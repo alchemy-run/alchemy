@@ -47,6 +47,7 @@ test.provider("diff tracks Postgres branch replica intent", () =>
 
     const alreadyConvergedToNonHa = yield* provider.diff!({
       id: "Branch",
+      fqn: "Branch",
       instanceId: "instance",
       olds: props(0),
       news: props(0),
@@ -62,6 +63,7 @@ test.provider("diff tracks Postgres branch replica intent", () =>
 
     const exactHaCountChanged = yield* provider.diff!({
       id: "Branch",
+      fqn: "Branch",
       instanceId: "instance",
       olds: props(2),
       news: props(3),

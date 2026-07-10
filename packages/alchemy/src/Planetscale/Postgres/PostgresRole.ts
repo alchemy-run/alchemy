@@ -199,8 +199,8 @@ export const PostgresRoleProvider = () =>
       if (newBranch !== oldBranch) {
         return { action: "replace" } as const;
       }
-      const newRoles = resolveInheritedRoles(news.inheritedRoles);
-      const oldRoles = output?.inheritedRoles ?? [];
+      const newRoles = [...resolveInheritedRoles(news.inheritedRoles)].sort();
+      const oldRoles = [...(output?.inheritedRoles ?? [])].sort();
       if (!deepEqual(newRoles, oldRoles)) {
         return { action: "replace" } as const;
       }

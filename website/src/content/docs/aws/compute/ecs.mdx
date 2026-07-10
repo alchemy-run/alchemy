@@ -113,6 +113,24 @@ import * as Effect from "effect/Effect";
 This is the shape Lambda can't give you: a polling loop, a queue
 drainer, or an open connection that outlives any single request.
 
+## Process scope vs request scope
+
+A Task is a **real process**, and its instance scope reflects that:
+the bundled program runs under a root scope that closes when the
+process shuts down gracefully, so resources acquired at init — the
+connection an `host.run` loop holds open, a warm pool shared across
+requests — are genuinely released on exit. Serverless runtimes only
+approximate this: workerd never closes its instance scope at all,
+and Lambda gets a best-effort 500 ms SIGTERM window; a server gets a
+real graceful shutdown (a hard kill still skips finalizers, as in
+any process).
+
+Each HTTP request still gets its own request `Scope`, released when
+the response settles — the same per-event contract as every other
+runtime. See
+[Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
+for the model across all runtimes.
+
 ## Give it a network
 
 ECS services run with `awsvpc` networking, so you need a VPC

@@ -465,7 +465,13 @@ const executeNode = (
     // ── noop ──
 
     if (node.action === "noop") {
-      // No work to do — the persisted attr is already stable.
+      // No work to do — the persisted attr is already stable. If the row was
+      // persisted under a legacy type name (the type was since renamed and
+      // carries the old name as an alias), migrate it to the canonical type
+      // so the state stops depending on the alias.
+      if (node.state.resourceType !== node.resource.Type) {
+        yield* commit({ ...node.state, resourceType: node.resource.Type });
+      }
       yield* signalReadyStable;
       yield* storeAndSignal({
         output: node.state.attr,
@@ -578,6 +584,7 @@ const executeNode = (
           attr = yield* node.provider
             .precreate({
               id: logicalId,
+              fqn,
               news: node.props,
               session: scopedSession,
               instanceId,
@@ -637,6 +644,7 @@ const executeNode = (
         attr = yield* node.provider
           .reconcile({
             id: logicalId,
+            fqn,
             news,
             instanceId,
             bindings: bindingOutputs,
@@ -764,6 +772,7 @@ const executeNode = (
         const attr = yield* node.provider
           .reconcile({
             id: logicalId,
+            fqn,
             news,
             instanceId,
             bindings: bindingOutputs,
@@ -886,6 +895,7 @@ const executeNode = (
               yield* node.provider
                 .delete({
                   id: logicalId,
+                  fqn,
                   instanceId: old.instanceId,
                   olds: old.props as never,
                   output: old.attr,
@@ -932,6 +942,7 @@ const executeNode = (
           attr = yield* node.provider
             .precreate({
               id: logicalId,
+              fqn,
               news: node.props,
               session: scopedSession,
               instanceId,
@@ -992,6 +1003,7 @@ const executeNode = (
         attr = yield* node.provider
           .reconcile({
             id: logicalId,
+            fqn,
             news,
             instanceId,
             bindings: bindingOutputs,
@@ -1345,6 +1357,7 @@ const converge = Effect.fn(function* (
       const attr = yield* node.provider
         .reconcile({
           id: logicalId,
+          fqn,
           news: newProps,
           instanceId,
           bindings: newBindings,
@@ -1647,6 +1660,7 @@ const collectGarbage = Effect.fn(function* (
               yield* provider
                 .delete({
                   id: logicalId,
+                  fqn,
                   instanceId,
                   olds: props as never,
                   output: attr,

@@ -1,5 +1,5 @@
-import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
+import * as Redacted from "effect/Redacted";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
   type Main,
@@ -610,7 +610,27 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
 // imported by Worker.ts). The provider helpers that previously lived here
 // (resolveDurableObjectApplicationRecovery, the readiness schedule/retry, etc.)
 // were extracted to ContainerProvider.ts on this branch.
-export type DevContainerImage = ContainerImage;
+export type DevContainerImage =
+  | DevContainerImage.Build
+  | DevContainerImage.Pull
+  | DevContainerImage.Ref;
+
+export declare namespace DevContainerImage {
+  interface Base {
+    readonly env?: Record<string, string | Redacted.Redacted<string>>;
+  }
+  export interface Build extends Base {
+    readonly dockerfile: string;
+    readonly context?: string;
+    readonly buildArgs?: Record<string, string>;
+  }
+  export interface Pull extends Base {
+    readonly imageUri: string;
+  }
+  export interface Ref extends Base {
+    readonly tag: string;
+  }
+}
 
 export const ContainerProvider = () =>
   ProviderLayer.select({

@@ -467,7 +467,9 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * });
  * ```
  */
-export const Gateway = Resource<Gateway>("Cloudflare.AI.Gateway");
+export const Gateway = Resource<Gateway>("Cloudflare.AI.Gateway", {
+  aliases: ["Cloudflare.AiGateway"],
+});
 
 export const GatewayResourceProvider = () =>
   Provider.succeed(Gateway, {

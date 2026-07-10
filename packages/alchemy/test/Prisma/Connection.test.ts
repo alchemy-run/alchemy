@@ -66,6 +66,7 @@ const reconcileInput = (
   olds?: typeof connectionProps,
 ) => ({
   id: "Connection",
+  fqn: "Connection",
   instanceId,
   news: connectionProps,
   olds,
@@ -79,6 +80,7 @@ const readInput = (
   readInstanceId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 ) => ({
   id: "Connection",
+  fqn: "Connection",
   instanceId: readInstanceId,
   olds: { database: "database-1", name: "api" },
   output: connectionsOutput,
@@ -287,6 +289,7 @@ describe("Prisma Connection provider", () => {
       const provider = yield* Connection.Provider;
       const diff = yield* provider.diff!({
         id: "Connection",
+        fqn: "Connection",
         instanceId,
         olds: connectionProps,
         news: connectionProps,

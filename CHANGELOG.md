@@ -1,3 +1,53 @@
+## v2.0.0-beta.61
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- **cloudflare**:
+  - Expand workflows api &nbsp;-&nbsp; by **Gerben Mulder**, **Sam Goodwin** and **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/611 [<samp>(4b0c5)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/4b0c527b)
+  - **workers**: Workers Cache support + Effect-native ExecutionContext &nbsp;-&nbsp; by **Sam Goodwin** and **Claude Fable 5** in https://github.com/alchemy-run/alchemy-effect/issues/752 [<samp>(ff81b)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ff81bee4)
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - **lambda**: Add event invoke config &nbsp;-&nbsp; by **José Netto** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/627 [<samp>(74754)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/74754b7a)
+- **cli**:
+  - `alchemy sync` — reconcile state drift via read+reconcile &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/766 [<samp>(dcafc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/dcafc26a)
+- **cloudflare**:
+  - **Worker**: Add Zone Routes &nbsp;-&nbsp; by **utopy** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/438 [<samp>(dc871)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/dc8717c9)
+  - **ai**: Add AI.ProviderKey BYOK composition helper &nbsp;-&nbsp; by **Alex** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/586 [<samp>(8c9bf)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8c9bfe78)
+  - **r2**: Restore cors prop on Bucket &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/771 [<samp>(14409)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/144090f8)
+- **engine**:
+  - Resource type aliases for safe type renames &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/765 [<samp>(27138)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/27138721)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Require effect >=4.0.0-beta.93 and migrate UrlParams.makeUrl to Url.make &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/748 [<samp>(94451)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/944510ca)
+- Guard read/diff recovery paths against lost Output-valued olds &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/770 [<samp>(29df0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/29df03eb)
+- **aws**:
+  - **ecs**: Unwedge plan/deploy/destroy after a half-created Service &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/767 [<samp>(70037)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/70037fe1)
+- **cli**:
+  - Suppress bun's benign tsconfig-override fd warning in dev &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/768 [<samp>(82692)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/826923a3)
+- **cloudflare**:
+  - Include worker metadata in the update diff &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy-effect/issues/747 [<samp>(26221)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/26221009)
+  - Fix state-store errors &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/737 [<samp>(6c9b6)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6c9b67c5)
+  - Preserve explicit globalOutbound: null in WorkerLoader &nbsp;-&nbsp; by **Alex** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/746 [<samp>(52be6)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/52be64e2)
+  - Classify Resource.ref values as native Worker env bindings &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/756 [<samp>(01b4a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/01b4ae32)
+  - Dispatch for multiple queue consumers &nbsp;-&nbsp; by **Leonardo E. Dominguez** in https://github.com/alchemy-run/alchemy-effect/issues/466 [<samp>(a2367)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a2367665)
+  - **workers**:
+    - Retry every binding-target-not-found error on script upload &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/753 [<samp>(958b9)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/958b9294)
+    - Declare binding-hosted DO classes in the worker precreate stub &nbsp;-&nbsp; by **Daniel Gangl** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/764 [<samp>(93952)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/93952191)
+- **drizzle**:
+  - Make proxyChain a real Effect so it composes with combinators &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/750 [<samp>(8015f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8015f610)
+- **planetscale**:
+  - Compare inherited roles by membership &nbsp;-&nbsp; by **Gerben Mulder** in https://github.com/alchemy-run/alchemy-effect/issues/761 [<samp>(6ce15)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6ce15030)
+- **test**:
+  - Make the test suite pass on Windows &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/735 [<samp>(3c050)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3c050fe2)
+  - Guard RPC test transports against edge-transient HTML responses &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/773 [<samp>(a8570)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a85708dc)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.60...HEAD)
+
+---
+
 ## v2.0.0-beta.60
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

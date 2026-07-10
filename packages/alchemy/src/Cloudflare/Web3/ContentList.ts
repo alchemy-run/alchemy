@@ -136,7 +136,9 @@ export type HostnameContentList = Resource<
  *
  * @see https://developers.cloudflare.com/web3/
  */
-export const HostnameContentList = Resource<HostnameContentList>(TypeId);
+export const HostnameContentList = Resource<HostnameContentList>(TypeId, {
+  aliases: ["Cloudflare.Web3HostnameContentList"],
+});
 
 /**
  * Returns true if the given value is a HostnameContentList resource.

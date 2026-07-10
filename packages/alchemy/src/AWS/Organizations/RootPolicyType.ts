@@ -54,10 +54,15 @@ export const RootPolicyTypeProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          return yield* readRootPolicyType({
-            rootId: output?.rootId ?? olds!.rootId,
-            policyType: output?.policyType ?? olds!.policyType,
-          });
+          const rootId = output?.rootId ?? olds?.rootId;
+          const policyType = output?.policyType ?? olds?.policyType;
+          if (rootId === undefined || policyType === undefined) {
+            // Output-valued props don't survive a `creating`-state round-trip
+            // (they deserialize as `undefined`) — report "not found" so the
+            // engine re-drives the create.
+            return undefined;
+          }
+          return yield* readRootPolicyType({ rootId, policyType });
         }),
         // A RootPolicyType is the enable/disable state of one policy type on
         // one organization root. `listRoots` already returns each root's

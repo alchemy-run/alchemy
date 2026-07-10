@@ -1,5 +1,6 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import {
+  type Config as PlanetscaleClientConfig,
   Credentials,
   DEFAULT_API_BASE_URL,
 } from "@distilled.cloud/planetscale/Credentials";
@@ -82,12 +83,23 @@ export const fromAuthProvider = () =>
         Effect.flatMap((config) =>
           auth.read(profileName, config as PlanetscaleAuthConfig),
         ),
-        Effect.map((creds) => ({
-          tokenId: creds.tokenId,
-          token: creds.token,
-          organization: creds.organization,
-          apiBaseUrl,
-        })),
+        Effect.map(
+          (creds): PlanetscaleClientConfig =>
+            creds.type === "oauth"
+              ? {
+                  type: "oauth",
+                  accessToken: creds.accessToken,
+                  organization: creds.organization,
+                  apiBaseUrl,
+                }
+              : {
+                  type: "serviceToken",
+                  tokenId: creds.tokenId,
+                  token: creds.token,
+                  organization: creds.organization,
+                  apiBaseUrl,
+                },
+        ),
         Effect.mapError(
           (e) =>
             new ConfigError({

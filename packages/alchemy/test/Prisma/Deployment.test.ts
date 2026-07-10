@@ -187,6 +187,7 @@ describe("Prisma Deployment", () => {
         const error = yield* provider
           .reconcile({
             id: "Version",
+            fqn: "Version",
             instanceId: "00000000000000000000000000000000",
             news: {
               app: "service-1",
@@ -257,6 +258,7 @@ describe("Prisma Deployment", () => {
       const error = yield* provider
         .reconcile({
           id: "Version",
+          fqn: "Version",
           instanceId: "00000000000000000000000000000000",
           news: {
             app: "service-1",
@@ -328,6 +330,7 @@ describe("Prisma Deployment", () => {
         const error = yield* provider
           .reconcile({
             id: "Version",
+            fqn: "Version",
             instanceId: "00000000000000000000000000000000",
             news: {
               app: "service-1",
@@ -407,6 +410,7 @@ describe("Prisma Deployment", () => {
       const error = yield* provider
         .reconcile({
           id: "Version",
+          fqn: "Version",
           instanceId: "00000000000000000000000000000000",
           news: {
             app: "service-1",
@@ -529,6 +533,7 @@ describe("Prisma Deployment", () => {
         const error = yield* provider
           .reconcile({
             id: "Version",
+            fqn: "Version",
             instanceId: "00000000000000000000000000000000",
             news: {
               app: "service-1",
@@ -628,6 +633,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const output = yield* provider.reconcile({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         news: {
           app: "service-1",
@@ -687,6 +693,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const output = yield* provider.read!({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         olds: {
           app: "service-1",
@@ -731,6 +738,7 @@ describe("Prisma Deployment", () => {
         const provider = yield* PrismaDeployment.Provider;
         const output = yield* provider.read!({
           id: "Deployment",
+          fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
           olds: { app: "app-1" },
           output: undefined,
@@ -781,6 +789,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const output = yield* provider.read!({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         olds: {
           app: "service-from-olds",
@@ -858,6 +867,7 @@ describe("Prisma Deployment", () => {
         const provider = yield* PrismaDeployment.Provider;
         const output = yield* provider.read!({
           id: "Version",
+          fqn: "Version",
           instanceId: "00000000000000000000000000000000",
           olds: {
             app: "service-from-olds",
@@ -927,6 +937,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const error = yield* provider.read!({
         id: "Deployment",
+        fqn: "Deployment",
         instanceId: "00000000000000000000000000000000",
         olds: { app: "app-1" },
         output: {
@@ -964,6 +975,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const diff = yield* provider.diff!({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         olds: {
           app: "service-1",
@@ -1011,6 +1023,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const diff = yield* provider.diff!({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         olds: {
           app: "service-1",
@@ -1057,6 +1070,7 @@ describe("Prisma Deployment", () => {
         const provider = yield* PrismaDeployment.Provider;
         const diff = yield* provider.diff!({
           id: "Deployment",
+          fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
           olds: {
             app: Output.asOutput("app-old"),
@@ -1103,6 +1117,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const diff = yield* provider.diff!({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         olds: {
           app: "service-1",
@@ -1214,6 +1229,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const first = yield* provider.reconcile({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         news,
         olds: undefined,
@@ -1228,6 +1244,7 @@ describe("Prisma Deployment", () => {
 
       const second = yield* provider.reconcile({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         news,
         olds: news,
@@ -1266,6 +1283,7 @@ describe("Prisma Deployment", () => {
       const error = yield* provider
         .reconcile({
           id: "Version",
+          fqn: "Version",
           instanceId: "00000000000000000000000000000000",
           news: {
             app: "service-1",
@@ -1301,6 +1319,7 @@ describe("Prisma Deployment", () => {
         const error = yield* provider
           .reconcile({
             id: "Deployment",
+            fqn: "Deployment",
             instanceId: "00000000000000000000000000000000",
             news: {
               app: "app-1",
@@ -1355,6 +1374,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const output = yield* provider.reconcile({
         id: "Deployment",
+        fqn: "Deployment",
         instanceId: "00000000000000000000000000000000",
         news: {
           app: "app-1",
@@ -1392,6 +1412,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const base = {
         id: "Deployment",
+        fqn: "Deployment",
         instanceId: "00000000000000000000000000000000",
         oldBindings: [],
         newBindings: [],
@@ -1434,6 +1455,7 @@ describe("Prisma Deployment", () => {
       const error = yield* provider
         .reconcile({
           id: "Deployment",
+          fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
           news: { app: "app-1" },
           olds: undefined,
@@ -1492,6 +1514,7 @@ describe("Prisma Deployment", () => {
       const provider = yield* PrismaDeployment.Provider;
       const output = yield* provider.reconcile({
         id: "Version",
+        fqn: "Version",
         instanceId: "00000000000000000000000000000000",
         news: {
           app: "service-1",
@@ -1574,6 +1597,7 @@ describe("Prisma Deployment", () => {
         );
         const lines = yield* provider.tail!({
           id: "Deployment",
+          fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
           props: {
             app: "service-1",

@@ -245,6 +245,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -277,6 +278,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -308,6 +310,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -346,6 +349,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -377,6 +381,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -426,6 +431,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -476,6 +482,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -507,6 +514,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -544,6 +552,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -578,6 +587,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const error = yield* provider.diff!({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           olds: {
             project: "project-1",
@@ -626,6 +636,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const diff = yield* provider.diff!({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           olds: {
             project: "project-1",
@@ -674,6 +685,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const diff = yield* provider.diff!({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           olds: {
             project: "project-1",
@@ -723,6 +735,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -819,6 +832,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const output = yield* provider.read!({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           olds: {
             project: "project-1",
@@ -890,6 +904,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.read!({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         olds: {
           project: "project-1",
@@ -963,6 +978,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const output = yield* provider.read!({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           olds: {
             project: "project-1",
@@ -1059,6 +1075,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -1185,6 +1202,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const output = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -1309,6 +1327,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const first = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: baseProps,
           olds: undefined,
@@ -1334,6 +1353,7 @@ describe("Prisma Compute", () => {
 
         const second = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: { ...baseProps, branchId: "branch-feature" },
           olds: baseProps,
@@ -1400,6 +1420,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -1436,6 +1457,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -1522,6 +1544,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -1595,6 +1618,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -1704,6 +1728,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -1792,6 +1817,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -1901,6 +1927,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -2003,6 +2030,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -2145,6 +2173,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const output = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -2272,6 +2301,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -2602,6 +2632,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -2744,6 +2775,7 @@ describe("Prisma Compute", () => {
       const error = yield* provider
         .reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -2838,6 +2870,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -2992,6 +3025,7 @@ describe("Prisma Compute", () => {
         } as ResourceBinding<Compute["Binding"]> & { action: "delete" };
         const output = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -3177,6 +3211,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -3275,6 +3310,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         yield* provider.delete({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           olds: {
             project: "project-1",
@@ -3394,6 +3430,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -3548,6 +3585,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -3676,6 +3714,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -3794,6 +3833,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -3924,6 +3964,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -4109,6 +4150,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const first = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -4124,6 +4166,7 @@ describe("Prisma Compute", () => {
 
       const second = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -4145,6 +4188,7 @@ describe("Prisma Compute", () => {
 
       yield* provider.delete({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         olds: {
           project: "project-1",
@@ -4291,6 +4335,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const output = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -4451,6 +4496,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const first = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news,
           olds: undefined,
@@ -4461,6 +4507,7 @@ describe("Prisma Compute", () => {
 
         const second = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news,
           olds: news,
@@ -4588,6 +4635,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         const output = yield* provider.reconcile({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           news: {
             project: "project-1",
@@ -4732,6 +4780,7 @@ describe("Prisma Compute", () => {
         const error = yield* provider
           .reconcile({
             id: "App",
+            fqn: "App",
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
@@ -4904,6 +4953,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         news: {
           project: "project-1",
@@ -5024,6 +5074,7 @@ describe("Prisma Compute", () => {
       const chunks = yield* Stream.runCollect(
         provider.tail!({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           props: {
             project: "project-1",
@@ -5098,6 +5149,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       yield* provider.delete({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         olds: {
           project: "project-1",
@@ -5211,6 +5263,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       yield* provider.delete({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         olds: {
           project: "project-1",
@@ -5317,6 +5370,7 @@ describe("Prisma Compute", () => {
       const provider = yield* Compute.Provider;
       yield* provider.delete({
         id: "App",
+        fqn: "App",
         instanceId: "00000000000000000000000000000000",
         olds: undefined as never,
         output: {
@@ -5394,6 +5448,7 @@ describe("Prisma Compute", () => {
         const provider = yield* Compute.Provider;
         yield* provider.delete({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           olds: {
             project: "project-1",
@@ -5494,6 +5549,7 @@ describe("Prisma Compute", () => {
         );
         const lines = yield* provider.tail!({
           id: "App",
+          fqn: "App",
           instanceId: "00000000000000000000000000000000",
           props: {
             project: "project-1",

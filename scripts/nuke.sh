@@ -1,7 +1,8 @@
 bun alchemy unsafe nuke ./stacks/nuke.ts  \
   --exclude 'Cloudflare.Zone*' \
   --exclude 'Cloudflare.Account*' \
-  --exclude 'Cloudflare.Dns*' \
+  --exclude 'Cloudflare.DNS*' \
+  --exclude 'Cloudflare.Ssl.UniversalSsl' \
   --exclude 'Cloudflare.ApiToken.*' \
   --exclude 'Cloudflare.Secret*' \
   --exclude 'Cloudflare.Organization.*' \

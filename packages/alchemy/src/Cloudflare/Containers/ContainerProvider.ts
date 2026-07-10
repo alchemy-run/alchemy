@@ -195,10 +195,26 @@ export const LiveContainerProvider = () =>
             bundleHash,
             dockerfile: finalDockerfile,
           })).slice(0, 16);
+          // The dev image is the deterministic build-context directory that
+          // `buildAndPushImage` materializes into (and that the local provider
+          // regenerates on the next `alchemy dev`). We persist the path here so
+          // a dev run after a live deploy has an image to `docker build` — the
+          // live deploy pushes to Cloudflare's registry, which the local
+          // `workerd` runtime can't pull. See `prepareContainerBuildContext`.
+          const contextDir = yield* getStableContextDir(
+            process.cwd(),
+            dotAlchemy,
+            `${id}-container`,
+          );
           return {
             build: { kind: "effectful" as const, files },
             imageRef: makeRef(imageHash),
             imageHash,
+            dev: {
+              context: contextDir,
+              dockerfile: path.join(contextDir, "Dockerfile"),
+              env: props.env,
+            },
           };
         }
 
@@ -212,6 +228,8 @@ export const LiveContainerProvider = () =>
             build: { kind: "remote" as const, image: props.image },
             imageRef: makeRef(imageHash),
             imageHash,
+            // The local runtime pulls this image directly (no build context).
+            dev: { imageUri: props.image, env: props.env },
           };
         }
 
@@ -230,6 +248,9 @@ export const LiveContainerProvider = () =>
           build: { kind: "external" as const, context, dockerfile },
           imageRef: makeRef(imageHash),
           imageHash,
+          // The local runtime builds the user's Dockerfile against the same
+          // (already real-path'd) context directory.
+          dev: { context, dockerfile, env: props.env },
         };
       });
 
@@ -531,7 +552,10 @@ export const LiveContainerProvider = () =>
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
-        const { build, imageRef, imageHash } = yield* computeImage(id, news);
+        const { build, imageRef, imageHash, dev } = yield* computeImage(
+          id,
+          news,
+        );
         const configuration = desiredConfiguration(news, imageRef, accountId);
 
         if (imageHash !== existing.hash?.image) {
@@ -589,7 +613,7 @@ export const LiveContainerProvider = () =>
             rollout: news.rollout,
           });
         }
-        return { ...updated, configuration, hash: { image: imageHash } };
+        return { ...updated, configuration, hash: { image: imageHash }, dev };
       });
 
       const getDurableObjects = (
@@ -676,7 +700,10 @@ export const LiveContainerProvider = () =>
           );
 
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const { build, imageRef, imageHash } = yield* computeImage(id, news);
+          const { build, imageRef, imageHash, dev } = yield* computeImage(
+            id,
+            news,
+          );
           const configuration = desiredConfiguration(news, imageRef, accountId);
           yield* buildAndPushImage(id, news, build, imageRef, session);
 
@@ -699,6 +726,7 @@ export const LiveContainerProvider = () =>
           return {
             ...("applicationId" in result ? result : toAttributes(result)),
             hash: { image: imageHash },
+            dev,
           };
         }),
         reconcile: Effect.fn(function* ({
@@ -714,7 +742,10 @@ export const LiveContainerProvider = () =>
           );
           const durableObjects = yield* getDurableObjects(bindings);
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const { build, imageRef, imageHash } = yield* computeImage(id, news);
+          const { build, imageRef, imageHash, dev } = yield* computeImage(
+            id,
+            news,
+          );
           const configuration = desiredConfiguration(news, imageRef, accountId);
 
           // Observe — re-fetch the cached application to confirm it still
@@ -815,6 +846,7 @@ export const LiveContainerProvider = () =>
             return {
               ...("applicationId" in result ? result : toAttributes(result)),
               hash: { image: imageHash },
+              dev,
             };
           }
 
@@ -849,6 +881,7 @@ export const LiveContainerProvider = () =>
           return {
             ...("applicationId" in result ? result : toAttributes(result)),
             hash: { image: imageHash },
+            dev,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -881,6 +914,10 @@ export const LiveContainerProvider = () =>
               return {
                 ...toAttributes(existing),
                 hash: output?.hash,
+                // The dev image is a local build-context reference that the
+                // API can't return — preserve the persisted one so a refresh
+                // doesn't wipe it (which would break a later `alchemy dev`).
+                dev: output?.dev,
               };
             });
 
@@ -902,6 +939,7 @@ export const LiveContainerProvider = () =>
               Effect.map((app) => ({
                 ...toAttributes(app),
                 hash: output.hash,
+                dev: output.dev,
               })),
               Effect.catchTag("ContainerApplicationNotFound", () =>
                 readByName(output.applicationName),

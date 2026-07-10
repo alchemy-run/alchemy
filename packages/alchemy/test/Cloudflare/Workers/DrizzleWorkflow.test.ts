@@ -95,7 +95,7 @@ const runToCompletion = (baseUrl: string) =>
  * `ExecutionContext` service and the run reports `errored` with no output.
  */
 test(
-  "Drizzle.postgres query runs inside a Workflow task (ExecutionContext provided per run)",
+  "Drizzle.postgres query runs inside a Workflow task (per-run scope provided by the bridge)",
   Effect.gen(function* () {
     const { url } = yield* stack;
     expect(url).toBeTypeOf("string");
@@ -110,6 +110,59 @@ test(
     expect(last.output?.rowCount).toBe(1);
     expect(last.output?.widget).toMatchObject({ id: 1, name: "widget-1" });
     expect(last.output?.inserted).toMatchObject({ id: 1, name: "widget-1" });
+  }).pipe(logLevel),
+  { timeout: 600_000 },
+);
+
+/**
+ * Cross-request regression guard for the build-once bridge: the isolate
+ * builds its layers on the first event and reuses them; each fetch event
+ * builds its own pg pool against its per-event scope and closes it after the
+ * response. Sequential requests must not touch a prior event's pool
+ * ("Cannot use a pool after calling end on the pool") and concurrent
+ * requests must not share I/O objects across request contexts ("Cannot
+ * perform I/O on behalf of a different request").
+ */
+test(
+  "Drizzle.postgres queries survive sequential and concurrent fetch events",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const baseUrl = url.replace(/\/+$/, "");
+    const client = yield* HttpClient.HttpClient;
+
+    const query = (id: number) =>
+      Effect.gen(function* () {
+        const res = yield* client.get(`${baseUrl}/query/${id}`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.succeed(res)
+              : Effect.fail(new WorkerNotReady({ status: res.status })),
+          ),
+          Effect.retry({
+            while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
+            schedule: Schedule.exponential("500 millis").pipe(
+              Schedule.both(Schedule.recurs(10)),
+            ),
+          }),
+        );
+        return (yield* res.json) as { rowCount: number };
+      }).pipe(Effect.orDie);
+
+    // Sequential: the second event must not observe the first event's
+    // (already closed) pool.
+    const first = yield* query(1);
+    const second = yield* query(1);
+    expect(first.rowCount).toBeTypeOf("number");
+    expect(second.rowCount).toBeTypeOf("number");
+
+    // Concurrent: every event acquires its own pool on its own scope.
+    const results = yield* Effect.all(
+      [1, 2, 3, 4, 5, 6].map((id) => query(id)),
+      { concurrency: "unbounded" },
+    );
+    for (const body of results) {
+      expect(body.rowCount).toBeTypeOf("number");
+    }
   }).pipe(logLevel),
   { timeout: 600_000 },
 );

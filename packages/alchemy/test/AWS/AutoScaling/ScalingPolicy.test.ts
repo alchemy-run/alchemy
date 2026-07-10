@@ -6,9 +6,13 @@ import {
 } from "@/AWS/AutoScaling";
 import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -77,5 +81,196 @@ test.provider.skipIf(!process.env.AWS_TEST_SCALING_POLICY_LIST)(
 
       yield* stack.destroy();
     }),
+  { timeout: 240_000 },
+);
+
+// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+//
+// An interrupted first deploy persists the scaling policy as
+// `status: "creating"` with no attributes — and the Output-valued
+// `autoScalingGroup` prop (a whole AutoScalingGroup resource object) does not
+// survive the state round-trip: it deserializes as `undefined`. Plan's
+// recovery branches then hand those junk props back to the provider as
+// `olds`:
+//
+// - `read` must tolerate `olds.autoScalingGroup === undefined` and fall back
+//   to an account-wide `describePolicies` lookup by (unique physical) policy
+//   name, so a half-created policy that DOES exist is recovered in place
+//   (same policyArn, no duplicate).
+// - `diff` must NOT treat "old ASG name unknown vs new ASG name known" as an
+//   ASG change: pre-fix it forced `action: "replace"`, which mints a new
+//   instanceId and therefore a NEW generated policy name instead of resuming
+//   the same create.
+//
+// The launch template is created out-of-band via distilled `ec2` (not the
+// `AWS.AutoScaling.LaunchTemplate` resource) to isolate this test from that
+// provider's unrelated untyped-NotFound read bug. The fleet is placed into a
+// subnet of the account's default VPC (resolved out-of-band) rather than a
+// throwaway `Vpc` resource: a failed run of this test loses its in-memory
+// scratch state, and orphaned VPCs quickly exhaust the 5-per-region quota.
+const recoveryLtName = "alchemy-test-scaling-policy-recovery-lt";
+const recoveryAsgName = "alchemy-test-scaling-policy-recovery-asg";
+const cleanupRecoveryLt = ec2
+  .deleteLaunchTemplate({ LaunchTemplateName: recoveryLtName } as any)
+  .pipe(Effect.catch(() => Effect.void));
+// Leftover-cleanup for interrupted/failed prior runs (the ASG name is
+// deterministic and account-unique; deleting it also deletes its policies).
+const cleanupRecoveryAsg = autoscaling
+  .deleteAutoScalingGroup({
+    AutoScalingGroupName: recoveryAsgName,
+    ForceDelete: true,
+  } as any)
+  .pipe(Effect.catch(() => Effect.void));
+
+test.provider(
+  "recovers a half-created scaling policy whose creating-state lost the Output-valued autoScalingGroup (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* cleanupRecoveryAsg;
+      yield* cleanupRecoveryLt;
+      yield* stack.destroy();
+
+      // Launch templates do not validate the AMI at creation time; fall back
+      // to a syntactically valid id if the lookup returns nothing.
+      const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
+      yield* ec2.createLaunchTemplate({
+        LaunchTemplateName: recoveryLtName,
+        LaunchTemplateData: { ImageId: imageId, InstanceType: "t3.micro" },
+      } as any);
+
+      const subnets = yield* ec2.describeSubnets({
+        Filters: [{ Name: "default-for-az", Values: ["true"] }],
+      } as any);
+      const subnetId = subnets.Subnets?.[0]?.SubnetId;
+      if (!subnetId) {
+        return yield* Effect.die(
+          new Error("no default-VPC subnet available in this region"),
+        );
+      }
+
+      const deployPolicy = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const group = yield* AutoScalingGroup("RecoveryGroup", {
+              autoScalingGroupName: recoveryAsgName,
+              launchTemplate: { launchTemplateName: recoveryLtName },
+              subnetIds: [subnetId as `subnet-${string}`],
+              minSize: 0,
+              maxSize: 0,
+              desiredCapacity: 0,
+            });
+            return yield* ScalingPolicy("RecoveryScalingPolicy", {
+              // Whole-resource spelling — the #736 shape (an unresolved
+              // Output persisted at `creating` does not survive the state
+              // round-trip) AND coverage for the resolved-attributes
+              // narrowing: the engine resolves `group` to its bare
+              // Attributes record (no resource `Type` marker), which the
+              // provider must narrow by shape (`autoScalingGroupName`
+              // string field) to extract the group name.
+              // policyName intentionally omitted: the engine-generated
+              // physical name embeds the instanceId, so a wrongful
+              // `replace` (pre-fix diff) is observable as a changed name.
+              autoScalingGroup: group,
+              predefinedMetricType: "ASGAverageCPUUtilization",
+              targetValue: 50,
+            });
+          }),
+        );
+
+      const created = yield* deployPolicy();
+
+      // Rewrite the policy's persisted row into the wedged shape an
+      // interrupted deploy leaves behind: `creating`, no attributes, and the
+      // Output-valued `autoScalingGroup` lost in the round-trip.
+      const wedgeRow = Effect.gen(function* () {
+        const state = yield* yield* State;
+        const stage = "test"; // scratch stacks default to the "test" stage
+        const fqns = yield* state.list({ stack: stack.name, stage });
+        const rows = yield* Effect.forEach(fqns, (fqn) =>
+          state
+            .get({ stack: stack.name, stage, fqn })
+            .pipe(Effect.map((row) => ({ fqn, row }))),
+        );
+        const wedged = rows.find(
+          (r): r is { fqn: string; row: ResourceState } =>
+            isResourceState(r.row) &&
+            r.row.resourceType === "AWS.AutoScaling.ScalingPolicy",
+        );
+        if (!wedged) {
+          return yield* Effect.die(
+            new Error(
+              "no AWS.AutoScaling.ScalingPolicy state row found after deploy",
+            ),
+          );
+        }
+        yield* state.set({
+          stack: stack.name,
+          stage,
+          fqn: wedged.fqn,
+          value: {
+            ...wedged.row,
+            status: "creating",
+            attr: undefined,
+            props: {
+              ...wedged.row.props,
+              autoScalingGroup: undefined,
+            },
+          },
+        });
+      });
+
+      // Variant A — the half-created policy still exists in the cloud.
+      // `read` gets junk olds (no ASG name) and must find the policy via the
+      // account-wide name-only lookup: SAME policyArn, no duplicate.
+      yield* wedgeRow;
+      const recoveredInPlace = yield* deployPolicy();
+      expect(recoveredInPlace.policyArn).toEqual(created.policyArn);
+      expect(recoveredInPlace.policyName).toEqual(created.policyName);
+      expect(recoveredInPlace.autoScalingGroupName).toEqual(
+        created.autoScalingGroupName,
+      );
+
+      // Variant B — wedge again AND delete the policy out-of-band so the
+      // recovery `read` misses and `diff` runs with the junk olds. Pre-fix,
+      // diff saw `undefined !== <asg name>` and forced a replacement (new
+      // instanceId => new generated policy name). Post-fix it falls through
+      // to update, resumes the same create, and recreates under the SAME
+      // name.
+      yield* wedgeRow;
+      yield* autoscaling.deletePolicy({
+        AutoScalingGroupName: created.autoScalingGroupName,
+        PolicyName: created.policyName,
+      } as any);
+      const remaining = yield* autoscaling
+        .describePolicies({ PolicyNames: [created.policyName] })
+        .pipe(
+          Effect.map((result) => (result.ScalingPolicies ?? []).length),
+          Effect.repeat({
+            until: (count) => count === 0,
+            schedule: Schedule.spaced("2 seconds"),
+            times: 8,
+          }),
+        );
+      expect(remaining).toBe(0);
+
+      const recreated = yield* deployPolicy();
+      expect(recreated.policyName).toEqual(created.policyName);
+      expect(recreated.autoScalingGroupName).toEqual(
+        created.autoScalingGroupName,
+      );
+
+      // Out-of-band proof the policy is live again.
+      const after = yield* autoscaling.describePolicies({
+        PolicyNames: [created.policyName],
+      });
+      expect(
+        (after.ScalingPolicies ?? []).some(
+          (p) => p.PolicyName === created.policyName,
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
+      yield* cleanupRecoveryLt;
+    }).pipe(Effect.ensuring(cleanupRecoveryLt)),
   { timeout: 240_000 },
 );

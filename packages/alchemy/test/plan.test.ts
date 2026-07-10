@@ -4,6 +4,7 @@ import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
+import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
@@ -25,6 +26,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import {
+  AliasedWidget,
+  aliasedWidgetProvider,
   ArtifactProbe,
   BindingTarget,
   Bucket,
@@ -3092,13 +3095,20 @@ describe("engine-level adoption", () => {
         },
       });
 
+      // Planning no longer persists the adopted state (issue #793): it rides
+      // on the plan node and is only committed to the store at apply time.
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
+      expect((node.state as any)?.attr).toMatchObject({ string: "hello" });
+
       const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted).toBeUndefined();
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
@@ -3125,23 +3135,29 @@ describe("engine-level adoption", () => {
         state: { status: "created" },
       });
 
-      const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted).toBeUndefined();
+      // The adopted state rides on the plan node, not the store (issue #793).
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
 
       // The Unowned brand must be fully scrubbed from anything that
-      // reaches Apply — both via the public `Unowned.is` check *and* via
-      // direct symbol inspection (in case someone accidentally uses
-      // `Symbol.for` rather than `Unowned.is`). Planning itself must not
-      // persist an ownership claim.
-      const adoptedAttr = (plan.resources.Adopted!.state as any).attr as object;
+      // reaches the plan node (and, at apply, the state store) — both via
+      // the public `Unowned.is` check *and* via direct symbol inspection
+      // (in case someone accidentally uses `Symbol.for` rather than
+      // `Unowned.is`).
+      const adoptedAttr = (node.state as any)?.attr as object;
       expect(Unowned.is(adoptedAttr)).toBe(false);
       expect(Object.getOwnPropertySymbols(adoptedAttr).length).toBe(0);
       expect(JSON.stringify(adoptedAttr)).not.toContain("Unowned");
+
+      // Planning wrote nothing to the store.
+      const state = yield* yield* State;
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
@@ -3202,13 +3218,19 @@ describe("engine-level adoption", () => {
         state: { status: "created" },
       });
 
+      // Adopted state rides on the plan node; planning persists nothing
+      // (issue #793).
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
+
       const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted).toBeUndefined();
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
@@ -3433,4 +3455,106 @@ describe("StackRefExpr resolution", () => {
       }
     }),
   );
+});
+
+describe("type aliases", () => {
+  // State rows persisted before a type rename carry the legacy name
+  // ("Test.Widget"). Provider lookup must fall back to the canonical type
+  // ("Test.Widgets.Widget") via the alias declared on the resource.
+  const legacyWidgetState = (fqn: string): ResourceState => ({
+    instanceId,
+    providerVersion: 0,
+    logicalId: fqn,
+    fqn,
+    namespace: undefined,
+    resourceType: "Test.Widget",
+    status: "created",
+    props: {
+      name: "widget",
+    },
+    attr: {
+      name: "widget",
+    },
+    bindings: [],
+    downstream: [],
+  });
+
+  test(
+    "orphan persisted under a legacy type name plans a delete via alias",
+    Effect.gen(function* () {
+      yield* seed({ LegacyOrphan: legacyWidgetState("LegacyOrphan") });
+      expect(
+        yield* makePlan(Effect.void).pipe(
+          Effect.provide(aliasedWidgetProvider()),
+        ),
+      ).toMatchObject({
+        deletions: {
+          LegacyOrphan: {
+            action: "delete",
+            resource: {
+              LogicalId: "LegacyOrphan",
+              Type: "Test.Widget",
+            },
+          },
+        },
+      });
+    }),
+  );
+
+  test(
+    "declared resource with legacy-typed state plans as a noop update",
+    Effect.gen(function* () {
+      yield* seed({ MyWidget: legacyWidgetState("MyWidget") });
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* AliasedWidget("MyWidget", { name: "widget" });
+        }),
+      ).pipe(Effect.provide(aliasedWidgetProvider()));
+      expect(plan).toMatchObject({
+        resources: {
+          MyWidget: {
+            action: "noop",
+            state: {
+              resourceType: "Test.Widget",
+            },
+          },
+        },
+      });
+      expect(Object.keys(plan.deletions)).toEqual([]);
+    }),
+  );
+
+  describe("via provider collection", () => {
+    class AliasPlanProviders extends Provider.ProviderCollection<AliasPlanProviders>()(
+      "Test.AliasPlanProviders",
+    ) {}
+
+    // The bare provider layer is consumed while building the collection and
+    // is NOT exported — lookup can only succeed through the collection.
+    const widgetCollection = () =>
+      Layer.effect(
+        AliasPlanProviders,
+        Provider.collection([AliasedWidget]),
+      ).pipe(Layer.provide(aliasedWidgetProvider()));
+
+    test(
+      "orphan persisted under a legacy type name plans a delete via alias",
+      Effect.gen(function* () {
+        yield* seed({ LegacyOrphan: legacyWidgetState("LegacyOrphan") });
+        expect(
+          yield* makePlan(Effect.void).pipe(Effect.provide(widgetCollection())),
+        ).toMatchObject({
+          deletions: {
+            LegacyOrphan: {
+              action: "delete",
+              resource: {
+                LogicalId: "LegacyOrphan",
+                Type: "Test.Widget",
+              },
+            },
+          },
+        });
+      }),
+    );
+  });
 });

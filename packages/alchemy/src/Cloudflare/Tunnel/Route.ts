@@ -114,7 +114,9 @@ export type Route = Resource<
  * });
  * ```
  */
-export const Route = Resource<Route>("Cloudflare.Tunnel.Route");
+export const Route = Resource<Route>("Cloudflare.Tunnel.Route", {
+  aliases: ["Cloudflare.TunnelRoute"],
+});
 
 export const RouteProvider = () =>
   Provider.succeed(Route, {

@@ -3,19 +3,26 @@ import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import { WorkerRpcs } from "./fixtures/rpc-http/group.ts";
 import Stack from "./fixtures/rpc-http/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
+
+// `Test.rpcClientLayer` guards the transport against edge-generated HTML
+// bodies (the workers.dev placeholder — which serves with HTTP 200 —
+// 1101/1102 error pages, 429/1015 rate limits): the effect RPC HTTP protocol
+// never inspects status or content-type, so those would otherwise surface as
+// an opaque `RpcClientDefect: Error decoding HTTP response`. Non-ndjson
+// responses fail typed (status + body snippet) and are retried at the
+// transport level, so every RPC call in this file rides out edge-propagation
+// windows with one shared budget.
+const clientLayer = Test.rpcClientLayer;
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -95,14 +102,6 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // `RpcClient` constructed inside the Worker handler whose transport
 // is `Cloudflare.toHttpClient(rpcDO.getByName(...))`. This mirrors the
 // HttpApi fixture's `getTaskDO` pattern.
-const clientLayer = (url: string) =>
-  RpcClient.layerProtocolHttp({ url }).pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(
-      Layer.succeed(RpcSerialization.RpcSerialization, RpcSerialization.ndjson),
-    ),
-  );
-
 test(
   "RpcServer.toHttpEffect: unary RPC response",
   Effect.gen(function* () {
@@ -192,9 +191,17 @@ test(
         (i) =>
           client.Ping({ message: `m-${i}` }).pipe(
             Effect.timeout("5 seconds"),
+            // 64-way fan-out opens many fresh connections, each of which can
+            // land on an edge host still serving an HTML page after the
+            // single-connection warmup succeeded. The transport guard retries
+            // those; this outer budget (matching the siblings' capped
+            // generosity) backstops timeouts and longer bursts — the previous
+            // uncapped `times: 3` (~3.5s window) was the flake.
             Effect.retry({
-              schedule: Schedule.exponential("500 millis"),
-              times: 3,
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.either(Schedule.spaced("2 seconds")),
+              ),
+              times: 10,
             }),
           ),
         { concurrency: 64 },
@@ -206,7 +213,7 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  { timeout: 60_000 },
 );
 
 test(

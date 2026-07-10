@@ -175,7 +175,9 @@ export type SearchNamespace = Resource<
  *
  * @see https://developers.cloudflare.com/ai-search/
  */
-export const SearchNamespace = Resource<SearchNamespace>(TypeId);
+export const SearchNamespace = Resource<SearchNamespace>(TypeId, {
+  aliases: ["Cloudflare.AiSearch.Namespace"],
+});
 
 /**
  * Returns true if the given value is a SearchNamespace resource.

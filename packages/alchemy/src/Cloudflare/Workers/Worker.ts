@@ -35,6 +35,7 @@ import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
+import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
@@ -295,6 +296,28 @@ export type NormalizedBindings<
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
+export interface WorkerRouteConfig {
+  /**
+   * URL pattern to match incoming requests against, e.g.
+   * `"subdomain.example.com/*"` or `"example.com/api/*"`.
+   */
+  pattern: string;
+  /**
+   * Cloudflare zone ID. Equivalent to Wrangler's `zone_id`.
+   */
+  zoneId?: string;
+  /**
+   * Cloudflare zone name, e.g. `"example.com"`. Equivalent to Wrangler's
+   * `zone_name`.
+   */
+  zoneName?: string;
+  /**
+   * Zone reference — a zone ID, zone name, or `{ zoneId, name? }` object.
+   * Alternative to `zoneId` / `zoneName`.
+   */
+  zone?: ZoneReference;
+}
+
 export interface WorkerProps<
   Bindings extends WorkerBindingProps = any,
   Assets extends WorkerAssetsConfig | undefined =
@@ -413,7 +436,7 @@ export interface WorkerProps<
    *   `Config.number`, …) — resolved at deploy time and bound as
    *   `secret_text` on Cloudflare regardless of the `Config`
    *   constructor used. See
-   *   {@link https://v2.alchemy.run/concepts/secrets | Concepts › Secrets and Variables}.
+   *   [Secrets & env](/cloudflare/security/secrets-env).
    * - Literal values — routed by shape: `Redacted<string>` →
    *   `secret_text`, `string` → `plain_text`, anything else → `json`.
    *
@@ -425,6 +448,13 @@ export interface WorkerProps<
   /**
    * Cron expressions that trigger the Worker's scheduled handler.
    *
+   * This is how async (non-Effect) Workers configure Cron Triggers — the
+   * entry module exports its own `scheduled` handler and this prop attaches
+   * the schedules at deploy time. Effect-native Workers usually skip this
+   * prop and call `Cloudflare.Workers.cron(expression, handler)` in the Init
+   * phase instead, which attaches the expression and registers the runtime
+   * listener in one step.
+   *
    * Pass an empty array to remove all Cron Triggers.
    */
   crons?: string[];
@@ -434,6 +464,13 @@ export interface WorkerProps<
    * already exist in the account.
    */
   domain?: string | string[];
+  /**
+   * Zone routes that map URL patterns to this Worker. Equivalent to Wrangler's
+   * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
+   * `pattern`. When the zone is omitted, it is inferred from the pattern's
+   * hostname.
+   */
+  routes?: WorkerRouteConfig[];
   /**
    * Extra bundler options applied on top of the standard rolldown input/output
    * options used to build this Worker. See {@link Bundle.BundleExtraOptions}.
@@ -520,6 +557,23 @@ export interface WorkerProps<
 
 export interface ViteOptions {
   /**
+   * Overrides the module that becomes the deployed Worker entry, forwarded
+   * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
+   * from the Vite root (`rootDir`).
+   *
+   * By default the entry environment's own entry (the server bundle the
+   * framework produces) is deployed. Point `main` at a custom module when
+   * the deployed Worker must export more than the framework's fetch
+   * handler — e.g. Durable Object classes or additional handlers wrapping
+   * the framework handler.
+   *
+   * @example
+   * ```typescript
+   * vite: { main: "worker/index.ts" }
+   * ```
+   */
+  main?: string;
+  /**
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
    */
@@ -572,6 +626,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
     domains: string[];
+    routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
     hash?: {
       assets: string | undefined;
@@ -625,7 +680,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * There are three ways to define a Worker, from simplest to most
- * flexible. See the {@link https://alchemy.run/concepts/platform | Platform concept}
+ * flexible. See the [Functions & Servers](/infrastructure-as-effects/functions-and-servers)
  * page for the full explanation.
  *
  * - **Async** — plain `async fetch` handler, no Effect runtime in the bundle.
@@ -646,7 +701,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * `Cloudflare.InferEnv` to extract a fully typed `env` object from
  * them.
  *
- * See the {@link https://alchemy.run/guides/async-worker | Async Workers Guide}
+ * See the [Workers guide](/cloudflare/compute/workers)
  * for a comprehensive walkthrough of all binding types (R2, D1,
  * Durable Objects, Assets, and more).
  *
@@ -789,6 +844,17 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * }
  * ```
  *
+ * @example Zone routes
+ * ```typescript
+ * {
+ *   main: import.meta.filename,
+ *   routes: [
+ *     { pattern: "api.example.com/*", zoneName: "example.com" },
+ *     { pattern: "example.com/api/*", zoneId: "<YOUR_ZONE_ID>" },
+ *   ],
+ * }
+ * ```
+ *
  * @example Deploying a prebuilt Worker without bundling
  * When `main` already points at a complete, runtime-ready ESM bundle
  * produced by an external tool (e.g. OpenNext), set `bundle: false` to
@@ -900,11 +966,16 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * closure and used from any handler; its methods are `RuntimeContext`-
  * colored, so they can only run inside a handler.
  *
- * The init closure itself is evaluated per event (its Layer is rebuilt for
- * each event's runtime), so treat it as stateless setup: bind resources and
- * build handlers there, but attach cleanup to handler scopes — a finalizer
- * added in the init closure runs at the end of every event, not once per
- * Worker.
+ * The init closure is evaluated once per isolate: the bridge builds the
+ * Worker's layer stack on the first event and every later event reuses the
+ * built services. Resolve services, bind resources, build handlers there —
+ * one-shot I/O that caches a plain value (e.g. fetching a secret for a
+ * client) is fine, but nothing disposable: the build scope is never closed
+ * (workerd has no isolate-teardown hook), so a finalizer added in the init
+ * closure never runs, and I/O-backed objects (sockets, response bodies) are
+ * pinned to the request that created them. Anything that needs cleanup
+ * belongs in a handler, where `Effect.addFinalizer` attaches to the
+ * per-event scope.
  *
  * @example Post-response cleanup with a scope finalizer
  * ```typescript

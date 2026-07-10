@@ -252,7 +252,9 @@ export type ZoneDnsSettings = Resource<
  * });
  * ```
  */
-export const ZoneDnsSettings = Resource<ZoneDnsSettings>(TypeId);
+export const ZoneDnsSettings = Resource<ZoneDnsSettings>(TypeId, {
+  aliases: ["Cloudflare.Dns.ZoneSettings"],
+});
 
 /**
  * Returns true if the given value is a ZoneDnsSettings resource.

@@ -1,9 +1,12 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
+import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -38,4 +41,95 @@ test.provider("list enumerates the deployed infrastructure target", (stack) =>
 
     yield* stack.destroy();
   }),
+);
+
+test.provider(
+  "recovers a half-created target whose creating-state lost Output-valued props (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      const hostname = "wedged-recovery.bastion.internal";
+
+      yield* stack.destroy();
+
+      // Safety net: a previously crashed run leaves an orphaned cloud
+      // target (its state row is wedged attr-less, so destroy can't reach
+      // it) which would fail the fresh deploy with OwnedBySomeoneElse.
+      // Sweep any target with our deterministic hostname out-of-band.
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const orphans = yield* zeroTrust.listAccessInfrastructureTargets
+        .items({ accountId, hostname })
+        .pipe(
+          Stream.filter((t) => t.hostname === hostname),
+          Stream.runCollect,
+        );
+      yield* Effect.forEach(Array.from(orphans), (t) =>
+        zeroTrust
+          .deleteAccessInfrastructureTarget({ accountId, targetId: t.id })
+          .pipe(Effect.catchTag("TargetNotFound", () => Effect.void)),
+      );
+
+      const deployTarget = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Access.InfrastructureTarget(
+              "WedgedTarget",
+              {
+                hostname,
+                ip: { ipv4: { ipAddr: "10.7.0.99" } },
+              },
+            );
+          }),
+        );
+
+      const created = yield* deployTarget();
+
+      // Rewrite the target's persisted row into the wedged shape an
+      // interrupted deploy leaves behind: `creating`, no attributes, and
+      // the Output-valued `ip` prop lost in the round-trip. `hostname`
+      // survives so the cold-read identity path runs.
+      const state = yield* yield* State;
+      const stage = "test"; // scratch stacks default to the "test" stage
+      const fqns = yield* state.list({ stack: stack.name, stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const wedged = rows.find(
+        (r): r is { fqn: string; row: ResourceState } =>
+          isResourceState(r.row) &&
+          r.row.resourceType === "Cloudflare.Access.InfrastructureTarget",
+      );
+      if (!wedged) {
+        return yield* Effect.die(
+          new Error(
+            "no Cloudflare.Access.InfrastructureTarget state row found after deploy",
+          ),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: wedged.fqn,
+        value: {
+          ...wedged.row,
+          status: "creating",
+          attr: undefined,
+          props: { ...wedged.row.props, ip: undefined },
+        },
+      });
+
+      // Before the fix, `read` crashed here with
+      // `TypeError: undefined is not an object (evaluating 'ip.ipv4')`
+      // (resolvedIp(olds.ip) with olds.ip === undefined). After the fix,
+      // read falls back to the output hint, matches by hostname, and the
+      // engine converges onto the same target — no duplicate created.
+      const recovered = yield* deployTarget();
+      expect(recovered.targetId).toEqual(created.targetId);
+      expect(recovered.hostname).toEqual(created.hostname);
+      expect(recovered.ip.ipv4?.ipAddr).toEqual("10.7.0.99");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 240_000 },
 );

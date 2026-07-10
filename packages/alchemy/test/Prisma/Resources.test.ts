@@ -415,6 +415,7 @@ const reconcileInput = <Props, Attrs>(
   olds?: Props,
 ) => ({
   id,
+  fqn: id,
   instanceId: "00000000000000000000000000000000",
   news,
   olds,
@@ -426,6 +427,7 @@ const reconcileInput = <Props, Attrs>(
 const deleteInput = (id: string, output: unknown) =>
   ({
     id,
+    fqn: id,
     instanceId: "00000000000000000000000000000000",
     olds: {} as never,
     output,
@@ -436,6 +438,7 @@ const deleteInput = (id: string, output: unknown) =>
 const readInput = <Props, Attrs>(id: string, olds: Props, output?: Attrs) =>
   ({
     id,
+    fqn: id,
     instanceId: "00000000000000000000000000000000",
     olds,
     output,
@@ -444,6 +447,7 @@ const readInput = <Props, Attrs>(id: string, olds: Props, output?: Attrs) =>
 const diffInput = <Props, Attrs>(olds: Props, news: Props, output?: Attrs) =>
   ({
     id: "Resource",
+    fqn: "Resource",
     instanceId: "00000000000000000000000000000000",
     olds,
     news,
@@ -2664,6 +2668,7 @@ describe("Prisma resource providers", () => {
         const envProvider = yield* PrismaEnvironmentVariable.Provider;
         yield* envProvider.delete!({
           id: "EnvironmentVariable",
+          fqn: "EnvironmentVariable",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -2734,6 +2739,7 @@ describe("Prisma resource providers", () => {
         const envProvider = yield* PrismaEnvironmentVariable.Provider;
         yield* envProvider.delete!({
           id: "EnvironmentVariable",
+          fqn: "EnvironmentVariable",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -2795,6 +2801,7 @@ describe("Prisma resource providers", () => {
         const envProvider = yield* PrismaEnvironmentVariable.Provider;
         yield* envProvider.delete!({
           id: "EnvironmentVariable",
+          fqn: "EnvironmentVariable",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -4288,6 +4295,7 @@ describe("Prisma resource providers", () => {
       const result = yield* databaseProvider
         .delete({
           id: "Postgres",
+          fqn: "Postgres",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -4329,6 +4337,7 @@ describe("Prisma resource providers", () => {
       const result = yield* databaseProvider
         .delete({
           id: "Postgres",
+          fqn: "Postgres",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -4365,6 +4374,7 @@ describe("Prisma resource providers", () => {
       const result = yield* databaseProvider
         .delete({
           id: "Postgres",
+          fqn: "Postgres",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -4400,6 +4410,7 @@ describe("Prisma resource providers", () => {
       const databaseProvider = yield* PrismaDatabase.Provider;
       yield* databaseProvider.delete({
         id: "Postgres",
+        fqn: "Postgres",
         instanceId: "00000000000000000000000000000000",
         olds: {} as never,
         output: {
@@ -4443,6 +4454,7 @@ describe("Prisma resource providers", () => {
       const result = yield* branchProvider
         .delete({
           id: "MainBranch",
+          fqn: "MainBranch",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -4492,6 +4504,7 @@ describe("Prisma resource providers", () => {
       const result = yield* branchProvider
         .delete({
           id: "MainBranch",
+          fqn: "MainBranch",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -4536,6 +4549,7 @@ describe("Prisma resource providers", () => {
       const result = yield* branchProvider
         .delete({
           id: "MainBranch",
+          fqn: "MainBranch",
           instanceId: "00000000000000000000000000000000",
           olds: {} as never,
           output: {
@@ -4579,6 +4593,7 @@ describe("Prisma resource providers", () => {
       const branchProvider = yield* PrismaBranch.Provider;
       yield* branchProvider.delete({
         id: "MainBranch",
+        fqn: "MainBranch",
         instanceId: "00000000000000000000000000000000",
         olds: {} as never,
         output: {

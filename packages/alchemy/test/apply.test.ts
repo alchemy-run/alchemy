@@ -1,6 +1,8 @@
+import { adopt, Unowned } from "@/AdoptPolicy";
 import { Cli } from "@/Cli/Cli";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
 import {
@@ -16,12 +18,16 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  AliasedWidget,
+  aliasedWidgetDeletes,
+  aliasedWidgetProvider,
   ArtifactProbe,
   BindingTarget,
   CollisionRegistry,
   DeleteFirstResource,
   DeletedBindingRegressionTarget,
   DurationResource,
+  FqnProbe,
   Function,
   KindStablesResource,
   PhasedTarget,
@@ -4332,6 +4338,30 @@ describe("artifacts", () => {
   );
 });
 
+describe("resource identity (fqn) threading", () => {
+  test.provider(
+    "threads the resource's fully-qualified name into handler inputs, distinct from the logical id",
+    (stack) =>
+      Effect.gen(function* () {
+        // Deploy the probe under a namespace so its FQN ("Parent/leaf") is
+        // NOT its bare logical id ("leaf"). The provider echoes both the `id`
+        // and `fqn` it received back out as attributes.
+        const { probe } = yield* Effect.gen(function* () {
+          const probe = yield* Effect.gen(function* () {
+            return yield* FqnProbe("leaf", {});
+          }).pipe(Namespace.push("Parent"));
+          return { probe };
+        }).pipe(stack.deploy);
+
+        // The engine passes the leaf logical id as `id` and the full
+        // namespace-qualified name as `fqn`.
+        expect(probe.id).toEqual("leaf");
+        expect(probe.fqn).toEqual("Parent/leaf");
+        expect((yield* getState("Parent/leaf"))?.status).toEqual("created");
+      }),
+  );
+});
+
 // =============================================================================
 // STATIC STABLE PROPERTIES (provider.stables defined on provider, not in diff)
 // This tests the bug where diff returns undefined but downstream resources
@@ -4811,6 +4841,190 @@ describe("Duration round-trip through state", () => {
         }>("Timer");
         expect(Duration.isDuration(persisted.attr.computedTimeout)).toBe(true);
         expect(Duration.toMillis(persisted.attr.computedTimeout)).toBe(16_000);
+      }),
+  );
+});
+
+describe("type aliases", () => {
+  // Simulate state written before a type rename: rewrite the persisted row's
+  // resourceType to the legacy name ("Test.Widget") that the canonical type
+  // ("Test.Widgets.Widget") carries as an alias.
+  const rewriteTypeToLegacy = Effect.fn(function* (fqn: string) {
+    const state = yield* yield* State;
+    const stk = yield* Stack;
+    const row = (yield* state.get({
+      stack: stk.name,
+      stage: stk.stage,
+      fqn,
+    })) as ResourceState;
+    expect(row.resourceType).toEqual("Test.Widgets.Widget");
+    yield* state.set({
+      stack: stk.name,
+      stage: stk.stage,
+      fqn,
+      value: { ...row, resourceType: "Test.Widget" },
+    });
+  });
+
+  describe("bare provider layer", () => {
+    const { test } = Test.make({
+      providers: Layer.mergeAll(TestLayers(), aliasedWidgetProvider()),
+    });
+
+    test.provider(
+      "a noop deploy migrates legacy-typed state to the canonical type",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W1", { name: "w1" });
+          }).pipe(stack.deploy);
+
+          yield* rewriteTypeToLegacy("W1");
+
+          // Unchanged props plan as a noop — Apply must still rewrite the
+          // state row to the canonical type name.
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W1", { name: "w1" });
+          }).pipe(stack.deploy);
+
+          const row = yield* getState("W1");
+          expect(row.resourceType).toEqual("Test.Widgets.Widget");
+          expect(row.status).toEqual("created");
+          expect(row.attr).toEqual({ name: "w1" });
+        }),
+    );
+
+    test.provider(
+      "orphan persisted under a legacy type name is deleted via alias",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W2", { name: "w2" });
+          }).pipe(stack.deploy);
+
+          yield* rewriteTypeToLegacy("W2");
+
+          // Remove the resource from the stack — the orphan-deletion path
+          // resolves the provider from the legacy type via its alias.
+          yield* Effect.void.pipe(stack.deploy);
+
+          expect(aliasedWidgetDeletes).toContain("W2");
+          expect(yield* getState("W2")).toBeUndefined();
+        }),
+    );
+
+    test.provider(
+      "destroy resolves the provider for legacy-typed state via alias",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W3", { name: "w3" });
+          }).pipe(stack.deploy);
+
+          yield* rewriteTypeToLegacy("W3");
+
+          yield* stack.destroy();
+
+          expect(aliasedWidgetDeletes).toContain("W3");
+          expect(yield* getState("W3")).toBeUndefined();
+        }),
+    );
+  });
+
+  describe("provider collection", () => {
+    class AliasApplyProviders extends Provider.ProviderCollection<AliasApplyProviders>()(
+      "Test.AliasApplyProviders",
+    ) {}
+
+    // The bare provider layer is consumed while building the collection and
+    // is NOT exported — lookup can only succeed through the collection.
+    const { test } = Test.make({
+      providers: Layer.effect(
+        AliasApplyProviders,
+        Provider.collection([AliasedWidget]),
+      ).pipe(Layer.provide(aliasedWidgetProvider())),
+    });
+
+    test.provider(
+      "orphan persisted under a legacy type name is deleted via alias",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W4", { name: "w4" });
+          }).pipe(stack.deploy);
+
+          yield* rewriteTypeToLegacy("W4");
+
+          yield* Effect.void.pipe(stack.deploy);
+
+          expect(aliasedWidgetDeletes).toContain("W4");
+          expect(yield* getState("W4")).toBeUndefined();
+        }),
+    );
+  });
+});
+
+// Regression coverage for
+// https://github.com/alchemy-run/alchemy-effect/issues/793
+//
+// `Plan.make` used to `state.set(...)` the adopted `created` state during plan
+// construction. Because `alchemy plan` / `deploy --dry-run` build a plan the
+// exact same way a real deploy does, a read-only preview silently claimed
+// ownership of an unowned cloud resource — arming a later, unrelated deploy to
+// orphan-delete it. Plan construction must be side-effect-free: reading the
+// cloud resource is fine (needed for an accurate diff), but persisting the
+// adopted state may only happen when the plan node is applied.
+describe("engine-level adoption persists at apply, not plan (issue #793)", () => {
+  // A pre-existing, foreign-owned cloud resource that `read` always discovers
+  // — the exact shape that triggers an `--adopt` takeover.
+  const ownedAttrs: TestResource["Attributes"] = {
+    string: "hello",
+    stringArray: [],
+    stableString: "Adopted",
+    stableArray: ["Adopted"],
+    replaceString: undefined,
+    redacted: undefined,
+    redactedArray: undefined,
+  };
+
+  const adoptHooks = Layer.succeed(TestResourceHooks, {
+    read: () => Effect.succeed(Unowned(ownedAttrs)),
+  });
+
+  test.provider(
+    "a dry-run plan writes nothing to the state store; applying persists",
+    (stack) =>
+      Effect.gen(function* () {
+        // ── dry-run: build a plan that adopts the unowned cloud resource ──
+        const plan = yield* TestResource("Adopted", { string: "hello" }).pipe(
+          adopt(true),
+          stack.plan,
+          Effect.provide(adoptHooks),
+        );
+
+        // The adopted state rides on the plan node as a forced update (so the
+        // provider re-syncs ownership tags / config) — it is not persisted.
+        expect(plan.resources.Adopted!.action).toBe("update");
+        expect(plan.resources.Adopted!.state?.status).toBe("created");
+
+        // The critical invariant of #793: planning persisted nothing, so a
+        // read-only `alchemy plan` / `--dry-run` cannot arm a later deploy to
+        // orphan-delete the live resource.
+        expect(yield* getState("Adopted")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+
+        // ── apply: the same config now deploys. Because plan didn't persist,
+        // the resource is still adoptable here. ──
+        yield* TestResource("Adopted", { string: "hello" }).pipe(
+          adopt(true),
+          stack.deploy,
+          Effect.provide(adoptHooks),
+        );
+
+        // Applying DOES persist the adopted state.
+        const persisted = yield* getState("Adopted");
+        expect(["created", "updated"]).toContain(persisted?.status);
+        expect(yield* listState()).toEqual(["Adopted"]);
       }),
   );
 });

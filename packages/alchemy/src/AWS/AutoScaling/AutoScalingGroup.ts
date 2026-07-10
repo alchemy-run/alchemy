@@ -111,14 +111,6 @@ export const AutoScalingGroup = Resource<AutoScalingGroup>(
   "AWS.AutoScaling.AutoScalingGroup",
 );
 
-const isLaunchTemplateResource = (
-  value: unknown,
-): value is LaunchTemplateResource =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  (value as { Type?: string }).Type === "AWS.AutoScaling.LaunchTemplate";
-
 const sortStrings = (values: readonly string[] = []) =>
   [...values].sort((a, b) => a.localeCompare(b));
 
@@ -137,14 +129,28 @@ export const AutoScalingGroupProvider = () =>
       const toLaunchTemplateSpec = (
         input: AutoScalingGroupProps["launchTemplate"],
       ) => {
-        const spec = isLaunchTemplateResource(input)
-          ? {
-              launchTemplateId: input.launchTemplateId,
-              launchTemplateName: input.launchTemplateName,
-              version: input.defaultVersionNumber,
-            }
-          : ((input ?? {}) as LaunchTemplateReference);
+        // A whole-resource `launchTemplate: template` resolves to the
+        // LaunchTemplate's bare Attributes before reaching the provider —
+        // the resource `Type` marker does not survive resolution — so narrow
+        // on the attributes shape (`launchTemplateArn` exists only on
+        // attributes, never on a LaunchTemplateReference). Attributes carry
+        // BOTH id and name, and the API rejects a spec with both, so send
+        // the id alone.
+        const attrs = input as
+          | Partial<LaunchTemplateResource["Attributes"]>
+          | undefined;
+        if (typeof attrs?.launchTemplateArn === "string") {
+          return {
+            LaunchTemplateId: attrs.launchTemplateId as string | undefined,
+            LaunchTemplateName: undefined,
+            Version:
+              attrs.defaultVersionNumber === undefined
+                ? "$Default"
+                : String(attrs.defaultVersionNumber),
+          };
+        }
 
+        const spec = (input ?? {}) as LaunchTemplateReference;
         return {
           LaunchTemplateId: spec.launchTemplateId as string | undefined,
           LaunchTemplateName: spec.launchTemplateName as string | undefined,

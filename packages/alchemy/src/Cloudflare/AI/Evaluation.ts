@@ -124,7 +124,9 @@ export type Evaluation = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/evaluations/
  */
-export const Evaluation = Resource<Evaluation>(TypeId);
+export const Evaluation = Resource<Evaluation>(TypeId, {
+  aliases: ["Cloudflare.AiGateway.Evaluation"],
+});
 
 /**
  * Returns true if the given value is an Evaluation resource.

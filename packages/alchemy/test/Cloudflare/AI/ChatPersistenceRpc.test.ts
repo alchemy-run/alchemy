@@ -3,13 +3,10 @@ import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import ChatPersistenceRpcWorker from "./fixtures/ChatPersistenceRpcWorker.ts";
 import { ChatRpcs } from "./fixtures/ChatRpcs.ts";
 import { Gateway } from "./fixtures/Gateway.ts";
@@ -17,6 +14,13 @@ import { Gateway } from "./fixtures/Gateway.ts";
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
+
+// `Test.rpcClientLayer` speaks `RpcSerialization.ndjson` (streaming
+// procedures require newline framing on the wire, matching the worker) and
+// guards the transport against edge-generated HTML bodies (workers.dev
+// placeholder, error pages) that the RPC protocol would otherwise surface as
+// an opaque `RpcClientDefect`; see Test/Http.ts.
+const clientLayer = Test.rpcClientLayer;
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -41,16 +45,6 @@ const Stack = Alchemy.Stack(
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
-
-// Streaming procedures require newline framing on the wire, so both the
-// worker and this client use `RpcSerialization.ndjson`.
-const clientLayer = (url: string) =>
-  RpcClient.layerProtocolHttp({ url }).pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(
-      Layer.succeed(RpcSerialization.RpcSerialization, RpcSerialization.ndjson),
-    ),
-  );
 
 // Cap exponential backoff at 3s so retries stay bounded when the CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).

@@ -45,6 +45,13 @@ export interface ResourceClassLike<R extends ResourceLike> {
   Props: R["Props"];
   Self: Self<R>;
   Provider: Provider<R>;
+  /**
+   * Legacy type names this resource was previously registered under
+   * (see {@link ResourceOptions.aliases}). Copied onto the
+   * `ProviderService` by `Provider.succeed`/`Provider.effect` so provider
+   * lookup can resolve state persisted under a pre-rename type.
+   */
+  Aliases?: readonly string[];
 }
 
 export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
@@ -54,6 +61,7 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    Aliases: readonly string[] | undefined;
     ref(
       id: string,
       options?: { stage?: string; stack?: string },
@@ -70,6 +78,7 @@ export type ResourceClassWithMethods<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    Aliases: readonly string[] | undefined;
     ref(
       id: string,
       options?: { stage?: string; stack?: string },
@@ -184,6 +193,23 @@ export interface ResourceOptions {
    * @default "destroy"
    */
   defaultRemovalPolicy?: RemovalPolicy["Service"];
+  /**
+   * Legacy type names this resource was previously registered under.
+   *
+   * When a resource type is renamed (e.g. `"Cloudflare.Queue"` →
+   * `"Cloudflare.Queues.Queue"`), state persisted under the old name must
+   * still resolve to this resource's provider. Listing the old names here
+   * makes provider lookup fall back from the legacy name to this type, so
+   * existing stacks keep planning, updating, and deleting cleanly across
+   * the rename. The state row migrates to the new type on its next write.
+   *
+   * ```ts
+   * export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
+   *   aliases: ["Cloudflare.Queue"],
+   * });
+   * ```
+   */
+  aliases?: string[];
 }
 
 /**
@@ -339,6 +365,7 @@ export function Resource<R extends ResourceLike>(
     Type: type,
     Provider: ProviderTag,
     Self: self,
+    Aliases: options?.aliases,
   };
 
   const ResourceClass = Object.assign(

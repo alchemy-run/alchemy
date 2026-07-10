@@ -103,7 +103,9 @@ export type Queue = Resource<
  * );
  * ```
  */
-export const Queue = Resource<Queue>("Cloudflare.Queues.Queue");
+export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
+  aliases: ["Cloudflare.Queue"],
+});
 
 export const ProviderLive = () =>
   Provider.succeed(Queue, {

@@ -188,6 +188,7 @@ export type Organization = Resource<
  */
 export const Organization = Resource<Organization>(
   "Cloudflare.Access.Organization",
+  { aliases: ["Cloudflare.AccessOrganization"] },
 );
 
 export const OrganizationProvider = () =>

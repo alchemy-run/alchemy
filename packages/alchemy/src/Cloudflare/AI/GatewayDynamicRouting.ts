@@ -302,7 +302,9 @@ export type GatewayDynamicRouting = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/
  */
-export const GatewayDynamicRouting = Resource<GatewayDynamicRouting>(TypeId);
+export const GatewayDynamicRouting = Resource<GatewayDynamicRouting>(TypeId, {
+  aliases: ["Cloudflare.AiGateway.DynamicRouting"],
+});
 
 /**
  * Returns true if the given value is a GatewayDynamicRouting resource.

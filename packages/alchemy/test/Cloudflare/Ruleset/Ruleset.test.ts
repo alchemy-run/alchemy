@@ -4,6 +4,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import { expect } from "@effect/vitest";
@@ -230,6 +231,96 @@ describe.sequential("Ruleset", () => {
         });
         expect(zoneAfter).toBeUndefined();
       }).pipe(softSkipWhenZoneCreationBlocked, logLevel),
+  );
+
+  // A `creating` state row persisted before upstream Outputs resolve cannot
+  // round-trip Output-valued props — the `zone` prop deserializes as
+  // `undefined`. The engine's creating-with-no-attr recovery path then calls
+  // `read` with those junk props as `olds` and `output: undefined`. Before the
+  // #770 guard, `zoneIdOf(olds.zone)` dereferenced `.zoneId` on `undefined`
+  // and crashed the deploy; after it, `read` returns "not found" and
+  // `reconcile` re-converges the phase entrypoint from the resolved news.
+  test.provider(
+    "recovers a half-created ruleset whose creating-state lost the Output-valued zone (#736)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployRuleset = () =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const zone = yield* Cloudflare.Zone.Zone("TestZone", {
+                name: zoneName,
+              }).pipe(AdoptPolicy.adopt(true));
+              return yield* Cloudflare.Ruleset.Ruleset("WedgedRuleset", {
+                zone,
+                phase,
+                rules: [
+                  {
+                    description: "Alchemy wedged recovery rule",
+                    expression:
+                      'http.request.uri.path eq "/__alchemy_ruleset_wedged__"',
+                    action: "block",
+                  },
+                ],
+              });
+            }),
+          );
+
+        const created = yield* deployRuleset();
+
+        // Rewrite the ruleset's persisted row into the wedged shape an
+        // interrupted deploy leaves behind: `creating`, no attributes, and the
+        // Output-valued `zone` prop lost in the round-trip.
+        const state = yield* yield* State;
+        const stage = "test"; // scratch stacks default to the "test" stage
+        const fqns = yield* state.list({ stack: stack.name, stage });
+        const rows = yield* Effect.forEach(fqns, (fqn) =>
+          state
+            .get({ stack: stack.name, stage, fqn })
+            .pipe(Effect.map((row) => ({ fqn, row }))),
+        );
+        const wedged = rows.find(
+          (r): r is { fqn: string; row: ResourceState } =>
+            isResourceState(r.row) &&
+            r.row.resourceType === "Cloudflare.Ruleset.Ruleset",
+        );
+        if (!wedged) {
+          return yield* Effect.die(
+            new Error(
+              "no Cloudflare.Ruleset.Ruleset state row found after deploy",
+            ),
+          );
+        }
+        yield* state.set({
+          stack: stack.name,
+          stage,
+          fqn: wedged.fqn,
+          value: {
+            ...wedged.row,
+            status: "creating",
+            attr: undefined,
+            props: { ...wedged.row.props, zone: undefined },
+          },
+        });
+
+        // Before the fix this crashed in `read` with
+        // `TypeError: undefined is not an object (evaluating 'zone.zoneId')`.
+        const recovered = yield* deployRuleset();
+        expect(recovered.rulesetId).toEqual(created.rulesetId);
+        expect(recovered.zoneId).toEqual(created.zoneId);
+
+        // The recovered entrypoint converged to the desired rules.
+        const recoveredRules = yield* getPhaseRules(recovered.zoneId, phase);
+        expect(recoveredRules).toHaveLength(1);
+        expect(recoveredRules[0]).toMatchObject({
+          description: "Alchemy wedged recovery rule",
+          action: "block",
+        });
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 240_000 },
   );
 
   // Canonical `list()` test (zone-scoped collection): enumerate every zone via

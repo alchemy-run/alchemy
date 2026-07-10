@@ -114,17 +114,22 @@ export const HostedZoneProvider = () =>
       // Poll `getChange` until the change reaches INSYNC. `getChange` is
       // eventually consistent and can briefly return `NoSuchChange` right after
       // submit, so coalesce that to a non-INSYNC status and keep polling.
+      // `ChangeInfo.Id` comes back as "/change/C..." but `getChange` only
+      // accepts the bare id — the prefixed form returns `NoSuchChange`
+      // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53.getChange({ Id: changeId }).pipe(
-          Effect.map((r) => r.ChangeInfo.Status),
-          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
-          Effect.repeat({
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
-            until: (status) => status === "INSYNC",
-          }),
-        );
+        return yield* route53
+          .getChange({ Id: changeId.replace(/^\/change\//, "") })
+          .pipe(
+            Effect.map((r) => r.ChangeInfo.Status),
+            Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+            Effect.repeat({
+              schedule: Schedule.fixed("2 seconds").pipe(
+                Schedule.both(Schedule.recurs(60)),
+              ),
+              until: (status) => status === "INSYNC",
+            }),
+          );
       });
 
       const findByName = Effect.fn(function* (name: string) {
@@ -242,8 +247,13 @@ export const HostedZoneProvider = () =>
           ),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
+          // Name change → replace, but only when the old name is known — a
+          // half-created state row can't round-trip an Output-valued `name`
+          // (it deserializes as `undefined`), and an unknown old name must
+          // fall through to the create/update recovery path.
           if (
-            normalizeName(olds.name) !== normalizeName(news.name) ||
+            (olds.name !== undefined &&
+              normalizeName(olds.name) !== normalizeName(news.name)) ||
             (olds.privateZone ?? false) !== (news.privateZone ?? false) ||
             olds.delegationSetId !== news.delegationSetId ||
             olds.vpc?.vpcId !== news.vpc?.vpcId
@@ -253,8 +263,15 @@ export const HostedZoneProvider = () =>
         }),
         read: Effect.fn(function* ({ olds, output }) {
           // Resolve the zone id: prefer the stored output, else look up by name
-          // (adoption / state-loss recovery).
-          const zoneId = output?.id ?? (yield* findByName(olds!.name))?.Id;
+          // (adoption / state-loss recovery). The persisted `name` may be
+          // `undefined` when a `creating` row was written before upstream
+          // Outputs resolved — report "not found" and let the engine
+          // re-drive the create.
+          const zoneId =
+            output?.id ??
+            (olds?.name !== undefined
+              ? (yield* findByName(olds.name))?.Id
+              : undefined);
           if (zoneId === undefined) {
             return undefined;
           }

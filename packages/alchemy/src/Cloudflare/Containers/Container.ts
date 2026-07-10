@@ -159,8 +159,8 @@ export type Container<Id extends string = string> = Named<Id> & {
  * runtime. Keeping them separate ensures the bundler only includes
  * the tiny class in the DO's output.
  *
- * See the {@link https://alchemy.run/concepts/platform | Platform
- * concept} page for how this fits into the async / effect / layer
+ * See the [Platform concept](/infrastructure-as-effects/functions-and-servers)
+ * page for how this fits into the async / effect / layer
  * progression.
  * @resource
  * @product Containers

@@ -107,7 +107,9 @@ export type ContentScanning = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/malicious-uploads/
  */
-export const ContentScanning = Resource<ContentScanning>(TypeId);
+export const ContentScanning = Resource<ContentScanning>(TypeId, {
+  aliases: ["Cloudflare.ContentScanning"],
+});
 
 /**
  * Returns true if the given value is a ContentScanning resource.

@@ -9,13 +9,12 @@ import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import type { Scope } from "effect/Scope";
+import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Dependencies } from "./Dependencies.ts";
-import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Named, Tag } from "./Named.ts";
@@ -43,6 +42,44 @@ export interface PlatformProps {
    */
   isExternal?: boolean;
 }
+
+/**
+ * Provide the platform class's layer (`cls.make(props, impl)`) with a
+ * lifetime that matches the phase.
+ *
+ * **At runtime** (`__ALCHEMY_RUNTIME__`, folded to `true` in every bundled
+ * artifact) the layer builds against the AMBIENT scope. `Effect.provide` is
+ * implemented with `scopedWith`, so its transient region scope would tear
+ * the layer down — firing init-level finalizers and releasing
+ * `Layer.scoped` services — the moment init completes. The runtime bridges
+ * evaluate the entrypoint under the instance-lifetime build scope (closed
+ * at instance shutdown where the platform offers one — Lambda's SIGTERM
+ * window — and never on workerd), so building against it keeps instance
+ * services alive for the instance.
+ *
+ * **At plan/deploy** it stays `Effect.provide`: the transient region evicts
+ * the layer's memo entry when each `yield*` of the class completes, so
+ * every deploy in a session re-evaluates the resource and re-registers its
+ * Output sources. Building on the session scope would keep the memo alive
+ * across deploys and a second `stack.deploy` would skip source
+ * registration (`MissingSourceError`).
+ */
+const provideClassLayer =
+  <ROut, E2, RIn>(layer: Layer.Layer<ROut, E2, RIn>) =>
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | E2, RIn | Scope | Exclude<R, ROut>> =>
+    (globalThis.__ALCHEMY_RUNTIME__
+      ? Effect.flatMap(Effect.scope, (scope) =>
+          Effect.flatMap(Layer.buildWithScope(layer, scope), (context) =>
+            Effect.provideContext(self, context),
+          ),
+        )
+      : Effect.provide(self, layer)) as Effect.Effect<
+      A,
+      E | E2,
+      RIn | Scope | Exclude<R, ROut>
+    >;
 
 export type Main<InitServices = never> = void | {
   fetch?:
@@ -98,14 +135,17 @@ export type MakeShape<Shape, BaseShape> = [
   ? Exclude<BaseShape, void | undefined>
   : Exclude<Shape, void | undefined> & Exclude<BaseShape, void | undefined>;
 
-// services provided to the Resource
+// Services provided to the Resource's init/props effects. Deliberately does
+// NOT include `Scope`: init runs once per instance under a build scope that
+// closes at instance shutdown at best (Lambda's SIGTERM window; never on
+// workerd), so init code that needs a scope must not typecheck. Handlers get
+// a fresh per-event `Scope` from the bridge — note the explicit `| Scope` on
+// the handler positions in `Main` / `MainRpc` above.
 export type PlatformServices =
   | NodeServices
-  | ExecutionContext
   | HttpClient
   | Provider<any>
   | ProviderCollectionLike
-  | Scope
   | Stack
   | StackServices
   | Stage;
@@ -324,7 +364,7 @@ export const Platform = <
         );
       return Object.assign(
         function (props: Props, impl: Impl) {
-          return cls.Self.pipe(Effect.provide(cls.make(props, impl)));
+          return cls.Self.pipe(provideClassLayer(cls.make(props, impl)));
         },
         // we splice in the Effect so this can be yielded to indicate a non-Effect native instance
         // e.g. here, we yield it - in this case we don't want to provide an implementation
@@ -345,7 +385,10 @@ export const Platform = <
       // e.g.
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id);
-      return cls.Self.pipe(Effect.provide(cls.make(props, impl)), effectClass);
+      return cls.Self.pipe(
+        provideClassLayer(cls.make(props, impl)),
+        effectClass,
+      );
     }
   };
 
@@ -367,6 +410,18 @@ export const Platform = <
               Effect.context<never>(),
             ]),
             Effect.fn(function* ([props, runtimeContext, outerServices]) {
+              // The init effect (`impl`) is evaluated inside an
+              // `Effect.provide(...)` region below, whose implementation
+              // (`scopedWith`) would otherwise shadow the ambient `Scope`
+              // with a transient one that closes the moment init returns.
+              // Pin init's ambient scope to this layer's build scope
+              // instead: under the runtime bridges that scope belongs to
+              // the instance-lifetime build, so init-level finalizers run
+              // at instance shutdown or not at all — never per event
+              // (workerd never closes it; the Lambda entry closes it in the
+              // SIGTERM window). Request-coupled cleanup belongs in
+              // handlers, where the bridge provides a per-event scope.
+              const buildScope = yield* Effect.scope;
               const instance = Object.assign(
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
@@ -455,6 +510,18 @@ export const Platform = <
                   ).pipe(
                     Layer.provideMerge(
                       Layer.mergeAll(
+                        // Pin init's ambient `Scope` to this layer's build
+                        // scope. `Effect.provide` (`scopedWith`) would
+                        // otherwise shadow it with a transient scope that
+                        // closes the moment init returns; the build scope
+                        // lives for the instance under the runtime bridges,
+                        // so init-level finalizers run at instance shutdown
+                        // (Lambda's SIGTERM window) or never (workerd) —
+                        // request-coupled cleanup belongs in handlers, where
+                        // the bridge provides a per-event scope. It also
+                        // wins over any `Scope` captured in `outerServices`
+                        // below.
+                        Layer.succeed(Scope, buildScope),
                         Layer.succeed(Platform.Platform, runtimeContext),
                         Layer.succeed(PlatformContext, runtimeContext),
                         Layer.succeed(RuntimeContext, runtimeContext),

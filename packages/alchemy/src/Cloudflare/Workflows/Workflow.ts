@@ -2,9 +2,9 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import { ExecutionContext } from "../../ExecutionContext.ts";
 import type { Input } from "../../Input.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
@@ -243,17 +243,17 @@ export const waitForEvent = <T = unknown>(
  * reflect that or `yield* WorkerEnvironment` fails to type-check inside a
  * body even though it succeeds at runtime.
  *
- * `ExecutionContext` (scope + cache) is provided per run-invocation by
- * `WorkflowBridge.run` and threaded into every `task` via the surrounding
- * body context, so `@binding` helpers that need it (e.g. `Drizzle.postgres`)
- * resolve their per-run resources inside workflow steps just as they do in a
- * Worker `fetch`/`queue` handler.
+ * A fresh `Scope` is provided per run-invocation by `WorkflowBridge.run` and
+ * threaded into every `task` via the surrounding body context, so `@binding`
+ * helpers that acquire per-run resources against the ambient scope (e.g.
+ * `Drizzle.postgres`) resolve them inside workflow steps just as they do in
+ * a Worker `fetch`/`queue` handler.
  */
 export type WorkflowRunServices =
   | WorkflowEvent
   | WorkflowStep
   | WorkerServices
-  | ExecutionContext;
+  | Scope;
 
 export type WorkflowServices =
   | WorkflowRunServices

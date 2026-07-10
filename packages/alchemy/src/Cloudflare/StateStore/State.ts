@@ -40,6 +40,11 @@ import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import {
+  CREDENTIALS_FILE,
+  type StoredStateStoreCredentials,
+  isStateStoreCredentialsStale,
+} from "./CredentialsFile.ts";
+import {
   AuthToken,
   AuthTokenSecretName,
   EncryptionKeySecretName,
@@ -47,9 +52,6 @@ import {
 } from "./Token.ts";
 
 const CI = Config.boolean("CI").pipe(Config.withDefault(false));
-
-/** Filename used for stored credentials under the profile directory. */
-const CREDENTIALS_FILE = "cloudflare-state-store";
 
 export const state = () =>
   Layer.effect(
@@ -173,15 +175,32 @@ export const state = () =>
             return yield* makeCloudflareStateStore(credentials);
           });
 
-        const credentials = yield* credStore.read<HttpStateStoreCredentials>(
+        const { accountId } =
+          yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+
+        const credentials = yield* credStore.read<StoredStateStoreCredentials>(
           profileName,
           CREDENTIALS_FILE,
         );
         if (credentials) {
-          return yield* ensureLatest(credentials);
+          // The cached `url`/`authToken` are minted per-account (the `url`
+          // encodes the account via its workers.dev subdomain). If the
+          // active account changed since they were written — or the file
+          // predates the `accountId` field — trusting the cache would
+          // silently read/write state in the wrong account, so discard it
+          // and fall through to re-derivation from the current account.
+          if (isStateStoreCredentialsStale(credentials, accountId)) {
+            yield* Clank.info(
+              `Cloudflare State Store credentials were minted for a different ` +
+                `Cloudflare account; re-deriving for the current account.`,
+            );
+            yield* credStore
+              .delete(profileName, CREDENTIALS_FILE)
+              .pipe(Effect.ignore);
+          } else {
+            return yield* ensureLatest(credentials);
+          }
         }
-        const { accountId } =
-          yield* yield* CloudflareEnvironment.CloudflareEnvironment;
         if (yield* isStateStoreServing(accountId)) {
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false),
@@ -283,7 +302,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       if (!isCI) {
         // we don't write credentials in CI because the file system is ephemeral
         const store = yield* CredentialsStore;
-        yield* store.write<HttpStateStoreCredentials>(
+        yield* store.write<StoredStateStoreCredentials>(
           profileName,
           CREDENTIALS_FILE,
           credentials,
@@ -703,11 +722,17 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
 
     if (!force) {
       // try and read from the cached credentials first if not forcing (force will always refresh)
-      const credentials = yield* credStore.read<HttpStateStoreCredentials>(
+      const credentials = yield* credStore.read<StoredStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
       );
-      if (credentials) {
+      // Ignore a cache minted for a different account (or a legacy file with
+      // no `accountId`) — reusing it would hand back the wrong account's
+      // state-store URL. Fall through to re-derive against `accountId`.
+      if (
+        credentials &&
+        !isStateStoreCredentialsStale(credentials, accountId)
+      ) {
         return credentials;
       }
     }
@@ -751,9 +776,10 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
       // 4. Persist credentials. The profile entry is managed by
       //    `loadOrConfigure` when this is invoked through `configure`.
       yield* credStore
-        .write<HttpStateStoreCredentials>(profileName, CREDENTIALS_FILE, {
+        .write<StoredStateStoreCredentials>(profileName, CREDENTIALS_FILE, {
           url,
           authToken: authToken.trim(),
+          accountId,
         })
         .pipe(
           Effect.mapError(
@@ -774,6 +800,7 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
     return {
       url,
       authToken: authToken.trim(),
+      accountId,
     };
   }).pipe(
     Effect.catchTag("EdgeSessionError", (e) =>
@@ -1022,12 +1049,15 @@ const writeCredentials = (url: string, authToken: string) =>
   Effect.gen(function* () {
     const profileName = yield* ALCHEMY_PROFILE;
     const credStore = yield* CredentialsStore;
-    yield* credStore.write<HttpStateStoreCredentials>(
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+    yield* credStore.write<StoredStateStoreCredentials>(
       profileName,
       CREDENTIALS_FILE,
       {
         url,
         authToken,
+        accountId,
       },
     );
   });

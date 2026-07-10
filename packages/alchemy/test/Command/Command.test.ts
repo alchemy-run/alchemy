@@ -130,6 +130,7 @@ test.provider(
       // diff() must return "update" because the output is stale.
       const refreshed = yield* provider.diff!({
         id: "test-build",
+        fqn: "test-build",
         instanceId: "legacy",
         olds: news,
         news,
@@ -142,6 +143,7 @@ test.provider(
       // reconcile() must rebuild and return a new output.
       const reconciled = yield* provider.reconcile({
         id: "test-build",
+        fqn: "test-build",
         instanceId: "legacy",
         news,
         olds: news,
@@ -161,6 +163,7 @@ test.provider(
       // delete() must resolve the absolute outdir and remove the directory.
       yield* provider.delete({
         id: "test-build",
+        fqn: "test-build",
         instanceId: "legacy",
         olds: news,
         output: legacyOutput,

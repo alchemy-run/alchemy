@@ -21,6 +21,7 @@ import {
   retryOnce,
 } from "../../Auth/Env.ts";
 import * as Clank from "../../Util/Clank.ts";
+import { CREDENTIALS_FILE as STATE_STORE_CREDENTIALS_FILE } from "../StateStore/CredentialsFile.ts";
 import * as OAuthClient from "./OAuthClient.ts";
 
 const options: Array<{
@@ -343,10 +344,18 @@ export const CloudflareAuth = AuthProviderLayer<
 
     const configureCredentials = (profileName: string, ctx: ConfigureContext) =>
       Effect.gen(function* () {
-        if (ctx.ci) {
-          return { method: "env" as const };
-        }
-        return yield* configureInteractive(profileName);
+        const config = ctx.ci
+          ? { method: "env" as const }
+          : yield* configureInteractive(profileName);
+        // Re-configuring auth may point this profile at a different
+        // Cloudflare account. The cached state-store credentials
+        // (`~/.alchemy/credentials/{profile}/cloudflare-state-store.json`)
+        // are minted per-account, so drop them here; the next deploy
+        // re-derives them against the freshly-configured account.
+        yield* store
+          .delete(profileName, STATE_STORE_CREDENTIALS_FILE)
+          .pipe(Effect.ignore);
+        return config;
       }).pipe(
         Effect.mapError(
           (e) =>
@@ -491,40 +500,50 @@ export const CloudflareAuth = AuthProviderLayer<
       );
 
     const logout = (profileName: string, config: CloudflareAuthConfig) =>
-      Match.value(config).pipe(
-        Match.when({ method: "env" }, () => Effect.void),
-        Match.when({ method: "stored" }, () =>
-          store
-            .delete(profileName, "cf-stored")
-            .pipe(
-              Effect.andThen(
-                Clank.success("Cloudflare: stored credentials removed"),
+      Match.value(config)
+        .pipe(
+          Match.when({ method: "env" }, () => Effect.void),
+          Match.when({ method: "stored" }, () =>
+            store
+              .delete(profileName, "cf-stored")
+              .pipe(
+                Effect.andThen(
+                  Clank.success("Cloudflare: stored credentials removed"),
+                ),
               ),
-            ),
-        ),
-        Match.when({ method: "oauth" }, () =>
-          store
-            .read<OAuthClient.OAuthCredentials>(profileName, "cf-oauth")
-            .pipe(
-              Effect.tap((creds) =>
-                creds?.type === "oauth"
-                  ? OAuthClient.revoke(creds).pipe(
-                      Effect.catchTag("OAuthError", (err) =>
-                        Clank.warn(
-                          `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
+          ),
+          Match.when({ method: "oauth" }, () =>
+            store
+              .read<OAuthClient.OAuthCredentials>(profileName, "cf-oauth")
+              .pipe(
+                Effect.tap((creds) =>
+                  creds?.type === "oauth"
+                    ? OAuthClient.revoke(creds).pipe(
+                        Effect.catchTag("OAuthError", (err) =>
+                          Clank.warn(
+                            `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
+                          ),
                         ),
-                      ),
-                    )
-                  : Effect.void,
+                      )
+                    : Effect.void,
+                ),
+                Effect.andThen(store.delete(profileName, "cf-oauth")),
+                Effect.andThen(
+                  Clank.success("Cloudflare: OAuth credentials removed."),
+                ),
               ),
-              Effect.andThen(store.delete(profileName, "cf-oauth")),
-              Effect.andThen(
-                Clank.success("Cloudflare: OAuth credentials removed."),
-              ),
-            ),
-        ),
-        Match.exhaustive,
-      );
+          ),
+          Match.exhaustive,
+        )
+        // The cached state-store credentials are derived from the account we
+        // just logged out of, so drop them regardless of auth method.
+        .pipe(
+          Effect.andThen(
+            store
+              .delete(profileName, STATE_STORE_CREDENTIALS_FILE)
+              .pipe(Effect.ignore),
+          ),
+        );
 
     const login = (profileName: string, config: CloudflareAuthConfig) =>
       Match.value(config)
@@ -619,9 +638,6 @@ export const CloudflareAuth = AuthProviderLayer<
             Match.exhaustive,
           );
         }),
-        Effect.catch((e) =>
-          Console.error(`  Failed to retrieve credentials: ${e}`),
-        ),
       );
 
     return {

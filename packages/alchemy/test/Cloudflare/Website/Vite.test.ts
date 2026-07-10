@@ -33,6 +33,7 @@ const logLevel = Effect.provideService(
 );
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
+const spaFixtureDir = pathe.resolve(import.meta.dirname, "vite-spa-fixture");
 const doFixtureDir = pathe.resolve(import.meta.dirname, "vite-do-fixture");
 const reactRouterRscFixtureDir = pathe.resolve(
   import.meta.dirname,
@@ -119,6 +120,60 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/792.
+//
+// A pure client-only Vite project (no vite.config.ts, no plugins, no worker
+// entry) resolves as `appType: "spa"`, so the Cloudflare Vite plugin declares
+// no `builder.buildApp`. On Vite 8, `builder.buildApp()` then runs post-order
+// `buildApp` hooks *before* the default environment builds — which used to make
+// our build-output plugin resolve while the client output was still undefined,
+// so the deploy died with "Vite build produced neither assets nor server
+// output". Detecting completion in `writeBundle` (per environment) instead of a
+// post-order `buildApp` hook fixes it; this test proves the SPA path deploys.
+test.provider(
+  "Vite: client-only SPA (no config, no plugins) builds and serves assets",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(spaFixtureDir, {
+        prefix: "alchemy-vite-spa-",
+        tempRoot,
+        entries: ["index.html", "package.json", "src"],
+      });
+      const indexPath = path.join(rootDir, "index.html");
+      const memoInclude = ["index.html", "src/**", "package.json"];
+
+      const marker = `vite-spa-${Date.now()}`;
+      yield* fs.writeFileString(indexPath, htmlPage(marker));
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "FixViteSpa",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      expect(site.hash?.input).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, marker, {
+        timeout: "120 seconds",
+        label: "spa marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
     }).pipe(logLevel),
   { timeout: 360_000 },
 );
@@ -389,6 +444,81 @@ test.provider(
         `${site.url!}/api/count`,
       );
       expect(second.count).toBe(2);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+test.provider(
+  "Vite: main overrides the worker entry from the Vite config",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(doFixtureDir, {
+        prefix: "alchemy-vite-main-",
+        tempRoot,
+        entries: [
+          "alchemy.run.ts",
+          "index.html",
+          "package.json",
+          "vite.config.ts",
+          "src",
+        ],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      // The fixture's vite.config.ts points the ssr environment at
+      // `src/worker.ts`. `main` must take precedence and deploy
+      // `src/worker-main.ts`, which re-exports the Durable Object and
+      // additionally answers `/api/entry`.
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("ViteMain", {
+            ...viteProps(rootDir, memoInclude),
+            main: "src/worker-main.ts",
+            compatibility: {
+              date: "2026-03-17",
+              flags: ["nodejs_compat"],
+            },
+            assets: {
+              runWorkerFirst: ["/api/*"],
+            },
+            env: {
+              Counter: Cloudflare.DurableObject<ViteDoCounter>("Counter", {
+                className: "Counter",
+              }),
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+
+      const entry = yield* fetchJsonReady<{ entry: string }>(
+        `${site.url!}/api/entry`,
+      );
+      expect(entry.entry).toBe("worker-main");
+
+      const reset = yield* fetchJsonReady<{ ok: boolean }>(
+        `${site.url!}/api/reset`,
+      );
+      expect(reset.ok).toBe(true);
+
+      const first = yield* fetchJsonReady<{ count: number }>(
+        `${site.url!}/api/count`,
+      );
+      expect(first.count).toBe(1);
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site.workerName, accountId);

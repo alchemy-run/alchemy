@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { ExecutionContext } from "../../ExecutionContext.ts";
 import { isScopeEjected } from "../Workers/HttpServer.ts";
 import { getWorkerExport } from "../Workers/WorkerBridge.ts";
 import {
@@ -40,35 +39,34 @@ export const makeWorkflowBridge =
       stack: { name: string; stage: string };
     },
   ) =>
-  (className: string) =>
-    class WorkflowBridge extends WorkflowEntrypoint {
+  (className: string) => {
+    // One isolate-lifetime layer build shared by every instantiation of this
+    // workflow class — `build` memoizes the built context.
+    const { build } = getWorkerExport<WorkflowExport>({
+      entrypoint,
+      stack,
+      exportName: className,
+    });
+
+    return class WorkflowBridge extends WorkflowEntrypoint {
       readonly fn: Promise<WorkflowImpl<unknown, unknown>>;
 
       constructor(ctx: unknown, env: unknown) {
         super(ctx, env);
 
-        const { globalContext, exported } = getWorkerExport<WorkflowExport>({
-          entrypoint,
-          stack,
-          exportName: className,
-        });
-
-        this.fn = exported.pipe(
-          Effect.flatMap((wf) => wf.make(env)),
-          Effect.provide(globalContext),
-          Effect.runPromise,
+        this.fn = build(() => {}).then(({ context, export: wf }) =>
+          wf.make(env).pipe(Effect.provideContext(context), Effect.runPromise),
         ) as Promise<WorkflowImpl<unknown, unknown>>;
       }
 
       async run(event: any, step: any): Promise<unknown> {
         const fn = await this.fn;
-        // Each run-invocation gets a fresh ExecutionContext (scope + cache),
-        // following the same per-invocation-scope pattern as
-        // `WorkerBridge.processEvent`. `task` threads this into every step via
-        // the surrounding body context, so `@binding` helpers that need it
-        // (e.g. `Drizzle.postgres`) resolve their per-run resources inside
-        // workflow steps. The same scope is also provided as the ambient
-        // `Scope` service, matching the Worker and Durable Object bridges.
+        // Each run-invocation gets a fresh `Scope`, following the same
+        // per-invocation-scope pattern as `WorkerBridge.processEvent`. `task`
+        // threads it into every step via the surrounding body context, so
+        // `@binding` helpers that acquire per-run resources against the
+        // ambient scope (e.g. `Drizzle.postgres`) resolve them inside
+        // workflow steps, matching the Worker and Durable Object bridges.
         const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(
           fn(event.payload).pipe(
@@ -79,9 +77,6 @@ export const makeWorkflowBridge =
               ).pipe(
                 Layer.provideMerge(
                   Layer.succeed(WorkflowStep, wrapWorkflowStep(step)),
-                ),
-                Layer.provideMerge(
-                  Layer.succeed(ExecutionContext, { scope, cache: {} }),
                 ),
                 Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
               ),
@@ -108,6 +103,7 @@ export const makeWorkflowBridge =
         throw Cause.squash(exit.cause);
       }
     };
+  };
 
 const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
   payload: event.payload,

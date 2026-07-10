@@ -512,7 +512,12 @@ const isLaunchTemplateNotFound = (error: unknown) => {
     tag === "InvalidLaunchTemplateNameNotFoundException" ||
     tag === "InvalidLaunchTemplateIdNotFoundException" ||
     tag === "InvalidLaunchTemplateId.Malformed" ||
-    tag === "InvalidLaunchTemplateId.NotFound"
+    tag === "InvalidLaunchTemplateId.NotFound" ||
+    // Live `describeLaunchTemplates` surfaces the dot-form codes, which the
+    // ec2 SDK leaves untyped — a missing template on the read-before-create
+    // probe otherwise fails the whole plan.
+    tag === "InvalidLaunchTemplateName.NotFoundException" ||
+    tag === "InvalidLaunchTemplateId.NotFoundException"
   );
 };
 

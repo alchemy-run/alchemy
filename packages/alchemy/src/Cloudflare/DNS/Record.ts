@@ -163,7 +163,9 @@ export type Record = Resource<
  * });
  * ```
  */
-export const Record = Resource<Record>("Cloudflare.DNS.Record");
+export const Record = Resource<Record>("Cloudflare.DNS.Record", {
+  aliases: ["Cloudflare.Dns.Record"],
+});
 
 export const RecordProvider = () =>
   Provider.succeed(Record, {

@@ -1,8 +1,10 @@
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as S from "effect/Schema";
@@ -16,10 +18,16 @@ import {
   AuthError,
   AuthProviders,
 } from "../../Auth/AuthProvider.ts";
-import type { AlchemyProfileProviders } from "../../Auth/Profile.ts";
-import type * as Stack from "../../Stack.ts";
+import {
+  type AlchemyProfileProviders,
+  withProfileOverride,
+} from "../../Auth/Profile.ts";
+import * as Stack from "../../Stack.ts";
+import { Stage } from "../../Stage.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
 import { PromptCancelled } from "../../Util/Clank.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { fileLogger } from "../../Util/FileLogger.ts";
 
 export const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -296,7 +304,19 @@ export const printProfile = Effect.fn(function* (
       }
       continue;
     }
-    yield* provider.prettyPrint(profile, cfg);
+    // A provider's `prettyPrint` catches its own credential-resolution
+    // failures, but some resolve paths `Effect.orDie` (e.g. AWS SSO with an
+    // expired token), which escapes as a defect. Contain it here — via
+    // `Console.log` so the message stays on stdout under this provider's
+    // header instead of interleaving on stderr — so one broken provider
+    // can't abort rendering the rest of the profile.
+    yield* provider.prettyPrint(profile, cfg).pipe(
+      Effect.catchCause((cause) => {
+        const error = Cause.squash(cause);
+        const message = error instanceof Error ? error.message : String(error);
+        return Console.log(`  Failed to retrieve credentials: ${message}`);
+      }),
+    );
   }
 });
 
@@ -325,4 +345,85 @@ export const importStack = Effect.fn(function* (main: string) {
     providers: Layer.Layer<never>;
     state: Layer.Layer<never>;
   };
+});
+
+/**
+ * Placeholder {@link Stack.Stack} value used while building a stack's
+ * `providers()` layer out of band. No real resources exist yet — we only
+ * want the layer's provider/auth registrations and cloud-environment
+ * services, so `resources`/`bindings`/`actions` are empty and the stage is a
+ * sentinel.
+ */
+const placeholderStack = (name: string) => ({
+  actions: {},
+  bindings: {},
+  name,
+  resources: {},
+  stage: "placeholder",
+});
+
+export interface BuildStackProvidersOptions {
+  /** Stack entrypoint to import (e.g. `"alchemy.run.ts"`). */
+  main: string;
+  envFile: Option.Option<string>;
+  profile: string;
+  /**
+   * Registry to populate. Pass a pre-seeded registry (e.g. one that already
+   * has built-in providers) to layer the stack's providers on top of it,
+   * overriding by name. Defaults to a fresh empty registry.
+   */
+  registry?: AuthProviders["Service"];
+  /**
+   * Logger layer used during the build. Defaults to the file logger
+   * (`out`). `alchemy unsafe nuke` overrides this to log to the console in
+   * debug mode.
+   */
+  logger?: Layer.Layer<never, never, never>;
+  /**
+   * Extra layer merged into the placeholder scaffold — e.g.
+   * `Layer.succeed(MinimumLogLevel, ...)`, which sets a fiber-ref default
+   * and so contributes no context service (`Layer<never>`).
+   */
+  extra?: Layer.Layer<never, never, never>;
+}
+
+/**
+ * Import a stack entrypoint and build its `providers()` (+ `state()`) layer
+ * out of band against placeholder {@link Stack.Stack}/{@link Stage} services,
+ * so its `AuthProviderLayer` registrations land in an {@link AuthProviders}
+ * registry and the built context holds every resource provider plus the
+ * cloud-environment services their operations need.
+ *
+ * Shared by `alchemy login`, `alchemy profile show`, and `alchemy unsafe
+ * nuke`. The caller decides what to do with the result — use `authProviders`
+ * (login / profile show) or `context` (nuke) — and whether a missing/invalid
+ * entrypoint is fatal (login / nuke let it propagate) or best-effort
+ * (profile show wraps the call in `Effect.catchCause`).
+ */
+export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
+  options: BuildStackProvidersOptions,
+) {
+  const authProviders = options.registry ?? {};
+  const stackEffect = yield* importStack(options.main);
+  const configProvider = withProfileOverride(
+    yield* loadConfigProvider(options.envFile),
+    options.profile,
+  );
+  const context = yield* Layer.build(
+    (stackEffect.providers ?? Layer.empty).pipe(
+      Layer.provideMerge(stackEffect.state ?? Layer.empty),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.succeed(AuthProviders, authProviders),
+          ConfigProvider.layer(configProvider),
+          options.logger ??
+            Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+          Layer.succeed(Stage, "placeholder"),
+          Layer.succeed(Stack.Stack, placeholderStack(stackEffect.stackName)),
+          options.extra ?? Layer.empty,
+        ),
+      ),
+    ),
+  );
+  return { authProviders, context, stackEffect };
 });

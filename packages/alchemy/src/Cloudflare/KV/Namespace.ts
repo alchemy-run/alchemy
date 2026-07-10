@@ -67,7 +67,9 @@ export type Namespace = Resource<
  * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
  * write-only access.
  */
-export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace");
+export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace", {
+  aliases: ["Cloudflare.KVNamespace"],
+});
 
 export const NamespaceProvider = () =>
   Provider.succeed(Namespace, {

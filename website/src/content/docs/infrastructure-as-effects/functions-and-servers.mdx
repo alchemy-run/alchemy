@@ -277,6 +277,94 @@ Pick whichever fits your team. The Effect style unlocks
 testing; the async style integrates better with existing handler
 code.
 
+## Instance scope vs request scope
+
+The Effectful Constructor splits every Function and Server into two
+lifetimes, and each has its own `Scope`:
+
+| Scope              | Covers                                           | Closes                                                    |
+| ------------------ | ------------------------------------------------ | --------------------------------------------------------- |
+| **Instance scope** | the constructor (init) and its Layers            | workerd: never · Lambda: 500 ms at shutdown · servers: on exit |
+| **Request scope**  | one event — a request, RPC call, run, invocation | when the event settles                                     |
+
+The constructor runs **once per instance** — a Worker isolate, a
+Lambda sandbox, a server process. Everything it builds (bindings,
+SDK clients, Layers) is assembled once and reused by every event.
+One-shot I/O that produces a plain value is fine here — fetching a
+secret and caching it for a client, reading config — that's exactly
+what once-per-instance is for. What doesn't belong at init is
+anything **disposable**: connections, pools, streams, or any
+resource with a finalizer. The instance scope closes at shutdown at
+best (never on workerd), so cleanup registered here is best-effort
+or never — and on workerd, I/O *objects* (sockets, response bodies)
+are pinned to the request that created them and can't be reused
+across events anyway.
+
+Each event then runs your handler with a **fresh `Scope`**. Anything
+disposable belongs here — acquired lazily, released when the event
+settles:
+
+```typescript
+fetch: Effect.gen(function* () {
+  // workerd: runs after the response via ctx.waitUntil, without
+  // blocking it. Lambda: runs before the response — keep it cheap.
+  yield* Effect.addFinalizer(() => releaseThings().pipe(Effect.ignore));
+  return HttpServerResponse.text("ok");
+}),
+```
+
+*When* request finalizers run differs by runtime. workerd closes the
+scope into `ctx.waitUntil`, so they run after the response without
+blocking it. Lambda settles the scope **inline, before the response
+leaves** — a buffered invocation's response isn't released until the
+Invoke phase completes, and no deferral scheme (extension windows,
+dangling promises across freezes) is reliable, so the contract is
+blocking and honest: keep Lambda request finalizers cheap, and write
+anything that must not be lost durably inside the handler instead of
+flushing it from a finalizer.
+
+Resources that should live for the whole event but be shared across
+calls within it — a database pool, for example — are memoized on the
+request scope. `Drizzle.postgres` opens its pool on the first query
+of an event and closes it when the event's scope does; every query
+in that event reuses it.
+
+### Why instance finalizers differ by runtime
+
+**workerd (Workers, Durable Objects, Workflows) has no teardown
+hook.** The platform freezes or evicts an isolate without warning,
+so the instance scope exists but is *never closed* — a finalizer
+registered during init will never run. This is a platform
+constraint, not an alchemy choice: it's the same reason a
+module-level `setInterval` or open socket in a plain Worker never
+gets cleaned up.
+
+**Lambda grants a brief Shutdown phase — because alchemy asks for
+one.** A sandbox with no registered extensions is killed with no
+signal at all; alchemy's generated entry registers an internal
+extension with the Extensions API, which makes Lambda send `SIGTERM`
+and allow 500 ms before `SIGKILL`. The entry closes the instance
+scope in that window, so init-level finalizers run at sandbox
+spin-down — best-effort and *fast*: half a second, not delivered on
+hard failures (a timeout reset kills the runtime without the
+signal). Flush caches and close connections here; never depend on it
+for critical writes.
+
+**Servers (Containers, ECS Tasks) are real processes.** The program
+runs under a root scope that closes when the process shuts down
+gracefully, so instance-scoped resources — a connection kept warm
+across requests, a background consumer — are released on exit. (A
+hard kill still skips finalizers, as it would in any process.)
+
+The rule of thumb:
+
+- **Instance scope** — build things. Cheap, reusable, no required
+  cleanup.
+- **Request scope** — use things. I/O, connections, finalizers.
+- Instance-level cleanup is best-effort at most — 500 ms on Lambda,
+  graceful-exit-only on servers, nonexistent on workerd. Design so
+  nothing *needs* it.
+
 ## Where next
 
 - [Bindings](/infrastructure-as-effects/binding) — the deploy-time

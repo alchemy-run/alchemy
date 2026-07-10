@@ -144,6 +144,7 @@ export type AllowPolicy = Resource<
  */
 export const AllowPolicy = Resource<AllowPolicy>(
   EmailSecurityAllowPolicyTypeId,
+  { aliases: ["Cloudflare.EmailSecurity.AllowPolicy"] },
 );
 
 /**
