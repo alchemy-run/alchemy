@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import { PutRecords } from "./PutRecords.ts";
 import { StreamSink, type StreamSinkRecord } from "./StreamSink.ts";
 import type { Stream } from "./Stream.ts";
@@ -15,7 +15,7 @@ export const StreamSinkHttp = Layer.effect(
     return Effect.fn(function* (stream: Stream) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.Kinesis.StreamSink(${stream}))`({
             policyStatements: [
               {

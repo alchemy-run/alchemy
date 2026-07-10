@@ -4,7 +4,7 @@ import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import type { Function } from "./Function.ts";
-import { isFunction } from "./Function.ts";
+import { isBindingHost } from "./Function.ts";
 import {
   InvokeFunction,
   type InvokeFunctionRequest,
@@ -19,7 +19,7 @@ export const InvokeFunctionHttp = Layer.effect(
       const FunctionArn = yield* func.functionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.Lambda.InvokeFunction(${func}))`({
             policyStatements: [
               {

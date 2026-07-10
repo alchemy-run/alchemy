@@ -4,7 +4,7 @@ import * as sfn from "@distilled.cloud/aws/sfn";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import type { StateMachine } from "./StateMachine.ts";
 import {
   StartSyncExecution,
@@ -33,7 +33,7 @@ export const StartSyncExecutionHttp = Layer.effect(
       const StateMachineArn = yield* stateMachine.stateMachineArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.StepFunctions.StartSyncExecution(${stateMachine}))`(
             {
               policyStatements: [

@@ -2,7 +2,7 @@ import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import type { Cluster } from "./Cluster.ts";
 import { RunTask, type RunTaskRequest } from "./RunTask.ts";
 import { isTask, type Task } from "./Task.ts";
@@ -17,7 +17,7 @@ export const RunTaskHttp = Layer.effect(
       const TaskDefinitionArn = yield* task.taskDefinitionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host) || isTask(host)) {
+        if (isBindingHost(host) || isTask(host)) {
           yield* host.bind`Allow(${host}, AWS.ECS.RunTask(${cluster}, ${task}))`(
             {
               policyStatements: [

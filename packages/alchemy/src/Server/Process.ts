@@ -1,4 +1,3 @@
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
@@ -78,21 +77,33 @@ export const createHostRuntimeContext =
           return key;
         }),
       get: <T>(key: string) =>
-        Config.string(key).pipe(
-          Effect.flatMap((value) =>
-            Effect.try({
-              try: () => JSON.parse(value) as T,
-              catch: (error) => error as Error,
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
-              }),
-            ),
-          ),
-        ),
+        // Read the captured value straight from `process.env`. We must NOT
+        // resolve through `Config.string` here: at runtime the ambient
+        // `ConfigProvider` is the interceptor installed in `Platform.ts`,
+        // whose runtime branch calls back into this `get(key)`. Going through
+        // `Config` would re-enter that interceptor for the same key and
+        // recurse forever, allocating until init OOMs — and when this host
+        // (ECS.Task / EC2.Instance) is a Platform nested inside another
+        // Platform (e.g. a Lambda), the outer interceptor is already the
+        // ambient `ConfigProvider` during this host's layer build, so even
+        // the build-time `ALCHEMY_PHASE` lookup recurses. The Lambda runtime
+        // reads from `process.env` and the Worker runtime from
+        // `WorkerEnvironment` for exactly this reason.
+        Effect.sync(() => {
+          // Key is already canonical (see RuntimeContext.sanitizeKey).
+          const value = process.env[key];
+          if (value === undefined) {
+            return undefined as T | undefined;
+          }
+          try {
+            return JSON.parse(value) as T;
+          } catch {
+            // Values `set` on this host are always JSON-encoded, but env vars
+            // injected out-of-band (e.g. `ALCHEMY_PHASE`) are plain strings —
+            // fall back to the raw string rather than dying.
+            return value as unknown as T;
+          }
+        }),
       run: (effect: Effect.Effect<void, never, any>) =>
         Effect.sync(() => {
           runners.push(effect);

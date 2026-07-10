@@ -1,0 +1,98 @@
+import * as AWS from "@/AWS";
+import * as Core from "@/Test/Core";
+import * as Test from "@/Test/Vitest";
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { describe } from "vitest";
+
+import LifecycleTestFunctionLive, {
+  LifecycleTestFunction,
+  lifecycleFleetAsgName,
+  lifecycleHookName,
+} from "./fixtures/lifecycle-handler.ts";
+
+const testOptions = { providers: AWS.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "AutoScalingLifecycle");
+
+const readinessPolicy = Schedule.fixed("2 seconds").pipe(
+  Schedule.both(Schedule.recurs(75)),
+);
+
+let baseUrl: string;
+
+// Deploys a Lambda that (a) creates a LAUNCHING lifecycle hook + EventBridge
+// subscription via `consumeLifecycleActions` and (b) binds
+// `CompleteLifecycleAction`. The fleet is sized to zero so no EC2 instances
+// launch — this verifies the DX wiring (hook creation + binding IAM) without a
+// >90s instance-launch round-trip. The full "instance pauses → Lambda completes
+// CONTINUE → InService" flow is left to a live run with a non-zero desired
+// capacity.
+describe("AutoScaling LifecycleHook event source + CompleteLifecycleAction", () => {
+  beforeAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+
+      const { fn } = yield* sharedStack.deploy(
+        Effect.gen(function* () {
+          const fn = yield* LifecycleTestFunction;
+          return { fn };
+        }).pipe(Effect.provide(LifecycleTestFunctionLive)),
+      );
+
+      expect(fn.functionUrl).toBeTruthy();
+      baseUrl = fn.functionUrl!.replace(/\/+$/, "");
+
+      yield* HttpClient.get(`${baseUrl}/health`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        ),
+        Effect.retry({ schedule: readinessPolicy }),
+      );
+    }),
+    { timeout: 300_000 },
+  );
+
+  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+
+  test.provider(
+    "consumeLifecycleActions creates the launch lifecycle hook on the ASG",
+    (_stack) =>
+      Effect.gen(function* () {
+        const hooks = yield* autoscaling.describeLifecycleHooks({
+          AutoScalingGroupName: lifecycleFleetAsgName,
+          LifecycleHookNames: [lifecycleHookName],
+        } as any);
+        const hook = hooks.LifecycleHooks?.[0];
+        expect(hook?.LifecycleHookName).toEqual(lifecycleHookName);
+        expect(hook?.LifecycleTransition).toEqual(
+          "autoscaling:EC2_INSTANCE_LAUNCHING",
+        );
+        expect(hook?.HeartbeatTimeout).toEqual(300);
+      }),
+  );
+
+  test.provider(
+    "CompleteLifecycleAction binding is IAM-wired (no AccessDenied)",
+    (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.post(`${baseUrl}/complete-bogus`),
+        );
+        expect(response.status).toBe(200);
+        const body = (yield* response.json) as { ok: boolean; tag: string };
+        // The SDK call reached AWS with valid credentials/policy: either it
+        // succeeded, or it failed for a resource reason (no active lifecycle
+        // action) — never an authorization failure.
+        expect(["AccessDenied", "AccessDeniedException"]).not.toContain(
+          body.tag,
+        );
+      }),
+  );
+});

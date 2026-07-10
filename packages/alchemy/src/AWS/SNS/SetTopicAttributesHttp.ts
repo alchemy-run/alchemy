@@ -2,7 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import {
   SetTopicAttributes,
   type SetTopicAttributesRequest,
@@ -18,7 +18,7 @@ export const SetTopicAttributesHttp = Layer.effect(
       const TopicArn = yield* topic.topicArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.SNS.SetTopicAttributes(${topic}))`(
             {
               policyStatements: [

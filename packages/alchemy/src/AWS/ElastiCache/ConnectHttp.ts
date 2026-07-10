@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import { Connect, connectEnvPrefix } from "./Connect.ts";
 import type { ServerlessCache } from "./ServerlessCache.ts";
 
@@ -25,7 +25,7 @@ export const ConnectHttp = Layer.effect(
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           const prefix = connectEnvPrefix(cache.LogicalId);
           yield* host.bind`Allow(${host}, AWS.ElastiCache.Connect(${cache}))`({
             env: {

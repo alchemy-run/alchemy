@@ -2,7 +2,7 @@ import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import type { UserPool } from "./UserPool.ts";
 import {
   UserPoolAdmin,
@@ -54,7 +54,7 @@ export const UserPoolAdminHttp = Layer.effect(
       const UserPoolId = yield* pool.userPoolId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.Cognito.UserPoolAdmin(${pool}))`({
             policyStatements: [
               {

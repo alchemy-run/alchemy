@@ -4,7 +4,7 @@ import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
 import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
 
@@ -17,7 +17,7 @@ export const PutEventsHttp = Layer.effect(
       const EventBusName = bus ? yield* bus.eventBusName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           const { accountId, region } =
             yield* AWSEnvironment.current as unknown as Effect.Effect<{
               accountId: string;

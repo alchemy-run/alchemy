@@ -2,7 +2,7 @@ import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import {
   UserPoolAuth,
   type ConfirmForgotPasswordRequest,
@@ -41,7 +41,7 @@ export const UserPoolAuthHttp = Layer.effect(
       const ClientId = yield* client.clientId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           // No IAM is required for the public auth flows; the binding is
           // recorded so the app client deploys before the function.
           yield* host.bind`Allow(${host}, AWS.Cognito.UserPoolAuth(${client}))`(

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import {
   GetParameters,
   type GetParametersParameters,
@@ -29,7 +29,7 @@ export const GetParametersHttp = Layer.effect(
           a.LogicalId.localeCompare(b.LogicalId),
         );
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.SSM.GetParameters(${sorted}))`({
             policyStatements: [
               {

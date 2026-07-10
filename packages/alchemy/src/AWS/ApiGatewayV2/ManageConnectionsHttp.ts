@@ -3,7 +3,7 @@ import * as mgmt from "@distilled.cloud/aws/apigatewaymanagementapi";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import {
   ManageConnections,
   type DeleteConnectionRequest,
@@ -28,7 +28,7 @@ export const ManageConnectionsHttp = Layer.effect(
       const CallbackUrl = yield* stage.callbackUrl;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.ApiGatewayV2.ManageConnections(${stage}))`(
             {
               policyStatements: [

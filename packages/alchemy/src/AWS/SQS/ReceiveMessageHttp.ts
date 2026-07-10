@@ -4,7 +4,7 @@ import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { isInstance } from "../EC2/Instance.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
 import {
   ReceiveMessage,
@@ -20,7 +20,7 @@ export const ReceiveMessageHttp = Layer.effect(
       const QueueUrl = yield* queue.queueUrl;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host) || isInstance(host)) {
+        if (isBindingHost(host) || isInstance(host)) {
           yield* host.bind`Allow(${host}, AWS.SQS.ReceiveMessage(${queue}))`({
             policyStatements: [
               {

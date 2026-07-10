@@ -2,7 +2,7 @@ import * as SD from "@distilled.cloud/aws/servicediscovery";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import {
   RegisterInstance,
   type RegisterInstanceRequest,
@@ -18,7 +18,7 @@ export const RegisterInstanceHttp = Layer.effect(
       const ServiceId = yield* service.serviceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.CloudMap.RegisterInstance(${service}))`(
             {
               policyStatements: [

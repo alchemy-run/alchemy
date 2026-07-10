@@ -4,7 +4,7 @@ import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
 
 import * as Output from "../../Output.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
 import { UploadPart, type UploadPartRequest } from "./UploadPart.ts";
 
@@ -17,7 +17,7 @@ export const UploadPartHttp = Layer.effect(
       const BucketName = yield* bucket.bucketName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.S3.UploadPart(${bucket}))`({
             policyStatements: [
               {

@@ -3,7 +3,7 @@ import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
 import * as Output from "../../Output.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
 import { QueueSink } from "./QueueSink.ts";
 import { SendMessageBatch } from "./SendMessageBatch.ts";
@@ -16,7 +16,7 @@ export const QueueSinkHttp = Layer.effect(
     return Effect.fn(function* (queue: Queue) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.SQS.QueueSink(${queue}))`({
             policyStatements: [
               {

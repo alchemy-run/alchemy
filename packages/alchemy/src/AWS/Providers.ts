@@ -23,24 +23,48 @@ import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
+import * as AccessAnalyzer from "./AccessAnalyzer/index.ts";
+import * as Account from "./Account/index.ts";
 import * as ACM from "./ACM/index.ts";
+import * as AMP from "./AMP/index.ts";
+import * as Amplify from "./Amplify/index.ts";
 import * as ApiGateway from "./ApiGateway/index.ts";
 import * as ApiGatewayV2 from "./ApiGatewayV2/index.ts";
+import * as AppConfig from "./AppConfig/index.ts";
+import * as AppFlow from "./AppFlow/index.ts";
 import * as ApplicationAutoScaling from "./ApplicationAutoScaling/index.ts";
 import * as AppRunner from "./AppRunner/index.ts";
 import * as AppSync from "./AppSync/index.ts";
 import * as Assets from "./Assets.ts";
+import * as Athena from "./Athena/index.ts";
 import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
+import * as B2BI from "./B2BI/index.ts";
+import * as Backup from "./Backup/index.ts";
 import * as Batch from "./Batch/index.ts";
+import * as Bedrock from "./Bedrock/index.ts";
+import * as Budgets from "./Budgets/index.ts";
+import * as CloudControl from "./CloudControl/index.ts";
+import * as CloudFormation from "./CloudFormation/index.ts";
 import * as CloudFront from "./CloudFront/index.ts";
 import * as CloudMap from "./CloudMap/index.ts";
 import * as CloudWatch from "./CloudWatch/index.ts";
+import * as CodeArtifact from "./CodeArtifact/index.ts";
+import * as CodeBuild from "./CodeBuild/index.ts";
+import * as CodeConnections from "./CodeConnections/index.ts";
+import * as CodeDeploy from "./CodeDeploy/index.ts";
+import * as CodePipeline from "./CodePipeline/index.ts";
 import * as Cognito from "./Cognito/index.ts";
 import * as Credentials from "./Credentials.ts";
+import * as DataSync from "./DataSync/index.ts";
+import * as DMS from "./DMS/index.ts";
+import * as Detective from "./Detective/index.ts";
+import * as DocDB from "./DocDB/index.ts";
+import * as DSQL from "./DSQL/index.ts";
 import * as DynamoDB from "./DynamoDB/index.ts";
 import * as EC2 from "./EC2/index.ts";
 import * as ECR from "./ECR/index.ts";
+import * as ECRPublic from "./ECRPublic/index.ts";
 import * as ECS from "./ECS/index.ts";
 import * as EFS from "./EFS/index.ts";
 import * as EKS from "./EKS/index.ts";
@@ -49,26 +73,54 @@ import * as ELBv2 from "./ELBv2/index.ts";
 import * as Endpoint from "./Endpoint.ts";
 import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
+import * as FMS from "./FMS/index.ts";
 import * as Firehose from "./Firehose/index.ts";
+import * as Forecast from "./Forecast/index.ts";
+import * as FraudDetector from "./FraudDetector/index.ts";
+import * as FSx from "./FSx/index.ts";
+import * as Glue from "./Glue/index.ts";
+import * as Grafana from "./Grafana/index.ts";
+import * as GuardDuty from "./GuardDuty/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
+import * as Inspector2 from "./Inspector2/index.ts";
+import * as IoT from "./IoT/index.ts";
+import * as Kafka from "./Kafka/index.ts";
+import * as Keyspaces from "./Keyspaces/index.ts";
 import * as Kinesis from "./Kinesis/index.ts";
 import * as KMS from "./KMS/index.ts";
 import * as Lambda from "./Lambda/index.ts";
+import * as Location from "./Location/index.ts";
 import * as Logs from "./Logs/index.ts";
+import * as MediaConvert from "./MediaConvert/index.ts";
+import * as MQ from "./MQ/index.ts";
+import * as MWAA from "./MWAA/index.ts";
+import * as Macie2 from "./Macie2/index.ts";
+import * as MemoryDB from "./MemoryDB/index.ts";
+import * as OpenSearchServerless from "./OpenSearchServerless/index.ts";
 import * as Organizations from "./Organizations/index.ts";
+import * as Personalize from "./Personalize/index.ts";
 import * as Pipes from "./Pipes/index.ts";
+import * as QuickSight from "./QuickSight/index.ts";
+import * as RAM from "./RAM/index.ts";
 import * as RDS from "./RDS/index.ts";
+import * as RedshiftServerless from "./RedshiftServerless/index.ts";
 import * as Region from "./Region.ts";
 import * as Route53 from "./Route53/index.ts";
 import * as S3 from "./S3/index.ts";
+import * as S3Vectors from "./S3Vectors/index.ts";
 import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
+import * as SecurityHub from "./SecurityHub/index.ts";
 import * as SES from "./SES/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
 import * as SSM from "./SSM/index.ts";
 import * as StepFunctions from "./StepFunctions/index.ts";
+import * as Timestream from "./Timestream/index.ts";
+import * as Transfer from "./Transfer/index.ts";
+import * as VerifiedPermissions from "./VerifiedPermissions/index.ts";
+import * as VpcLattice from "./VpcLattice/index.ts";
 import * as WAFv2 from "./WAFv2/index.ts";
 import * as Website from "./Website/index.ts";
 import * as XRay from "./XRay/index.ts";
@@ -83,7 +135,14 @@ export const providers = () =>
     Provider.collection([
       KeyPair,
       Random,
+      AccessAnalyzer.Analyzer,
+      AccessAnalyzer.ArchiveRule,
+      Account.AlternateContact,
       ACM.Certificate,
+      AMP.AlertManagerDefinition,
+      AMP.RuleGroupsNamespace,
+      AMP.Workspace,
+      Amplify.App,
       ApiGateway.Account,
       ApiGateway.ApiKey,
       ApiGateway.Authorizer,
@@ -106,6 +165,14 @@ export const providers = () =>
       ApiGatewayV2.RouteResource,
       ApiGatewayV2.StageResource,
       ApiGatewayV2.VpcLink,
+      AppConfig.Application,
+      AppConfig.ConfigurationProfile,
+      AppConfig.Deployment,
+      AppConfig.DeploymentStrategy,
+      AppConfig.Environment,
+      AppConfig.HostedConfigurationVersion,
+      AppFlow.ConnectorProfile,
+      AppFlow.Flow,
       ApplicationAutoScaling.ScalableTarget,
       ApplicationAutoScaling.ScalingPolicy,
       ApplicationAutoScaling.ScheduledAction,
@@ -119,12 +186,31 @@ export const providers = () =>
       AppSync.FunctionResource,
       AppSync.GraphqlApi,
       AppSync.ResolverResource,
+      Athena.DataCatalog,
+      Athena.NamedQuery,
+      Athena.WorkGroup,
       AutoScaling.AutoScalingGroup,
       AutoScaling.LaunchTemplate,
+      AutoScaling.LifecycleHook,
       AutoScaling.ScalingPolicy,
+      AutoScaling.ScheduledAction,
+      B2BI.Capability,
+      B2BI.Partnership,
+      B2BI.Profile,
+      B2BI.Transformer,
+      Backup.BackupPlan,
+      Backup.BackupSelection,
+      Backup.BackupVault,
       Batch.ComputeEnvironment,
       Batch.JobDefinition,
       Batch.JobQueue,
+      Bedrock.Agent,
+      Bedrock.AgentAlias,
+      Bedrock.DataSource,
+      Bedrock.KnowledgeBase,
+      Budgets.Budget,
+      CloudControl.Resource,
+      CloudFormation.Stack,
       CloudFront.CachePolicy,
       CloudFront.Distribution,
       CloudFront.Function,
@@ -151,6 +237,13 @@ export const providers = () =>
       CloudWatch.Dashboard,
       CloudWatch.InsightRule,
       CloudWatch.MetricStream,
+      CodeArtifact.Domain,
+      CodeArtifact.Repository,
+      CodeBuild.Project,
+      CodeConnections.Connection,
+      CodeDeploy.Application,
+      CodeDeploy.DeploymentGroup,
+      CodePipeline.Pipeline,
       Cognito.Group,
       Cognito.IdentityPool,
       Cognito.IdentityPoolRoleAttachment,
@@ -160,9 +253,22 @@ export const providers = () =>
       Cognito.UserPool,
       Cognito.UserPoolClient,
       Cognito.UserPoolDomain,
+      DataSync.LocationEfs,
+      DataSync.LocationS3,
+      DataSync.Task,
+      DocDB.DBCluster,
+      DocDB.DBInstance,
+      DocDB.DBSubnetGroup,
+      DMS.Endpoint,
+      DMS.ReplicationInstance,
+      DMS.ReplicationSubnetGroup,
+      DSQL.Cluster,
+      Detective.Graph,
       DynamoDB.Table,
+      EC2.DhcpOptions,
       EC2.EgressOnlyInternetGateway,
       EC2.EIP,
+      EC2.FlowLog,
       EC2.Instance,
       EC2.InternetGateway,
       EC2.KeyPair,
@@ -170,16 +276,24 @@ export const providers = () =>
       EC2.NetworkAcl,
       EC2.NetworkAclAssociation,
       EC2.NetworkAclEntry,
+      EC2.NetworkInterface,
+      EC2.NetworkInterfaceAttachment,
+      EC2.PrefixList,
       EC2.Route,
       EC2.RouteTable,
       EC2.RouteTableAssociation,
       EC2.SecurityGroup,
       EC2.SecurityGroupRule,
+      EC2.Snapshot,
       EC2.Subnet,
+      EC2.Volume,
+      EC2.VolumeAttachment,
       EC2.Vpc,
       EC2.VpcEndpoint,
+      EC2.VpcPeeringConnection,
       ECR.Image,
       ECR.Repository,
+      ECRPublic.PublicRepository,
       ECS.CapacityProvider,
       ECS.Cluster,
       ECS.Service,
@@ -191,7 +305,10 @@ export const providers = () =>
       EKS.AccessEntry,
       EKS.Addon,
       EKS.Cluster,
+      EKS.FargateProfile,
+      EKS.Nodegroup,
       EKS.PodIdentityAssociation,
+      EKS.ServerHost,
       ElastiCache.ServerlessCache,
       ELBv2.Listener,
       ELBv2.ListenerCertificate,
@@ -203,7 +320,21 @@ export const providers = () =>
       EventBridge.EventBus,
       EventBridge.Permission,
       EventBridge.Rule,
+      FMS.AdminAccount,
       Firehose.DeliveryStream,
+      FSx.FileSystem,
+      Forecast.Dataset,
+      Forecast.DatasetGroup,
+      FraudDetector.Detector,
+      FraudDetector.EventType,
+      FraudDetector.Variable,
+      Glue.Connection,
+      Glue.Crawler,
+      Glue.Database,
+      Glue.Job,
+      Glue.Table,
+      Grafana.Workspace,
+      GuardDuty.Detector,
       IAM.AccessKey,
       IAM.AccountAlias,
       IAM.AccountPasswordPolicy,
@@ -225,7 +356,15 @@ export const providers = () =>
       IdentityCenter.AccountAssignment,
       IdentityCenter.Group,
       IdentityCenter.Instance,
+      Inspector2.Enabler,
       IdentityCenter.PermissionSet,
+      IoT.Policy,
+      IoT.Thing,
+      IoT.ThingType,
+      IoT.TopicRule,
+      Kafka.ServerlessCluster,
+      Keyspaces.Keyspace,
+      Keyspaces.Table,
       KMS.Alias,
       KMS.Key,
       Kinesis.Stream,
@@ -236,12 +375,34 @@ export const providers = () =>
       Lambda.MicrovmImage,
       Lambda.NetworkConnector,
       Lambda.Permission,
+      Location.GeofenceCollection,
+      Location.Map,
+      Location.PlaceIndex,
+      Location.RouteCalculator,
+      Location.Tracker,
       Logs.Destination,
       Logs.LogGroup,
       Logs.LogStream,
       Logs.MetricFilter,
       Logs.ResourcePolicy,
       Logs.SubscriptionFilter,
+      MediaConvert.Job,
+      MediaConvert.JobTemplate,
+      MediaConvert.Preset,
+      MediaConvert.Queue,
+      MQ.Broker,
+      MQ.Configuration,
+      MWAA.Environment,
+      Macie2.Session,
+      Macie2.ClassificationJob,
+      MemoryDB.ACL,
+      MemoryDB.Cluster,
+      MemoryDB.SubnetGroup,
+      MemoryDB.User,
+      OpenSearchServerless.AccessPolicy,
+      OpenSearchServerless.Collection,
+      OpenSearchServerless.SecurityPolicy,
+      OpenSearchServerless.VpcEndpoint,
       Organizations.Account,
       Organizations.DelegatedAdministrator,
       Organizations.Organization,
@@ -252,7 +413,15 @@ export const providers = () =>
       Organizations.Root,
       Organizations.RootPolicyType,
       Organizations.TrustedServiceAccess,
+      Personalize.Dataset,
+      Personalize.DatasetGroup,
+      Personalize.Schema,
       Pipes.Pipe,
+      QuickSight.Analysis,
+      QuickSight.Dashboard,
+      QuickSight.DataSet,
+      QuickSight.DataSource,
+      RAM.ResourceShare,
       RDS.DBCluster,
       RDS.DBClusterEndpoint,
       RDS.DBClusterParameterGroup,
@@ -262,6 +431,8 @@ export const providers = () =>
       RDS.DBProxyEndpoint,
       RDS.DBProxyTargetGroup,
       RDS.DBSubnetGroup,
+      RedshiftServerless.Namespace,
+      RedshiftServerless.Workgroup,
       Route53.HealthCheck,
       Route53.HostedZone,
       Route53.QueryLoggingConfig,
@@ -269,8 +440,11 @@ export const providers = () =>
       Route53.VpcAssociationAuthorization,
       Route53.ZoneVpcAssociation,
       S3.Bucket,
+      S3Vectors.VectorBucket,
+      S3Vectors.Index,
       Scheduler.Schedule,
       Scheduler.ScheduleGroup,
+      SecurityHub.Hub,
       SecretsManager.Secret,
       SES.ConfigurationSet,
       SES.ConfigurationSetEventDestination,
@@ -282,6 +456,17 @@ export const providers = () =>
       SSM.Parameter,
       StepFunctions.Activity,
       StepFunctions.StateMachine,
+      Timestream.Database,
+      Timestream.DbInstance,
+      Timestream.Table,
+      Transfer.Server,
+      Transfer.User,
+      VerifiedPermissions.Policy,
+      VerifiedPermissions.PolicyStore,
+      VerifiedPermissions.Schema,
+      VpcLattice.Service,
+      VpcLattice.ServiceNetwork,
+      VpcLattice.ServiceNetworkVpcAssociation,
       WAFv2.IPSet,
       WAFv2.RuleGroup,
       WAFv2.WebACL,
@@ -294,7 +479,18 @@ export const providers = () =>
     Layer.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          AppFlow.ConnectorProfileProvider(),
+          AppFlow.FlowProvider(),
+          B2BI.CapabilityProvider(),
+          B2BI.PartnershipProvider(),
+          B2BI.ProfileProvider(),
+          B2BI.TransformerProvider(),
+        ),
+        Layer.mergeAll(
           ACM.CertificateProvider(),
+          AMP.AlertManagerDefinitionProvider(),
+          AMP.RuleGroupsNamespaceProvider(),
+          AMP.WorkspaceProvider(),
           ApiGateway.AccountProvider(),
           ApiGateway.ApiKeyProvider(),
           ApiGateway.AuthorizerProvider(),
@@ -317,6 +513,12 @@ export const providers = () =>
           ApiGatewayV2.RouteProvider(),
           ApiGatewayV2.StageProvider(),
           ApiGatewayV2.VpcLinkProvider(),
+          AppConfig.ApplicationProvider(),
+          AppConfig.ConfigurationProfileProvider(),
+          AppConfig.DeploymentProvider(),
+          AppConfig.DeploymentStrategyProvider(),
+          AppConfig.EnvironmentProvider(),
+          AppConfig.HostedConfigurationVersionProvider(),
           ApplicationAutoScaling.ScalableTargetProvider(),
           ApplicationAutoScaling.ScalingPolicyProvider(),
           ApplicationAutoScaling.ScheduledActionProvider(),
@@ -330,12 +532,19 @@ export const providers = () =>
           AppSync.FunctionProvider(),
           AppSync.GraphqlApiProvider(),
           AppSync.ResolverProvider(),
+          Athena.DataCatalogProvider(),
+          Athena.NamedQueryProvider(),
+          Athena.WorkGroupProvider(),
           AutoScaling.AutoScalingGroupProvider(),
           AutoScaling.LaunchTemplateProvider(),
+          AutoScaling.LifecycleHookProvider(),
           AutoScaling.ScalingPolicyProvider(),
+          AutoScaling.ScheduledActionProvider(),
           Batch.ComputeEnvironmentProvider(),
           Batch.JobDefinitionProvider(),
           Batch.JobQueueProvider(),
+          CloudControl.CloudControlResourceProvider(),
+          CloudFormation.StackProvider(),
           CloudFront.CachePolicyProvider(),
           CloudFront.DistributionProvider(),
           CloudFront.FunctionProvider(),
@@ -362,6 +571,13 @@ export const providers = () =>
           CloudWatch.DashboardProvider(),
           CloudWatch.InsightRuleProvider(),
           CloudWatch.MetricStreamProvider(),
+          CodeArtifact.DomainProvider(),
+          CodeArtifact.RepositoryProvider(),
+          CodeBuild.ProjectProvider(),
+          CodeConnections.ConnectionProvider(),
+          CodeDeploy.ApplicationProvider(),
+          CodeDeploy.DeploymentGroupProvider(),
+          CodePipeline.PipelineProvider(),
           Cognito.GroupProvider(),
           Cognito.IdentityPoolProvider(),
           Cognito.IdentityPoolRoleAttachmentProvider(),
@@ -373,9 +589,21 @@ export const providers = () =>
           Cognito.UserPoolProvider(),
         ),
         Layer.mergeAll(
+          DataSync.LocationEfsProvider(),
+          DataSync.LocationS3Provider(),
+          DataSync.TaskProvider(),
+          DocDB.DBClusterProvider(),
+          DocDB.DBInstanceProvider(),
+          DocDB.DBSubnetGroupProvider(),
+          DMS.EndpointProvider(),
+          DMS.ReplicationInstanceProvider(),
+          DMS.ReplicationSubnetGroupProvider(),
+          DSQL.ClusterProvider(),
           DynamoDB.TableProvider(),
+          EC2.DhcpOptionsProvider(),
           EC2.EgressOnlyInternetGatewayProvider(),
           EC2.EIPProvider(),
+          EC2.FlowLogProvider(),
           EC2.InstanceProvider(),
           EC2.InternetGatewayProvider(),
           EC2.KeyPairProvider(),
@@ -383,13 +611,20 @@ export const providers = () =>
           EC2.NetworkAclAssociationProvider(),
           EC2.NetworkAclEntryProvider(),
           EC2.NetworkAclProvider(),
+          EC2.NetworkInterfaceProvider(),
+          EC2.NetworkInterfaceAttachmentProvider(),
+          EC2.PrefixListProvider(),
           EC2.RouteProvider(),
           EC2.RouteTableAssociationProvider(),
           EC2.RouteTableProvider(),
           EC2.SecurityGroupProvider(),
           EC2.SecurityGroupRuleProvider(),
+          EC2.SnapshotProvider(),
           EC2.SubnetProvider(),
+          EC2.VolumeProvider(),
+          EC2.VolumeAttachmentProvider(),
           EC2.VpcEndpointProvider(),
+          EC2.VpcPeeringConnectionProvider(),
           EC2.VpcProvider(),
           ECR.ImageProvider(),
           ECR.RepositoryProvider(),
@@ -404,7 +639,10 @@ export const providers = () =>
           EKS.AccessEntryProvider(),
           EKS.AddonProvider(),
           EKS.ClusterProvider(),
+          EKS.FargateProfileProvider(),
+          EKS.NodegroupProvider(),
           EKS.PodIdentityAssociationProvider(),
+          EKS.ServerHostProvider(),
           ElastiCache.ServerlessCacheProvider(),
           ELBv2.ListenerProvider(),
           ELBv2.ListenerCertificateProvider(),
@@ -417,6 +655,13 @@ export const providers = () =>
           EventBridge.PermissionProvider(),
           EventBridge.RuleProvider(),
           Firehose.DeliveryStreamProvider(),
+          FSx.FileSystemProvider(),
+          Glue.ConnectionProvider(),
+          Glue.CrawlerProvider(),
+          Glue.DatabaseProvider(),
+          Glue.JobProvider(),
+          Glue.TableProvider(),
+          Grafana.WorkspaceProvider(),
           IAM.AccessKeyProvider(),
           IAM.AccountAliasProvider(),
           IAM.AccountPasswordPolicyProvider(),
@@ -441,6 +686,9 @@ export const providers = () =>
           IdentityCenter.GroupProvider(),
           IdentityCenter.InstanceProvider(),
           IdentityCenter.PermissionSetProvider(),
+          Kafka.ServerlessClusterProvider(),
+          Keyspaces.KeyspaceProvider(),
+          Keyspaces.TableProvider(),
           KMS.AliasProvider(),
           KMS.KeyProvider(),
           Kinesis.StreamConsumerProvider(),
@@ -457,6 +705,20 @@ export const providers = () =>
           Logs.MetricFilterProvider(),
           Logs.ResourcePolicyProvider(),
           Logs.SubscriptionFilterProvider(),
+          MediaConvert.JobProvider(),
+          MediaConvert.JobTemplateProvider(),
+          MediaConvert.PresetProvider(),
+          MediaConvert.QueueProvider(),
+          MQ.BrokerProvider(),
+          MQ.ConfigurationProvider(),
+          MemoryDB.ACLProvider(),
+          MemoryDB.ClusterProvider(),
+          MemoryDB.SubnetGroupProvider(),
+          MemoryDB.UserProvider(),
+          OpenSearchServerless.AccessPolicyProvider(),
+          OpenSearchServerless.CollectionProvider(),
+          OpenSearchServerless.SecurityPolicyProvider(),
+          OpenSearchServerless.VpcEndpointProvider(),
           Organizations.AccountProvider(),
           Organizations.DelegatedAdministratorProvider(),
           Organizations.OrganizationalUnitProvider(),
@@ -468,6 +730,10 @@ export const providers = () =>
           Organizations.RootProvider(),
           Organizations.TrustedServiceAccessProvider(),
           Pipes.PipeProvider(),
+          QuickSight.AnalysisProvider(),
+          QuickSight.DashboardProvider(),
+          QuickSight.DataSetProvider(),
+          QuickSight.DataSourceProvider(),
           RDS.DBClusterEndpointProvider(),
           RDS.DBClusterParameterGroupProvider(),
           RDS.DBClusterProvider(),
@@ -477,6 +743,8 @@ export const providers = () =>
           RDS.DBProxyProvider(),
           RDS.DBProxyTargetGroupProvider(),
           RDS.DBSubnetGroupProvider(),
+          RedshiftServerless.NamespaceProvider(),
+          RedshiftServerless.WorkgroupProvider(),
           Route53.HealthCheckProvider(),
           Route53.HostedZoneProvider(),
           Route53.QueryLoggingConfigProvider(),
@@ -504,6 +772,62 @@ export const providers = () =>
           Website.AssetDeploymentProvider(),
           XRay.GroupProvider(),
           XRay.SamplingRuleProvider(),
+          Bedrock.AgentProvider(),
+          Bedrock.AgentAliasProvider(),
+          Bedrock.DataSourceProvider(),
+          Bedrock.KnowledgeBaseProvider(),
+          AccessAnalyzer.AnalyzerProvider(),
+          AccessAnalyzer.ArchiveRuleProvider(),
+          Transfer.ServerProvider(),
+          Transfer.UserProvider(),
+          VerifiedPermissions.PolicyProvider(),
+          VerifiedPermissions.PolicyStoreProvider(),
+          VerifiedPermissions.SchemaProvider(),
+          Backup.BackupVaultProvider(),
+          Backup.BackupPlanProvider(),
+          Backup.BackupSelectionProvider(),
+          Budgets.BudgetProvider(),
+          GuardDuty.DetectorProvider(),
+          Inspector2.EnablerProvider(),
+          SecurityHub.HubProvider(),
+          Detective.GraphProvider(),
+          FMS.AdminAccountProvider(),
+          Macie2.SessionProvider(),
+          Macie2.ClassificationJobProvider(),
+          RAM.ResourceShareProvider(),
+        ),
+        Layer.mergeAll(
+          S3Vectors.VectorBucketProvider(),
+          S3Vectors.IndexProvider(),
+          Account.AlternateContactProvider(),
+          Amplify.AppProvider(),
+          ECRPublic.PublicRepositoryProvider(),
+          VpcLattice.ServiceNetworkProvider(),
+          VpcLattice.ServiceProvider(),
+          VpcLattice.ServiceNetworkVpcAssociationProvider(),
+          MWAA.EnvironmentProvider(),
+          Location.MapProvider(),
+          Location.PlaceIndexProvider(),
+          Location.RouteCalculatorProvider(),
+          Location.GeofenceCollectionProvider(),
+          Location.TrackerProvider(),
+          Forecast.DatasetGroupProvider(),
+          Forecast.DatasetProvider(),
+          FraudDetector.DetectorProvider(),
+          FraudDetector.EventTypeProvider(),
+          FraudDetector.VariableProvider(),
+          Personalize.SchemaProvider(),
+          Personalize.DatasetGroupProvider(),
+          Personalize.DatasetProvider(),
+          IoT.ThingProvider(),
+          IoT.ThingTypeProvider(),
+          IoT.PolicyProvider(),
+          IoT.TopicRuleProvider(),
+        ),
+        Layer.mergeAll(
+          Timestream.DatabaseProvider(),
+          Timestream.DbInstanceProvider(),
+          Timestream.TableProvider(),
         ),
       ),
     ),

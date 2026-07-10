@@ -2,7 +2,7 @@ import * as kms from "@distilled.cloud/aws/kms";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import type { AliasName } from "./Alias.ts";
 import { Decrypt, type DecryptRequest } from "./Decrypt.ts";
 import type { Key } from "./Key.ts";
@@ -18,7 +18,7 @@ export const DecryptHttp = Layer.effect(
         typeof key === "string" ? Effect.succeed(key) : yield* key.keyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.KMS.Decrypt(${key}))`({
             policyStatements: [keyPolicyStatement("kms:Decrypt", key)],
           });
