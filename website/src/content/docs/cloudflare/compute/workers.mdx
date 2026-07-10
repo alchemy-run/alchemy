@@ -287,6 +287,41 @@ export default {
 };
 ```
 
+## Version metadata
+
+The `version_metadata` binding exposes the deployed Worker version —
+`id`, `tag`, and `timestamp` — at runtime, so responses, logs, and
+error reports can say exactly which deploy produced them. Yield
+`VersionMetadata()` in the init phase and provide its layer; the
+accessor it returns is yielded again inside a handler, where the
+binding actually exists:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default Cloudflare.Worker(
+  "VersionWorker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const versionMetadata = yield* Cloudflare.Workers.VersionMetadata();
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { id, tag, timestamp } = yield* versionMetadata;
+        return yield* HttpServerResponse.json({ id, tag, timestamp });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.Workers.VersionMetadataBinding)),
+);
+```
+
+Async Workers declare it on `env` instead —
+`env: { CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata() }` —
+and `InferEnv` types the entry as the native
+`{ id, tag, timestamp }` object.
+
 ## Where next
 
 Guides that build on Workers:
