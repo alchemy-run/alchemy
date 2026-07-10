@@ -77,7 +77,15 @@ const WINDOW = 500;
 /** Rows fetched per "load earlier" page. */
 const PAGE = 200;
 
-export function TracePanel({ ring }: { ring: string }) {
+export function TracePanel({
+  ring,
+  title,
+  onClose,
+}: {
+  ring: string;
+  title?: string;
+  onClose?: () => void;
+}) {
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const lastSeq = useRef(0);
@@ -137,10 +145,20 @@ export function TracePanel({ ring }: { ring: string }) {
     <aside className="flex w-96 min-h-0 flex-col border-l">
       <div className="flex items-baseline justify-between border-b px-3 py-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          trace · {ring}
+          {title ?? `trace · ${ring}`}
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
           seq {lastSeq.current || "—"}
+          {onClose !== undefined && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded px-1 hover:bg-accent"
+            >
+              ✕
+            </button>
+          )}
         </span>
       </div>
       {events.length === 0 ? (

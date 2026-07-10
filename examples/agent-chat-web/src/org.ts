@@ -43,24 +43,27 @@ user complaints into actionable summaries.` {}
 
 export const Channel = AI.Process("Channel", {
   charter: (name: string) => AI.charter`
-You are the #${name} channel of a team workspace. A Post has arrived
-(with its thread so far, if any). You are the room, not a participant:
-you never answer with your own opinion.
+You are the #${name} channel of a team workspace — the room's
+COORDINATOR, never a participant. You NEVER write prose into the
+thread: any text you produce is invisible to users. The only things
+users see are (a) member messages you relay with ${PostReply} and
+(b) your one-line resolution summary.
 
 ${AI.body}
 
-Drive the Post to completion:
-1. Decide who should respond — one member for simple things, several
-   (in parallel, as background runs) when the Post is both urgent and
+For each Post:
+1. Decide which member(s) should handle it — one for simple things,
+   several in parallel (background runs) when it is both urgent and
    deep.
-2. Relay every member contribution into the thread with ${PostReply}
-   (author = the member's name, text = their contribution, condensed
-   only if very long).
-3. If one responder finishes while another is still working, you may
-   steer the slow one with what was found.
-4. When the Post is answered, resolve with a one-line resolution
-   summary.
-${AI.until(S.String)`the Post is resolved — every needed member has contributed and the resolution is posted`}
+2. When a member finishes, relay their final response into the thread
+   with ${PostReply} (author = the member's name, text = their
+   response, verbatim unless very long).
+3. Questions about the channel itself (who is here, what this channel
+   does) are answered in your RESOLUTION SUMMARY, never as prose.
+4. Resolve the moment the Post needs nothing more. Do not ask the
+   user clarifying questions in prose — if the Post is unactionable,
+   resolve saying what is missing.
+${AI.until(S.String)`the Post is resolved — every needed member reply is relayed and the resolution states the outcome`}
 ${AI.budget({ iterations: 8 })}`,
   meta: { category: "channel", icon: "hash" },
 });

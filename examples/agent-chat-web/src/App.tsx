@@ -91,6 +91,12 @@ const collectAgents = (nodes: TopologyNode[]): Set<string> => {
 
 let knownAgents = new Set<string>();
 
+/**
+ * Opens the run inspector (right sidebar) on an agent's ring — set by
+ * `App`, invoked by delegation pills deep in the message tree.
+ */
+let openInspector: (agent: string) => void = () => {};
+
 // ─── message parts ───────────────────────────────────────────────
 
 type Part = UIMessage["parts"][number];
@@ -110,11 +116,27 @@ function AuthoredReply({ author, text }: { author: string; text: string }) {
   );
 }
 
-function MessagePart({ part, index }: { part: Part; index: number }) {
+function MessagePart({
+  part,
+  index,
+  channelMode,
+}: {
+  part: Part;
+  index: number;
+  /**
+   * In a channel thread the Process is a coordinator, never a
+   * participant: its prose and thinking are invisible (they remain in
+   * the trace); only relayed member messages, delegation pills, asks,
+   * and the resolution render.
+   */
+  channelMode: boolean;
+}) {
   if (part.type === "text") {
+    if (channelMode) return null;
     return <MessageResponse key={index}>{part.text}</MessageResponse>;
   }
   if (part.type === "reasoning") {
+    if (channelMode) return null;
     return (
       <Reasoning isStreaming={part.state === "streaming"}>
         <ReasoningTrigger />
@@ -133,26 +155,28 @@ function MessagePart({ part, index }: { part: Part; index: number }) {
         />
       );
     }
-    // a delegation to a member agent — presence, not plumbing
+    // a delegation to a member agent — an async pill; click to inspect
+    // the agent's live run (thinking, tools, messages) in the sidebar
     if (knownAgents.has(part.toolName)) {
       const working = part.state !== "output-available";
       return (
-        <Marker role="status" className="my-1">
-          <MarkerIcon>
-            {working ? (
-              <Spinner className="size-3" />
-            ) : (
-              <CheckCircleIcon className="size-3 text-green-600" />
-            )}
-          </MarkerIcon>
-          <MarkerContent>
-            {working ? (
-              <Shimmer>{`${part.toolName} is working…`}</Shimmer>
-            ) : (
-              `${part.toolName} finished`
-            )}
-          </MarkerContent>
-        </Marker>
+        <button
+          type="button"
+          onClick={() => openInspector(part.toolName)}
+          className="my-1 flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground hover:bg-accent"
+          title={`Inspect ${part.toolName}'s run`}
+        >
+          {working ? (
+            <Spinner className="size-3" />
+          ) : (
+            <CheckCircleIcon className="size-3 text-green-600" />
+          )}
+          {working ? (
+            <Shimmer>{`${part.toolName} is working…`}</Shimmer>
+          ) : (
+            `${part.toolName} finished`
+          )}
+        </button>
       );
     }
     // the resolution marker
@@ -199,14 +223,29 @@ function MessagePart({ part, index }: { part: Part; index: number }) {
 
 const MessageView = memo(function MessageView({
   message,
+  channelMode = false,
 }: {
   message: UIMessage;
+  channelMode?: boolean;
 }) {
+  const visible = message.parts.some(
+    (part) =>
+      !channelMode ||
+      (part.type !== "text" &&
+        part.type !== "reasoning" &&
+        part.type !== "step-start"),
+  );
+  if (!visible && message.role === "assistant") return null;
   return (
     <Message from={message.role}>
       <MessageContent>
         {message.parts.map((part, index) => (
-          <MessagePart key={index} part={part} index={index} />
+          <MessagePart
+            key={index}
+            part={part}
+            index={index}
+            channelMode={channelMode}
+          />
         ))}
       </MessageContent>
     </Message>
@@ -539,7 +578,7 @@ function ThreadWithAutoSend({
                   messageId={message.id}
                   scrollAnchor={message.role === "user"}
                 >
-                  <MessageView message={message} />
+                  <MessageView message={message} channelMode />
                 </MessageScrollerItem>
               ))}
               {waiting && (
@@ -633,6 +672,9 @@ export function App() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selection, setSelection] = useState<Selection | undefined>();
   const [showTrace, setShowTrace] = useState(false);
+  // the run inspector: which agent's ring the right sidebar follows
+  const [inspecting, setInspecting] = useState<string | undefined>();
+  openInspector = (agent) => setInspecting(agent);
 
   const refreshChats = () =>
     fetch("/api/chats")
@@ -761,12 +803,16 @@ export function App() {
           <DmView key={selected.name} agent={selected} />
         )}
 
-        {showTrace && selection !== undefined && (
+        {inspecting !== undefined && (
           <TracePanel
-            ring={
-              selection.type === "channel" ? selection.name : selection.name
-            }
+            key={inspecting}
+            ring={inspecting}
+            title={`${inspecting}'s run`}
+            onClose={() => setInspecting(undefined)}
           />
+        )}
+        {showTrace && selection !== undefined && (
+          <TracePanel key={selection.name} ring={selection.name} />
         )}
       </div>
     </div>

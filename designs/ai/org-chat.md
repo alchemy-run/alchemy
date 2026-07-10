@@ -211,6 +211,20 @@ concerns; these are domain nouns).
   overload typing on `AI.Process`. Both are term-space, testable
   without a kernel.
 
+## 2.6 Coordinator visibility (decided in v1)
+
+A Process **never speaks in the room**. Users see only: member
+messages (relayed via `post_reply`, rendered as authored bubbles),
+delegation pills ("Sage is working…" — clickable, opening the run
+inspector sidebar on that agent's ring), ask cards, and the one-line
+resolution marker. The coordinator's prose and thinking are
+suppressed in the channel UI (they remain fully visible in the
+Trace/inspector — hidden is not deleted). Meta-questions about the
+room itself are answered in the resolution summary, not as chat
+prose. Agent work is asynchronous by construction: the pill is the
+channel-side handle; the member's FINAL response is what lands in the
+thread.
+
 ## 3. Primitive extensions (each small, each independently testable)
 
 1. **`AI.topology(term)`** — a pure walk over a term's refs producing
