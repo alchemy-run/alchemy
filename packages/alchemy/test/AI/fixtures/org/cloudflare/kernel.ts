@@ -101,6 +101,12 @@ export const CloudflareKernelLive = Layer.effect(
     const rings = yield* Ring;
 
     return AI.Kernel.of({
+      // deterministic handler path (reassess §C) — sketch: the handler
+      // is the DO's per-item work; run identity is the work item.
+      process: (_term, _handler) =>
+        Effect.die(
+          new Error("TODO(Phase 2): handler processes on the Ring DO"),
+        ) as any,
       // One interpretation method: Agent and Process denote the same object
       // (a Process); they differ only in who supplies the control
       // parameters (kernel defaults vs charter refs).

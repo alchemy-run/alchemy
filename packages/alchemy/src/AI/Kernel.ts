@@ -6,6 +6,7 @@ import type * as Stream from "effect/Stream";
 import type { Agent, AgentService } from "./Agent.ts";
 import type { KernelError } from "./Errors.ts";
 import type { Process, ProcessService } from "./Process.ts";
+import type { ProcessContext } from "./ProcessContext.ts";
 
 /**
  * A single entry in the Trace — the persisted event stream that is the
@@ -124,6 +125,20 @@ export interface KernelService {
   readonly interpret: <T extends InterpretableTerm>(
     term: T,
   ) => Effect.Effect<TermService<T>, KernelError, TermReq<T> | Scope.Scope>;
+  /**
+   * Interpret a process term with a **deterministic handler** instead
+   * of a model loop (reassess §C): the handler `(item, ctx) => Effect<
+   * Out, Err>` becomes the ring's per-work-item work. Same ring
+   * machinery as `interpret` — mailbox, dispatch = send + await,
+   * trigger-lift, steer, interrupt, `run.admitted`/`run.settled` — so a
+   * hand-written coordinator is a first-class process. The handler's
+   * own requirements are provided by the process's Layer (like a
+   * term's tool tags); `AI.process(term, handler)` packages this.
+   */
+  readonly process: <Out, In, Err>(
+    term: Process<Out, In, Err, any, any, any[], any>,
+    handler: (item: In, ctx: ProcessContext) => Effect.Effect<Out, Err, never>,
+  ) => Effect.Effect<ProcessService<Out, In, Err>, KernelError, Scope.Scope>;
   /** Live firehose: all interpreted process terms' events, deltas included. */
   readonly events: Stream.Stream<KernelEvent>;
   /** Durable replay-then-tail over one ring's Trace, from a cursor. */
@@ -159,6 +174,47 @@ export class Kernel extends Context.Service<Kernel, KernelService>()(
  * ordinary `Context.Service` tag, so `Layer.effect(Engineer, impl)` works
  * — the kernel default is a convenience, not a privilege.
  */
+/**
+ * The deterministic-handler Layer for a process term (reassess §C):
+ * `AI.process(Channel, (post, ctx) => …)` implements the term's tag
+ * with plain Effect code instead of a prose charter. The handler's own
+ * requirements (child agent tags it dispatches, tools it uses) plus
+ * `Kernel` are the Layer's inputs — discharged by ordinary Layer
+ * composition, exactly like a term's tool tags under `AI.layer`.
+ *
+ * This is the DEFAULT way to write a coordinator/router: deterministic
+ * routing in code, LLM judgment reserved for leaves the code calls.
+ * The prose `Process` charter (`AI.layer`) is the rarer artifact for
+ * genuinely open-ended goal jobs.
+ */
+export const process: <
+  P extends Process<any, any, any, any, any, any[], any> &
+    Context.Service<any, ProcessService<any, any, any>>,
+  R = never,
+>(
+  term: P,
+  handler: (
+    item: P extends Process<any, infer In, any, any, any, any[], any>
+      ? In
+      : unknown,
+    ctx: import("./ProcessContext.ts").ProcessContext,
+  ) => Effect.Effect<
+    P extends Process<infer Out, any, any, any, any, any[], any> ? Out : never,
+    P extends Process<any, any, infer Err, any, any, any[], any> ? Err : never,
+    R
+  >,
+) => Layer.Layer<P["Identifier"], never, Kernel | R> = ((
+  term: any,
+  handler: any,
+): any =>
+  Layer.effect(
+    term,
+    Effect.gen(function* () {
+      const kernel = yield* Kernel;
+      return yield* kernel.process(term, handler);
+    }) as any,
+  )) as any;
+
 export const layer: {
   <A extends Agent<any, any[], any, any> & Context.Service<any, AgentService>>(
     term: A,

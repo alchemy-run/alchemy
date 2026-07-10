@@ -11,6 +11,7 @@ import * as Result from "effect/Result";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as AiError from "effect/unstable/ai/AiError";
+import type { ProcessContext } from "./ProcessContext.ts";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
@@ -176,6 +177,59 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         ),
       );
       let oneShot = 0;
+
+      // ── triggers (§2.5): subscribe at interpretation time (the
+      // two-phase bind's plan half); run() drains the streams. `each`
+      // contributes nothing here — the ring's mailbox IS the durable
+      // queue and send() is its producer. Shared by the model-driven
+      // interpretProcess and the deterministic `process` handler path.
+      const subscribeTriggers = Effect.fn(function* (
+        refs: ReadonlyArray<unknown>,
+      ) {
+        const triggerStreams: Stream.Stream<unknown>[] = [];
+        for (const trigger of refs.filter(isTrigger) as Trigger<any, any>[]) {
+          if (trigger.mode === "every") {
+            const expression = (trigger.sources[0] as Cron).expression;
+            if (Option.isNone(Duration.fromInput(expression as never))) {
+              return yield* Effect.die(
+                new Error(
+                  `AI.every(${JSON.stringify(expression)}): cron expressions land with the Cloudflare harness — the memory kernel supports durations ("30 seconds", "1 hour")`,
+                ),
+              );
+            }
+            triggerStreams.push(
+              Stream.fromSchedule(
+                Schedule.spaced(expression as Duration.Input),
+              ).pipe(Stream.map(() => `tick: scheduled wake (${expression})`)),
+            );
+          } else if (trigger.mode === "on") {
+            for (const source of trigger.sources.filter(isEventSource)) {
+              if (source.channel !== undefined) {
+                const channel = yield* Effect.serviceOption(
+                  source.channel as never,
+                ).pipe(
+                  Effect.flatMap(
+                    Option.match({
+                      onSome: (service) =>
+                        Effect.succeed(service as EventChannelService),
+                      onNone: () =>
+                        Effect.die(
+                          new Error(
+                            `event channel for ${source["~alchemy/Name"]} has no Layer in context (Req should have caught this)`,
+                          ),
+                        ),
+                    }),
+                  ),
+                );
+                triggerStreams.push(yield* channel.subscribe(source));
+              } else {
+                triggerStreams.push(yield* eventBus.subscribe(source));
+              }
+            }
+          }
+        }
+        return triggerStreams;
+      });
 
       /**
        * The ring: ONE serial loop per process term, started when the
@@ -840,58 +894,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         const budget = (term.refs.find(isBudget) as Budget | undefined)?.limits;
         const policy = yield* KernelPolicy;
 
-        // ── triggers (§2.5): subscribe at interpretation time (the
-        // two-phase bind's plan half); run() drains the streams. `each`
-        // contributes nothing here — the ring's mailbox IS the durable
-        // queue and send() is its producer.
-        const triggerStreams: Stream.Stream<unknown>[] = [];
-        for (const trigger of term.refs.filter(isTrigger) as Trigger<
-          any,
-          any
-        >[]) {
-          if (trigger.mode === "every") {
-            const expression = (trigger.sources[0] as Cron).expression;
-            if (Option.isNone(Duration.fromInput(expression as never))) {
-              return yield* Effect.die(
-                new Error(
-                  `AI.every(${JSON.stringify(expression)}): cron expressions land with the Cloudflare harness — the memory kernel supports durations ("30 seconds", "1 hour")`,
-                ),
-              );
-            }
-            triggerStreams.push(
-              Stream.fromSchedule(
-                Schedule.spaced(expression as Duration.Input),
-              ).pipe(Stream.map(() => `tick: scheduled wake (${expression})`)),
-            );
-          } else if (trigger.mode === "on") {
-            for (const source of trigger.sources.filter(isEventSource)) {
-              if (source.channel !== undefined) {
-                // channel-backed: resolve the family tag from ambient
-                // context; subscribe = provision (plan half) + stream
-                const channel = yield* Effect.serviceOption(
-                  source.channel as never,
-                ).pipe(
-                  Effect.flatMap(
-                    Option.match({
-                      onSome: (service) =>
-                        Effect.succeed(service as EventChannelService),
-                      onNone: () =>
-                        Effect.die(
-                          new Error(
-                            `event channel for ${source["~alchemy/Name"]} has no Layer in context (Req should have caught this)`,
-                          ),
-                        ),
-                    }),
-                  ),
-                );
-                triggerStreams.push(yield* channel.subscribe(source));
-              } else {
-                // kernel-internal: the harness bus delivers
-                triggerStreams.push(yield* eventBus.subscribe(source));
-              }
-            }
-          }
-        }
+        const triggerStreams = yield* subscribeTriggers(term.refs);
 
         // ── perpetual rings (AI.never): now legal — each work item is
         // served as ONE kernel-default turn (agent semantics per item);
@@ -1277,7 +1280,58 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         return service;
       });
 
+      // ── deterministic handler path (reassess §C): the same ring, a
+      // per-item runItem that calls the user's handler with a
+      // ProcessContext instead of running model turns. Triggers, steer,
+      // interrupt, run.admitted/run.settled all come from makeRing.
+      const interpretHandler = Effect.fn(function* (
+        term: { "~alchemy/Name": string; refs: unknown[] },
+        handler: (
+          item: unknown,
+          ctx: ProcessContext,
+        ) => Effect.Effect<unknown, unknown>,
+      ) {
+        const termName = term["~alchemy/Name"];
+        const policy = yield* KernelPolicy;
+        const triggerStreams = yield* subscribeTriggers(term.refs);
+        const service = yield* makeRing({
+          termName,
+          system: "",
+          compiled: { toolkit: undefined, handlers: new Map() },
+          policy,
+          triggers: triggerStreams,
+          runItem: (item, run) => {
+            const ctx: ProcessContext = {
+              emit: (type, payload) =>
+                Effect.asVoid(
+                  run.emitRow(
+                    run.session,
+                    type,
+                    run.session,
+                    "handler",
+                    payload,
+                  ),
+                ),
+              post: (author, text) =>
+                Effect.asVoid(
+                  run.emitRow(
+                    run.session,
+                    "message.posted",
+                    run.session,
+                    "message",
+                    { author, text },
+                  ),
+                ),
+            };
+            return handler(item, ctx);
+          },
+        });
+        return service;
+      });
+
       return Kernel.of({
+        process: ((term: any, handler: any) =>
+          interpretHandler(term, handler)) as KernelService["process"],
         interpret: ((term: any) =>
           isAgent(term)
             ? interpretAgent(term)
