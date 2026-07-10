@@ -13,7 +13,7 @@ import {
   type PrismaManagementClient,
 } from "@/Prisma/Client";
 import { executeArtifactUpload } from "@/Prisma/Internal/ArtifactUpload";
-import { PrismaHttpClientLive } from "@/Prisma/Providers";
+import { PrismaHttpClientLive } from "@/Prisma/Internal/HttpClient";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256, sha256Object } from "@/Util/sha256";
 import { describe, expect, it } from "@effect/vitest";
@@ -1326,6 +1326,196 @@ describe("Prisma Deployment", () => {
       Effect.provide(PlatformServices),
     );
   });
+
+  it.effect(
+    "replaces a terminal failed deployment before deleting the failed generation",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      let latestDeploymentId: string | null = "version-failed";
+      const deployments = new Map<
+        string,
+        {
+          id: string;
+          type: "deployment";
+          url: string;
+          foundryVersionId: string;
+          status: string;
+          previewDomain: string | null;
+          createdAt: string;
+        }
+      >([
+        [
+          "version-failed",
+          {
+            id: "version-failed",
+            type: "deployment",
+            url: "https://api.prisma.test/v1/deployments/version-failed",
+            foundryVersionId: "foundry-failed",
+            status: "failed",
+            previewDomain: "version-failed.preview.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+      ]);
+      const client = {
+        createAppDeployment: (appId: string, input: unknown) =>
+          Effect.sync(() => {
+            calls.push(["createAppDeployment", { appId, input }]);
+            deployments.set("version-replacement", {
+              id: "version-replacement",
+              type: "deployment",
+              url: "https://api.prisma.test/v1/deployments/version-replacement",
+              foundryVersionId: "foundry-replacement",
+              status: "new",
+              previewDomain: "version-replacement.preview.prisma.build",
+              createdAt: "2026-01-02T00:00:00Z",
+            });
+            return {
+              id: "version-replacement",
+              type: "deployment" as const,
+              url: "https://api.prisma.test/v1/deployments/version-replacement",
+              foundryVersionId: "foundry-replacement",
+              uploadUrl: null,
+            };
+          }),
+        getDeployment: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getDeployment", id]);
+            return deployments.get(id)!;
+          }),
+        listAppDeployments: () =>
+          Effect.succeed(
+            Array.from(deployments.values()).map(
+              ({ id, type, url, foundryVersionId, createdAt }) => ({
+                id,
+                type,
+                url,
+                foundryVersionId,
+                createdAt,
+              }),
+            ),
+          ),
+        startDeployment: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["startDeployment", id]);
+            deployments.get(id)!.status = "running";
+            return {
+              previewDomain: deployments.get(id)!.previewDomain!,
+            };
+          }),
+        promoteApp: (
+          appId: string,
+          { deploymentId }: { deploymentId: string },
+        ) =>
+          Effect.sync(() => {
+            calls.push(["promoteApp", { appId, deploymentId }]);
+            expect(deployments.has("version-failed")).toBe(true);
+            latestDeploymentId = deploymentId;
+            return {
+              appEndpointDomain: "api.prisma.build",
+              reassignedDomains: 0,
+            };
+          }),
+        getApp: (appId: string) =>
+          Effect.succeed({
+            id: appId,
+            type: "app" as const,
+            url: `https://api.prisma.test/v1/apps/${appId}`,
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId: "project-1",
+            branchId: "branch-main",
+            latestDeploymentId,
+            appEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          }),
+        deleteDeployment: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["deleteDeployment", id]);
+            deployments.delete(id);
+          }),
+      } as unknown as PrismaManagementClient;
+      const news = {
+        app: "service-1",
+        skipCodeUpload: true,
+        promote: true,
+      } as const;
+      const failedOutput: PrismaDeployment["Attributes"] = {
+        deploymentId: "version-failed",
+        appId: "service-1",
+        foundryVersionId: "foundry-failed",
+        status: "failed",
+        previewDomain: "version-failed.preview.prisma.build",
+        artifactHash: undefined,
+        appEndpointDomain: "api.prisma.build",
+        createdAt: "2026-01-01T00:00:00Z",
+      };
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDeployment.Provider;
+        const action = yield* provider.diff!({
+          id: "Version",
+          fqn: "Version",
+          instanceId: "00000000000000000000000000000000",
+          olds: news,
+          news,
+          oldBindings: [],
+          newBindings: [],
+          output: failedOutput,
+        } as never);
+        expect(action).toEqual({ action: "replace" });
+
+        // The engine executes replacement create-before-delete. Reconcile the
+        // replacement to its requested running/promoted state before invoking
+        // delete for the failed generation.
+        const replacement = yield* provider.reconcile({
+          id: "Version",
+          fqn: "Version",
+          instanceId: "11111111111111111111111111111111",
+          news,
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        });
+        expect(replacement.deploymentId).toBe("version-replacement");
+        expect(replacement.status).toBe("running");
+        expect(deployments.has("version-failed")).toBe(true);
+
+        yield* provider.delete({
+          id: "Version",
+          fqn: "Version",
+          instanceId: "00000000000000000000000000000000",
+          olds: news,
+          output: failedOutput,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        const createIndex = calls.findIndex(
+          ([operation]) => operation === "createAppDeployment",
+        );
+        const promoteIndex = calls.findIndex(
+          ([operation]) => operation === "promoteApp",
+        );
+        const deleteIndex = calls.findIndex(
+          ([operation, id]) =>
+            operation === "deleteDeployment" && id === "version-failed",
+        );
+        expect(createIndex).toBeGreaterThanOrEqual(0);
+        expect(createIndex).toBeLessThan(promoteIndex);
+        expect(promoteIndex).toBeLessThan(deleteIndex);
+        expect(deployments.has("version-failed")).toBe(false);
+        expect(deployments.get("version-replacement")?.status).toBe("running");
+        expect(calls).not.toContainEqual(["startDeployment", "version-failed"]);
+      }).pipe(
+        Effect.provide(DeploymentProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
 
   it.effect("rejects promotion when start is explicitly disabled", () => {
     const client = {} as PrismaManagementClient;

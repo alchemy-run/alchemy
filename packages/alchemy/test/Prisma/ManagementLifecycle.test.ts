@@ -1414,7 +1414,7 @@ const customDomainClient = {
         updatedAt: createdAt,
       };
       customDomainCloud.set(id, domain);
-      return domain;
+      return { status: 201 as const, domain };
     }),
   retryCustomDomain: (id: string) =>
     Effect.sync(() => {

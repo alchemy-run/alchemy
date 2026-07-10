@@ -122,6 +122,15 @@ const normalizeHostname = (hostname: string) =>
 const sameHostname = (left: string, right: string) =>
   normalizeHostname(left) === normalizeHostname(right);
 
+const adoptionRequiredError = (
+  hostname: string,
+  appId: string,
+  detail: string,
+) =>
+  new Error(
+    `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
+  );
+
 const appIdValue = (app: AppReference | undefined) =>
   typeof app === "string" ? app : app?.appId;
 
@@ -288,9 +297,7 @@ export const CustomDomainProvider = () =>
           }
           if (domain && customDomainId === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Prisma custom domain '${hostname}' already exists on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
-              ),
+              adoptionRequiredError(hostname, appId, "already exists"),
             );
           }
           if (!domain) {
@@ -300,17 +307,28 @@ export const CustomDomainProvider = () =>
             ? domain.status === "failed"
               ? yield* client.retryCustomDomain(domain.id)
               : domain
-            : yield* client
-                .createAppDomain(appId, { hostname })
-                .pipe(
-                  Effect.catchIf(isConflict, () =>
-                    Effect.fail(
-                      new Error(
-                        `Prisma custom domain '${hostname}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended domain.`,
-                      ),
+            : yield* client.createAppDomain(appId, { hostname }).pipe(
+                Effect.catchIf(isConflict, () =>
+                  Effect.fail(
+                    adoptionRequiredError(
+                      hostname,
+                      appId,
+                      "appeared after the adoption check",
                     ),
                   ),
-                );
+                ),
+                Effect.flatMap((result) =>
+                  result.status === 201
+                    ? Effect.succeed(result.domain)
+                    : Effect.fail(
+                        adoptionRequiredError(
+                          hostname,
+                          appId,
+                          "was returned as already registered by the create request",
+                        ),
+                      ),
+                ),
+              );
           if (!identityMatches(reconciled)) {
             return yield* Effect.fail(
               new Error(

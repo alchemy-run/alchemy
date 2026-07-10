@@ -1,4 +1,3 @@
-import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
@@ -29,6 +28,7 @@ import {
   ensurePrismaDevDatabase,
 } from "./PrismaDevDatabase.ts";
 import { PrismaClientLive } from "./Client.ts";
+import { PrismaHttpClientLive } from "./Internal/HttpClient.ts";
 import { fromProfile } from "./PrismaEnvironment.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import {
@@ -43,8 +43,6 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 ) {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
-
-export const PrismaHttpClientLive = NodeHttpClient.layerNodeHttp;
 
 const managementApiLayer = () =>
   PrismaClientLive.pipe(

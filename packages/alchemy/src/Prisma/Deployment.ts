@@ -342,6 +342,16 @@ export const DeploymentProvider = () =>
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
+          if (isPrismaDevId(output?.deploymentId)) {
+            return { action: "update" } as const;
+          }
+          // `deploymentId` is stable and Foundry's failed status is terminal.
+          // Route drift recovery through the engine's create-before-delete
+          // replacement lifecycle instead of trying to restart the failed
+          // generation or changing a stable ID during an update.
+          if (output?.status === "failed") {
+            return { action: "replace" } as const;
+          }
           const replacementContent = {
             portMapping: news.portMapping,
             skipCodeUpload: news.skipCodeUpload,
@@ -356,9 +366,6 @@ export const DeploymentProvider = () =>
             | "artifactPath"
             | "artifactContentType"
           >;
-          if (isPrismaDevId(output?.deploymentId)) {
-            return { action: "update" } as const;
-          }
           const oldAppId = output?.appId ?? unresolvedAppIdOf(olds.app);
           const newAppId = isResolved(news.app)
             ? unresolvedAppIdOf(news.app)
@@ -492,6 +499,13 @@ export const DeploymentProvider = () =>
             : undefined;
           if (deployment) {
             yield* ensureDeploymentMembership(client, appId, deployment);
+            if (deployment.status === "failed") {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma deployment '${deployment.id}' is in terminal status 'failed' and must be replaced before reconcile; refusing to restart it or change the stable deploymentId during an update.`,
+                ),
+              );
+            }
           }
           let createdDeploymentId: string | undefined;
           const cleanupCreatedDeploymentOnFailure = (

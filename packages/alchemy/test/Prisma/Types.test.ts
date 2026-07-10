@@ -1,4 +1,7 @@
-import type { ProjectCreateResult } from "@/Prisma/Client";
+import type {
+  DatabaseCreateResult,
+  ProjectCreateResult,
+} from "@/Prisma/Client";
 import type {
   Database,
   DatabaseConnectionWithOptionalSecrets,
@@ -40,6 +43,16 @@ const projectCreateDatabaseWithoutProject: NonNullable<
   source: null,
   branchId: null,
 };
+const failedFlatDatabaseWithUnknownRegion: DatabaseCreateResult = {
+  ...projectCreateDatabaseWithoutProject,
+  project: {
+    id: "proj_1",
+    url: "https://api.prisma.test/v1/projects/proj_1",
+    name: "app",
+  },
+  status: "failure",
+  region: null,
+};
 
 describe("Prisma API types", () => {
   it("mirror nullable database sources and optional create-time secrets", () => {
@@ -48,5 +61,7 @@ describe("Prisma API types", () => {
     expect(validDatabaseSourceInput.type).toBe("backup");
     expect(invalidDatabaseSourceInput.type).toBe("snapshot");
     expect("project" in projectCreateDatabaseWithoutProject).toBe(false);
+    expect(failedFlatDatabaseWithUnknownRegion.status).toBe("failure");
+    expect(failedFlatDatabaseWithUnknownRegion.region).toBeNull();
   });
 });

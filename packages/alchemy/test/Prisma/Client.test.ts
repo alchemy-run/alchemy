@@ -486,6 +486,89 @@ describe("PrismaClient", () => {
     ).pipe(Effect.provide(layer));
   });
 
+  it.effect("preserves 200 versus 201 custom-domain create outcomes", () => {
+    const statuses = [200, 201] as const;
+    let requestIndex = 0;
+    const domain = {
+      id: "domain-1",
+      type: "custom-domain" as const,
+      url: "https://api.prisma.test/v1/domains/domain-1",
+      hostname: "api.example.com",
+      appId: "app-1",
+      status: "pending_dns" as const,
+      foundryStatus: "pending",
+      failureReason: null,
+      failureCategory: null,
+      certExpiresAt: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      dnsRecords: [],
+    };
+    const http = HttpClient.make((request) =>
+      Effect.sync(() => {
+        const status = statuses[requestIndex++];
+        return HttpClientResponse.fromWeb(
+          request,
+          json({ data: domain }, { status }),
+        );
+      }),
+    );
+
+    return withClient((client) =>
+      Effect.gen(function* () {
+        const existing = yield* client.createAppDomain("app-1", {
+          hostname: domain.hostname,
+        });
+        const created = yield* client.createAppDomain("app-1", {
+          hostname: domain.hostname,
+        });
+
+        expect(existing).toEqual({ status: 200, domain });
+        expect(created).toEqual({ status: 201, domain });
+      }),
+    ).pipe(Effect.provide(layerForHttp(http)));
+  });
+
+  it.effect("accepts the full flat database-create response contract", () => {
+    const database = {
+      id: "database-1",
+      type: "database" as const,
+      url: "https://api.prisma.test/v1/databases/database-1",
+      name: "main",
+      status: "failure" as const,
+      createdAt: "2026-01-01T00:00:00Z",
+      isDefault: false,
+      defaultConnectionId: null,
+      connections: [],
+      project: {
+        id: "project-1",
+        url: "https://api.prisma.test/v1/projects/project-1",
+        name: "app",
+      },
+      region: null,
+      source: null,
+      branchId: null,
+    };
+    const http = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          json({ data: database }, { status: 201 }),
+        ),
+      ),
+    );
+
+    return withClient((client) =>
+      Effect.gen(function* () {
+        const result = yield* client.createDatabase({
+          projectId: "project-1",
+        });
+        expect(result.status).toBe("failure");
+        expect(result.region).toBeNull();
+      }),
+    ).pipe(Effect.provide(layerForHttp(http)));
+  });
+
   it.effect("does not retain secret-bearing malformed response bodies", () => {
     const secret = "postgres://admin:super-secret@db.prisma.test/postgres";
     const http = HttpClient.make((request) =>

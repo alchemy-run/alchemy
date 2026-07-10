@@ -55,7 +55,10 @@ import {
   stopDeploymentIdempotent,
 } from "./Internal/DeploymentActions.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
-import { promoteAppObserved } from "./Internal/AppPromotion.ts";
+import {
+  promoteAppObserved,
+  waitForAppDeploymentTarget,
+} from "./Internal/AppPromotion.ts";
 import { normalizeBundleFilePath } from "./Internal/BundlePaths.ts";
 import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
 import { ensureDeploymentMembership } from "./Internal/DeploymentIdentity.ts";
@@ -2286,6 +2289,15 @@ export const ComputeProvider = () =>
                 | string
                 | undefined,
             );
+            const persistedDeployment = output?.deploymentId
+              ? yield* observeDeployment(client, output.deploymentId).pipe(
+                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+                )
+              : undefined;
+            const terminalFailedDeploymentId =
+              persistedDeployment?.status === "failed"
+                ? persistedDeployment.id
+                : undefined;
             const promotionRequested = !(effectiveNews.skipPromote ?? false);
             let persistedPendingCleanup = output?.pendingDeploymentCleanup;
             const cleanupPreviousDeployment = Effect.fn(function* (
@@ -2327,6 +2339,21 @@ export const ComputeProvider = () =>
               return "stopped" as const;
             });
 
+            if (
+              terminalFailedDeploymentId !== undefined &&
+              promotionRequested &&
+              output?.promoted === true &&
+              app.latestDeploymentId !== null &&
+              app.latestDeploymentId !== terminalFailedDeploymentId
+            ) {
+              return yield* Effect.fail(
+                new AggregateError(
+                  [],
+                  `Prisma Compute state preserves terminal failed deployment '${terminalFailedDeploymentId}', but App '${app.id}' reports deployment '${app.latestDeploymentId}' as latest. Alchemy cannot prove that the live deployment is the interrupted replacement, and the persisted failed deployment is not a safe rollback target. No new deployment was created and neither deployment was deleted.`,
+                ),
+              );
+            }
+
             // Apply persists the previous stable Attributes before reconcile.
             // If a prior attempt promoted a new generation, failed its stable
             // health check, and could not roll back, that durable output still
@@ -2338,6 +2365,7 @@ export const ComputeProvider = () =>
               promotionRequested &&
               output?.promoted === true &&
               output.deploymentId !== undefined &&
+              terminalFailedDeploymentId === undefined &&
               outputArtifactHash !== deploymentHash &&
               app.latestDeploymentId !== null &&
               app.latestDeploymentId !== output.deploymentId
@@ -2349,26 +2377,21 @@ export const ComputeProvider = () =>
                   deploymentId: persistedDeploymentId,
                 })
                 .pipe(Effect.result);
-              const observedAfterRollback = yield* client
-                .getApp(app.id)
-                .pipe(Effect.result);
+              const observedAfterRollback = yield* waitForAppDeploymentTarget(
+                client,
+                app.id,
+                persistedDeploymentId,
+                effectiveNews,
+              ).pipe(Effect.result);
 
-              if (
-                Result.isFailure(observedAfterRollback) ||
-                observedAfterRollback.success.latestDeploymentId !==
-                  persistedDeploymentId
-              ) {
+              if (Result.isFailure(observedAfterRollback)) {
                 return yield* Effect.fail(
                   new AggregateError(
                     [
                       ...(Result.isFailure(rollback) ? [rollback.failure] : []),
                       ...(Result.isFailure(observedAfterRollback)
                         ? [observedAfterRollback.failure]
-                        : [
-                            new Error(
-                              `Prisma App '${app.id}' still reports deployment '${observedAfterRollback.success.latestDeploymentId ?? "none"}' as latest after rollback recovery targeted '${persistedDeploymentId}'.`,
-                            ),
-                          ]),
+                        : []),
                     ],
                     `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/apps/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
                   ),
@@ -2460,18 +2483,28 @@ export const ComputeProvider = () =>
             );
 
             let deployment: ObservedDeployment | undefined =
-              output?.deploymentId && outputArtifactHash === deploymentHash
-                ? yield* observeDeployment(client, output.deploymentId).pipe(
-                    Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                  )
+              outputArtifactHash === deploymentHash
+                ? persistedDeployment
                 : undefined;
-            if (deployment) {
+            // A failed deployment is terminal and cannot be repaired by
+            // replaying start/promotion. Preserve it as the cleanup target,
+            // but create a fresh generation and do not delete the failed one
+            // until the replacement has passed preview + stable readiness and
+            // promotion is observed.
+            if (
+              persistedDeployment !== undefined &&
+              (deployment !== undefined ||
+                terminalFailedDeploymentId !== undefined)
+            ) {
               yield* ensureDeploymentMembership(
                 client,
                 app.id,
-                deployment,
+                persistedDeployment,
                 app.latestDeploymentId,
               );
+            }
+            if (terminalFailedDeploymentId !== undefined) {
+              deployment = undefined;
             }
             let createdDeploymentId: string | undefined;
             const cleanupCreatedDeploymentOnFailure = (
@@ -2550,11 +2583,16 @@ export const ComputeProvider = () =>
             }
 
             const previousDeploymentId =
+              terminalFailedDeploymentId ??
               persistedPendingCleanup?.deploymentId ??
               (app.latestDeploymentId !== null &&
               app.latestDeploymentId !== deployment.id
                 ? app.latestDeploymentId
                 : null);
+            const rollbackDeploymentId =
+              previousDeploymentId === terminalFailedDeploymentId
+                ? null
+                : previousDeploymentId;
 
             if (effectiveNews.start ?? true) {
               const currentDeployment = deployment;
@@ -2602,6 +2640,7 @@ export const ComputeProvider = () =>
                 client,
                 app.id,
                 deployment.id,
+                effectiveNews,
               );
               appEndpointDomain = promotedApp.appEndpointDomain;
               promoted = true;
@@ -2619,60 +2658,40 @@ export const ComputeProvider = () =>
               ).pipe(Effect.result);
               if (Result.isSuccess(readiness)) {
                 readinessStatus = "ready";
-              } else if (previousDeploymentId) {
+              } else if (rollbackDeploymentId) {
                 const rollback = yield* client
                   .rollbackApp(app.id, {
-                    deploymentId: previousDeploymentId,
+                    deploymentId: rollbackDeploymentId,
                   })
                   .pipe(Effect.result);
-                if (Result.isSuccess(rollback)) {
+                const observedAfterRollback = yield* waitForAppDeploymentTarget(
+                  client,
+                  app.id,
+                  rollbackDeploymentId,
+                  effectiveNews,
+                ).pipe(Effect.result);
+                if (Result.isSuccess(observedAfterRollback)) {
                   return yield* cleanupCreatedDeploymentOnFailure(
                     deployment.id,
-                    readiness.failure,
+                    Result.isSuccess(rollback)
+                      ? readiness.failure
+                      : new AggregateError(
+                          [readiness.failure, rollback.failure],
+                          `Prisma App '${app.id}' endpoint was restored to deployment '${rollbackDeploymentId}', but the rollback response was lost.`,
+                        ),
                   );
                 }
 
-                const observedAfterRollback = yield* client
-                  .getApp(app.id)
-                  .pipe(Effect.result);
-                if (
-                  Result.isSuccess(observedAfterRollback) &&
-                  observedAfterRollback.success.latestDeploymentId ===
-                    previousDeploymentId
-                ) {
-                  return yield* cleanupCreatedDeploymentOnFailure(
-                    deployment.id,
-                    new AggregateError(
-                      [readiness.failure, rollback.failure],
-                      `Prisma App '${app.id}' endpoint was restored to deployment '${previousDeploymentId}', but the rollback response was lost.`,
-                    ),
-                  );
-                }
-                if (
-                  Result.isSuccess(observedAfterRollback) &&
-                  observedAfterRollback.success.latestDeploymentId ===
-                    deployment.id
-                ) {
-                  return yield* Effect.fail(
-                    new AggregateError(
-                      [readiness.failure, rollback.failure],
-                      `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${previousDeploymentId}' failed. The App still reports '${deployment.id}' as latest. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/apps/${app.id}/rollback before making any new cloud changes.`,
-                    ),
-                  );
-                } else {
-                  return yield* Effect.fail(
-                    new AggregateError(
-                      [
-                        readiness.failure,
-                        rollback.failure,
-                        ...(Result.isFailure(observedAfterRollback)
-                          ? [observedAfterRollback.failure]
-                          : []),
-                      ],
-                      `Prisma App '${app.id}' failed stable endpoint readiness and rollback commit state is ambiguous. Neither deployment was deleted.`,
-                    ),
-                  );
-                }
+                return yield* Effect.fail(
+                  new AggregateError(
+                    [
+                      readiness.failure,
+                      ...(Result.isFailure(rollback) ? [rollback.failure] : []),
+                      observedAfterRollback.failure,
+                    ],
+                    `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/apps/${app.id}/rollback before making any new cloud changes.`,
+                  ),
+                );
               } else {
                 // A first deployment has no safe rollback target. Never report
                 // a successful stack deployment while the production endpoint
@@ -2682,6 +2701,14 @@ export const ComputeProvider = () =>
                   preserveCreatedAppOnFailure = false;
                 } else {
                   deploymentConverged = true;
+                }
+                if (terminalFailedDeploymentId !== undefined) {
+                  return yield* Effect.fail(
+                    new AggregateError(
+                      [readiness.failure],
+                      `Prisma App '${app.id}' promoted replacement deployment '${deployment.id}', but stable readiness failed and persisted deployment '${terminalFailedDeploymentId}' is terminal failed, so no safe rollback target exists. Neither deployment was deleted; a retry will refuse to create another generation while the live target differs from persisted state.`,
+                    ),
+                  );
                 }
                 return yield* Effect.fail(readiness.failure);
               }
@@ -2698,16 +2725,14 @@ export const ComputeProvider = () =>
                       persistedPendingCleanup?.deploymentId ===
                       previousDeploymentId
                         ? persistedPendingCleanup.action
-                        : effectiveNews.destroyOldDeployment
+                        : previousDeploymentId === terminalFailedDeploymentId
                           ? ("destroy" as const)
-                          : ("stop" as const),
+                          : effectiveNews.destroyOldDeployment
+                            ? ("destroy" as const)
+                            : ("stop" as const),
                   }
                 : undefined;
-            if (
-              promoted &&
-              readinessStatus !== "pending" &&
-              pendingDeploymentCleanup
-            ) {
+            if (promoted && pendingDeploymentCleanup) {
               const cleanup = yield* cleanupPreviousDeployment(
                 pendingDeploymentCleanup.deploymentId,
                 pendingDeploymentCleanup.action,

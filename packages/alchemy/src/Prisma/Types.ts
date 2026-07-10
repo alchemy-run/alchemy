@@ -490,6 +490,15 @@ export interface CustomDomainCreateInput {
   hostname: string;
 }
 
+/**
+ * Status-aware result from the idempotent custom-domain create endpoint.
+ * `200` means the hostname already existed on the App; only `201` proves that
+ * this request created it.
+ */
+export type CustomDomainCreateResult =
+  | { status: 200; domain: CustomDomain }
+  | { status: 201; domain: CustomDomain };
+
 export type EnvironmentVariableClass = "production" | "preview";
 
 export interface EnvironmentVariable {

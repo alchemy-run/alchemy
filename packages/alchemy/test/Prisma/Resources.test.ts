@@ -297,26 +297,29 @@ const makeClient = () => {
     createAppDomain: (appId: string, input: unknown) => {
       calls.push(["createAppDomain", { appId, input }]);
       return Effect.succeed({
-        id: "domain-1",
-        type: "custom-domain",
-        url: "https://api.prisma.test/v1/domains/domain-1",
-        hostname: "api.example.com",
-        appId: appId,
-        status: "pending_dns",
-        foundryStatus: "pending_dns",
-        failureReason: null,
-        failureCategory: null,
-        certExpiresAt: null,
-        dnsRecords: [
-          {
-            type: "CNAME",
-            name: "api.example.com",
-            value: "service-1.prisma.build",
-            ttl: null,
-          },
-        ],
-        createdAt,
-        updatedAt,
+        status: 201 as const,
+        domain: {
+          id: "domain-1",
+          type: "custom-domain" as const,
+          url: "https://api.prisma.test/v1/domains/domain-1",
+          hostname: "api.example.com",
+          appId: appId,
+          status: "pending_dns" as const,
+          foundryStatus: "pending_dns",
+          failureReason: null,
+          failureCategory: null,
+          certExpiresAt: null,
+          dnsRecords: [
+            {
+              type: "CNAME" as const,
+              name: "api.example.com",
+              value: "service-1.prisma.build",
+              ttl: null,
+            },
+          ],
+          createdAt,
+          updatedAt,
+        },
       });
     },
     getDeployment: (id: string) => {
@@ -2261,6 +2264,72 @@ describe("Prisma resource providers", () => {
     },
   );
 
+  it.effect(
+    "routes a 200 custom-domain create race through explicit adoption",
+    () => {
+      const { client, calls } = makeClient();
+      let visible = false;
+      const raced = {
+        id: "domain-raced",
+        type: "custom-domain" as const,
+        url: "https://api.prisma.test/v1/domains/domain-raced",
+        hostname: "api.example.com",
+        appId: "service-1",
+        status: "pending_dns" as const,
+        foundryStatus: "pending",
+        failureReason: null,
+        failureCategory: null,
+        certExpiresAt: null,
+        dnsRecords: [],
+        createdAt,
+        updatedAt,
+      };
+      Object.assign(client, {
+        listAppDomains: (appId: string) =>
+          Effect.sync(() => {
+            calls.push(["listAppDomains", appId]);
+            return visible ? [raced] : [];
+          }),
+        createAppDomain: (appId: string, input: unknown) =>
+          Effect.sync(() => {
+            calls.push(["createAppDomain", { appId, input }]);
+            visible = true;
+            return { status: 200 as const, domain: raced };
+          }),
+      });
+
+      return Effect.gen(function* () {
+        const domainProvider = yield* PrismaCustomDomain.Provider;
+        const error = yield* domainProvider
+          .reconcile(
+            reconcileInput("CustomDomain", {
+              app: "service-1",
+              hostname: raced.hostname,
+            }),
+          )
+          .pipe(Effect.flip);
+
+        expect((error as Error).message).toContain("explicit adoption");
+        expect(calls).toContainEqual([
+          "createAppDomain",
+          {
+            appId: "service-1",
+            input: { hostname: raced.hostname },
+          },
+        ]);
+
+        const observed = yield* domainProvider.read!(
+          readInput("CustomDomain", {
+            app: "service-1",
+            hostname: raced.hostname,
+          }),
+        );
+        expect(observed?.customDomainId).toBe(raced.id);
+        expect(Unowned.is(observed!)).toBe(true);
+      }).pipe(Effect.provide(providerLayer(client)));
+    },
+  );
+
   it.effect("normalizes Prisma custom domain hostnames when matching", () => {
     const { client, calls } = makeClient();
     Object.assign(client, {
@@ -2355,6 +2424,7 @@ describe("Prisma resource providers", () => {
   it.effect("starts a direct deployment only after observing status", () => {
     const calls: Call[] = [];
     let status = "new";
+    let latestDeploymentId: string | null = null;
     const client = {
       createAppDeployment: (appId: string, input: unknown) =>
         Effect.sync(() => {
@@ -2398,7 +2468,7 @@ describe("Prisma resource providers", () => {
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
             branchId: null,
-            latestDeploymentId: null,
+            latestDeploymentId,
             appEndpointDomain: "api.prisma.build",
             createdAt,
           };
@@ -2406,6 +2476,7 @@ describe("Prisma resource providers", () => {
       promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) =>
         Effect.sync(() => {
           calls.push(["promoteApp", { appId, deploymentId }]);
+          latestDeploymentId = deploymentId;
           return { appEndpointDomain: "api.prisma.build" };
         }),
     } as unknown as PrismaManagementClient;
@@ -2439,6 +2510,7 @@ describe("Prisma resource providers", () => {
         ["startDeployment", "version-1"],
         ["getDeployment", "version-1"],
         ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
+        ["getApp", "service-1"],
       ]);
     }).pipe(
       Effect.provide(providerLayer(client)),

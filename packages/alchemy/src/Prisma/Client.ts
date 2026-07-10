@@ -26,6 +26,7 @@ import type {
   CurrentPrincipal,
   CustomDomain,
   CustomDomainCreateInput,
+  CustomDomainCreateResult,
   DataResponse,
   Database,
   DatabaseConnection,
@@ -158,7 +159,10 @@ export interface PrismaManagementClient {
   createProjectDatabase(
     projectId: string,
     input: ProjectDatabaseCreateInput,
-  ): Effect.Effect<DatabaseCreateResult, PrismaApiError | PrismaApiDecodeError>;
+  ): Effect.Effect<
+    ProjectDatabaseCreateResult,
+    PrismaApiError | PrismaApiDecodeError
+  >;
   updateDatabase(
     id: string,
     input: DatabaseUpdateInput,
@@ -265,7 +269,10 @@ export interface PrismaManagementClient {
   createAppDomain(
     appId: string,
     input: CustomDomainCreateInput,
-  ): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
+  ): Effect.Effect<
+    CustomDomainCreateResult,
+    PrismaApiError | PrismaApiDecodeError
+  >;
   listAppDeployments(
     appId: string,
     query?: PaginationQuery,
@@ -428,17 +435,22 @@ export interface SourceRepositoryListQuery extends PaginationQuery {
   projectId: string;
 }
 
-export interface DatabaseCreateResult extends Omit<
-  Database,
-  "connections" | "region" | "status"
-> {
-  status: "provisioning" | "ready";
-  region: { id: string; name: string };
+/** Response from the flat `POST /v1/databases` operation. */
+export interface DatabaseCreateResult extends Omit<Database, "connections"> {
   connections: DatabaseConnectionWithOptionalSecrets[];
 }
 
-export interface ProjectCreateDatabaseResult extends Omit<
+/** Response from `POST /v1/projects/{projectId}/databases`. */
+export interface ProjectDatabaseCreateResult extends Omit<
   DatabaseCreateResult,
+  "region" | "status"
+> {
+  status: "provisioning" | "ready";
+  region: { id: string; name: string };
+}
+
+export interface ProjectCreateDatabaseResult extends Omit<
+  ProjectDatabaseCreateResult,
   "project"
 > {}
 
@@ -671,11 +683,14 @@ function makePrismaClient(): Effect.Effect<
         : request.pipe(HttpClientRequest.bodyJsonUnsafe(options.body));
     };
 
-    const request = <T>(
+    const requestWithStatus = <T>(
       method: Method,
       path: string,
       options?: RequestOptions,
-    ): Effect.Effect<T, PrismaApiError | PrismaApiDecodeError> => {
+    ): Effect.Effect<
+      { status: number; body: T },
+      PrismaApiError | PrismaApiDecodeError
+    > => {
       if (!isValidApiPath(path)) {
         return Effect.fail(
           new PrismaApiError({
@@ -796,9 +811,9 @@ function makePrismaClient(): Effect.Effect<
             yield* options.onSuccessfulBodyLength(bodyLength);
           }
           if (status === 204 || text.length === 0) {
-            return undefined as T;
+            return { status, body: undefined as T };
           }
-          return yield* Effect.try({
+          const body = yield* Effect.try({
             try: () => JSON.parse(text) as T,
             catch: () =>
               new PrismaApiDecodeError({
@@ -808,6 +823,7 @@ function makePrismaClient(): Effect.Effect<
                 message: "Prisma Management API returned invalid JSON",
               }),
           });
+          return { status, body };
         }),
       ).pipe(
         // The deadline covers the complete operation, including transient
@@ -832,13 +848,29 @@ function makePrismaClient(): Effect.Effect<
       );
     };
 
-    const data = <T>(method: Method, path: string, options?: RequestOptions) =>
-      request<unknown>(method, path, options).pipe(
-        Effect.flatMap((response) =>
+    const request = <T>(
+      method: Method,
+      path: string,
+      options?: RequestOptions,
+    ): Effect.Effect<T, PrismaApiError | PrismaApiDecodeError> =>
+      requestWithStatus<T>(method, path, options).pipe(
+        Effect.map(({ body }) => body),
+      );
+
+    const dataWithStatus = <T>(
+      method: Method,
+      path: string,
+      options?: RequestOptions,
+    ) =>
+      requestWithStatus<unknown>(method, path, options).pipe(
+        Effect.flatMap(({ status, body: response }) =>
           response !== null &&
           typeof response === "object" &&
           Object.hasOwn(response, "data")
-            ? Effect.succeed(requestBody(response as DataResponse<T>))
+            ? Effect.succeed({
+                status,
+                data: requestBody(response as DataResponse<T>),
+              })
             : Effect.fail(
                 new PrismaApiDecodeError({
                   method,
@@ -849,6 +881,11 @@ function makePrismaClient(): Effect.Effect<
                 }),
               ),
         ),
+      );
+
+    const data = <T>(method: Method, path: string, options?: RequestOptions) =>
+      dataWithStatus<T>(method, path, options).pipe(
+        Effect.map(({ data }) => data),
       );
 
     const list = <T>(
@@ -1010,7 +1047,7 @@ function makePrismaClient(): Effect.Effect<
           timeout: PROVISIONING_REQUEST_TIMEOUT,
         }),
       createProjectDatabase: (projectId, input) =>
-        data<DatabaseCreateResult>(
+        data<ProjectDatabaseCreateResult>(
           "POST",
           `/v1/projects/${pathSegment(projectId)}/databases`,
           { body: input, timeout: PROVISIONING_REQUEST_TIMEOUT },
@@ -1125,10 +1162,25 @@ function makePrismaClient(): Effect.Effect<
         ),
       listAppDomains: (appId) =>
         paginate<CustomDomain>(`/v1/apps/${pathSegment(appId)}/domains`),
-      createAppDomain: (appId, input) =>
-        data<CustomDomain>("POST", `/v1/apps/${pathSegment(appId)}/domains`, {
+      createAppDomain: (appId, input) => {
+        const path = `/v1/apps/${pathSegment(appId)}/domains`;
+        return dataWithStatus<CustomDomain>("POST", path, {
           body: input,
-        }),
+        }).pipe(
+          Effect.flatMap(({ status, data: domain }) =>
+            status === 200 || status === 201
+              ? Effect.succeed({ status, domain })
+              : Effect.fail(
+                  new PrismaApiDecodeError({
+                    method: "POST",
+                    path,
+                    bodyLength: 0,
+                    message: `Prisma Management API returned unexpected HTTP ${status} for custom-domain creation`,
+                  }),
+                ),
+          ),
+        );
+      },
       listAppDeployments: (appId, query) =>
         paginate<DeploymentListItem>(
           `/v1/apps/${pathSegment(appId)}/deployments`,
