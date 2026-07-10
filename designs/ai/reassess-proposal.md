@@ -82,35 +82,50 @@ other's charters identically (`${Sage}` works whether Sage is prose or
 
 ## The changes (grouped; each independently shippable)
 
-### A. Control wiring → structured config (report 3)
+### A. Control refs stay in prose — fix the renderer (report 3 **v2**, supersedes)
 
-The constructor gains a config object; the template keeps only
-capability refs and (optionally) inline splices:
+**Reversed after owner review.** The original §A moved control wiring
+to a config argument (`until: AI.until(S.String)\`…\``). The owner
+rejected it: the `AI.until` wrapper-as-config-value is redundant, and
+the real bug was never "prose vs config" — it was that
+`displayRef` renders every control ref to the **empty string**. Fix
+the *rendering* and control refs belong in the prose, where they read
+naturally and the author put them.
 
 ```ts
-// before: control refs tacked onto the template tail
+// UNCHANGED from what authors write today — control refs stay interpolated
 class Fix extends AI.Process<Fix>()("Fix")`
-…prose… ${AI.until(S.String)`tests pass`} ${AI.budget({ iterations: 8 })}` {}
-
-// after: control is config; judgment prose stays as config VALUES
-class Fix extends AI.Process<Fix>()("Fix", {
-  until: AI.until(S.String)`the tests pass`,   // judgment prose preserved
-  budget: { iterations: 8 },                    // pure config
-  on: Issues,                                   // trigger
-})`…prose (tools, agents, policy only)…` {}
+…prose (tools, agents, policy)…
+${AI.until(S.String)`the tests pass`}
+${AI.budget({ iterations: 8 })}` {}
 ```
 
-- `Out`/`In`/`Err` derive by keyed lookup on the config (`C["until"]`)
-  instead of `Extract` over the refs tuple — simpler inference, and
-  `until`+`never` / duplicate-budget become **type errors** not lints.
-- The kind form gains typed constitutional config: instances may *add*
-  budget/triggers but not *override* the kind's (replaces
-  `spliceCharter` smuggling halts through prose).
-- New `kernelPrompts.budgetNote(limits)` finally tells the model "you
-  have at most 8 iterations" — the prose the owner expected, rendered
-  from config, byte-stable.
-- Prose MAY still splice a config'd value inline where narration
-  matters (`"you have ${AI.budget} attempts"`), rendered from data.
+The change is entirely in `Render.ts` + `KernelPrompts.ts` (zero
+constructor call sites change):
+
+- `${AI.until(S)\`…\`}` renders the full kernel-worded halt-contract
+  block **in place**, replacing the kernel's separately-appended
+  `# Halt condition` heading (the model-visible prompt is
+  byte-equivalent — now honestly authored where it stands).
+- `${AI.budget({ iterations: 8 })}` renders a `budgetNote` block — the
+  model is finally told "you have at most 8 iterations" (today it is
+  told *nothing*; the number only sets `maxIterations`).
+- `${AI.concurrency(3)}` / `${AI.on(…)}` / `${AI.each(…)}` render
+  inline as their values (today "at most `${AI.concurrency(3)}` in
+  flight" renders as "at most in flight").
+- `check` / `fold` correctly keep rendering `""` in the host prompt —
+  their prose renders into the *verifier's* and *fold agent's* prompts
+  (recipient-scoped), which is already how the kernel routes them.
+- Type derivation (`Out`/`In`/`Err`/`Req` over the refs tuple) is
+  **untouched** — the ref was always both a type carrier and a render
+  token; only `displayRef` was stubbed. `until`+`never` stays a lint
+  (not promoted to a type error — the config shape that would have
+  bought that is gone).
+
+The naming complaint dissolves with the config shape: `${AI.until(S)\`…\`}`
+reads fine as an interpolation; it only looked silly as `until:
+AI.until(…)`. All spellings survive unchanged. Full analysis:
+[reassess-control-refs-v2.md](./reports/reassess-control-refs-v2.md).
 
 ### B. Exit sources: model / machine / human (report 2)
 
@@ -179,11 +194,47 @@ contrast:
 - Ship the **prose Channel variant beside the code variant** — the
   contrast (when is a coordinator worth an LLM?) is the lesson.
 
+### F. Dynamism within a static upper bound (report 6)
+
+Full analysis: [dynamic-prose-and-tools.md](./reports/dynamic-prose-and-tools.md).
+The unifying principle: **`Req` is a static upper bound on capability;
+realization is dynamic within it.** Narrowing is safe anywhere;
+widening only in source (or one explicitly-marked escape hatch). Keeps
+static-by-default (type-safe capability sets, capability-by-omission,
+`AI.topology`) while allowing the dynamism real apps need.
+
+- **Now — dynamic prose values:** `${AI.value(Tag)}` interpolates a
+  service-resolved string into an otherwise static charter (RAG
+  context, observed state, user name). Its tag joins `Req`; topology
+  sees a typed hole; the prompt hash stamps per interpretation.
+  Per-*run* data (the user message, retrieved docs) rides `In`/tool
+  results, never the system prompt (prompt-cache doctrine).
+- **Now — per-run tool exposure:** `Req` = the full declared tool
+  union (upper bound); a typed filter service shrinks the *exposed*
+  set per run (admin-only tools, context-scoped). Granted-but-not-
+  exposed is sound — that's what "upper bound" means; filters only
+  shrink.
+- **Soon — runtime instances:** `AI.instantiate(kind, name, prose)` —
+  a DB row fills only the *body* of a static kind whose scaffold refs
+  fix `Req` statically; a static registry process fronts N instances.
+- **Deferred — MCP / dynamic tool universe:** one static tag for the
+  source (`AI.dynamicTools(Source)`); discovered tools are honestly
+  typed as untyped-extra, outside the static `Req`; exposure filters
+  still apply.
+- **Refused permanently:** charter-as-`(ctx) => template` (erases the
+  refs tuple, kills `Req` derivation), runtime-widened tool universes
+  outside the marked ref, string-keyed term registries where data
+  creates structure. Refusal is the feature: capability structure
+  changes only by editing source — the oversight surface stays the
+  source file.
+
 ## Build order
 
-1. **A** (control config) — the biggest type-surface change; do it
-   first so everything downstream is authored in the new shape. ~10
-   test files + 2 fixtures + example migrate mechanically.
+1. **A** (fix the renderer so control refs render in prose) — small,
+   self-contained (`Render.ts` + `KernelPrompts.ts` + two deletions in
+   `KernelMemory.ts` + one lint); zero constructor call sites change.
+   Do it first: it makes the current syntax honest before anything
+   else is authored.
 2. **C** (`AI.process` + `ProcessContext` + prose-free) — unblocks the
    deterministic example.
 3. **B** (exit sources) — `AI.until(eventSource)` + re-admission; needed
@@ -191,7 +242,10 @@ contrast:
 4. **D** (doctrine + lints) — pure, cheap, locks in the defaults.
 5. **E** (the example: Channel-as-code, IssueWork, prose variant) +
    an OrgStress-style live test.
-6. Docs: invert the teaching order (Tool → Agent → Effect → `process` →
+6. **F** (dynamism: `AI.value` + exposure filters) — cheap (one ref
+   kind + one `RefServices` arm each), no `Out`/`In`/`Err` impact;
+   slot in when a use-case demands it.
+7. Docs: invert the teaching order (Tool → Agent → Effect → `process` →
    charter last) in the design docs; update org-chat.md and
    alchemy-ai-design.md §1/§2.5/§2.11.
 
