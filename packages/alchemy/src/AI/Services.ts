@@ -5,6 +5,7 @@ import type { Fold } from "./Fold.ts";
 import type { Halt } from "./Halt.ts";
 import type { ToolImpl } from "./Tool.ts";
 import type { Trigger } from "./Trigger.ts";
+import type { Value } from "./Value.ts";
 
 /** The channel tags of any EventSource refs (machine-observed halts). */
 type EventChannels<R> =
@@ -64,7 +65,12 @@ export type RefServices<R> =
         ? LeafServices<A> | LeafServices<Inner[number]>
         : R extends Trigger<any, infer Channels>
           ? Channels
-          : LeafServices<R>;
+          : // a dynamic-prose Value contributes its resolved-value
+            // service's tag (reassess §F): the value is a declared
+            // dependency, provided by a Layer
+            R extends Value<infer Id>
+            ? Id
+            : LeafServices<R>;
 
 /**
  * Folds a term's interpolated refs into its requirement union (`Req`).

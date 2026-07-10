@@ -12,6 +12,7 @@ import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as AiError from "effect/unstable/ai/AiError";
 import type { ProcessContext } from "./ProcessContext.ts";
+import { type Value, isValue } from "./Value.ts";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
@@ -214,6 +215,31 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           return yield* channel.subscribe(source);
         }
         return yield* eventBus.subscribe(source);
+      });
+
+      // resolve a term's charter to prose, filling any dynamic-prose
+      // Value refs from ambient context (reassess §F). Resolution
+      // happens ONCE per interpretation (not per run) — promptHash
+      // stamps once, prompt-caching stays effective.
+      const renderCharter = Effect.fn(function* (term: {
+        template: TemplateStringsArray | ReadonlyArray<string>;
+        refs: ReadonlyArray<unknown>;
+      }) {
+        const resolved = new Map<unknown, string>();
+        for (const ref of term.refs) {
+          if (isValue(ref)) {
+            const v = yield* Effect.serviceOption((ref as Value).tag as never);
+            resolved.set(
+              ref,
+              Option.isSome(v)
+                ? String(v.value)
+                : `{${(ref as any).tag?.key ?? "value"}}`,
+            );
+          }
+        }
+        return renderTemplate(term.template, term.refs, (ref) =>
+          resolved.get(ref),
+        );
       });
 
       const subscribeTriggers = Effect.fn(function* (
@@ -866,7 +892,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         );
         const service = yield* makeRing({
           termName: term["~alchemy/Name"],
-          system: renderTemplate(term.template, term.refs),
+          system: yield* renderCharter(term),
           compiled,
           policy,
           children,
@@ -925,7 +951,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             termName,
             // the never-halt is in term.refs; the renderer emits the
             // perpetual note in place (§A) — no kernel re-append
-            system: renderTemplate(term.template, term.refs),
+            system: yield* renderCharter(term),
             compiled,
             policy,
             children,
@@ -965,7 +991,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           );
           const service = yield* makeRing({
             termName,
-            system: renderTemplate(term.template, term.refs),
+            system: yield* renderCharter(term),
             compiled,
             policy,
             children,
@@ -1161,7 +1187,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // note, which the halt ref can't know (it depends on a check).
         const haltProse = renderTemplate(halt.template, halt.refs);
         const system =
-          renderTemplate(term.template, term.refs) +
+          (yield* renderCharter(term)) +
           (judge !== undefined || machineCheck !== undefined
             ? kernelPrompts.verifiedNote()
             : "");
