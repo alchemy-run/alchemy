@@ -261,22 +261,20 @@ export const ConfigurationRecorderProvider = () =>
       return ConfigurationRecorder.Provider.of({
         stables: ["recorderName", "recorderArn"],
         list: () =>
-          config
-            .describeConfigurationRecorders({})
-            .pipe(
-              Effect.map((response) =>
-                (response.ConfigurationRecorders ?? []).flatMap((recorder) =>
-                  recorder.name && recorder.arn
-                    ? [
-                        {
-                          recorderName: recorder.name,
-                          recorderArn: recorder.arn,
-                        },
-                      ]
-                    : [],
-                ),
+          config.describeConfigurationRecorders({}).pipe(
+            Effect.map((response) =>
+              (response.ConfigurationRecorders ?? []).flatMap((recorder) =>
+                recorder.name && recorder.arn
+                  ? [
+                      {
+                        recorderName: recorder.name,
+                        recorderArn: recorder.arn,
+                      },
+                    ]
+                  : [],
               ),
             ),
+          ),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.recorderName ?? (yield* createRecorderName(id, olds ?? {}));
