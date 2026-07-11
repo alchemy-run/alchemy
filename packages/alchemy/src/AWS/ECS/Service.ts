@@ -1,5 +1,6 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -215,10 +216,11 @@ export interface ServiceProps {
   role?: string;
 
   /**
-   * Grace period before ECS starts evaluating target health checks. Updated in
-   * place.
+   * Grace period before ECS starts evaluating target health checks, e.g.
+   * `"30 seconds"` or `Duration.seconds(30)`. Rounded to whole seconds on
+   * the wire. Updated in place.
    */
-  healthCheckGracePeriodSeconds?: number;
+  healthCheckGracePeriodSeconds?: Duration.Input;
 
   /**
    * User-defined tags to apply to the ECS service and generated ingress
@@ -371,7 +373,7 @@ export interface Service extends Resource<
  *     maximumPercent: 200,
  *     deploymentCircuitBreaker: { enable: true, rollback: true },
  *   },
- *   healthCheckGracePeriodSeconds: 30,
+ *   healthCheckGracePeriodSeconds: "30 seconds",
  * });
  * ```
  */
@@ -537,7 +539,12 @@ export const ServiceProvider = () =>
         desiredCount: news.desiredCount ?? 1,
         platformVersion: news.platformVersion,
         deploymentConfiguration: news.deploymentConfiguration,
-        healthCheckGracePeriodSeconds: news.healthCheckGracePeriodSeconds,
+        healthCheckGracePeriodSeconds:
+          news.healthCheckGracePeriodSeconds === undefined
+            ? undefined
+            : Math.round(
+                Duration.toSeconds(news.healthCheckGracePeriodSeconds),
+              ),
         networkConfiguration: networkConfigurationOf(news),
         capacityProviderStrategy: news.capacityProviderStrategy,
         placementConstraints: news.placementConstraints,

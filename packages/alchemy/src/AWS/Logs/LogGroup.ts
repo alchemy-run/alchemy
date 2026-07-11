@@ -1,4 +1,5 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -23,9 +24,13 @@ export interface LogGroupProps {
    */
   logGroupName?: string;
   /**
-   * Retention in days. If omitted, CloudWatch keeps logs indefinitely.
+   * How long CloudWatch retains log events. If omitted, logs are kept
+   * indefinitely. Accepts any `Duration.Input` (e.g. `"7 days"`,
+   * `Duration.days(7)`; a bare number is milliseconds); the wire unit is
+   * whole days and must resolve to one of the retention values CloudWatch
+   * accepts (1, 3, 5, 7, 14, 30, ...).
    */
-  retentionInDays?: number;
+  retentionInDays?: Duration.Input;
   /**
    * Optional KMS key identifier used to encrypt the log group.
    */
@@ -69,7 +74,7 @@ export interface LogGroup extends Resource<
  * @example ECS Task Log Group
  * ```typescript
  * const logs = yield* LogGroup("TaskLogs", {
- *   retentionInDays: 7,
+ *   retentionInDays: "7 days",
  * });
  * ```
  */
@@ -197,6 +202,11 @@ export const LogGroupProvider = () =>
             `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`) as LogGroupArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          // Wire unit is whole days (retentionInDays).
+          const desiredRetention =
+            news.retentionInDays !== undefined
+              ? Math.round(Duration.toDays(news.retentionInDays))
+              : undefined;
 
           // Observe - fetch live state. `describeLogGroups` returns
           // retention/kms info so we can diff against desired without
@@ -274,8 +284,8 @@ export const LogGroupProvider = () =>
 
           // Sync retention - observed to desired.
           const observedRetention = observed?.retentionInDays;
-          if (news.retentionInDays !== observedRetention) {
-            if (news.retentionInDays === undefined) {
+          if (desiredRetention !== observedRetention) {
+            if (desiredRetention === undefined) {
               yield* logs
                 .deleteRetentionPolicy({
                   logGroupName,
@@ -289,7 +299,7 @@ export const LogGroupProvider = () =>
             } else {
               yield* logs.putRetentionPolicy({
                 logGroupName,
-                retentionInDays: news.retentionInDays,
+                retentionInDays: desiredRetention,
               });
             }
           }
@@ -331,7 +341,7 @@ export const LogGroupProvider = () =>
           return {
             logGroupName,
             logGroupArn: arn,
-            retentionInDays: news.retentionInDays,
+            retentionInDays: desiredRetention,
             kmsKeyId: news.kmsKeyId,
             logGroupClass: observed?.logGroupClass ?? toLogGroupClass(news),
             deletionProtectionEnabled: desiredDeletionProtection,

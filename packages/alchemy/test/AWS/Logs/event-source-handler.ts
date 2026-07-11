@@ -30,7 +30,7 @@ export const SourceGroupAndResultQueueLive = Layer.effect(
   SourceGroupAndResultQueue,
   Effect.gen(function* () {
     const source = yield* AWS.Logs.LogGroup("EventSourceLogGroup", {
-      retentionInDays: 1,
+      retentionInDays: "1 day",
     });
     const result = yield* AWS.SQS.Queue("LogEventsResultQueue");
     return { source, result };

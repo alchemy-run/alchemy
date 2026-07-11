@@ -51,7 +51,7 @@ export interface ConditionalForwarder extends Resource<
  * const directory = yield* Directory("Corp", {
  *   type: "MicrosoftAD",
  *   name: "corp.example.com",
- *   password: "SuperSecret123!",
+ *   password: Redacted.make("SuperSecret123!"),
  *   vpcId: vpc.vpcId,
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });

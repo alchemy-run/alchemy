@@ -1,4 +1,5 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -29,7 +30,11 @@ export interface MethodIntegrationProps {
   cacheNamespace?: string;
   cacheKeyParameters?: string[];
   contentHandling?: ag.ContentHandlingStrategy;
-  timeoutInMillis?: number;
+  /**
+   * Integration timeout (e.g. `"29 seconds"` or `Duration.seconds(29)`;
+   * a bare number is milliseconds). Sent to the API in milliseconds.
+   */
+  timeoutInMillis?: Duration.Input;
   tlsConfig?: ag.TlsConfig;
   responseTransferMode?: ag.ResponseTransferMode;
   integrationTarget?: string;
@@ -228,6 +233,34 @@ const MethodImpl = (id: string, props: MethodInputProps) =>
  */
 export const Method = MethodImpl;
 
+/**
+ * Normalize a `Duration.Input` that may have round-tripped through state
+ * JSON (which flattens a `Duration` to its `toJSON` shape
+ * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
+ * `Duration.Input`) back into an input `Duration.toMillis` accepts.
+ */
+const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional duration input to whole wire milliseconds. */
+const toWireMillis = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toMillis(normalizeDurationInput(input)));
+
 const putIntegrationRequest = (
   restApiId: string,
   resourceId: string,
@@ -249,7 +282,7 @@ const putIntegrationRequest = (
   cacheNamespace: integration.cacheNamespace,
   cacheKeyParameters: integration.cacheKeyParameters,
   contentHandling: integration.contentHandling,
-  timeoutInMillis: integration.timeoutInMillis,
+  timeoutInMillis: toWireMillis(integration.timeoutInMillis),
   tlsConfig: integration.tlsConfig,
   responseTransferMode: integration.responseTransferMode,
   integrationTarget: integration.integrationTarget,
@@ -562,8 +595,13 @@ export const MethodProvider = () =>
           }
 
           // Sync integration — putIntegration is an upsert; deleteIntegration
-          // tolerates missing integrations.
-          if (!deepEqual(news.integration, observed.integration)) {
+          // tolerates missing integrations. Normalize the desired timeout to
+          // wire milliseconds so it compares against the observed snapshot.
+          const desiredIntegration = news.integration && {
+            ...news.integration,
+            timeoutInMillis: toWireMillis(news.integration.timeoutInMillis),
+          };
+          if (!deepEqual(desiredIntegration, observed.integration)) {
             if (news.integration) {
               yield* ag.putIntegration(
                 putIntegrationRequest(

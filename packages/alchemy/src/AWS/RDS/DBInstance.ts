@@ -1,4 +1,5 @@
 import * as rds from "@distilled.cloud/aws/rds";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -93,9 +94,10 @@ export interface DBInstanceProps {
    */
   availabilityZone?: string;
   /**
-   * Backup retention period in days. In-place modify.
+   * Backup retention period (e.g. `"7 days"` or `Duration.days(7)`).
+   * Sent to the API in whole days. In-place modify.
    */
-  backupRetentionPeriod?: number;
+  backupRetentionPeriod?: Duration.Input;
   /**
    * Daily backup window, e.g. `07:00-09:00`. In-place modify.
    */
@@ -151,13 +153,15 @@ export interface DBInstanceProps {
    */
   performanceInsightsKMSKeyId?: string;
   /**
-   * Performance Insights retention in days (7, 731, or month multiples).
+   * Performance Insights retention (e.g. `"7 days"`). Sent to the API in
+   * whole days (valid: 7, 731, or month multiples).
    */
-  performanceInsightsRetentionPeriod?: number;
+  performanceInsightsRetentionPeriod?: Duration.Input;
   /**
-   * Enhanced-monitoring granularity in seconds (0, 1, 5, 10, 15, 30, 60).
+   * Enhanced-monitoring granularity (e.g. `"60 seconds"`). Sent to the API
+   * in whole seconds (valid: 0, 1, 5, 10, 15, 30, 60).
    */
-  monitoringInterval?: number;
+  monitoringInterval?: Duration.Input;
   /**
    * IAM role ARN for enhanced monitoring. In-place modify.
    */
@@ -272,7 +276,7 @@ export interface DBInstance extends Resource<
  *   storageType: "gp3",
  *   masterUsername: "admin",
  *   masterUserPassword: Redacted.make("supersecret"),
- *   backupRetentionPeriod: 7,
+ *   backupRetentionPeriod: "7 days",
  *   deletionProtection: false,
  * });
  * ```
@@ -294,7 +298,7 @@ export interface DBInstance extends Resource<
  *   engine: "postgres",
  *   dbInstanceClass: "db.t3.micro",
  *   allocatedStorage: 20,
- *   monitoringInterval: 60,
+ *   monitoringInterval: "60 seconds",
  *   monitoringRoleArn: monitoringRole.roleArn,
  *   enablePerformanceInsights: true,
  *   enableCloudwatchLogsExports: ["postgresql", "upgrade"],
@@ -527,6 +531,21 @@ export const DBInstanceProvider = () =>
             output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          // Duration props → the exact wire units the RDS API expects.
+          const backupRetentionDays =
+            news.backupRetentionPeriod !== undefined
+              ? Math.round(Duration.toDays(news.backupRetentionPeriod))
+              : undefined;
+          const performanceInsightsRetentionDays =
+            news.performanceInsightsRetentionPeriod !== undefined
+              ? Math.round(
+                  Duration.toDays(news.performanceInsightsRetentionPeriod),
+                )
+              : undefined;
+          const monitoringIntervalSeconds =
+            news.monitoringInterval !== undefined
+              ? Math.round(Duration.toSeconds(news.monitoringInterval))
+              : undefined;
 
           // Observe — fetch live instance state.
           let observed = yield* readInstance(identifier);
@@ -554,7 +573,7 @@ export const DBInstanceProvider = () =>
                 Port: news.port,
                 MultiAZ: news.multiAZ,
                 AvailabilityZone: news.availabilityZone,
-                BackupRetentionPeriod: news.backupRetentionPeriod,
+                BackupRetentionPeriod: backupRetentionDays,
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 DBSubnetGroupName: news.dbSubnetGroupName,
@@ -569,8 +588,8 @@ export const DBInstanceProvider = () =>
                 EnablePerformanceInsights: news.enablePerformanceInsights,
                 PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
                 PerformanceInsightsRetentionPeriod:
-                  news.performanceInsightsRetentionPeriod,
-                MonitoringInterval: news.monitoringInterval,
+                  performanceInsightsRetentionDays,
+                MonitoringInterval: monitoringIntervalSeconds,
                 MonitoringRoleArn: news.monitoringRoleArn,
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
                 DeletionProtection: news.deletionProtection,
@@ -630,7 +649,7 @@ export const DBInstanceProvider = () =>
             setIf("Iops", news.iops, observed.Iops);
             setIf("StorageThroughput", news.storageThroughput, observed.StorageThroughput); // prettier-ignore
             setIf("MultiAZ", news.multiAZ, observed.MultiAZ);
-            setIf("BackupRetentionPeriod", news.backupRetentionPeriod, observed.BackupRetentionPeriod); // prettier-ignore
+            setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
             setIf("DBPortNumber", news.port, observed.DbInstancePort);
@@ -640,8 +659,8 @@ export const DBInstanceProvider = () =>
             setIf("EnableIAMDatabaseAuthentication", news.enableIAMDatabaseAuthentication, observed.IAMDatabaseAuthenticationEnabled); // prettier-ignore
             setIf("EnablePerformanceInsights", news.enablePerformanceInsights, observed.PerformanceInsightsEnabled); // prettier-ignore
             setIf("PerformanceInsightsKMSKeyId", news.performanceInsightsKMSKeyId, observed.PerformanceInsightsKMSKeyId); // prettier-ignore
-            setIf("PerformanceInsightsRetentionPeriod", news.performanceInsightsRetentionPeriod, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
-            setIf("MonitoringInterval", news.monitoringInterval, observed.MonitoringInterval); // prettier-ignore
+            setIf("PerformanceInsightsRetentionPeriod", performanceInsightsRetentionDays, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
+            setIf("MonitoringInterval", monitoringIntervalSeconds, observed.MonitoringInterval); // prettier-ignore
             setIf("MonitoringRoleArn", news.monitoringRoleArn, observed.MonitoringRoleArn); // prettier-ignore
             setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore
             setIf("NetworkType", news.networkType, observed.NetworkType);

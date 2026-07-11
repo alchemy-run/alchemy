@@ -1,5 +1,6 @@
 import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
 import * as iam from "@distilled.cloud/aws/iam";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -56,11 +57,12 @@ export interface AgentProps {
    */
   agentResourceRoleArn?: string;
   /**
-   * How long (in seconds) the agent retains an idle session before it is
-   * ended. Between 60 and 3600.
-   * @default 600
+   * How long the agent retains an idle session before it is ended (e.g.
+   * `"30 minutes"` or `Duration.minutes(30)`; a bare number is milliseconds).
+   * Between 1 minute and 1 hour.
+   * @default 600 seconds
    */
-  idleSessionTTLInSeconds?: number;
+  idleSessionTTLInSeconds?: Duration.Input;
   /**
    * The ARN of a KMS key to encrypt the agent with.
    */
@@ -130,7 +132,7 @@ export interface Agent extends Resource<
  * const agent = yield* Bedrock.Agent("assistant", {
  *   foundationModel: "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
  *   instruction: "You are a careful, policy-compliant support agent.",
- *   idleSessionTTLInSeconds: 1800,
+ *   idleSessionTTLInSeconds: "30 minutes",
  *   guardrailConfiguration: {
  *     guardrailIdentifier: guardrail.guardrailId,
  *     guardrailVersion: "DRAFT",
@@ -396,7 +398,12 @@ export const AgentProvider = () =>
                 instruction: news.instruction,
                 description: news.description,
                 agentResourceRoleArn: roleArn,
-                idleSessionTTLInSeconds: news.idleSessionTTLInSeconds,
+                idleSessionTTLInSeconds:
+                  news.idleSessionTTLInSeconds !== undefined
+                    ? Math.round(
+                        Duration.toSeconds(news.idleSessionTTLInSeconds),
+                      )
+                    : undefined,
                 customerEncryptionKeyArn: news.customerEncryptionKeyArn,
                 guardrailConfiguration: news.guardrailConfiguration,
                 tags: desiredTags,
@@ -414,7 +421,10 @@ export const AgentProvider = () =>
               instruction: news.instruction,
               description: news.description,
               agentResourceRoleArn: roleArn,
-              idleSessionTTLInSeconds: news.idleSessionTTLInSeconds,
+              idleSessionTTLInSeconds:
+                news.idleSessionTTLInSeconds !== undefined
+                  ? Math.round(Duration.toSeconds(news.idleSessionTTLInSeconds))
+                  : undefined,
               customerEncryptionKeyArn: news.customerEncryptionKeyArn,
               guardrailConfiguration: news.guardrailConfiguration,
             });

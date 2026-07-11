@@ -6,6 +6,7 @@ import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -74,7 +75,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
           const locker = yield* CredentialLocker("Locker", {});
           const thing = yield* ManagedThing("Device", {
             role: "DEVICE",
-            authenticationMaterial: ZIGBEE_QR_PAYLOAD,
+            authenticationMaterial: Redacted.make(ZIGBEE_QR_PAYLOAD),
             authenticationMaterialType: "ZIGBEE_QR_BAR_CODE",
             credentialLockerId: locker.credentialLockerId,
             brand,

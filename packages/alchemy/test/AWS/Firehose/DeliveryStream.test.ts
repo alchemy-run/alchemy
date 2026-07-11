@@ -78,7 +78,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
                 bucketArn: bucket.bucketArn,
                 prefix: "events/",
                 errorOutputPrefix: "errors/",
-                bufferingIntervalInSeconds: 60,
+                bufferingIntervalInSeconds: "60 seconds",
                 bufferingSizeInMBs: 1,
                 compressionFormat: "GZIP",
               },

@@ -34,7 +34,7 @@ export const BucketAndDeliveryStreamLive = Layer.effect(
           prefix: "records/",
           // Minimum buffering so AWS_TEST_SLOW=1 S3-arrival polling stays
           // bounded; ingest assertions never wait on delivery.
-          bufferingIntervalInSeconds: 60,
+          bufferingIntervalInSeconds: "60 seconds",
           bufferingSizeInMBs: 1,
         },
         tags: { fixture: "firehose-bindings" },

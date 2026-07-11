@@ -88,7 +88,7 @@ export default LifecycleTestFunction.make(
       {
         lifecycleHookName,
         lifecycleTransition: "LAUNCHING",
-        heartbeatTimeout: 300,
+        heartbeatTimeout: "300 seconds",
         defaultResult: "ABANDON",
       },
       (events) =>

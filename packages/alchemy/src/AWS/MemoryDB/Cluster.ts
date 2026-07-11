@@ -1,4 +1,5 @@
 import * as memorydb from "@distilled.cloud/aws/memorydb";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -92,9 +93,11 @@ export interface ClusterProps {
    */
   maintenanceWindow?: string;
   /**
-   * Days to retain automatic snapshots. 0 disables automatic snapshots.
+   * How long automatic snapshots are retained (e.g. `"7 days"` or
+   * `Duration.days(7)`). Sent to the API in whole days; `Duration.zero`
+   * disables automatic snapshots.
    */
-  snapshotRetentionLimit?: number;
+  snapshotRetentionLimit?: Duration.Input;
   /**
    * Daily window (UTC, `HH:MM-HH:MM`) when automatic snapshots are taken.
    */
@@ -331,6 +334,11 @@ export const ClusterProvider = () =>
           const name = output?.clusterName ?? (yield* toName(id, props));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
+          // The wire field is whole days.
+          const snapshotRetentionDays =
+            props.snapshotRetentionLimit !== undefined
+              ? Math.round(Duration.toDays(props.snapshotRetentionLimit))
+              : undefined;
 
           // 1. Observe — cloud state is authoritative.
           let observed = yield* readCluster(name);
@@ -354,7 +362,7 @@ export const ClusterProvider = () =>
                 TLSEnabled: props.tlsEnabled,
                 KmsKeyId: props.kmsKeyId,
                 MaintenanceWindow: props.maintenanceWindow,
-                SnapshotRetentionLimit: props.snapshotRetentionLimit,
+                SnapshotRetentionLimit: snapshotRetentionDays,
                 SnapshotWindow: props.snapshotWindow,
                 SnsTopicArn: props.snsTopicArn,
                 AutoMinorVersionUpgrade: props.autoMinorVersionUpgrade,
@@ -404,11 +412,10 @@ export const ClusterProvider = () =>
             mutated = true;
           }
           if (
-            props.snapshotRetentionLimit !== undefined &&
-            props.snapshotRetentionLimit !==
-              (observed.SnapshotRetentionLimit ?? 0)
+            snapshotRetentionDays !== undefined &&
+            snapshotRetentionDays !== (observed.SnapshotRetentionLimit ?? 0)
           ) {
-            update.SnapshotRetentionLimit = props.snapshotRetentionLimit;
+            update.SnapshotRetentionLimit = snapshotRetentionDays;
             mutated = true;
           }
           if (

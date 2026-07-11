@@ -1,5 +1,6 @@
 import * as finspace from "@distilled.cloud/aws/finspace";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
@@ -7,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export type KxClusterStatus = finspace.KxClusterStatus;
@@ -14,7 +16,6 @@ export type KxClusterType = finspace.KxClusterType;
 export type KxAzMode = finspace.KxAzMode;
 export type VpcConfiguration = finspace.VpcConfiguration;
 export type CapacityConfiguration = finspace.CapacityConfiguration;
-export type AutoScalingConfiguration = finspace.AutoScalingConfiguration;
 export type CodeConfiguration = finspace.CodeConfiguration;
 export type KxCommandLineArgument = finspace.KxCommandLineArgument;
 export type KxDatabaseConfiguration = finspace.KxDatabaseConfiguration;
@@ -23,6 +24,42 @@ export type KxSavedownStorageConfiguration =
   finspace.KxSavedownStorageConfiguration;
 export type KxScalingGroupConfiguration = finspace.KxScalingGroupConfiguration;
 export type TickerplantLogConfiguration = finspace.TickerplantLogConfiguration;
+
+/**
+ * Auto-scaling policy for a dedicated {@link KxCluster}.
+ */
+export interface AutoScalingConfiguration {
+  /** Lowest number of nodes to scale in to. */
+  minNodeCount?: number;
+  /** Highest number of nodes to scale out to. */
+  maxNodeCount?: number;
+  /** The metric the auto-scaling policy tracks. */
+  autoScalingMetric?: finspace.AutoScalingMetric;
+  /** The desired value of the chosen metric. */
+  metricTarget?: number;
+  /**
+   * The cooldown after a scale-in event before another scaling event —
+   * e.g. `"5 minutes"`. Sent to AWS as whole seconds.
+   */
+  scaleInCooldownSeconds?: Duration.Input;
+  /**
+   * The cooldown after a scale-out event before another scaling event —
+   * e.g. `"5 minutes"`. Sent to AWS as whole seconds.
+   */
+  scaleOutCooldownSeconds?: Duration.Input;
+}
+
+/** Convert the alchemy-facing auto-scaling config to the wire shape (seconds). */
+const toWireAutoScaling = (
+  config: AutoScalingConfiguration,
+): finspace.AutoScalingConfiguration => ({
+  minNodeCount: config.minNodeCount,
+  maxNodeCount: config.maxNodeCount,
+  autoScalingMetric: config.autoScalingMetric,
+  metricTarget: config.metricTarget,
+  scaleInCooldownSeconds: toSeconds(config.scaleInCooldownSeconds),
+  scaleOutCooldownSeconds: toSeconds(config.scaleOutCooldownSeconds),
+});
 
 export interface KxClusterProps {
   /**
@@ -354,8 +391,10 @@ export const KxClusterProvider = () =>
               news.scalingGroupConfiguration,
             ) ||
             !sameJson(
-              olds.autoScalingConfiguration,
-              news.autoScalingConfiguration,
+              olds.autoScalingConfiguration &&
+                toWireAutoScaling(olds.autoScalingConfiguration),
+              news.autoScalingConfiguration &&
+                toWireAutoScaling(news.autoScalingConfiguration),
             ) ||
             !sameJson(
               olds.savedownStorageConfiguration,
@@ -405,7 +444,9 @@ export const KxClusterProvider = () =>
                 availabilityZoneId: news.availabilityZoneId,
                 capacityConfiguration: news.capacityConfiguration,
                 scalingGroupConfiguration: news.scalingGroupConfiguration,
-                autoScalingConfiguration: news.autoScalingConfiguration,
+                autoScalingConfiguration:
+                  news.autoScalingConfiguration &&
+                  toWireAutoScaling(news.autoScalingConfiguration),
                 savedownStorageConfiguration: news.savedownStorageConfiguration,
                 databases: news.databases,
                 cacheStorageConfigurations: news.cacheStorageConfigurations,

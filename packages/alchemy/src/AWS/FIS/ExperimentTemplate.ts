@@ -1,4 +1,5 @@
 import * as fis from "@distilled.cloud/aws/fis";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -202,13 +203,15 @@ export interface ExperimentTemplateReportConfiguration {
     }[];
   };
   /**
-   * How long before the experiment to capture data, e.g. `PT10M`.
+   * How long before the experiment to capture data, e.g. `"10 minutes"` or
+   * `Duration.minutes(10)`. Sent to FIS as an ISO-8601 duration (`PT10M`).
    */
-  preExperimentDuration?: string;
+  preExperimentDuration?: Duration.Input;
   /**
-   * How long after the experiment to capture data, e.g. `PT10M`.
+   * How long after the experiment to capture data, e.g. `"10 minutes"` or
+   * `Duration.minutes(10)`. Sent to FIS as an ISO-8601 duration (`PT10M`).
    */
-  postExperimentDuration?: string;
+  postExperimentDuration?: Duration.Input;
 }
 
 export interface ExperimentTemplateProps {
@@ -458,6 +461,37 @@ export const ExperimentTemplateProvider = () =>
         roleArn: template.roleArn!,
       });
 
+      // Report-capture durations are `Duration.Input`s; the FIS wire format
+      // is an ISO-8601 duration string (e.g. `PT10M`). Emit hours when the
+      // duration is whole hours, else minutes, else seconds, matching the
+      // canonical forms FIS reports back.
+      const toIsoDuration = (
+        input: Duration.Input | undefined,
+      ): string | undefined => {
+        if (input === undefined) return undefined;
+        const seconds = Math.max(0, Math.round(Duration.toSeconds(input)));
+        if (seconds > 0 && seconds % 3600 === 0) return `PT${seconds / 3600}H`;
+        if (seconds % 60 === 0) return `PT${seconds / 60}M`;
+        return `PT${seconds}S`;
+      };
+
+      // Project the report configuration into the wire shape (ISO-8601
+      // duration strings).
+      const projectReportConfiguration = (
+        config: ExperimentTemplateReportConfiguration | undefined,
+      ) =>
+        config
+          ? {
+              ...config,
+              preExperimentDuration: toIsoDuration(
+                config.preExperimentDuration,
+              ),
+              postExperimentDuration: toIsoDuration(
+                config.postExperimentDuration,
+              ),
+            }
+          : undefined;
+
       // The desired mutable state, projected into the wire shape that
       // `getExperimentTemplate` reports so observed-vs-desired comparison is
       // structural.
@@ -478,7 +512,9 @@ export const ExperimentTemplateProvider = () =>
           : undefined,
         emptyTargetResolutionMode:
           props.experimentOptions?.emptyTargetResolutionMode,
-        experimentReportConfiguration: props.experimentReportConfiguration,
+        experimentReportConfiguration: projectReportConfiguration(
+          props.experimentReportConfiguration,
+        ),
       });
 
       const projectObserved = (
@@ -601,7 +637,7 @@ export const ExperimentTemplateProvider = () =>
                 logConfiguration: desired.logConfiguration,
                 experimentOptions: news.experimentOptions,
                 experimentReportConfiguration:
-                  news.experimentReportConfiguration,
+                  desired.experimentReportConfiguration,
                 tags: desiredTags,
               }),
             ).pipe(Effect.map((r) => r.experimentTemplate!));
@@ -629,7 +665,7 @@ export const ExperimentTemplateProvider = () =>
                     }
                   : undefined,
                 experimentReportConfiguration:
-                  news.experimentReportConfiguration,
+                  desired.experimentReportConfiguration,
               }),
             ).pipe(Effect.map((r) => r.experimentTemplate!));
           }

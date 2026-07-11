@@ -54,7 +54,7 @@ test.provider(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const logGroup = yield* LogGroup("StreamLogGroup", {
-            retentionInDays: 1,
+            retentionInDays: "1 day",
           });
           return yield* LogStream("AuditStream", {
             logGroupName: logGroup.logGroupName,
@@ -74,7 +74,7 @@ test.provider(
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
           const logGroup = yield* LogGroup("StreamLogGroup", {
-            retentionInDays: 1,
+            retentionInDays: "1 day",
           });
           return yield* LogStream("AuditStream", {
             logGroupName: logGroup.logGroupName,
@@ -87,7 +87,7 @@ test.provider(
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           const logGroup = yield* LogGroup("StreamLogGroup", {
-            retentionInDays: 1,
+            retentionInDays: "1 day",
           });
           return yield* LogStream("AuditStream", {
             logGroupName: logGroup.logGroupName,

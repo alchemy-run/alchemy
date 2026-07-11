@@ -1,6 +1,7 @@
 import * as mq from "@distilled.cloud/aws/mq";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -24,7 +25,7 @@ export interface BrokerUser {
   /**
    * Password (12-250 printable chars, no commas, colons, or equals signs).
    */
-  password: string;
+  password: Redacted.Redacted<string>;
   /**
    * Whether the user can access the ActiveMQ Web Console. Ignored for
    * RabbitMQ.
@@ -220,7 +221,7 @@ export interface Broker extends Resource<
  *   hostInstanceType: "mq.t3.micro",
  *   deploymentMode: "SINGLE_INSTANCE",
  *   publiclyAccessible: true,
- *   users: [{ username: "admin", password: "SuperSecretPassw0rd" }],
+ *   users: [{ username: "admin", password: Redacted.make("SuperSecretPassw0rd") }],
  * });
  * // broker.endpoints -> ["ssl://b-xxxx-1.mq.us-west-2.amazonaws.com:61617", ...]
  * ```
@@ -232,7 +233,7 @@ export interface Broker extends Resource<
  *   engineVersion: "3.13",
  *   hostInstanceType: "mq.t3.micro",
  *   publiclyAccessible: true,
- *   users: [{ username: "admin", password: "SuperSecretPassw0rd" }],
+ *   users: [{ username: "admin", password: Redacted.make("SuperSecretPassw0rd") }],
  * });
  * ```
  *
@@ -248,7 +249,7 @@ export interface Broker extends Resource<
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  *   securityGroups: [group.groupId],
  *   encryptionOptions: { kmsKeyId: key.keyArn },
- *   users: [{ username: "admin", password: "SuperSecretPassw0rd" }],
+ *   users: [{ username: "admin", password: Redacted.make("SuperSecretPassw0rd") }],
  * });
  * ```
  *
@@ -259,7 +260,7 @@ export interface Broker extends Resource<
  *   engineType: "ACTIVEMQ",
  *   engineVersion: "5.18",
  *   hostInstanceType: "mq.t3.micro",
- *   users: [{ username: "admin", password: "SuperSecretPassw0rd" }],
+ *   users: [{ username: "admin", password: Redacted.make("SuperSecretPassw0rd") }],
  *   logs: { general: true, audit: true },
  *   maintenanceWindow: {
  *     dayOfWeek: "SUNDAY",
@@ -288,7 +289,7 @@ const sameArray = (
 const toWireUsers = (users: BrokerUser[]): mq.User[] =>
   users.map((u) => ({
     Username: u.username,
-    Password: u.password,
+    Password: Redacted.value(u.password),
     ConsoleAccess: u.consoleAccess,
     Groups: u.groups,
   }));

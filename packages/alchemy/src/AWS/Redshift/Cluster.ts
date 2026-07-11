@@ -1,6 +1,8 @@
 import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -10,6 +12,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { durationToDays, unwrapRedactedString } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 import {
   applyRedshiftTagDelta,
@@ -60,7 +63,7 @@ export interface ClusterProps {
    * letter, one lowercase letter and one number. Provide this or set
    * `manageMasterPassword`.
    */
-  masterUserPassword?: string;
+  masterUserPassword?: Redacted.Redacted<string>;
   /**
    * Let Amazon Redshift manage the admin password in Secrets Manager
    * instead of supplying `masterUserPassword`. The secret ARN is surfaced
@@ -123,9 +126,11 @@ export interface ClusterProps {
    */
   preferredMaintenanceWindow?: string;
   /**
-   * Days to retain automated snapshots. 0 disables automated snapshots.
+   * How long automated snapshots are retained, e.g. `"7 days"` or
+   * `Duration.days(7)` (a bare number is milliseconds). Rounded to whole
+   * days on the wire; zero disables automated snapshots.
    */
-  automatedSnapshotRetentionPeriod?: number;
+  automatedSnapshotRetentionPeriod?: Duration.Input;
   /**
    * Whether major engine upgrades may be applied during the maintenance
    * window.
@@ -441,8 +446,9 @@ export const ClusterProvider = () =>
                 Port: news.port,
                 AvailabilityZone: news.availabilityZone,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
-                AutomatedSnapshotRetentionPeriod:
+                AutomatedSnapshotRetentionPeriod: durationToDays(
                   news.automatedSnapshotRetentionPeriod,
+                ),
                 AllowVersionUpgrade: news.allowVersionUpgrade,
                 EnhancedVpcRouting: news.enhancedVpcRouting,
                 IamRoles: news.iamRoles,
@@ -531,13 +537,14 @@ export const ClusterProvider = () =>
             update.PreferredMaintenanceWindow = news.preferredMaintenanceWindow;
             mutated = true;
           }
+          const desiredRetentionDays = durationToDays(
+            news.automatedSnapshotRetentionPeriod,
+          );
           if (
-            news.automatedSnapshotRetentionPeriod !== undefined &&
-            news.automatedSnapshotRetentionPeriod !==
-              observed.AutomatedSnapshotRetentionPeriod
+            desiredRetentionDays !== undefined &&
+            desiredRetentionDays !== observed.AutomatedSnapshotRetentionPeriod
           ) {
-            update.AutomatedSnapshotRetentionPeriod =
-              news.automatedSnapshotRetentionPeriod;
+            update.AutomatedSnapshotRetentionPeriod = desiredRetentionDays;
             mutated = true;
           }
           if (
@@ -559,7 +566,9 @@ export const ClusterProvider = () =>
           if (
             olds !== undefined &&
             news.masterUserPassword !== undefined &&
-            news.masterUserPassword !== olds.masterUserPassword
+            (olds.masterUserPassword === undefined ||
+              unwrapRedactedString(news.masterUserPassword) !==
+                unwrapRedactedString(olds.masterUserPassword))
           ) {
             update.MasterUserPassword = news.masterUserPassword;
             mutated = true;

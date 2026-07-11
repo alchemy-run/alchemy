@@ -1,5 +1,6 @@
 import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -23,10 +24,11 @@ export interface ManagedThingProps {
   role: mi.Role;
   /**
    * Authentication material used to onboard the device (e.g. the payload of
-   * a Wi-Fi setup or Zigbee QR bar code). Create-only — changing it replaces
-   * the managed thing.
+   * a Wi-Fi setup or Zigbee QR bar code). This is a device-onboarding
+   * credential — wrap it with `Redacted.make(...)`. Create-only — changing
+   * it replaces the managed thing.
    */
-  authenticationMaterial: string;
+  authenticationMaterial: Redacted.Redacted<string>;
   /**
    * Type of the authentication material.
    * E.g. `WIFI_SETUP_QR_BAR_CODE`, `ZIGBEE_QR_BAR_CODE`, `ZWAVE_QR_BAR_CODE`.
@@ -113,7 +115,7 @@ export interface ManagedThing extends Resource<
  * ```typescript
  * const thing = yield* ManagedThing("Hub", {
  *   role: "CONTROLLER",
- *   authenticationMaterial: wifiSetupQrCodePayload,
+ *   authenticationMaterial: Redacted.make(wifiSetupQrCodePayload),
  *   authenticationMaterialType: "WIFI_SETUP_QR_BAR_CODE",
  * });
  * ```
@@ -123,7 +125,7 @@ export interface ManagedThing extends Resource<
  * const locker = yield* CredentialLocker("DeviceCredentials", {});
  * const thing = yield* ManagedThing("Sensor", {
  *   role: "DEVICE",
- *   authenticationMaterial: zigbeeQrCodePayload,
+ *   authenticationMaterial: Redacted.make(zigbeeQrCodePayload),
  *   authenticationMaterialType: "ZIGBEE_QR_BAR_CODE",
  *   credentialLockerId: locker.credentialLockerId,
  *   serialNumber: "SN-0001",
@@ -198,7 +200,8 @@ export const ManagedThingProvider = () =>
           // Role and authentication material are create-only.
           if (
             olds.role !== news.role ||
-            olds.authenticationMaterial !== news.authenticationMaterial ||
+            Redacted.value(olds.authenticationMaterial) !==
+              Redacted.value(news.authenticationMaterial) ||
             olds.authenticationMaterialType !== news.authenticationMaterialType
           ) {
             return { action: "replace" } as const;

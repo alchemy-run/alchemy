@@ -1,5 +1,6 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -46,10 +47,11 @@ export interface UserPoolPasswordPolicy {
    */
   passwordHistorySize?: number;
   /**
-   * Days an admin-set temporary password stays valid (0-365).
-   * @default 7
+   * How long an admin-set temporary password stays valid, e.g.
+   * `"7 days"` (0-365 days). Rounded to whole days on the wire.
+   * @default 7 days
    */
-  temporaryPasswordValidityDays?: number;
+  temporaryPasswordValidityDays?: Duration.Input;
 }
 
 /**
@@ -325,6 +327,12 @@ export interface UserPool extends Resource<
  */
 export const UserPool = Resource<UserPool>("AWS.Cognito.UserPool");
 
+/** The Cognito wire unit for TemporaryPasswordValidityDays is whole days. */
+const toWireValidityDays = (
+  duration: Duration.Input | undefined,
+): number | undefined =>
+  duration === undefined ? undefined : Math.round(Duration.toDays(duration));
+
 /** Map camelCase password policy props to the Cognito wire shape. */
 const toWirePasswordPolicy = (policy: UserPoolPasswordPolicy | undefined) =>
   policy === undefined
@@ -336,7 +344,9 @@ const toWirePasswordPolicy = (policy: UserPoolPasswordPolicy | undefined) =>
         RequireNumbers: policy.requireNumbers,
         RequireSymbols: policy.requireSymbols,
         PasswordHistorySize: policy.passwordHistorySize,
-        TemporaryPasswordValidityDays: policy.temporaryPasswordValidityDays,
+        TemporaryPasswordValidityDays: toWireValidityDays(
+          policy.temporaryPasswordValidityDays,
+        ),
       };
 
 const toWireSchemaAttribute = (attribute: UserPoolSchemaAttribute) => ({
@@ -526,11 +536,22 @@ export const UserPoolProvider = () =>
           .join(",");
 
       /** Full password policy with the Cognito API defaults filled in, so a
-       * partial desired policy compares fairly against the observed one. */
+       * partial desired policy compares fairly against the observed one.
+       * Operates on the wire shape — `temporaryPasswordValidityDays` is a
+       * whole number of days (desired durations are converted first). */
       const normalizedPasswordPolicy = (
-        policy: UserPoolPasswordPolicy,
-      ): Required<Omit<UserPoolPasswordPolicy, "passwordHistorySize">> & {
+        policy: Omit<
+          UserPoolPasswordPolicy,
+          "temporaryPasswordValidityDays"
+        > & { temporaryPasswordValidityDays?: number },
+      ): Required<
+        Omit<
+          UserPoolPasswordPolicy,
+          "passwordHistorySize" | "temporaryPasswordValidityDays"
+        >
+      > & {
         passwordHistorySize: number | undefined;
+        temporaryPasswordValidityDays: number;
       } => ({
         minimumLength: policy.minimumLength ?? 8,
         requireUppercase: policy.requireUppercase ?? true,
@@ -558,7 +579,12 @@ export const UserPoolProvider = () =>
           }
         }
         if (news.passwordPolicy !== undefined) {
-          const desired = normalizedPasswordPolicy(news.passwordPolicy);
+          const desired = normalizedPasswordPolicy({
+            ...news.passwordPolicy,
+            temporaryPasswordValidityDays: toWireValidityDays(
+              news.passwordPolicy.temporaryPasswordValidityDays,
+            ),
+          });
           const actual = normalizedPasswordPolicy({
             minimumLength: observed.Policies?.PasswordPolicy?.MinimumLength,
             requireUppercase:

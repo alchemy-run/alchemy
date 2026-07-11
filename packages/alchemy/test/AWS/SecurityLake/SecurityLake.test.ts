@@ -110,7 +110,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
               configurations: [
                 {
                   region,
-                  lifecycleConfiguration: { expiration: { days: 30 } },
+                  lifecycleConfiguration: { expiration: { days: "30 days" } },
                 },
               ],
               metaStoreManagerRoleArn: metastoreRole.roleArn,

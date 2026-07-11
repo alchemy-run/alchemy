@@ -94,7 +94,7 @@ test.provider("create, update, delete Glue job definition", (stack) =>
           glueVersion: "3.0",
           description: "curated ETL",
           defaultArguments: { "--job-language": "python", "--extra": "1" },
-          timeout: 30,
+          timeout: "30 minutes",
           tags: { Environment: "test" },
         });
         return { job };

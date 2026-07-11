@@ -1,4 +1,5 @@
 import * as omics from "@distilled.cloud/aws/omics";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -26,9 +27,11 @@ export interface RunGroupProps {
    */
   maxRuns?: number;
   /**
-   * The maximum time (in minutes) for each run in the group. Mutable.
+   * The maximum time for each run in the group, e.g. `"10 hours"` or
+   * `Duration.minutes(600)`. Sent to the API as whole minutes (a bare
+   * number is milliseconds). Mutable.
    */
-  maxDuration?: number;
+  maxDuration?: Duration.Input;
   /**
    * The maximum number of GPUs that can run concurrently across all active
    * runs in the group. Mutable.
@@ -74,11 +77,15 @@ export interface RunGroup extends Resource<
  *   name: "nightly-batch",
  *   maxCpus: 100,
  *   maxRuns: 10,
- *   maxDuration: 600,
+ *   maxDuration: "10 hours",
  * });
  * ```
  */
 export const RunGroup = Resource<RunGroup>("AWS.Omics.RunGroup");
+
+/** Wire unit for the run-group max duration is whole minutes. */
+const toWireMinutes = (input: Duration.Input | undefined): number | undefined =>
+  input !== undefined ? Math.round(Duration.toMinutes(input)) : undefined;
 
 export const RunGroupProvider = () =>
   Provider.effect(
@@ -128,6 +135,7 @@ export const RunGroupProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.name ?? (yield* createName(id, news));
+          const maxDurationMinutes = toWireMinutes(news.maxDuration);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...(news.tags ?? {}), ...internalTags };
 
@@ -151,7 +159,7 @@ export const RunGroupProvider = () =>
               name,
               maxCpus: news.maxCpus,
               maxRuns: news.maxRuns,
-              maxDuration: news.maxDuration,
+              maxDuration: maxDurationMinutes,
               maxGpus: news.maxGpus,
               requestId: `alchemy-${id}`,
               tags: desiredTags,
@@ -177,10 +185,10 @@ export const RunGroupProvider = () =>
               patch.maxRuns = news.maxRuns;
             }
             if (
-              news.maxDuration !== undefined &&
-              news.maxDuration !== group.maxDuration
+              maxDurationMinutes !== undefined &&
+              maxDurationMinutes !== group.maxDuration
             ) {
-              patch.maxDuration = news.maxDuration;
+              patch.maxDuration = maxDurationMinutes;
             }
             if (news.maxGpus !== undefined && news.maxGpus !== group.maxGpus) {
               patch.maxGpus = news.maxGpus;

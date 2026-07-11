@@ -1,4 +1,5 @@
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -74,10 +75,11 @@ export interface IntegrationProps {
   /** Template selection expression (WebSocket APIs only). */
   templateSelectionExpression?: string;
   /**
-   * Integration timeout in milliseconds. 50–29000 for WebSocket APIs,
-   * 50–30000 for HTTP APIs.
+   * Integration timeout (e.g. `"29 seconds"` or `Duration.seconds(29)`;
+   * a bare number is milliseconds). 50–29000 ms for WebSocket APIs,
+   * 50–30000 ms for HTTP APIs. Sent to the API in milliseconds.
    */
-  timeoutInMillis?: number;
+  timeoutInMillis?: Duration.Input;
   /** TLS configuration for private integrations. */
   tlsConfig?: agw2.TlsConfigInput;
   /** Content handling strategy (WebSocket APIs only). */
@@ -180,6 +182,34 @@ export const Integration = (id: string, props: IntegrationInputProps) =>
     return yield* IntegrationResource(id, { ...rest, apiId } as any);
   });
 
+/**
+ * Normalize a `Duration.Input` that may have round-tripped through state
+ * JSON (which flattens a `Duration` to its `toJSON` shape
+ * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
+ * `Duration.Input`) back into an input `Duration.toMillis` accepts.
+ */
+const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional duration input to whole wire milliseconds. */
+const toWireMillis = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toMillis(normalizeDurationInput(input)));
+
 const snapshotFromIntegration = (
   apiId: string,
   integ: agw2.GetIntegrationResult,
@@ -219,7 +249,7 @@ const desiredRequest = (news: IntegrationProps) => ({
   RequestTemplates: news.requestTemplates,
   ResponseParameters: news.responseParameters,
   TemplateSelectionExpression: news.templateSelectionExpression,
-  TimeoutInMillis: news.timeoutInMillis,
+  TimeoutInMillis: toWireMillis(news.timeoutInMillis),
   TlsConfig: news.tlsConfig,
   ContentHandlingStrategy: news.contentHandlingStrategy,
 });

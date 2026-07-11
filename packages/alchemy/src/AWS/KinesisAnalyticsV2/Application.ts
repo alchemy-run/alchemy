@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -65,14 +66,16 @@ export interface CheckpointConfigurationProps {
    */
   checkpointingEnabled?: boolean;
   /**
-   * Interval in milliseconds between checkpoints. Only used with `CUSTOM`.
+   * Interval between checkpoints, e.g. `"1 minute"` or
+   * `Duration.seconds(30)`. The API stores whole milliseconds. Only used
+   * with `CUSTOM`.
    */
-  checkpointInterval?: number;
+  checkpointInterval?: Duration.Input;
   /**
-   * Minimum pause in milliseconds between checkpoint operations.
-   * Only used with `CUSTOM`.
+   * Minimum pause between checkpoint operations, e.g. `"5 seconds"`. The
+   * API stores whole milliseconds. Only used with `CUSTOM`.
    */
-  minPauseBetweenCheckpoints?: number;
+  minPauseBetweenCheckpoints?: Duration.Input;
 }
 
 export interface MonitoringConfigurationProps {
@@ -697,6 +700,10 @@ const canonicalPropertyGroups = (
 const sameStringSet = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
   a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
 
+/** The Flink API expresses checkpoint intervals in whole milliseconds. */
+const toWireMillis = (input: Duration.Input | undefined) =>
+  input === undefined ? undefined : Math.round(Duration.toMillis(input));
+
 const checkpointDiffers = (
   desired: CheckpointConfigurationProps,
   observed: analytics.CheckpointConfigurationDescription | undefined,
@@ -705,9 +712,10 @@ const checkpointDiffers = (
   (desired.checkpointingEnabled !== undefined &&
     desired.checkpointingEnabled !== observed?.CheckpointingEnabled) ||
   (desired.checkpointInterval !== undefined &&
-    desired.checkpointInterval !== observed?.CheckpointInterval) ||
+    toWireMillis(desired.checkpointInterval) !==
+      observed?.CheckpointInterval) ||
   (desired.minPauseBetweenCheckpoints !== undefined &&
-    desired.minPauseBetweenCheckpoints !==
+    toWireMillis(desired.minPauseBetweenCheckpoints) !==
       observed?.MinPauseBetweenCheckpoints);
 
 const monitoringDiffers = (
@@ -740,9 +748,12 @@ const toFlinkConfiguration = (
     configuration.CheckpointConfiguration = {
       ConfigurationType: flink.checkpointConfiguration.configurationType,
       CheckpointingEnabled: flink.checkpointConfiguration.checkpointingEnabled,
-      CheckpointInterval: flink.checkpointConfiguration.checkpointInterval,
-      MinPauseBetweenCheckpoints:
+      CheckpointInterval: toWireMillis(
+        flink.checkpointConfiguration.checkpointInterval,
+      ),
+      MinPauseBetweenCheckpoints: toWireMillis(
         flink.checkpointConfiguration.minPauseBetweenCheckpoints,
+      ),
     };
   }
   if (flink.monitoringConfiguration) {
@@ -779,10 +790,12 @@ const toFlinkConfigurationUpdate = (
       ConfigurationTypeUpdate: flink.checkpointConfiguration.configurationType,
       CheckpointingEnabledUpdate:
         flink.checkpointConfiguration.checkpointingEnabled,
-      CheckpointIntervalUpdate:
+      CheckpointIntervalUpdate: toWireMillis(
         flink.checkpointConfiguration.checkpointInterval,
-      MinPauseBetweenCheckpointsUpdate:
+      ),
+      MinPauseBetweenCheckpointsUpdate: toWireMillis(
         flink.checkpointConfiguration.minPauseBetweenCheckpoints,
+      ),
     };
   }
   if (

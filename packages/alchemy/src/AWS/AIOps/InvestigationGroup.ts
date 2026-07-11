@@ -1,4 +1,5 @@
 import * as aiops from "@distilled.cloud/aws/aiops";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -49,12 +50,13 @@ export interface InvestigationGroupProps {
    */
   roleArn: string;
   /**
-   * How long, in days, investigations and their data are retained.
+   * How long investigations and their data are retained (e.g. `"7 days"`
+   * or `Duration.days(7)`). Rounded to whole days on the wire.
    * The retention period cannot be updated in place — changing it replaces
    * the investigation group.
-   * @default 90
+   * @default 90 days
    */
-  retentionInDays?: number;
+  retentionInDays?: Duration.Input;
   /**
    * Encryption configuration for investigation data. Omit to use an AWS
    * owned key.
@@ -138,7 +140,7 @@ export interface InvestigationGroup extends Resource<
  * ```typescript
  * const group = yield* AIOps.InvestigationGroup("Investigations", {
  *   roleArn: role.roleArn,
- *   retentionInDays: 7,
+ *   retentionInDays: "7 days",
  *   tagKeyBoundaries: ["Application"],
  *   tags: { Environment: "test" },
  * });
@@ -172,6 +174,34 @@ const retryWhileRolePropagates = <A, R>(
 
 const sameStringArray = (l: readonly string[], r: readonly string[]) =>
   l.length === r.length && l.every((v, i) => v === r[i]);
+
+/**
+ * Normalize a `Duration.Input` that may have round-tripped through state
+ * JSON (which flattens a `Duration` to its `toJSON` shape
+ * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
+ * `Duration.Input`) back into an input `Duration.toDays` accepts.
+ */
+const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional duration input to whole wire days. */
+const toWireDays = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toDays(normalizeDurationInput(input)));
 
 export const InvestigationGroupProvider = () =>
   Provider.effect(
@@ -278,7 +308,10 @@ export const InvestigationGroupProvider = () =>
             return { action: "replace", deleteFirst: true } as const;
           }
           // The retention period has no update API — replace to change it.
-          if (olds?.retentionInDays !== news?.retentionInDays) {
+          if (
+            toWireDays(olds?.retentionInDays) !==
+            toWireDays(news?.retentionInDays)
+          ) {
             return { action: "replace", deleteFirst: true } as const;
           }
           // fall through: engine default update logic for mutable fields
@@ -302,7 +335,7 @@ export const InvestigationGroupProvider = () =>
               .createInvestigationGroup({
                 name,
                 roleArn: news.roleArn,
-                retentionInDays: news.retentionInDays,
+                retentionInDays: toWireDays(news.retentionInDays),
                 encryptionConfiguration: news.encryptionConfiguration,
                 tagKeyBoundaries: news.tagKeyBoundaries,
                 chatbotNotificationChannel: news.chatbotNotificationChannel,
@@ -418,7 +451,8 @@ export const InvestigationGroupProvider = () =>
             name: live?.name ?? name,
             arn: arn!,
             roleArn: live?.roleArn ?? news.roleArn,
-            retentionInDays: live?.retentionInDays ?? news.retentionInDays,
+            retentionInDays:
+              live?.retentionInDays ?? toWireDays(news.retentionInDays),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

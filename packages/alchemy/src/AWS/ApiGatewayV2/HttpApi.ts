@@ -1,4 +1,5 @@
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -47,10 +48,11 @@ export interface HttpApiProps {
    */
   stageName?: Input<string>;
   /**
-   * Integration timeout in milliseconds (50–30000).
-   * @default 30000
+   * Integration timeout (e.g. `"29 seconds"`; a bare number is
+   * milliseconds, 50–30000).
+   * @default 30 seconds
    */
-  timeoutInMillis?: Input<number>;
+  timeoutInMillis?: Input<Duration.Input>;
   /** User-defined tags for the API and stage. */
   tags?: Record<string, string>;
 }

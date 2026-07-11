@@ -1,4 +1,5 @@
 import * as iam from "@distilled.cloud/aws/iam";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -6,7 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { toRedactedString } from "./common.ts";
+import { durationToDays, toRedactedString } from "./common.ts";
 
 export interface ServiceSpecificCredentialProps {
   /**
@@ -18,9 +19,11 @@ export interface ServiceSpecificCredentialProps {
    */
   serviceName: string;
   /**
-   * Optional credential age in days.
+   * Optional credential validity duration, e.g. `"30 days"` or
+   * `Duration.days(30)`. Sent to IAM as whole days (a bare number is
+   * milliseconds). Changing it replaces the credential.
    */
-  credentialAgeDays?: number;
+  credentialAgeDays?: Duration.Input;
   /**
    * Desired credential status.
    * @default "Active"
@@ -118,7 +121,8 @@ export const ServiceSpecificCredentialProvider = () =>
       if (
         olds.userName !== news.userName ||
         olds.serviceName !== news.serviceName ||
-        olds.credentialAgeDays !== news.credentialAgeDays
+        durationToDays(olds.credentialAgeDays) !==
+          durationToDays(news.credentialAgeDays)
       ) {
         return { action: "replace" } as const;
       }
@@ -201,7 +205,7 @@ export const ServiceSpecificCredentialProvider = () =>
         const created = yield* iam.createServiceSpecificCredential({
           UserName: news.userName,
           ServiceName: news.serviceName,
-          CredentialAgeDays: news.credentialAgeDays,
+          CredentialAgeDays: durationToDays(news.credentialAgeDays),
         });
         const credential = created.ServiceSpecificCredential;
         if (!credential?.ServiceSpecificCredentialId) {

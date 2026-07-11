@@ -1,4 +1,5 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -121,10 +122,11 @@ export interface UserPoolClientProps {
    */
   enableTokenRevocation?: boolean;
   /**
-   * Duration (minutes, 3-15) of the session token in auth challenge flows.
-   * @default 3
+   * Duration of the session token in auth challenge flows, e.g.
+   * `"5 minutes"` (3-15 minutes). Rounded to whole minutes on the wire.
+   * @default 3 minutes
    */
-  authSessionValidity?: number;
+  authSessionValidity?: Duration.Input;
 }
 
 export interface UserPoolClient extends Resource<
@@ -134,7 +136,7 @@ export interface UserPoolClient extends Resource<
     /** The generated app client ID. */
     clientId: string;
     /** The client secret; defined only when `generateSecret` is true. */
-    clientSecret: string | undefined;
+    clientSecret: Redacted.Redacted<string> | undefined;
     /** The name of the app client. */
     clientName: string;
     /** The ID of the user pool the client belongs to. */
@@ -238,7 +240,11 @@ const desiredConfig = (news: UserPoolClientProps) => ({
   AllowedOAuthFlowsUserPoolClient: news.allowedOAuthFlowsUserPoolClient,
   PreventUserExistenceErrors: news.preventUserExistenceErrors,
   EnableTokenRevocation: news.enableTokenRevocation,
-  AuthSessionValidity: news.authSessionValidity,
+  // The Cognito wire unit for AuthSessionValidity is whole minutes.
+  AuthSessionValidity:
+    news.authSessionValidity === undefined
+      ? undefined
+      : Math.round(Duration.toMinutes(news.authSessionValidity)),
 });
 
 /** True when any prop the user specified differs from the observed client.
@@ -340,12 +346,16 @@ export const UserPoolClientProvider = () =>
         return yield* describeClient(userPoolId, plain(match.ClientId)!);
       });
 
-      const attributesOf = (client: cip.UserPoolClientType) => ({
-        clientId: plain(client.ClientId)!,
-        clientSecret: plain(client.ClientSecret),
-        clientName: client.ClientName!,
-        userPoolId: client.UserPoolId!,
-      });
+      const attributesOf = (client: cip.UserPoolClientType) => {
+        const secret = plain(client.ClientSecret);
+        return {
+          clientId: plain(client.ClientId)!,
+          clientSecret:
+            secret === undefined ? undefined : Redacted.make(secret),
+          clientName: client.ClientName!,
+          userPoolId: client.UserPoolId!,
+        };
+      };
 
       return UserPoolClient.Provider.of({
         stables: ["clientId", "userPoolId"],

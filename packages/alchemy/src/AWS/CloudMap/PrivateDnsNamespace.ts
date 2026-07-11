@@ -1,4 +1,5 @@
 import * as sd from "@distilled.cloud/aws/servicediscovery";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -36,10 +37,11 @@ export interface PrivateDnsNamespaceProps {
    */
   description?: string;
   /**
-   * The TTL (in seconds) of the SOA record for the namespace's Route 53
-   * private hosted zone.
+   * The TTL of the SOA record for the namespace's Route 53 private hosted
+   * zone (e.g. `"60 seconds"` or `Duration.seconds(60)`; a bare number is
+   * milliseconds).
    */
-  ttl?: number;
+  ttl?: Duration.Input;
   /**
    * Tags to apply to the namespace. Merged with internal Alchemy tags.
    */
@@ -88,7 +90,7 @@ export interface PrivateDnsNamespace extends Resource<
  *   name: "internal.example.com",
  *   vpc: vpc.vpcId,
  *   description: "service discovery for the app tier",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  * });
  * ```
  *
@@ -97,7 +99,7 @@ export interface PrivateDnsNamespace extends Resource<
  * ```typescript
  * const service = yield* AWS.CloudMap.Service("Backend", {
  *   namespaceId: namespace.namespaceId,
- *   dnsRecords: [{ type: "A", ttl: 10 }],
+ *   dnsRecords: [{ type: "A", ttl: "10 seconds" }],
  *   routingPolicy: "MULTIVALUE",
  * });
  * ```
@@ -188,6 +190,10 @@ export const PrivateDnsNamespaceProvider = () =>
           const name = output?.namespaceName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
+          const desiredTtl =
+            news.ttl !== undefined
+              ? Math.round(Duration.toSeconds(news.ttl))
+              : undefined;
 
           // 1. OBSERVE — cloud state is authoritative; output is an id cache
           let namespace = yield* observeNamespace(
@@ -204,8 +210,8 @@ export const PrivateDnsNamespaceProvider = () =>
                 Vpc: news.vpc,
                 Description: news.description,
                 Properties:
-                  news.ttl !== undefined
-                    ? { DnsProperties: { SOA: { TTL: news.ttl } } }
+                  desiredTtl !== undefined
+                    ? { DnsProperties: { SOA: { TTL: desiredTtl } } }
                     : undefined,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
@@ -241,14 +247,15 @@ export const PrivateDnsNamespaceProvider = () =>
           const descriptionDelta =
             news.description !== undefined &&
             news.description !== namespace.Description;
-          const ttlDelta = news.ttl !== undefined && news.ttl !== observedTtl;
+          const ttlDelta =
+            desiredTtl !== undefined && desiredTtl !== observedTtl;
           if (descriptionDelta || ttlDelta) {
             const update = yield* sd.updatePrivateDnsNamespace({
               Id: namespace.Id,
               Namespace: {
                 Description: descriptionDelta ? news.description : undefined,
                 Properties: ttlDelta
-                  ? { DnsProperties: { SOA: { TTL: news.ttl! } } }
+                  ? { DnsProperties: { SOA: { TTL: desiredTtl! } } }
                   : undefined,
               },
             });

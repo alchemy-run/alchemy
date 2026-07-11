@@ -1,4 +1,5 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -7,6 +8,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -60,13 +62,15 @@ export interface AutoScalingGroupProps {
    */
   healthCheckType?: "EC2" | "ELB";
   /**
-   * Grace period in seconds before health checks start.
+   * Grace period before health checks start, e.g. `"5 minutes"` or
+   * `Duration.seconds(300)` (whole seconds on the wire).
    */
-  healthCheckGracePeriod?: number;
+  healthCheckGracePeriod?: Duration.Input;
   /**
-   * Default cooldown in seconds.
+   * Default cooldown between scaling activities, e.g. `"5 minutes"` or
+   * `Duration.seconds(300)` (whole seconds on the wire).
    */
-  defaultCooldown?: number;
+  defaultCooldown?: Duration.Input;
   /**
    * Termination policies for scale-in.
    */
@@ -336,8 +340,8 @@ export const AutoScalingGroupProvider = () =>
                 VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
                 TargetGroupARNs: targetGroupArns,
                 HealthCheckType: healthCheckType,
-                HealthCheckGracePeriod: news.healthCheckGracePeriod,
-                DefaultCooldown: news.defaultCooldown,
+                HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),
+                DefaultCooldown: toSeconds(news.defaultCooldown),
                 TerminationPolicies: news.terminationPolicies,
                 Tags: toTags(autoScalingGroupName, desiredTags),
               } as any)
@@ -378,8 +382,8 @@ export const AutoScalingGroupProvider = () =>
             LaunchTemplate: launchTemplate,
             VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
             HealthCheckType: healthCheckType,
-            HealthCheckGracePeriod: news.healthCheckGracePeriod,
-            DefaultCooldown: news.defaultCooldown,
+            HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),
+            DefaultCooldown: toSeconds(news.defaultCooldown),
             TerminationPolicies: news.terminationPolicies,
           } as any);
 

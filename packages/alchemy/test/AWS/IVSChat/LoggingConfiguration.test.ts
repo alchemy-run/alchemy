@@ -43,7 +43,7 @@ test.provider(
       const program = Effect.gen(function* () {
         const logGroup = yield* LogGroup("ChatLogGroup", {
           logGroupName: "/alchemy-test/ivschat-logging",
-          retentionInDays: 1,
+          retentionInDays: "1 day",
         });
         const logging = yield* LoggingConfiguration("ChatLogs", {
           loggingConfigurationName: "alchemy-test-ivschat-logging",

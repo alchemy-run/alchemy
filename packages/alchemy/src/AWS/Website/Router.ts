@@ -202,7 +202,7 @@ export const Router = (id: string, props: RouterProps) =>
             httpPort: 80,
             httpsPort: 443,
             originProtocolPolicy: "https-only",
-            originReadTimeout: 20,
+            originReadTimeout: "20 seconds",
             originSslProtocols: ["TLSv1.2"],
           },
         },

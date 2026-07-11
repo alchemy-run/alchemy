@@ -1,5 +1,6 @@
 import * as rbin from "@distilled.cloud/aws/rbin";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -15,23 +16,6 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-
-/**
- * The retention period applied to resources retained by the rule.
- */
-export interface RuleRetentionPeriod {
-  /**
-   * The period value for which the retention rule is to retain resources
-   * (`1` - `365` days).
-   */
-  value: number;
-  /**
-   * The unit of time in which the retention period is measured. Currently
-   * only `DAYS` is supported.
-   * @default "DAYS"
-   */
-  unit?: "DAYS";
-}
 
 /**
  * A resource tag used to identify (or exclude) resources covered by a
@@ -57,20 +41,10 @@ export interface RuleResourceTag {
 export interface RuleLockConfiguration {
   /**
    * The unlock delay that must expire after the rule is unlocked before it
-   * can be modified or deleted.
+   * can be modified or deleted (e.g. `"7 days"`; valid range 7-30 days).
+   * Sent to the API in whole days.
    */
-  unlockDelay: {
-    /**
-     * The unlock delay period (`7` - `30` days).
-     */
-    value: number;
-    /**
-     * The unit of time in which the unlock delay is measured. Currently
-     * only `DAYS` is supported.
-     * @default "DAYS"
-     */
-    unit?: "DAYS";
-  };
+  unlockDelay: Duration.Input;
 }
 
 export interface RuleProps {
@@ -84,9 +58,10 @@ export interface RuleProps {
 
   /**
    * The period for which the retention rule retains resources after they
-   * are deleted.
+   * are deleted (e.g. `"7 days"` or `Duration.days(7)`; valid range
+   * 1-365 days). Sent to the API in whole days.
    */
-  retentionPeriod: RuleRetentionPeriod;
+  retentionPeriod: Duration.Input;
 
   /**
    * A brief description of the retention rule.
@@ -162,7 +137,7 @@ export interface Rule extends Resource<
  *
  * const rule = yield* Rbin.Rule("SnapshotRetention", {
  *   resourceType: "EBS_SNAPSHOT",
- *   retentionPeriod: { value: 7 },
+ *   retentionPeriod: "7 days",
  *   description: "Retain tagged snapshots for 7 days",
  *   resourceTags: [{ key: "team", value: "data" }],
  * });
@@ -172,7 +147,7 @@ export interface Rule extends Resource<
  * ```typescript
  * const rule = yield* Rbin.Rule("AmiRetention", {
  *   resourceType: "EC2_IMAGE",
- *   retentionPeriod: { value: 14, unit: "DAYS" },
+ *   retentionPeriod: "14 days",
  *   description: "Retain all deregistered AMIs in this Region",
  * });
  * ```
@@ -181,7 +156,7 @@ export interface Rule extends Resource<
  * ```typescript
  * const rule = yield* Rbin.Rule("SnapshotRetention", {
  *   resourceType: "EBS_SNAPSHOT",
- *   retentionPeriod: { value: 30 },
+ *   retentionPeriod: "30 days",
  *   excludeResourceTags: [{ key: "ephemeral", value: "true" }],
  * });
  * ```
@@ -195,8 +170,8 @@ export interface Rule extends Resource<
  * ```typescript
  * const rule = yield* Rbin.Rule("LockedRetention", {
  *   resourceType: "EBS_SNAPSHOT",
- *   retentionPeriod: { value: 30 },
- *   lockConfiguration: { unlockDelay: { value: 7 } },
+ *   retentionPeriod: "30 days",
+ *   lockConfiguration: { unlockDelay: "7 days" },
  * });
  * ```
  *
@@ -205,7 +180,7 @@ export interface Rule extends Resource<
  * ```typescript
  * const rule = yield* Rbin.Rule("SnapshotRetention", {
  *   resourceType: "EBS_SNAPSHOT",
- *   retentionPeriod: { value: 7 },
+ *   retentionPeriod: "7 days",
  *   resourceTags: [{ key: "team", value: "data" }],
  *   tags: { CostCenter: "storage" },
  * });
@@ -241,9 +216,10 @@ const RULE_RESOURCE_TYPES = [
   "EBS_VOLUME",
 ] as const;
 
-const toRetentionPeriod = (p: RuleRetentionPeriod): rbin.RetentionPeriod => ({
-  RetentionPeriodValue: p.value,
-  RetentionPeriodUnit: p.unit ?? "DAYS",
+const toRetentionPeriod = (p: Duration.Input): rbin.RetentionPeriod => ({
+  // The wire unit is whole days (`DAYS` is the only supported unit).
+  RetentionPeriodValue: Math.round(Duration.toDays(p)),
+  RetentionPeriodUnit: "DAYS",
 });
 
 const toResourceTags = (
@@ -258,8 +234,9 @@ const toLockConfiguration = (
   lock: RuleLockConfiguration,
 ): rbin.LockConfiguration => ({
   UnlockDelay: {
-    UnlockDelayValue: lock.unlockDelay.value,
-    UnlockDelayUnit: lock.unlockDelay.unit ?? "DAYS",
+    // The wire unit is whole days (`DAYS` is the only supported unit).
+    UnlockDelayValue: Math.round(Duration.toDays(lock.unlockDelay)),
+    UnlockDelayUnit: "DAYS",
   },
 });
 

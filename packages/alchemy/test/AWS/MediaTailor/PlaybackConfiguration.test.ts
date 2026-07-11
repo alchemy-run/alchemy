@@ -100,7 +100,7 @@ test.provider(
           return yield* PlaybackConfiguration("TestConfig", {
             adDecisionServerUrl: "https://ads.example.com/vast/v2",
             videoContentSourceUrl: "https://origin.example.com/live",
-            personalizationThresholdSeconds: 2,
+            personalizationThresholdSeconds: "2 seconds",
             manifestProcessingRules: { adMarkerPassthroughEnabled: true },
             availSuppression: { mode: "BEHIND_LIVE_EDGE", value: "00:00:30" },
             tags: { Purpose: "alchemy-live-test" },

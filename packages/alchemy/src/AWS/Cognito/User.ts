@@ -31,9 +31,10 @@ export interface UserProps {
    * A permanent password for the user, set via `AdminSetUserPassword`
    * (`Permanent: true`), which moves the user to `CONFIRMED`. Without it
    * the user is created in `FORCE_CHANGE_PASSWORD` state. Must satisfy the
-   * pool's password policy.
+   * pool's password policy. Wrap with `Redacted.make(...)` so the value
+   * never leaks into logs or state output.
    */
-  password?: string;
+  password?: Redacted.Redacted<string>;
   /**
    * Whether the user account is enabled.
    * @default true
@@ -79,10 +80,12 @@ export interface User extends Resource<
  *
  * @example Confirmed User with a Permanent Password
  * ```typescript
+ * import * as Redacted from "effect/Redacted";
+ *
  * const user = yield* Cognito.User("ServiceAccount", {
  *   userPoolId: pool.userPoolId,
  *   username: "service-account",
- *   password: "A-Str0ng-Passw0rd!",
+ *   password: Redacted.make("A-Str0ng-Passw0rd!"),
  *   attributes: { email: "svc@example.com", email_verified: "true" },
  * });
  * // user.userStatus === "CONFIRMED"
@@ -249,7 +252,7 @@ export const UserProvider = () =>
             news.password !== undefined &&
             (output === undefined ||
               olds === undefined ||
-              olds.password !== news.password)
+              plain(olds.password) !== plain(news.password))
           ) {
             yield* cip.adminSetUserPassword({
               UserPoolId: userPoolId,

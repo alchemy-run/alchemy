@@ -1,4 +1,5 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -50,9 +51,11 @@ export interface AuthorizerProps {
    */
   identityValidationExpression?: string;
   /**
-   * Cache TTL for authorizer results, in seconds.
+   * Cache TTL for authorizer results (e.g. `"5 minutes"` or
+   * `Duration.seconds(300)`; a bare number is milliseconds). Rounded to
+   * whole seconds on the wire.
    */
-  authorizerResultTtlInSeconds?: number;
+  authorizerResultTtlInSeconds?: Duration.Input;
 }
 
 /** @resource */
@@ -86,6 +89,34 @@ export interface Authorizer extends Resource<
 const AuthorizerResource = Resource<Authorizer>("AWS.ApiGateway.Authorizer");
 
 export { AuthorizerResource as Authorizer };
+
+/**
+ * Normalize a `Duration.Input` that may have round-tripped through state
+ * JSON (which flattens a `Duration` to its `toJSON` shape
+ * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
+ * `Duration.Input`) back into an input `Duration.toSeconds` accepts.
+ */
+const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional duration input to whole wire seconds. */
+const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toSeconds(normalizeDurationInput(input)));
 
 const generatedName = (id: string, props: AuthorizerProps) =>
   props.name
@@ -176,7 +207,9 @@ export const AuthorizerProvider = () =>
               authorizerCredentials: news.authorizerCredentials,
               identitySource: news.identitySource,
               identityValidationExpression: news.identityValidationExpression,
-              authorizerResultTtlInSeconds: news.authorizerResultTtlInSeconds,
+              authorizerResultTtlInSeconds: toWireSeconds(
+                news.authorizerResultTtlInSeconds,
+              ),
             });
             if (!created.id)
               return yield* Effect.die("createAuthorizer missing id");
@@ -226,20 +259,17 @@ export const AuthorizerProvider = () =>
               value: news.identityValidationExpression,
             });
           }
-          if (
-            news.authorizerResultTtlInSeconds !==
-            observed.authorizerResultTtlInSeconds
-          ) {
+          const desiredTtlSeconds = toWireSeconds(
+            news.authorizerResultTtlInSeconds,
+          );
+          if (desiredTtlSeconds !== observed.authorizerResultTtlInSeconds) {
             patches.push({
-              op:
-                news.authorizerResultTtlInSeconds === undefined
-                  ? "remove"
-                  : "replace",
+              op: desiredTtlSeconds === undefined ? "remove" : "replace",
               path: "/authorizerResultTtlInSeconds",
               value:
-                news.authorizerResultTtlInSeconds === undefined
+                desiredTtlSeconds === undefined
                   ? undefined
-                  : String(news.authorizerResultTtlInSeconds),
+                  : String(desiredTtlSeconds),
             });
           }
           if (patches.length > 0) {

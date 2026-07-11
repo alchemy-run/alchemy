@@ -56,8 +56,8 @@ provider("create, update, delete standard queue", (stack) =>
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
-          visibilityTimeout: 30,
-          delaySeconds: 0,
+          visibilityTimeout: "30 seconds",
+          delaySeconds: "0 seconds",
         });
       }),
     );
@@ -74,8 +74,8 @@ provider("create, update, delete standard queue", (stack) =>
     const updatedQueue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
-          visibilityTimeout: 60,
-          delaySeconds: 5,
+          visibilityTimeout: "60 seconds",
+          delaySeconds: "5 seconds",
         });
       }),
     );
@@ -99,7 +99,7 @@ provider("create, update, delete fifo queue", (stack) =>
         return yield* Queue("TestFifoQueue", {
           fifo: true,
           contentBasedDeduplication: false,
-          visibilityTimeout: 30,
+          visibilityTimeout: "30 seconds",
         });
       }),
     );
@@ -123,7 +123,7 @@ provider("create, update, delete fifo queue", (stack) =>
         return yield* Queue("TestFifoQueue", {
           fifo: true,
           contentBasedDeduplication: true,
-          visibilityTimeout: 60,
+          visibilityTimeout: "60 seconds",
         });
       }),
     );
@@ -439,7 +439,7 @@ provider("SSE-KMS encryption with AWS-managed key", (stack) =>
       Effect.gen(function* () {
         return yield* Queue("KmsQueue", {
           kmsMasterKeyId: "alias/aws/sqs",
-          kmsDataKeyReusePeriodSeconds: 300,
+          kmsDataKeyReusePeriodSeconds: "300 seconds",
         });
       }),
     );

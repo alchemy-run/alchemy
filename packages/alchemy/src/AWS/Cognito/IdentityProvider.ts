@@ -1,5 +1,6 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -36,9 +37,11 @@ export interface IdentityProviderProps {
    * Provider configuration. For OIDC: `client_id`, `client_secret`,
    * `authorize_scopes`, `oidc_issuer`, `attributes_request_method`. For
    * SAML: `MetadataURL` or `MetadataFile`. For social providers:
-   * `client_id`, `client_secret`, `authorize_scopes`.
+   * `client_id`, `client_secret`, `authorize_scopes`. Wrap secret values
+   * (e.g. `client_secret`) with `Redacted.make(...)` so they never leak
+   * into logs or state output.
    */
-  providerDetails: Record<string, string>;
+  providerDetails: Record<string, string | Redacted.Redacted<string>>;
   /**
    * Maps IdP claims to user pool attributes, e.g. `{ email: "email" }`.
    */
@@ -80,7 +83,7 @@ export interface IdentityProvider extends Resource<
  *   providerType: "OIDC",
  *   providerDetails: {
  *     client_id: "my-client-id",
- *     client_secret: "my-client-secret",
+ *     client_secret: Redacted.make("my-client-secret"),
  *     authorize_scopes: "openid email",
  *     oidc_issuer: "https://accounts.google.com",
  *     attributes_request_method: "GET",
@@ -100,6 +103,18 @@ export interface IdentityProvider extends Resource<
 export const IdentityProvider = Resource<IdentityProvider>(
   "AWS.Cognito.IdentityProvider",
 );
+
+/** Unwrap any `Redacted` values (e.g. `client_secret`) into the plain
+ * string record the Cognito wire API expects. */
+const plainDetails = (
+  details: Record<string, string | Redacted.Redacted<string>>,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(details).map(([key, value]) => [
+      key,
+      typeof value === "string" ? value : Redacted.value(value),
+    ]),
+  );
 
 const definedRecord = (
   record: { [key: string]: string | undefined } | undefined,
@@ -207,6 +222,7 @@ export const IdentityProviderProvider = () =>
           const providerName =
             output?.providerName ?? (yield* createName(id, news));
           const userPoolId = news.userPoolId;
+          const desiredDetails = plainDetails(news.providerDetails);
 
           // 1. OBSERVE
           let observed = yield* describeProvider(userPoolId, providerName);
@@ -218,7 +234,7 @@ export const IdentityProviderProvider = () =>
                 UserPoolId: userPoolId,
                 ProviderName: providerName,
                 ProviderType: news.providerType,
-                ProviderDetails: news.providerDetails,
+                ProviderDetails: desiredDetails,
                 AttributeMapping: news.attributeMapping,
                 IdpIdentifiers: news.idpIdentifiers,
               })
@@ -235,7 +251,7 @@ export const IdentityProviderProvider = () =>
             // Cognito augments ProviderDetails with derived keys (e.g.
             // attributes_url), so compare desired keys only.
             const observedDetails = definedRecord(observed.ProviderDetails);
-            const detailsDrift = Object.entries(news.providerDetails).some(
+            const detailsDrift = Object.entries(desiredDetails).some(
               ([key, value]) => observedDetails[key] !== value,
             );
             const mappingDrift =
@@ -251,7 +267,7 @@ export const IdentityProviderProvider = () =>
                 .updateIdentityProvider({
                   UserPoolId: userPoolId,
                   ProviderName: providerName,
-                  ProviderDetails: news.providerDetails,
+                  ProviderDetails: desiredDetails,
                   AttributeMapping: news.attributeMapping,
                   IdpIdentifiers: news.idpIdentifiers,
                 })

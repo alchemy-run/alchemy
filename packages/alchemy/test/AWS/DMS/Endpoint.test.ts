@@ -5,6 +5,7 @@ import * as Test from "@/Test/Vitest";
 import * as dms from "@distilled.cloud/aws/database-migration-service";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -52,7 +53,7 @@ test.provider(
             serverName: "source-db.example.com",
             port: 3306,
             username: "admin",
-            password: "correct-horse-battery-staple",
+            password: Redacted.make("correct-horse-battery-staple"),
             databaseName: "app",
             tags: { team: "data" },
           });
@@ -115,7 +116,7 @@ test.provider(
             serverName: "target-db.example.com",
             port: 5432,
             username: "admin",
-            password: "hunter2",
+            password: Redacted.make("hunter2"),
             databaseName: "warehouse",
           });
           return { endpoint };

@@ -1,4 +1,5 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
 import * as IdentityCenter from "../IdentityCenter/index.ts";
@@ -70,7 +71,12 @@ export interface TenantIdentityCenterPermissionSetSpec {
   key: string;
   name: string;
   description?: string;
-  sessionDuration?: string;
+  /**
+   * Optional session duration, e.g. `"8 hours"` or `Duration.hours(8)`.
+   * Sent to Identity Center as an ISO-8601 string such as `PT8H` (a bare
+   * number is milliseconds).
+   */
+  sessionDuration?: Duration.Input;
   relayState?: string;
 }
 
@@ -193,7 +199,7 @@ const toLogicalIdSegment = (value: string) =>
  *       {
  *         key: "admin",
  *         name: "AdministratorAccess",
- *         sessionDuration: "PT8H",
+ *         sessionDuration: "8 hours",
  *       },
  *     ],
  *     assignments: [

@@ -1,4 +1,5 @@
 import * as kms from "@distilled.cloud/aws/kms";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -58,20 +59,24 @@ export interface KeyProps {
    */
   enableKeyRotation?: boolean;
   /**
-   * Rotation period in days when automatic key rotation is enabled.
+   * Rotation period when automatic key rotation is enabled. Accepts any
+   * `Duration.Input` (e.g. `"90 days"`, `Duration.days(90)`; a bare number
+   * is milliseconds); the wire unit is whole days.
    */
-  rotationPeriodInDays?: number;
+  rotationPeriodInDays?: Duration.Input;
   /**
    * Whether to create a multi-region primary key.
    * @default false
    */
   multiRegion?: boolean;
   /**
-   * Waiting period, in days, before AWS permanently deletes the key after
-   * destroy schedules deletion.
-   * @default 30
+   * Waiting period before AWS permanently deletes the key after destroy
+   * schedules deletion. Accepts any `Duration.Input` (e.g. `"7 days"`,
+   * `Duration.days(7)`; a bare number is milliseconds); the wire unit is
+   * whole days.
+   * @default 30 days
    */
-  deletionWindowInDays?: number;
+  deletionWindowInDays?: Duration.Input;
   /**
    * User-defined tags to apply to the key.
    */
@@ -111,7 +116,7 @@ export interface Key extends Resource<
  * const key = yield* KMS.Key("AppKey", {
  *   description: "Application encryption key",
  *   enableKeyRotation: true,
- *   deletionWindowInDays: 7,
+ *   deletionWindowInDays: "7 days",
  * });
  * ```
  *
@@ -136,6 +141,10 @@ export const Key = Resource<Key>("AWS.KMS.Key");
 const defaultKeyUsage = "ENCRYPT_DECRYPT" as const;
 const defaultKeySpec = "SYMMETRIC_DEFAULT" as const;
 const defaultDeletionWindowInDays = 30;
+
+/** Wire unit for KMS windows/periods is whole days. */
+const toWireDays = (input: Duration.Input | undefined): number | undefined =>
+  input !== undefined ? Math.round(Duration.toDays(input)) : undefined;
 
 export const KeyProvider = () =>
   Provider.succeed(Key, {
@@ -178,7 +187,7 @@ export const KeyProvider = () =>
         keyId: output.keyId,
         deletionWindowInDays:
           output.deletionWindowInDays ??
-          olds.deletionWindowInDays ??
+          toWireDays(olds.deletionWindowInDays) ??
           defaultDeletionWindowInDays,
       });
     }),
@@ -202,7 +211,8 @@ export const KeyProvider = () =>
       const enableKeyRotation = news.enableKeyRotation ?? false;
       const multiRegion = news.multiRegion ?? false;
       const deletionWindowInDays =
-        news.deletionWindowInDays ?? defaultDeletionWindowInDays;
+        toWireDays(news.deletionWindowInDays) ?? defaultDeletionWindowInDays;
+      const rotationPeriodInDays = toWireDays(news.rotationPeriodInDays);
       const desiredPolicy =
         news.policy === undefined
           ? undefined
@@ -294,13 +304,13 @@ export const KeyProvider = () =>
       if (
         enableKeyRotation &&
         (state.keyRotationEnabled !== true ||
-          (news.rotationPeriodInDays !== undefined &&
-            state.rotationPeriodInDays !== news.rotationPeriodInDays))
+          (rotationPeriodInDays !== undefined &&
+            state.rotationPeriodInDays !== rotationPeriodInDays))
       ) {
         yield* kms
           .enableKeyRotation({
             KeyId: state.keyId,
-            RotationPeriodInDays: news.rotationPeriodInDays,
+            RotationPeriodInDays: rotationPeriodInDays,
           })
           .pipe(
             Effect.retry({
@@ -364,7 +374,7 @@ export const KeyProvider = () =>
         desiredEnabled: enabled,
         desiredKeyRotationEnabled: enableKeyRotation,
         desiredPolicy,
-        desiredRotationPeriodInDays: news.rotationPeriodInDays,
+        desiredRotationPeriodInDays: rotationPeriodInDays,
         desiredTags,
       });
 

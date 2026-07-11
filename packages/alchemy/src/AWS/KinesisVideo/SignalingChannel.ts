@@ -1,4 +1,5 @@
 import * as kv from "@distilled.cloud/aws/kinesis-video";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream_ from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -30,11 +31,12 @@ export interface SignalingChannelProps {
    */
   type?: "SINGLE_MASTER" | "FULL_MESH";
   /**
-   * How long (in seconds) an undelivered signaling message is retained
-   * (`5` - `120`). Updated in place.
-   * @default 60
+   * How long an undelivered signaling message is retained (5–120 seconds).
+   * Accepts any `Duration.Input` (e.g. `"30 seconds"`, `Duration.seconds(30)`;
+   * a bare number is milliseconds). Updated in place.
+   * @default 60 seconds
    */
-  messageTtlSeconds?: number;
+  messageTtlSeconds?: Duration.Input;
   /**
    * Tags to apply to the channel. Merged with internal Alchemy tags.
    */
@@ -71,7 +73,7 @@ export interface SignalingChannel extends Resource<
  * @example Channel with Message TTL
  * ```typescript
  * const channel = yield* AWS.KinesisVideo.SignalingChannel("Doorbell", {
- *   messageTtlSeconds: 30,
+ *   messageTtlSeconds: "30 seconds",
  *   tags: { Environment: "production" },
  * });
  * ```
@@ -188,6 +190,11 @@ export const SignalingChannelProvider = () =>
             output?.channelName ?? (yield* createName(id, props));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
+          // Wire unit is whole seconds (MessageTtlSeconds).
+          const desiredTtl =
+            props.messageTtlSeconds !== undefined
+              ? Math.round(Duration.toSeconds(props.messageTtlSeconds))
+              : undefined;
 
           // 1. OBSERVE
           let info = yield* observeChannel(channelName);
@@ -210,8 +217,8 @@ export const SignalingChannelProvider = () =>
                 ChannelName: channelName,
                 ChannelType: props.type ?? "SINGLE_MASTER",
                 SingleMasterConfiguration:
-                  props.messageTtlSeconds !== undefined
-                    ? { MessageTtlSeconds: props.messageTtlSeconds }
+                  desiredTtl !== undefined
+                    ? { MessageTtlSeconds: desiredTtl }
                     : undefined,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
@@ -231,7 +238,6 @@ export const SignalingChannelProvider = () =>
           const channelArn = info.ChannelARN!;
 
           // 3. SYNC — message TTL (versioned update; only on observed drift)
-          const desiredTtl = props.messageTtlSeconds;
           const observedTtl = info.SingleMasterConfiguration?.MessageTtlSeconds;
           if (desiredTtl !== undefined && desiredTtl !== observedTtl) {
             yield* retryWhileSettling(

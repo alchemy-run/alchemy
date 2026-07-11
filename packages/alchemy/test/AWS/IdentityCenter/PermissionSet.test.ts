@@ -24,7 +24,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SSO_INSTANCE)(
           return yield* PermissionSet("ListPermissionSet", {
             name: "alchemy-test-list-permission-set",
             description: "list() coverage test",
-            sessionDuration: "PT1H",
+            sessionDuration: "1 hour",
           });
         }),
       );

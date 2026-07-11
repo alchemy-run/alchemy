@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -70,9 +71,10 @@ export interface DBClusterProps {
    */
   availabilityZones?: string[];
   /**
-   * Backup retention period in days. In-place modify.
+   * Backup retention period (e.g. `"7 days"` or `Duration.days(7)`).
+   * Sent to the API in whole days. In-place modify.
    */
-  backupRetentionPeriod?: number;
+  backupRetentionPeriod?: Duration.Input;
   /**
    * Daily backup window, e.g. `07:00-09:00`. In-place modify.
    */
@@ -82,9 +84,10 @@ export interface DBClusterProps {
    */
   preferredMaintenanceWindow?: string;
   /**
-   * Backtrack window in seconds (Aurora MySQL only). In-place modify.
+   * Backtrack window (Aurora MySQL only), e.g. `"1 hour"`. Sent to the API
+   * in whole seconds. In-place modify.
    */
-  backtrackWindow?: number;
+  backtrackWindow?: Duration.Input;
   /**
    * Option group name. In-place modify.
    */
@@ -103,9 +106,10 @@ export interface DBClusterProps {
    */
   allowMajorVersionUpgrade?: boolean;
   /**
-   * Enhanced-monitoring granularity in seconds. In-place modify.
+   * Enhanced-monitoring granularity (e.g. `"60 seconds"`). Sent to the API
+   * in whole seconds (valid: 0, 1, 5, 10, 15, 30, 60). In-place modify.
    */
-  monitoringInterval?: number;
+  monitoringInterval?: Duration.Input;
   /**
    * IAM role ARN for enhanced monitoring. In-place modify.
    */
@@ -119,9 +123,10 @@ export interface DBClusterProps {
    */
   performanceInsightsKMSKeyId?: string;
   /**
-   * Performance Insights retention in days. In-place modify.
+   * Performance Insights retention (e.g. `"7 days"`). Sent to the API in
+   * whole days (valid: 7, 731, or month multiples). In-place modify.
    */
-  performanceInsightsRetentionPeriod?: number;
+  performanceInsightsRetentionPeriod?: Duration.Input;
   /**
    * Network type: `IPV4` | `DUAL`. In-place modify.
    */
@@ -201,7 +206,7 @@ export interface DBClusterProps {
   /**
    * Explicit master password when not deriving credentials from a secret.
    */
-  masterUserPassword?: string;
+  masterUserPassword?: Redacted.Redacted<string>;
   /**
    * Existing Secrets Manager secret ARN whose JSON payload contains
    * `username` and `password`.
@@ -289,7 +294,7 @@ export interface DBCluster extends Resource<
  *   serverlessV2ScalingConfiguration: { MinCapacity: 0.5, MaxCapacity: 4 },
  *   manageMasterUserPassword: true,
  *   masterUsername: "alchemy",
- *   backupRetentionPeriod: 7,
+ *   backupRetentionPeriod: "7 days",
  *   deletionProtection: false,
  * });
  * ```
@@ -301,7 +306,7 @@ export interface DBCluster extends Resource<
  *   engine: "aurora-postgresql",
  *   enableCloudwatchLogsExports: ["postgresql"],
  *   enablePerformanceInsights: true,
- *   monitoringInterval: 60,
+ *   monitoringInterval: "60 seconds",
  *   monitoringRoleArn: monitoringRole.roleArn,
  * });
  * ```
@@ -548,6 +553,25 @@ export const DBClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const credentials = yield* resolveMasterCredentials(news);
+          // Duration props → the exact wire units the RDS API expects.
+          const backupRetentionDays =
+            news.backupRetentionPeriod !== undefined
+              ? Math.round(Duration.toDays(news.backupRetentionPeriod))
+              : undefined;
+          const backtrackWindowSeconds =
+            news.backtrackWindow !== undefined
+              ? Math.round(Duration.toSeconds(news.backtrackWindow))
+              : undefined;
+          const monitoringIntervalSeconds =
+            news.monitoringInterval !== undefined
+              ? Math.round(Duration.toSeconds(news.monitoringInterval))
+              : undefined;
+          const performanceInsightsRetentionDays =
+            news.performanceInsightsRetentionPeriod !== undefined
+              ? Math.round(
+                  Duration.toDays(news.performanceInsightsRetentionPeriod),
+                )
+              : undefined;
 
           // Observe — fetch live cluster state. We never trust `output`
           // blindly: the cluster may have been deleted out-of-band, or this
@@ -569,10 +593,10 @@ export const DBClusterProvider = () =>
                 VpcSecurityGroupIds: news.vpcSecurityGroupIds,
                 Port: news.port,
                 AvailabilityZones: news.availabilityZones,
-                BackupRetentionPeriod: news.backupRetentionPeriod,
+                BackupRetentionPeriod: backupRetentionDays,
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
-                BacktrackWindow: news.backtrackWindow,
+                BacktrackWindow: backtrackWindowSeconds,
                 OptionGroupName: news.optionGroupName,
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
                 EnableIAMDatabaseAuthentication:
@@ -583,12 +607,12 @@ export const DBClusterProvider = () =>
                 ServerlessV2ScalingConfiguration:
                   news.serverlessV2ScalingConfiguration,
                 AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
-                MonitoringInterval: news.monitoringInterval,
+                MonitoringInterval: monitoringIntervalSeconds,
                 MonitoringRoleArn: news.monitoringRoleArn,
                 EnablePerformanceInsights: news.enablePerformanceInsights,
                 PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
                 PerformanceInsightsRetentionPeriod:
-                  news.performanceInsightsRetentionPeriod,
+                  performanceInsightsRetentionDays,
                 NetworkType: news.networkType,
                 CACertificateIdentifier: news.caCertificateIdentifier,
                 MasterUserSecretKmsKeyId: news.masterUserSecretKmsKeyId,
@@ -645,20 +669,20 @@ export const DBClusterProvider = () =>
             };
             setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
             setIf("Port", news.port, observed.Port);
-            setIf("BackupRetentionPeriod", news.backupRetentionPeriod, observed.BackupRetentionPeriod); // prettier-ignore
+            setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
-            setIf("BacktrackWindow", news.backtrackWindow, observed.BacktrackWindow); // prettier-ignore
+            setIf("BacktrackWindow", backtrackWindowSeconds, observed.BacktrackWindow); // prettier-ignore
             setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore
             setIf("CopyTagsToSnapshot", news.copyTagsToSnapshot, observed.CopyTagsToSnapshot); // prettier-ignore
             setIf("EnableIAMDatabaseAuthentication", news.enableIAMDatabaseAuthentication, observed.IAMDatabaseAuthenticationEnabled); // prettier-ignore
             setIf("EnableHttpEndpoint", news.enableHttpEndpoint, observed.HttpEndpointEnabled); // prettier-ignore
             setIf("AutoMinorVersionUpgrade", news.autoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade); // prettier-ignore
-            setIf("MonitoringInterval", news.monitoringInterval, observed.MonitoringInterval); // prettier-ignore
+            setIf("MonitoringInterval", monitoringIntervalSeconds, observed.MonitoringInterval); // prettier-ignore
             setIf("MonitoringRoleArn", news.monitoringRoleArn, observed.MonitoringRoleArn); // prettier-ignore
             setIf("EnablePerformanceInsights", news.enablePerformanceInsights, observed.PerformanceInsightsEnabled); // prettier-ignore
             setIf("PerformanceInsightsKMSKeyId", news.performanceInsightsKMSKeyId, observed.PerformanceInsightsKMSKeyId); // prettier-ignore
-            setIf("PerformanceInsightsRetentionPeriod", news.performanceInsightsRetentionPeriod, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
+            setIf("PerformanceInsightsRetentionPeriod", performanceInsightsRetentionDays, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
             setIf("NetworkType", news.networkType, observed.NetworkType);
             setIf("DBClusterInstanceClass", news.dbClusterInstanceClass, observed.DBClusterInstanceClass); // prettier-ignore
             setIf("AllocatedStorage", news.allocatedStorage, observed.AllocatedStorage); // prettier-ignore

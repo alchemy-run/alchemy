@@ -1,3 +1,4 @@
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
@@ -192,9 +193,9 @@ export interface AuroraProps {
    */
   dataApi?: boolean;
   /**
-   * Backup retention period in days, forwarded to the cluster.
+   * Backup retention period (e.g. `"7 days"`), forwarded to the cluster.
    */
-  backupRetentionPeriod?: number;
+  backupRetentionPeriod?: Duration.Input;
   /**
    * Daily backup window (`hh:mm-hh:mm` UTC), forwarded to the cluster.
    */
@@ -233,18 +234,20 @@ export interface AuroraProps {
    */
   port?: number;
   /**
-   * Aurora MySQL backtrack window in seconds. Forwarded to the cluster.
+   * Aurora MySQL backtrack window (e.g. `"1 hour"`). Forwarded to the
+   * cluster.
    */
-  backtrackWindow?: number;
+  backtrackWindow?: Duration.Input;
   /**
    * Enhanced-monitoring + Performance Insights settings. Forwarded to the
    * cluster (and the enhanced-monitoring role to the instances).
    */
   monitoring?: {
     /**
-     * Enhanced-monitoring granularity in seconds (0, 1, 5, 10, 15, 30, 60).
+     * Enhanced-monitoring granularity (e.g. `"60 seconds"`). Sent to the
+     * API in whole seconds (valid: 0, 1, 5, 10, 15, 30, 60).
      */
-    interval?: number;
+    interval?: Duration.Input;
     /**
      * Existing IAM role ARN for enhanced monitoring. When omitted and
      * `interval > 0`, Aurora creates one automatically.
@@ -405,8 +408,8 @@ export const Aurora = (id: string, props: AuroraProps) =>
       // one when a non-zero interval is requested.
       const monitoringInterval = props.monitoring?.interval;
       const monitoringRole =
-        monitoringInterval &&
-        monitoringInterval > 0 &&
+        monitoringInterval !== undefined &&
+        Duration.toSeconds(monitoringInterval) > 0 &&
         !props.monitoring?.roleArn
           ? yield* IAM.Role("MonitoringRole", {
               assumeRolePolicyDocument: {

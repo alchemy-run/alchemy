@@ -1,5 +1,6 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -52,7 +53,7 @@ export interface DistributionOrigin {
    */
   s3OriginConfig?: {
     originAccessIdentity?: string;
-    originReadTimeout?: number;
+    originReadTimeout?: Duration.Input;
   };
   /**
    * Optional custom origin settings.
@@ -61,8 +62,8 @@ export interface DistributionOrigin {
     httpPort?: number;
     httpsPort?: number;
     originProtocolPolicy?: cloudfront.OriginProtocolPolicy;
-    originReadTimeout?: number;
-    originKeepaliveTimeout?: number;
+    originReadTimeout?: Duration.Input;
+    originKeepaliveTimeout?: Duration.Input;
     originSslProtocols?: cloudfront.SslProtocol[];
     /**
      * IP address type CloudFront uses to connect to the origin.
@@ -81,8 +82,8 @@ export interface DistributionOrigin {
    */
   vpcOriginConfig?: {
     vpcOriginId: Input<string>;
-    originReadTimeout?: number;
-    originKeepaliveTimeout?: number;
+    originReadTimeout?: Duration.Input;
+    originKeepaliveTimeout?: Duration.Input;
     ownerAccountId?: string;
   };
   /**
@@ -101,13 +102,15 @@ export interface DistributionOrigin {
    */
   connectionAttempts?: number;
   /**
-   * Seconds CloudFront waits when trying to establish a connection (1-10).
+   * How long CloudFront waits when trying to establish a connection (1-10
+   * seconds), e.g. `"5 seconds"` (a bare number is milliseconds).
    */
-  connectionTimeout?: number;
+  connectionTimeout?: Duration.Input;
   /**
-   * Seconds CloudFront waits for the origin to deliver a complete response.
+   * How long CloudFront waits for the origin to deliver a complete response,
+   * e.g. `"30 seconds"` (a bare number is milliseconds).
    */
-  responseCompletionTimeout?: number;
+  responseCompletionTimeout?: Duration.Input;
 }
 
 export interface DistributionBehavior {
@@ -120,9 +123,9 @@ export interface DistributionBehavior {
   originRequestPolicyId?: string;
   responseHeadersPolicyId?: string;
   forwardedValues?: cloudfront.ForwardedValues;
-  minTtl?: number;
-  defaultTtl?: number;
-  maxTtl?: number;
+  minTtl?: Duration.Input;
+  defaultTtl?: Duration.Input;
+  maxTtl?: Duration.Input;
   functionAssociations?: {
     functionArn: string;
     eventType: cloudfront.EventType;
@@ -1017,6 +1020,12 @@ const isAccessDenied = (error: unknown) => {
   );
 };
 
+/** Convert an optional `Duration.Input` to the wire's whole seconds. */
+const toWireSeconds = (
+  duration: Duration.Input | undefined,
+): number | undefined =>
+  duration === undefined ? undefined : Math.round(Duration.toSeconds(duration));
+
 const toBehavior = (
   behavior: DistributionBehavior & {
     pathPattern?: string;
@@ -1042,9 +1051,9 @@ const toBehavior = (
   OriginRequestPolicyId: behavior.originRequestPolicyId,
   ResponseHeadersPolicyId: behavior.responseHeadersPolicyId,
   ForwardedValues: behavior.forwardedValues,
-  MinTTL: behavior.minTtl,
-  DefaultTTL: behavior.defaultTtl,
-  MaxTTL: behavior.maxTtl,
+  MinTTL: toWireSeconds(behavior.minTtl),
+  DefaultTTL: toWireSeconds(behavior.defaultTtl),
+  MaxTTL: toWireSeconds(behavior.maxTtl),
   TrustedKeyGroups: behavior.trustedKeyGroups
     ? {
         Enabled: (behavior.trustedKeyGroups as string[]).length > 0,
@@ -1115,22 +1124,27 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
         }
       : undefined,
     ConnectionAttempts: origin.connectionAttempts,
-    ConnectionTimeout: origin.connectionTimeout,
-    ResponseCompletionTimeout: origin.responseCompletionTimeout,
+    ConnectionTimeout: toWireSeconds(origin.connectionTimeout),
+    ResponseCompletionTimeout: toWireSeconds(origin.responseCompletionTimeout),
     VpcOriginConfig: isVpcOrigin
       ? {
           VpcOriginId: origin.vpcOriginConfig!.vpcOriginId as string,
           OwnerAccountId: origin.vpcOriginConfig!.ownerAccountId,
-          OriginReadTimeout: origin.vpcOriginConfig!.originReadTimeout,
-          OriginKeepaliveTimeout:
+          OriginReadTimeout: toWireSeconds(
+            origin.vpcOriginConfig!.originReadTimeout,
+          ),
+          OriginKeepaliveTimeout: toWireSeconds(
             origin.vpcOriginConfig!.originKeepaliveTimeout,
+          ),
         }
       : undefined,
     S3OriginConfig: isS3Origin
       ? {
           OriginAccessIdentity:
             origin.s3OriginConfig?.originAccessIdentity ?? "",
-          OriginReadTimeout: origin.s3OriginConfig?.originReadTimeout,
+          OriginReadTimeout: toWireSeconds(
+            origin.s3OriginConfig?.originReadTimeout,
+          ),
         }
       : undefined,
     CustomOriginConfig:
@@ -1149,9 +1163,12 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
                 "TLSv1.2",
               ],
             },
-            OriginReadTimeout: origin.customOriginConfig?.originReadTimeout,
-            OriginKeepaliveTimeout:
+            OriginReadTimeout: toWireSeconds(
+              origin.customOriginConfig?.originReadTimeout,
+            ),
+            OriginKeepaliveTimeout: toWireSeconds(
               origin.customOriginConfig?.originKeepaliveTimeout,
+            ),
             IpAddressType: origin.customOriginConfig?.ipAddressType,
             OriginMtlsConfig: origin.customOriginConfig?.originMtlsConfig
               ? {

@@ -4,6 +4,7 @@ import * as Test from "@/Test/Vitest";
 import * as influxdb from "@distilled.cloud/aws/timestream-influxdb";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -54,7 +55,7 @@ describe("AWS.Timestream.DbInstance", () => {
               allocatedStorage: 20,
               vpcSubnetIds: subnetIds,
               vpcSecurityGroupIds: securityGroupIds,
-              password: "alchemy-super-secret-pw-1",
+              password: Redacted.make("alchemy-super-secret-pw-1"),
               tags: { Environment: "test" },
             });
           }),

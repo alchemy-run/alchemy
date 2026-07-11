@@ -25,7 +25,7 @@ export default KinesisVideoTestFunction.make(
   Effect.gen(function* () {
     const stream = yield* AWS.KinesisVideo.Stream("FixtureStream", {
       mediaType: "video/h264",
-      dataRetentionInHours: 24,
+      dataRetentionInHours: "24 hours",
     });
     const channel = yield* AWS.KinesisVideo.SignalingChannel("FixtureChannel");
 

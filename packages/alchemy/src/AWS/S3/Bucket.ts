@@ -2,6 +2,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Arr from "effect/Array";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +16,7 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
 import type { Credentials } from "../Credentials.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { durationToDays } from "../IAM/common.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -104,8 +106,12 @@ export interface BucketReplication {
 export interface BucketObjectLockConfiguration {
   /** Retention mode. */
   mode: "GOVERNANCE" | "COMPLIANCE";
-  /** Retention period in days (mutually exclusive with `years`). */
-  days?: number;
+  /**
+   * Retention period (e.g. `"30 days"` or `Duration.days(30)`; a bare number
+   * is milliseconds). Rounded to whole days on the wire. Mutually exclusive
+   * with `years`.
+   */
+  days?: Duration.Input;
   /** Retention period in years (mutually exclusive with `days`). */
   years?: number;
 }
@@ -1283,7 +1289,7 @@ export const BucketProvider = () =>
           );
         const desired: s3.DefaultRetention = {
           Mode: objectLockConfiguration.mode,
-          Days: objectLockConfiguration.days,
+          Days: durationToDays(objectLockConfiguration.days),
           Years: objectLockConfiguration.years,
         };
         const canon = (r: s3.DefaultRetention | undefined) =>

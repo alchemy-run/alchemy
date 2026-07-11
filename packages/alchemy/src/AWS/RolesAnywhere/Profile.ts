@@ -1,5 +1,6 @@
 import * as rolesanywhere from "@distilled.cloud/aws/rolesanywhere";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { durationToSeconds } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readRolesAnywhereTags,
@@ -46,10 +48,12 @@ export interface ProfileProps {
    */
   managedPolicyArns?: string[];
   /**
-   * Number of seconds vended session credentials are valid for (900-43200).
-   * @default 3600
+   * How long vended session credentials are valid for, e.g. `"1 hour"` or
+   * `Duration.minutes(15)` (a bare number is milliseconds). Rounded to whole
+   * seconds on the wire (900-43200).
+   * @default 3600 seconds
    */
-  durationSeconds?: number;
+  durationSeconds?: Duration.Input;
   /**
    * Whether temporary credential requests must include instance properties.
    * Immutable after creation — changing it replaces the profile.
@@ -119,7 +123,7 @@ export interface Profile extends Resource<
  * ```typescript
  * const profile = yield* RolesAnywhere.Profile("Profile", {
  *   roleArns: [role.roleArn],
- *   durationSeconds: 900,
+ *   durationSeconds: "15 minutes",
  *   sessionPolicy: JSON.stringify({
  *     Version: "2012-10-17",
  *     Statement: [
@@ -208,6 +212,9 @@ export const ProfileProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredEnabled = news.enabled ?? true;
+          const desiredDurationSeconds = durationToSeconds(
+            news.durationSeconds,
+          );
 
           // 1. Observe — cloud state is authoritative; output caches the id.
           let live = output?.profileId
@@ -221,7 +228,7 @@ export const ProfileProvider = () =>
               roleArns: news.roleArns,
               sessionPolicy: news.sessionPolicy,
               managedPolicyArns: news.managedPolicyArns,
-              durationSeconds: news.durationSeconds,
+              durationSeconds: desiredDurationSeconds,
               requireInstanceProperties: news.requireInstanceProperties,
               acceptRoleSessionName: news.acceptRoleSessionName,
               enabled: desiredEnabled,
@@ -242,8 +249,8 @@ export const ProfileProvider = () =>
               !sameMembers(live.managedPolicyArns, news.managedPolicyArns) ||
               (news.sessionPolicy !== undefined &&
                 live.sessionPolicy !== news.sessionPolicy) ||
-              (news.durationSeconds !== undefined &&
-                live.durationSeconds !== news.durationSeconds) ||
+              (desiredDurationSeconds !== undefined &&
+                live.durationSeconds !== desiredDurationSeconds) ||
               (news.acceptRoleSessionName !== undefined &&
                 (live.acceptRoleSessionName ?? false) !==
                   news.acceptRoleSessionName);
@@ -254,7 +261,7 @@ export const ProfileProvider = () =>
                 roleArns: news.roleArns,
                 sessionPolicy: news.sessionPolicy,
                 managedPolicyArns: news.managedPolicyArns,
-                durationSeconds: news.durationSeconds,
+                durationSeconds: desiredDurationSeconds,
                 acceptRoleSessionName: news.acceptRoleSessionName,
               });
               live = updated.profile ?? live;

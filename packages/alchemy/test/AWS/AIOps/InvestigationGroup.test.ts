@@ -5,6 +5,7 @@ import * as Test from "@/Test/Vitest";
 import * as aiops from "@distilled.cloud/aws/aiops";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -64,7 +65,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
       yield* stack.destroy();
 
       const deployGroup = (props: {
-        retentionInDays: number;
+        retentionInDays: Duration.Input;
         tagKeyBoundaries: string[];
         isCloudTrailEventHistoryEnabled?: boolean;
         tags: Record<string, string>;
@@ -95,7 +96,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
         );
 
       const { group } = yield* deployGroup({
-        retentionInDays: 7,
+        retentionInDays: "7 days",
         tagKeyBoundaries: ["Application"],
         tags: { Environment: "test" },
       });
@@ -118,7 +119,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
       // Update mutable aspects in place: tag key boundaries, CloudTrail
       // event history, and tags.
       const { group: updated } = yield* deployGroup({
-        retentionInDays: 7,
+        retentionInDays: "7 days",
         tagKeyBoundaries: ["Application", "Service"],
         isCloudTrailEventHistoryEnabled: false,
         tags: { Environment: "test", Team: "obs" },
@@ -136,7 +137,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
       // The retention period has no update API — changing it replaces the
       // group (delete-first, because only one group may exist per Region).
       const { group: replaced } = yield* deployGroup({
-        retentionInDays: 14,
+        retentionInDays: "14 days",
         tagKeyBoundaries: ["Application", "Service"],
         isCloudTrailEventHistoryEnabled: false,
         tags: { Environment: "test", Team: "obs" },

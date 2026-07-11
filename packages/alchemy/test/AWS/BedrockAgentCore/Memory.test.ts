@@ -3,6 +3,7 @@ import { Memory } from "@/AWS/BedrockAgentCore";
 import * as Test from "@/Test/Vitest";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
 import { expect } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -53,7 +54,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deployMemory = (eventExpiryDuration: number) =>
+      const deployMemory = (eventExpiryDuration: Duration.Input) =>
         Effect.gen(function* () {
           const memory = yield* Memory("SessionMemory", {
             eventExpiryDuration,
@@ -62,7 +63,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           return { memory };
         });
 
-      const { memory } = yield* stack.deploy(deployMemory(7));
+      const { memory } = yield* stack.deploy(deployMemory("7 days"));
 
       expect(memory.memoryId).toBeTruthy();
       expect(memory.memoryArn).toContain(":memory/");
@@ -83,7 +84,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(tags.tags?.["alchemy::id"]).toBe("SessionMemory");
 
       // update in place — same memory id, new expiry
-      const { memory: updated } = yield* stack.deploy(deployMemory(14));
+      const { memory: updated } = yield* stack.deploy(deployMemory("14 days"));
       expect(updated.memoryId).toBe(memory.memoryId);
       const observedUpdated = yield* control.getMemory({
         memoryId: memory.memoryId,

@@ -1,4 +1,5 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -6,6 +7,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
 
@@ -47,11 +49,12 @@ export interface LifecycleHookProps {
    */
   lifecycleTransition: LifecycleTransition;
   /**
-   * Maximum time, in seconds, the instance stays in the wait state before the
-   * `defaultResult` is applied (30–7200).
-   * @default 3600
+   * Maximum time the instance stays in the wait state before the
+   * `defaultResult` is applied, e.g. `"5 minutes"` or
+   * `Duration.seconds(300)` (30 seconds–2 hours on the wire).
+   * @default "1 hour"
    */
-  heartbeatTimeout?: number;
+  heartbeatTimeout?: Duration.Input;
   /**
    * Action taken when the hook times out or the ASG is otherwise unable to
    * respond.
@@ -105,7 +108,7 @@ export interface LifecycleHook extends Resource<
  * const hook = yield* LifecycleHook("Drain", {
  *   autoScalingGroup: group,
  *   lifecycleTransition: "TERMINATING",
- *   heartbeatTimeout: 300,
+ *   heartbeatTimeout: "300 seconds",
  *   defaultResult: "CONTINUE",
  * });
  * ```
@@ -115,7 +118,7 @@ export interface LifecycleHook extends Resource<
  * const hook = yield* LifecycleHook("Warm", {
  *   autoScalingGroup: group,
  *   lifecycleTransition: "LAUNCHING",
- *   heartbeatTimeout: 120,
+ *   heartbeatTimeout: "2 minutes",
  * });
  * ```
  *
@@ -252,7 +255,7 @@ export const LifecycleHookProvider = () =>
             LifecycleHookName: lifecycleHookName,
             AutoScalingGroupName: autoScalingGroupName,
             LifecycleTransition: normalizeTransition(news.lifecycleTransition),
-            HeartbeatTimeout: news.heartbeatTimeout,
+            HeartbeatTimeout: toSeconds(news.heartbeatTimeout),
             DefaultResult: news.defaultResult,
             NotificationTargetARN: news.notificationTargetARN,
             RoleARN: news.roleARN,

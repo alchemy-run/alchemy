@@ -4,6 +4,7 @@ import * as Test from "@/Test/Vitest";
 import * as mq from "@distilled.cloud/aws/mq";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -71,7 +72,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             deploymentMode: "SINGLE_INSTANCE",
             publiclyAccessible: true,
             users: [
-              { username: "alchemyadmin", password: "SuperSecretPassw0rd!" },
+              {
+                username: "alchemyadmin",
+                password: Redacted.make("SuperSecretPassw0rd!"),
+              },
             ],
             tags: { team: "messaging" },
           });

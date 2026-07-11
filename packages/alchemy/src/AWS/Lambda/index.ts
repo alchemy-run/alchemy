@@ -8,6 +8,8 @@ export * from "./CreateShellAuthTokenHttp.ts";
 export * from "./DeleteMicrovmImageVersion.ts";
 export * from "./DeleteMicrovmImageVersionHttp.ts";
 export * from "./DocDBClusterEventSource.ts";
+export * as Durable from "./Durable.ts";
+export * from "./DurableFunction.ts";
 export * from "./EventBridgeEventSource.ts";
 export * from "./EventInvokeConfig.ts";
 export * from "./EventSourceMapping.ts";

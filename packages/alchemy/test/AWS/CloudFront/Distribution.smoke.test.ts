@@ -49,8 +49,8 @@ describe("AWS.CloudFront smoke", () => {
             const cachePolicy = yield* CachePolicy("SmokeCachePolicy", {
               comment: "smoke",
               minTTL: 0,
-              defaultTTL: 60,
-              maxTTL: 86400,
+              defaultTTL: "60 seconds",
+              maxTTL: "1 day",
               parametersInCacheKeyAndForwardedToOrigin: {
                 EnableAcceptEncodingGzip: true,
                 EnableAcceptEncodingBrotli: true,

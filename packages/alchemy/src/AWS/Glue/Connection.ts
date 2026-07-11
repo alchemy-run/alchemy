@@ -1,5 +1,6 @@
 import * as glue from "@distilled.cloud/aws/glue";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -38,9 +39,11 @@ export interface ConnectionProps {
   description?: string;
   /**
    * Connection-type-specific properties, e.g. for `JDBC`:
-   * `{ JDBC_CONNECTION_URL, USERNAME, PASSWORD }`.
+   * `{ JDBC_CONNECTION_URL, USERNAME, PASSWORD }`. Secret values (e.g.
+   * `PASSWORD`) should be wrapped with `Redacted.make(...)` so they are
+   * kept out of logs and state output.
    */
-  connectionProperties: Record<string, string>;
+  connectionProperties: Record<string, string | Redacted.Redacted<string>>;
   /**
    * Criteria used to match connections (for MATCH_CRITERIA lookups).
    */
@@ -90,13 +93,14 @@ export interface Connection extends Resource<
  * @example JDBC Connection
  * ```typescript
  * import * as AWS from "alchemy/AWS";
+ * import * as Redacted from "effect/Redacted";
  *
  * const connection = yield* AWS.Glue.Connection("Warehouse", {
  *   connectionType: "JDBC",
  *   connectionProperties: {
  *     JDBC_CONNECTION_URL: "jdbc:postgresql://db.example.com:5432/warehouse",
  *     USERNAME: "glue",
- *     PASSWORD: "secret",
+ *     PASSWORD: Redacted.make("secret"),
  *   },
  *   physicalConnectionRequirements: {
  *     subnetId: subnet.subnetId,
@@ -144,7 +148,12 @@ export const ConnectionProvider = () =>
         Name: name,
         ConnectionType: props.connectionType,
         Description: props.description,
-        ConnectionProperties: props.connectionProperties,
+        ConnectionProperties: Object.fromEntries(
+          Object.entries(props.connectionProperties).map(([key, value]) => [
+            key,
+            Redacted.isRedacted(value) ? Redacted.value(value) : value,
+          ]),
+        ),
         MatchCriteria: props.matchCriteria,
         PhysicalConnectionRequirements: props.physicalConnectionRequirements
           ? {

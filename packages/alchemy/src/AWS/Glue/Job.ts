@@ -1,4 +1,5 @@
 import * as glue from "@distilled.cloud/aws/glue";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -67,9 +68,10 @@ export interface JobProps {
    */
   maxRetries?: number;
   /**
-   * Job timeout in minutes.
+   * Job timeout, e.g. `"1 hour"` or `Duration.minutes(60)`. Rounded to
+   * whole minutes on the wire (the Glue API unit).
    */
-  timeout?: number;
+  timeout?: Duration.Input;
   /**
    * Max Glue data processing units (DPUs) for `pythonshell` (0.0625 or 1).
    * Mutually exclusive with `numberOfWorkers`/`workerType`.
@@ -152,7 +154,7 @@ export interface Job extends Resource<
  *   glueVersion: "4.0",
  *   workerType: "G.1X",
  *   numberOfWorkers: 2,
- *   timeout: 60,
+ *   timeout: "1 hour",
  * });
  * ```
  *
@@ -208,7 +210,10 @@ export const JobProvider = () =>
             ? { Connections: props.connections }
             : undefined,
         MaxRetries: props.maxRetries,
-        Timeout: props.timeout,
+        Timeout:
+          props.timeout !== undefined
+            ? Math.round(Duration.toMinutes(props.timeout))
+            : undefined,
         MaxCapacity: props.maxCapacity,
         GlueVersion: props.glueVersion,
         NumberOfWorkers: props.numberOfWorkers,

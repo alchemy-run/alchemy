@@ -4,6 +4,7 @@ import * as appsync from "@distilled.cloud/aws/appsync";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { fileURLToPath } from "node:url";
 
@@ -79,7 +80,7 @@ test.provider(
       expect(out.apiId).toBeTruthy();
       expect(out.graphqlUrl).toContain("appsync-api");
       expect(out.authenticationType).toBe("API_KEY");
-      expect(out.keyId).toMatch(/^da2-/);
+      expect(Redacted.value(out.keyId)).toMatch(/^da2-/);
 
       // Out-of-band verification via distilled.
       const remote = yield* appsync.getGraphqlApi({ apiId: out.apiId });
@@ -96,16 +97,17 @@ test.provider(
       expect(["SUCCESS", "ACTIVE"]).toContain(schemaStatus.status);
 
       // The API key is registered on the API.
+      const keyId = Redacted.value(out.keyId);
       const keys = yield* appsync.listApiKeys({ apiId: out.apiId });
-      expect(keys.apiKeys?.map((k) => k.id)).toContain(out.keyId);
-      expect(keys.apiKeys?.find((k) => k.id === out.keyId)?.description).toBe(
+      expect(keys.apiKeys?.map((k) => k.id)).toContain(keyId);
+      expect(keys.apiKeys?.find((k) => k.id === keyId)?.description).toBe(
         "test key",
       );
 
       // Update in place: schema v2 + xray + query depth limit.
       const updated = yield* deployApi(SCHEMA_V2, true);
       expect(updated.apiId).toBe(out.apiId);
-      expect(updated.keyId).toBe(out.keyId);
+      expect(Redacted.value(updated.keyId)).toBe(keyId);
 
       const afterUpdate = yield* appsync.getGraphqlApi({ apiId: out.apiId });
       expect(afterUpdate.graphqlApi?.xrayEnabled).toBe(true);
@@ -194,7 +196,7 @@ test.provider.skipIf(!process.env.AWS_TEST_APPSYNC_CACHE)(
             cache: {
               type: "SMALL",
               behavior: "FULL_REQUEST_CACHING",
-              ttl: 60,
+              ttl: "60 seconds",
             },
           });
           return { apiId: api.apiId };

@@ -1,5 +1,6 @@
 import * as databrew from "@distilled.cloud/aws/databrew";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -216,10 +217,11 @@ export interface JobProps {
    */
   maxRetries?: number;
   /**
-   * Job timeout in minutes.
-   * @default 2880
+   * Job timeout, e.g. `"90 minutes"` or `Duration.hours(2)`. DataBrew
+   * measures the timeout in whole minutes.
+   * @default "48 hours"
    */
-  timeout?: number;
+  timeout?: Duration.Input;
   /**
    * Tags to apply to the job. Merged with internal Alchemy tags.
    */
@@ -406,7 +408,10 @@ const buildCommon = (props: JobProps) => ({
   MaxCapacity: props.maxCapacity,
   MaxRetries: props.maxRetries,
   RoleArn: props.role,
-  Timeout: props.timeout,
+  Timeout:
+    props.timeout !== undefined
+      ? Math.round(Duration.toMinutes(props.timeout))
+      : undefined,
 });
 
 export const JobProvider = () =>

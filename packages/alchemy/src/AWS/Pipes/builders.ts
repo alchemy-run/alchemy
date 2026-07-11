@@ -1,4 +1,5 @@
 import type * as pipes from "@distilled.cloud/aws/pipes";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { Table } from "../DynamoDB/Table.ts";
 import * as IAM from "../IAM/index.ts";
@@ -19,9 +20,11 @@ export interface PipeSourceOptions {
    */
   batchSize?: number;
   /**
-   * Maximum time (seconds) to gather records before delivering a batch.
+   * Maximum time to gather records before delivering a batch (e.g.
+   * `"30 seconds"` or `Duration.seconds(30)`). Sent to the API in whole
+   * seconds.
    */
-  maximumBatchingWindowInSeconds?: number;
+  maximumBatchingWindowInSeconds?: Duration.Input;
   /**
    * Where to start reading a Kinesis or DynamoDB stream source. Ignored
    * for SQS sources. Changing it triggers a replacement.
@@ -184,6 +187,11 @@ interface SourceSpec {
 
 const sourceSpec = (state: PipeBuilderState): SourceSpec => {
   const { source, options, filters } = state;
+  // The wire field is whole seconds.
+  const maximumBatchingWindowInSeconds =
+    options.maximumBatchingWindowInSeconds !== undefined
+      ? Math.round(Duration.toSeconds(options.maximumBatchingWindowInSeconds))
+      : undefined;
   const filterCriteria: Pick<pipes.PipeSourceParameters, "FilterCriteria"> =
     filters.length > 0
       ? { FilterCriteria: { Filters: filters.map((Pattern) => ({ Pattern })) } }
@@ -207,8 +215,7 @@ const sourceSpec = (state: PipeBuilderState): SourceSpec => {
           ...filterCriteria,
           SqsQueueParameters: {
             BatchSize: options.batchSize,
-            MaximumBatchingWindowInSeconds:
-              options.maximumBatchingWindowInSeconds,
+            MaximumBatchingWindowInSeconds: maximumBatchingWindowInSeconds,
           },
         },
       };
@@ -234,8 +241,7 @@ const sourceSpec = (state: PipeBuilderState): SourceSpec => {
           KinesisStreamParameters: {
             StartingPosition: options.startingPosition ?? "LATEST",
             BatchSize: options.batchSize,
-            MaximumBatchingWindowInSeconds:
-              options.maximumBatchingWindowInSeconds,
+            MaximumBatchingWindowInSeconds: maximumBatchingWindowInSeconds,
           },
         },
       };
@@ -259,8 +265,7 @@ const sourceSpec = (state: PipeBuilderState): SourceSpec => {
           DynamoDBStreamParameters: {
             StartingPosition: options.startingPosition ?? "LATEST",
             BatchSize: options.batchSize,
-            MaximumBatchingWindowInSeconds:
-              options.maximumBatchingWindowInSeconds,
+            MaximumBatchingWindowInSeconds: maximumBatchingWindowInSeconds,
           },
         },
       };

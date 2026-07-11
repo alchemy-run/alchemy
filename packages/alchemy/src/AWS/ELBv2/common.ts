@@ -1,4 +1,7 @@
 import type * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import type * as Duration from "effect/Duration";
+import * as Redacted from "effect/Redacted";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { TargetGroupArn } from "./TargetGroup.ts";
 
 /**
@@ -34,10 +37,11 @@ export interface ForwardAction {
     /** Whether target-group stickiness is enabled. */
     enabled: boolean;
     /**
-     * The time, in seconds, a client remains pinned to a target group.
-     * @default 3600
+     * The time a client remains pinned to a target group — e.g. `"1 hour"`
+     * or `Duration.hours(1)`. Sent to AWS as whole seconds.
+     * @default "1 hour"
      */
-    durationSeconds?: number;
+    durationSeconds?: Duration.Input;
   };
 }
 
@@ -89,10 +93,11 @@ export interface AuthenticateOidcAction {
   userInfoEndpoint: string;
   clientId: string;
   /** Required on first use; omit with `useExistingClientSecret: true` to keep the existing one. */
-  clientSecret?: string;
+  clientSecret?: Redacted.Redacted<string>;
   scope?: string;
   sessionCookieName?: string;
-  sessionTimeout?: number;
+  /** The maximum duration of the authentication session — e.g. `"7 days"`. Sent to AWS as whole seconds. */
+  sessionTimeout?: Duration.Input;
   onUnauthenticatedRequest?: "deny" | "allow" | "authenticate";
   useExistingClientSecret?: boolean;
 }
@@ -108,7 +113,8 @@ export interface AuthenticateCognitoAction {
   userPoolDomain: string;
   scope?: string;
   sessionCookieName?: string;
-  sessionTimeout?: number;
+  /** The maximum duration of the authentication session — e.g. `"7 days"`. Sent to AWS as whole seconds. */
+  sessionTimeout?: Duration.Input;
   onUnauthenticatedRequest?: "deny" | "allow" | "authenticate";
 }
 
@@ -149,7 +155,7 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
             TargetGroupStickinessConfig: action.stickiness
               ? {
                   Enabled: action.stickiness.enabled,
-                  DurationSeconds: action.stickiness.durationSeconds,
+                  DurationSeconds: toSeconds(action.stickiness.durationSeconds),
                 }
               : undefined,
           },
@@ -194,10 +200,13 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
             TokenEndpoint: action.tokenEndpoint,
             UserInfoEndpoint: action.userInfoEndpoint,
             ClientId: action.clientId,
-            ClientSecret: action.clientSecret,
+            ClientSecret:
+              action.clientSecret !== undefined
+                ? Redacted.value(action.clientSecret)
+                : undefined,
             Scope: action.scope,
             SessionCookieName: action.sessionCookieName,
-            SessionTimeout: action.sessionTimeout,
+            SessionTimeout: toSeconds(action.sessionTimeout),
             OnUnauthenticatedRequest: action.onUnauthenticatedRequest,
             UseExistingClientSecret: action.useExistingClientSecret,
           },
@@ -212,7 +221,7 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
             UserPoolDomain: action.userPoolDomain,
             Scope: action.scope,
             SessionCookieName: action.sessionCookieName,
-            SessionTimeout: action.sessionTimeout,
+            SessionTimeout: toSeconds(action.sessionTimeout),
             OnUnauthenticatedRequest: action.onUnauthenticatedRequest,
           },
         };

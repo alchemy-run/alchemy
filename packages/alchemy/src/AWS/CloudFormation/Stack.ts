@@ -1,5 +1,6 @@
 import * as cloudformation from "@distilled.cloud/aws/cloudformation";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -87,10 +88,11 @@ export interface StackProps {
    */
   onFailure?: OnFailure;
   /**
-   * Amount of time (in minutes) that can pass before the stack status
-   * becomes `CREATE_FAILED`.
+   * Amount of time that can pass before the stack status becomes
+   * `CREATE_FAILED` (e.g. `"30 minutes"` or `Duration.minutes(30)`; a bare
+   * number is milliseconds).
    */
-  timeoutInMinutes?: number;
+  timeoutInMinutes?: Duration.Input;
   /**
    * User-defined tags propagated to every resource in the stack.
    */
@@ -382,7 +384,10 @@ export const StackProvider = () =>
               NotificationARNs: news.notificationARNs,
               DisableRollback: news.disableRollback,
               OnFailure: news.onFailure,
-              TimeoutInMinutes: news.timeoutInMinutes,
+              TimeoutInMinutes:
+                news.timeoutInMinutes !== undefined
+                  ? Math.round(Duration.toMinutes(news.timeoutInMinutes))
+                  : undefined,
               Tags: toWireTags(desiredTags),
             });
             const settled = yield* waitForSettled(created.StackId!, name);

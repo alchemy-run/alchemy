@@ -1,4 +1,5 @@
 import * as rds from "@distilled.cloud/aws/rds";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -39,9 +40,10 @@ export interface DBProxyProps {
    */
   requireTLS?: boolean;
   /**
-   * Idle client timeout in seconds.
+   * Idle client timeout (e.g. `"30 minutes"` or `Duration.minutes(30)`).
+   * Sent to the API in whole seconds.
    */
-  idleClientTimeout?: number;
+  idleClientTimeout?: Duration.Input;
   /**
    * Enable debug logging.
    */
@@ -226,6 +228,11 @@ export const DBProxyProvider = () =>
           const name = output?.dbProxyName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          // Duration prop → the wire unit the RDS API expects (whole seconds).
+          const idleClientTimeoutSeconds =
+            news.idleClientTimeout !== undefined
+              ? Math.round(Duration.toSeconds(news.idleClientTimeout))
+              : undefined;
 
           // Observe — fetch live proxy state.
           let observed = yield* readProxy(name);
@@ -242,7 +249,7 @@ export const DBProxyProvider = () =>
                 VpcSubnetIds: news.vpcSubnetIds,
                 VpcSecurityGroupIds: news.vpcSecurityGroupIds,
                 RequireTLS: news.requireTLS,
-                IdleClientTimeout: news.idleClientTimeout,
+                IdleClientTimeout: idleClientTimeoutSeconds,
                 DebugLogging: news.debugLogging,
                 EndpointNetworkType: news.endpointNetworkType,
                 TargetConnectionNetworkType: news.targetConnectionNetworkType,
@@ -266,7 +273,7 @@ export const DBProxyProvider = () =>
               RoleArn: news.roleArn,
               SecurityGroups: news.vpcSecurityGroupIds,
               RequireTLS: news.requireTLS,
-              IdleClientTimeout: news.idleClientTimeout,
+              IdleClientTimeout: idleClientTimeoutSeconds,
               DebugLogging: news.debugLogging,
               NewDBProxyName:
                 news.dbProxyName && news.dbProxyName !== name

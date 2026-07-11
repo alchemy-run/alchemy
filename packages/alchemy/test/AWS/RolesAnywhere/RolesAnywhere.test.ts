@@ -4,6 +4,7 @@ import { Crl, Profile, TrustAnchor } from "@/AWS/RolesAnywhere";
 import * as Test from "@/Test/Vitest";
 import * as rolesanywhere from "@distilled.cloud/aws/rolesanywhere";
 import { expect } from "@effect/vitest";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -75,7 +76,7 @@ test.provider(
         crlData: string;
         crlEnabled: boolean;
         crlOnAnchorB: boolean;
-        durationSeconds: number;
+        durationSeconds: Duration.Input;
         sessionPolicy?: string;
       }) =>
         Effect.gen(function* () {
@@ -115,7 +116,7 @@ test.provider(
           crlData: CRL1_PEM,
           crlEnabled: true,
           crlOnAnchorB: false,
-          durationSeconds: 3600,
+          durationSeconds: "1 hour",
         }),
       );
 
@@ -155,7 +156,7 @@ test.provider(
           crlData: CRL2_PEM, // updateCrl data
           crlEnabled: false, // disableCrl
           crlOnAnchorB: false,
-          durationSeconds: 7200, // updateProfile
+          durationSeconds: "2 hours", // updateProfile
           sessionPolicy, // updateProfile
         }),
       );
@@ -201,7 +202,7 @@ test.provider(
           crlData: CRL2_PEM,
           crlEnabled: false,
           crlOnAnchorB: true,
-          durationSeconds: 7200,
+          durationSeconds: "2 hours",
           sessionPolicy,
         }),
       );

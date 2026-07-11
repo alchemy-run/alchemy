@@ -1,6 +1,45 @@
 import type * as iam from "@distilled.cloud/aws/iam";
+import * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import type { PolicyDocument } from "./Policy.ts";
+
+/**
+ * Reconstruct a valid `Duration.Input` from a value that may have
+ * round-tripped through persisted state JSON, which flattens a `Duration`
+ * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
+ * shape `Duration.toSeconds` silently decodes as zero.
+ */
+const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return typeof input === "object" && input !== null && json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional {@link Duration.Input} prop to whole wire seconds. */
+export const durationToSeconds = (
+  input: Duration.Input | undefined,
+): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toSeconds(fromStateDurationInput(input)));
+
+/** Convert an optional {@link Duration.Input} prop to whole wire days. */
+export const durationToDays = (
+  input: Duration.Input | undefined,
+): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toDays(fromStateDurationInput(input)));
 
 export const toTagRecord = (
   tags: Array<{ Key?: string; Value?: string }> | undefined,

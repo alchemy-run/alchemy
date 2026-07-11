@@ -4,11 +4,12 @@ import * as Test from "@/Test/Vitest";
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const TEST_PASSWORD = "AlchemyMemoryDbTestPass01";
+const TEST_PASSWORD = Redacted.make("AlchemyMemoryDbTestPass01");
 
 // Ungated typed-error probe: proves the not-found tag the read/delete paths
 // depend on is in the distilled error union.

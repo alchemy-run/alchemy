@@ -1,4 +1,5 @@
 import * as paymentcryptography from "@distilled.cloud/aws/payment-cryptography";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -110,12 +111,13 @@ export interface KeyProps {
    */
   deriveKeyUsage?: string;
   /**
-   * The waiting period, in days, before a deleted key is permanently
-   * removed (`3` - `180`). During the window the key is `DELETE_PENDING`
-   * and can be restored.
-   * @default 3
+   * The waiting period before a deleted key is permanently removed, e.g.
+   * `"7 days"` or `Duration.days(7)` (`3` - `180` days; sent to the API as
+   * whole days — a bare number is milliseconds). During the window the key
+   * is `DELETE_PENDING` and can be restored.
+   * @default "3 days"
    */
-  deleteWindowInDays?: number;
+  deleteWindowInDays?: Duration.Input;
   /**
    * Tags to apply to the key. Merged with internal Alchemy tags.
    */
@@ -201,6 +203,35 @@ export interface Key extends Resource<
  * ```
  */
 export const Key = Resource<Key>("AWS.PaymentCryptography.Key");
+
+/**
+ * Reconstruct a valid `Duration.Input` from a value that may have
+ * round-tripped through persisted state JSON, which flattens a `Duration`
+ * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
+ * shape `Duration.toDays` silently decodes as zero. The delete lifecycle
+ * reads this prop from persisted `olds`.
+ */
+const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return typeof input === "object" && input !== null && json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Wire unit for the key deletion window is whole days. */
+const toWireDays = (input: Duration.Input | undefined): number | undefined =>
+  input !== undefined
+    ? Math.round(Duration.toDays(fromStateDurationInput(input)))
+    : undefined;
 
 const toWireKeyAttributes = (
   attributes: KeyAttributes,
@@ -395,7 +426,7 @@ export const KeyProvider = () =>
           yield* paymentcryptography
             .deleteKey({
               KeyIdentifier: output.keyArn,
-              DeleteKeyInDays: olds.deleteWindowInDays ?? 3,
+              DeleteKeyInDays: toWireDays(olds.deleteWindowInDays) ?? 3,
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),

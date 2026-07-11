@@ -48,7 +48,7 @@ test.provider(
             name: "alchemy-test-cloudmap-private.local",
             vpc: vpc.vpcId,
             description: "initial description",
-            ttl: 60,
+            ttl: "60 seconds",
             tags: { Environment: "test" },
           });
         }),
@@ -84,7 +84,7 @@ test.provider(
             name: "alchemy-test-cloudmap-private.local",
             vpc: vpc.vpcId,
             description: "updated description",
-            ttl: 120,
+            ttl: "120 seconds",
             tags: { Environment: "test" },
           });
         }),

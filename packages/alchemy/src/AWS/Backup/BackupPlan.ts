@@ -1,4 +1,5 @@
 import * as backup from "@distilled.cloud/aws/backup";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -14,14 +15,16 @@ import type { Providers } from "../Providers.ts";
  */
 export interface BackupRuleLifecycle {
   /**
-   * Number of days after creation that a recovery point is moved to cold
-   * storage. Must be at least 90 days less than `deleteAfterDays`.
+   * Time after creation that a recovery point is moved to cold storage,
+   * e.g. `"30 days"` (whole days on the wire). Must be at least 90 days
+   * less than `deleteAfterDays`.
    */
-  moveToColdStorageAfterDays?: number;
+  moveToColdStorageAfterDays?: Duration.Input;
   /**
-   * Number of days after creation that a recovery point is deleted.
+   * Time after creation that a recovery point is deleted, e.g. `"365 days"`
+   * (whole days on the wire).
    */
-  deleteAfterDays?: number;
+  deleteAfterDays?: Duration.Input;
   /**
    * Opt recovery points of supported resources into archive-tier storage.
    */
@@ -50,15 +53,15 @@ export interface BackupPlanRule {
    */
   scheduleExpressionTimezone?: string;
   /**
-   * Number of minutes after the scheduled time within which a backup must
-   * start, or it is canceled.
+   * Time after the scheduled time within which a backup must start, or it
+   * is canceled, e.g. `"1 hour"` (whole minutes on the wire).
    */
-  startWindowMinutes?: number;
+  startWindowMinutes?: Duration.Input;
   /**
-   * Number of minutes within which a backup must complete, or it is
-   * canceled.
+   * Time within which a backup must complete, or it is canceled, e.g.
+   * `"3 hours"` (whole minutes on the wire).
    */
-  completionWindowMinutes?: number;
+  completionWindowMinutes?: Duration.Input;
   /**
    * Enables continuous backups (point-in-time restore) for supported
    * resources.
@@ -125,9 +128,9 @@ export interface BackupPlan extends Resource<
  *       ruleName: "DailyBackups",
  *       targetBackupVaultName: vault.backupVaultName,
  *       scheduleExpression: "cron(0 5 ? * * *)",
- *       startWindowMinutes: 60,
- *       completionWindowMinutes: 180,
- *       lifecycle: { deleteAfterDays: 30 },
+ *       startWindowMinutes: "1 hour",
+ *       completionWindowMinutes: "3 hours",
+ *       lifecycle: { deleteAfterDays: "30 days" },
  *     },
  *   ],
  * });
@@ -142,8 +145,8 @@ export interface BackupPlan extends Resource<
  *       targetBackupVaultName: vault.backupVaultName,
  *       scheduleExpression: "cron(0 5 1 * ? *)",
  *       lifecycle: {
- *         moveToColdStorageAfterDays: 30,
- *         deleteAfterDays: 365,
+ *         moveToColdStorageAfterDays: "30 days",
+ *         deleteAfterDays: "365 days",
  *       },
  *     },
  *   ],
@@ -152,19 +155,29 @@ export interface BackupPlan extends Resource<
  */
 export const BackupPlan = Resource<BackupPlan>("AWS.Backup.BackupPlan");
 
+/** Convert an optional {@link Duration.Input} to whole wire minutes. */
+const toWireMinutes = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined ? undefined : Math.round(Duration.toMinutes(input));
+
+/** Convert an optional {@link Duration.Input} to whole wire days. */
+const toWireDays = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined ? undefined : Math.round(Duration.toDays(input));
+
 const toRuleInput = (rule: BackupPlanRule): backup.BackupRuleInput => ({
   RuleName: rule.ruleName,
   TargetBackupVaultName: rule.targetBackupVaultName,
   ScheduleExpression: rule.scheduleExpression,
   ScheduleExpressionTimezone: rule.scheduleExpressionTimezone,
-  StartWindowMinutes: rule.startWindowMinutes,
-  CompletionWindowMinutes: rule.completionWindowMinutes,
+  StartWindowMinutes: toWireMinutes(rule.startWindowMinutes),
+  CompletionWindowMinutes: toWireMinutes(rule.completionWindowMinutes),
   EnableContinuousBackup: rule.enableContinuousBackup,
   RecoveryPointTags: rule.recoveryPointTags,
   Lifecycle: rule.lifecycle
     ? {
-        MoveToColdStorageAfterDays: rule.lifecycle.moveToColdStorageAfterDays,
-        DeleteAfterDays: rule.lifecycle.deleteAfterDays,
+        MoveToColdStorageAfterDays: toWireDays(
+          rule.lifecycle.moveToColdStorageAfterDays,
+        ),
+        DeleteAfterDays: toWireDays(rule.lifecycle.deleteAfterDays),
         OptInToArchiveForSupportedResources:
           rule.lifecycle.optInToArchiveForSupportedResources,
       }

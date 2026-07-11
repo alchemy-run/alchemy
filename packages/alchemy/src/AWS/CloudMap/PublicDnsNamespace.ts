@@ -1,4 +1,5 @@
 import * as sd from "@distilled.cloud/aws/servicediscovery";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -29,10 +30,11 @@ export interface PublicDnsNamespaceProps {
    */
   description?: string;
   /**
-   * The TTL (in seconds) of the SOA record for the namespace's Route 53
-   * public hosted zone.
+   * The TTL of the SOA record for the namespace's Route 53 public hosted
+   * zone (e.g. `"60 seconds"` or `Duration.seconds(60)`; a bare number is
+   * milliseconds).
    */
-  ttl?: number;
+  ttl?: Duration.Input;
   /**
    * Tags to apply to the namespace. Merged with internal Alchemy tags.
    */
@@ -156,6 +158,10 @@ export const PublicDnsNamespaceProvider = () =>
           const name = output?.namespaceName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
+          const desiredTtl =
+            news.ttl !== undefined
+              ? Math.round(Duration.toSeconds(news.ttl))
+              : undefined;
 
           // 1. OBSERVE
           let namespace = yield* observeNamespace(
@@ -171,8 +177,8 @@ export const PublicDnsNamespaceProvider = () =>
                 Name: name,
                 Description: news.description,
                 Properties:
-                  news.ttl !== undefined
-                    ? { DnsProperties: { SOA: { TTL: news.ttl } } }
+                  desiredTtl !== undefined
+                    ? { DnsProperties: { SOA: { TTL: desiredTtl } } }
                     : undefined,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
@@ -206,14 +212,15 @@ export const PublicDnsNamespaceProvider = () =>
           const descriptionDelta =
             news.description !== undefined &&
             news.description !== namespace.Description;
-          const ttlDelta = news.ttl !== undefined && news.ttl !== observedTtl;
+          const ttlDelta =
+            desiredTtl !== undefined && desiredTtl !== observedTtl;
           if (descriptionDelta || ttlDelta) {
             const update = yield* sd.updatePublicDnsNamespace({
               Id: namespace.Id,
               Namespace: {
                 Description: descriptionDelta ? news.description : undefined,
                 Properties: ttlDelta
-                  ? { DnsProperties: { SOA: { TTL: news.ttl! } } }
+                  ? { DnsProperties: { SOA: { TTL: desiredTtl! } } }
                   : undefined,
               },
             });

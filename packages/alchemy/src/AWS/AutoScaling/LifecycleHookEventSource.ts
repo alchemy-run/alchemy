@@ -1,3 +1,4 @@
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import {
@@ -46,10 +47,12 @@ export interface LifecycleHookEventSourceProps {
    */
   lifecycleTransition: LifecycleTransition;
   /**
-   * Maximum seconds an instance stays paused before `defaultResult` applies.
-   * @default 3600
+   * Maximum time an instance stays paused before `defaultResult` applies,
+   * e.g. `"5 minutes"` or `Duration.seconds(300)` (whole seconds on the
+   * wire).
+   * @default "1 hour"
    */
-  heartbeatTimeout?: number;
+  heartbeatTimeout?: Duration.Input;
   /**
    * Action taken when the hook times out.
    * @default "ABANDON"
@@ -85,7 +88,7 @@ const detailTypeFor = (transition: string): string =>
  * const lifecycle = yield* CompleteLifecycleAction(group);
  * yield* consumeLifecycleActions(
  *   group,
- *   { lifecycleTransition: "TERMINATING", heartbeatTimeout: 300 },
+ *   { lifecycleTransition: "TERMINATING", heartbeatTimeout: "300 seconds" },
  *   (events) =>
  *     Stream.runForEach(events, (event) =>
  *       lifecycle

@@ -56,7 +56,7 @@ const assertFilterDeleted = (logGroupName: string, filterName: string) =>
 const infra = (filterProps: { filterName?: string; filterPattern: string }) =>
   Effect.gen(function* () {
     const logGroup = yield* LogGroup("SubFilterLogGroup", {
-      retentionInDays: 1,
+      retentionInDays: "1 day",
     });
     const stream = yield* KinesisStream("SubFilterStream", {});
     const role = yield* Role("SubFilterDeliveryRole", {

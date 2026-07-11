@@ -1,5 +1,6 @@
 import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -27,11 +28,12 @@ export interface StageAutoParticipantRecordingConfiguration {
    */
   mediaTypes?: string[];
   /**
-   * Reconnect window (seconds) within which a rejoining participant is
-   * recorded into the same file set (`0` disables).
+   * Reconnect window within which a rejoining participant is recorded into
+   * the same file set, e.g. `"2 minutes"` or `Duration.seconds(30)` (`0`
+   * disables). The API stores whole seconds.
    * @default 0
    */
-  recordingReconnectWindowSeconds?: number;
+  recordingReconnectWindowSeconds?: Duration.Input;
   /**
    * Whether participant replicas are also recorded.
    * @default true
@@ -107,9 +109,30 @@ export class IvsRealtimeStageIncomplete extends Data.TaggedError(
   "IvsRealtimeStageIncomplete",
 )<{ message: string }> {}
 
+/**
+ * Convert the recording configuration prop shape (Duration-typed reconnect
+ * window) to the wire shape the IVS Real-Time API expects (whole seconds).
+ */
+const toWireRecordingConfig = (
+  config: StageAutoParticipantRecordingConfiguration | undefined,
+): ivsrealtime.AutoParticipantRecordingConfiguration | undefined =>
+  config === undefined
+    ? undefined
+    : {
+        storageConfigurationArn: config.storageConfigurationArn,
+        mediaTypes: config.mediaTypes,
+        recordingReconnectWindowSeconds:
+          config.recordingReconnectWindowSeconds !== undefined
+            ? Math.round(
+                Duration.toSeconds(config.recordingReconnectWindowSeconds),
+              )
+            : undefined,
+        recordParticipantReplicas: config.recordParticipantReplicas,
+      };
+
 /** Deep-equality on the recording configuration's user-specified fields. */
 const recordingConfigDrifted = (
-  desired: StageAutoParticipantRecordingConfiguration | undefined,
+  desired: ivsrealtime.AutoParticipantRecordingConfiguration | undefined,
   observed: ivsrealtime.AutoParticipantRecordingConfiguration | undefined,
 ): boolean => {
   if (desired === undefined) return false; // unspecified — leave alone
@@ -210,6 +233,9 @@ export const StageProvider = () =>
           const name = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          const desiredRecording = toWireRecordingConfig(
+            news.autoParticipantRecordingConfiguration,
+          );
 
           // 1. Observe.
           let observed = output?.stageArn
@@ -221,8 +247,7 @@ export const StageProvider = () =>
             const created = yield* ivsrealtime
               .createStage({
                 name,
-                autoParticipantRecordingConfiguration:
-                  news.autoParticipantRecordingConfiguration,
+                autoParticipantRecordingConfiguration: desiredRecording,
                 tags: desiredTags,
               })
               .pipe(retryWhileThrottled);
@@ -243,12 +268,11 @@ export const StageProvider = () =>
           if (observed.name !== name) patch.name = name;
           if (
             recordingConfigDrifted(
-              news.autoParticipantRecordingConfiguration,
+              desiredRecording,
               observed.autoParticipantRecordingConfiguration,
             )
           ) {
-            patch.autoParticipantRecordingConfiguration =
-              news.autoParticipantRecordingConfiguration;
+            patch.autoParticipantRecordingConfiguration = desiredRecording;
           }
           if (Object.keys(patch).length > 0) {
             yield* ivsrealtime

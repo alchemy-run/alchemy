@@ -1,4 +1,5 @@
 import * as sd from "@distilled.cloud/aws/servicediscovery";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -23,9 +24,10 @@ export interface ServiceDnsRecord {
    */
   type: "A" | "AAAA" | "SRV" | "CNAME";
   /**
-   * The TTL (in seconds) of the DNS record. Mutable.
+   * The TTL of the DNS record (e.g. `"10 seconds"` or
+   * `Duration.seconds(10)`; a bare number is milliseconds). Mutable.
    */
-  ttl: number;
+  ttl: Duration.Input;
 }
 
 export interface ServiceProps {
@@ -123,7 +125,7 @@ export interface Service extends Resource<
  *
  * const service = yield* AWS.CloudMap.Service("Backend", {
  *   namespaceId: namespace.namespaceId,
- *   dnsRecords: [{ type: "A", ttl: 10 }],
+ *   dnsRecords: [{ type: "A", ttl: "10 seconds" }],
  *   routingPolicy: "MULTIVALUE",
  * });
  * ```
@@ -140,7 +142,7 @@ export interface Service extends Resource<
  * ```typescript
  * const service = yield* AWS.CloudMap.Service("Backend", {
  *   namespaceId: namespace.namespaceId,
- *   dnsRecords: [{ type: "SRV", ttl: 10 }],
+ *   dnsRecords: [{ type: "SRV", ttl: "10 seconds" }],
  *   healthCheckCustomConfig: {},
  * });
  * ```
@@ -213,7 +215,7 @@ export const ServiceProvider = () =>
           ? {
               DnsRecords: props.dnsRecords.map((record) => ({
                 Type: record.type,
-                TTL: record.ttl,
+                TTL: Math.round(Duration.toSeconds(record.ttl)),
               })),
               RoutingPolicy: props.routingPolicy,
             }

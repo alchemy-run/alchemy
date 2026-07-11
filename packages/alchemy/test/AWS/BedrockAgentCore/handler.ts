@@ -23,7 +23,7 @@ export default AgentCoreTestFunction.make(
   },
   Effect.gen(function* () {
     const memory = yield* AgentCore.Memory("TestMemory", {
-      eventExpiryDuration: 7,
+      eventExpiryDuration: "7 days",
       memoryStrategies: [
         {
           semanticMemoryStrategy: {

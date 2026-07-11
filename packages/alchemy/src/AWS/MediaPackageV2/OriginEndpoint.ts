@@ -1,4 +1,5 @@
 import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -6,6 +7,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   matchesDesired,
@@ -46,10 +48,11 @@ export interface OriginEndpointProps {
    */
   description?: string;
   /**
-   * The size of the window (in seconds, `60` - `1,209,600`) from which
-   * viewers can start over or catch up on previously streamed content.
+   * The size of the window (1 minute - 14 days, e.g. `"1 hour"` or
+   * `Duration.hours(1)`) from which viewers can start over or catch up on
+   * previously streamed content. Sent to the API in whole seconds.
    */
-  startoverWindowSeconds?: number;
+  startoverWindowSeconds?: Duration.Input;
   /**
    * HLS manifest configurations served by the endpoint.
    */
@@ -150,7 +153,7 @@ export interface OriginEndpoint extends Resource<
  *   channelGroupName: group.channelGroupName,
  *   channelName: channel.channelName,
  *   containerType: "TS",
- *   startoverWindowSeconds: 3600,
+ *   startoverWindowSeconds: "1 hour",
  *   hlsManifests: [{ ManifestName: "index" }],
  * });
  * ```
@@ -281,6 +284,8 @@ export const OriginEndpointProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const channelGroupName = news.channelGroupName;
           const channelName = news.channelName;
+          // The wire field is whole seconds.
+          const startoverWindowSeconds = toSeconds(news.startoverWindowSeconds);
           const name =
             output?.originEndpointName ?? (yield* createName(id, news));
 
@@ -302,7 +307,7 @@ export const OriginEndpointProvider = () =>
                 ContainerType: news.containerType,
                 Segment: news.segment,
                 Description: news.description,
-                StartoverWindowSeconds: news.startoverWindowSeconds,
+                StartoverWindowSeconds: startoverWindowSeconds,
                 HlsManifests: news.hlsManifests,
                 LowLatencyHlsManifests: news.lowLatencyHlsManifests,
                 DashManifests: news.dashManifests,
@@ -330,7 +335,7 @@ export const OriginEndpointProvider = () =>
             const desired = {
               Segment: news.segment,
               Description: news.description ?? "",
-              StartoverWindowSeconds: news.startoverWindowSeconds,
+              StartoverWindowSeconds: startoverWindowSeconds,
               HlsManifests: news.hlsManifests ?? [],
               LowLatencyHlsManifests: news.lowLatencyHlsManifests ?? [],
               DashManifests: news.dashManifests ?? [],
@@ -359,7 +364,7 @@ export const OriginEndpointProvider = () =>
                 ContainerType: news.containerType,
                 Segment: news.segment,
                 Description: news.description,
-                StartoverWindowSeconds: news.startoverWindowSeconds,
+                StartoverWindowSeconds: startoverWindowSeconds,
                 HlsManifests: news.hlsManifests,
                 LowLatencyHlsManifests: news.lowLatencyHlsManifests,
                 DashManifests: news.dashManifests,

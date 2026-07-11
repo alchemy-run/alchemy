@@ -1,4 +1,5 @@
 import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -37,9 +38,11 @@ export interface ServiceProps {
    */
   certificateArn?: string;
   /**
-   * Idle timeout in seconds for connections to the service.
+   * Idle timeout for connections to the service, e.g. `"60 seconds"` or
+   * `Duration.minutes(1)` (a bare number is milliseconds). Rounded to whole
+   * seconds on the wire.
    */
-  idleTimeoutSeconds?: number;
+  idleTimeoutSeconds?: Duration.Input;
   /**
    * User-defined tags to apply to the service.
    */
@@ -80,11 +83,39 @@ export interface Service extends Resource<
  *   customDomainName: "payments.internal.example.com",
  *   certificateArn: cert.certificateArn,
  *   authType: "AWS_IAM",
- *   idleTimeoutSeconds: 60,
+ *   idleTimeoutSeconds: "60 seconds",
  * });
  * ```
  */
 export const Service = Resource<Service>("AWS.VpcLattice.Service");
+
+/**
+ * Normalize a `Duration.Input` that may have round-tripped through state
+ * JSON (which flattens a `Duration` to its `toJSON` shape
+ * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
+ * `Duration.Input`) back into an input `Duration.toSeconds` accepts.
+ */
+const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional duration input to whole wire seconds. */
+const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toSeconds(normalizeDurationInput(input)));
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -183,6 +214,9 @@ export const ServiceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredAuthType = news.authType ?? "NONE";
+          const desiredIdleTimeoutSeconds = toWireSeconds(
+            news.idleTimeoutSeconds,
+          );
 
           const existing = output?.serviceId
             ? yield* observe(output.serviceId)
@@ -197,7 +231,7 @@ export const ServiceProvider = () =>
                 authType: desiredAuthType,
                 customDomainName: news.customDomainName,
                 certificateArn: news.certificateArn,
-                idleTimeoutSeconds: news.idleTimeoutSeconds,
+                idleTimeoutSeconds: desiredIdleTimeoutSeconds,
               })
               .pipe(
                 Effect.catchTag("ConflictException", () => findByName(name)),
@@ -220,13 +254,13 @@ export const ServiceProvider = () =>
           const needsUpdate =
             (stable?.authType ?? "NONE") !== desiredAuthType ||
             stable?.certificateArn !== news.certificateArn ||
-            stable?.idleTimeoutSeconds !== news.idleTimeoutSeconds;
+            stable?.idleTimeoutSeconds !== desiredIdleTimeoutSeconds;
           if (needsUpdate) {
             yield* vpclattice.updateService({
               serviceIdentifier: serviceId,
               authType: desiredAuthType,
               certificateArn: news.certificateArn,
-              idleTimeoutSeconds: news.idleTimeoutSeconds,
+              idleTimeoutSeconds: desiredIdleTimeoutSeconds,
             });
           }
 

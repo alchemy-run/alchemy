@@ -4,6 +4,7 @@ import * as Test from "@/Test/Vitest";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
@@ -43,7 +44,7 @@ test.provider(
       const vpc = yield* getDefaultVpc;
 
       const makeStack = (
-        records: { type: "A" | "SRV"; ttl: number }[],
+        records: { type: "A" | "SRV"; ttl: Duration.Input }[],
         description: string,
       ) =>
         Effect.gen(function* () {
@@ -64,7 +65,7 @@ test.provider(
         });
 
       const { namespace, service } = yield* stack.deploy(
-        makeStack([{ type: "A", ttl: 10 }], "initial"),
+        makeStack([{ type: "A", ttl: "10 seconds" }], "initial"),
       );
 
       expect(service.serviceId).toBeDefined();
@@ -93,7 +94,7 @@ test.provider(
 
       // TTL + description are mutable via updateService
       const updated = yield* stack.deploy(
-        makeStack([{ type: "A", ttl: 30 }], "updated"),
+        makeStack([{ type: "A", ttl: "30 seconds" }], "updated"),
       );
       expect(updated.service.serviceId).toBe(service.serviceId);
 
@@ -105,7 +106,7 @@ test.provider(
 
       // changing the record TYPE replaces the service
       const replaced = yield* stack.deploy(
-        makeStack([{ type: "SRV", ttl: 30 }], "updated"),
+        makeStack([{ type: "SRV", ttl: "30 seconds" }], "updated"),
       );
       expect(replaced.service.serviceId).not.toBe(service.serviceId);
       const afterReplace = yield* findService(replaced.service.serviceId);

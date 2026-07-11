@@ -105,7 +105,7 @@ export interface Configuration extends Resource<
  *   engineType: "ACTIVEMQ",
  *   engineVersion: "5.18",
  *   hostInstanceType: "mq.t3.micro",
- *   users: [{ username: "admin", password: "SuperSecretPassw0rd" }],
+ *   users: [{ username: "admin", password: Redacted.make("SuperSecretPassw0rd") }],
  *   configuration: {
  *     id: config.configurationId,
  *     revision: config.configurationRevision,

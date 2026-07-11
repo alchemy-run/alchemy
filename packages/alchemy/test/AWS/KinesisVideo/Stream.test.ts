@@ -52,7 +52,7 @@ test.provider(
       const stream = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Stream("TestVideoStream", {
-            dataRetentionInHours: 24,
+            dataRetentionInHours: "24 hours",
             tags: { Environment: "test" },
           });
         }),
@@ -73,7 +73,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Stream("TestVideoStream", {
-            dataRetentionInHours: 48,
+            dataRetentionInHours: "48 hours",
             mediaType: "video/h264",
             deviceName: "camera-1",
             tags: { Environment: "test", Extra: "yes" },
@@ -94,7 +94,7 @@ test.provider(
       const decreased = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Stream("TestVideoStream", {
-            dataRetentionInHours: 24,
+            dataRetentionInHours: "24 hours",
             mediaType: "video/h264",
             deviceName: "camera-1",
             tags: { Environment: "test" },

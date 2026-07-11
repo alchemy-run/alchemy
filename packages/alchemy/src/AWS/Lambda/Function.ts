@@ -232,6 +232,16 @@ export interface FunctionProps extends PlatformProps {
    * config to an alias instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
+  /**
+   * Wire-level `DurableConfig` applied at `CreateFunction`.
+   *
+   * @internal Set exclusively by the `AWS.Lambda.DurableFunction` wrapper —
+   * never set this directly. Durability is a **create-time** property of a
+   * Lambda function, so a presence change replaces the function (see `diff`).
+   * The base Function is otherwise durability-agnostic; author durable
+   * orchestrators with `AWS.Lambda.DurableFunction`.
+   */
+  durableConfig?: Lambda.DurableConfig;
 }
 
 /**
@@ -1423,6 +1433,9 @@ export default handler;
           // Always explicit so removing the `tracing` prop converges back to
           // the AWS default on update.
           TracingConfig: { Mode: news.tracing ?? "PassThrough" },
+          // Durability is create-time-only; a presence flip is a replacement
+          // (see `diff`), so passing the same value on update is a no-op.
+          DurableConfig: news.durableConfig,
           VpcConfig: vpc
             ? {
                 SubnetIds: vpc.subnetIds,
@@ -1490,6 +1503,7 @@ export default handler;
                 Timeout: createFunctionRequest.Timeout,
                 TracingConfig: createFunctionRequest.TracingConfig,
                 VpcConfig: createFunctionRequest.VpcConfig,
+                DurableConfig: createFunctionRequest.DurableConfig,
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
@@ -1687,6 +1701,12 @@ export default handler;
             output.functionName !==
             (yield* createFunctionName(id, news.functionName))
           ) {
+            return { action: "replace" };
+          }
+          if (!!olds.durableConfig !== !!news.durableConfig) {
+            // DurableConfig can only be enabled/disabled at CreateFunction —
+            // switching a logical id between Function and DurableFunction (or
+            // vice versa) must replace the physical function.
             return { action: "replace" };
           }
           if (

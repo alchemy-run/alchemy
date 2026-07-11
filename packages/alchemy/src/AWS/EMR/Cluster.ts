@@ -1,4 +1,5 @@
 import * as emr from "@distilled.cloud/aws/emr";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -8,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -160,12 +162,15 @@ export interface ClusterProps {
   stepConcurrencyLevel?: number;
   /**
    * Auto-termination policy — the cluster terminates itself after being idle
-   * for the configured number of seconds (60-604800). Updateable in place;
+   * for the configured duration (60 seconds to 7 days). Updateable in place;
    * removing the prop detaches the policy.
    */
   autoTerminationPolicy?: {
-    /** Idle time in seconds after which the cluster auto-terminates. */
-    idleTimeoutSeconds: number;
+    /**
+     * Idle time after which the cluster auto-terminates — e.g. `"1 hour"` or
+     * `Duration.hours(1)`. Sent to AWS as whole seconds.
+     */
+    idleTimeoutSeconds: Duration.Input;
   };
   /**
    * User-defined tags for the cluster.
@@ -222,7 +227,7 @@ export interface Cluster extends Resource<
  *   applications: ["Spark"],
  *   serviceRole: serviceRole.roleName,
  *   jobFlowRole: instanceProfile.instanceProfileName,
- *   autoTerminationPolicy: { idleTimeoutSeconds: 3600 },
+ *   autoTerminationPolicy: { idleTimeoutSeconds: "1 hour" },
  *   stepConcurrencyLevel: 4,
  * });
  * ```
@@ -544,7 +549,9 @@ export const ClusterProvider = () =>
               StepConcurrencyLevel: props.stepConcurrencyLevel,
               AutoTerminationPolicy: props.autoTerminationPolicy
                 ? {
-                    IdleTimeout: props.autoTerminationPolicy.idleTimeoutSeconds,
+                    IdleTimeout: toSeconds(
+                      props.autoTerminationPolicy.idleTimeoutSeconds,
+                    ),
                   }
                 : undefined,
               Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
@@ -624,14 +631,14 @@ export const ClusterProvider = () =>
               Effect.catch(() => Effect.succeed(undefined)),
             );
           if (props.autoTerminationPolicy !== undefined) {
-            if (
-              observedPolicy?.IdleTimeout !==
-              props.autoTerminationPolicy.idleTimeoutSeconds
-            ) {
+            const desiredIdleTimeout = toSeconds(
+              props.autoTerminationPolicy.idleTimeoutSeconds,
+            );
+            if (observedPolicy?.IdleTimeout !== desiredIdleTimeout) {
               yield* emr.putAutoTerminationPolicy({
                 ClusterId: clusterId,
                 AutoTerminationPolicy: {
-                  IdleTimeout: props.autoTerminationPolicy.idleTimeoutSeconds,
+                  IdleTimeout: desiredIdleTimeout,
                 },
               });
             }

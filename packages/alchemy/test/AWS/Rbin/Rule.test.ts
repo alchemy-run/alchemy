@@ -36,7 +36,7 @@ describe("AWS.Rbin.Rule", () => {
           Effect.gen(function* () {
             const rule = yield* Rule("SnapshotRetention", {
               resourceType: "EBS_SNAPSHOT",
-              retentionPeriod: { value: 7 },
+              retentionPeriod: "7 days",
               description: "alchemy rbin lifecycle test",
               resourceTags: [{ key: "alchemy-rbin-test", value: "snapshots" }],
               tags: { purpose: "alchemy-test" },
@@ -83,7 +83,7 @@ describe("AWS.Rbin.Rule", () => {
           Effect.gen(function* () {
             const rule = yield* Rule("SnapshotRetention", {
               resourceType: "EBS_SNAPSHOT",
-              retentionPeriod: { value: 14 },
+              retentionPeriod: "14 days",
               description: "alchemy rbin lifecycle test (updated)",
               resourceTags: [{ key: "alchemy-rbin-test", value: "updated" }],
               tags: { owner: "alchemy" },
@@ -121,7 +121,7 @@ describe("AWS.Rbin.Rule", () => {
           Effect.gen(function* () {
             const rule = yield* Rule("SnapshotRetention", {
               resourceType: "EC2_IMAGE",
-              retentionPeriod: { value: 14 },
+              retentionPeriod: "14 days",
               description: "alchemy rbin lifecycle test (updated)",
               resourceTags: [{ key: "alchemy-rbin-test", value: "updated" }],
               tags: { owner: "alchemy" },

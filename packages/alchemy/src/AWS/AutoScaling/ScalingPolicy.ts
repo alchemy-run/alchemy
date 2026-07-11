@@ -1,4 +1,5 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -6,6 +7,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
 
@@ -42,9 +44,10 @@ export interface ScalingPolicyProps {
    */
   disableScaleIn?: boolean;
   /**
-   * Estimated warmup time for new instances.
+   * Estimated warmup time for new instances, e.g. `"5 minutes"` or
+   * `Duration.seconds(300)` (whole seconds on the wire).
    */
-  estimatedInstanceWarmup?: number;
+  estimatedInstanceWarmup?: Duration.Input;
 }
 
 export interface ScalingPolicy extends Resource<
@@ -210,7 +213,7 @@ export const ScalingPolicyProvider = () =>
               TargetValue: news.targetValue,
               DisableScaleIn: news.disableScaleIn,
             },
-            EstimatedInstanceWarmup: news.estimatedInstanceWarmup,
+            EstimatedInstanceWarmup: toSeconds(news.estimatedInstanceWarmup),
           } as any);
 
           // Observe final state — re-read so the returned attributes

@@ -879,7 +879,7 @@ test.provider("object lock default retention", (stack) =>
       Bucket("ObjLockRetentionBucket", {
         bucketName: name,
         objectLockEnabled: true,
-        objectLockConfiguration: { mode: "GOVERNANCE", days: 1 },
+        objectLockConfiguration: { mode: "GOVERNANCE", days: "1 day" },
         forceDestroy: true,
       }),
     );

@@ -4,6 +4,7 @@ import { AWSEnvironment } from "@/AWS/Environment.ts";
 import * as Test from "@/Test/Vitest";
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
 import { expect } from "@effect/vitest";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
@@ -86,7 +87,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
       yield* stack.destroy();
 
       const make = (props: {
-        retentionPeriod: number;
+        retentionPeriod: Duration.Input;
         tags?: Record<string, string>;
       }) =>
         Effect.gen(function* () {
@@ -102,7 +103,10 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
 
       // 1. Create with the 7-day minimum retention.
       const { store } = yield* stack.deploy(
-        make({ retentionPeriod: 7, tags: { fixture: "cloudtrail-eds" } }),
+        make({
+          retentionPeriod: "7 days",
+          tags: { fixture: "cloudtrail-eds" },
+        }),
       );
       expect(store.name).toBe(STORE_NAME);
       expect(store.eventDataStoreArn).toContain(":eventdatastore/");
@@ -132,7 +136,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
 
       // 2. Update retention in place — the ARN is the stable identity.
       const { store: updated } = yield* stack.deploy(
-        make({ retentionPeriod: 14, tags: { team: "audit" } }),
+        make({ retentionPeriod: "14 days", tags: { team: "audit" } }),
       );
       expect(updated.eventDataStoreArn).toBe(store.eventDataStoreArn);
       const observedAfter = yield* cloudtrail.getEventDataStore({

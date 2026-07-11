@@ -107,7 +107,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             shardCount: 1,
             subnetIds: network.subnetIds,
             vpcSecurityGroupIds: network.securityGroupIds,
-            backupRetentionPeriod: 1,
+            backupRetentionPeriod: "1 day",
             tags: { fixture: "docdb-elastic-cluster" },
           });
           return { cluster };

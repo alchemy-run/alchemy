@@ -1,6 +1,7 @@
 import * as firehose from "@distilled.cloud/aws/firehose";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -17,6 +18,7 @@ import {
 } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -76,11 +78,12 @@ export interface S3DestinationProps {
    */
   errorOutputPrefix?: string;
   /**
-   * Buffering interval in seconds before flushing to S3.
-   * Valid values range from 0 (zero buffering) to 900.
-   * @default 300
+   * Buffering interval before flushing to S3 — e.g. `"1 minute"` or
+   * `Duration.seconds(60)`. Sent to AWS as whole seconds; valid values range
+   * from 0 (zero buffering) to 900 seconds.
+   * @default "300 seconds"
    */
-  bufferingIntervalInSeconds?: number;
+  bufferingIntervalInSeconds?: Duration.Input;
   /**
    * Buffering size in MiB before flushing to S3.
    * Valid values range from 1 to 128.
@@ -223,7 +226,7 @@ export interface DeliveryStream extends Resource<
  *     bucketArn: bucket.bucketArn,
  *     prefix: "events/",
  *     errorOutputPrefix: "errors/",
- *     bufferingIntervalInSeconds: 60,
+ *     bufferingIntervalInSeconds: "1 minute",
  *     bufferingSizeInMBs: 1,
  *     compressionFormat: "GZIP",
  *   },
@@ -758,7 +761,7 @@ export const DeliveryStreamProvider = () =>
 
           const desiredBufferingHints = {
             IntervalInSeconds:
-              news.destination.bufferingIntervalInSeconds ??
+              toSeconds(news.destination.bufferingIntervalInSeconds) ??
               defaultBufferingIntervalInSeconds,
             SizeInMBs:
               news.destination.bufferingSizeInMBs ?? defaultBufferingSizeInMBs,

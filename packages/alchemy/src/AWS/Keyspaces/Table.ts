@@ -1,5 +1,6 @@
 import * as keyspaces from "@distilled.cloud/aws/keyspaces";
 import * as keyspacesstreams from "@distilled.cloud/aws/keyspacesstreams";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -113,9 +114,10 @@ export interface TableProps {
    */
   ttlEnabled?: boolean;
   /**
-   * Default TTL in seconds applied to all rows. Requires `ttlEnabled`.
+   * Default TTL applied to all rows, e.g. `"1 day"` or `Duration.hours(12)`.
+   * The API stores whole seconds. Requires `ttlEnabled`.
    */
-  defaultTimeToLive?: number;
+  defaultTimeToLive?: Duration.Input;
   /**
    * Change data capture (CDC) stream configuration. Enabling CDC creates a
    * stream that captures row-level changes for 24 hours; consume it with the
@@ -178,7 +180,7 @@ export interface Table extends Resource<
  *   partitionKeys: ["device"],
  *   clusteringKeys: [{ name: "ts", orderBy: "DESC" }],
  *   ttlEnabled: true,
- *   defaultTimeToLive: 86_400,
+ *   defaultTimeToLive: "1 day",
  * });
  * ```
  *
@@ -427,6 +429,11 @@ export const TableProvider = () =>
           const props = news as TableProps;
           const keyspaceName = props.keyspaceName;
           const tableName = output?.tableName ?? (yield* toName(id, props));
+          // The Keyspaces API expects the default TTL in whole seconds.
+          const desiredTtlSeconds =
+            props.defaultTimeToLive !== undefined
+              ? Math.round(Duration.toSeconds(props.defaultTimeToLive))
+              : undefined;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
@@ -445,7 +452,7 @@ export const TableProvider = () =>
                   ? { status: "ENABLED" }
                   : undefined,
                 ttl: props.ttlEnabled ? { status: "ENABLED" } : undefined,
-                defaultTimeToLive: props.defaultTimeToLive,
+                defaultTimeToLive: desiredTtlSeconds,
                 cdcSpecification:
                   props.cdcSpecification?.status === "ENABLED"
                     ? {
@@ -516,10 +523,10 @@ export const TableProvider = () =>
             needsUpdate = true;
           }
           if (
-            props.defaultTimeToLive !== undefined &&
-            props.defaultTimeToLive !== observed.defaultTimeToLive
+            desiredTtlSeconds !== undefined &&
+            desiredTtlSeconds !== observed.defaultTimeToLive
           ) {
-            update.defaultTimeToLive = props.defaultTimeToLive;
+            update.defaultTimeToLive = desiredTtlSeconds;
             needsUpdate = true;
           }
 

@@ -1,8 +1,10 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -48,10 +50,10 @@ export interface TargetGroupProps {
   healthCheckProtocol?: string;
   /** Whether health checks are enabled. Updated in place. */
   healthCheckEnabled?: boolean;
-  /** The approximate interval between health checks, in seconds. Updated in place. */
-  healthCheckIntervalSeconds?: number;
-  /** The amount of time, in seconds, to wait for a health-check response. Updated in place. */
-  healthCheckTimeoutSeconds?: number;
+  /** The approximate interval between health checks — e.g. `"15 seconds"`. Sent to AWS as whole seconds. Updated in place. */
+  healthCheckIntervalSeconds?: Duration.Input;
+  /** The amount of time to wait for a health-check response — e.g. `"5 seconds"`. Sent to AWS as whole seconds. Updated in place. */
+  healthCheckTimeoutSeconds?: Duration.Input;
   /** The number of consecutive successes before a target is healthy. Updated in place. */
   healthyThresholdCount?: number;
   /** The number of consecutive failures before a target is unhealthy. Updated in place. */
@@ -126,7 +128,7 @@ export interface TargetGroup extends Resource<
  *   port: 8080,
  *   protocol: "HTTP",
  *   healthCheckPath: "/healthz",
- *   healthCheckIntervalSeconds: 15,
+ *   healthCheckIntervalSeconds: "15 seconds",
  *   healthyThresholdCount: 3,
  *   unhealthyThresholdCount: 3,
  * });
@@ -292,8 +294,12 @@ export const TargetGroupProvider = () =>
               HealthCheckPort: news.healthCheckPort,
               HealthCheckProtocol: news.healthCheckProtocol,
               HealthCheckEnabled: news.healthCheckEnabled,
-              HealthCheckIntervalSeconds: news.healthCheckIntervalSeconds,
-              HealthCheckTimeoutSeconds: news.healthCheckTimeoutSeconds,
+              HealthCheckIntervalSeconds: toSeconds(
+                news.healthCheckIntervalSeconds,
+              ),
+              HealthCheckTimeoutSeconds: toSeconds(
+                news.healthCheckTimeoutSeconds,
+              ),
               HealthyThresholdCount: news.healthyThresholdCount,
               UnhealthyThresholdCount: news.unhealthyThresholdCount,
               Matcher: news.matcher,
@@ -333,10 +339,10 @@ export const TargetGroupProvider = () =>
             HealthCheckEnabled:
               news.healthCheckEnabled ?? observedHc.HealthCheckEnabled,
             HealthCheckIntervalSeconds:
-              news.healthCheckIntervalSeconds ??
+              toSeconds(news.healthCheckIntervalSeconds) ??
               observedHc.HealthCheckIntervalSeconds,
             HealthCheckTimeoutSeconds:
-              news.healthCheckTimeoutSeconds ??
+              toSeconds(news.healthCheckTimeoutSeconds) ??
               observedHc.HealthCheckTimeoutSeconds,
             HealthyThresholdCount:
               news.healthyThresholdCount ?? observedHc.HealthyThresholdCount,

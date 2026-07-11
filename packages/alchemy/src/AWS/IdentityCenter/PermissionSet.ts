@@ -1,4 +1,5 @@
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -22,9 +23,11 @@ export interface PermissionSetProps {
    */
   description?: string;
   /**
-   * Optional ISO-8601 session duration such as `PT8H`.
+   * Optional session duration, e.g. `"8 hours"` or `Duration.hours(8)`.
+   * Sent to Identity Center as an ISO-8601 string such as `PT8H` (a bare
+   * number is milliseconds).
    */
-  sessionDuration?: string;
+  sessionDuration?: Duration.Input;
   /**
    * Optional relay state passed to supported applications.
    */
@@ -56,7 +59,7 @@ export interface PermissionSet extends Resource<
  * const admin = yield* PermissionSet("AdministratorAccess", {
  *   name: "AdministratorAccess",
  *   description: "Administrator access for platform engineers",
- *   sessionDuration: "PT8H",
+ *   sessionDuration: "8 hours",
  * });
  * ```
  */
@@ -126,6 +129,10 @@ export const PermissionSetProvider = () =>
           const instance = yield* resolveInstance(
             output?.instanceArn ?? news.instanceArn,
           );
+          const desiredSessionDuration =
+            news.sessionDuration !== undefined
+              ? toIsoSessionDuration(news.sessionDuration)
+              : undefined;
 
           // Observe — find the permission set by ARN (when we already
           // have one) or by name on the resolved instance.
@@ -148,7 +155,7 @@ export const PermissionSetProvider = () =>
                 InstanceArn: instance.InstanceArn!,
                 Name: news.name,
                 Description: news.description,
-                SessionDuration: news.sessionDuration,
+                SessionDuration: desiredSessionDuration,
                 RelayState: news.relayState,
               }),
             );
@@ -184,7 +191,8 @@ export const PermissionSetProvider = () =>
           // there's a real delta.
           if (
             (existing.description ?? undefined) !== news.description ||
-            (existing.sessionDuration ?? undefined) !== news.sessionDuration ||
+            (existing.sessionDuration ?? undefined) !==
+              desiredSessionDuration ||
             (existing.relayState ?? undefined) !== news.relayState
           ) {
             yield* retryIdentityCenter(
@@ -192,7 +200,7 @@ export const PermissionSetProvider = () =>
                 InstanceArn: existing.instanceArn,
                 PermissionSetArn: existing.permissionSetArn,
                 Description: news.description,
-                SessionDuration: news.sessionDuration,
+                SessionDuration: desiredSessionDuration,
                 RelayState: news.relayState,
               }),
             );
@@ -230,6 +238,47 @@ export const PermissionSetProvider = () =>
       };
     }),
   );
+
+/**
+ * Reconstruct a valid `Duration.Input` from a value that may have
+ * round-tripped through persisted state JSON, which flattens a `Duration`
+ * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
+ * shape `Duration.toSeconds` silently decodes as zero.
+ */
+const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return typeof input === "object" && input !== null && json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/**
+ * Format a {@link Duration.Input} as the canonical ISO-8601 duration string
+ * (`PT8H`, `PT1H30M`, …) the `SessionDuration` wire field expects.
+ */
+const toIsoSessionDuration = (input: Duration.Input): string => {
+  const totalSeconds = Math.round(
+    Duration.toSeconds(fromStateDurationInput(input)),
+  );
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [
+    hours > 0 ? `${hours}H` : "",
+    minutes > 0 ? `${minutes}M` : "",
+    seconds > 0 || totalSeconds === 0 ? `${seconds}S` : "",
+  ].join("");
+  return `PT${parts}`;
+};
 
 const readPermissionSetByArn = Effect.fn(function* ({
   instanceArn,

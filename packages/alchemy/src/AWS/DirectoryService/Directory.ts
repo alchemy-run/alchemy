@@ -1,6 +1,7 @@
 import * as ds from "@distilled.cloud/aws/directory-service";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -39,7 +40,7 @@ export interface DirectoryProps {
    * Simple AD, `Admin` for Microsoft AD). There is no API to change it after
    * creation, so changing the password replaces the directory.
    */
-  password: string;
+  password: Redacted.Redacted<string>;
   /**
    * Human-readable description of the directory. There is no update API, so
    * changing the description replaces the directory.
@@ -112,7 +113,7 @@ export interface Directory extends Resource<
  * ```typescript
  * const directory = yield* Directory("Corp", {
  *   name: "corp.example.com",
- *   password: "SuperSecret123!",
+ *   password: Redacted.make("SuperSecret123!"),
  *   size: "Small",
  *   vpcId: vpc.vpcId,
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
@@ -125,7 +126,7 @@ export interface Directory extends Resource<
  *   type: "MicrosoftAD",
  *   name: "corp.example.com",
  *   shortName: "CORP",
- *   password: "SuperSecret123!",
+ *   password: Redacted.make("SuperSecret123!"),
  *   edition: "Standard",
  *   vpcId: vpc.vpcId,
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
@@ -304,7 +305,7 @@ export const DirectoryProvider = () =>
           if (n.shortName !== o.shortName) {
             return { action: "replace" } as const;
           }
-          if (n.password !== o.password) {
+          if (Redacted.value(n.password) !== Redacted.value(o.password)) {
             return { action: "replace" } as const;
           }
           if (n.description !== o.description) {

@@ -3,6 +3,7 @@ import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -137,12 +138,13 @@ test.provider(
         }),
       );
 
+      const apiKey = Redacted.value(out.apiKey);
       expect(out.url).toContain("appsync-api");
-      expect(out.apiKey).toMatch(/^da2-/);
+      expect(apiKey).toMatch(/^da2-/);
 
       // 1. Unit resolver: the result is computed inside the Lambda.
       const add = yield* edgePropagationRetry(
-        graphql(out.url, out.apiKey, "query { add(a: 2, b: 3) }").pipe(
+        graphql(out.url, apiKey, "query { add(a: 2, b: 3) }").pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
@@ -160,7 +162,7 @@ test.provider(
       // 2. Unit resolver with a string result.
       const greet = (yield* graphql(
         out.url,
-        out.apiKey,
+        apiKey,
         'query { greet(name: "Alchemy") }',
       ).pipe(Effect.flatMap((response) => response.json))) as any;
       expect(greet.data.greet).toBe("Hello, Alchemy! (from Lambda)");
@@ -169,7 +171,7 @@ test.provider(
       //    ctx.prev.result.
       const double = (yield* graphql(
         out.url,
-        out.apiKey,
+        apiKey,
         "query { double(n: 21) }",
       ).pipe(Effect.flatMap((response) => response.json))) as any;
       expect(double.data.double).toBe(42);

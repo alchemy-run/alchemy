@@ -1,5 +1,6 @@
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -28,7 +29,7 @@ export interface UserAuthenticationMode {
    * them, so changes to `passwords` alone are not auto-detected on update;
    * change `type` (or replace the user) to force a credential reset.
    */
-  passwords?: string[];
+  passwords?: Redacted.Redacted<string>[];
 }
 
 export interface UserProps {
@@ -157,7 +158,9 @@ export const UserProvider = () =>
         mode: UserAuthenticationMode,
       ): memorydb.AuthenticationMode => ({
         Type: mode.type,
-        ...(mode.passwords ? { Passwords: mode.passwords } : {}),
+        ...(mode.passwords
+          ? { Passwords: mode.passwords.map(Redacted.value) }
+          : {}),
       });
 
       return {

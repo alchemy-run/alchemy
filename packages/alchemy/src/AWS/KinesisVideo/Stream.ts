@@ -1,4 +1,5 @@
 import * as kv from "@distilled.cloud/aws/kinesis-video";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream_ from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -41,12 +42,13 @@ export interface StreamProps {
    */
   kmsKeyId?: string;
   /**
-   * How long stream data is retained, in hours. `0` means no retention —
-   * data is only available live. Adjusted in place via
-   * `UpdateDataRetention`.
+   * How long stream data is retained. `0` means no retention — data is
+   * only available live. Accepts any `Duration.Input` (e.g. `"24 hours"`,
+   * `Duration.hours(24)`; a bare number is milliseconds); the wire unit is
+   * whole hours. Adjusted in place via `UpdateDataRetention`.
    * @default 0
    */
-  dataRetentionInHours?: number;
+  dataRetentionInHours?: Duration.Input;
   /**
    * Tags to apply to the stream. Merged with internal Alchemy tags.
    */
@@ -86,7 +88,7 @@ export interface Stream extends Resource<
  * ```typescript
  * const stream = yield* AWS.KinesisVideo.Stream("Camera", {
  *   mediaType: "video/h264",
- *   dataRetentionInHours: 24,
+ *   dataRetentionInHours: "24 hours",
  *   tags: { Environment: "production" },
  * });
  * ```
@@ -209,6 +211,11 @@ export const StreamProvider = () =>
             output?.streamName ?? (yield* createName(id, props));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
+          // Wire unit is whole hours (DataRetentionInHours).
+          const desiredRetention =
+            props.dataRetentionInHours !== undefined
+              ? Math.round(Duration.toHours(props.dataRetentionInHours))
+              : undefined;
 
           // 1. OBSERVE — cloud state is authoritative
           let info = yield* observeStream(streamName);
@@ -234,7 +241,7 @@ export const StreamProvider = () =>
                 DeviceName: props.deviceName,
                 MediaType: props.mediaType,
                 KmsKeyId: props.kmsKeyId,
-                DataRetentionInHours: props.dataRetentionInHours ?? 0,
+                DataRetentionInHours: desiredRetention ?? 0,
                 Tags: desiredTags,
               }),
             ).pipe(
@@ -274,7 +281,6 @@ export const StreamProvider = () =>
 
           // 3b. SYNC — data retention (delta-based API: INCREASE/DECREASE by
           // the difference between observed and desired)
-          const desiredRetention = props.dataRetentionInHours;
           const observedRetention = info.DataRetentionInHours ?? 0;
           if (
             desiredRetention !== undefined &&

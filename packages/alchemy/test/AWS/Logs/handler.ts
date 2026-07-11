@@ -28,7 +28,7 @@ export default LogsTestFunction.make(
   },
   Effect.gen(function* () {
     const logGroup = yield* Logs.LogGroup("BindingsLogGroup", {
-      retentionInDays: 1,
+      retentionInDays: "1 day",
     });
     const logStream = yield* Logs.LogStream("BindingsLogStream", {
       logGroupName: logGroup.logGroupName,

@@ -34,8 +34,8 @@ const base: DBClusterProps = {
 test.provider("diff: backup retention is an in-place update", () =>
   Effect.gen(function* () {
     const result = yield* callDiff(
-      { ...base, backupRetentionPeriod: 1 },
-      { ...base, backupRetentionPeriod: 7 },
+      { ...base, backupRetentionPeriod: "1 day" },
+      { ...base, backupRetentionPeriod: "7 days" },
     );
     expect(result).toBeUndefined();
   }),
@@ -172,7 +172,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 1,
+            backupRetentionPeriod: "1 day",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: false,
           });
@@ -197,7 +197,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 3,
+            backupRetentionPeriod: "3 days",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: true,
           });
@@ -223,7 +223,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 3,
+            backupRetentionPeriod: "3 days",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: false,
           });

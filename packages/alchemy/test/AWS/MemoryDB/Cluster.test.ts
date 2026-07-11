@@ -5,6 +5,7 @@ import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
@@ -94,7 +95,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           const user = yield* User("ClusterUser", {
             authenticationMode: {
               type: "password",
-              passwords: ["AlchemyMemoryDbTestPass01"],
+              passwords: [Redacted.make("AlchemyMemoryDbTestPass01")],
             },
             accessString: "on ~* +@all",
           });

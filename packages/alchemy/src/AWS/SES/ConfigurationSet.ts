@@ -1,4 +1,5 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -54,10 +55,12 @@ export interface ConfigurationSetProps {
    */
   tlsPolicy?: TlsPolicy;
   /**
-   * The maximum amount of time, in seconds (300-50400), that SES will
-   * attempt delivery of email through this configuration set.
+   * The maximum amount of time (300-50400 seconds) that SES will attempt
+   * delivery of email through this configuration set. Accepts any
+   * `Duration.Input` (e.g. `"1 hour"`, `Duration.hours(1)`; a bare number
+   * is milliseconds); the wire unit is whole seconds.
    */
-  maxDeliverySeconds?: number;
+  maxDeliverySeconds?: Duration.Input;
   /**
    * Which events cause SES to add a recipient to the account suppression
    * list when sending through this configuration set. Overrides the
@@ -139,6 +142,34 @@ const configurationSetArnOf = (
   accountId: string,
   name: string,
 ) => `arn:aws:ses:${region}:${accountId}:configuration-set/${name}`;
+
+/**
+ * Reconstruct a valid `Duration.Input` from a value that may have
+ * round-tripped through persisted state JSON, which flattens a `Duration`
+ * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
+ * shape `Duration.toSeconds` silently decodes as zero.
+ */
+const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return typeof input === "object" && input !== null && json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional {@link Duration.Input} prop to whole wire seconds. */
+const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toSeconds(fromStateDurationInput(input)));
 
 const sameReasons = (
   a: ReadonlyArray<string> | undefined,
@@ -228,6 +259,7 @@ export const ConfigurationSetProvider = () =>
           );
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
+          const desiredMaxDelivery = toWireSeconds(news.maxDeliverySeconds);
 
           // 1. OBSERVE — cloud state is authoritative.
           let observed = yield* getConfigurationSet(name);
@@ -250,10 +282,10 @@ export const ConfigurationSetProvider = () =>
                     : undefined,
                 DeliveryOptions:
                   news.tlsPolicy !== undefined ||
-                  news.maxDeliverySeconds !== undefined
+                  desiredMaxDelivery !== undefined
                     ? {
                         TlsPolicy: news.tlsPolicy,
-                        MaxDeliverySeconds: news.maxDeliverySeconds,
+                        MaxDeliverySeconds: desiredMaxDelivery,
                       }
                     : undefined,
                 SuppressionOptions:
@@ -301,14 +333,13 @@ export const ConfigurationSetProvider = () =>
             observed.DeliveryOptions?.MaxDeliverySeconds;
           if (
             observedTls !== desiredTls ||
-            (news.maxDeliverySeconds !== undefined &&
-              observedMaxDelivery !== news.maxDeliverySeconds)
+            (desiredMaxDelivery !== undefined &&
+              observedMaxDelivery !== desiredMaxDelivery)
           ) {
             yield* sesv2.putConfigurationSetDeliveryOptions({
               ConfigurationSetName: name,
               TlsPolicy: desiredTls,
-              MaxDeliverySeconds:
-                news.maxDeliverySeconds ?? observedMaxDelivery,
+              MaxDeliverySeconds: desiredMaxDelivery ?? observedMaxDelivery,
               // preserve any dedicated sending pool configured out-of-band
               SendingPoolName: observed.DeliveryOptions?.SendingPoolName,
             });

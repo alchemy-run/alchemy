@@ -34,7 +34,7 @@ test.provider(
             fullyQualifiedDomainName: "example.com",
             resourcePath: "/",
             port: 80,
-            requestInterval: 30,
+            requestInterval: "30 seconds",
             failureThreshold: 3,
             tags: { env: "test" },
           });
@@ -69,7 +69,7 @@ test.provider(
             fullyQualifiedDomainName: "example.com",
             resourcePath: "/health",
             port: 80,
-            requestInterval: 30,
+            requestInterval: "30 seconds",
             failureThreshold: 5,
             tags: { env: "prod" },
           });
@@ -113,7 +113,7 @@ test.provider(
             type: "HTTP",
             fullyQualifiedDomainName: "example.com",
             port: 80,
-            requestInterval: 30,
+            requestInterval: "30 seconds",
           });
         }),
       );
@@ -126,7 +126,7 @@ test.provider(
             type: "HTTPS",
             fullyQualifiedDomainName: "example.com",
             port: 443,
-            requestInterval: 30,
+            requestInterval: "30 seconds",
           });
         }),
       );

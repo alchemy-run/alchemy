@@ -1,4 +1,5 @@
 import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -9,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  durationToSeconds,
   inFleetWiseRegion,
   readFleetWiseTags,
   retryObservation,
@@ -66,11 +68,13 @@ export interface CampaignProps {
    */
   expiryTime?: string;
   /**
-   * Seconds of data to collect after a condition-based trigger fires.
+   * How long to keep collecting data after a condition-based trigger
+   * fires, e.g. `"30 seconds"` or `Duration.seconds(30)`. Sent to
+   * FleetWise as whole seconds (a bare number is milliseconds).
    * Changing it replaces the campaign.
    * @default 0
    */
-  postTriggerCollectionDuration?: number;
+  postTriggerCollectionDuration?: Duration.Input;
   /**
    * Whether to send active diagnostic trouble codes — `"OFF"` or
    * `"SEND_ACTIVE_DTCS"`. Changing it replaces the campaign.
@@ -233,7 +237,9 @@ export const CampaignProvider = () =>
             dataDestinationConfigs: props.dataDestinationConfigs,
             startTime: props.startTime,
             expiryTime: props.expiryTime,
-            postTriggerCollectionDuration: props.postTriggerCollectionDuration,
+            postTriggerCollectionDuration: durationToSeconds(
+              props.postTriggerCollectionDuration,
+            ),
             diagnosticsMode: props.diagnosticsMode,
             spoolingMode: props.spoolingMode,
             compression: props.compression,
@@ -281,8 +287,9 @@ export const CampaignProvider = () =>
                   news.expiryTime !== undefined
                     ? new Date(news.expiryTime)
                     : undefined,
-                postTriggerCollectionDuration:
+                postTriggerCollectionDuration: durationToSeconds(
                   news.postTriggerCollectionDuration,
+                ),
                 diagnosticsMode: news.diagnosticsMode,
                 spoolingMode: news.spoolingMode,
                 compression: news.compression,

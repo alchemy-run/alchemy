@@ -1,4 +1,5 @@
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -72,12 +73,13 @@ export interface EventDataStoreProps {
    */
   organizationEnabled?: boolean;
   /**
-   * Retention period in days (minimum `7`; maximum `2557` under
-   * `EXTENDABLE_RETENTION_PRICING`, `3653` under
-   * `FIXED_RETENTION_PRICING`).
-   * @default 366
+   * Retention period, e.g. `"30 days"` or `Duration.days(30)` (minimum
+   * 7 days; maximum 2557 days under `EXTENDABLE_RETENTION_PRICING`,
+   * 3653 days under `FIXED_RETENTION_PRICING`). Rounded to whole days
+   * on the wire.
+   * @default 366 days
    */
-  retentionPeriod?: number;
+  retentionPeriod?: Duration.Input;
   /**
    * Whether termination protection is enabled. A protected store cannot
    * be deleted until protection is disabled.
@@ -128,7 +130,7 @@ export interface EventDataStore extends Resource<
  * import * as AWS from "alchemy/AWS";
  *
  * const store = yield* AWS.CloudTrail.EventDataStore("Lake", {
- *   retentionPeriod: 7,
+ *   retentionPeriod: "7 days",
  *   terminationProtectionEnabled: false,
  * });
  * ```
@@ -137,7 +139,7 @@ export interface EventDataStore extends Resource<
  * ```typescript
  * const store = yield* AWS.CloudTrail.EventDataStore("S3DataEvents", {
  *   multiRegionEnabled: false,
- *   retentionPeriod: 30,
+ *   retentionPeriod: "30 days",
  *   terminationProtectionEnabled: false,
  *   advancedEventSelectors: [
  *     {
@@ -310,6 +312,11 @@ export const EventDataStoreProvider = () =>
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredSelectors = toWireSelectors(news.advancedEventSelectors);
+          // The CloudTrail wire unit for RetentionPeriod is whole days.
+          const retentionDays =
+            news.retentionPeriod === undefined
+              ? undefined
+              : Math.round(Duration.toDays(news.retentionPeriod));
 
           // 1. OBSERVE — prefer the cached ARN, fall back to name lookup.
           let store = output?.eventDataStoreArn
@@ -347,7 +354,7 @@ export const EventDataStoreProvider = () =>
                 AdvancedEventSelectors: desiredSelectors,
                 MultiRegionEnabled: news.multiRegionEnabled,
                 OrganizationEnabled: news.organizationEnabled,
-                RetentionPeriod: news.retentionPeriod,
+                RetentionPeriod: retentionDays,
                 TerminationProtectionEnabled: news.terminationProtectionEnabled,
                 BillingMode: news.billingMode,
                 KmsKeyId: news.kmsKeyId,
@@ -399,10 +406,10 @@ export const EventDataStoreProvider = () =>
             updateDelta.Name = name;
           }
           if (
-            news.retentionPeriod !== undefined &&
-            store.RetentionPeriod !== news.retentionPeriod
+            retentionDays !== undefined &&
+            store.RetentionPeriod !== retentionDays
           ) {
-            updateDelta.RetentionPeriod = news.retentionPeriod;
+            updateDelta.RetentionPeriod = retentionDays;
           }
           if (
             news.multiRegionEnabled !== undefined &&

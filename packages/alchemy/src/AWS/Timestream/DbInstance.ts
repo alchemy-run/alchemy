@@ -1,6 +1,7 @@
 import * as influxdb from "@distilled.cloud/aws/timestream-influxdb";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as EffectStream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -44,9 +45,10 @@ export interface DbInstanceProps {
   vpcSecurityGroupIds: string[];
   /**
    * The initial InfluxDB admin password. Stored in AWS Secrets Manager by
-   * Timestream; supplied only at creation.
+   * Timestream; supplied only at creation. Pass a redacted value, e.g.
+   * `Redacted.make("super-secret-password")`.
    */
-  password: string;
+  password: Redacted.Redacted<string>;
   /**
    * The initial InfluxDB admin username.
    * @default "admin"
@@ -174,7 +176,7 @@ export interface DbInstance extends Resource<
  *   allocatedStorage: 20,
  *   vpcSubnetIds: [subnetA.subnetId, subnetB.subnetId],
  *   vpcSecurityGroupIds: [securityGroup.groupId],
- *   password: "super-secret-password",
+ *   password: Redacted.make("super-secret-password"),
  * });
  * ```
  */
@@ -397,7 +399,7 @@ export const DbInstanceProvider = () =>
               allocatedStorage: news.allocatedStorage,
               vpcSubnetIds: news.vpcSubnetIds,
               vpcSecurityGroupIds: news.vpcSecurityGroupIds,
-              password: news.password,
+              password: Redacted.value(news.password),
               username: news.username,
               organization: news.organization,
               bucket: news.bucket,

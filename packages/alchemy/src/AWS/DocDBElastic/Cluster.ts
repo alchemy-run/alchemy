@@ -1,4 +1,5 @@
 import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -74,9 +75,10 @@ export interface ClusterProps {
    */
   preferredMaintenanceWindow?: string;
   /**
-   * Days to retain automatic snapshots (1-35).
+   * How long automatic snapshots are retained, e.g. `"7 days"` or
+   * `Duration.days(7)`. Rounded to whole days (1-35) on the wire.
    */
-  backupRetentionPeriod?: number;
+  backupRetentionPeriod?: Duration.Input;
   /**
    * Daily window (UTC, `HH:MM-HH:MM`) when automatic snapshots are taken.
    */
@@ -141,7 +143,7 @@ export interface Cluster extends Resource<
  *   shardCount: 1,
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  *   vpcSecurityGroupIds: [securityGroup.securityGroupId],
- *   backupRetentionPeriod: 1,
+ *   backupRetentionPeriod: "1 day",
  * });
  * ```
  */
@@ -150,6 +152,12 @@ export const Cluster = Resource<Cluster>("AWS.DocDBElastic.Cluster");
 const DEFAULT_AUTH_TYPE = "PLAIN_TEXT";
 const DEFAULT_SHARD_CAPACITY = 2;
 const DEFAULT_SHARD_COUNT = 1;
+
+/** Normalize a {@link ClusterProps.backupRetentionPeriod} to the whole days the API expects. */
+const toRetentionDays = (
+  period: Duration.Input | undefined,
+): number | undefined =>
+  period === undefined ? undefined : Math.round(Duration.toDays(period));
 
 /** True when two string sets are equal ignoring order and duplicates. */
 const sameStringSet = (
@@ -336,7 +344,9 @@ export const ClusterProvider = () =>
                 subnetIds: props.subnetIds,
                 kmsKeyId: props.kmsKeyId,
                 preferredMaintenanceWindow: props.preferredMaintenanceWindow,
-                backupRetentionPeriod: props.backupRetentionPeriod,
+                backupRetentionPeriod: toRetentionDays(
+                  props.backupRetentionPeriod,
+                ),
                 preferredBackupWindow: props.preferredBackupWindow,
                 tags: desiredTags,
               })
@@ -410,11 +420,14 @@ export const ClusterProvider = () =>
               props.preferredMaintenanceWindow;
             mutated = true;
           }
+          const desiredRetentionDays = toRetentionDays(
+            props.backupRetentionPeriod,
+          );
           if (
-            props.backupRetentionPeriod !== undefined &&
-            props.backupRetentionPeriod !== observed.backupRetentionPeriod
+            desiredRetentionDays !== undefined &&
+            desiredRetentionDays !== observed.backupRetentionPeriod
           ) {
-            update.backupRetentionPeriod = props.backupRetentionPeriod;
+            update.backupRetentionPeriod = desiredRetentionDays;
             mutated = true;
           }
           if (

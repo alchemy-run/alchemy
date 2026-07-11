@@ -1,4 +1,5 @@
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -35,10 +36,11 @@ export interface MemoryProps {
    */
   description?: string;
   /**
-   * Number of days after which short-term memory events expire (7-365).
-   * @default 90
+   * How long until short-term memory events expire (7-365 days), e.g.
+   * `"30 days"` or `Duration.days(30)` (a bare number is milliseconds).
+   * @default 90 days
    */
-  eventExpiryDuration?: number;
+  eventExpiryDuration?: Duration.Input;
   /**
    * The ARN of a KMS key used to encrypt the memory. Changing it triggers a
    * replacement.
@@ -91,14 +93,14 @@ export interface Memory extends Resource<
  * import * as AgentCore from "alchemy/AWS/BedrockAgentCore";
  *
  * const memory = yield* AgentCore.Memory("SessionMemory", {
- *   eventExpiryDuration: 30,
+ *   eventExpiryDuration: "30 days",
  * });
  * ```
  *
  * @example Memory with a Semantic Long-Term Strategy
  * ```typescript
  * const memory = yield* AgentCore.Memory("AgentMemory", {
- *   eventExpiryDuration: 90,
+ *   eventExpiryDuration: "90 days",
  *   memoryStrategies: [
  *     {
  *       semanticMemoryStrategy: {
@@ -271,7 +273,10 @@ export const MemoryProvider = () =>
           const name = output?.name ?? (yield* createName(id, props));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
-          const eventExpiryDuration = props.eventExpiryDuration ?? 90;
+          const eventExpiryDuration =
+            props.eventExpiryDuration !== undefined
+              ? Math.round(Duration.toDays(props.eventExpiryDuration))
+              : 90;
 
           // 1. OBSERVE — cloud state is authoritative; output is an id cache.
           let memory = output?.memoryId

@@ -25,7 +25,7 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const key = yield* Key("ManagedKey", {
               description: "alchemy kms smoke v1",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
               enableKeyRotation: true,
               tags: {
                 Environment: "test",
@@ -85,7 +85,7 @@ describe("AWS.KMS.Key", () => {
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
             const key = yield* Key("ManagedKey", {
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
               description: "alchemy kms smoke v2",
               enableKeyRotation: false,
               enabled: false,
@@ -143,7 +143,7 @@ describe("AWS.KMS.Key", () => {
         const noop = yield* stack.deploy(
           Effect.gen(function* () {
             const key = yield* Key("ManagedKey", {
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
               description: "alchemy kms smoke v2",
               enableKeyRotation: false,
               enabled: false,
@@ -189,7 +189,7 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const key = yield* Key("ReplaceKey", {
               description: "alchemy kms replace v1",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
               keySpec: "SYMMETRIC_DEFAULT",
               keyUsage: "ENCRYPT_DECRYPT",
             });
@@ -201,7 +201,7 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const key = yield* Key("ReplaceKey", {
               description: "alchemy kms replace v2",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
               keySpec: "RSA_2048",
               keyUsage: "ENCRYPT_DECRYPT",
             });
@@ -240,11 +240,11 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const keyA = yield* Key("AliasKeyA", {
               description: "alchemy kms alias target A",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
             });
             const keyB = yield* Key("AliasKeyB", {
               description: "alchemy kms alias target B",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
             });
             const alias = yield* Alias("RenamableAlias", {
               aliasName: aliasNameA,
@@ -265,11 +265,11 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const keyA = yield* Key("AliasKeyA", {
               description: "alchemy kms alias target A",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
             });
             const keyB = yield* Key("AliasKeyB", {
               description: "alchemy kms alias target B",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
             });
             const alias = yield* Alias("RenamableAlias", {
               aliasName: aliasNameA,
@@ -291,11 +291,11 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const keyA = yield* Key("AliasKeyA", {
               description: "alchemy kms alias target A",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
             });
             const keyB = yield* Key("AliasKeyB", {
               description: "alchemy kms alias target B",
-              deletionWindowInDays: 7,
+              deletionWindowInDays: "7 days",
             });
             const alias = yield* Alias("RenamableAlias", {
               aliasName: aliasNameB,

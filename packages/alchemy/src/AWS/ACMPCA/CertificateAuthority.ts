@@ -1,5 +1,6 @@
 import * as acmpca from "@distilled.cloud/aws/acm-pca";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -86,10 +87,11 @@ export interface CrlConfigurationProps {
    */
   enabled: boolean;
   /**
-   * Validity period of the CRL in days.
-   * @default 7 (service default when enabled)
+   * Validity period of the CRL (e.g. `"7 days"` or `Duration.days(7)`).
+   * Rounded to whole days on the wire.
+   * @default 7 days (service default when enabled)
    */
-  expirationInDays?: number;
+  expirationInDays?: Duration.Input;
   /**
    * Alias to conceal the S3 bucket name inside issued certificates.
    */
@@ -182,12 +184,13 @@ export interface CertificateAuthorityProps {
     ocspConfiguration?: OcspConfigurationProps;
   };
   /**
-   * Number of days (7-30) the CA remains restorable after deletion. Used
-   * when the CA is destroyed while in the `PENDING_CERTIFICATE` or
-   * `DISABLED` state.
-   * @default 7
+   * How long (7-30 days, e.g. `"7 days"`) the CA remains restorable after
+   * deletion. Used when the CA is destroyed while in the
+   * `PENDING_CERTIFICATE` or `DISABLED` state. Rounded to whole days on the
+   * wire.
+   * @default 7 days
    */
-  permanentDeletionTimeInDays?: number;
+  permanentDeletionTimeInDays?: Duration.Input;
   /**
    * Tags to apply to the CA. Merged with internal Alchemy tags.
    */
@@ -257,7 +260,7 @@ export interface CertificateAuthority extends Resource<
  *   revocationConfiguration: {
  *     crlConfiguration: {
  *       enabled: true,
- *       expirationInDays: 7,
+ *       expirationInDays: "7 days",
  *       s3BucketName: bucket.bucketName,
  *     },
  *   },
@@ -307,6 +310,34 @@ const retryWhileConcurrentlyModified = <
     schedule: Schedule.fixed(2000).pipe(Schedule.both(Schedule.recurs(10))),
   });
 
+/**
+ * Normalize a `Duration.Input` that may have round-tripped through state
+ * JSON (which flattens a `Duration` to its `toJSON` shape
+ * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
+ * `Duration.Input`) back into an input `Duration.toDays` accepts.
+ */
+const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional duration input to whole wire days. */
+const toWireDays = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toDays(normalizeDurationInput(input)));
+
 const buildSubject = (
   subject: CertificateAuthoritySubject,
 ): acmpca.ASN1Subject => ({
@@ -336,7 +367,7 @@ const buildRevocationConfiguration = (
     CrlConfiguration: crl
       ? {
           Enabled: crl.enabled,
-          ExpirationInDays: crl.expirationInDays,
+          ExpirationInDays: toWireDays(crl.expirationInDays),
           CustomCname: crl.customCname,
           S3BucketName: crl.s3BucketName,
           S3ObjectAcl: crl.s3ObjectAcl,
@@ -583,7 +614,12 @@ export const CertificateAuthorityProvider = () =>
                         ca.RevocationConfiguration.CrlConfiguration.Enabled,
                       expirationInDays:
                         ca.RevocationConfiguration.CrlConfiguration
-                          .ExpirationInDays,
+                          .ExpirationInDays === undefined
+                          ? undefined
+                          : Duration.days(
+                              ca.RevocationConfiguration.CrlConfiguration
+                                .ExpirationInDays,
+                            ),
                       customCname:
                         ca.RevocationConfiguration.CrlConfiguration.CustomCname,
                       s3BucketName:
@@ -673,7 +709,7 @@ export const CertificateAuthorityProvider = () =>
             .deleteCertificateAuthority({
               CertificateAuthorityArn: arn,
               PermanentDeletionTimeInDays: canSetWindow
-                ? (olds?.permanentDeletionTimeInDays ?? 7)
+                ? (toWireDays(olds?.permanentDeletionTimeInDays) ?? 7)
                 : undefined,
             })
             .pipe(

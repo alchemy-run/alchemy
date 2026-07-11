@@ -1,5 +1,6 @@
 import * as appsync from "@distilled.cloud/aws/appsync";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -52,11 +53,11 @@ export interface LambdaAuthorizerConfig {
    */
   authorizerUri: string;
   /**
-   * Seconds AppSync caches an authorizer response (0 disables caching,
-   * max 3600).
-   * @default 300
+   * How long AppSync caches an authorizer response, e.g. `"5 minutes"` or
+   * `Duration.seconds(300)` (0 disables caching, max 1 hour).
+   * @default "300 seconds"
    */
-  authorizerResultTtlInSeconds?: number;
+  authorizerResultTtlInSeconds?: Duration.Input;
   /** Regular expression the authorization token must match before invoking. */
   identityValidationExpression?: string;
 }
@@ -66,10 +67,10 @@ export interface OpenIDConnectAuthConfig {
   issuer: string;
   /** The client identifier the token audience must match. */
   clientId?: string;
-  /** Milliseconds a token is valid after `iat`. */
-  iatTTL?: number;
-  /** Milliseconds a token is valid after `auth_time`. */
-  authTTL?: number;
+  /** How long a token is valid after `iat`, e.g. `"1 hour"`. */
+  iatTTL?: Duration.Input;
+  /** How long a token is valid after `auth_time`, e.g. `"1 hour"`. */
+  authTTL?: Duration.Input;
 }
 
 export interface AdditionalAuthProvider {
@@ -94,8 +95,8 @@ export interface ApiCacheConfig {
    * `"PER_RESOLVER_CACHING"` caches only resolvers that opt in.
    */
   behavior: appsync.ApiCachingBehavior;
-  /** TTL in seconds for cache entries (1–3600). */
-  ttl: number;
+  /** TTL for cache entries, e.g. `"60 seconds"` (1 second–1 hour). */
+  ttl: Duration.Input;
   /** Encrypt cache entries in transit. Immutable after creation. */
   transitEncryptionEnabled?: boolean;
   /** Encrypt cache entries at rest. Immutable after creation. */
@@ -265,7 +266,7 @@ export interface GraphqlApi extends Resource<
  * ```typescript
  * const api = yield* AppSync.GraphqlApi("Api", {
  *   schema,
- *   cache: { type: "SMALL", behavior: "FULL_REQUEST_CACHING", ttl: 60 },
+ *   cache: { type: "SMALL", behavior: "FULL_REQUEST_CACHING", ttl: "60 seconds" },
  * });
  * ```
  */
@@ -286,6 +287,40 @@ export class SchemaCreationTimedOut extends Data.TaggedError(
   readonly apiId: string;
   readonly status: string | undefined;
 }> {}
+
+/** Convert an optional {@link Duration.Input} to whole wire seconds. */
+const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined ? undefined : Math.round(Duration.toSeconds(input));
+
+/** Convert an optional {@link Duration.Input} to whole wire milliseconds. */
+const toWireMillis = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined ? undefined : Math.round(Duration.toMillis(input));
+
+const toWireOidcConfig = (
+  config: OpenIDConnectAuthConfig | undefined,
+): appsync.OpenIDConnectConfig | undefined =>
+  config === undefined
+    ? undefined
+    : {
+        issuer: config.issuer,
+        clientId: config.clientId,
+        // The AppSync API expresses both token TTLs in milliseconds.
+        iatTTL: toWireMillis(config.iatTTL),
+        authTTL: toWireMillis(config.authTTL),
+      };
+
+const toWireLambdaAuthorizerConfig = (
+  config: LambdaAuthorizerConfig | undefined,
+): appsync.LambdaAuthorizerConfig | undefined =>
+  config === undefined
+    ? undefined
+    : {
+        authorizerUri: config.authorizerUri,
+        authorizerResultTtlInSeconds: toWireSeconds(
+          config.authorizerResultTtlInSeconds,
+        ),
+        identityValidationExpression: config.identityValidationExpression,
+      };
 
 const toWireUserPoolConfig = (
   config: UserPoolAuthConfig | undefined,
@@ -316,8 +351,10 @@ const toWireAdditionalProviders = (
                 awsRegion: provider.userPoolConfig.awsRegion ?? region,
                 appIdClientRegex: provider.userPoolConfig.appIdClientRegex,
               },
-        openIDConnectConfig: provider.openIDConnectConfig,
-        lambdaAuthorizerConfig: provider.lambdaAuthorizerConfig,
+        openIDConnectConfig: toWireOidcConfig(provider.openIDConnectConfig),
+        lambdaAuthorizerConfig: toWireLambdaAuthorizerConfig(
+          provider.lambdaAuthorizerConfig,
+        ),
       }));
 
 /**
@@ -466,13 +503,15 @@ export const GraphqlApiProvider = () =>
           }
           return;
         }
+        // The wire TTL is whole seconds.
+        const desiredTtl = Math.round(Duration.toSeconds(desired.ttl));
         if (observed === undefined) {
           yield* retryConcurrentModification(
             appsync.createApiCache({
               apiId,
               type: desired.type,
               apiCachingBehavior: desired.behavior,
-              ttl: desired.ttl,
+              ttl: desiredTtl,
               transitEncryptionEnabled: desired.transitEncryptionEnabled,
               atRestEncryptionEnabled: desired.atRestEncryptionEnabled,
               healthMetricsConfig: desired.healthMetricsConfig,
@@ -483,7 +522,7 @@ export const GraphqlApiProvider = () =>
         const drifted =
           observed.type !== desired.type ||
           observed.apiCachingBehavior !== desired.behavior ||
-          observed.ttl !== desired.ttl ||
+          observed.ttl !== desiredTtl ||
           (desired.healthMetricsConfig !== undefined &&
             observed.healthMetricsConfig !== desired.healthMetricsConfig);
         if (drifted) {
@@ -492,7 +531,7 @@ export const GraphqlApiProvider = () =>
               apiId,
               type: desired.type,
               apiCachingBehavior: desired.behavior,
-              ttl: desired.ttl,
+              ttl: desiredTtl,
               healthMetricsConfig: desired.healthMetricsConfig,
             }),
           );
@@ -546,8 +585,10 @@ export const GraphqlApiProvider = () =>
             name,
             authenticationType,
             userPoolConfig: toWireUserPoolConfig(news.userPoolConfig, region),
-            openIDConnectConfig: news.openIDConnectConfig,
-            lambdaAuthorizerConfig: news.lambdaAuthorizerConfig,
+            openIDConnectConfig: toWireOidcConfig(news.openIDConnectConfig),
+            lambdaAuthorizerConfig: toWireLambdaAuthorizerConfig(
+              news.lambdaAuthorizerConfig,
+            ),
             additionalAuthenticationProviders: toWireAdditionalProviders(
               news.additionalAuthenticationProviders,
               region,

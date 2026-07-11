@@ -23,8 +23,8 @@ describe("AWS.CloudFront.CachePolicy", () => {
             return yield* CachePolicy("ApiCachePolicy", {
               comment: "initial",
               minTTL: 0,
-              defaultTTL: 60,
-              maxTTL: 3600,
+              defaultTTL: "60 seconds",
+              maxTTL: "1 hour",
               parametersInCacheKeyAndForwardedToOrigin: {
                 EnableAcceptEncodingGzip: true,
                 EnableAcceptEncodingBrotli: true,
@@ -53,8 +53,8 @@ describe("AWS.CloudFront.CachePolicy", () => {
             return yield* CachePolicy("ApiCachePolicy", {
               comment: "updated",
               minTTL: 0,
-              defaultTTL: 120,
-              maxTTL: 86400,
+              defaultTTL: "120 seconds",
+              maxTTL: "1 day",
               parametersInCacheKeyAndForwardedToOrigin: {
                 EnableAcceptEncodingGzip: true,
                 EnableAcceptEncodingBrotli: true,
@@ -94,8 +94,8 @@ describe("AWS.CloudFront.CachePolicy", () => {
             return yield* CachePolicy("ListCachePolicy", {
               comment: "list",
               minTTL: 0,
-              defaultTTL: 60,
-              maxTTL: 3600,
+              defaultTTL: "60 seconds",
+              maxTTL: "1 hour",
               parametersInCacheKeyAndForwardedToOrigin: {
                 EnableAcceptEncodingGzip: true,
                 EnableAcceptEncodingBrotli: true,

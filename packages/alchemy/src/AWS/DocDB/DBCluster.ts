@@ -1,4 +1,5 @@
 import * as docdb from "@distilled.cloud/aws/docdb";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -49,9 +50,10 @@ export interface DBClusterProps {
    */
   availabilityZones?: string[];
   /**
-   * Backup retention period in days. In-place modify.
+   * Backup retention period, e.g. `"7 days"` or `Duration.days(7)`.
+   * Rounded to whole days on the wire. In-place modify.
    */
-  backupRetentionPeriod?: number;
+  backupRetentionPeriod?: Duration.Input;
   /**
    * Daily backup window, e.g. `07:00-09:00`. In-place modify.
    */
@@ -181,7 +183,7 @@ export interface DBCluster extends Resource<
  *   vpcSecurityGroupIds: [sg.groupId],
  *   masterUsername: "alchemy",
  *   manageMasterUserPassword: true,
- *   backupRetentionPeriod: 7,
+ *   backupRetentionPeriod: "7 days",
  *   deletionProtection: false,
  * });
  * ```
@@ -199,6 +201,12 @@ export interface DBCluster extends Resource<
  * ```
  */
 export const DBCluster = Resource<DBCluster>("AWS.DocDB.DBCluster");
+
+/** Normalize a {@link DBClusterProps.backupRetentionPeriod} to the whole days the API expects. */
+const toRetentionDays = (
+  period: Duration.Input | undefined,
+): number | undefined =>
+  period === undefined ? undefined : Math.round(Duration.toDays(period));
 
 const toTagRecord = (
   tags: Array<{ Key?: string; Value?: string }> | undefined,
@@ -415,7 +423,9 @@ export const DBClusterProvider = () =>
                 VpcSecurityGroupIds: news.vpcSecurityGroupIds,
                 Port: news.port,
                 AvailabilityZones: news.availabilityZones,
-                BackupRetentionPeriod: news.backupRetentionPeriod,
+                BackupRetentionPeriod: toRetentionDays(
+                  news.backupRetentionPeriod,
+                ),
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
@@ -467,7 +477,7 @@ export const DBClusterProvider = () =>
             };
             setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
             setIf("Port", news.port, observed.Port);
-            setIf("BackupRetentionPeriod", news.backupRetentionPeriod, observed.BackupRetentionPeriod); // prettier-ignore
+            setIf("BackupRetentionPeriod", toRetentionDays(news.backupRetentionPeriod), observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
             setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore

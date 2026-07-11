@@ -5,6 +5,7 @@ import * as ds from "@distilled.cloud/aws/directory-service";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
@@ -113,7 +114,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY)(
       const network = yield* defaultNetwork;
       const props = {
         name: "corp.alchemy-test.internal",
-        password: "AlchemyTest123!",
+        password: Redacted.make("AlchemyTest123!"),
         size: "Small" as const,
         description: "alchemy directory-service test",
         vpcId: network.vpcId,
@@ -188,7 +189,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY_MSAD)(
       const directoryProps = {
         type: "MicrosoftAD" as const,
         name: "msad.alchemy-test.internal",
-        password: "AlchemyTest123!",
+        password: Redacted.make("AlchemyTest123!"),
         edition: "Standard" as const,
         vpcId: network.vpcId,
         subnetIds: network.subnetIds,

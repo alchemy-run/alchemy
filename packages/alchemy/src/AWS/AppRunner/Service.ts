@@ -1,5 +1,6 @@
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -10,6 +11,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readAppRunnerTags,
@@ -95,15 +97,17 @@ export interface ServiceHealthCheckConfiguration {
    */
   path?: string;
   /**
-   * Seconds between health checks (1-20).
-   * @default 5
+   * Time between health checks, e.g. `"5 seconds"` or
+   * `Duration.seconds(5)` (1-20 seconds on the wire).
+   * @default "5 seconds"
    */
-  interval?: number;
+  interval?: Duration.Input;
   /**
-   * Seconds to wait for a response (1-20).
-   * @default 2
+   * Time to wait for a response, e.g. `"2 seconds"` or
+   * `Duration.seconds(2)` (1-20 seconds on the wire).
+   * @default "2 seconds"
    */
-  timeout?: number;
+  timeout?: Duration.Input;
   /**
    * Consecutive successful checks before the target is healthy (1-20).
    * @default 1
@@ -374,8 +378,8 @@ const toWireHealthCheck = (
     : {
         Protocol: healthCheck.protocol,
         Path: healthCheck.path,
-        Interval: healthCheck.interval,
-        Timeout: healthCheck.timeout,
+        Interval: toSeconds(healthCheck.interval),
+        Timeout: toSeconds(healthCheck.timeout),
         HealthyThreshold: healthCheck.healthyThreshold,
         UnhealthyThreshold: healthCheck.unhealthyThreshold,
       };
@@ -460,8 +464,9 @@ const healthCheckDrifted = (
     observed?.Protocol !== desired.protocol) ||
     (desired.path !== undefined && observed?.Path !== desired.path) ||
     (desired.interval !== undefined &&
-      observed?.Interval !== desired.interval) ||
-    (desired.timeout !== undefined && observed?.Timeout !== desired.timeout) ||
+      observed?.Interval !== toSeconds(desired.interval)) ||
+    (desired.timeout !== undefined &&
+      observed?.Timeout !== toSeconds(desired.timeout)) ||
     (desired.healthyThreshold !== undefined &&
       observed?.HealthyThreshold !== desired.healthyThreshold) ||
     (desired.unhealthyThreshold !== undefined &&

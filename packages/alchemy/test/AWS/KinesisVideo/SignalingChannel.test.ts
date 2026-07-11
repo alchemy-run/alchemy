@@ -69,7 +69,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* SignalingChannel("TestSignalingChannel", {
-            messageTtlSeconds: 30,
+            messageTtlSeconds: "30 seconds",
             tags: { Environment: "test", Extra: "yes" },
           });
         }),

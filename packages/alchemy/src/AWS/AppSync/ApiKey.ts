@@ -1,5 +1,6 @@
 import * as appsync from "@distilled.cloud/aws/appsync";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -33,9 +34,10 @@ export interface AppSyncApiKey extends Resource<
     apiId: string;
     /**
      * The API key ID — this IS the secret key value (`da2-…`) clients send
-     * in the `x-api-key` header. Treat it as sensitive.
+     * in the `x-api-key` header. Wrapped in `Redacted` — unwrap with
+     * `Redacted.value(key.id)` where the raw header value is needed.
      */
-    id: string;
+    id: Redacted.Redacted<string>;
     /** The key's expiry (epoch seconds, rounded down to the hour). */
     expires: number | undefined;
     /** The key's description. */
@@ -49,13 +51,14 @@ export interface AppSyncApiKey extends Resource<
  * An AppSync API key for `API_KEY`-authenticated GraphQL APIs.
  *
  * The key's `id` attribute is the secret value (`da2-…`) sent in the
- * `x-api-key` request header.
+ * `x-api-key` request header. It is wrapped in `Redacted`; unwrap with
+ * `Redacted.value(key.id)` where the raw header value is needed.
  * @resource
  * @section Creating API Keys
  * @example Key with the default 7-day expiry
  * ```typescript
  * const key = yield* AppSync.ApiKey("Key", { api });
- * // key.id → "da2-…" — send as the x-api-key header
+ * // Redacted.value(key.id) → "da2-…" — send as the x-api-key header
  * ```
  *
  * @example Key with a managed expiry
@@ -123,7 +126,8 @@ export const ApiKeyProvider = () =>
         key: appsync.ApiKey,
       ): AppSyncApiKey["Attributes"] => ({
         apiId,
-        id: key.id!,
+        // The key id doubles as the secret `x-api-key` header value.
+        id: Redacted.make(key.id!),
         expires: key.expires,
         description: key.description,
       });
@@ -141,7 +145,7 @@ export const ApiKeyProvider = () =>
           // Keys carry no deterministic identity — without the cached id
           // there is nothing to look up (a fresh reconcile will mint one).
           if (output?.id === undefined) return undefined;
-          const key = yield* findKey(output.apiId, output.id);
+          const key = yield* findKey(output.apiId, Redacted.value(output.id));
           if (key?.id == null) return undefined;
           return toAttributes(output.apiId, key);
         }),
@@ -160,7 +164,7 @@ export const ApiKeyProvider = () =>
           // 1. OBSERVE — the cached key id is the only handle.
           let observed =
             output?.id !== undefined
-              ? yield* findKey(apiId, output.id)
+              ? yield* findKey(apiId, Redacted.value(output.id))
               : undefined;
 
           if (observed?.id == null) {
@@ -203,7 +207,10 @@ export const ApiKeyProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* retryConcurrentModification(
             appsync
-              .deleteApiKey({ apiId: output.apiId, id: output.id })
+              .deleteApiKey({
+                apiId: output.apiId,
+                id: Redacted.value(output.id),
+              })
               .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
           );
         }),

@@ -40,7 +40,7 @@ test.provider(
               email: "admin@example.com",
               email_verified: "true",
             },
-            password: PASSWORD,
+            password: Redacted.make(PASSWORD),
           });
           return { pool, user };
         }),
@@ -78,7 +78,7 @@ test.provider(
               email: "admin2@example.com",
               email_verified: "true",
             },
-            password: PASSWORD,
+            password: Redacted.make(PASSWORD),
             enabled: false,
           });
           return { pool, user };
@@ -109,7 +109,7 @@ test.provider(
               email: "admin2@example.com",
               email_verified: "true",
             },
-            password: PASSWORD,
+            password: Redacted.make(PASSWORD),
           });
           return { pool, user };
         }),

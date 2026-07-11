@@ -3,6 +3,7 @@ import { Channel, ChannelGroup, OriginEndpoint } from "@/AWS/MediaPackageV2";
 import * as Test from "@/Test/Vitest";
 import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
 import { expect } from "@effect/vitest";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -54,7 +55,7 @@ test.provider(
 
       const deployStack = (props: {
         endpointDescription?: string;
-        startoverWindowSeconds?: number;
+        startoverWindowSeconds?: Duration.Input;
         containerType: mediapackagev2.ContainerType;
       }) =>
         stack.deploy(
@@ -125,7 +126,7 @@ test.provider(
       //    every ARN must survive.
       const second = yield* deployStack({
         endpointDescription: "v2",
-        startoverWindowSeconds: 300,
+        startoverWindowSeconds: "5 minutes",
         containerType: "TS",
       });
       expect(second.group.channelGroupArn).toBe(first.group.channelGroupArn);
@@ -146,7 +147,7 @@ test.provider(
       //    group stay in place.
       const third = yield* deployStack({
         endpointDescription: "v2",
-        startoverWindowSeconds: 300,
+        startoverWindowSeconds: "5 minutes",
         containerType: "CMAF",
       });
       expect(third.group.channelGroupArn).toBe(first.group.channelGroupArn);

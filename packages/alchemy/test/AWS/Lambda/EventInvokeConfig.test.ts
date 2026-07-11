@@ -30,7 +30,7 @@ test.provider(
       }) =>
         Effect.gen(function* () {
           const queue = yield* AWS.SQS.Queue("FailureQueue", {
-            visibilityTimeout: 30,
+            visibilityTimeout: "30 seconds",
           });
 
           const fn = yield* AWS.Lambda.Function("AsyncFn", {

@@ -1,4 +1,5 @@
 import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -46,11 +47,12 @@ export interface ClusterProps {
    */
   mode?: cloudhsm.ClusterMode;
   /**
-   * How many days automatic backups of the cluster are retained. Updated in
-   * place via ModifyCluster.
-   * @default 90
+   * How long automatic backups of the cluster are retained (e.g. `"30 days"`
+   * or `Duration.days(30)`; a bare number is milliseconds). Updated in place
+   * via ModifyCluster.
+   * @default 90 days
    */
-  backupRetentionDays?: number;
+  backupRetentionDays?: Duration.Input;
   /**
    * User-defined tags for the cluster.
    */
@@ -103,7 +105,7 @@ export interface Cluster extends Resource<
  *   hsmType: "hsm2m.medium",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  *   mode: "NON_FIPS",
- *   backupRetentionDays: 30,
+ *   backupRetentionDays: "30 days",
  * });
  * ```
  *
@@ -256,6 +258,10 @@ export const ClusterProvider = () =>
           const props = news!;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
+          const backupRetentionDays =
+            props.backupRetentionDays !== undefined
+              ? Math.round(Duration.toDays(props.backupRetentionDays))
+              : undefined;
 
           // 1. Observe — cloud state is authoritative; output is only an id
           //    cache. Without one, recover by alchemy tags (crash recovery /
@@ -273,8 +279,8 @@ export const ClusterProvider = () =>
               NetworkType: props.networkType,
               Mode: props.mode,
               BackupRetentionPolicy:
-                props.backupRetentionDays !== undefined
-                  ? { Type: "DAYS", Value: String(props.backupRetentionDays) }
+                backupRetentionDays !== undefined
+                  ? { Type: "DAYS", Value: String(backupRetentionDays) }
                   : undefined,
               TagList: createTagsList(desiredTags),
             });
@@ -293,15 +299,15 @@ export const ClusterProvider = () =>
 
           // 3. Sync backup retention — diff OBSERVED policy against desired.
           if (
-            props.backupRetentionDays !== undefined &&
-            String(props.backupRetentionDays) !==
+            backupRetentionDays !== undefined &&
+            String(backupRetentionDays) !==
               observed.BackupRetentionPolicy?.Value
           ) {
             yield* cloudhsm.modifyCluster({
               ClusterId: clusterId,
               BackupRetentionPolicy: {
                 Type: "DAYS",
-                Value: String(props.backupRetentionDays),
+                Value: String(backupRetentionDays),
               },
             });
             observed = yield* waitUntilSettled(clusterId);

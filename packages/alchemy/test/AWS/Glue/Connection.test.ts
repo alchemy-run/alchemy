@@ -4,6 +4,7 @@ import * as Test from "@/Test/Vitest";
 import * as glue from "@distilled.cloud/aws/glue";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,7 +27,7 @@ test.provider("create, update, delete Glue JDBC connection", (stack) =>
             JDBC_CONNECTION_URL:
               "jdbc:postgresql://db.example.com:5432/warehouse",
             USERNAME: "glue",
-            PASSWORD: "secret",
+            PASSWORD: Redacted.make("secret"),
           },
           tags: { Environment: "test" },
         });
@@ -60,7 +61,7 @@ test.provider("create, update, delete Glue JDBC connection", (stack) =>
             JDBC_CONNECTION_URL:
               "jdbc:postgresql://db2.example.com:5432/warehouse",
             USERNAME: "glue",
-            PASSWORD: "secret",
+            PASSWORD: Redacted.make("secret"),
           },
           tags: { Environment: "test" },
         });

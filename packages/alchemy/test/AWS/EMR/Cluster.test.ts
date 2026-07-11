@@ -5,6 +5,7 @@ import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as emr from "@distilled.cloud/aws/emr";
 import { expect } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
@@ -129,7 +130,11 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               },
               stepConcurrencyLevel: props.stepConcurrencyLevel,
               autoTerminationPolicy: props.idleTimeoutSeconds
-                ? { idleTimeoutSeconds: props.idleTimeoutSeconds }
+                ? {
+                    idleTimeoutSeconds: Duration.seconds(
+                      props.idleTimeoutSeconds,
+                    ),
+                  }
                 : undefined,
               tags: { fixture: "emr-cluster" },
             });

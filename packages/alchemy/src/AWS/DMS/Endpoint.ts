@@ -41,7 +41,7 @@ export interface EndpointProps {
   /**
    * Password used to connect to the endpoint database. Marked sensitive.
    */
-  password?: string;
+  password?: Redacted.Redacted<string>;
   /**
    * Host name of the endpoint database server.
    */
@@ -145,7 +145,7 @@ export interface Endpoint extends Resource<
  *   serverName: "source-db.example.com",
  *   port: 3306,
  *   username: "admin",
- *   password: "super-secret",
+ *   password: Redacted.make("super-secret"),
  *   databaseName: "app",
  * });
  * ```
@@ -229,10 +229,7 @@ export const EndpointProvider = () =>
       // Settings blocks and secret material shared by create + modify.
       const buildSettings = (props: EndpointProps) => ({
         Username: props.username,
-        Password:
-          props.password === undefined
-            ? undefined
-            : Redacted.make(props.password),
+        Password: props.password,
         ServerName: props.serverName,
         Port: props.port,
         DatabaseName: props.databaseName,

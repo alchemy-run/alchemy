@@ -5,6 +5,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as emr from "@distilled.cloud/aws/emr-serverless";
 import { expect } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -44,7 +45,10 @@ test.provider(
               applicationName: APP_NAME,
               releaseLabel: RELEASE_LABEL,
               autoStartConfiguration: { enabled: true },
-              autoStopConfiguration: { enabled: true, idleTimeoutMinutes },
+              autoStopConfiguration: {
+                enabled: true,
+                idleTimeoutMinutes: Duration.minutes(idleTimeoutMinutes),
+              },
               tags: { purpose: "alchemy-test" },
             });
           }),
@@ -123,7 +127,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           const app = yield* Application("JobApp", {
             applicationName: JOB_APP_NAME,
             releaseLabel: RELEASE_LABEL,
-            autoStopConfiguration: { enabled: true, idleTimeoutMinutes: 1 },
+            autoStopConfiguration: {
+              enabled: true,
+              idleTimeoutMinutes: "1 minute",
+            },
           });
           return { app, role };
         }),

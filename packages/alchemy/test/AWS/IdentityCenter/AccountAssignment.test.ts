@@ -33,7 +33,7 @@ test.provider.skipIf(SKIP_IDENTITY_CENTER)(
           const permissionSet = yield* PermissionSet("ListPermissionSet", {
             name: "alchemy-list-test-permission-set",
             description: "Permission set used to verify list() enumeration",
-            sessionDuration: "PT1H",
+            sessionDuration: "1 hour",
           });
 
           const group = yield* Group("ListGroup", {

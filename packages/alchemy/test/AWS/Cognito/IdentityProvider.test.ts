@@ -4,14 +4,16 @@ import * as Test from "@/Test/Vitest";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // OIDC provider validation is lazy for issuer reachability of well-known
-// issuers; a dummy client against accounts.google.com creates fine.
+// issuers; a dummy client against accounts.google.com creates fine. The
+// client_secret is Redacted to exercise the provider's unwrapping.
 const providerDetails = {
   client_id: "alchemy-test-client",
-  client_secret: "alchemy-test-secret",
+  client_secret: Redacted.make("alchemy-test-secret"),
   authorize_scopes: "openid email",
   oidc_issuer: "https://accounts.google.com",
   attributes_request_method: "GET",

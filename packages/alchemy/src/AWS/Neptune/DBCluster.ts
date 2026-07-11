@@ -1,4 +1,5 @@
 import * as neptune from "@distilled.cloud/aws/neptune";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -59,9 +60,10 @@ export interface DBClusterProps {
    */
   availabilityZones?: string[];
   /**
-   * Backup retention period in days. In-place modify.
+   * Backup retention period (1-35 days, e.g. `"7 days"` or
+   * `Duration.days(7)`). Sent to the API in whole days. In-place modify.
    */
-  backupRetentionPeriod?: number;
+  backupRetentionPeriod?: Duration.Input;
   /**
    * Daily backup window, e.g. `07:00-09:00`. In-place modify.
    */
@@ -184,7 +186,7 @@ export interface DBCluster extends Resource<
  *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
  *   vpcSecurityGroupIds: [sg.groupId],
  *   enableIAMDatabaseAuthentication: true,
- *   backupRetentionPeriod: 1,
+ *   backupRetentionPeriod: "1 day",
  *   deletionProtection: false,
  * });
  * ```
@@ -405,6 +407,11 @@ export const DBClusterProvider = () =>
             output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          // The wire field is whole days.
+          const backupRetentionDays =
+            news.backupRetentionPeriod !== undefined
+              ? Math.round(Duration.toDays(news.backupRetentionPeriod))
+              : undefined;
 
           // Observe — fetch live cluster state.
           let observed = yield* readCluster(identifier);
@@ -422,7 +429,7 @@ export const DBClusterProvider = () =>
                 VpcSecurityGroupIds: news.vpcSecurityGroupIds,
                 Port: news.port,
                 AvailabilityZones: news.availabilityZones,
-                BackupRetentionPeriod: news.backupRetentionPeriod,
+                BackupRetentionPeriod: backupRetentionDays,
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
@@ -481,7 +488,7 @@ export const DBClusterProvider = () =>
             };
             setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
             setIf("Port", news.port, observed.Port);
-            setIf("BackupRetentionPeriod", news.backupRetentionPeriod, observed.BackupRetentionPeriod); // prettier-ignore
+            setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
             setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore

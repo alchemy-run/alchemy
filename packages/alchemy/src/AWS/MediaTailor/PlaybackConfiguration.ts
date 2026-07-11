@@ -1,5 +1,6 @@
 import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -13,6 +14,7 @@ import {
   hasAlchemyTags,
   tagRecord,
 } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -87,8 +89,11 @@ export interface PlaybackConfigurationBumper {
 export interface PlaybackConfigurationLivePreRoll {
   /** The ad decision server URL used for live pre-roll ads. */
   adDecisionServerUrl?: string;
-  /** Maximum allowed duration for the pre-roll ad avail, in seconds. */
-  maxDurationSeconds?: number;
+  /**
+   * Maximum allowed duration for the pre-roll ad avail, e.g. `"30 seconds"`.
+   * Sent to the API in whole seconds.
+   */
+  maxDurationSeconds?: Duration.Input;
 }
 
 /**
@@ -131,11 +136,11 @@ export interface PlaybackConfigurationProps {
    */
   slateAdUrl?: string;
   /**
-   * Defines the maximum duration of underfilled ad time (in seconds)
+   * Defines the maximum duration of underfilled ad time (e.g. `"2 seconds"`)
    * allowed in an ad break. Underfilled time beyond the threshold is not
-   * filled with slate.
+   * filled with slate. Sent to the API in whole seconds.
    */
-  personalizationThresholdSeconds?: number;
+  personalizationThresholdSeconds?: Duration.Input;
   /**
    * The name that is used to associate this playback configuration with a
    * custom transcode profile (set up with AWS Support).
@@ -221,7 +226,7 @@ export interface PlaybackConfiguration extends Resource<
  *   adDecisionServerUrl: "https://ads.example.com/vast",
  *   videoContentSourceUrl: "https://origin.example.com/vod",
  *   slateAdUrl: "https://origin.example.com/slate.mp4",
- *   personalizationThresholdSeconds: 2,
+ *   personalizationThresholdSeconds: "2 seconds",
  * });
  * ```
  *
@@ -318,7 +323,9 @@ export const PlaybackConfigurationProvider = () =>
         AdDecisionServerUrl: props.adDecisionServerUrl,
         VideoContentSourceUrl: props.videoContentSourceUrl,
         SlateAdUrl: props.slateAdUrl,
-        PersonalizationThresholdSeconds: props.personalizationThresholdSeconds,
+        PersonalizationThresholdSeconds: toSeconds(
+          props.personalizationThresholdSeconds,
+        ),
         TranscodeProfileName: props.transcodeProfileName,
         InsertionMode: props.insertionMode,
         CdnConfiguration: props.cdnConfiguration && {
@@ -342,7 +349,9 @@ export const PlaybackConfigurationProvider = () =>
         LivePreRollConfiguration: props.livePreRollConfiguration && {
           AdDecisionServerUrl:
             props.livePreRollConfiguration.adDecisionServerUrl,
-          MaxDurationSeconds: props.livePreRollConfiguration.maxDurationSeconds,
+          MaxDurationSeconds: toSeconds(
+            props.livePreRollConfiguration.maxDurationSeconds,
+          ),
         },
         ManifestProcessingRules: props.manifestProcessingRules && {
           AdMarkerPassthrough: {

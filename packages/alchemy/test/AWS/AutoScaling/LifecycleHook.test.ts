@@ -9,6 +9,7 @@ import * as Test from "@/Test/Vitest";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -64,7 +65,7 @@ test.provider(
         );
       }
 
-      const deployHook = (heartbeatTimeout: number) =>
+      const deployHook = (heartbeatTimeout: Duration.Input) =>
         stack.deploy(
           Effect.gen(function* () {
             const template = yield* LaunchTemplate("HookTemplate", {
@@ -90,7 +91,7 @@ test.provider(
         );
 
       // Create.
-      const created = yield* deployHook(300);
+      const created = yield* deployHook("300 seconds");
       expect(created.lifecycleHookName).toEqual(hookName);
       expect(created.autoScalingGroupName).toEqual(asgName);
       expect(created.lifecycleTransition).toEqual(
@@ -106,7 +107,7 @@ test.provider(
       expect(liveCreated?.DefaultResult).toEqual("CONTINUE");
 
       // Update the heartbeat timeout in place (same name → no replacement).
-      const updated = yield* deployHook(120);
+      const updated = yield* deployHook("120 seconds");
       expect(updated.lifecycleHookName).toEqual(hookName);
       expect(updated.heartbeatTimeout).toEqual(120);
 

@@ -1,5 +1,6 @@
 import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -17,6 +18,104 @@ import {
   sameShape,
   syncIotWirelessTags,
 } from "./internal.ts";
+
+/**
+ * LoRaWAN OTAA v1.1 activation keys. The root keys (`AppKey`, `NwkKey`) are
+ * secrets — wrap them with `Redacted.make(...)`.
+ */
+export interface OtaaV1_1Props {
+  /** The AppKey root key. Secret key material. */
+  AppKey?: Redacted.Redacted<string>;
+  /** The NwkKey root key. Secret key material. */
+  NwkKey?: Redacted.Redacted<string>;
+  /** The JoinEUI identifier (public). */
+  JoinEui?: string;
+}
+
+/**
+ * LoRaWAN OTAA v1.0.x activation keys. The root keys (`AppKey`, `GenAppKey`)
+ * are secrets — wrap them with `Redacted.make(...)`.
+ */
+export interface OtaaV1_0_xProps {
+  /** The AppKey root key. Secret key material. */
+  AppKey?: Redacted.Redacted<string>;
+  /** The AppEUI identifier (public). */
+  AppEui?: string;
+  /** The JoinEUI identifier (public). */
+  JoinEui?: string;
+  /** The GenAppKey root key. Secret key material. */
+  GenAppKey?: Redacted.Redacted<string>;
+}
+
+/**
+ * LoRaWAN ABP v1.1 session keys. All four keys are secrets — wrap them with
+ * `Redacted.make(...)`.
+ */
+export interface SessionKeysAbpV1_1Props {
+  /** The FNwkSIntKey session key. Secret key material. */
+  FNwkSIntKey?: Redacted.Redacted<string>;
+  /** The SNwkSIntKey session key. Secret key material. */
+  SNwkSIntKey?: Redacted.Redacted<string>;
+  /** The NwkSEncKey session key. Secret key material. */
+  NwkSEncKey?: Redacted.Redacted<string>;
+  /** The AppSKey session key. Secret key material. */
+  AppSKey?: Redacted.Redacted<string>;
+}
+
+/** LoRaWAN ABP v1.1 activation configuration. */
+export interface AbpV1_1Props {
+  /** The device address (public). */
+  DevAddr?: string;
+  /** Session keys. Secret key material. */
+  SessionKeys?: SessionKeysAbpV1_1Props;
+  /** The initial FCnt value. */
+  FCntStart?: number;
+}
+
+/**
+ * LoRaWAN ABP v1.0.x session keys. Both keys are secrets — wrap them with
+ * `Redacted.make(...)`.
+ */
+export interface SessionKeysAbpV1_0_xProps {
+  /** The NwkSKey session key. Secret key material. */
+  NwkSKey?: Redacted.Redacted<string>;
+  /** The AppSKey session key. Secret key material. */
+  AppSKey?: Redacted.Redacted<string>;
+}
+
+/** LoRaWAN ABP v1.0.x activation configuration. */
+export interface AbpV1_0_xProps {
+  /** The device address (public). */
+  DevAddr?: string;
+  /** Session keys. Secret key material. */
+  SessionKeys?: SessionKeysAbpV1_0_xProps;
+  /** The initial FCnt value. */
+  FCntStart?: number;
+}
+
+/**
+ * LoRaWAN device configuration. Mirrors the wire shape, with the activation
+ * key material typed as `Redacted` so secrets never leak into logs or state
+ * diffs.
+ */
+export interface LoRaWANDeviceProps {
+  /** The DevEUI radio identifier (public). Changing it replaces the device. */
+  DevEui?: string;
+  /** ID of the device profile the device uses. Updates in place. */
+  DeviceProfileId?: string;
+  /** ID of the service profile the device uses. Updates in place. */
+  ServiceProfileId?: string;
+  /** OTAA v1.1 activation keys. Changing them replaces the device. */
+  OtaaV1_1?: OtaaV1_1Props;
+  /** OTAA v1.0.x activation keys. Changing them replaces the device. */
+  OtaaV1_0_x?: OtaaV1_0_xProps;
+  /** ABP v1.1 activation configuration. Changing it replaces the device. */
+  AbpV1_1?: AbpV1_1Props;
+  /** ABP v1.0.x activation configuration. Changing it replaces the device. */
+  AbpV1_0_x?: AbpV1_0_xProps;
+  /** FPort configuration. Updates in place. */
+  FPorts?: iotw.FPorts;
+}
 
 export interface WirelessDeviceProps {
   /**
@@ -44,9 +143,10 @@ export interface WirelessDeviceProps {
    * and the activation keys (`OtaaV1_0_x`, `OtaaV1_1`, `AbpV1_0_x`,
    * `AbpV1_1`). The `DevEui` and activation keys are the device's radio
    * identity — changing them replaces the device; the profile IDs and
-   * `FPorts` update in place.
+   * `FPorts` update in place. Key material is secret — wrap each key with
+   * `Redacted.make(...)`.
    */
-  loRaWAN?: iotw.LoRaWANDevice;
+  loRaWAN?: LoRaWANDeviceProps;
   /**
    * Whether position solving is enabled for the device (`Enabled` or
    * `Disabled`).
@@ -106,7 +206,7 @@ export interface WirelessDevice extends Resource<
  *     DeviceProfileId: deviceProfile.deviceProfileId,
  *     ServiceProfileId: serviceProfile.serviceProfileId,
  *     OtaaV1_0_x: {
- *       AppKey: "00112233445566778899aabbccddeeff",
+ *       AppKey: Redacted.make("00112233445566778899aabbccddeeff"),
  *       AppEui: "8877665544332211",
  *     },
  *   },
@@ -125,6 +225,78 @@ export interface WirelessDevice extends Resource<
 export const WirelessDevice = Resource<WirelessDevice>(
   "AWS.IoTWireless.WirelessDevice",
 );
+
+const unwrap = (value: Redacted.Redacted<string> | undefined) =>
+  value === undefined ? undefined : Redacted.value(value);
+
+/**
+ * Convert the Redacted-keyed LoRaWAN prop shape to the plain wire shape the
+ * IoT Wireless API expects.
+ */
+const toWireLoRaWAN = (
+  loRaWAN: LoRaWANDeviceProps | undefined,
+): iotw.LoRaWANDevice | undefined =>
+  loRaWAN === undefined
+    ? undefined
+    : {
+        DevEui: loRaWAN.DevEui,
+        DeviceProfileId: loRaWAN.DeviceProfileId,
+        ServiceProfileId: loRaWAN.ServiceProfileId,
+        OtaaV1_1:
+          loRaWAN.OtaaV1_1 === undefined
+            ? undefined
+            : {
+                AppKey: unwrap(loRaWAN.OtaaV1_1.AppKey),
+                NwkKey: unwrap(loRaWAN.OtaaV1_1.NwkKey),
+                JoinEui: loRaWAN.OtaaV1_1.JoinEui,
+              },
+        OtaaV1_0_x:
+          loRaWAN.OtaaV1_0_x === undefined
+            ? undefined
+            : {
+                AppKey: unwrap(loRaWAN.OtaaV1_0_x.AppKey),
+                AppEui: loRaWAN.OtaaV1_0_x.AppEui,
+                JoinEui: loRaWAN.OtaaV1_0_x.JoinEui,
+                GenAppKey: unwrap(loRaWAN.OtaaV1_0_x.GenAppKey),
+              },
+        AbpV1_1:
+          loRaWAN.AbpV1_1 === undefined
+            ? undefined
+            : {
+                DevAddr: loRaWAN.AbpV1_1.DevAddr,
+                FCntStart: loRaWAN.AbpV1_1.FCntStart,
+                SessionKeys:
+                  loRaWAN.AbpV1_1.SessionKeys === undefined
+                    ? undefined
+                    : {
+                        FNwkSIntKey: unwrap(
+                          loRaWAN.AbpV1_1.SessionKeys.FNwkSIntKey,
+                        ),
+                        SNwkSIntKey: unwrap(
+                          loRaWAN.AbpV1_1.SessionKeys.SNwkSIntKey,
+                        ),
+                        NwkSEncKey: unwrap(
+                          loRaWAN.AbpV1_1.SessionKeys.NwkSEncKey,
+                        ),
+                        AppSKey: unwrap(loRaWAN.AbpV1_1.SessionKeys.AppSKey),
+                      },
+              },
+        AbpV1_0_x:
+          loRaWAN.AbpV1_0_x === undefined
+            ? undefined
+            : {
+                DevAddr: loRaWAN.AbpV1_0_x.DevAddr,
+                FCntStart: loRaWAN.AbpV1_0_x.FCntStart,
+                SessionKeys:
+                  loRaWAN.AbpV1_0_x.SessionKeys === undefined
+                    ? undefined
+                    : {
+                        NwkSKey: unwrap(loRaWAN.AbpV1_0_x.SessionKeys.NwkSKey),
+                        AppSKey: unwrap(loRaWAN.AbpV1_0_x.SessionKeys.AppSKey),
+                      },
+              },
+        FPorts: loRaWAN.FPorts,
+      };
 
 /** The parts of a LoRaWAN device spec that form its immutable radio identity. */
 const loRaWANIdentity = (loRaWAN: iotw.LoRaWANDevice | undefined) => ({
@@ -246,8 +418,8 @@ export const WirelessDeviceProvider = () =>
           }
           if (
             !sameShape(
-              loRaWANIdentity(olds?.loRaWAN),
-              loRaWANIdentity(news.loRaWAN),
+              loRaWANIdentity(toWireLoRaWAN(olds?.loRaWAN)),
+              loRaWANIdentity(toWireLoRaWAN(news.loRaWAN)),
             )
           ) {
             return { action: "replace" } as const;
@@ -279,7 +451,7 @@ export const WirelessDeviceProvider = () =>
                 Name: name,
                 Description: news.description,
                 DestinationName: news.destinationName,
-                LoRaWAN: news.loRaWAN,
+                LoRaWAN: toWireLoRaWAN(news.loRaWAN),
                 Positioning: news.positioning,
                 Sidewalk: news.sidewalk,
                 Tags: createTagsList(desiredTags),

@@ -209,7 +209,7 @@ test.provider(
               hostedZoneId,
               name: recoveryRecordName,
               type: "TXT",
-              ttl: 60,
+              ttl: "60 seconds",
               records: [recoveryRecordValue],
             });
           }),

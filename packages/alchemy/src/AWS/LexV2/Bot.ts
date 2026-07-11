@@ -1,4 +1,5 @@
 import * as lexm from "@distilled.cloud/aws/lex-models-v2";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -39,11 +40,13 @@ export interface BotProps {
     childDirected: boolean;
   };
   /**
-   * Seconds Amazon Lex retains a conversation session after the last user
-   * input (60 to 86,400).
-   * @default 300
+   * How long Amazon Lex retains a conversation session after the last user
+   * input (60 seconds to 24 hours). Accepts any `Duration.Input` (e.g.
+   * `"10 minutes"`, `Duration.minutes(10)`; a bare number is milliseconds);
+   * the wire unit is whole seconds.
+   * @default 300 seconds
    */
-  idleSessionTTLInSeconds?: number;
+  idleSessionTTLInSeconds?: Duration.Input;
   /**
    * Description of the bot.
    */
@@ -109,7 +112,7 @@ export interface Bot extends Resource<
  * const bot = yield* AWS.LexV2.Bot("KidsBot", {
  *   roleArn: role.roleArn,
  *   dataPrivacy: { childDirected: true },
- *   idleSessionTTLInSeconds: 600,
+ *   idleSessionTTLInSeconds: "10 minutes",
  *   description: "A bot for children",
  * });
  * ```
@@ -237,7 +240,11 @@ export const BotProvider = () =>
           const desiredDataPrivacy = news.dataPrivacy ?? {
             childDirected: false,
           };
-          const desiredTtl = news.idleSessionTTLInSeconds ?? 300;
+          // Wire unit is whole seconds (idleSessionTTLInSeconds).
+          const desiredTtl =
+            news.idleSessionTTLInSeconds !== undefined
+              ? Math.round(Duration.toSeconds(news.idleSessionTTLInSeconds))
+              : 300;
 
           // 1. OBSERVE — output.botId is only a cache; fall back to name.
           let observed =

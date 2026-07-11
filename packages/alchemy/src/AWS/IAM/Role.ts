@@ -1,4 +1,5 @@
 import * as iam from "@distilled.cloud/aws/iam";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -18,6 +19,7 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
 import {
+  durationToSeconds,
   parsePolicyDocument,
   stringifyPolicyDocument,
   toTagRecord,
@@ -71,9 +73,10 @@ export interface RoleProps {
    */
   description?: string;
   /**
-   * Maximum session duration in seconds.
+   * Maximum session duration, e.g. `"4 hours"` or `Duration.hours(4)`.
+   * Sent to IAM as whole seconds (a bare number is milliseconds).
    */
-  maxSessionDuration?: number;
+  maxSessionDuration?: Duration.Input;
   /**
    * Optional managed policy ARN used as the permissions boundary.
    */
@@ -463,6 +466,9 @@ export const RoleProvider = () =>
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
+          const desiredMaxSessionDuration = durationToSeconds(
+            news.maxSessionDuration,
+          );
 
           // Observe — read the role from IAM. Absence is signalled by
           // `NoSuchEntityException`; ownership has already been verified
@@ -487,7 +493,7 @@ export const RoleProvider = () =>
                   assumeRolePolicyDocument,
                 ),
                 Description: news.description,
-                MaxSessionDuration: news.maxSessionDuration,
+                MaxSessionDuration: desiredMaxSessionDuration,
                 PermissionsBoundary: news.permissionsBoundary,
                 Tags: createTagsList(desiredTags),
               })
@@ -527,12 +533,12 @@ export const RoleProvider = () =>
           // Sync description / maxSessionDuration via updateRole.
           if (
             observedDescription !== news.description ||
-            observedMaxSessionDuration !== news.maxSessionDuration
+            observedMaxSessionDuration !== desiredMaxSessionDuration
           ) {
             yield* iam.updateRole({
               RoleName: roleName,
               Description: news.description,
-              MaxSessionDuration: news.maxSessionDuration,
+              MaxSessionDuration: desiredMaxSessionDuration,
             });
           }
 
@@ -612,7 +618,7 @@ export const RoleProvider = () =>
             inlinePolicies,
             description: liveRole.Role?.Description ?? news.description,
             maxSessionDuration:
-              liveRole.Role?.MaxSessionDuration ?? news.maxSessionDuration,
+              liveRole.Role?.MaxSessionDuration ?? desiredMaxSessionDuration,
             permissionsBoundary:
               liveRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn ??
               news.permissionsBoundary,

@@ -1,5 +1,6 @@
 import * as securitylake from "@distilled.cloud/aws/securitylake";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
@@ -29,8 +30,12 @@ export interface DataLakeEncryptionConfiguration {
  * When objects expire out of the data lake.
  */
 export interface DataLakeLifecycleExpiration {
-  /** Number of days after which objects are deleted. */
-  days?: number;
+  /**
+   * How long after creation objects are deleted. Accepts any
+   * `Duration.Input` (e.g. `"365 days"`, `Duration.days(365)`; a bare
+   * number is milliseconds); the wire unit is whole days.
+   */
+  days?: Duration.Input;
 }
 
 /**
@@ -39,8 +44,12 @@ export interface DataLakeLifecycleExpiration {
 export interface DataLakeLifecycleTransition {
   /** The S3 storage class to transition into (e.g. `GLACIER`, `ONEZONE_IA`). */
   storageClass?: string;
-  /** Number of days after which objects transition. */
-  days?: number;
+  /**
+   * How long after creation objects transition. Accepts any
+   * `Duration.Input` (e.g. `"30 days"`, `Duration.days(30)`; a bare
+   * number is milliseconds); the wire unit is whole days.
+   */
+  days?: Duration.Input;
 }
 
 /**
@@ -154,8 +163,8 @@ export interface DataLake extends Resource<
  *       region: "us-west-2",
  *       encryptionConfiguration: { kmsKeyId: key.keyId },
  *       lifecycleConfiguration: {
- *         expiration: { days: 365 },
- *         transitions: [{ storageClass: "ONEZONE_IA", days: 30 }],
+ *         expiration: { days: "365 days" },
+ *         transitions: [{ storageClass: "ONEZONE_IA", days: "30 days" }],
  *       },
  *     },
  *   ],
@@ -179,12 +188,63 @@ export class DataLakeCreateFailed extends Data.TaggedError(
   readonly code: string | undefined;
 }> {}
 
+/**
+ * Reconstruct a valid `Duration.Input` from a value that may have
+ * round-tripped through persisted state JSON, which flattens a `Duration`
+ * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
+ * shape `Duration.toDays` silently decodes as zero.
+ */
+const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
+  const json = input as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  return typeof input === "object" && input !== null && json._id === "Duration"
+    ? json._tag === "Millis"
+      ? json.millis!
+      : json._tag === "Nanos"
+        ? BigInt(json.nanos!)
+        : "Infinity"
+    : input;
+};
+
+/** Convert an optional {@link Duration.Input} prop to whole wire days. */
+const toWireDays = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined
+    ? undefined
+    : Math.round(Duration.toDays(fromStateDurationInput(input)));
+
+// Convert a per-Region prop configuration (Duration-typed lifecycle days)
+// into the wire shape the Security Lake API expects (whole days).
+const toWireConfiguration = (
+  config: DataLakeRegionConfiguration,
+): securitylake.DataLakeConfiguration => ({
+  region: config.region,
+  encryptionConfiguration: config.encryptionConfiguration,
+  lifecycleConfiguration: config.lifecycleConfiguration
+    ? {
+        expiration: config.lifecycleConfiguration.expiration
+          ? { days: toWireDays(config.lifecycleConfiguration.expiration.days) }
+          : undefined,
+        transitions: config.lifecycleConfiguration.transitions?.map(
+          (transition) => ({
+            storageClass: transition.storageClass,
+            days: toWireDays(transition.days),
+          }),
+        ),
+      }
+    : undefined,
+  replicationConfiguration: config.replicationConfiguration,
+});
+
 // Normalize a per-Region config for observed↔desired comparison. AWS reports
 // SSE-S3 as `S3_MANAGED_KEY`, so an unset kmsKeyId compares equal to it.
 const normalizeConfig = (config: {
-  encryptionConfiguration?: DataLakeEncryptionConfiguration;
-  lifecycleConfiguration?: DataLakeLifecycleConfiguration;
-  replicationConfiguration?: DataLakeReplicationConfiguration;
+  encryptionConfiguration?: securitylake.DataLakeEncryptionConfiguration;
+  lifecycleConfiguration?: securitylake.DataLakeLifecycleConfiguration;
+  replicationConfiguration?: securitylake.DataLakeReplicationConfiguration;
 }) =>
   JSON.stringify({
     kmsKeyId: config.encryptionConfiguration?.kmsKeyId ?? "S3_MANAGED_KEY",
@@ -295,7 +355,8 @@ export const DataLakeProvider = () =>
           const { region } = yield* AWSEnvironment.current;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const desiredRegions = news.configurations.map((c) => c.region);
+          const desiredConfigs = news.configurations.map(toWireConfiguration);
+          const desiredRegions = desiredConfigs.map((c) => c.region);
 
           // 1. OBSERVE — cloud state is authoritative.
           let lakes = yield* observeDataLakes;
@@ -307,7 +368,7 @@ export const DataLakeProvider = () =>
           // missing Regions covers both greenfield onboarding and Region
           // expansion. A ConflictException is a race with a concurrent
           // enable — fall through to observation.
-          const missing = news.configurations.filter(
+          const missing = desiredConfigs.filter(
             (config) => !observedByRegion.has(config.region),
           );
           if (missing.length > 0) {
@@ -323,7 +384,7 @@ export const DataLakeProvider = () =>
           }
 
           // 3. SYNC per-Region settings — observed ↔ desired delta only.
-          const changed = news.configurations.filter((config) => {
+          const changed = desiredConfigs.filter((config) => {
             const observed = observedByRegion.get(config.region);
             return (
               observed !== undefined &&

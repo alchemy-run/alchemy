@@ -1,4 +1,5 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -6,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { durationToSeconds } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface RecordAliasTarget {
@@ -85,9 +87,10 @@ export interface RecordProps {
    */
   type: route53.RRType;
   /**
-   * TTL in seconds for non-alias records.
+   * TTL for non-alias records, e.g. `"60 seconds"` or `Duration.minutes(5)`
+   * (a bare number is milliseconds). Rounded to whole seconds on the wire.
    */
-  ttl?: number;
+  ttl?: Duration.Input;
   /**
    * Record values for non-alias records.
    */
@@ -233,7 +236,7 @@ export interface Record extends Resource<
  *   hostedZoneId: "Z1234567890",
  *   name: "_acme-challenge.example.com",
  *   type: "TXT",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["\"value\""],
  * });
  * ```
@@ -245,7 +248,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "blue",
  *   weight: 90,
@@ -254,7 +257,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["5.6.7.8"],
  *   setIdentifier: "green",
  *   weight: 10,
@@ -267,7 +270,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "app.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "primary",
  *   failover: "PRIMARY",
@@ -277,7 +280,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "app.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["5.6.7.8"],
  *   setIdentifier: "secondary",
  *   failover: "SECONDARY",
@@ -290,7 +293,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "us-east-1",
  *   region: "us-east-1",
@@ -303,7 +306,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "www.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "default",
  *   geoLocation: { countryCode: "*" },
@@ -409,7 +412,6 @@ const toRecordSet = (
     RecordProps,
     | "name"
     | "type"
-    | "ttl"
     | "records"
     | "aliasTarget"
     | "setIdentifier"
@@ -421,7 +423,10 @@ const toRecordSet = (
     | "multiValueAnswer"
     | "cidrRoutingConfig"
     | "healthCheckId"
-  >,
+  > & {
+    /** TTL already converted to wire seconds. */
+    ttl?: number;
+  },
 ): route53.ResourceRecordSet => ({
   Name: normalizeName(props.name),
   Type: props.type,
@@ -528,7 +533,10 @@ export const RecordProvider = () =>
             Changes: [
               {
                 Action: "UPSERT",
-                ResourceRecordSet: toRecordSet(props),
+                ResourceRecordSet: toRecordSet({
+                  ...props,
+                  ttl: durationToSeconds(props.ttl),
+                }),
               },
             ],
           },

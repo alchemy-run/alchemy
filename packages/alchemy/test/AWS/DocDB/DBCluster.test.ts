@@ -129,7 +129,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             vpcSecurityGroupIds: network.securityGroupIds,
             masterUsername: "alchemy",
             manageMasterUserPassword: true,
-            backupRetentionPeriod: 1,
+            backupRetentionPeriod: "1 day",
             deletionProtection: false,
             tags: { fixture: "docdb-cluster" },
           });

@@ -1,6 +1,7 @@
 import * as redshiftserverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -34,7 +35,7 @@ export interface NamespaceProps {
   /**
    * Administrator password. Ignored when `manageAdminPassword` is true.
    */
-  adminUserPassword?: string;
+  adminUserPassword?: Redacted.Redacted<string>;
   /**
    * Let Redshift generate and manage the admin password in Secrets Manager.
    * The secret ARN is returned as `adminPasswordSecretArn`.
@@ -104,7 +105,7 @@ export interface Namespace extends Resource<
  * const namespace = yield* RedshiftServerless.Namespace("Analytics", {
  *   dbName: "analytics",
  *   adminUsername: "admin",
- *   adminUserPassword: "SuperSecret123!",
+ *   adminUserPassword: Redacted.make("SuperSecret123!"),
  * });
  * ```
  *

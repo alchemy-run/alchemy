@@ -83,6 +83,7 @@ const withJobs = (maxCapacity: number) =>
       outputLocation: { bucket: base.bucket.bucketName, key: "profiles/" },
       jobSample: { mode: "CUSTOM_ROWS", size: 100 },
       maxCapacity,
+      timeout: "1 hour",
       tags: { Environment: "test" },
     });
     const recipeJob = yield* Job("RecipeJob", {
@@ -128,6 +129,8 @@ test.provider(
       expect(profile?.DatasetName).toEqual(created.dataset.datasetName);
       expect(profile?.JobSample?.Size).toEqual(100);
       expect(profile?.MaxCapacity).toEqual(2);
+      // Duration.Input "1 hour" lands on the wire as 60 (minutes)
+      expect(profile?.Timeout).toEqual(60);
       expect(profile?.Tags?.["alchemy::id"]).toBeDefined();
 
       const recipeJob = yield* getJob(created.recipeJob.jobName);
@@ -181,7 +184,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               },
             ],
             maxCapacity: 2,
-            timeout: 20,
+            timeout: "20 minutes",
           });
           return { ...infra, job };
         }),

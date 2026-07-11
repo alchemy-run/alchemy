@@ -50,7 +50,7 @@ export default CloudMapTestFunction.make(
     const service = yield* AWS.CloudMap.Service("FixtureService", {
       namespaceId: namespace.namespaceId,
       name: "backend",
-      dnsRecords: [{ type: "A", ttl: 10 }],
+      dnsRecords: [{ type: "A", ttl: "10 seconds" }],
       routingPolicy: "MULTIVALUE",
     });
 

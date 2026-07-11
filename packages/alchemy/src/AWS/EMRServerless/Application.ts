@@ -1,4 +1,5 @@
 import * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -19,6 +20,32 @@ import {
  * the application.
  */
 export type ApplicationType = "SPARK" | "HIVE";
+
+/**
+ * Auto-stop behavior for an EMR Serverless {@link Application}.
+ */
+export interface AutoStopConfiguration {
+  /**
+   * Whether the application stops automatically after being idle.
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * Idle time after which the application stops automatically — e.g.
+   * `"5 minutes"` or `Duration.minutes(5)`. Sent to AWS as whole minutes.
+   * @default "15 minutes"
+   */
+  idleTimeoutMinutes?: Duration.Input;
+}
+
+/** Convert the alchemy-facing auto-stop config to the wire shape (minutes). */
+const toWireAutoStop = (config: AutoStopConfiguration): emr.AutoStopConfig => ({
+  enabled: config.enabled,
+  idleTimeoutMinutes:
+    config.idleTimeoutMinutes !== undefined
+      ? Math.round(Duration.toMinutes(config.idleTimeoutMinutes))
+      : undefined,
+});
 
 export interface ApplicationProps {
   /**
@@ -60,11 +87,11 @@ export interface ApplicationProps {
    */
   autoStartConfiguration?: emr.AutoStartConfig;
   /**
-   * Whether (and after how many idle minutes) the application stops
+   * Whether (and after how long idle) the application stops
    * automatically.
    * @default enabled after 15 idle minutes
    */
-  autoStopConfiguration?: emr.AutoStopConfig;
+  autoStopConfiguration?: AutoStopConfiguration;
   /**
    * VPC connectivity (subnet + security group IDs) for jobs that must reach
    * resources in a VPC. Omit for the default non-VPC connectivity.
@@ -116,7 +143,7 @@ export interface Application extends Resource<
  *   type: "HIVE",
  *   releaseLabel: "emr-7.9.0",
  *   autoStartConfiguration: { enabled: true },
- *   autoStopConfiguration: { enabled: true, idleTimeoutMinutes: 5 },
+ *   autoStopConfiguration: { enabled: true, idleTimeoutMinutes: "5 minutes" },
  * });
  * ```
  *
@@ -310,6 +337,10 @@ export const ApplicationProvider = () =>
           const type = news.type ?? "SPARK";
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
+          const desiredAutoStop =
+            news.autoStopConfiguration !== undefined
+              ? toWireAutoStop(news.autoStopConfiguration)
+              : undefined;
 
           // 1. OBSERVE — cloud state is authoritative; output is an id cache
           let application = yield* observe(output?.applicationId, name);
@@ -326,7 +357,7 @@ export const ApplicationProvider = () =>
                 initialCapacity: news.initialCapacity,
                 maximumCapacity: news.maximumCapacity,
                 autoStartConfiguration: news.autoStartConfiguration,
-                autoStopConfiguration: news.autoStopConfiguration,
+                autoStopConfiguration: desiredAutoStop,
                 networkConfiguration: news.networkConfiguration,
                 tags: desiredTags,
               })
@@ -385,10 +416,10 @@ export const ApplicationProvider = () =>
                 ? news.autoStartConfiguration
                 : undefined,
             autoStopConfiguration:
-              news.autoStopConfiguration !== undefined &&
-              canonical(news.autoStopConfiguration) !==
+              desiredAutoStop !== undefined &&
+              canonical(desiredAutoStop) !==
                 canonical(application.autoStopConfiguration)
-                ? news.autoStopConfiguration
+                ? desiredAutoStop
                 : undefined,
             networkConfiguration:
               news.networkConfiguration !== undefined &&

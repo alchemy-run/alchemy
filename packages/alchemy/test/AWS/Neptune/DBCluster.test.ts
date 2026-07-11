@@ -141,7 +141,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           const cluster = yield* DBCluster("Cluster", {
             dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
             vpcSecurityGroupIds: network.securityGroupIds,
-            backupRetentionPeriod: 1,
+            backupRetentionPeriod: "1 day",
             deletionProtection: false,
             enableIAMDatabaseAuthentication: true,
             serverlessV2ScalingConfiguration: {

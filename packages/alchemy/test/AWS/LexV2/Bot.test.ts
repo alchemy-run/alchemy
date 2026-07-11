@@ -71,7 +71,7 @@ test.provider(
           const bot = yield* Bot("TestBot", {
             roleArn: role.roleArn,
             description: "alchemy lex test bot",
-            idleSessionTTLInSeconds: 300,
+            idleSessionTTLInSeconds: "300 seconds",
             tags: { fixture: "lexv2-bot" },
           });
           const locale = yield* BotLocale("En", {
@@ -149,7 +149,7 @@ test.provider(
           const bot = yield* Bot("TestBot", {
             roleArn: role.roleArn,
             description: "alchemy lex test bot (updated)",
-            idleSessionTTLInSeconds: 600,
+            idleSessionTTLInSeconds: "600 seconds",
             tags: { fixture: "lexv2-bot", pass: "two" },
           });
           const locale = yield* BotLocale("En", {

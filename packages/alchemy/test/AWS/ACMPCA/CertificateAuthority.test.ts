@@ -84,7 +84,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
             const ca = yield* CertificateAuthority("TestCA", {
               subject: { commonName: props.commonName },
               usageMode: "SHORT_LIVED_CERTIFICATE",
-              permanentDeletionTimeInDays: 7,
+              permanentDeletionTimeInDays: "7 days",
               tags: props.tags,
             });
             const permission = yield* Permission("AcmRenewal", {

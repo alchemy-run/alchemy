@@ -1,4 +1,5 @@
 import * as ga from "@distilled.cloud/aws/global-accelerator";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -82,10 +83,12 @@ export interface EndpointGroupProps {
    */
   healthCheckPath?: string;
   /**
-   * Seconds between health checks: `10` or `30`.
-   * @default 30
+   * Time between health checks, e.g. `"10 seconds"` or
+   * `Duration.seconds(30)`. Rounded to whole seconds on the wire; the API
+   * accepts `10` or `30` seconds.
+   * @default "30 seconds"
    */
-  healthCheckIntervalSeconds?: number;
+  healthCheckIntervalSeconds?: Duration.Input;
   /**
    * Consecutive health-check successes/failures required to flip an
    * endpoint healthy/unhealthy.
@@ -152,7 +155,7 @@ export interface EndpointGroup extends Resource<
  *   ],
  *   healthCheckProtocol: "HTTP",
  *   healthCheckPath: "/health",
- *   healthCheckIntervalSeconds: 10,
+ *   healthCheckIntervalSeconds: "10 seconds",
  * });
  * ```
  *
@@ -193,6 +196,13 @@ const toAttributes = (g: ga.EndpointGroup, endpointGroupArn: string) => ({
   })),
 });
 
+// The health-check interval is a `Duration.Input`; the GA wire unit is whole
+// seconds.
+const toIntervalSeconds = (
+  interval: Duration.Input | undefined,
+): number | undefined =>
+  interval !== undefined ? Math.round(Duration.toSeconds(interval)) : undefined;
+
 // The desired mutable configuration, shared by create and update. Defaults
 // are applied explicitly so removing a prop converges back to the default.
 const desiredConfig = (news: EndpointGroupProps) => ({
@@ -206,7 +216,8 @@ const desiredConfig = (news: EndpointGroupProps) => ({
   HealthCheckPort: news.healthCheckPort,
   HealthCheckProtocol: news.healthCheckProtocol ?? "TCP",
   HealthCheckPath: news.healthCheckPath,
-  HealthCheckIntervalSeconds: news.healthCheckIntervalSeconds ?? 30,
+  HealthCheckIntervalSeconds:
+    toIntervalSeconds(news.healthCheckIntervalSeconds) ?? 30,
   ThresholdCount: news.thresholdCount ?? 3,
   PortOverrides: (news.portOverrides ?? []).map((o) => ({
     ListenerPort: o.listenerPort,
@@ -240,7 +251,7 @@ const hasDrift = (
   }
   if (
     (live.HealthCheckIntervalSeconds ?? 30) !==
-    (news.healthCheckIntervalSeconds ?? 30)
+    (toIntervalSeconds(news.healthCheckIntervalSeconds) ?? 30)
   ) {
     return true;
   }

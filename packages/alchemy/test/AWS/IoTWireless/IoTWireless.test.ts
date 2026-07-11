@@ -11,6 +11,7 @@ import * as Test from "@/Test/Vitest";
 import * as iotw from "@distilled.cloud/aws/iot-wireless";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -234,7 +235,7 @@ test.provider(
 // full device/gateway lifecycle is gated behind AWS_TEST_IOT_WIRELESS=1.
 const DEV_EUI = "1a2b3c4d5e6f7081";
 const APP_EUI = "0000000000000001";
-const APP_KEY = "000102030405060708090a0b0c0d0e0f";
+const APP_KEY = Redacted.make("000102030405060708090a0b0c0d0e0f");
 const GATEWAY_EUI = "aa555a0000000101";
 
 test.provider.skipIf(!process.env.AWS_TEST_IOT_WIRELESS)(

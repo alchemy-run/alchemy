@@ -6,6 +6,7 @@ import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as redshift from "@distilled.cloud/aws/redshift";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
@@ -95,7 +96,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             nodeType: "ra3.large",
             numberOfNodes: 1,
             masterUsername: "alchemyadmin",
-            masterUserPassword: "AlchemyRedshiftTest1",
+            masterUserPassword: Redacted.make("AlchemyRedshiftTest1"),
             dbName: "analytics",
             clusterSubnetGroupName: subnetGroup.clusterSubnetGroupName,
             publiclyAccessible: false,
