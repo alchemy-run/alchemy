@@ -345,6 +345,22 @@ stack + stage (for a cross-stack move, use the physical script name
 instead). Whichever Worker hosts `Counter` next will transfer the
 namespace from it.
 
+:::tip[Prefer a typed reference over a string]
+`transferredFrom` also accepts the Worker class or resource itself —
+or a thunk for forward references and import cycles:
+
+```typescript
+{ transferredFrom: () => WorkerA }
+```
+
+The thunk is evaluated lazily at plan time and normalized to
+WorkerA's logical id, so it stays safe in module cycles (here,
+`object.ts` referencing `workerA.ts` while `workerA.ts` imports
+`object.ts`). A reference never becomes a dependency edge — alchemy
+takes the *identity*, not the deployed value, which keeps the deploy
+order correct (the new host uploads first).
+:::
+
 ### Make WorkerB the host
 
 `WorkerB` takes over the host role: it declares `Counter` in its

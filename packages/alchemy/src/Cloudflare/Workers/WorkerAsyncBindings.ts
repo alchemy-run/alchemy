@@ -24,7 +24,10 @@ import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
-import { isDurableObjectLike } from "./DurableObject.ts";
+import {
+  isDurableObjectLike,
+  normalizeTransferredFrom,
+} from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
@@ -167,7 +170,7 @@ const toBinding = (
       name: bindingName,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
-      transferredFrom: binding.transferredFrom,
+      transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
     };
   } else if (isWorkflowLike(binding)) {
     return {

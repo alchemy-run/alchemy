@@ -676,7 +676,9 @@ test.provider(
             script: hostWorkerScript,
             env: {
               Counter: Cloudflare.DurableObject("Counter", {
-                transferredFrom: bScriptName,
+                // Thunk form — evaluated lazily at plan time and
+                // normalized to the plain script name.
+                transferredFrom: () => bScriptName,
               }),
             },
           });
@@ -762,6 +764,93 @@ test.provider(
         .pipe(Effect.flip);
 
       expect(error._tag).toEqual("DurableObjectTransferRequired");
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+// #799: the documented *pure move* — the former host drops the DO entirely,
+// keeping no cross-script reference — done as two deploys. Phase 1 adds the
+// class to worker-a, declaring the former host by **Worker resource
+// reference** (`transferredFrom: b`, normalized at plan time to worker-b's
+// logical id — no dependency edge on b); worker-b is untouched. Phase 2
+// removes the DO from worker-b, whose deploy observes the class already
+// transferred away and skips the delete.
+test.provider(
+  "two-deploy pure move with a Worker resource reference",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.destroy();
+
+      const v1 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            b: yield* Cloudflare.Worker("worker-b", {
+              script: hostWorkerScript,
+              env: {
+                Counter: Cloudflare.DurableObject("Counter"),
+              },
+            }),
+          };
+        }),
+      );
+
+      yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
+      const written = yield* fetchJsonReady<{ value: number }>(
+        `${v1.b.url}/increment`,
+      );
+      expect(written.value).toBe(1);
+
+      // Phase 1: worker-a takes the class, naming the former host by
+      // resource reference. worker-b's declaration is unchanged (noop).
+      const v2 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter"),
+            },
+          });
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                transferredFrom: b,
+              }),
+            },
+          });
+          return { a, b };
+        }),
+      );
+
+      // The namespace moved to worker-a with its data intact.
+      const viaA = yield* fetchJsonReady<{ value: number }>(`${v2.a.url}/get`);
+      expect(viaA.value).toBe(1);
+
+      // Phase 2: worker-b drops the DO entirely. Its deploy observes the
+      // class already lives on worker-a and emits no delete migration.
+      const v3 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: `export default { fetch() { return new Response("plain"); } };`,
+          });
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                transferredFrom: b,
+              }),
+            },
+          });
+          return { a, b };
+        }),
+      );
+
+      const afterRemoval = yield* fetchJsonReady<{ value: number }>(
+        `${v3.a.url}/increment`,
+      );
+      expect(afterRemoval.value).toBe(2);
 
       yield* scratch.destroy();
     }).pipe(logLevel),
