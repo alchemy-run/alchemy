@@ -78,10 +78,12 @@ import * as DataExchange from "./DataExchange/index.ts";
 import * as DataSync from "./DataSync/index.ts";
 import * as DataZone from "./DataZone/index.ts";
 import * as DAX from "./DAX/index.ts";
+import * as Deadline from "./Deadline/index.ts";
 import * as DirectoryService from "./DirectoryService/index.ts";
 import * as DLM from "./DLM/index.ts";
 import * as DMS from "./DMS/index.ts";
 import * as Detective from "./Detective/index.ts";
+import * as DevOpsGuru from "./DevOpsGuru/index.ts";
 import * as DocDB from "./DocDB/index.ts";
 import * as DocDBElastic from "./DocDBElastic/index.ts";
 import * as DSQL from "./DSQL/index.ts";
@@ -103,6 +105,7 @@ import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as FIS from "./FIS/index.ts";
 import * as FMS from "./FMS/index.ts";
+import * as FinSpace from "./FinSpace/index.ts";
 import * as Firehose from "./Firehose/index.ts";
 import * as Forecast from "./Forecast/index.ts";
 import * as FraudDetector from "./FraudDetector/index.ts";
@@ -113,6 +116,7 @@ import * as Glue from "./Glue/index.ts";
 import * as Grafana from "./Grafana/index.ts";
 import * as GreengrassV2 from "./GreengrassV2/index.ts";
 import * as GuardDuty from "./GuardDuty/index.ts";
+import * as HealthLake from "./HealthLake/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
 import * as ImageBuilder from "./ImageBuilder/index.ts";
@@ -147,7 +151,9 @@ import * as MediaTailor from "./MediaTailor/index.ts";
 import * as MedicalImaging from "./MedicalImaging/index.ts";
 import * as MQ from "./MQ/index.ts";
 import * as MWAA from "./MWAA/index.ts";
+import * as MWAAServerless from "./MWAAServerless/index.ts";
 import * as Macie2 from "./Macie2/index.ts";
+import * as MailManager from "./MailManager/index.ts";
 import * as MemoryDB from "./MemoryDB/index.ts";
 import * as Neptune from "./Neptune/index.ts";
 import * as NeptuneGraph from "./NeptuneGraph/index.ts";
@@ -165,6 +171,7 @@ import * as PaymentCryptography from "./PaymentCryptography/index.ts";
 import * as Personalize from "./Personalize/index.ts";
 import * as PinpointSMSVoiceV2 from "./PinpointSMSVoiceV2/index.ts";
 import * as Pipes from "./Pipes/index.ts";
+import * as QApps from "./QApps/index.ts";
 import * as QBusiness from "./QBusiness/index.ts";
 import * as QuickSight from "./QuickSight/index.ts";
 import * as RAM from "./RAM/index.ts";
@@ -183,6 +190,7 @@ import * as Route53Resolver from "./Route53Resolver/index.ts";
 import * as RUM from "./RUM/index.ts";
 import * as S3 from "./S3/index.ts";
 import * as S3Control from "./S3Control/index.ts";
+import * as S3Files from "./S3Files/index.ts";
 import * as S3Vectors from "./S3Vectors/index.ts";
 import * as SageMaker from "./SageMaker/index.ts";
 import * as Scheduler from "./Scheduler/index.ts";
@@ -197,6 +205,7 @@ import * as Shield from "./Shield/index.ts";
 import * as Signer from "./Signer/index.ts";
 import * as SimpleDB from "./SimpleDB/index.ts";
 import * as SNS from "./SNS/index.ts";
+import * as SocialMessaging from "./SocialMessaging/index.ts";
 import * as SQS from "./SQS/index.ts";
 import * as SSM from "./SSM/index.ts";
 import * as SSMContacts from "./SSMContacts/index.ts";
@@ -396,6 +405,12 @@ export const providers = () =>
       DAX.Cluster,
       DAX.ParameterGroup,
       DAX.SubnetGroup,
+      Deadline.Budget,
+      Deadline.Farm,
+      Deadline.Fleet,
+      Deadline.Monitor,
+      Deadline.Queue,
+      Deadline.StorageProfile,
       DirectoryService.ConditionalForwarder,
       DirectoryService.Directory,
       DLM.LifecyclePolicy,
@@ -408,6 +423,8 @@ export const providers = () =>
       DMS.ReplicationSubnetGroup,
       DSQL.Cluster,
       Detective.Graph,
+      DevOpsGuru.NotificationChannel,
+      DevOpsGuru.ResourceCollection,
       DynamoDB.Table,
       EC2.DhcpOptions,
       EC2.EgressOnlyInternetGateway,
@@ -473,6 +490,10 @@ export const providers = () =>
       EventBridge.Rule,
       FIS.ExperimentTemplate,
       FMS.AdminAccount,
+      FinSpace.Environment,
+      FinSpace.KxCluster,
+      FinSpace.KxDatabase,
+      FinSpace.KxEnvironment,
       Firehose.DeliveryStream,
       FSx.FileSystem,
       Forecast.Dataset,
@@ -497,6 +518,7 @@ export const providers = () =>
       GreengrassV2.ComponentVersion,
       GreengrassV2.Deployment,
       GuardDuty.Detector,
+      HealthLake.FHIRDatastore,
       IAM.AccessKey,
       IAM.AccountAlias,
       IAM.AccountPasswordPolicy,
@@ -612,8 +634,15 @@ export const providers = () =>
       MQ.Broker,
       MQ.Configuration,
       MWAA.Environment,
+      MWAAServerless.Workflow,
       Macie2.Session,
       Macie2.ClassificationJob,
+      MailManager.AddonInstance,
+      MailManager.AddonSubscription,
+      MailManager.IngressPoint,
+      MailManager.Relay,
+      MailManager.RuleSet,
+      MailManager.TrafficPolicy,
       MemoryDB.ACL,
       MemoryDB.Cluster,
       MemoryDB.SubnetGroup,
@@ -666,6 +695,7 @@ export const providers = () =>
       PinpointSMSVoiceV2.OptOutList,
       PinpointSMSVoiceV2.PhoneNumber,
       Pipes.Pipe,
+      QApps.QApp,
       QBusiness.Application,
       QBusiness.DataSource,
       QBusiness.Index,
@@ -717,6 +747,8 @@ export const providers = () =>
       S3Control.MultiRegionAccessPoint,
       S3Control.ObjectLambdaAccessPoint,
       S3Control.StorageLensConfiguration,
+      S3Files.AccessPoint,
+      S3Files.FileSystem,
       S3Vectors.VectorBucket,
       S3Vectors.Index,
       SageMaker.Model,
@@ -749,6 +781,7 @@ export const providers = () =>
       SimpleDB.Domain,
       SNS.Subscription,
       SNS.Topic,
+      SocialMessaging.LinkedWhatsAppBusinessAccount,
       SQS.Queue,
       SSM.Parameter,
       SSMContacts.Contact,
@@ -923,6 +956,12 @@ export const providers = () =>
           DAX.ClusterProvider(),
           DAX.ParameterGroupProvider(),
           DAX.SubnetGroupProvider(),
+          Deadline.BudgetProvider(),
+          Deadline.FarmProvider(),
+          Deadline.FleetProvider(),
+          Deadline.MonitorProvider(),
+          Deadline.QueueProvider(),
+          Deadline.StorageProfileProvider(),
           DirectoryService.ConditionalForwarderProvider(),
           DirectoryService.DirectoryProvider(),
           DLM.LifecyclePolicyProvider(),
@@ -934,6 +973,8 @@ export const providers = () =>
           DMS.ReplicationInstanceProvider(),
           DMS.ReplicationSubnetGroupProvider(),
           DSQL.ClusterProvider(),
+          DevOpsGuru.NotificationChannelProvider(),
+          DevOpsGuru.ResourceCollectionProvider(),
           DynamoDB.TableProvider(),
           EC2.DhcpOptionsProvider(),
           EC2.EgressOnlyInternetGatewayProvider(),
@@ -1001,6 +1042,7 @@ export const providers = () =>
           Grafana.WorkspaceProvider(),
           GreengrassV2.ComponentVersionProvider(),
           GreengrassV2.DeploymentProvider(),
+          HealthLake.FHIRDatastoreProvider(),
           IAM.AccessKeyProvider(),
           IAM.AccountAliasProvider(),
           IAM.AccountPasswordPolicyProvider(),
@@ -1071,6 +1113,12 @@ export const providers = () =>
           MedicalImaging.DatastoreProvider(),
           MQ.BrokerProvider(),
           MQ.ConfigurationProvider(),
+          MailManager.AddonInstanceProvider(),
+          MailManager.AddonSubscriptionProvider(),
+          MailManager.IngressPointProvider(),
+          MailManager.RelayProvider(),
+          MailManager.RuleSetProvider(),
+          MailManager.TrafficPolicyProvider(),
           MemoryDB.ACLProvider(),
           MemoryDB.ClusterProvider(),
           MemoryDB.SubnetGroupProvider(),
@@ -1099,6 +1147,7 @@ export const providers = () =>
           PaymentCryptography.AliasProvider(),
           PaymentCryptography.KeyProvider(),
           Pipes.PipeProvider(),
+          QApps.QAppProvider(),
           QBusiness.ApplicationProvider(),
           QBusiness.DataSourceProvider(),
           QBusiness.IndexProvider(),
@@ -1139,6 +1188,7 @@ export const providers = () =>
           SES.EmailTemplateProvider(),
           SNS.SubscriptionProvider(),
           SNS.TopicProvider(),
+          SocialMessaging.LinkedWhatsAppBusinessAccountProvider(),
           SQS.QueueProvider(),
           SSM.ParameterProvider(),
           StepFunctions.ActivityProvider(),
@@ -1207,6 +1257,8 @@ export const providers = () =>
           LexV2.BotVersionProvider(),
           LexV2.IntentProvider(),
           LexV2.SlotTypeProvider(),
+          S3Files.FileSystemProvider(),
+          S3Files.AccessPointProvider(),
           S3Vectors.VectorBucketProvider(),
           S3Vectors.IndexProvider(),
           SageMaker.ModelProvider(),
@@ -1220,6 +1272,7 @@ export const providers = () =>
           VpcLattice.ServiceProvider(),
           VpcLattice.ServiceNetworkVpcAssociationProvider(),
           MWAA.EnvironmentProvider(),
+          MWAAServerless.WorkflowProvider(),
           Location.MapProvider(),
           Location.PlaceIndexProvider(),
           Location.RouteCalculatorProvider(),
@@ -1275,6 +1328,10 @@ export const providers = () =>
           SSMIncidents.ResponsePlanProvider(),
         ),
         Layer.mergeAll(
+          FinSpace.EnvironmentProvider(),
+          FinSpace.KxClusterProvider(),
+          FinSpace.KxDatabaseProvider(),
+          FinSpace.KxEnvironmentProvider(),
           ControlTower.EnabledBaselineProvider(),
           ControlTower.EnabledControlProvider(),
           ControlTower.LandingZoneProvider(),
