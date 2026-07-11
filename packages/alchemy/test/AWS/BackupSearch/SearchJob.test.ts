@@ -1,0 +1,128 @@
+import * as AWS from "@/AWS";
+import { SearchJob } from "@/AWS/BackupSearch";
+import * as Test from "@/Test/Vitest";
+import * as backupsearch from "@distilled.cloud/aws/backupsearch";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+
+const { test } = Test.make({ providers: AWS.providers() });
+
+// Ungated typed-error probes: prove the distilled error union carries the
+// not-found tag this provider's read/reconcile/delete paths depend on. Runs
+// in every CI pass at near-zero cost, unlike the gated lifecycle below.
+test.provider(
+  "getSearchJob on a nonexistent identifier fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      // Identifiers must be UUID-shaped — anything else is a ValidationException.
+      const error = yield* Effect.flip(
+        backupsearch.getSearchJob({
+          SearchJobIdentifier: "00000000-0000-0000-0000-000000000000",
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
+test.provider(
+  "getSearchResultExportJob on a nonexistent identifier fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      // Identifiers must be UUID-shaped — anything else is a ValidationException.
+      const error = yield* Effect.flip(
+        backupsearch.getSearchResultExportJob({
+          ExportJobIdentifier: "00000000-0000-0000-0000-000000000000",
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
+test.provider("listSearchJobs succeeds on an account-level scan", () =>
+  Effect.gen(function* () {
+    const page = yield* backupsearch.listSearchJobs({ MaxResults: 10 });
+    expect(Array.isArray(page.SearchJobs)).toBe(true);
+  }),
+);
+
+// A search job only produces results when the account has recovery points
+// with ACTIVE backup indexes to search — the full lifecycle is gated behind
+// AWS_TEST_BACKUP_SEARCH=1. Search jobs cannot be deleted (7-day server-side
+// retention); destroy stops the job if it is still RUNNING.
+test.provider.skipIf(!process.env.AWS_TEST_BACKUP_SEARCH)(
+  "start S3 search job, verify, destroy (stop)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { job } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const job = yield* SearchJob("Search", {
+            searchScope: { backupResourceTypes: ["S3"] },
+            itemFilters: {
+              s3ItemFilters: [
+                {
+                  objectKeys: [{ value: "alchemy-", operator: "BEGINS_WITH" }],
+                },
+              ],
+            },
+            tags: { fixture: "backup-search" },
+          });
+          return { job };
+        }),
+      );
+
+      expect(job.searchJobIdentifier).toBeDefined();
+      expect(job.searchJobArn).toContain("search-job");
+      // In an account without indexed recovery points the job fails fast;
+      // the resource lifecycle (start/observe/stop) is identical either way.
+      expect(["RUNNING", "COMPLETED", "FAILED"]).toContain(job.status);
+
+      // Out-of-band verification via distilled.
+      const observed = yield* backupsearch.getSearchJob({
+        SearchJobIdentifier: job.searchJobIdentifier,
+      });
+      expect(observed.SearchJobArn).toBe(job.searchJobArn);
+      const tags = yield* backupsearch.listTagsForResource({
+        ResourceArn: job.searchJobArn,
+      });
+      expect(tags.Tags?.fixture).toBe("backup-search");
+
+      // Replacement: the search scope/filters are immutable — changing them
+      // must start a NEW search job with a new identifier.
+      const { job: replaced } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const job = yield* SearchJob("Search", {
+            searchScope: { backupResourceTypes: ["S3"] },
+            itemFilters: {
+              s3ItemFilters: [
+                {
+                  objectKeys: [{ value: "replaced-", operator: "BEGINS_WITH" }],
+                },
+              ],
+            },
+            tags: { fixture: "backup-search" },
+          });
+          return { job };
+        }),
+      );
+      expect(replaced.searchJobIdentifier).not.toBe(job.searchJobIdentifier);
+
+      // NOTE: a live ExportJob lifecycle additionally requires a search job
+      // in COMPLETED or STOPPED status. In an account without indexed
+      // recovery points every search job ends FAILED ("Export is only
+      // supported for search job with COMPLETED,STOPPED statuses. SearchJob
+      // has status FAILED"), so export coverage needs real, indexed backups.
+
+      // Destroy stops the job (or no-ops if it already completed); the job
+      // record itself is retained by AWS for 7 days and cannot be deleted.
+      yield* stack.destroy();
+      const after = yield* backupsearch.getSearchJob({
+        SearchJobIdentifier: replaced.searchJobIdentifier,
+      });
+      expect(["STOPPING", "STOPPED", "COMPLETED", "FAILED"]).toContain(
+        after.Status,
+      );
+    }),
+  { timeout: 120_000 },
+);

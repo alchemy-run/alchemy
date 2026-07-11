@@ -1,4 +1,5 @@
 import * as keyspaces from "@distilled.cloud/aws/keyspaces";
+import * as keyspacesstreams from "@distilled.cloud/aws/keyspacesstreams";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -47,6 +48,21 @@ export interface KeyspacesCapacity {
   readCapacityUnits?: number;
   /** Provisioned write capacity units (only for `PROVISIONED`). */
   writeCapacityUnits?: number;
+}
+
+/**
+ * Change data capture (CDC) stream configuration for a table.
+ */
+export interface KeyspacesCdcSpecification {
+  /**
+   * Whether CDC is enabled on the table.
+   */
+  status: "ENABLED" | "DISABLED";
+  /**
+   * What data is written to the table's stream for each changed row.
+   * @default "NEW_AND_OLD_IMAGES"
+   */
+  viewType?: "NEW_IMAGE" | "OLD_IMAGE" | "KEYS_ONLY" | "NEW_AND_OLD_IMAGES";
 }
 
 export interface TableProps {
@@ -101,6 +117,12 @@ export interface TableProps {
    */
   defaultTimeToLive?: number;
   /**
+   * Change data capture (CDC) stream configuration. Enabling CDC creates a
+   * stream that captures row-level changes for 24 hours; consume it with the
+   * `TableStreams` binding or the `keyspacesstreams` data-plane API.
+   */
+  cdcSpecification?: KeyspacesCdcSpecification;
+  /**
    * User-defined tags for the table.
    */
   tags?: Record<string, string>;
@@ -114,6 +136,10 @@ export interface Table extends Resource<
     tableName: string;
     tableArn: string;
     status: string;
+    /**
+     * ARN of the most recent CDC stream, when `cdcSpecification` is enabled.
+     */
+    latestStreamArn: string | undefined;
   },
   never,
   Providers
@@ -154,6 +180,24 @@ export interface Table extends Resource<
  *   ttlEnabled: true,
  *   defaultTimeToLive: 86_400,
  * });
+ * ```
+ *
+ * @section Change Data Capture
+ * @example CDC-Enabled Table
+ * ```typescript
+ * const table = yield* Table("Orders", {
+ *   keyspaceName: keyspace.keyspaceName,
+ *   columns: [
+ *     { name: "id", type: "uuid" },
+ *     { name: "total", type: "int" },
+ *   ],
+ *   partitionKeys: ["id"],
+ *   cdcSpecification: {
+ *     status: "ENABLED",
+ *     viewType: "NEW_AND_OLD_IMAGES",
+ *   },
+ * });
+ * // table.latestStreamArn → consume via the TableStreams binding
  * ```
  */
 export const Table = Resource<Table>("AWS.Keyspaces.Table");
@@ -208,6 +252,57 @@ export const TableProvider = () =>
             Effect.catch(() => Effect.succeed<keyspaces.Tag[]>([])),
           );
         return toTagRecord(tags);
+      });
+
+      // Resolve the most recent CDC stream's ARN (streams are labeled with
+      // their creation timestamp; the lexicographically greatest label is the
+      // latest). Only meaningful while CDC is (or was recently) enabled.
+      const readLatestStreamArn = Effect.fn(function* (
+        keyspaceName: string,
+        tableName: string,
+      ) {
+        const response = yield* keyspacesstreams
+          .listStreams({ keyspaceName, tableName })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        const sorted = [...(response?.streams ?? [])].sort((a, b) =>
+          b.streamLabel.localeCompare(a.streamLabel),
+        );
+        return sorted[0]?.streamArn;
+      });
+
+      const isCdcEnabled = (table: keyspaces.GetTableResponse) => {
+        const status = table.cdcSpecification?.status;
+        return status === "ENABLED" || status === "ENABLING";
+      };
+
+      // A freshly-enabled stream can lag ListStreams visibility briefly;
+      // poll (bounded ~60s) and fall back to undefined rather than failing
+      // the reconcile.
+      const waitForStreamArn = Effect.fn(function* (
+        keyspaceName: string,
+        tableName: string,
+      ) {
+        return yield* readLatestStreamArn(keyspaceName, tableName).pipe(
+          Effect.flatMap((arn) =>
+            arn !== undefined
+              ? Effect.succeed<string | undefined>(arn)
+              : Effect.fail(
+                  new Error(
+                    `CDC stream for '${keyspaceName}.${tableName}' not yet visible`,
+                  ),
+                ),
+          ),
+          Effect.retry({
+            schedule: Schedule.fixed("5 seconds").pipe(
+              Schedule.both(Schedule.recurs(12)),
+            ),
+          }),
+          Effect.catch(() => Effect.succeed(undefined)),
+        );
       });
 
       // Bounded readiness wait; Keyspaces tables typically reach ACTIVE within
@@ -320,6 +415,9 @@ export const TableProvider = () =>
             tableName: found.tableName,
             tableArn: found.resourceArn,
             status: found.status ?? "ACTIVE",
+            latestStreamArn: isCdcEnabled(found)
+              ? yield* readLatestStreamArn(found.keyspaceName, found.tableName)
+              : undefined,
           };
           const tags = yield* readTags(found.resourceArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -348,6 +446,15 @@ export const TableProvider = () =>
                   : undefined,
                 ttl: props.ttlEnabled ? { status: "ENABLED" } : undefined,
                 defaultTimeToLive: props.defaultTimeToLive,
+                cdcSpecification:
+                  props.cdcSpecification?.status === "ENABLED"
+                    ? {
+                        status: "ENABLED",
+                        viewType:
+                          props.cdcSpecification.viewType ??
+                          "NEW_AND_OLD_IMAGES",
+                      }
+                    : undefined,
                 tags: Object.entries(desiredTags).map(([key, value]) => ({
                   key,
                   value,
@@ -416,6 +523,19 @@ export const TableProvider = () =>
             needsUpdate = true;
           }
 
+          const desiredCdcEnabled =
+            props.cdcSpecification?.status === "ENABLED";
+          if (desiredCdcEnabled !== isCdcEnabled(observed)) {
+            update.cdcSpecification = desiredCdcEnabled
+              ? {
+                  status: "ENABLED",
+                  viewType:
+                    props.cdcSpecification?.viewType ?? "NEW_AND_OLD_IMAGES",
+                }
+              : { status: "DISABLED" };
+            needsUpdate = true;
+          }
+
           if (needsUpdate) {
             yield* keyspaces.updateTable(update);
             observed = yield* waitForActive(
@@ -447,6 +567,12 @@ export const TableProvider = () =>
             tableName: observed.tableName,
             tableArn: observed.resourceArn,
             status: observed.status ?? "ACTIVE",
+            latestStreamArn: isCdcEnabled(observed)
+              ? yield* waitForStreamArn(
+                  observed.keyspaceName,
+                  observed.tableName,
+                )
+              : undefined,
           };
         }),
 

@@ -1,0 +1,110 @@
+import * as AWS from "@/AWS";
+import { Vpc } from "@/AWS/EC2";
+import { Profile, ProfileAssociation } from "@/AWS/Route53Profiles";
+import * as Test from "@/Test/Vitest";
+import * as profiles from "@distilled.cloud/aws/route53profiles";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+
+const { test } = Test.make({ providers: AWS.providers() });
+
+const assertAssociationGone = (profileAssociationId: string) =>
+  profiles
+    .getProfileAssociation({ ProfileAssociationId: profileAssociationId })
+    .pipe(
+      Effect.flatMap((r) =>
+        r.ProfileAssociation?.Status === "DELETING" ||
+        r.ProfileAssociation?.Status === "DELETED"
+          ? Effect.void
+          : Effect.fail(
+              new Error(`association still ${r.ProfileAssociation?.Status}`),
+            ),
+      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+      Effect.retry({
+        while: (e) => e instanceof Error,
+        schedule: Schedule.fixed("3 seconds").pipe(
+          Schedule.both(Schedule.recurs(10)),
+        ),
+      }),
+    );
+
+const assertProfileGone = (profileId: string) =>
+  profiles.getProfile({ ProfileId: profileId }).pipe(
+    Effect.flatMap((r) =>
+      r.Profile?.Status === "DELETING" || r.Profile?.Status === "DELETED"
+        ? Effect.void
+        : Effect.fail(new Error(`profile still ${r.Profile?.Status}`)),
+    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.retry({
+      while: (e) => e instanceof Error,
+      schedule: Schedule.fixed("3 seconds").pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+
+test.provider(
+  "associate a Profile with a VPC and destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const vpc = yield* Vpc("ProfileVpc", {
+            cidrBlock: "10.63.0.0/24",
+          });
+          const profile = yield* Profile("VpcDnsProfile", {});
+          const association = yield* ProfileAssociation("VpcDns", {
+            profileId: profile.profileId,
+            resourceId: vpc.vpcId,
+          });
+          return { vpc, profile, association };
+        }),
+      );
+
+      expect(deployed.association.profileAssociationId).toMatch(/^rpassoc-/);
+      expect(deployed.association.profileId).toBe(deployed.profile.profileId);
+      expect(deployed.association.resourceId).toBe(deployed.vpc.vpcId);
+
+      // Out-of-band: the association exists for the (profile, VPC) pair.
+      const live = yield* profiles.getProfileAssociation({
+        ProfileAssociationId: deployed.association.profileAssociationId,
+      });
+      expect(live.ProfileAssociation?.ProfileId).toBe(
+        deployed.profile.profileId,
+      );
+      expect(live.ProfileAssociation?.ResourceId).toBe(deployed.vpc.vpcId);
+      expect(["CREATING", "COMPLETE"]).toContain(
+        live.ProfileAssociation?.Status,
+      );
+
+      // Re-deploying the same stack is a no-op (idempotent reconcile).
+      const again = yield* stack.deploy(
+        Effect.gen(function* () {
+          const vpc = yield* Vpc("ProfileVpc", {
+            cidrBlock: "10.63.0.0/24",
+          });
+          const profile = yield* Profile("VpcDnsProfile", {});
+          const association = yield* ProfileAssociation("VpcDns", {
+            profileId: profile.profileId,
+            resourceId: vpc.vpcId,
+          });
+          return { association };
+        }),
+      );
+      expect(again.association.profileAssociationId).toBe(
+        deployed.association.profileAssociationId,
+      );
+
+      // Destroy tears down association → profile → VPC in order. The
+      // association disassociates asynchronously (~1–2 min).
+      yield* stack.destroy();
+      yield* assertAssociationGone(deployed.association.profileAssociationId);
+      yield* assertProfileGone(deployed.profile.profileId);
+    }),
+  { timeout: 360_000 },
+);

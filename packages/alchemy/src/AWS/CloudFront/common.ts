@@ -13,7 +13,10 @@ export const extractValue = (v: string | Redacted.Redacted<string>): string =>
   typeof v === "string" ? v : Redacted.value(v);
 
 export const withKvsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(AwsRegion, KVS_REGION as any));
+  // The distilled Region service value is `Effect<RegionName>`, not a raw
+  // string — providing a bare string makes the client `yield*` a string and
+  // crash. Wrap in Effect.succeed (same as ACM/ECRPublic/WAFv2/GlobalAccelerator).
+  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(KVS_REGION)));
 
 export const withKvsRegionFn =
   <Args extends any[], A, E, R>(
