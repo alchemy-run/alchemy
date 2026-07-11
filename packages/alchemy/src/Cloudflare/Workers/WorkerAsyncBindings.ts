@@ -24,7 +24,10 @@ import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
-import { isDurableObjectLike } from "./DurableObject.ts";
+import {
+  isDurableObjectLike,
+  registerDoTransferHint,
+} from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
@@ -65,6 +68,17 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             ? getHyperdriveDevOrigin(binding)
             : undefined,
         });
+
+        if (isDurableObjectLike(binding) && binding.scriptName !== undefined) {
+          // Cross-script DO reference: hint the target so it can infer a
+          // data-preserving transfer when this class is moving host.
+          yield* registerDoTransferHint(
+            resource,
+            binding.scriptName,
+            bindingName,
+            binding.className ?? binding.name,
+          );
+        }
 
         // A locally-hosted Workflow (no `scriptName`) must be registered with
         // Cloudflare via `putWorkflow` once the host Worker exists. Cross-script
