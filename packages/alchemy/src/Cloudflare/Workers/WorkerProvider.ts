@@ -47,16 +47,13 @@ class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
  * destroy the namespace's data irreversibly, so the deploy fails before any
  * upload.
  *
- * When both Workers are in the same stack and the cross-script `scriptName`
- * carries resource provenance (the Worker resource or its `workerName`
- * output, including `.from(WorkerA)`), Alchemy infers the data-preserving
- * `transferred_classes` migration automatically and this error never fires.
- * It fires when the move can't be seen in the plan — a cross-stack move, or a
- * `scriptName` passed as a raw string. To move the data then, declare
- * `transferredFrom` on the Durable Object at its new host and deploy that
- * Worker first. To abandon the data instead, remove the binding entirely in
- * one deploy (which deletes the class and its data), then add the
- * cross-script binding in a second deploy.
+ * Moving a Durable Object class between Workers is always declared: set
+ * `transferredFrom` on the Durable Object at its **new host** — naming the
+ * former host by Worker logical id (same stack) or physical script name — and
+ * Alchemy performs the data-preserving `transferred_classes` migration on the
+ * new host's deploy; this deploy then converges on its own. To abandon the
+ * data instead, remove the binding entirely in one deploy (which deletes the
+ * class and its data), then add the cross-script binding in a second deploy.
  */
 export class DurableObjectTransferRequired extends Data.TaggedError(
   "DurableObjectTransferRequired",
@@ -70,19 +67,19 @@ export class DurableObjectTransferRequired extends Data.TaggedError(
       `Durable Object class '${this.className}' still lives on Worker '${this.scriptName}' but this deploy re-binds it as a cross-script reference` +
       (this.targetScriptName ? ` to '${this.targetScriptName}'` : "") +
       ". Durable Object data does NOT move with the class automatically. " +
-      "When both Workers deploy from the same stack, reference the host by resource (e.g. scriptName: hostWorker.workerName) so Alchemy can infer the data-preserving transfer. " +
-      `For cross-stack moves, set transferredFrom: "${this.scriptName}" on the Durable Object declaration in its new host Worker and deploy that Worker first. ` +
+      `To move the data, set transferredFrom: "${this.scriptName}" (the former host's script name, or its Worker logical id for same-stack moves) on the Durable Object declaration in its new host Worker. ` +
       "To abandon the data, remove the binding entirely in one deploy before re-adding it as a cross-script reference."
     );
   }
 }
 
 /**
- * More than one script in this stack + stage qualifies as the source of an
- * inferred Durable Object transfer (e.g. an orphaned script left behind by a
- * `name` prop change still carries the same alchemy tags). Alchemy refuses to
- * guess which namespace's data to move — set `transferredFrom` on the Durable
- * Object declaration to name the source script explicitly.
+ * More than one script matches the `transferredFrom` declaration of a Durable
+ * Object (e.g. an orphaned script left behind by a `name` prop change still
+ * carries the same alchemy tags, or the host history lists several scripts
+ * that each still hold a same-class namespace). Alchemy refuses to guess
+ * which namespace's data to move — narrow the declaration to the exact
+ * physical script name that holds the data.
  */
 export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
   "AmbiguousDurableObjectTransfer",
@@ -94,8 +91,8 @@ export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
 }> {
   override get message() {
     return (
-      `Durable Object '${this.logicalId}' (class '${this.className}') is new to Worker '${this.scriptName}' and multiple scripts qualify as its transfer source: ${this.sources.join(", ")}. ` +
-      `Set transferredFrom: "<script-name>" on the Durable Object declaration to name the source explicitly.`
+      `Durable Object '${this.logicalId}' (class '${this.className}') is new to Worker '${this.scriptName}' and multiple scripts match its transferredFrom declaration: ${this.sources.join(", ")}. ` +
+      `Narrow transferredFrom to the exact physical script name that holds the data.`
     );
   }
 }
@@ -956,39 +953,28 @@ export const LiveWorkerProvider = () =>
       };
 
       /**
-       * Resolve the source script of an inferred Durable Object transfer for
-       * a class that is new to `selfScriptName`. Transfer hints (see
-       * `registerDoTransferHint`) name the *worker* — by logical id — whose
-       * cross-script declaration points at this script; the source *script*
-       * is discovered from authoritative cloud state: it must currently host
-       * the class and carry the alchemy tags proving it is that worker in
-       * this stack + stage and hosted this exact Durable Object
-       * (`alchemy:do:{logicalId}:{className}`). The tag match is what keeps
-       * inference safe: it distinguishes "the worker that used to host this
-       * DO now points at you" from unrelated same-name classes on other
-       * scripts (other stages, or the two-hosts-two-namespaces pattern).
-       * Returns `undefined` when nothing matches — fresh stage, transfer
-       * already completed, or a foreign class — and the caller creates the
-       * class fresh.
+       * Resolve the source script of a declared Durable Object transfer for
+       * a class that is new to `selfScriptName`. `sources` is the
+       * `transferredFrom` host history: each entry names a former host either
+       * by *physical script name* or by *Worker logical id* in this stack +
+       * stage (matched via the `alchemy:id:`/stack/stage ownership tags).
+       * The namespace is transferred from whichever listed host currently
+       * holds a same-class namespace; when none does (fresh stage, or every
+       * transfer already completed) this returns `undefined` and the caller
+       * creates the class fresh — the declaration is inert and safe to keep.
+       * More than one match (e.g. an orphaned script from a `name` change)
+       * fails with {@link AmbiguousDurableObjectTransfer} rather than
+       * guessing whose data to move.
        */
-      const findDoTransferSource = Effect.fn(function* (params: {
+      const resolveTransferSource = Effect.fn(function* (params: {
         accountId: string;
         selfScriptName: string;
         logicalId: string;
         className: string;
-        hints: readonly {
-          logicalId: string;
-          className: string;
-          fromWorkerId: string;
-        }[];
+        sources: readonly string[];
         observedNamespaces: readonly { script: string; class: string }[];
       }) {
-        const hints = params.hints.filter(
-          (hint) =>
-            hint.logicalId === params.logicalId &&
-            hint.className === params.className,
-        );
-        if (hints.length === 0) {
+        if (params.sources.length === 0) {
           return undefined;
         }
         const candidates = Array.from(
@@ -1001,8 +987,12 @@ export const LiveWorkerProvider = () =>
             ),
           ),
         );
-        const sources: string[] = [];
+        const matched: string[] = [];
         for (const script of candidates) {
+          if (params.sources.includes(script)) {
+            matched.push(script);
+            continue;
+          }
           const settings = yield* getScriptSettings(
             params.accountId,
             script,
@@ -1017,23 +1007,22 @@ export const LiveWorkerProvider = () =>
           if (
             tags.has(`alchemy:stack:${stack.name}`) &&
             tags.has(`alchemy:stage:${stack.stage}`) &&
-            tags.has(`alchemy:do:${params.logicalId}:${params.className}`) &&
-            hints.some((hint) => tags.has(`alchemy:id:${hint.fromWorkerId}`))
+            params.sources.some((source) => tags.has(`alchemy:id:${source}`))
           ) {
-            sources.push(script);
+            matched.push(script);
           }
         }
-        if (sources.length > 1) {
+        if (matched.length > 1) {
           return yield* Effect.fail(
             new AmbiguousDurableObjectTransfer({
               scriptName: params.selfScriptName,
               logicalId: params.logicalId,
               className: params.className,
-              sources,
+              sources: matched,
             }),
           );
         }
-        return sources[0];
+        return matched[0];
       });
 
       const getDurableObjects = (
@@ -1513,13 +1502,6 @@ export const LiveWorkerProvider = () =>
         // Parse alchemy:do:{logicalId}:{className} tags
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
-        // Transfer hints bound onto this worker by *other* workers'
-        // cross-script DO declarations (see registerDoTransferHint) — the
-        // signal that a class new to this script may be a host move rather
-        // than a fresh namespace.
-        const doTransferHints = bindings.flatMap(
-          (b) => b.data.doTransferHints ?? [],
-        );
         const currentDoClassNameByLogicalId = Object.fromEntries(
           currentDoBindings.map((binding) => [
             binding.logicalId,
@@ -1596,12 +1578,7 @@ export const LiveWorkerProvider = () =>
         const mayTransferIn = currentDoBindings.some(
           (binding) =>
             !oldDoClassNameByLogicalId[binding.logicalId] &&
-            (binding.transferredFrom !== undefined ||
-              doTransferHints.some(
-                (hint) =>
-                  hint.logicalId === binding.logicalId &&
-                  hint.className === binding.className,
-              )),
+            binding.transferredFrom !== undefined,
         );
         const observedNamespaces =
           !dispatchNamespace &&
@@ -1711,33 +1688,27 @@ export const LiveWorkerProvider = () =>
             }
           }
           if (!previousClassName) {
-            // A class new to this script may be a host move rather than a
-            // fresh namespace. The source is inferred from transfer hints
-            // (the former host's cross-script declaration points here) —
-            // or named explicitly via `transferredFrom` for cross-stack
-            // moves the plan can't see. Either way the source must be
-            // observed to still host the namespace; otherwise (fresh stage,
-            // transfer already completed) fall through to a plain create.
-            let fromScript: string | undefined;
-            if (!dispatchNamespace) {
-              if (binding.transferredFrom !== undefined) {
-                fromScript = scriptHostsClass(
-                  binding.transferredFrom,
-                  binding.className,
-                )
-                  ? binding.transferredFrom
-                  : undefined;
-              } else {
-                fromScript = yield* findDoTransferSource({
+            // A class new to this script is a host move when the declaration
+            // says so: `transferredFrom` lists the former host(s) — moves
+            // are always declared, never inferred, because a class deleted
+            // on one worker and created on another is otherwise ambiguous
+            // between "move the data" and "delete + fresh namespace". The
+            // declared source must be observed to still host the namespace;
+            // otherwise (fresh stage, transfer already completed) fall
+            // through to a plain create.
+            const fromScript = dispatchNamespace
+              ? undefined
+              : yield* resolveTransferSource({
                   accountId,
                   selfScriptName: name,
                   logicalId: binding.logicalId,
                   className: binding.className,
-                  hints: doTransferHints,
+                  sources: normalizeTransferSources(
+                    binding.transferredFrom,
+                    name,
+                  ),
                   observedNamespaces,
                 });
-              }
-            }
             if (fromScript !== undefined) {
               // Data-preserving move: ship Cloudflare's
               // `transferred_classes` migration instead of creating a
@@ -2321,48 +2292,13 @@ export const LiveWorkerProvider = () =>
           // entirely (class list, bindings, tags): Cloudflare forbids
           // creating the destination class of a `transferred_classes`
           // migration ahead of the transfer, so `reconcile` must perform it
-          // with the real upload. Explicitly-marked classes
-          // (`transferredFrom` — may still be an unresolved Output here,
-          // precreate runs on raw props, but only its presence matters) are
-          // excluded outright; hinted classes are excluded only when the
-          // inferred source is confirmed to still host the namespace.
-          // Precreate only runs for creates/replaces (no prior state), so
-          // the observation costs nothing in steady state.
-          let durableObjects = mergeDurableObjectClasses(
+          // with the real upload. (`transferredFrom` may still be an
+          // unresolved Output here — precreate runs on raw props — but only
+          // its presence matters.)
+          const durableObjects = mergeDurableObjectClasses(
             exportDerived,
             getDurableObjectBindings(bindings, name),
           ).filter((binding) => !binding.transferredFrom);
-          const doTransferHints = bindings.flatMap(
-            (b) => b.data.doTransferHints ?? [],
-          );
-          const hinted = durableObjects.filter((binding) =>
-            doTransferHints.some(
-              (hint) =>
-                hint.logicalId === binding.logicalId &&
-                hint.className === binding.className,
-            ),
-          );
-          if (hinted.length > 0) {
-            const observedNamespaces =
-              yield* listDurableObjectNamespaces(accountId);
-            const transferring = new Set<string>();
-            for (const binding of hinted) {
-              const source = yield* findDoTransferSource({
-                accountId,
-                selfScriptName: name,
-                logicalId: binding.logicalId,
-                className: binding.className,
-                hints: doTransferHints,
-                observedNamespaces,
-              });
-              if (source !== undefined) {
-                transferring.add(binding.className);
-              }
-            }
-            durableObjects = durableObjects.filter(
-              (binding) => !transferring.has(binding.className),
-            );
-          }
           const doClasses = durableObjects.map((binding) => binding.className);
           // Only attach container metadata for classes actually fronted by a
           // Container binding (mirrors reconcile's `containerClassNames`).
@@ -2889,6 +2825,22 @@ const listDurableObjectNamespaces = (accountId: string) =>
     ),
   );
 
+/**
+ * Coerce a resolved `transferredFrom` declaration to its list form, dropping
+ * self-references (a worker naming itself as its own former host is
+ * meaningless — the class already lives there).
+ */
+const normalizeTransferSources = (
+  value: string | readonly string[] | undefined,
+  selfScriptName: string,
+): string[] =>
+  (value === undefined
+    ? []
+    : Array.isArray(value)
+      ? value
+      : [value as string]
+  ).filter((source) => source !== selfScriptName);
+
 function bumpMigrationTagVersion(
   oldTag: string | undefined,
 ): string | undefined {
@@ -2908,12 +2860,12 @@ function mergeDurableObjectClasses(
   exportDerived: ReadonlyArray<{
     logicalId: string;
     className: string;
-    transferredFrom?: string;
+    transferredFrom?: string | string[];
   }>,
   bindingDerived: ReadonlyArray<{
     logicalId: string;
     className: string;
-    transferredFrom?: string;
+    transferredFrom?: string | string[];
   }>,
 ) {
   return Array.from(
@@ -2958,13 +2910,14 @@ function getDurableObjectBindings(
           logicalId: binding.sid,
           bindingName: item.name,
           className: item.className,
-          // Source script of a data-preserving `transferred_classes`
-          // migration. A self-reference is meaningless — the class already
-          // lives here — so normalize it away.
+          // Declared host history for a data-preserving
+          // `transferred_classes` migration. Normalize an empty list to
+          // "not declared"; self-references are dropped at resolution time.
           transferredFrom:
-            item.transferredFrom !== workerName
-              ? item.transferredFrom
-              : undefined,
+            Array.isArray(item.transferredFrom) &&
+            item.transferredFrom.length === 0
+              ? undefined
+              : item.transferredFrom,
         },
       ];
     }),

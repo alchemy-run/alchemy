@@ -22,12 +22,7 @@ import {
 } from "./DurableObjectState.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
-import {
-  isWorker,
-  Worker,
-  WorkerEnvironment,
-  type WorkerServices,
-} from "./Worker.ts";
+import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
 export interface DurableObjectExport {
   readonly kind: "durableObject";
@@ -67,7 +62,7 @@ export interface DurableObjectLike<Shape = any> {
   /** @internal phantom */
   scriptName?: Input<string>;
   /** @internal phantom */
-  transferredFrom?: Input<string>;
+  transferredFrom?: Input<string | string[]>;
   /** @internal phantom */
   Shape?: Shape;
 }
@@ -128,23 +123,25 @@ export interface DurableObjectProps {
    */
   scriptName?: Input<string> | undefined;
   /**
-   * Name of the Worker script that previously hosted this Durable Object
-   * class. When set, the deploy performs Cloudflare's data-preserving
-   * `transferred_classes` migration, moving the namespace — including all
-   * stored objects — from that script to this Worker.
+   * The Worker(s) that previously hosted this Durable Object class. When one
+   * of them still holds the namespace, the deploy performs Cloudflare's
+   * data-preserving `transferred_classes` migration, moving the namespace —
+   * including all stored objects — from that script to this Worker.
    *
-   * Only needed when the move can't be inferred from the plan — i.e. the
-   * former host deploys from a *different stack* (or references this Worker
-   * by a raw string). When both Workers deploy together and the former host
-   * references this one by resource (`scriptName: worker.workerName`,
-   * `Counter.from(Worker)`), the transfer is inferred automatically and
-   * this property is unnecessary.
+   * Each entry names a former host either by its Worker **logical id** in
+   * this stack + stage (resolved via alchemy's ownership tags) or by its
+   * **physical script name** (required for cross-stack moves). Moving a
+   * class is always declared this way — there is no inference. A list is a
+   * host *history*: as the class moves again, append the previous host so
+   * stages that lag behind (or skipped an intermediate release) still
+   * transfer from wherever their namespace currently lives.
    *
-   * Once the transfer has completed, or when the source script does not host
-   * the class (e.g. on a fresh stage), the property is inert: the class is
-   * created fresh or left as-is, so it is safe to leave in place.
+   * When no listed host holds the namespace — a fresh stage, or every
+   * transfer already completed — the property is inert and the class is
+   * created fresh (or left as-is), so it is safe to leave in place
+   * indefinitely.
    */
-  transferredFrom?: Input<string> | undefined;
+  transferredFrom?: Input<string | string[]> | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -223,58 +220,6 @@ export class DurableObjectScope extends Context.Service<
   DurableObjectScope,
   DurableObject
 >()("Cloudflare.DurableObject") {}
-
-/**
- * Recover the target Worker resource from a cross-script `scriptName` value
- * at plan time. Covers the shapes that reference a Worker in the same plan:
- * the resource itself, or its `workerName` output (`scriptName:
- * host.workerName`, which is also what `.from(WorkerA)` passes). Raw strings
- * and mapped/foreign Outputs (e.g. cross-stack `stackRef`s) carry no resource
- * provenance and return `undefined` — no transfer can be inferred for them.
- *
- * @internal
- */
-const workerFromScriptName = (scriptName: unknown): Worker | undefined => {
-  if (isWorker(scriptName)) {
-    return scriptName;
-  }
-  if (
-    Output.isPropExpr(scriptName) &&
-    scriptName.identifier === "workerName" &&
-    Output.isResourceExpr(scriptName.expr) &&
-    isWorker(scriptName.expr.src)
-  ) {
-    return scriptName.expr.src;
-  }
-  return undefined;
-};
-
-/**
- * Attach a Durable Object transfer hint onto the target of a cross-script DO
- * declaration. The hint — pure literals, so it adds no dependency edges —
- * tells the target's provider that `self` references `(logicalId, className)`
- * on it. If the target is newly hosting that class while `self`'s script
- * still holds the namespace (verified against `alchemy:id:` / `alchemy:do:`
- * tags and observed namespace ownership), the target's deploy infers
- * Cloudflare's data-preserving `transferred_classes` migration — the
- * cross-worker analog of how renames are inferred within one worker.
- *
- * @internal
- */
-export const registerDoTransferHint = Effect.fn(function* (
-  self: Worker,
-  scriptName: unknown,
-  logicalId: string,
-  className: string,
-) {
-  const target = workerFromScriptName(scriptName);
-  if (target === undefined || target.FQN === self.FQN) {
-    return;
-  }
-  yield* target.bind`${logicalId}:transfer-hint`({
-    doTransferHints: [{ logicalId, className, fromWorkerId: self.LogicalId }],
-  });
-});
 
 /**
  * A Cloudflare Durable Object namespace that manages globally unique, stateful
@@ -867,19 +812,24 @@ export const registerDoTransferHint = Effect.fn(function* (
  *
  * @section Moving a Class Between Workers
  * A Durable Object class can move from one Worker to another with its
- * data intact — and when both Workers deploy from the same stack, the
- * move is **inferred**, exactly like class renames. Keep the Durable
- * Object's name stable, host it on the new Worker, and have the former
- * host reference it cross-script (`scriptName: newHost.workerName`, or
- * `Counter.from(NewHost)` in the Effect-native form). At plan time the
- * cross-script declaration carries the target's resource provenance, so
- * the new host's deploy knows the class is arriving from the former
- * host, verifies the namespace still lives there, and ships Cloudflare's
+ * data intact. The move is always **declared** — a class that disappears
+ * from one worker and appears on another is otherwise ambiguous between
+ * "transfer the data" and "delete it, start fresh", so Alchemy never
+ * guesses (removing a DO deletes it; that is the default). Declare
+ * `transferredFrom` on the Durable Object at its **new host**, naming the
+ * former host, and the new host's deploy ships Cloudflare's
  * data-preserving `transferred_classes` migration. The former host's
  * deploy converges on its own — no delete migration is emitted for a
  * class that moved away.
  *
- * @example Move a class by moving where it's hosted
+ * Each `transferredFrom` entry is either the former host's Worker
+ * **logical id** (same stack + stage, resolved via alchemy's ownership
+ * tags) or its **physical script name** (required for cross-stack moves).
+ * When no listed host holds the namespace — a fresh stage, or the
+ * transfer already completed — the declaration is inert, so it is safe to
+ * leave in place indefinitely.
+ *
+ * @example Move a class from WorkerB to WorkerA
  * ```typescript
  * // BEFORE: worker-b hosts the class
  * const b = yield* Cloudflare.Worker("WorkerB", {
@@ -889,12 +839,15 @@ export const registerDoTransferHint = Effect.fn(function* (
  *   },
  * });
  *
- * // AFTER: worker-a hosts it; worker-b keeps a cross-script reference.
- * // Nothing else to declare — the transfer is inferred and the data moves.
+ * // AFTER: worker-a hosts it and declares where it came from;
+ * // worker-b keeps a cross-script reference.
  * const a = yield* Cloudflare.Worker("WorkerA", {
  *   main: "./src/worker-a.ts", // now exports MyDOClass
  *   bindings: {
- *     MyDO: Cloudflare.DurableObject("MyDO", { className: "MyDOClass" }),
+ *     MyDO: Cloudflare.DurableObject("MyDO", {
+ *       className: "MyDOClass",
+ *       transferredFrom: "WorkerB", // logical id (or its script name)
+ *     }),
  *   },
  * });
  * const b = yield* Cloudflare.Worker("WorkerB", {
@@ -902,35 +855,39 @@ export const registerDoTransferHint = Effect.fn(function* (
  *   bindings: {
  *     MyDO: Cloudflare.DurableObject("MyDO", {
  *       className: "MyDOClass",
- *       scriptName: a.workerName, // provenance ⇒ transfer is inferred
+ *       scriptName: a.workerName,
  *     }),
  *   },
  * });
  * ```
  *
- * When the move spans two stacks — or the cross-script `scriptName` is a
- * raw string with no resource provenance — the plan cannot see both
- * sides, so nothing can be inferred. The deploy then fails before any
- * upload with `DurableObjectTransferRequired` (Durable Object data does
- * not move on its own, and deleting the class would destroy it). Name
- * the source explicitly with `transferredFrom` on the Durable Object at
- * its **new host** and deploy that stack first; once the transfer has
- * completed — or on a fresh stage — the property is inert and safe to
- * leave in place.
+ * Forgetting the declaration is safe: when the former host still
+ * references the class cross-script, its deploy fails before any upload
+ * with `DurableObjectTransferRequired`, telling you exactly what to
+ * declare — data is never silently destroyed or forked.
  *
- * @example Cross-stack move: name the source explicitly
+ * @example Chained moves keep the host history
  * ```typescript
- * // stack-a alchemy.run.ts — the NEW host, deployed from its own stack
- * const workerA = yield* Cloudflare.Worker("WorkerA", {
- *   main: "./src/worker-a.ts", // exports MyDOClass
- *   bindings: {
- *     MyDO: Cloudflare.DurableObject("MyDO", {
- *       className: "MyDOClass",
- *       transferredFrom: "worker-b", // script that used to host it
- *     }),
- *   },
- * });
+ * // The class moved WorkerB → WorkerA last release and WorkerA →
+ * // WorkerC this release. Keep the full history so a stage that lagged
+ * // behind (or skipped the intermediate release) still transfers from
+ * // wherever its namespace currently lives.
+ * Cloudflare.DurableObject("MyDO", {
+ *   className: "MyDOClass",
+ *   transferredFrom: ["WorkerB", "WorkerA"],
+ * })
  * ```
+ *
+ * Two rules for multi-worker migrations:
+ *
+ * - **Pure moves (the former host drops the DO entirely, keeping no
+ *   cross-script reference) must be two deploys**: first add the class to
+ *   the new host with `transferredFrom` and deploy; then remove it from
+ *   the former host and deploy. In a single deploy nothing orders the
+ *   transfer before the former host's delete.
+ * - **Cross-stack moves deploy the new host's stack first**, naming the
+ *   former host by physical script name; the former host's stack deploys
+ *   after and converges.
  *
  * @section Adopting an Existing Durable Object
  * When you adopt a Worker that already exists on Cloudflare — created
@@ -1015,7 +972,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
     const binding = (
       scriptName?: Input<string>,
-      transferredFrom?: Input<string>,
+      transferredFrom?: Input<string | string[]>,
     ) =>
       Effect.gen(function* () {
         const worker = yield* Worker;
@@ -1031,17 +988,6 @@ export const DurableObject: DurableObjectClass = taggedFunction(
             },
           ],
         });
-
-        if (scriptName !== undefined) {
-          // Cross-script reference: hint the target so it can infer a
-          // data-preserving transfer when this class is moving host.
-          yield* registerDoTransferHint(
-            worker,
-            scriptName,
-            namespace,
-            namespace,
-          );
-        }
 
         const binding = yield* Effect.all([
           WorkerEnvironment,

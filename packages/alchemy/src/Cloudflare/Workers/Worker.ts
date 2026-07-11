@@ -643,23 +643,6 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     /**
-     * Durable Object transfer hints contributed by *other* Workers'
-     * cross-script DO declarations. When Worker B re-binds a Durable Object
-     * it used to host as a cross-script reference to Worker A, B's
-     * declaration binds `{ logicalId, className, fromWorkerId: B }` onto A
-     * at plan time. A's reconcile uses the hint to infer Cloudflare's
-     * data-preserving `transferred_classes` migration: a class that is new
-     * to A whose hint resolves (via `alchemy:id:` / `alchemy:do:` tags,
-     * same stack + stage) to a script currently hosting the namespace is
-     * transferred instead of created fresh. Pure literals — hints never
-     * carry Outputs, so they add no dependency edges.
-     */
-    doTransferHints?: {
-      logicalId: string;
-      className: string;
-      fromWorkerId: string;
-    }[];
-    /**
      * Workers Cache settings contributed by `yield* Cloudflare.cache()`.
      * Merged into the upload metadata's `cache_options`; an explicit
      * `WorkerProps.cache` takes precedence.

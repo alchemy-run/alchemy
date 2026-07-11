@@ -544,21 +544,21 @@ test.provider(
 );
 
 // #799: moving a Durable Object class from one Worker to another is
-// *inferred* — no extra configuration. Worker-b's cross-script declaration
-// (`scriptName: a.workerName`) carries resource provenance, so at plan time
-// it binds a transfer hint onto worker-a. Worker-a's deploy sees a class
-// that is new to it, resolves the hint against observed cloud state
-// (worker-b still hosts the namespace and carries the matching
-// `alchemy:do:` / `alchemy:id:` tags), and ships Cloudflare's
-// data-preserving `transferred_classes` migration. Worker-b's deploy
-// converges on its own (no `deleted_classes` for a class that moved away).
+// *declared*: the new host names the former host with `transferredFrom` —
+// here by Worker *logical id*, resolved to the actual script via alchemy's
+// ownership tags (`alchemy:id:` + stack + stage) among scripts observed to
+// host the class. Worker-a's deploy ships Cloudflare's data-preserving
+// `transferred_classes` migration; worker-b's deploy converges on its own
+// (no `deleted_classes` for a class that moved away).
 //
 //   v1 — worker-b hosts `Counter` locally; write data into the namespace
-//   v2 — worker-a hosts `Counter`; worker-b re-binds it cross-script.
-//        The stored data must survive the move, reachable from both.
-//   v3 — redeploy of the same shape is inert (no re-transfer).
+//   v2 — worker-a hosts `Counter` with `transferredFrom: "worker-b"`;
+//        worker-b re-binds it cross-script. The stored data must survive
+//        the move, reachable from both.
+//   v3 — redeploy of the same shape is inert (no re-transfer; the
+//        declaration stays in the code).
 test.provider(
-  "durable object host move is inferred and preserves data",
+  "durable object host move declared by worker logical id preserves data",
   (scratch) =>
     Effect.gen(function* () {
       yield* scratch.destroy();
@@ -587,16 +587,17 @@ test.provider(
         const a = yield* Cloudflare.Worker("worker-a", {
           script: hostWorkerScript,
           env: {
-            // No transfer configuration — the move is inferred.
-            Counter: Cloudflare.DurableObject("Counter"),
+            Counter: Cloudflare.DurableObject("Counter", {
+              // The former host's Worker *logical id* — resolved to its
+              // physical script via alchemy's ownership tags.
+              transferredFrom: "worker-b",
+            }),
           },
         });
         const b = yield* Cloudflare.Worker("worker-b", {
           script: consumerWorkerScript,
           env: {
             Counter: Cloudflare.DurableObject("Counter", {
-              // `a.workerName` carries resource provenance, which is what
-              // lets the plan hint worker-a about the incoming transfer.
               scriptName: a.workerName,
             }),
           },
@@ -618,8 +619,8 @@ test.provider(
       expect(viaB.value).toBe(2);
 
       // Redeploying the same shape is inert: the class now lives on
-      // worker-a (tracked by its alchemy:do tag), so the steady-state hint
-      // must not re-emit a transfer migration. Data still intact.
+      // worker-a (tracked by its alchemy:do tag), so the standing
+      // declaration must not re-emit a transfer migration. Data intact.
       const v3 = yield* scratch.deploy(moved);
       const afterRedeploy = yield* fetchJsonReady<{ value: number }>(
         `${v3.a.url}/get`,
@@ -631,12 +632,12 @@ test.provider(
   { timeout: 240_000 },
 );
 
-// #799: when the plan can't see the move — a raw-string `scriptName` here,
-// standing in for a cross-stack move where the new host deploys from a
-// different plan entirely — `transferredFrom` names the source script
-// explicitly and drives the same data-preserving transfer.
+// #799: `transferredFrom` also accepts the former host's *physical script
+// name* — the form required for cross-stack moves, where the new host
+// deploys from a different plan entirely (modeled here with raw-string
+// script names on a pre-existing worker).
 test.provider(
-  "transferredFrom explicitly transfers when the plan can't infer the move",
+  "transferredFrom by physical script name transfers the namespace",
   (scratch) =>
     Effect.gen(function* () {
       yield* scratch.destroy();
@@ -702,13 +703,13 @@ test.provider(
   { timeout: 240_000 },
 );
 
-// #799 (safety interlock): the same raw-string move WITHOUT
-// `transferredFrom` must fail loudly before the former host uploads
-// anything — the plan has no provenance to infer from, the namespace (and
-// its data) still lives on worker-b, and deleting the class would destroy
-// it.
+// #799 (safety interlock): a host move WITHOUT `transferredFrom` must fail
+// loudly before the former host uploads anything — moves are never
+// inferred, the namespace (and its data) still lives on worker-b, and
+// deleting the class would destroy it. The error names the exact
+// declaration to add.
 test.provider(
-  "unresolvable host move fails with DurableObjectTransferRequired",
+  "undeclared host move fails with DurableObjectTransferRequired",
   (scratch) =>
     Effect.gen(function* () {
       yield* scratch.destroy();
@@ -742,8 +743,8 @@ test.provider(
             const a = yield* Cloudflare.Worker("worker-a", {
               script: hostWorkerScript,
               env: {
-                // Fresh, empty namespace for the same class name — no
-                // transfer configuration and no provenance to infer from.
+                // Fresh, empty namespace for the same class name — the
+                // move is not declared, so nothing transfers.
                 Counter: Cloudflare.DurableObject("Counter"),
               },
             });
@@ -751,7 +752,6 @@ test.provider(
               script: consumerWorkerScript,
               env: {
                 Counter: Cloudflare.DurableObject("Counter", {
-                  // Raw string: no resource provenance, no hint.
                   scriptName: aScriptName,
                 }),
               },
