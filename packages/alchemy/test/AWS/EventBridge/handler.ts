@@ -57,14 +57,15 @@ export default EventBridgeTestFunction.make(
       { source: ["alchemy.test.custom"] },
       (events: Stream.Stream<AWS.EventBridge.EventRecord>) =>
         events.pipe(
-          Stream.map((event) =>
-            JSON.stringify({
+          Stream.map((event) => ({
+            MessageBody: JSON.stringify({
               source: event.source,
               detailType: event["detail-type"],
               detail: event.detail,
             }),
-          ),
+          })),
           Stream.run(customSink),
+          Effect.orDie,
         ),
     );
 
@@ -73,14 +74,15 @@ export default EventBridgeTestFunction.make(
       { source: ["alchemy.test.default"] },
       (events: Stream.Stream<AWS.EventBridge.EventRecord>) =>
         events.pipe(
-          Stream.map((event) =>
-            JSON.stringify({
+          Stream.map((event) => ({
+            MessageBody: JSON.stringify({
               source: event.source,
               detailType: event["detail-type"],
               detail: event.detail,
             }),
-          ),
+          })),
           Stream.run(defaultSink),
+          Effect.orDie,
         ),
     );
 

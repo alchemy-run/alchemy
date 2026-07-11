@@ -101,6 +101,9 @@ export default SFNTestFunction.make(
     const sendTaskSuccess = yield* StepFunctions.SendTaskSuccess();
     const sendTaskFailure = yield* StepFunctions.SendTaskFailure();
     const sendTaskHeartbeat = yield* StepFunctions.SendTaskHeartbeat();
+    const validateDefinition =
+      yield* StepFunctions.ValidateStateMachineDefinition();
+    const testState = yield* StepFunctions.TestState();
     const receiveMessage = yield* SQS.ReceiveMessage(callbackQueue);
     const deleteMessage = yield* SQS.DeleteMessage(callbackQueue);
 
@@ -214,6 +217,42 @@ export default SFNTestFunction.make(
           return yield* HttpServerResponse.json({ sent: true });
         }
 
+        if (request.method === "POST" && pathname === "/validate-definition") {
+          const body = (yield* request.json) as unknown as {
+            definition: string;
+            type?: "STANDARD" | "EXPRESS";
+          };
+          const report = yield* validateDefinition({
+            definition: body.definition,
+            type: body.type,
+            severity: "ERROR",
+          });
+          return yield* HttpServerResponse.json({
+            result: report.result,
+            diagnostics: report.diagnostics.map((diagnostic) => ({
+              severity: diagnostic.severity,
+              code: plain(diagnostic.code),
+              message: plain(diagnostic.message),
+            })),
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/test-state") {
+          const body = (yield* request.json) as unknown as {
+            definition: string;
+            input?: string;
+          };
+          const result = yield* testState({
+            definition: body.definition,
+            input: body.input,
+          });
+          return yield* HttpServerResponse.json({
+            status: result.status,
+            output: plain(result.output),
+            error: plain(result.error),
+          });
+        }
+
         if (request.method === "POST" && pathname === "/stop") {
           const body = (yield* request.json) as unknown as {
             executionArn: string;
@@ -244,6 +283,8 @@ export default SFNTestFunction.make(
         StepFunctions.SendTaskSuccessHttp,
         StepFunctions.SendTaskFailureHttp,
         StepFunctions.SendTaskHeartbeatHttp,
+        StepFunctions.ValidateStateMachineDefinitionHttp,
+        StepFunctions.TestStateHttp,
         SQS.ReceiveMessageHttp,
         SQS.DeleteMessageHttp,
       ),

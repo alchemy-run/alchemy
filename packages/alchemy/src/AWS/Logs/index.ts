@@ -9,6 +9,8 @@ export * from "./GetLogEvents.ts";
 export * from "./GetLogEventsHttp.ts";
 export * from "./GetQueryResults.ts";
 export * from "./GetQueryResultsHttp.ts";
+export * from "./LogEventSink.ts";
+export * from "./LogEventSinkHttp.ts";
 export { LogGroup, LogGroupProvider, type LogGroupClass } from "./LogGroup.ts";
 export * from "./LogGroupEventSource.ts";
 export * from "./LogStream.ts";

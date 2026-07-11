@@ -47,8 +47,9 @@ export default IoTEventSourceFunction.make(
 
     yield* AWS.IoT.consumeTopicMessages(TOPIC, (messages) =>
       messages.pipe(
-        Stream.map((message) => JSON.stringify(message)),
+        Stream.map((message) => ({ MessageBody: JSON.stringify(message) })),
         Stream.run(sink),
+        Effect.orDie,
       ),
     );
 

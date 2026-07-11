@@ -8,6 +8,7 @@ import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import FirehoseApiFunctionLive, {
@@ -115,6 +116,52 @@ describe("Firehose Bindings", () => {
     );
   });
 
+  describe("DeliveryStreamSink", () => {
+    // `test.provider` supplies the AWS environment for the out-of-band
+    // describeDeliveryStream verification via distilled.
+    test.provider("streams records through the sink helper", () =>
+      Effect.gen(function* () {
+        const { url, deliveryStreamName } = yield* stack;
+        const response = yield* postJson(url, "/sink", {
+          records: [
+            `sink-1-${crypto.randomUUID()}`,
+            `sink-2-${crypto.randomUUID()}`,
+            `sink-3-${crypto.randomUUID()}`,
+          ],
+        });
+        expect((response as any).ok).toBe(true);
+        expect((response as any).count).toBe(3);
+
+        // Ingest success is the assertion — S3 delivery is asynchronous
+        // (buffering ≥ 60s; see the gated slow test below for arrival proof).
+        const described = yield* Firehose.describeDeliveryStream({
+          DeliveryStreamName: deliveryStreamName,
+        });
+        expect(
+          described.DeliveryStreamDescription.DeliveryStreamStatus,
+        ).toEqual("ACTIVE");
+      }),
+    );
+
+    test(
+      "splits more than 500 records into multiple PutRecordBatch calls",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        // 501 records > the PutRecordBatch limit of 500, so the batched sink
+        // must split the chunk into 2 sequential API calls (500 + 1). Any
+        // per-record ServiceUnavailable failures are retried by the sink
+        // engine before the handler responds.
+        const marker = crypto.randomUUID();
+        const response = yield* postJson(url, "/sink", {
+          records: Array.from({ length: 501 }, (_, i) => `sink-${marker}-${i}`),
+        });
+        expect((response as any).ok).toBe(true);
+        expect((response as any).count).toBe(501);
+      }),
+      { timeout: 120_000 },
+    );
+  });
+
   // S3 arrival proof is gated: Firehose buffers for ≥ 60s before delivering,
   // which busts the speed doctrine for the default suite. Run with
   // AWS_TEST_SLOW=1 to verify end-to-end delivery with bounded polling.
@@ -147,6 +194,64 @@ describe("Firehose Bindings", () => {
             }),
           );
           expect(listing.KeyCount ?? 0).toBeGreaterThan(0);
+        }),
+      { timeout: 180_000 },
+    );
+
+    class MarkerNotDeliveredYet extends Data.TaggedError(
+      "MarkerNotDeliveredYet",
+    ) {}
+
+    test.provider(
+      "sink records land in the destination bucket (marker-anchored)",
+      () =>
+        Effect.gen(function* () {
+          const { url, bucketName } = yield* stack;
+          const marker = `sink-delivery-${crypto.randomUUID()}`;
+          yield* postJson(url, "/sink", {
+            records: [`${marker}-1`, `${marker}-2`],
+          });
+
+          // Poll until a delivered object *contains the marker* — anchoring
+          // on content (not bare KeyCount) attributes delivery to the sink
+          // records rather than to other tests sharing the prefix.
+          const findMarker = Effect.gen(function* () {
+            const listing = yield* S3.listObjectsV2({
+              Bucket: bucketName,
+              Prefix: "records/",
+            });
+            for (const object of listing.Contents ?? []) {
+              if (object.Key === undefined) {
+                continue;
+              }
+              const got = yield* S3.getObject({
+                Bucket: bucketName,
+                Key: object.Key,
+              });
+              // The body read surfaces plain `Error` (streaming transport) —
+              // a mid-delivery read hiccup is just "not delivered yet", so
+              // fold it into the retryable tag instead of failing the poll.
+              const text = yield* Stream.mkString(
+                Stream.decodeText(got.Body!),
+              ).pipe(
+                Effect.catch(() => Effect.fail(new MarkerNotDeliveredYet())),
+              );
+              if (text.includes(marker)) {
+                return object.Key;
+              }
+            }
+            return yield* new MarkerNotDeliveredYet();
+          });
+
+          const key = yield* findMarker.pipe(
+            Effect.retry({
+              while: (e) => e._tag === "MarkerNotDeliveredYet",
+              schedule: Schedule.fixed("10 seconds").pipe(
+                Schedule.both(Schedule.recurs(12)),
+              ),
+            }),
+          );
+          expect(key).toBeTruthy();
         }),
       { timeout: 180_000 },
     );

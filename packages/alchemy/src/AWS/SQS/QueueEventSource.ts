@@ -1,7 +1,7 @@
 import type * as lambda from "aws-lambda";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
 export type SQSRecord = lambda.SQSRecord;
@@ -51,10 +51,24 @@ export function consumeQueueMessages<Q extends Queue, Req = never>(
   return QueueEventSource.use((source) => source(queue, props, process));
 }
 
-export class QueueEventSource extends Context.Service<
+/**
+ * Event source connecting an SQS {@link Queue} to the hosting compute
+ * (Lambda function or ServerHost process).
+ *
+ * The contract is a `Binding.Service`; the host-specific implementation
+ * layers are `Lambda.QueueEventSource` (event-source mapping + runtime
+ * dispatch) and `Server.SQSQueueEventSource` (long-poll receive loop).
+ * @binding
+ */
+export interface QueueEventSource extends Binding.Service<
   QueueEventSource,
+  "AWS.SQS.QueueEventSource",
   QueueEventSourceService
->()("AWS.SQS.QueueEventSource") {}
+> {}
+
+export const QueueEventSource = Binding.Service<QueueEventSource>(
+  "AWS.SQS.QueueEventSource",
+);
 
 export interface QueueEventSourceProps {
   /**

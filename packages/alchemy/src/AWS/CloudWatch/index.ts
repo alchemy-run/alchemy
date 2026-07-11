@@ -48,6 +48,8 @@ export * from "./ListMetrics.ts";
 export * from "./ListMetricsHttp.ts";
 export * from "./ListTagsForResource.ts";
 export * from "./ListTagsForResourceHttp.ts";
+export * from "./MetricSink.ts";
+export * from "./MetricSinkHttp.ts";
 export * from "./MetricStream.ts";
 export * from "./PutMetricData.ts";
 export * from "./PutMetricDataHttp.ts";

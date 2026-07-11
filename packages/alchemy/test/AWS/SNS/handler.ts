@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -85,6 +86,9 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
   {
     main,
     url: true,
+    // The sink's bounded partial-failure retry can sleep up to ~6s, which
+    // exceeds Lambda's 3s default timeout (see PATTERNS §7).
+    timeout: Duration.seconds(30),
     env: {
       DEBUG: "true",
     },
@@ -126,15 +130,16 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
 
     yield* AWS.SNS.consumeTopicNotifications(topic, (stream) =>
       stream.pipe(
-        Stream.map((notification) =>
-          JSON.stringify({
+        Stream.map((notification) => ({
+          MessageBody: JSON.stringify({
             topicArn: notification.TopicArn,
             message: notification.Message,
             subject: notification.Subject,
             messageId: notification.MessageId,
           }),
-        ),
+        })),
         Stream.run(queueSink),
+        Effect.orDie,
       ),
     );
 
@@ -173,7 +178,10 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
 
         if (request.method === "POST" && pathname === "/sink") {
           const body = (yield* request.json) as { messages: string[] };
-          yield* Stream.fromIterable(body.messages).pipe(Stream.run(sink));
+          yield* Stream.fromIterable(body.messages).pipe(
+            Stream.map((message) => ({ Message: message })),
+            Stream.run(sink),
+          );
           return yield* HttpServerResponse.json({ ok: true });
         }
 

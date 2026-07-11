@@ -7,8 +7,13 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import type { PolicyDocument } from "../IAM/Policy.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+} from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GenerateSecretStringProps
   extends secretsmanager.GetRandomPasswordRequest {
@@ -49,6 +54,14 @@ export interface SecretProps {
    * Generate a password and store it inside a JSON secret string.
    */
   generateSecretString?: GenerateSecretStringProps;
+  /**
+   * Resource-based permission policy attached to the secret
+   * (`PutResourcePolicy`). Accepts a typed {@link PolicyDocument} or a raw
+   * JSON string as an escape hatch (e.g. for adoption of an existing
+   * policy). Omitting the prop removes any policy previously attached by
+   * Alchemy.
+   */
+  resourcePolicy?: PolicyDocument | string;
   /**
    * User-defined tags for the secret.
    */
@@ -95,6 +108,25 @@ export interface Secret extends Resource<
  *     secretStringTemplate: JSON.stringify({ username: "app" }),
  *     generateStringKey: "password",
  *     PasswordLength: 32,
+ *   },
+ * });
+ * ```
+ *
+ * @section Resource Policies
+ * @example Typed Resource Policy
+ * ```typescript
+ * const secret = yield* Secret("SharedSecret", {
+ *   secretString: Redacted.make("shared-value"),
+ *   resourcePolicy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+ *         Action: ["secretsmanager:GetSecretValue"],
+ *         Resource: "*",
+ *       },
+ *     ],
  *   },
  * });
  * ```
@@ -313,6 +345,44 @@ export const SecretProvider = () =>
               SecretId: secretArn,
               TagKeys: removed,
             });
+          }
+
+          // Sync the resource-based policy — diff the observed policy
+          // against the desired one (both canonicalized via
+          // `normalizePolicyDocument`) so a re-deploy of an equivalent
+          // document is a no-op API-wise.
+          const desiredPolicy =
+            news.resourcePolicy === undefined
+              ? undefined
+              : typeof news.resourcePolicy === "string"
+                ? news.resourcePolicy
+                : stringifyPolicyDocument(news.resourcePolicy);
+          const observedPolicy = yield* secretsmanager
+            .getResourcePolicy({ SecretId: secretArn })
+            .pipe(
+              Effect.map((response) => response.ResourcePolicy),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+
+          if (desiredPolicy !== undefined) {
+            if (
+              observedPolicy === undefined ||
+              normalizePolicyDocument(observedPolicy) !==
+                normalizePolicyDocument(desiredPolicy)
+            ) {
+              yield* secretsmanager.putResourcePolicy({
+                SecretId: secretArn,
+                ResourcePolicy: desiredPolicy,
+              });
+            }
+          } else if (observedPolicy !== undefined) {
+            yield* secretsmanager
+              .deleteResourcePolicy({ SecretId: secretArn })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
           }
 
           yield* session.note(secretArn);

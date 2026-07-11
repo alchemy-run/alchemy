@@ -6,14 +6,17 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import type { PolicyDocument } from "../IAM/Policy.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+} from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import {
   isDomainActive,
   isDomainDeletable,
-  jsonEquals,
   readDomainTags,
   repeatUntilDomainState,
-  safeParseJson,
   subsetDiffers,
 } from "./internal.ts";
 
@@ -178,9 +181,10 @@ export interface DomainProps {
   ebsOptions?: DomainEbsOptions;
   /**
    * IAM resource-based access policy document controlling who can reach the
-   * domain endpoint.
+   * domain endpoint, either as a structured {@link PolicyDocument} or a raw
+   * JSON string (escape hatch / adoption of pre-existing policies).
    */
-  accessPolicies?: Record<string, unknown>;
+  accessPolicies?: PolicyDocument | string;
   /**
    * IP address type of the endpoint — `"ipv4"` or `"dualstack"`.
    */
@@ -267,7 +271,7 @@ export interface Domain extends Resource<
  *       {
  *         Effect: "Allow",
  *         Principal: { AWS: `arn:aws:iam::${accountId}:root` },
- *         Action: "es:*",
+ *         Action: ["es:*"],
  *         Resource: `arn:aws:es:${region}:${accountId}:domain/*`,
  *       },
  *     ],
@@ -336,6 +340,15 @@ const toEndpointOptions = (
         CustomEndpoint: options.customEndpoint,
         CustomEndpointCertificateArn: options.customEndpointCertificateArn,
       };
+
+const toAccessPolicies = (
+  policy: PolicyDocument | string | undefined,
+): string | undefined =>
+  policy === undefined
+    ? undefined
+    : typeof policy === "string"
+      ? policy
+      : stringifyPolicyDocument(policy);
 
 const toVpcOptions = (
   options: DomainVpcOptions | undefined,
@@ -449,10 +462,7 @@ export const DomainProvider = () =>
                 EngineVersion: props.engineVersion,
                 ClusterConfig: toClusterConfig(props.clusterConfig),
                 EBSOptions: toEbsOptions(props.ebsOptions),
-                AccessPolicies:
-                  props.accessPolicies !== undefined
-                    ? JSON.stringify(props.accessPolicies)
-                    : undefined,
+                AccessPolicies: toAccessPolicies(props.accessPolicies),
                 IPAddressType: props.ipAddressType,
                 SnapshotOptions:
                   props.snapshotOptions !== undefined
@@ -510,14 +520,15 @@ export const DomainProvider = () =>
             update.EBSOptions = desiredEbs;
             mutated = true;
           }
+          // Drift-compare canonicalized documents so key order / encoding
+          // differences in what OpenSearch echoes back never cause a
+          // spurious blue/green config change on re-deploy.
           if (
             props.accessPolicies !== undefined &&
-            !jsonEquals(
-              props.accessPolicies,
-              safeParseJson(observed.AccessPolicies),
-            )
+            normalizePolicyDocument(props.accessPolicies) !==
+              normalizePolicyDocument(observed.AccessPolicies ?? "")
           ) {
-            update.AccessPolicies = JSON.stringify(props.accessPolicies);
+            update.AccessPolicies = toAccessPolicies(props.accessPolicies);
             mutated = true;
           }
           if (

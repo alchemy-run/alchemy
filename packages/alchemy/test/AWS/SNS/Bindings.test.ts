@@ -394,20 +394,27 @@ describe.sequential("SNS Bindings", () => {
           expect((response as any).error).toBeTruthy();
         });
 
-        // TopicSink
+        // TopicSink — 12 messages > the PublishBatch limit of 10, so the
+        // batched sink must split the chunk into 2 sequential API calls
+        // (10 + 2) and every message must still arrive.
         yield* Effect.gen(function* () {
-          const first = `sink-1-${crypto.randomUUID()}`;
-          const second = `sink-2-${crypto.randomUUID()}`;
+          const prefix = `sink-${crypto.randomUUID()}`;
+          const markers = Array.from(
+            { length: 12 },
+            (_, i) => `${prefix}-${i}`,
+          );
 
-          const response = yield* postJson("/sink", {
-            messages: [first, second],
-          });
+          const response = yield* postJson("/sink", { messages: markers });
           expect((response as any).ok).toBe(true);
 
-          const bodies = yield* waitForQueueMessages(2);
-          const messages = bodies.map((body) => body.message);
-          expect(messages).toContain(first);
-          expect(messages).toContain(second);
+          const received: string[] = [];
+          while (received.length < markers.length) {
+            const body = yield* waitForQueueMessage((candidate) =>
+              candidate.message.startsWith(prefix),
+            );
+            received.push(body.message);
+          }
+          expect(received.sort()).toEqual([...markers].sort());
         });
 
         if (!process.env.NO_DESTROY) {

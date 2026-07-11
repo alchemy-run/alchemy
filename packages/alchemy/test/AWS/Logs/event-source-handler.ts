@@ -49,8 +49,9 @@ export default LogGroupEventSourceFunction.make(
 
     yield* AWS.Logs.consumeLogEvents(source, { filterPattern: "" }, (events) =>
       events.pipe(
-        Stream.map((event) => event.message),
+        Stream.map((event) => ({ MessageBody: event.message })),
         Stream.run(sink),
+        Effect.orDie,
       ),
     );
 

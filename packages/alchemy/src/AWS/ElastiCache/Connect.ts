@@ -1,5 +1,7 @@
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
 import type { ServerlessCache } from "./ServerlessCache.ts";
 
 /**
@@ -30,7 +32,7 @@ export interface CacheConnectionInfo {
  * `ELASTICACHE_SESSIONCACHE_PORT`, and `ELASTICACHE_SESSIONCACHE_TLS`.
  */
 export const connectEnvPrefix = (logicalId: string): string =>
-  `ELASTICACHE_${logicalId.replace(/[^A-Za-z0-9]+/g, "_").toUpperCase()}`;
+  makeConnectEnvPrefix("ELASTICACHE", logicalId);
 
 /**
  * Runtime binding that resolves connection settings for an ElastiCache
@@ -57,6 +59,8 @@ export const connectEnvPrefix = (logicalId: string): string =>
 export interface Connect extends Binding.Service<
   Connect,
   "AWS.ElastiCache.Connect",
-  (cache: ServerlessCache) => Effect.Effect<Effect.Effect<CacheConnectionInfo>>
+  (
+    cache: ServerlessCache,
+  ) => Effect.Effect<Effect.Effect<CacheConnectionInfo, never, RuntimeContext>>
 > {}
 export const Connect = Binding.Service<Connect>("AWS.ElastiCache.Connect");

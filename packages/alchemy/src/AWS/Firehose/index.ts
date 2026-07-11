@@ -1,4 +1,6 @@
 export * from "./DeliveryStream.ts";
+export * from "./DeliveryStreamSink.ts";
+export * from "./DeliveryStreamSinkHttp.ts";
 export * from "./PutRecord.ts";
 export * from "./PutRecordBatch.ts";
 export * from "./PutRecordBatchHttp.ts";

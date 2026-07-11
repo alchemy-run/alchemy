@@ -179,11 +179,12 @@ provider(
 
       const { queueUrl } = yield* waitForFunctionReady(`${baseUrl}/ready`);
 
-      const messages = [
-        `sink-${crypto.randomUUID()}`,
-        `sink-${crypto.randomUUID()}`,
-        `sink-${crypto.randomUUID()}`,
-      ];
+      // 25 messages > the SendMessageBatch limit of 10, so the batched sink
+      // must split the chunk into 3 sequential API calls (10 + 10 + 5).
+      const messages = Array.from(
+        { length: 25 },
+        (_, i) => `sink-${i}-${crypto.randomUUID()}`,
+      );
       const response = yield* HttpClient.post(`${baseUrl}/sink`, {
         body: yield* HttpBody.json({ messages }),
       }).pipe(

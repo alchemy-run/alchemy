@@ -72,6 +72,40 @@ describe("normalizePolicyDocument", () => {
   it("returns unparseable strings unchanged so drift diffs still fire", () => {
     expect(normalizePolicyDocument("not-json{")).toBe("not-json{");
   });
+
+  it("treats singleton arrays and scalars as equivalent (AWS collapses them)", () => {
+    // The IAM grammar accepts `"x"` wherever `["x"]` is legal, and several
+    // services (e.g. Secrets Manager `GetResourcePolicy`) return the scalar
+    // form for a stored singleton array — the two must canonicalize equal or
+    // every re-deploy spuriously re-puts the policy.
+    const arrays: PolicyDocument = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { AWS: ["arn:aws:iam::123456789012:root"] },
+          Action: ["secretsmanager:GetSecretValue"],
+          Resource: "*",
+        },
+      ],
+    };
+    const scalars = {
+      Version: "2012-10-17",
+      Statement: {
+        Effect: "Allow",
+        Principal: { AWS: "arn:aws:iam::123456789012:root" },
+        Action: "secretsmanager:GetSecretValue",
+        Resource: "*",
+      },
+    };
+    expect(normalizePolicyDocument(arrays)).toBe(
+      normalizePolicyDocument(scalars),
+    );
+    // Multi-element arrays are untouched (order still significant).
+    expect(normalizePolicyDocument(document)).toContain(
+      '"Action":["s3:GetObject","s3:ListBucket"]',
+    );
+  });
 });
 
 describe("IamAction", () => {

@@ -2,6 +2,10 @@ import * as AWS from "@/AWS";
 import { BackupPlan } from "@/AWS/Backup/BackupPlan.ts";
 import { BackupSelection } from "@/AWS/Backup/BackupSelection.ts";
 import { BackupVault } from "@/AWS/Backup/BackupVault.ts";
+import {
+  normalizePolicyDocument,
+  type PolicyDocument,
+} from "@/AWS/IAM/Policy.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as backup from "@distilled.cloud/aws/backup";
@@ -11,6 +15,27 @@ import * as Effect from "effect/Effect";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const vaultName = "alchemy-test-backup-vault-lifecycle";
+
+// A structured PolicyDocument (not a JSON string) — proves the typed prop
+// deploys and that a re-deploy of the equivalent document is drift-free.
+// NOTE: two actions on purpose — AWS Backup canonicalizes a single-element
+// Action array to a bare string in the stored document, which would defeat
+// a verbatim round-trip comparison.
+const vaultAccessPolicy: PolicyDocument = {
+  Version: "2012-10-17",
+  Statement: [
+    {
+      Sid: "DenyRecoveryPointDeletion",
+      Effect: "Deny",
+      Principal: { AWS: "*" },
+      Action: [
+        "backup:DeleteRecoveryPoint",
+        "backup:UpdateRecoveryPointLifecycle",
+      ],
+      Resource: "*",
+    },
+  ],
+};
 
 // AWS Backup reports a missing vault as AccessDeniedException, not
 // ResourceNotFoundException.
@@ -35,6 +60,7 @@ test.provider(
         Effect.gen(function* () {
           const vault = yield* BackupVault("LifecycleVault", {
             backupVaultName: vaultName,
+            accessPolicy: vaultAccessPolicy,
             tags: { env: "test" },
           });
           const role = yield* AWS.IAM.Role("LifecycleBackupRole", {
@@ -112,17 +138,45 @@ test.provider(
       });
       expect(vaultTags.Tags?.env).toBe("test");
 
+      // The PolicyDocument-valued access policy round-trips: the document
+      // AWS stored is canonically equal to the one we deployed.
+      const storedPolicy = yield* backup.getBackupVaultAccessPolicy({
+        BackupVaultName: vaultName,
+      });
+      expect(storedPolicy.Policy).toBeDefined();
+      expect(normalizePolicyDocument(storedPolicy.Policy!)).toBe(
+        normalizePolicyDocument(vaultAccessPolicy),
+      );
+
       // Canonical list() coverage.
       const vaultProvider = yield* Provider.findProvider(BackupVault);
       const allVaults = yield* vaultProvider.list();
       expect(allVaults.some((v) => v.backupVaultName === vaultName)).toBe(true);
 
-      // Update the plan in place — change retention and start window.
+      // Update the plan in place — change retention and start window. The
+      // vault re-deploys with an equivalent PolicyDocument (statement keys
+      // reordered) plus a tag change, so its reconcile runs and the policy
+      // sync must conclude "no drift" against the stored document.
       yield* stack.deploy(
         Effect.gen(function* () {
           const vault = yield* BackupVault("LifecycleVault", {
             backupVaultName: vaultName,
-            tags: { env: "test" },
+            accessPolicy: {
+              Statement: [
+                {
+                  Resource: "*",
+                  Action: [
+                    "backup:DeleteRecoveryPoint",
+                    "backup:UpdateRecoveryPointLifecycle",
+                  ],
+                  Principal: { AWS: "*" },
+                  Effect: "Deny",
+                  Sid: "DenyRecoveryPointDeletion",
+                },
+              ],
+              Version: "2012-10-17",
+            },
+            tags: { env: "test", phase: "two" },
           });
           const role = yield* AWS.IAM.Role("LifecycleBackupRole", {
             assumeRolePolicyDocument: {
@@ -176,6 +230,19 @@ test.provider(
       expect(updatedPlan.BackupPlan?.Rules?.[0]?.CompletionWindowMinutes).toBe(
         360,
       );
+
+      // Re-deploy was clean: the stored access policy is still canonically
+      // equal to the original document, and the tag update landed.
+      const policyAfterRedeploy = yield* backup.getBackupVaultAccessPolicy({
+        BackupVaultName: vaultName,
+      });
+      expect(normalizePolicyDocument(policyAfterRedeploy.Policy!)).toBe(
+        normalizePolicyDocument(vaultAccessPolicy),
+      );
+      const tagsAfterRedeploy = yield* backup.listTags({
+        ResourceArn: deployed.vaultArn,
+      });
+      expect(tagsAfterRedeploy.Tags?.phase).toBe("two");
 
       // Destroy — provider recursively deletes and everything is gone.
       yield* stack.destroy();

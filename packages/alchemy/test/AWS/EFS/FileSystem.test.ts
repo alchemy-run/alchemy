@@ -58,7 +58,8 @@ test.provider(
       expect(observedTags.purpose).toBe("alchemy-efs-test");
       expect(observedTags["alchemy::id"]).toBe("Files");
 
-      // --- update: lifecycle policies + tags, same file system ---
+      // --- update: lifecycle policies + typed file system policy + tags,
+      //     same file system ---
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const files = yield* AWS.EFS.FileSystem("Files", {
@@ -67,6 +68,25 @@ test.provider(
               { transitionToIA: "AFTER_30_DAYS" },
               { transitionToPrimaryStorageClass: "AFTER_1_ACCESS" },
             ],
+            policy: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Sid: "AllowMountViaMountTarget",
+                  Effect: "Allow",
+                  Principal: { AWS: "*" },
+                  Action: [
+                    "elasticfilesystem:ClientMount",
+                    "elasticfilesystem:ClientWrite",
+                  ],
+                  Condition: {
+                    Bool: {
+                      "elasticfilesystem:AccessedViaMountTarget": "true",
+                    },
+                  },
+                },
+              ],
+            },
             tags: { purpose: "alchemy-efs-test-updated" },
           });
           return { files };
@@ -79,12 +99,64 @@ test.provider(
       });
       expect(lifecycle.LifecyclePolicies ?? []).toHaveLength(2);
 
+      // the PolicyDocument round-trips as the file system policy
+      const storedPolicy = yield* efs
+        .describeFileSystemPolicy({
+          FileSystemId: created.files.fileSystemId,
+        })
+        .pipe(Effect.map((r) => r.Policy ?? ""));
+      expect(storedPolicy).toContain("AllowMountViaMountTarget");
+
       const retagged = yield* efs
         .describeFileSystems({ FileSystemId: created.files.fileSystemId })
         .pipe(Effect.map((r) => efsTagsToRecord(r.FileSystems![0].Tags)));
       expect(retagged.purpose).toBe("alchemy-efs-test-updated");
 
-      // --- update: clearing lifecycle policies converges to empty ---
+      // --- re-deploy: an equivalent PolicyDocument (statement keys in a
+      //     different order) is a no-op — the normalized comparison skips
+      //     the put and the stored policy is untouched. The tag change
+      //     forces the reconcile to actually run.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const files = yield* AWS.EFS.FileSystem("Files", {
+            throughputMode: "elastic",
+            lifecyclePolicies: [
+              { transitionToIA: "AFTER_30_DAYS" },
+              { transitionToPrimaryStorageClass: "AFTER_1_ACCESS" },
+            ],
+            policy: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Condition: {
+                    Bool: {
+                      "elasticfilesystem:AccessedViaMountTarget": "true",
+                    },
+                  },
+                  Action: [
+                    "elasticfilesystem:ClientMount",
+                    "elasticfilesystem:ClientWrite",
+                  ],
+                  Principal: { AWS: "*" },
+                  Effect: "Allow",
+                  Sid: "AllowMountViaMountTarget",
+                },
+              ],
+            },
+            tags: { purpose: "alchemy-efs-test-redeploy" },
+          });
+          return { files };
+        }),
+      );
+      const redeployedPolicy = yield* efs
+        .describeFileSystemPolicy({
+          FileSystemId: created.files.fileSystemId,
+        })
+        .pipe(Effect.map((r) => r.Policy ?? ""));
+      expect(redeployedPolicy).toBe(storedPolicy);
+
+      // --- update: clearing lifecycle policies + policy converges to
+      //     empty / the default policy ---
       yield* stack.deploy(
         Effect.gen(function* () {
           const files = yield* AWS.EFS.FileSystem("Files", {
@@ -99,6 +171,18 @@ test.provider(
       });
       expect(cleared.LifecyclePolicies ?? []).toHaveLength(0);
 
+      // removing the policy prop reverts to the default policy — the
+      // explicit policy is gone (typed PolicyNotFound)
+      const policyGone = yield* efs
+        .describeFileSystemPolicy({
+          FileSystemId: created.files.fileSystemId,
+        })
+        .pipe(
+          Effect.map(() => false),
+          Effect.catchTag("PolicyNotFound", () => Effect.succeed(true)),
+        );
+      expect(policyGone).toBe(true);
+
       // --- list ---
       const provider = yield* Provider.findProvider(AWS.EFS.FileSystem);
       const all = yield* provider.list();
@@ -111,7 +195,7 @@ test.provider(
       const gone = yield* waitUntilFileSystemGone(created.files.fileSystemId);
       expect(gone).toBe(true);
     }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test.provider(

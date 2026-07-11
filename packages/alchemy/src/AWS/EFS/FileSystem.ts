@@ -10,6 +10,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import {
+  normalizePolicyDocument,
+  type PolicyDocument,
+  stringifyPolicyDocument,
+} from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -81,6 +86,14 @@ export interface FileSystemProps {
    */
   lifecyclePolicies?: FileSystemLifecyclePolicy[];
   /**
+   * The file system policy — an IAM resource-based policy controlling client
+   * access to the file system (e.g. enforcing in-transit encryption or
+   * restricting mounts to access points). Either a structured
+   * {@link PolicyDocument} or a raw JSON string. Omitting the property
+   * removes any explicit policy, reverting to the default EFS policy.
+   */
+  policy?: PolicyDocument | string;
+  /**
    * Tags to apply to the file system. Merged with internal Alchemy tags.
    */
   tags?: Record<string, string>;
@@ -130,6 +143,25 @@ export interface FileSystem extends Resource<
  *     { transitionToIA: "AFTER_30_DAYS" },
  *     { transitionToPrimaryStorageClass: "AFTER_1_ACCESS" },
  *   ],
+ * });
+ * ```
+ *
+ * @section File System Policy
+ * @example Enforce in-transit encryption with a typed PolicyDocument
+ * ```typescript
+ * const files = yield* AWS.EFS.FileSystem("Files", {
+ *   policy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Sid: "DenyUnencryptedTransport",
+ *         Effect: "Deny",
+ *         Principal: { AWS: "*" },
+ *         Action: ["elasticfilesystem:ClientMount"],
+ *         Condition: { Bool: { "aws:SecureTransport": "false" } },
+ *       },
+ *     ],
+ *   },
  * });
  * ```
  *
@@ -439,7 +471,44 @@ export const FileSystemProvider = () =>
             );
           }
 
-          // 3c. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3c. SYNC file system policy — compare the observed policy with
+          //     the desired one after canonicalization (sorted keys, no
+          //     whitespace) so a re-deploy of an equivalent document is a
+          //     no-op API-wise.
+          const observedPolicy = yield* efs
+            .describeFileSystemPolicy({ FileSystemId: fileSystemId })
+            .pipe(
+              Effect.map((r) => r.Policy),
+              Effect.catchTag("PolicyNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const desiredPolicy =
+            news.policy === undefined
+              ? undefined
+              : typeof news.policy === "string"
+                ? news.policy
+                : stringifyPolicyDocument(news.policy);
+          if (desiredPolicy === undefined) {
+            if (observedPolicy !== undefined) {
+              yield* retryWhileFileSystemUpdating(
+                efs.deleteFileSystemPolicy({ FileSystemId: fileSystemId }),
+              );
+            }
+          } else if (
+            observedPolicy === undefined ||
+            normalizePolicyDocument(observedPolicy) !==
+              normalizePolicyDocument(desiredPolicy)
+          ) {
+            yield* retryWhileFileSystemUpdating(
+              efs.putFileSystemPolicy({
+                FileSystemId: fileSystemId,
+                Policy: desiredPolicy,
+              }),
+            );
+          }
+
+          // 3d. SYNC tags — diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = efsTagsToRecord(fs.Tags);
           const { upsert, removed } = diffTags(observedTags, {

@@ -9,6 +9,11 @@ import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
+import type { PolicyDocument } from "../IAM/Policy.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+} from "../IAM/Policy.ts";
 import type { RegionID } from "../Region.ts";
 
 export type RepositoryName = string;
@@ -36,6 +41,13 @@ export interface RepositoryProps {
    */
   lifecyclePolicyText?: string;
   /**
+   * Repository permission policy controlling access from other AWS
+   * principals — either a structured IAM {@link PolicyDocument} or a raw
+   * JSON string (escape hatch / adoption of an existing policy). Omitting
+   * the prop removes any repository policy.
+   */
+  policy?: PolicyDocument | string;
+  /**
    * User-defined tags to apply to the repository.
    */
   tags?: Record<string, string>;
@@ -51,6 +63,7 @@ export interface Repository extends Resource<
     registryId: string;
     imageTagMutability: ecr.ImageTagMutability;
     lifecyclePolicyText?: string;
+    policy?: string;
     tags: Record<string, string>;
   },
   never,
@@ -65,6 +78,24 @@ export interface Repository extends Resource<
  * ```typescript
  * const repo = yield* Repository("TaskRepository", {
  *   scanOnPush: true,
+ * });
+ * ```
+ *
+ * @section Repository Policies
+ * @example Grant Lambda Pull Access
+ * ```typescript
+ * const repo = yield* Repository("LambdaImages", {
+ *   policy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Sid: "LambdaECRImageRetrieval",
+ *         Effect: "Allow",
+ *         Principal: { Service: "lambda.amazonaws.com" },
+ *         Action: ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
+ *       },
+ *     ],
+ *   },
  * });
  * ```
  */
@@ -85,6 +116,56 @@ export const RepositoryProvider = () =>
               maxLength: 256,
               lowercase: true,
             });
+
+      const toPolicyText = (policy: PolicyDocument | string | undefined) =>
+        policy === undefined
+          ? undefined
+          : typeof policy === "string"
+            ? policy
+            : stringifyPolicyDocument(policy);
+
+      const readPolicy = (repositoryName: string) =>
+        ecr.getRepositoryPolicy({ repositoryName }).pipe(
+          Effect.map((response) => response.policyText),
+          Effect.catchTag(
+            [
+              "RepositoryPolicyNotFoundException",
+              "RepositoryNotFoundException",
+            ],
+            () => Effect.succeed(undefined),
+          ),
+        );
+
+      // Sync the repository policy — compare the OBSERVED policy against the
+      // desired one via `normalizePolicyDocument` (key order / whitespace
+      // insensitive) so a re-deploy of an equivalent document is a no-op.
+      const syncPolicy = Effect.fn(function* (
+        repositoryName: string,
+        desired: string | undefined,
+      ) {
+        const observed = yield* readPolicy(repositoryName);
+        if (desired !== undefined) {
+          if (
+            observed === undefined ||
+            normalizePolicyDocument(observed) !==
+              normalizePolicyDocument(desired)
+          ) {
+            yield* ecr.setRepositoryPolicy({
+              repositoryName,
+              policyText: desired,
+            });
+          }
+        } else if (observed !== undefined) {
+          yield* ecr
+            .deleteRepositoryPolicy({ repositoryName })
+            .pipe(
+              Effect.catchTag(
+                "RepositoryPolicyNotFoundException",
+                () => Effect.void,
+              ),
+            );
+        }
+      });
 
       return {
         stables: [
@@ -131,6 +212,7 @@ export const RepositoryProvider = () =>
               output?.imageTagMutability ??
               "MUTABLE",
             lifecyclePolicyText: output?.lifecyclePolicyText,
+            policy: yield* readPolicy(repositoryName),
             tags: output?.tags ?? {},
           };
           return (yield* hasAlchemyTags(id, listedTags.tags ?? []))
@@ -204,6 +286,10 @@ export const RepositoryProvider = () =>
             });
           }
 
+          // Sync repository policy — normalized observed ↔ desired.
+          const desiredPolicy = toPolicyText(news.policy);
+          yield* syncPolicy(repositoryName, desiredPolicy);
+
           // Sync tags — diff observed cloud tags against desired.
           const listedTags = yield* ecr.listTagsForResource({
             resourceArn: repositoryArn,
@@ -241,6 +327,7 @@ export const RepositoryProvider = () =>
               repository.imageTagMutability ??
               "MUTABLE",
             lifecyclePolicyText: news.lifecyclePolicyText,
+            policy: desiredPolicy,
             tags: desiredTags,
           };
         }),
@@ -301,6 +388,7 @@ export const RepositoryProvider = () =>
                     imageTagMutability:
                       repository.imageTagMutability ?? "MUTABLE",
                     lifecyclePolicyText,
+                    policy: yield* readPolicy(repository.repositoryName),
                     tags,
                   };
                 }),

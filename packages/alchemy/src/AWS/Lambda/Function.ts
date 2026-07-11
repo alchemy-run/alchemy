@@ -281,6 +281,16 @@ export interface Function extends Resource<
   {
     env?: Record<string, any>;
     policyStatements?: PolicyStatement[];
+    /**
+     * VPC attachment requested by a binding (e.g. `RDS.Connect` with
+     * `subnetIds`/`securityGroupIds`). Merged (set-union) with the
+     * Function's own `vpc` prop and any other bindings' requests — both
+     * paths converge on the same underlying Lambda VPC config.
+     */
+    vpc?: {
+      subnetIds: string[];
+      securityGroupIds: string[];
+    };
   },
   Providers
 > {}
@@ -837,6 +847,23 @@ export const FunctionProvider = () =>
               }),
             ) ?? [],
         );
+        // VPC attachments requested through the binding channel (DECISION
+        // #5) — set-union across bindings; merged with the `vpc` prop in
+        // `reconcile`.
+        const vpcRequests = activeBindings.flatMap((binding) =>
+          binding?.data?.vpc ? [binding.data.vpc] : [],
+        );
+        const vpc =
+          vpcRequests.length > 0
+            ? {
+                subnetIds: [
+                  ...new Set(vpcRequests.flatMap((v) => v.subnetIds)),
+                ],
+                securityGroupIds: [
+                  ...new Set(vpcRequests.flatMap((v) => v.securityGroupIds)),
+                ],
+              }
+            : undefined;
 
         if (policyStatements.length > 0) {
           yield* iam.putRolePolicy({
@@ -856,7 +883,7 @@ export const FunctionProvider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         }
 
-        return env;
+        return { env, vpc };
       });
 
       const xrayWriteAccessPolicyArn =
@@ -1290,6 +1317,10 @@ export default handler;
         // Resolved EFS mounts. `undefined` leaves the function's existing
         // config untouched (precreate stub); `[]` explicitly clears mounts.
         fileSystemConfigs?: Lambda.FileSystemConfig[];
+        // Effective VPC attachment (prop ∪ binding-channel requests).
+        // Defaults to `news.vpc` when omitted (precreate stub, before
+        // bindings are known).
+        vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
       }) => Effect.Effect<
         void,
@@ -1305,6 +1336,7 @@ export default handler;
         functionName,
         preferUpdate,
         fileSystemConfigs,
+        vpc = news.vpc,
         session,
       }: {
         id: string;
@@ -1316,6 +1348,7 @@ export default handler;
         functionName: string;
         preferUpdate?: boolean;
         fileSystemConfigs?: Lambda.FileSystemConfig[];
+        vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
@@ -1328,6 +1361,11 @@ export default handler;
         ) =>
           e._tag === "InvalidParameterValueException" &&
           (e.message?.includes("cannot be assumed by Lambda") ||
+            // Freshly attached AWSLambdaVPCAccessExecutionRole still
+            // propagating when a VPC-attached function is created/updated.
+            e.message?.includes(
+              "does not have permissions to call CreateNetworkInterface",
+            ) ||
             (e.message?.includes("KMS key is invalid for CreateGrant") &&
               e.message?.includes("ARN does not refer to a valid principal")));
 
@@ -1385,10 +1423,10 @@ export default handler;
           // Always explicit so removing the `tracing` prop converges back to
           // the AWS default on update.
           TracingConfig: { Mode: news.tracing ?? "PassThrough" },
-          VpcConfig: news.vpc
+          VpcConfig: vpc
             ? {
-                SubnetIds: news.vpc.subnetIds,
-                SecurityGroupIds: news.vpc.securityGroupIds,
+                SubnetIds: vpc.subnetIds,
+                SecurityGroupIds: vpc.securityGroupIds,
               }
             : undefined,
           FileSystemConfigs: fileSystemConfigs,
@@ -1847,13 +1885,46 @@ export default handler;
             (yield* createRoleIfNotExists({ id, roleName, vpc: news.vpc })).Role
               .Arn;
 
-          const env = yield* attachBindings({
+          const { env, vpc: bindingVpc } = yield* attachBindings({
             roleName,
             policyName,
             functionArn,
             functionName,
             bindings,
           });
+
+          // Both VPC paths (the `vpc` prop and binding-channel requests)
+          // converge on one Lambda VPC config: set-union of subnets and
+          // security groups.
+          const vpc =
+            news.vpc || bindingVpc
+              ? {
+                  subnetIds: [
+                    ...new Set([
+                      ...(news.vpc?.subnetIds ?? []),
+                      ...(bindingVpc?.subnetIds ?? []),
+                    ]),
+                  ],
+                  securityGroupIds: [
+                    ...new Set([
+                      ...(news.vpc?.securityGroupIds ?? []),
+                      ...(bindingVpc?.securityGroupIds ?? []),
+                    ]),
+                  ],
+                }
+              : undefined;
+
+          // The role may predate the VPC request (precreate stub, or a
+          // binding newly asking for attachment) — the ENI permissions must
+          // be on the role before the function config references the VPC.
+          // Attaching is idempotent.
+          if (vpc) {
+            yield* iam.attachRolePolicy({
+              RoleName: roleName,
+              PolicyArn:
+                "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+            });
+          }
 
           yield* syncTracingPolicy({
             roleName,
@@ -1891,6 +1962,7 @@ export default handler;
               ...news.env,
             },
             functionName,
+            vpc,
             preferUpdate: output !== undefined,
             // `[]` (when the prop was removed on a function that previously
             // had mounts) explicitly clears the file-system config;

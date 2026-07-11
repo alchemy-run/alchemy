@@ -1,6 +1,6 @@
 import type * as lambda from "aws-lambda";
-import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import * as Binding from "../../Binding.ts";
 import type { UserPool, UserPoolTriggerName } from "./UserPool.ts";
 
 /**
@@ -85,11 +85,18 @@ export type UserPoolTriggerEventSourceService = <
  * `lambda:InvokeFunction` Permission for `cognito-idp.amazonaws.com`; at
  * runtime it dispatches matching trigger events to the handler and returns
  * the handler's (mutated) event to Cognito.
+ * @binding
  */
-export class UserPoolTriggerEventSource extends Context.Service<
+export interface UserPoolTriggerEventSource extends Binding.Service<
   UserPoolTriggerEventSource,
+  "AWS.Cognito.UserPoolTriggerEventSource",
   UserPoolTriggerEventSourceService
->()("AWS.Cognito.UserPoolTriggerEventSource") {}
+> {}
+
+export const UserPoolTriggerEventSource =
+  Binding.Service<UserPoolTriggerEventSource>(
+    "AWS.Cognito.UserPoolTriggerEventSource",
+  );
 
 /**
  * Handle a Cognito user pool Lambda trigger with the current Lambda

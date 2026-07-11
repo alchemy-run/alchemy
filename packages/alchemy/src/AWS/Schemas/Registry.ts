@@ -7,6 +7,11 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+  type PolicyDocument,
+} from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import { syncSchemasTags } from "./internal.ts";
 
@@ -27,6 +32,14 @@ export interface RegistryProps {
    * User tags to attach to the registry.
    */
   tags?: Record<string, string>;
+
+  /**
+   * Resource-based policy attached to the registry, granting other AWS
+   * accounts or principals access to the registry and its schemas. Provided
+   * as a structured {@link PolicyDocument} or a raw JSON string. Omitting it
+   * removes any existing resource policy.
+   */
+  policy?: PolicyDocument | string;
 }
 
 export interface Registry extends Resource<
@@ -62,6 +75,24 @@ export interface Registry extends Resource<
  * const registry = yield* AWS.Schemas.Registry("orders", {
  *   description: "Order lifecycle events",
  *   tags: { team: "payments" },
+ * });
+ * ```
+ *
+ * @section Sharing a Registry
+ * @example Registry with a Resource Policy
+ * ```typescript
+ * const registry = yield* AWS.Schemas.Registry("shared-events", {
+ *   policy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { AWS: `arn:aws:iam::${otherAccountId}:root` },
+ *         Action: ["schemas:DescribeRegistry", "schemas:SearchSchemas"],
+ *         Resource: registryArn,
+ *       },
+ *     ],
+ *   },
  * });
  * ```
  *
@@ -172,6 +203,41 @@ export const RegistryProvider = () =>
               RegistryName: registryName,
               Description: news.description ?? "",
             });
+          }
+
+          // SYNC resource policy — diff observed against desired, comparing
+          // canonicalized documents so a re-deploy of an equivalent policy
+          // (key order, whitespace) is a no-op.
+          const desiredPolicy =
+            news.policy === undefined
+              ? undefined
+              : typeof news.policy === "string"
+                ? news.policy
+                : stringifyPolicyDocument(news.policy);
+          const currentPolicy = yield* schemas
+            .getResourcePolicy({ RegistryName: registryName })
+            .pipe(
+              Effect.map((r) => (r.Policy ? r.Policy : undefined)),
+              Effect.catchTag("NotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const policyDrifted =
+            desiredPolicy === undefined || currentPolicy === undefined
+              ? desiredPolicy !== currentPolicy
+              : normalizePolicyDocument(currentPolicy) !==
+                normalizePolicyDocument(desiredPolicy);
+          if (policyDrifted) {
+            if (desiredPolicy === undefined) {
+              yield* schemas
+                .deleteResourcePolicy({ RegistryName: registryName })
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+            } else {
+              yield* schemas.putResourcePolicy({
+                RegistryName: registryName,
+                Policy: desiredPolicy,
+              });
+            }
           }
 
           // SYNC tags — diff against observed cloud tags.

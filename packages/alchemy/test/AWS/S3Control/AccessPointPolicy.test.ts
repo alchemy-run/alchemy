@@ -25,15 +25,17 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const bucket = yield* Bucket("PolicyBucket", { forceDestroy: true });
-          const accessPoint = yield* AccessPoint("PolicyAp", {
-            bucket: bucket.bucketName,
-          });
-          yield* AccessPointPolicy("PolicyApPolicy", {
-            accessPointName: accessPoint.accessPointName,
-            policy: [
+      const singleStatementStack = Effect.gen(function* () {
+        const bucket = yield* Bucket("PolicyBucket", { forceDestroy: true });
+        const accessPoint = yield* AccessPoint("PolicyAp", {
+          bucket: bucket.bucketName,
+        });
+        yield* AccessPointPolicy("PolicyApPolicy", {
+          accessPointName: accessPoint.accessPointName,
+          // typed PolicyDocument (not a raw JSON string)
+          policy: {
+            Version: "2012-10-17",
+            Statement: [
               {
                 Effect: "Allow",
                 Principal: { AWS: `arn:aws:iam::${ACCOUNT_ID}:root` },
@@ -41,10 +43,12 @@ test.provider(
                 Resource: Output.interpolate`${accessPoint.accessPointArn}/object/*`,
               },
             ],
-          });
-          return { accessPoint };
-        }),
-      );
+          },
+        });
+        return { accessPoint };
+      });
+
+      const deployed = yield* stack.deploy(singleStatementStack);
 
       // out-of-band verification via distilled
       const policy = yield* findPolicy(deployed.accessPoint.accessPointName);
@@ -60,6 +64,14 @@ test.provider(
         "s3:GetObject",
       ]);
 
+      // re-deploy the identical PolicyDocument — must be a clean no-op:
+      // the stored policy is byte-for-byte unchanged afterwards.
+      yield* stack.deploy(singleStatementStack);
+      const redeployedPolicy = yield* findPolicy(
+        deployed.accessPoint.accessPointName,
+      );
+      expect(redeployedPolicy).toBe(policy);
+
       // update the policy document in place
       yield* stack.deploy(
         Effect.gen(function* () {
@@ -69,20 +81,23 @@ test.provider(
           });
           yield* AccessPointPolicy("PolicyApPolicy", {
             accessPointName: accessPoint.accessPointName,
-            policy: [
-              {
-                Effect: "Allow",
-                Principal: { AWS: `arn:aws:iam::${ACCOUNT_ID}:root` },
-                Action: ["s3:GetObject"],
-                Resource: Output.interpolate`${accessPoint.accessPointArn}/object/*`,
-              },
-              {
-                Effect: "Allow",
-                Principal: { AWS: `arn:aws:iam::${ACCOUNT_ID}:root` },
-                Action: ["s3:ListBucket"],
-                Resource: accessPoint.accessPointArn,
-              },
-            ],
+            policy: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { AWS: `arn:aws:iam::${ACCOUNT_ID}:root` },
+                  Action: ["s3:GetObject"],
+                  Resource: Output.interpolate`${accessPoint.accessPointArn}/object/*`,
+                },
+                {
+                  Effect: "Allow",
+                  Principal: { AWS: `arn:aws:iam::${ACCOUNT_ID}:root` },
+                  Action: ["s3:ListBucket"],
+                  Resource: accessPoint.accessPointArn,
+                },
+              ],
+            },
           });
           return { accessPoint };
         }),

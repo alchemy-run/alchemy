@@ -1,3 +1,5 @@
+export * from "./BusSink.ts";
+export * from "./BusSinkHttp.ts";
 export * from "./DescribeEventBus.ts";
 export * from "./DescribeEventBusHttp.ts";
 export * from "./DescribeRule.ts";

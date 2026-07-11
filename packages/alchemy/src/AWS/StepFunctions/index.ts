@@ -1,4 +1,5 @@
 export * from "./Activity.ts";
+export * as Sfn from "./Asl/index.ts";
 export * from "./DescribeExecution.ts";
 export * from "./DescribeExecutionHttp.ts";
 export * from "./SendTaskFailure.ts";
@@ -14,3 +15,7 @@ export * from "./StartSyncExecutionHttp.ts";
 export * from "./StateMachine.ts";
 export * from "./StopExecution.ts";
 export * from "./StopExecutionHttp.ts";
+export * from "./TestState.ts";
+export * from "./TestStateHttp.ts";
+export * from "./ValidateStateMachineDefinition.ts";
+export * from "./ValidateStateMachineDefinitionHttp.ts";

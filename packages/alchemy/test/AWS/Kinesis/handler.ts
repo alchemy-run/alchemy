@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -50,6 +51,9 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
   {
     main: import.meta.url,
     url: true,
+    // The sink's bounded partial-failure retry can sleep up to ~6s, which
+    // exceeds Lambda's 3s default timeout (see PATTERNS §7).
+    timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
     const { stream, consumer } = yield* StreamAndConsumer;

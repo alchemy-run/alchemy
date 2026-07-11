@@ -1,6 +1,9 @@
 import * as AWS from "@/AWS";
 import { Vpc } from "@/AWS/EC2";
+import { normalizePolicyDocument } from "@/AWS/IAM/Policy.ts";
 import {
+  AuthPolicy,
+  ResourcePolicy,
   Service,
   ServiceNetwork,
   ServiceNetworkVpcAssociation,
@@ -151,6 +154,107 @@ test.provider(
       yield* stack.destroy();
     }),
   { timeout: 180_000 },
+);
+
+test.provider(
+  "auth + resource policies deploy from PolicyDocument and re-deploy clean",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Deploy the network alone first — the policy documents below embed the
+      // resolved ARN/account as plain strings (Outputs are unresolved proxies
+      // during plan, so string ops on them are impossible inside the program).
+      const base = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* ServiceNetwork("PolicyServiceNetwork", {
+            authType: "AWS_IAM",
+          });
+        }),
+      );
+      const account = base.serviceNetworkArn.split(":")[4];
+      const networkArn = base.serviceNetworkArn;
+
+      const program = Effect.gen(function* () {
+        const network = yield* ServiceNetwork("PolicyServiceNetwork", {
+          authType: "AWS_IAM",
+        });
+        const authPolicy = yield* AuthPolicy("NetworkAuthPolicy", {
+          resourceIdentifier: network.serviceNetworkId,
+          policy: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: { AWS: `arn:aws:iam::${account}:root` },
+                Action: ["vpc-lattice-svcs:Invoke"],
+                Resource: "*",
+              },
+            ],
+          },
+        });
+        const resourcePolicy = yield* ResourcePolicy("NetworkResourcePolicy", {
+          resourceArn: network.serviceNetworkArn,
+          policy: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: { AWS: `arn:aws:iam::${account}:root` },
+                Action: [
+                  "vpc-lattice:CreateServiceNetworkVpcAssociation",
+                  "vpc-lattice:CreateServiceNetworkServiceAssociation",
+                  "vpc-lattice:GetServiceNetwork",
+                ],
+                Resource: networkArn,
+              },
+            ],
+          },
+        });
+        return { authPolicy, network, resourcePolicy };
+      });
+
+      const first = yield* stack.deploy(program);
+
+      expect(first.authPolicy.resourceIdentifier).toBe(
+        first.network.serviceNetworkId,
+      );
+      expect(first.authPolicy.policy).toContain("vpc-lattice-svcs:Invoke");
+      expect(first.resourcePolicy.resourceArn).toBe(
+        first.network.serviceNetworkArn,
+      );
+
+      // The live documents match the PolicyDocument we deployed (canonicalized).
+      const liveAuth = yield* vpclattice.getAuthPolicy({
+        resourceIdentifier: first.network.serviceNetworkId,
+      });
+      expect(normalizePolicyDocument(liveAuth.policy!)).toBe(
+        normalizePolicyDocument(first.authPolicy.policy),
+      );
+      const liveResource = yield* vpclattice.getResourcePolicy({
+        resourceArn: first.network.serviceNetworkArn,
+      });
+      expect(normalizePolicyDocument(liveResource.policy!)).toBe(
+        normalizePolicyDocument(first.resourcePolicy.policy),
+      );
+
+      // Re-deploy the identical program — the normalized observed-vs-desired
+      // comparison must skip the puts, so the auth policy's lastUpdatedAt
+      // timestamp is unchanged (a put always bumps it).
+      const second = yield* stack.deploy(program);
+      expect(second.authPolicy.policy).toBe(first.authPolicy.policy);
+      expect(second.resourcePolicy.policy).toBe(first.resourcePolicy.policy);
+      const liveAuth2 = yield* vpclattice.getAuthPolicy({
+        resourceIdentifier: first.network.serviceNetworkId,
+      });
+      expect(liveAuth2.lastUpdatedAt?.toISOString()).toBe(
+        liveAuth.lastUpdatedAt?.toISOString(),
+      );
+
+      yield* stack.destroy();
+      yield* assertServiceNetworkDeleted(first.network.serviceNetworkId);
+    }),
+  { timeout: 240_000 },
 );
 
 test.provider(

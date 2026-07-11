@@ -33,6 +33,8 @@ export * from "./Scan.ts";
 export * from "./ScanHttp.ts";
 export * from "./Stream.ts";
 export * from "./Table.ts";
+export * from "./TableSink.ts";
+export * from "./TableSinkHttp.ts";
 export * from "./TransactGetItems.ts";
 export * from "./TransactGetItemsHttp.ts";
 export * from "./TransactWriteItems.ts";

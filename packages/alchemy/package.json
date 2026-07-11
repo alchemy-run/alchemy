@@ -348,6 +348,7 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@aws/durable-execution-sdk-js": "^2.1.0",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
@@ -385,6 +386,7 @@
     "ws": "catalog:"
   },
   "peerDependencies": {
+    "@aws/durable-execution-sdk-js": "^2.1.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
@@ -395,10 +397,13 @@
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
-    "@effect/platform-node": {
+    "@aws/durable-execution-sdk-js": {
       "optional": true
     },
     "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
       "optional": true
     },
     "@effect/sql-pg": {

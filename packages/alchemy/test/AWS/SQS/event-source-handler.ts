@@ -44,8 +44,9 @@ export default QueueEventSourceFunction.make(
 
     yield* AWS.SQS.consumeQueueMessages(source, { batchSize: 10 }, (records) =>
       records.pipe(
-        Stream.map((record) => record.body),
+        Stream.map((record) => ({ MessageBody: record.body })),
         Stream.run(sink),
+        Effect.orDie,
       ),
     );
 

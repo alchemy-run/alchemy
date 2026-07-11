@@ -5,11 +5,15 @@ import * as rds from "@distilled.cloud/aws/rds";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
 
+import RDSDrizzleIamFunctionLive, {
+  RDSDrizzleIamFunction,
+} from "./drizzle-iam-handler";
 import RDSDataTestFunctionLive, { RDSDataTestFunction } from "./handler";
 
 // Aurora Serverless v2 cluster + writer-instance provisioning takes 5-15
@@ -23,6 +27,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "RDSDataBindings");
 
 let baseUrl: string;
+let drizzleUrl: string;
 let clusterIdentifier: string | undefined;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
@@ -77,14 +82,28 @@ describe("RDSData Bindings", () => {
           yield* Effect.logInfo(
             "RDSData test setup: deploying Aurora SV2 + Lambda fixture (5-15 min)",
           );
-          const { functionUrl } = yield* sharedStack.deploy(
+          const { dataApiUrl, drizzleIamUrl } = yield* sharedStack.deploy(
             Effect.gen(function* () {
-              return yield* RDSDataTestFunction;
-            }).pipe(Effect.provide(RDSDataTestFunctionLive)),
+              const dataApi = yield* RDSDataTestFunction;
+              const drizzleIam = yield* RDSDrizzleIamFunction;
+              return {
+                dataApiUrl: dataApi.functionUrl,
+                drizzleIamUrl: drizzleIam.functionUrl,
+              };
+            }).pipe(
+              Effect.provide(
+                Layer.mergeAll(
+                  RDSDataTestFunctionLive,
+                  RDSDrizzleIamFunctionLive,
+                ),
+              ),
+            ),
           );
 
-          expect(functionUrl).toBeTruthy();
-          baseUrl = functionUrl!.replace(/\/+$/, "");
+          expect(dataApiUrl).toBeTruthy();
+          expect(drizzleIamUrl).toBeTruthy();
+          baseUrl = dataApiUrl!.replace(/\/+$/, "");
+          drizzleUrl = drizzleIamUrl!.replace(/\/+$/, "");
 
           // Bounded readiness poll (gated-suite only): the cluster is already
           // `available` when deploy returns (the DBCluster/DBInstance
@@ -123,6 +142,11 @@ describe("RDSData Bindings", () => {
 
           // Create the shared table once for all binding tests.
           yield* postJson(`${baseUrl}/setup`, {});
+
+          // Bootstrap the IAM-auth DB user (rds_iam + table grants) via the
+          // Data API — the VPC-attached Drizzle fixture can't reach the Data
+          // API itself.
+          yield* postJson(`${baseUrl}/setup-iam-user`, {});
         })
       : Effect.void,
     { timeout: 1_500_000 },
@@ -311,6 +335,67 @@ describe("RDSData Bindings", () => {
           expect(info.ssl).toBe(true);
         }),
       { timeout: 120_000 },
+    );
+  });
+
+  // IAM database authentication (db-drivers §3 "RDS/Aurora"): the deploy
+  // half binds `rds-db:connect` on `dbuser:{resourceId}/app_iam` and attaches
+  // the Lambda to the fixture VPC through the binding contract's `vpc`
+  // channel (DECISION #5); the runtime half presigns a 15-minute token as the
+  // password and `Drizzle.postgres` consumes `ConnectionInfo.url` directly.
+  describe("RDS.Connect (IAM auth)", () => {
+    test.provider.skipIf(!SLOW)(
+      "mints an IAM auth token as the password and can re-mint via refreshPassword",
+      (_stack) =>
+        Effect.gen(function* () {
+          const info = (yield* send(
+            HttpClientRequest.get(`${drizzleUrl}/connect-info`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            host: string;
+            port: number;
+            database?: string;
+            username?: string;
+            hasToken: boolean;
+            ssl: boolean;
+            canRefresh: boolean;
+          };
+          expect(info.host).toMatch(/\.rds\.amazonaws\.com$/);
+          expect(info.port).toBe(5432);
+          expect(info.database).toBe("app");
+          expect(info.username).toBe("app_iam");
+          expect(info.hasToken).toBe(true);
+          expect(info.ssl).toBe(true);
+          expect(info.canRefresh).toBe(true);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider.skipIf(!SLOW)(
+      "Drizzle round-trips over the IAM-auth connection URL",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Socket sanity check first — TLS + token auth + in-VPC route.
+          const health = (yield* send(
+            HttpClientRequest.get(`${drizzleUrl}/drizzle-health`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            rows: { one: number }[];
+          };
+          expect(health.rows[0]?.one).toBe(1);
+
+          // Cross-path consistency: write via the Data API Lambda, read over
+          // the wire protocol from the VPC-attached Lambda.
+          yield* postJson(`${baseUrl}/insert`, {
+            id: 60,
+            title: "written-via-data-api",
+          });
+          const todos = (yield* send(
+            HttpClientRequest.get(`${drizzleUrl}/drizzle-todos`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            rows: { count: number }[];
+          };
+          expect(todos.rows[0]!.count).toBeGreaterThanOrEqual(1);
+        }),
+      { timeout: 180_000 },
     );
   });
 

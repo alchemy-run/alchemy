@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -55,6 +56,7 @@ export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
 
     const putRecord = yield* AWS.Firehose.PutRecord(deliveryStream);
     const putRecordBatch = yield* AWS.Firehose.PutRecordBatch(deliveryStream);
+    const sink = yield* AWS.Firehose.DeliveryStreamSink(deliveryStream);
 
     return {
       fetch: Effect.gen(function* () {
@@ -86,6 +88,23 @@ export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
           );
         }
 
+        if (request.method === "POST" && pathname === "/sink") {
+          const body = (yield* request.json) as { records: string[] };
+          // Sinks are request-scoped: Stream.run drains fully (including the
+          // engine's bounded partial-failure retries) before the handler
+          // responds.
+          yield* Stream.fromIterable(body.records).pipe(
+            Stream.map((data) => ({
+              Data: new TextEncoder().encode(`${data}\n`),
+            })),
+            Stream.run(sink),
+          );
+          return yield* HttpServerResponse.json({
+            ok: true,
+            count: body.records.length,
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -94,10 +113,18 @@ export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        AWS.Firehose.PutRecordHttp,
-        AWS.Firehose.PutRecordBatchHttp,
-        BucketAndDeliveryStreamLive,
+      Layer.provideMerge(
+        // The sink layer consumes the PutRecordBatch binding, so the op
+        // layers are provided *into* the sink group (and merged out for the
+        // fetch routes that call them directly).
+        Layer.mergeAll(
+          AWS.Firehose.DeliveryStreamSinkHttp,
+          BucketAndDeliveryStreamLive,
+        ),
+        Layer.mergeAll(
+          AWS.Firehose.PutRecordHttp,
+          AWS.Firehose.PutRecordBatchHttp,
+        ),
       ),
     ),
   ),

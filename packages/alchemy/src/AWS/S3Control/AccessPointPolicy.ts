@@ -4,7 +4,11 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import type { PolicyStatement } from "../IAM/Policy.ts";
+import {
+  normalizePolicyDocument,
+  type PolicyDocument,
+  stringifyPolicyDocument,
+} from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AccessPointPolicyProps {
@@ -15,10 +19,11 @@ export interface AccessPointPolicyProps {
    */
   accessPointName: string;
   /**
-   * The resource policy statements granting access through the access
-   * point. Object-level actions target `${accessPointArn}/object/${key}`.
+   * The resource policy granting access through the access point, as a
+   * typed {@link PolicyDocument} or a raw JSON string (escape hatch /
+   * adoption). Object-level actions target `${accessPointArn}/object/${key}`.
    */
-  policy: PolicyStatement[];
+  policy: PolicyDocument | string;
 }
 
 export interface AccessPointPolicy extends Resource<
@@ -53,14 +58,17 @@ export interface AccessPointPolicy extends Resource<
  *
  * yield* S3Control.AccessPointPolicy("data-ap-policy", {
  *   accessPointName: accessPoint.accessPointName,
- *   policy: [
- *     {
- *       Effect: "Allow",
- *       Principal: { AWS: `arn:aws:iam::${accountId}:role/reader` },
- *       Action: ["s3:GetObject"],
- *       Resource: [Output.interpolate`${accessPoint.accessPointArn}/object/*`],
- *     },
- *   ],
+ *   policy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { AWS: `arn:aws:iam::${accountId}:role/reader` },
+ *         Action: ["s3:GetObject"],
+ *         Resource: [Output.interpolate`${accessPoint.accessPointArn}/object/*`],
+ *       },
+ *     ],
+ *   },
  * });
  * ```
  */
@@ -84,10 +92,9 @@ export const AccessPointPolicyProvider = () =>
           );
 
       const desiredPolicy = (props: AccessPointPolicyProps) =>
-        JSON.stringify({
-          Version: "2012-10-17",
-          Statement: props.policy,
-        });
+        typeof props.policy === "string"
+          ? props.policy
+          : stringifyPolicyDocument(props.policy);
 
       return AccessPointPolicy.Provider.of({
         stables: ["accessPointName"],
@@ -120,9 +127,15 @@ export const AccessPointPolicyProvider = () =>
           // 1. OBSERVE — read the policy currently attached in the cloud.
           const observed = yield* observePolicy(accountId, name);
 
-          // 2. SYNC — apply only when the desired document differs.
+          // 2. SYNC — apply only when the desired document differs after
+          // canonicalization (key order / whitespace insensitive), so a
+          // re-deploy of an unchanged document is a no-op.
           const desired = desiredPolicy(news);
-          if (observed !== desired) {
+          if (
+            observed === undefined ||
+            normalizePolicyDocument(observed) !==
+              normalizePolicyDocument(desired)
+          ) {
             yield* s3control.putAccessPointPolicy({
               AccountId: accountId,
               Name: name,

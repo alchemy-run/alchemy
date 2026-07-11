@@ -1,6 +1,6 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
-import type { PolicyDocument } from "../IAM/Policy.ts";
+import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
 import * as IdentityCenter from "../IdentityCenter/index.ts";
 import type { Account, AccountProps } from "./Account.ts";
 import { Account as OrganizationAccount } from "./Account.ts";
@@ -50,7 +50,12 @@ export interface TenantPolicySpec {
   name?: string;
   description?: string;
   type?: organizations.PolicyType;
-  document: PolicyDocument;
+  /**
+   * Policy content — a typed {@link ServiceControlPolicyDocument} for
+   * SCP/RCP policies, or a raw JSON `string` for other policy types
+   * (tag, backup, ...) and as the escape hatch.
+   */
+  document: ServiceControlPolicyDocument | string;
   targetKeys: TenantTargetKey[];
   tags?: Record<string, string>;
 }

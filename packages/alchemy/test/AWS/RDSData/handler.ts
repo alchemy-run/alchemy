@@ -1,14 +1,13 @@
-import * as EC2 from "@/AWS/EC2";
 import * as Lambda from "@/AWS/Lambda";
 import * as RDS from "@/AWS/RDS";
 import * as RDSData from "@/AWS/RDSData";
-import * as SecretsManager from "@/AWS/SecretsManager";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import { RDSDataInfra } from "./infra.ts";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -37,69 +36,10 @@ export default RDSDataTestFunction.make(
     timeout: Duration.seconds(60),
   },
   Effect.gen(function* () {
-    // Plain EC2 resources — `EC2.Network` is runtime-safe now (see
-    // test/AWS/EC2/Network.test.ts), but a DB subnet group just needs a VPC
-    // with two isolated subnets in distinct AZs; the Data API is HTTP, so no
-    // gateways or routes are required.
-    const vpc = yield* EC2.Vpc("Vpc", {
-      cidrBlock: "10.61.0.0/16",
-    });
-    const subnetA = yield* EC2.Subnet("SubnetA", {
-      vpcId: vpc.vpcId,
-      cidrBlock: "10.61.0.0/24",
-      availabilityZone: "us-west-2a",
-    });
-    const subnetB = yield* EC2.Subnet("SubnetB", {
-      vpcId: vpc.vpcId,
-      cidrBlock: "10.61.1.0/24",
-      availabilityZone: "us-west-2b",
-    });
-
-    const securityGroup = yield* EC2.SecurityGroup("DbSecurityGroup", {
-      vpcId: vpc.vpcId,
-      description: "Aurora Data API test cluster (no ingress; Data API only)",
-    });
-
-    const subnetGroup = yield* RDS.DBSubnetGroup("SubnetGroup", {
-      description: "RDSData bindings test cluster",
-      subnetIds: [subnetA.subnetId, subnetB.subnetId],
-    });
-
-    // The Data API authenticates with a Secrets Manager secret whose JSON
-    // payload carries `username` + `password`; the cluster reads the same
-    // secret for its master credentials (`masterUserSecretArn`).
-    const secret = yield* SecretsManager.Secret("Secret", {
-      description: "Credentials for the RDSData bindings test cluster",
-      generateSecretString: {
-        secretStringTemplate: JSON.stringify({ username: "app" }),
-        generateStringKey: "password",
-        PasswordLength: 32,
-        ExcludeCharacters: "\"'@/\\",
-      },
-    });
-
-    const cluster = yield* RDS.DBCluster("Cluster", {
-      engine: "aurora-postgresql",
-      engineMode: "provisioned",
-      databaseName: "app",
-      dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
-      vpcSecurityGroupIds: [securityGroup.groupId],
-      enableHttpEndpoint: true,
-      serverlessV2ScalingConfiguration: {
-        MinCapacity: 0.5,
-        MaxCapacity: 1,
-      },
-      masterUserSecretArn: secret.secretArn,
-    });
-
-    // Cluster members inherit the subnet group and security groups from the
-    // cluster — RDS rejects `CreateDBInstance` with VpcSecurityGroupIds for a
-    // cluster member ("Set vpc security group for the DB Cluster").
-    yield* RDS.DBInstance("Writer", {
-      dbClusterIdentifier: cluster.dbClusterIdentifier,
-      dbInstanceClass: "db.serverless",
-      engine: "aurora-postgresql",
-    });
+    // Shared Aurora fixture infra (VPC, subnets, SGs, secret, cluster,
+    // writer) — also yielded by the Drizzle IAM fixture; declarations
+    // dedupe by logical ID.
+    const { secret, cluster } = yield* RDSDataInfra;
 
     const options = { secret, database: "app" };
 
@@ -172,6 +112,21 @@ export default RDSDataTestFunction.make(
             success: true,
             numberOfRecordsUpdated: result.numberOfRecordsUpdated ?? 0,
           });
+        }
+
+        // Bootstrap the IAM-auth database user for the Drizzle fixture:
+        // `rds_iam` switches the user to token authentication, and the
+        // grants let it read the shared `todos` table. Idempotent so the
+        // suite can re-run against a standing deployment.
+        if (request.method === "POST" && pathname === "/setup-iam-user") {
+          yield* executeStatement({
+            sql: "DO $$ BEGIN CREATE USER app_iam WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+          });
+          yield* executeStatement({ sql: "GRANT rds_iam TO app_iam" });
+          yield* executeStatement({
+            sql: "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_iam",
+          });
+          return yield* HttpServerResponse.json({ success: true });
         }
 
         if (request.method === "POST" && pathname === "/insert") {

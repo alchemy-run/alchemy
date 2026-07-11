@@ -31,8 +31,9 @@ export const SmokeWorkerFunctionLive = SmokeWorkerFunction.make(
       { batchSize: 10 },
       (records) =>
         records.pipe(
-          Stream.map((record) => `processed:${record.body}`),
+          Stream.map((record) => ({ MessageBody: `processed:${record.body}` })),
           Stream.run(sink),
+          Effect.orDie,
         ),
     );
   }).pipe(

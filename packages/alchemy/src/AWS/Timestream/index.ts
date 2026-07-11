@@ -2,6 +2,8 @@ export * from "./Database.ts";
 export * from "./DbInstance.ts";
 export * from "./Query.ts";
 export * from "./QueryHttp.ts";
+export * from "./RecordsSink.ts";
+export * from "./RecordsSinkHttp.ts";
 export * from "./Table.ts";
 export * from "./WriteRecords.ts";
 export * from "./WriteRecordsHttp.ts";

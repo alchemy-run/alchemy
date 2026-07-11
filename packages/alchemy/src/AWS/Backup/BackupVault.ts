@@ -7,6 +7,11 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+  type PolicyDocument,
+} from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface BackupVaultProps {
@@ -26,11 +31,12 @@ export interface BackupVaultProps {
    */
   encryptionKeyArn?: string;
   /**
-   * Resource-based access policy (IAM policy JSON) attached to the vault.
-   * Provided as a JSON string or a plain object. Omit to leave the vault
+   * Resource-based access policy attached to the vault. Provided as a
+   * structured {@link PolicyDocument} (typed actions, drift-normalized on
+   * re-deploy) or a raw JSON string escape hatch. Omit to leave the vault
    * without a resource policy.
    */
-  accessPolicy?: string | Record<string, any>;
+  accessPolicy?: PolicyDocument | string;
   /**
    * Tags to apply to the vault. Merged with internal Alchemy tags.
    */
@@ -82,7 +88,7 @@ export interface BackupVault extends Resource<
  *     Statement: [
  *       {
  *         Effect: "Deny",
- *         Principal: "*",
+ *         Principal: { AWS: "*" },
  *         Action: ["backup:DeleteRecoveryPoint"],
  *         Resource: "*",
  *       },
@@ -93,13 +99,14 @@ export interface BackupVault extends Resource<
  */
 export const BackupVault = Resource<BackupVault>("AWS.Backup.BackupVault");
 
-const normalizePolicy = (
-  policy: string | Record<string, any> | undefined,
-): string | undefined => {
-  if (policy === undefined) return undefined;
-  const doc = typeof policy === "string" ? JSON.parse(policy) : policy;
-  return JSON.stringify(doc);
-};
+const toPolicyString = (
+  policy: PolicyDocument | string | undefined,
+): string | undefined =>
+  policy === undefined
+    ? undefined
+    : typeof policy === "string"
+      ? policy
+      : stringifyPolicyDocument(policy);
 
 export const BackupVaultProvider = () =>
   Provider.effect(
@@ -205,19 +212,24 @@ export const BackupVaultProvider = () =>
           }
           const backupVaultArn = live.BackupVaultArn!;
 
-          // SYNC access policy — diff observed against desired.
-          const desiredPolicy = normalizePolicy(news.accessPolicy);
+          // SYNC access policy — diff observed against desired, comparing
+          // canonicalized documents so a re-deploy of an equivalent policy
+          // (key order, whitespace) is a no-op.
+          const desiredPolicy = toPolicyString(news.accessPolicy);
           const currentPolicy = yield* backup
             .getBackupVaultAccessPolicy({ BackupVaultName: name })
             .pipe(
-              Effect.map((r) =>
-                r.Policy ? normalizePolicy(r.Policy) : undefined,
-              ),
+              Effect.map((r) => (r.Policy ? r.Policy : undefined)),
               Effect.catchTag("ResourceNotFoundException", () =>
                 Effect.succeed(undefined),
               ),
             );
-          if (desiredPolicy !== currentPolicy) {
+          const policyDrifted =
+            desiredPolicy === undefined || currentPolicy === undefined
+              ? desiredPolicy !== currentPolicy
+              : normalizePolicyDocument(currentPolicy) !==
+                normalizePolicyDocument(desiredPolicy);
+          if (policyDrifted) {
             if (desiredPolicy === undefined) {
               yield* backup
                 .deleteBackupVaultAccessPolicy({ BackupVaultName: name })

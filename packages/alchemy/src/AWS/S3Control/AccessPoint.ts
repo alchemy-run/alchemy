@@ -173,14 +173,17 @@ export interface AccessPoint extends Resource<
  * ```typescript
  * yield* S3Control.AccessPointPolicy("data-ap-policy", {
  *   accessPointName: accessPoint.accessPointName,
- *   policy: [
- *     {
- *       Effect: "Allow",
- *       Principal: { AWS: `arn:aws:iam::${accountId}:role/reader` },
- *       Action: ["s3:GetObject"],
- *       Resource: [Output.interpolate`${accessPoint.accessPointArn}/object/*`],
- *     },
- *   ],
+ *   policy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { AWS: `arn:aws:iam::${accountId}:role/reader` },
+ *         Action: ["s3:GetObject"],
+ *         Resource: [Output.interpolate`${accessPoint.accessPointArn}/object/*`],
+ *       },
+ *     ],
+ *   },
  * });
  * ```
  */

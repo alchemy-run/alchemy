@@ -1,4 +1,9 @@
 import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import {
+  normalizePolicyDocument,
+  type PolicyDocument,
+} from "@/AWS/IAM/Policy.ts";
 import { Registry } from "@/AWS/Schemas";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
@@ -61,6 +66,51 @@ describe("AWS.Schemas.Registry", () => {
         );
         expect(all.some((r) => r.registryName === "aws.events")).toBe(false);
 
+        // POLICY — attach a PolicyDocument-valued resource policy in place.
+        const { accountId } = yield* AWSEnvironment.current;
+        const policy: PolicyDocument = {
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Sid: "AllowOwnAccountRead",
+              Effect: "Allow",
+              Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+              Action: ["schemas:DescribeRegistry", "schemas:SearchSchemas"],
+              Resource: created.registryArn,
+            },
+          ],
+        };
+        const deployWithPolicy = stack.deploy(
+          Effect.gen(function* () {
+            const registry = yield* Registry("TestRegistry", {
+              description: "alchemy schemas test registry",
+              tags: { purpose: "alchemy-test" },
+              policy,
+            });
+            return { registryName: registry.registryName };
+          }),
+        );
+        const withPolicy = yield* deployWithPolicy;
+        expect(withPolicy.registryName).toEqual(created.registryName);
+
+        const observedPolicy = yield* schemas.getResourcePolicy({
+          RegistryName: created.registryName,
+        });
+        expect(normalizePolicyDocument(observedPolicy.Policy!)).toEqual(
+          normalizePolicyDocument(policy),
+        );
+
+        // NO-OP RE-DEPLOY — the same PolicyDocument deploys clean and skips
+        // putResourcePolicy entirely (the revision id is unchanged).
+        yield* deployWithPolicy;
+        const afterRedeploy = yield* schemas.getResourcePolicy({
+          RegistryName: created.registryName,
+        });
+        expect(afterRedeploy.RevisionId).toEqual(observedPolicy.RevisionId);
+        expect(normalizePolicyDocument(afterRedeploy.Policy!)).toEqual(
+          normalizePolicyDocument(policy),
+        );
+
         // UPDATE — description changes in place, user tag is removed.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
@@ -81,6 +131,15 @@ describe("AWS.Schemas.Registry", () => {
         expect(afterUpdate.Description).toEqual("updated description");
         expect(afterUpdate.Tags?.purpose).toBeUndefined();
         expect(afterUpdate.Tags?.["alchemy::id"]).toEqual("TestRegistry");
+
+        // Omitting `policy` removed the resource policy.
+        const policyGone = yield* schemas
+          .getResourcePolicy({ RegistryName: created.registryName })
+          .pipe(
+            Effect.map(() => false),
+            Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
+          );
+        expect(policyGone).toBe(true);
 
         // REPLACE — an explicit name change replaces the registry.
         const renamed = yield* stack.deploy(

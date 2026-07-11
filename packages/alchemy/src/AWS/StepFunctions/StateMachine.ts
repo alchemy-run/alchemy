@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as sfn from "@distilled.cloud/aws/sfn";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -13,6 +14,8 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+import { compileProgram, SfnCompileError } from "./Asl/compile.ts";
+import type { SfnEffect } from "./Asl/Program.ts";
 
 /**
  * The workflow type. `STANDARD` workflows are durable (up to one year),
@@ -123,6 +126,66 @@ export interface StateMachine extends Resource<
   },
   Providers
 > {}
+
+/**
+ * The definition failed AWS's `validateStateMachineDefinition` pre-flight
+ * check (run in reconcile before create/update). Carries the validator's
+ * ERROR-severity diagnostics.
+ */
+export class InvalidStateMachineDefinition extends Data.TaggedError(
+  "InvalidStateMachineDefinition",
+)<{
+  readonly diagnostics: readonly {
+    readonly severity: string;
+    readonly code: string;
+    readonly message: string;
+    readonly location: string | undefined;
+  }[];
+}> {}
+
+const StateMachineResource = Resource<StateMachine>(
+  "AWS.StepFunctions.StateMachine",
+);
+
+/**
+ * Props for {@link StateMachine.fromProgram} — everything a raw
+ * `StateMachine` accepts except the `definition` (which is compiled from
+ * the program). User `policyStatements` are merged with the statements the
+ * compiler collects from `Sfn.invoke`/`Sfn.integrate` task states.
+ */
+export interface FromProgramProps extends Omit<
+  StateMachineProps,
+  "definition" | "definitionSubstitutions"
+> {
+  /** The typed Step Functions program to compile (built with `Sfn.gen`). */
+  program: SfnEffect<any, any>;
+}
+
+/**
+ * Sugar over the raw `StateMachine` resource: compile a typed `Sfn` program
+ * to a plain ASL definition object plus collected IAM policy statements,
+ * then register the same `StateMachine` resource the raw path uses. Nothing
+ * engine-level — the raw `definition` escape hatch stays first-class.
+ */
+const fromProgram = (id: string, props: FromProgramProps) =>
+  Effect.gen(function* () {
+    const { program, policyStatements, ...rest } = props;
+    const compiled = yield* Effect.try({
+      try: () => compileProgram(program),
+      catch: (error) =>
+        error instanceof SfnCompileError
+          ? error
+          : new SfnCompileError({ message: String(error) }),
+    });
+    return yield* StateMachineResource(id, {
+      ...rest,
+      definition: compiled.definition,
+      policyStatements: [
+        ...compiled.policyStatements,
+        ...(policyStatements ?? []),
+      ],
+    });
+  });
 
 /**
  * An AWS Step Functions state machine (workflow).
@@ -241,10 +304,37 @@ export interface StateMachine extends Resource<
  * });
  * // result.status === "SUCCEEDED", result.output is the workflow output
  * ```
+ *
+ * @section Typed Programs
+ * Author the workflow as a typed `Sfn` program (mirroring Effect's names —
+ * `Sfn.gen`, `Sfn.invoke`, `Sfn.when`, `Sfn.forEach`, `Sfn.catchTag`, ...)
+ * and compile it with `StateMachine.fromProgram`. The compiler emits a plain
+ * ASL definition plus the IAM policy statements its task states need; the
+ * raw `definition` path above stays fully usable underneath.
+ *
+ * @example Compile a typed program
+ * ```typescript
+ * import { Sfn, StateMachine } from "alchemy/AWS/StepFunctions";
+ *
+ * const machine = yield* StateMachine.fromProgram("OrderWorkflow", {
+ *   type: "EXPRESS",
+ *   program: Sfn.gen(function* (input: Sfn.Expr<{ value: number }>) {
+ *     const result = yield* Sfn.invoke<{ doubled: number }>(doubler, {
+ *       value: input.value,
+ *     });
+ *     const size = yield* Sfn.when(
+ *       Sfn.gt(result.doubled, 10),
+ *       Sfn.succeed("big"),
+ *       Sfn.succeed("small"),
+ *     );
+ *     return { doubled: result.doubled, size };
+ *   }),
+ * });
+ * ```
  */
-export const StateMachine = Resource<StateMachine>(
-  "AWS.StepFunctions.StateMachine",
-);
+export const StateMachine: typeof StateMachineResource & {
+  fromProgram: typeof fromProgram;
+} = Object.assign(StateMachineResource, { fromProgram });
 
 /** Normalize a plain or redacted string to its plain value. */
 const plain = (value: string | Redacted.Redacted<string>): string =>
@@ -443,6 +533,41 @@ export const StateMachineProvider = () =>
               Effect.succeed(undefined),
             ),
           );
+      });
+
+      /**
+       * Pre-flight the serialized definition through the vendor validator
+       * so a definitively invalid document fails with typed diagnostics
+       * before any create/update call. Best-effort: if the validate call
+       * itself fails (missing IAM permission, throttling), reconcile
+       * proceeds and create/updateStateMachine remains the authority.
+       */
+      const preflightValidateDefinition = Effect.fn(function* (
+        definition: string,
+        type: StateMachineType,
+      ) {
+        const report = yield* sfn
+          .validateStateMachineDefinition({
+            definition,
+            type,
+            severity: "ERROR",
+          })
+          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+        if (report !== undefined && report.result === "FAIL") {
+          return yield* Effect.fail(
+            new InvalidStateMachineDefinition({
+              diagnostics: report.diagnostics.map((diagnostic) => ({
+                severity: diagnostic.severity,
+                code: plain(diagnostic.code),
+                message: plain(diagnostic.message),
+                location:
+                  diagnostic.location === undefined
+                    ? undefined
+                    : plain(diagnostic.location),
+              })),
+            }),
+          );
+        }
       });
 
       const fetchObservedTags = Effect.fn(function* (resourceArn: string) {
@@ -656,6 +781,10 @@ export const StateMachineProvider = () =>
           const desiredTracing = { enabled: news.tracingEnabled ?? false };
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
+
+          // Pre-flight: fail with typed diagnostics before touching IAM or
+          // the machine when the definition is definitively invalid.
+          yield* preflightValidateDefinition(definition, type);
 
           // Ensure the execution role first — the machine cannot exist
           // without one. Managed unless an explicit roleArn is provided.

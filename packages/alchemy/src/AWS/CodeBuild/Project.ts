@@ -8,6 +8,11 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+  type PolicyDocument,
+} from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -227,6 +232,14 @@ export interface ProjectProps {
    * @default false
    */
   badgeEnabled?: boolean;
+  /**
+   * Resource policy attached to the project — shares the project with other
+   * AWS accounts by granting them read actions such as
+   * `codebuild:BatchGetProjects`. Accepts a typed {@link PolicyDocument} or a
+   * raw JSON string (escape hatch / adoption of an existing policy). Omit to
+   * remove any existing policy.
+   */
+  resourcePolicy?: PolicyDocument | string;
   /**
    * User-defined tags.
    */
@@ -460,6 +473,41 @@ export const ProjectProvider = () =>
                 `CodeBuild project '${name}' disappeared while reconciling`,
               ),
             );
+          }
+
+          // 3b. Sync — resource policy. Compare observed against desired in
+          // normalized form (keys sorted, no whitespace) so a re-deploy of an
+          // equivalent document — regardless of key order or string vs typed
+          // object — is a no-op that skips the API entirely.
+          const desiredPolicy =
+            news.resourcePolicy === undefined
+              ? undefined
+              : typeof news.resourcePolicy === "string"
+                ? news.resourcePolicy
+                : stringifyPolicyDocument(news.resourcePolicy);
+          const observedPolicy = yield* codebuild
+            .getResourcePolicy({ resourceArn: observed.arn })
+            .pipe(
+              Effect.map((res) => res.policy),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (desiredPolicy === undefined) {
+            if (observedPolicy !== undefined && observedPolicy !== "") {
+              yield* codebuild.deleteResourcePolicy({
+                resourceArn: observed.arn,
+              });
+            }
+          } else if (
+            observedPolicy === undefined ||
+            normalizePolicyDocument(observedPolicy) !==
+              normalizePolicyDocument(desiredPolicy)
+          ) {
+            yield* codebuild.putResourcePolicy({
+              resourceArn: observed.arn,
+              policy: desiredPolicy,
+            });
           }
 
           // 4. Return fresh attributes.

@@ -1,4 +1,7 @@
 import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
+import { normalizePolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { Secret } from "@/AWS/SecretsManager/Secret.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
@@ -12,6 +15,10 @@ import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: AWS.providers() });
 
 class SecretNotListed extends Data.TaggedError("SecretNotListed") {}
+
+class ResourcePolicyNotAttached extends Data.TaggedError(
+  "ResourcePolicyNotAttached",
+) {}
 
 class SecretStillExists extends Data.TaggedError("SecretStillExists") {}
 
@@ -91,6 +98,97 @@ test.provider("create, update value, destroy", (stack) =>
 
     yield* stack.destroy();
 
+    yield* assertSecretDeleted(secret.secretArn);
+  }),
+);
+
+// PolicyDocument adoption: a typed `resourcePolicy` deploys, the attached
+// policy round-trips (normalized comparison), and re-deploying the identical
+// document is clean — reconcile diffs `normalizePolicyDocument(observed)`
+// against `normalizePolicyDocument(desired)` and skips `PutResourcePolicy`
+// on equivalence. Removing the prop detaches the policy.
+test.provider("resource policy deploys and re-deploys clean", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* AWSEnvironment.current;
+    const resourcePolicy: PolicyDocument = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "AllowAccountRead",
+          Effect: "Allow",
+          Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+          Action: ["secretsmanager:GetSecretValue"],
+          Resource: "*",
+        },
+      ],
+    };
+
+    const secret = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Secret("PolicySecret", {
+          description: "resource policy round-trip",
+          secretString: Redacted.make("policy-value"),
+          resourcePolicy,
+        });
+      }),
+    );
+
+    // Out-of-band verification via distilled: the attached policy is
+    // equivalent to the typed document (bounded retry through propagation).
+    const attached = yield* secretsmanager
+      .getResourcePolicy({ SecretId: secret.secretArn })
+      .pipe(
+        Effect.flatMap((response) =>
+          response.ResourcePolicy === undefined
+            ? Effect.fail(new ResourcePolicyNotAttached())
+            : Effect.succeed(response.ResourcePolicy),
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "ResourcePolicyNotAttached",
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(5)),
+          ),
+        }),
+      );
+    expect(normalizePolicyDocument(attached)).toBe(
+      normalizePolicyDocument(resourcePolicy),
+    );
+
+    // Re-deploy the identical PolicyDocument — must be a clean no-op.
+    const redeployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Secret("PolicySecret", {
+          description: "resource policy round-trip",
+          secretString: Redacted.make("policy-value"),
+          resourcePolicy,
+        });
+      }),
+    );
+    expect(redeployed.secretArn).toBe(secret.secretArn);
+
+    const afterRedeploy = yield* secretsmanager.getResourcePolicy({
+      SecretId: secret.secretArn,
+    });
+    expect(afterRedeploy.ResourcePolicy).toBeTruthy();
+    expect(normalizePolicyDocument(afterRedeploy.ResourcePolicy ?? "")).toBe(
+      normalizePolicyDocument(resourcePolicy),
+    );
+
+    // Removing the prop detaches the policy.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Secret("PolicySecret", {
+          description: "resource policy round-trip",
+          secretString: Redacted.make("policy-value"),
+        });
+      }),
+    );
+    const removed = yield* secretsmanager.getResourcePolicy({
+      SecretId: secret.secretArn,
+    });
+    expect(removed.ResourcePolicy).toBeUndefined();
+
+    yield* stack.destroy();
     yield* assertSecretDeleted(secret.secretArn);
   }),
 );

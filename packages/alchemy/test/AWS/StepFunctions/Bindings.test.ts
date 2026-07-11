@@ -189,6 +189,54 @@ describe("StepFunctions Bindings", () => {
     );
   });
 
+  describe("ValidateStateMachineDefinition", () => {
+    test.provider(
+      "returns OK for a valid definition and FAIL with diagnostics for an invalid one",
+      (_stack) =>
+        Effect.gen(function* () {
+          const ok = (yield* postJson(`${baseUrl}/validate-definition`, {
+            definition: JSON.stringify({
+              StartAt: "Done",
+              States: { Done: { Type: "Pass", End: true } },
+            }),
+          })) as { result: string; diagnostics: unknown[] };
+          expect(ok.result).toBe("OK");
+          expect(ok.diagnostics).toEqual([]);
+
+          const fail = (yield* postJson(`${baseUrl}/validate-definition`, {
+            definition: JSON.stringify({
+              StartAt: "Missing",
+              States: { Done: { Type: "Pass", End: true } },
+            }),
+          })) as { result: string; diagnostics: { code: string }[] };
+          expect(fail.result).toBe("FAIL");
+          expect(fail.diagnostics.length).toBeGreaterThan(0);
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("TestState", () => {
+    test.provider(
+      "executes a single JSONata Pass state against an input",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* postJson(`${baseUrl}/test-state`, {
+            definition: JSON.stringify({
+              Type: "Pass",
+              QueryLanguage: "JSONata",
+              Output: "{% $states.input.value * 2 %}",
+              End: true,
+            }),
+            input: JSON.stringify({ value: 21 }),
+          })) as { status: string; output?: string };
+          expect(response.status).toBe("SUCCEEDED");
+          expect(response.output).toBe("42");
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
   // The callback flows share ONE SQS queue carrying task tokens — receives
   // steal each other's messages under concurrency, so run them sequentially
   // and drain only the matching token per test.

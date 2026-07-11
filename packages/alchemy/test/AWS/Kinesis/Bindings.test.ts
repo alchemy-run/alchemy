@@ -323,5 +323,24 @@ describe.sequential("Kinesis Bindings", () => {
         expect((response as any).ok).toBe(true);
       }),
     );
+
+    test(
+      "splits more than 500 records into multiple PutRecords calls",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        // 501 records > the PutRecords limit of 500, so the batched sink
+        // must split the chunk into 2 sequential API calls (500 + 1). Any
+        // per-record throttling failures are retried by the sink engine.
+        const marker = crypto.randomUUID();
+        const response = yield* postJson(url, "/sink", {
+          records: Array.from({ length: 501 }, (_, i) => ({
+            partitionKey: `sink-${i % 7}`,
+            data: `sink-${marker}-${i}`,
+          })),
+        });
+        expect((response as any).ok).toBe(true);
+      }),
+      { timeout: 120_000 },
+    );
   });
 });

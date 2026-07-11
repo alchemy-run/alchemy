@@ -63,37 +63,41 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       const { accountId, region } = yield* AWSEnvironment.current;
 
-      const { domain } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const domain = yield* AWS.OpenSearch.Domain("Search", {
-            engineVersion: "OpenSearch_2.19",
-            clusterConfig: {
-              instanceType: "t3.small.search",
-              instanceCount: 1,
-            },
-            ebsOptions: { volumeType: "gp3", volumeSize: 10 },
-            encryptionAtRest: { enabled: true },
-            nodeToNodeEncryption: true,
-            domainEndpointOptions: {
-              enforceHTTPS: true,
-              tlsSecurityPolicy: "Policy-Min-TLS-1-2-2019-07",
-            },
-            accessPolicies: {
-              Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Principal: { AWS: `arn:aws:iam::${accountId}:root` },
-                  Action: "es:*",
-                  Resource: `arn:aws:es:${region}:${accountId}:domain/*`,
-                },
-              ],
-            },
-            tags: { fixture: "opensearch-domain" },
-          });
-          return { domain };
-        }),
-      );
+      // A structured (typed) PolicyDocument — deliberately NOT a raw JSON
+      // string — to prove PolicyDocument-valued access policies round-trip.
+      const accessPolicies: AWS.IAM.PolicyDocument = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+            Action: ["es:*"],
+            Resource: `arn:aws:es:${region}:${accountId}:domain/*`,
+          },
+        ],
+      };
+
+      const program = Effect.gen(function* () {
+        const domain = yield* AWS.OpenSearch.Domain("Search", {
+          engineVersion: "OpenSearch_2.19",
+          clusterConfig: {
+            instanceType: "t3.small.search",
+            instanceCount: 1,
+          },
+          ebsOptions: { volumeType: "gp3", volumeSize: 10 },
+          encryptionAtRest: { enabled: true },
+          nodeToNodeEncryption: true,
+          domainEndpointOptions: {
+            enforceHTTPS: true,
+            tlsSecurityPolicy: "Policy-Min-TLS-1-2-2019-07",
+          },
+          accessPolicies,
+          tags: { fixture: "opensearch-domain" },
+        });
+        return { domain };
+      });
+
+      const { domain } = yield* stack.deploy(program);
 
       expect(domain.domainName).toBeDefined();
       expect(domain.domainArn).toContain(":domain/");
@@ -119,6 +123,30 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         true,
       );
       expect(described.DomainStatus.AccessPolicies).toContain(accountId);
+      // The PolicyDocument round-trips: what OpenSearch echoes back is
+      // canonically equal to the structured document we deployed.
+      expect(
+        AWS.IAM.normalizePolicyDocument(
+          described.DomainStatus.AccessPolicies ?? "",
+        ),
+      ).toBe(AWS.IAM.normalizePolicyDocument(accessPolicies));
+
+      // Re-deploy the identical program — the normalized policy comparison
+      // must see no drift, so no updateDomainConfig (blue/green change) may
+      // fire. A config change would mint a new ChangeProgressDetails.ChangeId
+      // and flip Processing.
+      const changeIdBefore =
+        described.DomainStatus.ChangeProgressDetails?.ChangeId;
+      const { domain: redeployed } = yield* stack.deploy(program);
+      expect(redeployed.domainArn).toBe(domain.domainArn);
+      expect(redeployed.processing).toBe(false);
+      const redescribed = yield* opensearch.describeDomain({
+        DomainName: domain.domainName,
+      });
+      expect(redescribed.DomainStatus.Processing).not.toBe(true);
+      expect(redescribed.DomainStatus.ChangeProgressDetails?.ChangeId).toBe(
+        changeIdBefore,
+      );
 
       // Destroy immediately — domains bill while they exist — and verify
       // deletion was initiated out-of-band.

@@ -67,19 +67,20 @@ describe("AWS.KMS.Key", () => {
           keyProvider,
         });
 
-        const policy = JSON.stringify({
+        // Typed PolicyDocument (not a JSON string) — proves the structured
+        // form deploys and, below, re-deploys as a no-op.
+        const policy: AWS.IAM.PolicyDocument = {
           Version: "2012-10-17",
-          Id: "alchemy-test-policy",
           Statement: [
             {
               Sid: "EnableRootPermissions",
               Effect: "Allow",
               Principal: { AWS: `arn:aws:iam::${accountId}:root` },
-              Action: "kms:*",
+              Action: ["kms:*"],
               Resource: "*",
             },
           ],
-        });
+        };
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
@@ -128,12 +129,43 @@ describe("AWS.KMS.Key", () => {
         });
         expect(updatedRotation.KeyRotationEnabled).toEqual(false);
 
-        // The inline policy must have been applied.
+        // The inline (PolicyDocument-valued) policy must have been applied.
         const appliedPolicy = yield* KMS.getKeyPolicy({
           KeyId: updated.key.keyId,
           PolicyName: "default",
         });
-        expect(appliedPolicy.Policy).toContain("alchemy-test-policy");
+        expect(appliedPolicy.Policy).toContain("EnableRootPermissions");
+
+        // Re-deploying the identical PolicyDocument is a clean no-op: same
+        // physical key, policy still in place (the provider's normalized
+        // drift comparison must treat AWS's pretty-printed policy JSON as
+        // equal to the synthesized document).
+        const noop = yield* stack.deploy(
+          Effect.gen(function* () {
+            const key = yield* Key("ManagedKey", {
+              deletionWindowInDays: 7,
+              description: "alchemy kms smoke v2",
+              enableKeyRotation: false,
+              enabled: false,
+              bypassPolicyLockoutSafetyCheck: true,
+              policy,
+              tags: {
+                Environment: "prod",
+                Team: "platform",
+              },
+            });
+            const alias = yield* Alias("ManagedAlias", {
+              targetKeyId: key.keyId,
+            });
+            return { alias, key };
+          }),
+        );
+        expect(noop.key.keyId).toEqual(updated.key.keyId);
+        const noopPolicy = yield* KMS.getKeyPolicy({
+          KeyId: noop.key.keyId,
+          PolicyName: "default",
+        });
+        expect(noopPolicy.Policy).toContain("EnableRootPermissions");
 
         yield* stack.destroy();
 

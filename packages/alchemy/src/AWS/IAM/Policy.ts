@@ -83,13 +83,22 @@ export interface ServiceControlPolicyDocument {
  * sorted recursively, arrays kept in order, no whitespace — so two equivalent
  * documents compare equal regardless of key ordering or encoding.
  *
+ * Single-element arrays are collapsed to their element: the IAM policy
+ * grammar treats `["x"]` and `"x"` as equivalent in every list-valued
+ * position (`Action`, `Resource`, principal values, condition values, even
+ * `Statement` itself), and several AWS services (e.g. Secrets Manager)
+ * store the scalar form — without collapsing, a typed document that uses
+ * arrays would spuriously diff against the stored policy on every deploy.
+ *
  * Unparseable strings are returned unchanged so a diff still fires (and shows
  * the offending value) instead of throwing inside a provider.
  */
 export const normalizePolicyDocument = (json: string | object): string => {
   const stable = (value: unknown): unknown =>
     Array.isArray(value)
-      ? value.map(stable)
+      ? value.length === 1
+        ? stable(value[0])
+        : value.map(stable)
       : value !== null && typeof value === "object"
         ? Object.fromEntries(
             Object.entries(value as Record<string, unknown>)

@@ -54,45 +54,6 @@ export const subsetDiffers = (desired: unknown, observed: unknown): boolean => {
   return desired !== observed;
 };
 
-/** Structural deep equality over JSON-shaped values (order-insensitive keys). */
-export const jsonEquals = (a: unknown, b: unknown): boolean => {
-  if (a === b) return true;
-  if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((v, i) => jsonEquals(v, b[i]));
-  }
-  if (
-    typeof a === "object" &&
-    a !== null &&
-    typeof b === "object" &&
-    b !== null &&
-    !Array.isArray(a) &&
-    !Array.isArray(b)
-  ) {
-    const ka = Object.keys(a as Record<string, unknown>);
-    const kb = Object.keys(b as Record<string, unknown>);
-    return (
-      ka.length === kb.length &&
-      ka.every((k) =>
-        jsonEquals(
-          (a as Record<string, unknown>)[k],
-          (b as Record<string, unknown>)[k],
-        ),
-      )
-    );
-  }
-  return false;
-};
-
-/** Parse a JSON policy string, returning undefined on empty/invalid input. */
-export const safeParseJson = (input: string | undefined): unknown => {
-  if (input === undefined || input === "") return undefined;
-  try {
-    return JSON.parse(input);
-  } catch {
-    return undefined;
-  }
-};
-
 /**
  * Poll an OpenSearch domain until `done` observes a settled state (bounded:
  * 15s x 120 = ~30 minutes; domain provisioning and blue/green config changes

@@ -1,6 +1,7 @@
 import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
 
@@ -30,7 +31,8 @@ export interface BatchExecuteStatement extends Binding.Service<
       request: BatchExecuteStatementRequest,
     ) => Effect.Effect<
       rdsdata.BatchExecuteStatementResponse,
-      rdsdata.BatchExecuteStatementError
+      rdsdata.BatchExecuteStatementError,
+      RuntimeContext
     >
   >
 > {}

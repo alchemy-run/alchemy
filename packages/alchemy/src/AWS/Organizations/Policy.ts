@@ -6,7 +6,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import type { PolicyDocument } from "../IAM/Policy.ts";
+import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+} from "../IAM/Policy.ts";
 import {
   collectPages,
   createName,
@@ -33,9 +37,14 @@ export interface PolicyProps {
    */
   type: organizations.PolicyType;
   /**
-   * Typed policy document.
+   * Policy content. For `SERVICE_CONTROL_POLICY` / `RESOURCE_CONTROL_POLICY`
+   * pass a typed {@link ServiceControlPolicyDocument} (the SCP-legal IAM
+   * dialect — no `Principal`/`NotPrincipal`). Other policy types (tag,
+   * backup, AI-services opt-out, ...) use their own JSON grammars — pass
+   * them as a raw JSON `string`. The string form also serves as the
+   * escape hatch for adopted or hand-authored documents.
    */
-  document: PolicyDocument;
+  document: ServiceControlPolicyDocument | string;
   /**
    * Optional tags applied to the policy.
    */
@@ -52,7 +61,7 @@ export interface Policy extends Resource<
     description: string | undefined;
     type: organizations.PolicyType | undefined;
     awsManaged: boolean | undefined;
-    document: PolicyDocument;
+    document: ServiceControlPolicyDocument;
     tags: Record<string, string>;
   },
   never,
@@ -145,7 +154,10 @@ export const PolicyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
           const desiredDescription = news.description ?? "";
-          const desiredContent = JSON.stringify(news.document);
+          const desiredContent =
+            typeof news.document === "string"
+              ? news.document
+              : stringifyPolicyDocument(news.document);
 
           // Observe — locate the policy by ID if known, else by type+name.
           // Both `name` (after generation) and `type` are stable, so `diff`
@@ -188,13 +200,17 @@ export const PolicyProvider = () =>
           }
 
           // Sync description + content — diff observed cloud state against
-          // desired. `updatePolicy` requires `Name`; we keep the existing
-          // policy name (rename triggers replacement at the diff level).
+          // desired. Documents are compared in canonical form
+          // (`normalizePolicyDocument`: sorted keys, no whitespace) so an
+          // unchanged re-deploy — regardless of key order or string-vs-typed
+          // authoring — skips the `updatePolicy` call entirely.
+          // `updatePolicy` requires `Name`; we keep the existing policy name
+          // (rename triggers replacement at the diff level).
           const observedDescription = state.description ?? "";
-          const observedContent = JSON.stringify(state.document);
           if (
             observedDescription !== desiredDescription ||
-            observedContent !== desiredContent
+            normalizePolicyDocument(state.document) !==
+              normalizePolicyDocument(desiredContent)
           ) {
             yield* retryOrganizations(
               organizations.updatePolicy({
@@ -284,7 +300,9 @@ const readPolicyById = Effect.fn(function* (policyId: string) {
     description: summary.Description,
     type: summary.Type,
     awsManaged: summary.AwsManaged,
-    document: JSON.parse(described?.Content ?? "{}") as PolicyDocument,
+    document: JSON.parse(
+      described?.Content ?? "{}",
+    ) as ServiceControlPolicyDocument,
     tags,
   } satisfies Policy["Attributes"];
 });
