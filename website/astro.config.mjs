@@ -228,7 +228,7 @@ function caseSensitiveLinkChecker() {
 }
 
 export default defineConfig({
-  site: "https://v2.alchemy.run",
+  site: "https://alchemy.run",
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [

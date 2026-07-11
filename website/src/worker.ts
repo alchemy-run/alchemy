@@ -18,7 +18,7 @@ interface HTMLRewriterElement {
 /**
  * Astro bakes absolute URLs into `<meta property="og:image">`,
  * `og:url`, `twitter:image`, and `<link rel="canonical">` at build time
- * using the `site` config (`https://v2.alchemy.run`). PR previews and
+ * using the `site` config (`https://alchemy.run`). PR previews and
  * custom domains then advertise OG / canonical URLs that point back at
  * the canonical host — so a Slack/Twitter unfurl of a preview URL
  * fetches the *production* card, not the one for the page being
@@ -27,7 +27,7 @@ interface HTMLRewriterElement {
  * Rewrite those tags at the edge to match the request's actual host so
  * each deployment unfurls itself.
  */
-const CANONICAL_HOST = "v2.alchemy.run";
+const CANONICAL_HOST = "alchemy.run";
 
 /**
  * 301s for the docs restructure (guides/tutorials moved into per-cloud hubs).
