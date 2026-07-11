@@ -1,3 +1,4 @@
+import * as GeoMaps from "@/AWS/GeoMaps";
 import * as GeoPlaces from "@/AWS/GeoPlaces";
 import * as GeoRoutes from "@/AWS/GeoRoutes";
 import * as Lambda from "@/AWS/Lambda";
@@ -25,7 +26,11 @@ export default GeoTestFunction.make(
     const searchText = yield* GeoPlaces.SearchText();
     const geocode = yield* GeoPlaces.Geocode();
     const reverseGeocode = yield* GeoPlaces.ReverseGeocode();
+    const autocomplete = yield* GeoPlaces.Autocomplete();
     const calculateRoutes = yield* GeoRoutes.CalculateRoutes();
+    const calculateIsolines = yield* GeoRoutes.CalculateIsolines();
+    const getTile = yield* GeoMaps.GetTile();
+    const getStaticMap = yield* GeoMaps.GetStaticMap();
 
     return {
       fetch: Effect.gen(function* () {
@@ -92,6 +97,65 @@ export default GeoTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/autocomplete") {
+          const result = yield* autocomplete({
+            QueryText: "1600 Pennsylvania",
+            MaxResults: 5,
+          });
+          const items = result.ResultItems ?? [];
+          return yield* HttpServerResponse.json({
+            count: items.length,
+            firstTitle: items[0]?.Title,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/calculate-isolines") {
+          const result = yield* calculateIsolines({
+            // [longitude, latitude] — downtown Seattle.
+            Origin: [-122.339, 47.61],
+            // 10-minute drive-time isochrone.
+            Thresholds: { Time: [600] },
+            TravelMode: "Car",
+          });
+          const isolines = result.Isolines ?? [];
+          return yield* HttpServerResponse.json({
+            count: isolines.length,
+            geometryCount: isolines[0]?.Geometries?.length ?? 0,
+            pricingBucket: result.PricingBucket,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/get-tile") {
+          const result = yield* getTile({
+            Tileset: "vector.basemap",
+            Z: "0",
+            X: "0",
+            Y: "0",
+          });
+          return yield* HttpServerResponse.json({
+            byteLength: result.Blob?.byteLength ?? 0,
+            contentType: result.ContentType,
+            pricingBucket: result.PricingBucket,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/get-static-map") {
+          const result = yield* getStaticMap({
+            // FileName must match ^map(@2x)?$ (it is the {FileName} path label).
+            FileName: "map",
+            // "longitude,latitude" — the Space Needle, Seattle.
+            Center: "-122.3493,47.6205",
+            Zoom: 12,
+            Width: 400,
+            Height: 300,
+          });
+          return yield* HttpServerResponse.json({
+            byteLength: result.Blob?.byteLength ?? 0,
+            contentType: result.ContentType,
+            pricingBucket: result.PricingBucket,
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -104,7 +168,11 @@ export default GeoTestFunction.make(
         GeoPlaces.SearchTextHttp,
         GeoPlaces.GeocodeHttp,
         GeoPlaces.ReverseGeocodeHttp,
+        GeoPlaces.AutocompleteHttp,
         GeoRoutes.CalculateRoutesHttp,
+        GeoRoutes.CalculateIsolinesHttp,
+        GeoMaps.GetTileHttp,
+        GeoMaps.GetStaticMapHttp,
       ),
     ),
   ),

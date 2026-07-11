@@ -138,7 +138,7 @@ export const JobProvider = () =>
           return toAttrs(job);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Jobs are immutable. If one was already submitted, observe it and
           // return — never resubmit on an update.
           if (output?.jobId) {

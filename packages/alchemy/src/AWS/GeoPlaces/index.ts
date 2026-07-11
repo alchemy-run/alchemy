@@ -1,3 +1,5 @@
+export * from "./Autocomplete.ts";
+export * from "./AutocompleteHttp.ts";
 export * from "./Geocode.ts";
 export * from "./GeocodeHttp.ts";
 export * from "./ReverseGeocode.ts";

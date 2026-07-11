@@ -34,6 +34,7 @@ import * as ApiGateway from "./ApiGateway/index.ts";
 import * as ApiGatewayV2 from "./ApiGatewayV2/index.ts";
 import * as AppConfig from "./AppConfig/index.ts";
 import * as AppFlow from "./AppFlow/index.ts";
+import * as AppIntegrations from "./AppIntegrations/index.ts";
 import * as ApplicationAutoScaling from "./ApplicationAutoScaling/index.ts";
 import * as ApplicationSignals from "./ApplicationSignals/index.ts";
 import * as AppRegistry from "./AppRegistry/index.ts";
@@ -50,6 +51,8 @@ import * as BackupSearch from "./BackupSearch/index.ts";
 import * as Batch from "./Batch/index.ts";
 import * as BCMDataExports from "./BCMDataExports/index.ts";
 import * as Bedrock from "./Bedrock/index.ts";
+import * as BedrockAgentCore from "./BedrockAgentCore/index.ts";
+import * as BedrockDataAutomation from "./BedrockDataAutomation/index.ts";
 import * as Budgets from "./Budgets/index.ts";
 import * as Chatbot from "./Chatbot/index.ts";
 import * as CloudControl from "./CloudControl/index.ts";
@@ -104,15 +107,25 @@ import * as Firehose from "./Firehose/index.ts";
 import * as Forecast from "./Forecast/index.ts";
 import * as FraudDetector from "./FraudDetector/index.ts";
 import * as FSx from "./FSx/index.ts";
+import * as Glacier from "./Glacier/index.ts";
 import * as GlobalAccelerator from "./GlobalAccelerator/index.ts";
 import * as Glue from "./Glue/index.ts";
 import * as Grafana from "./Grafana/index.ts";
+import * as GreengrassV2 from "./GreengrassV2/index.ts";
 import * as GuardDuty from "./GuardDuty/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
+import * as ImageBuilder from "./ImageBuilder/index.ts";
 import * as Inspector2 from "./Inspector2/index.ts";
 import * as InternetMonitor from "./InternetMonitor/index.ts";
 import * as IoT from "./IoT/index.ts";
+import * as IoTFleetWise from "./IoTFleetWise/index.ts";
+import * as IoTManagedIntegrations from "./IoTManagedIntegrations/index.ts";
+import * as IoTSiteWise from "./IoTSiteWise/index.ts";
+import * as IoTWireless from "./IoTWireless/index.ts";
+import * as IVS from "./IVS/index.ts";
+import * as IVSChat from "./IVSChat/index.ts";
+import * as IVSRealtime from "./IVSRealtime/index.ts";
 import * as Kafka from "./Kafka/index.ts";
 import * as Kendra from "./Kendra/index.ts";
 import * as Keyspaces from "./Keyspaces/index.ts";
@@ -122,10 +135,16 @@ import * as KinesisVideo from "./KinesisVideo/index.ts";
 import * as KMS from "./KMS/index.ts";
 import * as LakeFormation from "./LakeFormation/index.ts";
 import * as Lambda from "./Lambda/index.ts";
+import * as LexV2 from "./LexV2/index.ts";
 import * as LicenseManager from "./LicenseManager/index.ts";
 import * as Location from "./Location/index.ts";
 import * as Logs from "./Logs/index.ts";
+import * as MediaConnect from "./MediaConnect/index.ts";
 import * as MediaConvert from "./MediaConvert/index.ts";
+import * as MediaLive from "./MediaLive/index.ts";
+import * as MediaPackageV2 from "./MediaPackageV2/index.ts";
+import * as MediaTailor from "./MediaTailor/index.ts";
+import * as MedicalImaging from "./MedicalImaging/index.ts";
 import * as MQ from "./MQ/index.ts";
 import * as MWAA from "./MWAA/index.ts";
 import * as Macie2 from "./Macie2/index.ts";
@@ -137,17 +156,21 @@ import * as Notifications from "./Notifications/index.ts";
 import * as NotificationsContacts from "./NotificationsContacts/index.ts";
 import * as OAM from "./OAM/index.ts";
 import * as ObservabilityAdmin from "./ObservabilityAdmin/index.ts";
+import * as Omics from "./Omics/index.ts";
 import * as OpenSearch from "./OpenSearch/index.ts";
 import * as OpenSearchServerless from "./OpenSearchServerless/index.ts";
 import * as OSIS from "./OSIS/index.ts";
 import * as Organizations from "./Organizations/index.ts";
 import * as PaymentCryptography from "./PaymentCryptography/index.ts";
 import * as Personalize from "./Personalize/index.ts";
+import * as PinpointSMSVoiceV2 from "./PinpointSMSVoiceV2/index.ts";
 import * as Pipes from "./Pipes/index.ts";
+import * as QBusiness from "./QBusiness/index.ts";
 import * as QuickSight from "./QuickSight/index.ts";
 import * as RAM from "./RAM/index.ts";
 import * as RDS from "./RDS/index.ts";
 import * as Rbin from "./Rbin/index.ts";
+import * as RePostSpace from "./RePostSpace/index.ts";
 import * as Redshift from "./Redshift/index.ts";
 import * as RedshiftServerless from "./RedshiftServerless/index.ts";
 import * as ResourceExplorer from "./ResourceExplorer/index.ts";
@@ -161,6 +184,7 @@ import * as RUM from "./RUM/index.ts";
 import * as S3 from "./S3/index.ts";
 import * as S3Control from "./S3Control/index.ts";
 import * as S3Vectors from "./S3Vectors/index.ts";
+import * as SageMaker from "./SageMaker/index.ts";
 import * as Scheduler from "./Scheduler/index.ts";
 import * as Schemas from "./Schemas/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
@@ -171,6 +195,7 @@ import * as ServiceQuotas from "./ServiceQuotas/index.ts";
 import * as SES from "./SES/index.ts";
 import * as Shield from "./Shield/index.ts";
 import * as Signer from "./Signer/index.ts";
+import * as SimpleDB from "./SimpleDB/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
 import * as SSM from "./SSM/index.ts";
@@ -237,6 +262,9 @@ export const providers = () =>
       AppConfig.HostedConfigurationVersion,
       AppFlow.ConnectorProfile,
       AppFlow.Flow,
+      AppIntegrations.Application,
+      AppIntegrations.DataIntegration,
+      AppIntegrations.EventIntegration,
       ApplicationAutoScaling.ScalableTarget,
       ApplicationAutoScaling.ScalingPolicy,
       ApplicationAutoScaling.ScheduledAction,
@@ -281,6 +309,13 @@ export const providers = () =>
       Bedrock.AgentAlias,
       Bedrock.DataSource,
       Bedrock.KnowledgeBase,
+      BedrockAgentCore.BrowserCustom,
+      BedrockAgentCore.CodeInterpreter,
+      BedrockAgentCore.Gateway,
+      BedrockAgentCore.Memory,
+      BedrockAgentCore.Runtime,
+      BedrockDataAutomation.Blueprint,
+      BedrockDataAutomation.DataAutomationProject,
       Budgets.Budget,
       Chatbot.CustomAction,
       Chatbot.MicrosoftTeamsChannelConfiguration,
@@ -449,6 +484,7 @@ export const providers = () =>
       FraudDetector.Label,
       FraudDetector.Outcome,
       FraudDetector.Variable,
+      Glacier.Vault,
       GlobalAccelerator.Accelerator,
       GlobalAccelerator.EndpointGroup,
       GlobalAccelerator.Listener,
@@ -458,6 +494,8 @@ export const providers = () =>
       Glue.Job,
       Glue.Table,
       Grafana.Workspace,
+      GreengrassV2.ComponentVersion,
+      GreengrassV2.Deployment,
       GuardDuty.Detector,
       IAM.AccessKey,
       IAM.AccountAlias,
@@ -480,6 +518,11 @@ export const providers = () =>
       IdentityCenter.AccountAssignment,
       IdentityCenter.Group,
       IdentityCenter.Instance,
+      ImageBuilder.Component,
+      ImageBuilder.DistributionConfiguration,
+      ImageBuilder.ImagePipeline,
+      ImageBuilder.ImageRecipe,
+      ImageBuilder.InfrastructureConfiguration,
       Inspector2.Enabler,
       InternetMonitor.Monitor,
       IdentityCenter.PermissionSet,
@@ -487,6 +530,29 @@ export const providers = () =>
       IoT.Thing,
       IoT.ThingType,
       IoT.TopicRule,
+      IoTFleetWise.Campaign,
+      IoTFleetWise.DecoderManifest,
+      IoTFleetWise.Fleet,
+      IoTFleetWise.ModelManifest,
+      IoTFleetWise.SignalCatalog,
+      IoTFleetWise.Vehicle,
+      IoTManagedIntegrations.CredentialLocker,
+      IoTManagedIntegrations.Destination,
+      IoTManagedIntegrations.ManagedThing,
+      IoTSiteWise.Asset,
+      IoTSiteWise.AssetModel,
+      IoTSiteWise.Gateway,
+      IoTWireless.Destination,
+      IoTWireless.DeviceProfile,
+      IoTWireless.ServiceProfile,
+      IoTWireless.WirelessDevice,
+      IoTWireless.WirelessGateway,
+      IVS.Channel,
+      IVS.PlaybackKeyPair,
+      IVS.StreamKey,
+      IVSChat.LoggingConfiguration,
+      IVSChat.Room,
+      IVSRealtime.Stage,
       Kafka.ServerlessCluster,
       Kendra.DataSource,
       Kendra.Index,
@@ -512,6 +578,12 @@ export const providers = () =>
       Lambda.MicrovmImage,
       Lambda.NetworkConnector,
       Lambda.Permission,
+      LexV2.Bot,
+      LexV2.BotAlias,
+      LexV2.BotLocale,
+      LexV2.BotVersion,
+      LexV2.Intent,
+      LexV2.SlotType,
       LicenseManager.LicenseConfiguration,
       Location.GeofenceCollection,
       Location.Map,
@@ -524,10 +596,19 @@ export const providers = () =>
       Logs.MetricFilter,
       Logs.ResourcePolicy,
       Logs.SubscriptionFilter,
+      MediaConnect.Flow,
       MediaConvert.Job,
       MediaConvert.JobTemplate,
       MediaConvert.Preset,
       MediaConvert.Queue,
+      MediaLive.Channel,
+      MediaLive.Input,
+      MediaLive.InputSecurityGroup,
+      MediaPackageV2.Channel,
+      MediaPackageV2.ChannelGroup,
+      MediaPackageV2.OriginEndpoint,
+      MediaTailor.PlaybackConfiguration,
+      MedicalImaging.Datastore,
       MQ.Broker,
       MQ.Configuration,
       MWAA.Environment,
@@ -553,6 +634,12 @@ export const providers = () =>
       OAM.Link,
       OAM.Sink,
       ObservabilityAdmin.TelemetryConfig,
+      Omics.AnnotationStore,
+      Omics.ReferenceStore,
+      Omics.RunGroup,
+      Omics.SequenceStore,
+      Omics.VariantStore,
+      Omics.Workflow,
       OpenSearch.Domain,
       OSIS.Pipeline,
       OpenSearchServerless.AccessPolicy,
@@ -574,7 +661,16 @@ export const providers = () =>
       Personalize.Dataset,
       Personalize.DatasetGroup,
       Personalize.Schema,
+      PinpointSMSVoiceV2.ConfigurationSet,
+      PinpointSMSVoiceV2.EventDestination,
+      PinpointSMSVoiceV2.OptOutList,
+      PinpointSMSVoiceV2.PhoneNumber,
       Pipes.Pipe,
+      QBusiness.Application,
+      QBusiness.DataSource,
+      QBusiness.Index,
+      QBusiness.Retriever,
+      QBusiness.WebExperience,
       QuickSight.Analysis,
       QuickSight.Dashboard,
       QuickSight.DataSet,
@@ -590,6 +686,7 @@ export const providers = () =>
       RDS.DBProxyTargetGroup,
       RDS.DBSubnetGroup,
       Rbin.Rule,
+      RePostSpace.Space,
       Redshift.Cluster,
       Redshift.ClusterParameterGroup,
       Redshift.ClusterSubnetGroup,
@@ -622,6 +719,10 @@ export const providers = () =>
       S3Control.StorageLensConfiguration,
       S3Vectors.VectorBucket,
       S3Vectors.Index,
+      SageMaker.Model,
+      SageMaker.EndpointConfig,
+      SageMaker.Endpoint,
+      SageMaker.FeatureGroup,
       Scheduler.Schedule,
       Scheduler.ScheduleGroup,
       Schemas.Discoverer,
@@ -645,6 +746,7 @@ export const providers = () =>
       Shield.ProtectionGroup,
       Shield.Subscription,
       Signer.SigningProfile,
+      SimpleDB.Domain,
       SNS.Subscription,
       SNS.Topic,
       SQS.Queue,
@@ -685,10 +787,15 @@ export const providers = () =>
           ACMPCA.PermissionProvider(),
           AppFlow.ConnectorProfileProvider(),
           AppFlow.FlowProvider(),
+          AppIntegrations.ApplicationProvider(),
+          AppIntegrations.DataIntegrationProvider(),
+          AppIntegrations.EventIntegrationProvider(),
           B2BI.CapabilityProvider(),
           B2BI.PartnershipProvider(),
           B2BI.ProfileProvider(),
           B2BI.TransformerProvider(),
+          BedrockDataAutomation.BlueprintProvider(),
+          BedrockDataAutomation.DataAutomationProjectProvider(),
           Config.AggregationAuthorizationProvider(),
           Config.ConfigRuleProvider(),
           Config.ConfigurationRecorderProvider(),
@@ -885,12 +992,15 @@ export const providers = () =>
           FIS.ExperimentTemplateProvider(),
           Firehose.DeliveryStreamProvider(),
           FSx.FileSystemProvider(),
+          Glacier.VaultProvider(),
           Glue.ConnectionProvider(),
           Glue.CrawlerProvider(),
           Glue.DatabaseProvider(),
           Glue.JobProvider(),
           Glue.TableProvider(),
           Grafana.WorkspaceProvider(),
+          GreengrassV2.ComponentVersionProvider(),
+          GreengrassV2.DeploymentProvider(),
           IAM.AccessKeyProvider(),
           IAM.AccountAliasProvider(),
           IAM.AccountPasswordPolicyProvider(),
@@ -946,10 +1056,19 @@ export const providers = () =>
           Logs.MetricFilterProvider(),
           Logs.ResourcePolicyProvider(),
           Logs.SubscriptionFilterProvider(),
+          MediaConnect.FlowProvider(),
           MediaConvert.JobProvider(),
           MediaConvert.JobTemplateProvider(),
           MediaConvert.PresetProvider(),
           MediaConvert.QueueProvider(),
+          MediaLive.ChannelProvider(),
+          MediaLive.InputProvider(),
+          MediaLive.InputSecurityGroupProvider(),
+          MediaPackageV2.ChannelProvider(),
+          MediaPackageV2.ChannelGroupProvider(),
+          MediaPackageV2.OriginEndpointProvider(),
+          MediaTailor.PlaybackConfigurationProvider(),
+          MedicalImaging.DatastoreProvider(),
           MQ.BrokerProvider(),
           MQ.ConfigurationProvider(),
           MemoryDB.ACLProvider(),
@@ -980,6 +1099,11 @@ export const providers = () =>
           PaymentCryptography.AliasProvider(),
           PaymentCryptography.KeyProvider(),
           Pipes.PipeProvider(),
+          QBusiness.ApplicationProvider(),
+          QBusiness.DataSourceProvider(),
+          QBusiness.IndexProvider(),
+          QBusiness.RetrieverProvider(),
+          QBusiness.WebExperienceProvider(),
           QuickSight.AnalysisProvider(),
           QuickSight.DashboardProvider(),
           QuickSight.DataSetProvider(),
@@ -993,6 +1117,7 @@ export const providers = () =>
           RDS.DBProxyProvider(),
           RDS.DBProxyTargetGroupProvider(),
           RDS.DBSubnetGroupProvider(),
+          RePostSpace.SpaceProvider(),
           Redshift.ClusterParameterGroupProvider(),
           Redshift.ClusterProvider(),
           Redshift.ClusterSubnetGroupProvider(),
@@ -1029,6 +1154,11 @@ export const providers = () =>
           Bedrock.AgentAliasProvider(),
           Bedrock.DataSourceProvider(),
           Bedrock.KnowledgeBaseProvider(),
+          BedrockAgentCore.BrowserCustomProvider(),
+          BedrockAgentCore.CodeInterpreterProvider(),
+          BedrockAgentCore.GatewayProvider(),
+          BedrockAgentCore.MemoryProvider(),
+          BedrockAgentCore.RuntimeProvider(),
           AccessAnalyzer.AnalyzerProvider(),
           AccessAnalyzer.ArchiveRuleProvider(),
           Transfer.ServerProvider(),
@@ -1047,6 +1177,11 @@ export const providers = () =>
           Chatbot.MicrosoftTeamsChannelConfigurationProvider(),
           Chatbot.SlackChannelConfigurationProvider(),
           GuardDuty.DetectorProvider(),
+          ImageBuilder.ComponentProvider(),
+          ImageBuilder.DistributionConfigurationProvider(),
+          ImageBuilder.ImagePipelineProvider(),
+          ImageBuilder.ImageRecipeProvider(),
+          ImageBuilder.InfrastructureConfigurationProvider(),
           Inspector2.EnablerProvider(),
           InternetMonitor.MonitorProvider(),
           SecurityHub.HubProvider(),
@@ -1066,8 +1201,18 @@ export const providers = () =>
           AuditManager.FrameworkProvider(),
           ApplicationSignals.ServiceLevelObjectiveProvider(),
           LicenseManager.LicenseConfigurationProvider(),
+          LexV2.BotProvider(),
+          LexV2.BotAliasProvider(),
+          LexV2.BotLocaleProvider(),
+          LexV2.BotVersionProvider(),
+          LexV2.IntentProvider(),
+          LexV2.SlotTypeProvider(),
           S3Vectors.VectorBucketProvider(),
           S3Vectors.IndexProvider(),
+          SageMaker.ModelProvider(),
+          SageMaker.EndpointConfigProvider(),
+          SageMaker.EndpointProvider(),
+          SageMaker.FeatureGroupProvider(),
           Account.AlternateContactProvider(),
           Amplify.AppProvider(),
           ECRPublic.PublicRepositoryProvider(),
@@ -1092,10 +1237,31 @@ export const providers = () =>
           Personalize.SchemaProvider(),
           Personalize.DatasetGroupProvider(),
           Personalize.DatasetProvider(),
+          PinpointSMSVoiceV2.ConfigurationSetProvider(),
+          PinpointSMSVoiceV2.EventDestinationProvider(),
+          PinpointSMSVoiceV2.OptOutListProvider(),
+          PinpointSMSVoiceV2.PhoneNumberProvider(),
           IoT.ThingProvider(),
           IoT.ThingTypeProvider(),
           IoT.PolicyProvider(),
           IoT.TopicRuleProvider(),
+          IoTFleetWise.CampaignProvider(),
+          IoTFleetWise.DecoderManifestProvider(),
+          IoTFleetWise.FleetProvider(),
+          IoTFleetWise.ModelManifestProvider(),
+          IoTFleetWise.SignalCatalogProvider(),
+          IoTFleetWise.VehicleProvider(),
+          IoTManagedIntegrations.CredentialLockerProvider(),
+          IoTManagedIntegrations.DestinationProvider(),
+          IoTManagedIntegrations.ManagedThingProvider(),
+          IoTSiteWise.AssetModelProvider(),
+          IoTSiteWise.AssetProvider(),
+          IoTSiteWise.GatewayProvider(),
+          IoTWireless.DestinationProvider(),
+          IoTWireless.DeviceProfileProvider(),
+          IoTWireless.ServiceProfileProvider(),
+          IoTWireless.WirelessDeviceProvider(),
+          IoTWireless.WirelessGatewayProvider(),
           ResourceGroups.GroupProvider(),
           RolesAnywhere.CrlProvider(),
           RolesAnywhere.ProfileProvider(),
@@ -1138,6 +1304,7 @@ export const providers = () =>
           Shield.ProtectionGroupProvider(),
           Shield.SubscriptionProvider(),
           Signer.SigningProfileProvider(),
+          SimpleDB.DomainProvider(),
           Timestream.DatabaseProvider(),
           Timestream.DbInstanceProvider(),
           Timestream.TableProvider(),
@@ -1150,6 +1317,12 @@ export const providers = () =>
           OAM.LinkProvider(),
           OAM.SinkProvider(),
           ObservabilityAdmin.TelemetryConfigProvider(),
+          Omics.AnnotationStoreProvider(),
+          Omics.ReferenceStoreProvider(),
+          Omics.RunGroupProvider(),
+          Omics.SequenceStoreProvider(),
+          Omics.VariantStoreProvider(),
+          Omics.WorkflowProvider(),
           GlobalAccelerator.AcceleratorProvider(),
           GlobalAccelerator.ListenerProvider(),
           GlobalAccelerator.EndpointGroupProvider(),
@@ -1171,6 +1344,12 @@ export const providers = () =>
           NetworkFirewall.LoggingConfigurationProvider(),
           CloudTrail.EventDataStoreProvider(),
           CloudTrail.TrailProvider(),
+          IVS.ChannelProvider(),
+          IVS.PlaybackKeyPairProvider(),
+          IVS.StreamKeyProvider(),
+          IVSChat.LoggingConfigurationProvider(),
+          IVSChat.RoomProvider(),
+          IVSRealtime.StageProvider(),
         ),
       ),
     ),

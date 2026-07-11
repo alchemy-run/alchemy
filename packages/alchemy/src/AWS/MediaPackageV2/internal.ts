@@ -1,0 +1,100 @@
+import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { diffTags } from "../../Tags.ts";
+
+/**
+ * Coerce a MediaPackage wire tag map (values are `string | undefined`) into a
+ * plain `Record<string, string>`, dropping any undefined values.
+ */
+export const toMpTagRecord = (
+  tags: { [key: string]: string | undefined } | undefined,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(tags ?? {}).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+
+/**
+ * Sync tags on a MediaPackage resource: diff the OBSERVED cloud tags against
+ * the desired set and apply only the delta.
+ */
+export const syncMpTags = Effect.fn(function* (
+  arn: string,
+  observedTags: Record<string, string>,
+  desiredTags: Record<string, string>,
+) {
+  const { removed, upsert } = diffTags(observedTags, desiredTags);
+  if (upsert.length > 0) {
+    yield* mediapackagev2.tagResource({
+      ResourceArn: arn,
+      Tags: Object.fromEntries(upsert.map((t) => [t.Key, t.Value])),
+    });
+  }
+  if (removed.length > 0) {
+    yield* mediapackagev2.untagResource({
+      ResourceArn: arn,
+      TagKeys: removed,
+    });
+  }
+});
+
+/**
+ * Explicitly-typed pipeable retry helper. Inlining `Effect.retry` in a
+ * provider lifecycle op leaks `Retry.Return`'s conditional into declaration
+ * emit and widens the provider layer to `unknown` R for every consumer of
+ * `AWS.providers()`.
+ *
+ * MediaPackage rejects deleting a parent whose children are still being
+ * cleaned up (and concurrent mutations of the same resource) with
+ * `ConflictException`; both settle within seconds.
+ */
+export const retryWhileMpConflict = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "ConflictException",
+    schedule: Schedule.fixed("3 seconds").pipe(
+      Schedule.both(Schedule.recurs(15)),
+    ),
+  });
+
+/**
+ * Structural "desired is a subset of observed" comparison used for drift
+ * detection. Only keys present (and defined) in `desired` are compared, so
+ * server-side defaults on the observed state never register as drift. Arrays
+ * must match pairwise and in length so removed/added items are detected.
+ */
+export const matchesDesired = (
+  desired: unknown,
+  observed: unknown,
+): boolean => {
+  if (desired === undefined) return true;
+  if (desired === null) return observed === null;
+  if (desired instanceof Date) {
+    return observed instanceof Date && desired.getTime() === observed.getTime();
+  }
+  if (Array.isArray(desired)) {
+    if (!Array.isArray(observed) || observed.length !== desired.length) {
+      return false;
+    }
+    return desired.every((item, i) => matchesDesired(item, observed[i]));
+  }
+  if (typeof desired === "object") {
+    if (
+      typeof observed !== "object" ||
+      observed === null ||
+      Array.isArray(observed)
+    ) {
+      return false;
+    }
+    return Object.entries(desired as Record<string, unknown>).every(
+      ([key, value]) =>
+        value === undefined
+          ? true
+          : matchesDesired(value, (observed as Record<string, unknown>)[key]),
+    );
+  }
+  return desired === observed;
+};

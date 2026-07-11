@@ -166,4 +166,86 @@ describe("Geo Bindings", () => {
       { timeout: 120_000 },
     );
   });
+
+  describe("GeoPlaces.Autocomplete", () => {
+    test.provider(
+      "completes a partial address query",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/autocomplete`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            count: number;
+            firstTitle?: string;
+          };
+
+          expect(response.count).toBeGreaterThan(0);
+          expect(typeof response.firstTitle).toBe("string");
+          expect(response.firstTitle!.length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GeoRoutes.CalculateIsolines", () => {
+    test.provider(
+      "computes a drive-time isoline around a point",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/calculate-isolines`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            count: number;
+            geometryCount: number;
+            pricingBucket?: string;
+          };
+
+          expect(response.count).toBeGreaterThan(0);
+          expect(response.geometryCount).toBeGreaterThan(0);
+          expect(typeof response.pricingBucket).toBe("string");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GeoMaps.GetTile", () => {
+    test.provider(
+      "fetches a vector tile at z/x/y",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/get-tile`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            byteLength: number;
+            contentType?: string;
+            pricingBucket?: string;
+          };
+
+          expect(response.byteLength).toBeGreaterThan(0);
+          expect(typeof response.pricingBucket).toBe("string");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GeoMaps.GetStaticMap", () => {
+    test.provider(
+      "renders a static map image",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/get-static-map`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            byteLength: number;
+            contentType?: string;
+            pricingBucket?: string;
+          };
+
+          expect(response.byteLength).toBeGreaterThan(0);
+          expect(response.contentType).toContain("image");
+          expect(typeof response.pricingBucket).toBe("string");
+        }),
+      { timeout: 120_000 },
+    );
+  });
 });
