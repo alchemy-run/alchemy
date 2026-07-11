@@ -13,10 +13,15 @@ export {
   OpenIDConnectProviderProvider,
 } from "./OpenIDConnectProvider.ts";
 export {
+  normalizePolicyDocument,
   Policy,
   PolicyProvider,
+  stringifyPolicyDocument,
+  type IamAction,
   type PolicyDocument,
   type PolicyStatement,
+  type ServiceControlPolicyDocument,
+  type ServiceControlPolicyStatement,
 } from "./Policy.ts";
 export { Role, RoleProvider } from "./Role.ts";
 export { SAMLProvider, SAMLProviderProvider } from "./SAMLProvider.ts";
