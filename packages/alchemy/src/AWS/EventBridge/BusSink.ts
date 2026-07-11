@@ -31,6 +31,25 @@ export type BusSinkError =
  * Omit the bus argument to publish to the account's default event bus.
  *
  * @binding
+ * @section Streaming Events
+ * @example Run a Stream of Entries into the Bus
+ * ```typescript
+ * // init — bind the sink (provide AWS.EventBridge.BusSinkHttp on the Function)
+ * const sink = yield* AWS.EventBridge.BusSink(bus);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime — publish a stream of raw PutEvents entries
+ *     const entries: AWS.EventBridge.BusSinkEntry[] = markers.map((marker) => ({
+ *       Source: "my.app",
+ *       DetailType: "MarkerSeen",
+ *       Detail: JSON.stringify({ marker }),
+ *     }));
+ *     yield* Stream.fromIterable(entries).pipe(Stream.run(sink));
+ *     return HttpServerResponse.json({ ok: true });
+ *   }),
+ * };
+ * ```
  */
 export interface BusSink extends Binding.Service<
   BusSink,

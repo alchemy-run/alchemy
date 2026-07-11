@@ -14,6 +14,10 @@ import * as Binding from "../../Binding.ts";
  *
  * @binding
  * @section Calculating Routes
+ * Provide the `CalculateRoutesHttp` implementation layer on the Function
+ * effect (`.pipe(Effect.provide(AWS.GeoRoutes.CalculateRoutesHttp))`), bind in
+ * the init phase, then call the client at runtime.
+ *
  * @example Calculate a route between two points
  * ```typescript
  * // init

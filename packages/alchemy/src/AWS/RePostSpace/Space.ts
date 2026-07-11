@@ -85,22 +85,75 @@ export interface Space extends Resource<
   "AWS.RePostSpace.Space",
   SpaceProps,
   {
+    /**
+     * Unique ID of the private re:Post space.
+     */
     spaceId: string;
+    /**
+     * ARN of the space.
+     */
     spaceArn: string;
+    /**
+     * Display name of the space.
+     */
     name: string;
+    /**
+     * Current space status (e.g. `"CREATE_COMPLETED"`).
+     */
     status: string;
+    /**
+     * IAM Identity Center configuration status of the space
+     * (e.g. `"CONFIGURED"` / `"UNCONFIGURED"`).
+     */
     configurationStatus: string;
+    /**
+     * Client ID of the space's IAM Identity Center application.
+     */
     clientId: string;
+    /**
+     * ID of the IAM Identity Center identity store backing the space.
+     */
     identityStoreId: string | undefined;
+    /**
+     * ARN of the space's IAM Identity Center application.
+     */
     applicationArn: string | undefined;
+    /**
+     * Description of the space.
+     */
     description: string | undefined;
+    /**
+     * Subdomain the space is served from.
+     */
     vanityDomain: string;
+    /**
+     * Approval status of the vanity domain (e.g. `"PENDING"`, `"APPROVED"`).
+     */
     vanityDomainStatus: string;
+    /**
+     * AWS-generated domain the space is reachable on.
+     */
     randomDomain: string;
+    /**
+     * ARN of the customer-provided IAM role the space uses for account
+     * integrations (mirrors the `roleArn` prop).
+     */
     customerRoleArn: string | undefined;
+    /**
+     * Pricing tier of the space (`"BASIC"` or `"STANDARD"`).
+     */
     tier: string;
+    /**
+     * Storage limit of the space, in bytes.
+     */
     storageLimit: number;
+    /**
+     * Customer-managed KMS key encrypting the space's data, if any.
+     */
     userKMSKey: string | undefined;
+    /**
+     * Tags on the space (including internal Alchemy tags).
+     */
     tags: Record<string, string>;
   },
   never,

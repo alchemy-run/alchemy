@@ -222,48 +222,165 @@ export interface DBCluster extends Resource<
   "AWS.RDS.DBCluster",
   DBClusterProps,
   {
+    /**
+     * Identifier of the cluster.
+     */
     dbClusterIdentifier: string;
+    /**
+     * ARN of the cluster.
+     */
     dbClusterArn: string;
+    /**
+     * Subnet group the cluster is placed in.
+     */
     dbSubnetGroupName: string | undefined;
+    /**
+     * Writer endpoint DNS address.
+     */
     endpoint: string | undefined;
+    /**
+     * Load-balanced reader endpoint DNS address.
+     */
     readerEndpoint: string | undefined;
+    /**
+     * Port the database listens on.
+     */
     port: number | undefined;
+    /**
+     * Database engine (e.g. `aurora-postgresql`).
+     */
     engine: string;
+    /**
+     * Engine version in use.
+     */
     engineVersion: string | undefined;
+    /**
+     * Status of the cluster (e.g. `available`).
+     */
     status: string | undefined;
+    /**
+     * Name of the initial database.
+     */
     databaseName: string | undefined;
+    /**
+     * Master username.
+     */
     masterUsername: string | undefined;
+    /**
+     * ARN of the Secrets Manager secret holding master credentials.
+     */
     masterUserSecretArn: string | undefined;
+    /**
+     * Security groups attached to the cluster.
+     */
     vpcSecurityGroupIds: string[];
+    /**
+     * Whether the Data API HTTP endpoint is enabled.
+     */
     httpEndpointEnabled: boolean | undefined;
+    /**
+     * Allocated storage in GiB (provisioned engines).
+     */
     allocatedStorage: number | undefined;
+    /**
+     * Backup retention period in days.
+     */
     backupRetentionPeriod: number | undefined;
+    /**
+     * Daily backup window (`hh:mm-hh:mm` UTC).
+     */
     preferredBackupWindow: string | undefined;
+    /**
+     * Weekly maintenance window.
+     */
     preferredMaintenanceWindow: string | undefined;
+    /**
+     * Whether storage is encrypted.
+     */
     storageEncrypted: boolean | undefined;
+    /**
+     * KMS key used for storage encryption.
+     */
     kmsKeyId: string | undefined;
+    /**
+     * Whether deletion protection is enabled.
+     */
     deletionProtection: boolean | undefined;
+    /**
+     * Whether IAM database authentication is enabled.
+     */
     iamDatabaseAuthenticationEnabled: boolean | undefined;
+    /**
+     * Engine mode (e.g. `provisioned`).
+     */
     engineMode: string | undefined;
+    /**
+     * Member instances with their writer flag and promotion tier.
+     */
     dbClusterMembers: Array<{
       dbInstanceIdentifier: string | undefined;
       isClusterWriter: boolean | undefined;
       promotionTier: number | undefined;
     }>;
+    /**
+     * Immutable region-unique cluster resource ID (used in IAM auth ARNs).
+     */
     dbClusterResourceId: string | undefined;
+    /**
+     * Route 53 hosted zone ID of the cluster endpoints.
+     */
     hostedZoneId: string | undefined;
+    /**
+     * Whether the cluster has instances in multiple AZs.
+     */
     multiAZ: boolean | undefined;
+    /**
+     * Log types exported to CloudWatch Logs.
+     */
     enabledCloudwatchLogsExports: string[];
+    /**
+     * Whether cluster tags are copied to snapshots.
+     */
     copyTagsToSnapshot: boolean | undefined;
+    /**
+     * Time the cluster was created (ISO 8601).
+     */
     clusterCreateTime: string | undefined;
+    /**
+     * Serverless v2 platform version.
+     */
     serverlessV2PlatformVersion: string | undefined;
+    /**
+     * Enhanced-monitoring granularity in seconds.
+     */
     monitoringInterval: number | undefined;
+    /**
+     * Whether Performance Insights is enabled.
+     */
     performanceInsightsEnabled: boolean | undefined;
+    /**
+     * Instance class for Multi-AZ DB clusters.
+     */
     dbClusterInstanceClass: string | undefined;
+    /**
+     * Storage type (e.g. `aurora`, `aurora-iopt1`).
+     */
     storageType: string | undefined;
+    /**
+     * Provisioned IOPS (Multi-AZ DB clusters).
+     */
     iops: number | undefined;
+    /**
+     * Network type (`IPV4` or `DUAL`).
+     */
     networkType: string | undefined;
+    /**
+     * Custom endpoint ARNs associated with the cluster.
+     */
     customEndpoints: string[];
+    /**
+     * Tags on the cluster.
+     */
     tags: Record<string, string>;
   },
   never,

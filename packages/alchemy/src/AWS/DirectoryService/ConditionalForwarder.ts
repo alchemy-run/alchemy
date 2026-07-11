@@ -30,9 +30,13 @@ export interface ConditionalForwarder extends Resource<
   "AWS.DirectoryService.ConditionalForwarder",
   ConditionalForwarderProps,
   {
+    /** The ID of the directory the forwarder is attached to. */
     directoryId: string;
+    /** The fully qualified domain name the forwarder resolves. */
     remoteDomainName: string;
+    /** The IP addresses of the remote DNS servers. */
     dnsIpAddrs: string[];
+    /** The replication scope of the forwarder, e.g. `Domain`. */
     replicationScope: string | undefined;
   },
   never,

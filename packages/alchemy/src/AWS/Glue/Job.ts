@@ -111,8 +111,11 @@ export interface Job extends Resource<
   "AWS.Glue.Job",
   JobProps,
   {
+    /** The name of the job. */
     jobName: string;
+    /** The ARN of the job. */
     jobArn: string;
+    /** The IAM role the job assumes to run. */
     role: string;
   },
   {},

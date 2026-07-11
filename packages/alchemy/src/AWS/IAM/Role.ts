@@ -91,16 +91,27 @@ export interface Role extends Resource<
   "AWS.IAM.Role",
   RoleProps,
   {
+    /** The ARN of the role. */
     roleArn: RoleArn;
+    /** The name of the role. */
     roleName: RoleName;
+    /** The stable unique ID of the role. */
     roleId: string | undefined;
+    /** The IAM path of the role. */
     path: string | undefined;
+    /** The trust policy in effect for the role. */
     assumeRolePolicyDocument: PolicyDocument;
+    /** Managed policy ARNs attached to the role. */
     managedPolicyArns: string[];
+    /** Inline policies embedded in the role, keyed by policy name. */
     inlinePolicies: Record<string, PolicyDocument>;
+    /** The description of the role. */
     description: string | undefined;
+    /** The maximum session duration, in seconds. */
     maxSessionDuration: number | undefined;
+    /** The managed policy ARN used as the permissions boundary, if any. */
     permissionsBoundary: string | undefined;
+    /** The tags applied to the role. */
     tags: Record<string, string>;
   },
   {
@@ -180,6 +191,43 @@ const mergeBoundAssumeRolePolicy = (
  *       Principal: { Service: "ecs-tasks.amazonaws.com" },
  *       Action: ["sts:AssumeRole"],
  *     }],
+ *   },
+ * });
+ * ```
+ *
+ * @section Granting Permissions
+ * @example Attach a Customer-Managed Policy
+ * ```typescript
+ * const policy = yield* Policy("AppPolicy", {
+ *   policyDocument: {
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Action: ["s3:GetObject"],
+ *       Resource: ["arn:aws:s3:::my-bucket/*"],
+ *     }],
+ *   },
+ * });
+ *
+ * const role = yield* Role("AppRole", {
+ *   assumeRolePolicyDocument: {
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Principal: { Service: "lambda.amazonaws.com" },
+ *       Action: ["sts:AssumeRole"],
+ *     }],
+ *   },
+ *   managedPolicyArns: [policy.policyArn],
+ *   inlinePolicies: {
+ *     Logs: {
+ *       Version: "2012-10-17",
+ *       Statement: [{
+ *         Effect: "Allow",
+ *         Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+ *         Resource: ["*"],
+ *       }],
+ *     },
  *   },
  * });
  * ```

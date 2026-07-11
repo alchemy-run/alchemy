@@ -58,9 +58,21 @@ export interface VariantStore extends Resource<
   "AWS.Omics.VariantStore",
   VariantStoreProps,
   {
+    /**
+     * ID of the variant store.
+     */
     variantStoreId: string;
+    /**
+     * ARN of the variant store.
+     */
     variantStoreArn: string;
+    /**
+     * Name of the variant store.
+     */
     name: string;
+    /**
+     * Store status (e.g. `ACTIVE`, `CREATING`, `UPDATING`, `FAILED`).
+     */
     status: string;
   },
   never,

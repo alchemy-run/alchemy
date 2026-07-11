@@ -63,16 +63,50 @@ export interface Cluster extends Resource<
   "AWS.CloudHSMV2.Cluster",
   ClusterProps,
   {
+    /**
+     * The unique identifier of the cluster.
+     */
     clusterId: string;
+    /**
+     * Current state of the cluster (e.g. `UNINITIALIZED`, `ACTIVE`).
+     */
     state: string;
+    /**
+     * The type of HSM in the cluster (e.g. `hsm2m.medium`).
+     */
     hsmType: string;
+    /**
+     * The FIPS mode of the cluster (`FIPS` or `NON_FIPS`).
+     */
     mode: string | undefined;
+    /**
+     * The network type of the cluster (`IPV4` or `DUALSTACK`).
+     */
     networkType: string | undefined;
+    /**
+     * The VPC the cluster's HSMs live in.
+     */
     vpcId: string | undefined;
+    /**
+     * The security group CloudHSM created for the cluster's ENIs.
+     */
     securityGroup: string | undefined;
+    /**
+     * The subnets (one per AZ) the cluster spans.
+     */
     subnetIds: string[];
+    /**
+     * The certificate signing request to sign when initializing the cluster
+     * (present while `UNINITIALIZED`).
+     */
     clusterCsr: string | undefined;
+    /**
+     * How many days backups are retained.
+     */
     backupRetentionDays: number | undefined;
+    /**
+     * Current tags on the cluster.
+     */
     tags: Record<string, string>;
   },
   never,

@@ -21,17 +21,32 @@ export interface GetEventPredictionRequest extends Omit<
  *
  * @binding
  * @section Scoring Events
+ * Provide the `GetEventPredictionHttp` implementation layer on the Function
+ * effect, bind the detector in the init phase, then call the returned client
+ * at runtime. The binding grants `frauddetector:GetEventPrediction` on the
+ * detector and injects its `detectorId` automatically.
+ *
  * @example Predict from a Lambda
  * ```typescript
+ * // init
  * const getEventPrediction = yield* FraudDetector.GetEventPrediction(detector);
- * const { ruleResults } = yield* getEventPrediction({
- *   eventId: "order-123",
- *   eventTypeName: "purchase",
- *   eventTimestamp: new Date().toISOString(),
- *   entities: [{ entityType: "customer", entityId: "cust-1" }],
- *   eventVariables: { email: "fraud@example.com", ip: "1.2.3.4" },
- * });
- * const outcomes = ruleResults?.flatMap((r) => r.outcomes ?? []);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     const { ruleResults } = yield* getEventPrediction({
+ *       eventId: "order-123",
+ *       eventTypeName: "purchase",
+ *       eventTimestamp: new Date().toISOString(),
+ *       entities: [{ entityType: "customer", entityId: "cust-1" }],
+ *       eventVariables: { email: "fraud@example.com", ip: "1.2.3.4" },
+ *     });
+ *     const outcomes = ruleResults?.flatMap((r) => r.outcomes ?? []);
+ *     return HttpServerResponse.json({ outcomes });
+ *   }),
+ * };
+ * // on the Function effect:
+ * // .pipe(Effect.provide(FraudDetector.GetEventPredictionHttp))
  * ```
  */
 export interface GetEventPrediction extends Binding.Service<

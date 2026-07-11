@@ -9,7 +9,9 @@ import type { LogGroup } from "./LogGroup.ts";
  * `awslogs.data`.
  */
 export interface CloudWatchLogsEvent {
+  /** Envelope holding the gzipped, base64-encoded subscription payload. */
   awslogs: {
+    /** Base64-encoded gzip of a {@link LogsSubscriptionPayload} JSON document. */
     data: string;
   };
 }
@@ -18,14 +20,23 @@ export interface CloudWatchLogsEvent {
  * Decoded CloudWatch Logs subscription payload (after base64 + gunzip).
  */
 export interface LogsSubscriptionPayload {
+  /** `DATA_MESSAGE` carries log events; `CONTROL_MESSAGE` is a delivery check. */
   messageType: "DATA_MESSAGE" | "CONTROL_MESSAGE";
+  /** AWS account id that owns the source log group. */
   owner: string;
+  /** Name of the log group the events came from. */
   logGroup: string;
+  /** Name of the log stream the events came from. */
   logStream: string;
+  /** Names of the subscription filters that matched the events. */
   subscriptionFilters: string[];
+  /** The batch of matched log events. */
   logEvents: {
+    /** Unique identifier of the log event. */
     id: string;
+    /** Event timestamp (epoch milliseconds). */
     timestamp: number;
+    /** The raw log line. */
     message: string;
   }[];
 }
@@ -98,6 +109,26 @@ type LogEventsHandler<Req> = (
  *     Stream.runForEach(events, (event) =>
  *       Effect.log(`${event.logStream}: ${event.message}`),
  *     ),
+ * );
+ * ```
+ *
+ * @example Wire the Event Source into a Lambda Function
+ * ```typescript
+ * // The Lambda implementation layer (AWS.Lambda.LogGroupEventSource)
+ * // satisfies the LogGroupEventSource requirement of consumeLogEvents.
+ * export default AlertsFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const source = yield* AWS.Logs.LogGroup("AppLogs", {
+ *       retentionInDays: "7 days",
+ *     });
+ *     yield* AWS.Logs.consumeLogEvents(source, (events) =>
+ *       Stream.runForEach(events, (event) => Effect.log(event.message)),
+ *     );
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("ok")),
+ *     };
+ *   }).pipe(Effect.provide(AWS.Lambda.LogGroupEventSource)),
  * );
  * ```
  */

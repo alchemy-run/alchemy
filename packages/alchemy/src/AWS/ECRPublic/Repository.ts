@@ -64,11 +64,17 @@ export interface PublicRepository extends Resource<
   "AWS.ECRPublic.Repository",
   PublicRepositoryProps,
   {
+    /** The name of the public repository. */
     repositoryName: RepositoryName;
+    /** The ARN of the public repository. */
     repositoryArn: RepositoryArn;
+    /** The public pull URI, e.g. `public.ecr.aws/<alias>/<name>`. */
     repositoryUri: string;
+    /** The AWS account ID of the registry. */
     registryId: string;
+    /** The JSON repository permissions policy, if any. */
     policyText?: string;
+    /** The tags attached to the repository. */
     tags: Record<string, string>;
   },
   never,

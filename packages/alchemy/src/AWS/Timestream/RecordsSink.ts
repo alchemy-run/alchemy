@@ -38,7 +38,32 @@ export type RecordsSinkError =
  * count) and keeps draining; there is no transient per-record failure mode to
  * retry.
  *
+ * Provide `Timestream.RecordsSinkHttp` on the Function to implement the
+ * binding.
+ *
  * @binding
+ * @section Streaming Records
+ * @example Stream records into a table
+ * ```typescript
+ * // init — bind the sink to the table; shared attributes are sent once per
+ * // batch as CommonAttributes and merged into every record server-side
+ * const sink = yield* Timestream.RecordsSink(table, {
+ *   commonAttributes: {
+ *     MeasureName: "cpu",
+ *     MeasureValueType: "DOUBLE",
+ *     TimeUnit: "MILLISECONDS",
+ *   },
+ * });
+ *
+ * // runtime — drain a stream through the sink (batched 100 records/call)
+ * yield* Stream.fromIterable(
+ *   samples.map((s) => ({
+ *     Dimensions: [{ Name: "host", Value: s.host }],
+ *     MeasureValue: `${s.value}`,
+ *     Time: `${s.time}`,
+ *   })),
+ * ).pipe(Stream.run(sink));
+ * ```
  */
 export interface RecordsSink extends Binding.Service<
   RecordsSink,

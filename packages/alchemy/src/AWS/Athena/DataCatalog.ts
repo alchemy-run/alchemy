@@ -46,11 +46,29 @@ export interface DataCatalog extends Resource<
   "AWS.Athena.DataCatalog",
   DataCatalogProps,
   {
+    /**
+     * Name of the data catalog.
+     */
     name: string;
+    /**
+     * ARN of the data catalog.
+     */
     dataCatalogArn: DataCatalogArn;
+    /**
+     * Catalog type (`LAMBDA`, `GLUE`, or `HIVE`).
+     */
     type: string;
+    /**
+     * Type-specific connection parameters.
+     */
     parameters: Record<string, string>;
+    /**
+     * Description of the data catalog.
+     */
     description: string | undefined;
+    /**
+     * Tags on the data catalog.
+     */
     tags: Record<string, string>;
   },
   never,

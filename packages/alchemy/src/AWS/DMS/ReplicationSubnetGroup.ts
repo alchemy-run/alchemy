@@ -36,11 +36,17 @@ export interface ReplicationSubnetGroup extends Resource<
   "AWS.DMS.ReplicationSubnetGroup",
   ReplicationSubnetGroupProps,
   {
+    /** The subnet group identifier (unique per account/region). */
     replicationSubnetGroupIdentifier: string;
+    /** The ARN of the replication subnet group. */
     replicationSubnetGroupArn: string;
+    /** The VPC the subnets belong to. */
     vpcId: string | undefined;
+    /** The IDs of the subnets in the group. */
     subnetIds: string[];
+    /** The current status of the subnet group, e.g. `Complete`. */
     status: string | undefined;
+    /** The tags attached to the subnet group. */
     tags: Record<string, string>;
   },
   never,

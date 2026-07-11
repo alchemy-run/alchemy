@@ -6,6 +6,40 @@ import { isBindingHost } from "../Lambda/Function.ts";
 import { ExecuteQuery, type ExecuteQueryRequest } from "./ExecuteQuery.ts";
 import type { Graph } from "./Graph.ts";
 
+/**
+ * HTTP implementation of the {@link ExecuteQuery} binding — signs
+ * `neptune-graph:ExecuteQuery` data-plane requests against the graph's HTTPS
+ * endpoint and, at deploy time, grants the query IAM actions on the bound
+ * {@link Graph} to the host function.
+ *
+ * Provide it on the Lambda function that uses the binding:
+ *
+ * @example
+ * ```typescript
+ * export default QueryFunction.make(
+ *   { main, url: true },
+ *   Effect.gen(function* () {
+ *     // init — bind the graph
+ *     const executeQuery = yield* NeptuneGraph.ExecuteQuery(graph);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime — run an openCypher query
+ *         const response = yield* executeQuery({
+ *           queryString: "MATCH (n) RETURN count(n) AS nodes",
+ *           language: "OPEN_CYPHER",
+ *         });
+ *         const body = yield* response.payload.pipe(
+ *           Stream.decodeText,
+ *           Stream.mkString,
+ *         );
+ *         return yield* HttpServerResponse.json(JSON.parse(body));
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(NeptuneGraph.ExecuteQueryHttp)),
+ * );
+ * ```
+ */
 export const ExecuteQueryHttp = Layer.effect(
   ExecuteQuery,
   Effect.gen(function* () {

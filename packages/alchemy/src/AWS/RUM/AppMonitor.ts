@@ -110,8 +110,17 @@ export interface AppMonitor extends Resource<
   "AWS.RUM.AppMonitor",
   AppMonitorProps,
   {
+    /**
+     * Name of the app monitor.
+     */
     appMonitorName: string;
+    /**
+     * Unique ID of the app monitor (used by the RUM web client configuration).
+     */
     appMonitorId: string;
+    /**
+     * ARN of the app monitor.
+     */
     appMonitorArn: string;
   },
   never,

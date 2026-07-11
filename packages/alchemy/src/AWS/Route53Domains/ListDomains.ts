@@ -15,6 +15,8 @@ export interface ListDomainsRequest extends route53domains.ListDomainsRequest {}
  * function runs.
  *
  * Pass `Marker` from a previous response's `NextPageMarker` to paginate.
+ * Provide the implementation with
+ * `Effect.provide(AWS.Route53Domains.ListDomainsHttp)`.
  *
  * @binding
  * @section Listing Registered Domains

@@ -13,6 +13,10 @@ import * as Binding from "../../Binding.ts";
  *
  * @binding
  * @section Searching Places
+ * Provide the `SearchTextHttp` implementation layer on the Function effect
+ * (`.pipe(Effect.provide(AWS.GeoPlaces.SearchTextHttp))`), bind in the init
+ * phase, then call the client at runtime.
+ *
  * @example Search for a place by text
  * ```typescript
  * // init

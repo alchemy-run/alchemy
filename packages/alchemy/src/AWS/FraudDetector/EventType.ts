@@ -55,7 +55,9 @@ export interface EventType extends Resource<
   "AWS.FraudDetector.EventType",
   EventTypeProps,
   {
+    /** The name of the event type. */
     name: string;
+    /** The ARN of the event type. */
     arn: string;
   },
   never,

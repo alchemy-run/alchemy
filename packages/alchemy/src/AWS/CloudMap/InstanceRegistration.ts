@@ -31,7 +31,13 @@ export interface InstanceRegistration extends Resource<
   "AWS.CloudMap.InstanceRegistration",
   InstanceRegistrationProps,
   {
+    /**
+     * The Cloud Map service the instance is registered with.
+     */
     serviceId: string;
+    /**
+     * The identifier of the registered instance.
+     */
     instanceId: string;
   },
   {},

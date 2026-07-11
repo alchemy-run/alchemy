@@ -97,11 +97,17 @@ export interface Component extends Resource<
   "AWS.ImageBuilder.Component",
   ComponentProps,
   {
+    /** The name of the component. */
     componentName: string;
+    /** The ARN of this component build version. */
     componentBuildVersionArn: string;
+    /** The semantic version of the component. */
     semanticVersion: string;
+    /** The OS platform of the component (`Linux` / `Windows`). */
     platform: string;
+    /** Whether the component is a `BUILD` or `TEST` component. */
     type: string | undefined;
+    /** When the component was created. */
     dateCreated: string | undefined;
   },
   never,

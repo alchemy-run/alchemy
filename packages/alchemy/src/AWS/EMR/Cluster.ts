@@ -182,11 +182,17 @@ export interface Cluster extends Resource<
   "AWS.EMR.Cluster",
   ClusterProps,
   {
+    /** The ID of the cluster (e.g. `j-2AXXXXXXGAPLF`). */
     clusterId: string;
+    /** The ARN of the cluster. */
     clusterArn: string;
+    /** The name of the cluster. */
     clusterName: string;
+    /** The cluster state (e.g. `STARTING`, `RUNNING`, `WAITING`). */
     state: string;
+    /** The public DNS name of the primary node, when reachable. */
     masterPublicDnsName: string | undefined;
+    /** The tags applied to the cluster. */
     tags: Record<string, string>;
   },
   never,

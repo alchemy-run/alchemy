@@ -205,25 +205,42 @@ export interface Task extends Resource<
   "AWS.ECS.Task",
   TaskProps,
   {
+    /** The ARN of the registered task definition revision. */
     taskDefinitionArn: string;
+    /** The task definition family name. */
     taskFamily: string;
+    /** The name of the main container in the task definition. */
     containerName: string;
+    /** The container port the task listens on. */
     port: number;
+    /** The full URI of the container image the task runs. */
     imageUri: string;
+    /** The name of the ECR repository holding the built image. */
     repositoryName: string;
+    /** The URI of the ECR repository holding the built image. */
     repositoryUri: string;
+    /** The ARN of the task role assumed by the running containers. */
     taskRoleArn: string;
+    /** The name of the task role. */
     taskRoleName: string;
+    /** The ARN of the execution role used to pull images and write logs. */
     executionRoleArn: string;
+    /** The name of the execution role. */
     executionRoleName: string;
+    /** The CloudWatch log group the task writes to. */
     logGroupName: string;
+    /** The ARN of the CloudWatch log group. */
     logGroupArn: string;
+    /** The content hash of the bundled application code. */
     code: {
+      /** The content hash of the bundled application code. */
       hash: string;
     };
   },
   {
+    /** Environment variables injected into the task's containers. */
     env?: Record<string, any>;
+    /** IAM policy statements attached to the task role. */
     policyStatements?: PolicyStatement[];
   },
   Providers

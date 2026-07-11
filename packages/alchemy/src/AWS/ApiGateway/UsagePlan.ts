@@ -67,6 +67,23 @@ export interface UsagePlan extends Resource<
  *   apiStages: [{ apiId: api.restApiId, stage: stage.stageName }],
  * });
  * ```
+ *
+ * @example Throttled plan with a quota and an enrolled API key
+ * ```typescript
+ * const plan = yield* ApiGateway.UsagePlan("Partner", {
+ *   throttle: { rateLimit: 10, burstLimit: 20 },
+ *   quota: { limit: 10_000, period: "MONTH" },
+ * });
+ *
+ * const key = yield* ApiGateway.ApiKey("PartnerKey", {
+ *   generateDistinctId: true,
+ * });
+ *
+ * yield* ApiGateway.UsagePlanKey("PartnerLink", {
+ *   usagePlanId: plan.id,
+ *   keyId: key.id,
+ * });
+ * ```
  */
 const UsagePlanResource = Resource<UsagePlan>("AWS.ApiGateway.UsagePlan");
 

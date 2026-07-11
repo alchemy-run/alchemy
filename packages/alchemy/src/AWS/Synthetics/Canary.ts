@@ -149,11 +149,29 @@ export interface Canary extends Resource<
   "AWS.Synthetics.Canary",
   CanaryProps,
   {
+    /**
+     * Physical name of the canary.
+     */
     canaryName: string;
+    /**
+     * ARN of the canary.
+     */
     canaryArn: string;
+    /**
+     * Service-assigned unique ID of the canary.
+     */
     canaryId: string;
+    /**
+     * ARN of the IAM role the canary runs as.
+     */
     executionRoleArn: string;
+    /**
+     * S3 location where run artifacts (screenshots, HAR files, logs) land.
+     */
     artifactS3Location: string;
+    /**
+     * Synthetics runtime version the canary executes on.
+     */
     runtimeVersion: string;
     /** Name of the auto-created execution role; `undefined` when the user supplied `executionRoleArn`. */
     roleName: string | undefined;

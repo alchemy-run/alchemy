@@ -74,13 +74,37 @@ export interface Workgroup extends Resource<
   "AWS.RedshiftServerless.Workgroup",
   WorkgroupProps,
   {
+    /**
+     * Name of the workgroup.
+     */
     workgroupName: string;
+    /**
+     * ARN of the workgroup.
+     */
     workgroupArn: string;
+    /**
+     * Unique ID of the workgroup.
+     */
     workgroupId: string;
+    /**
+     * Name of the namespace the workgroup computes against.
+     */
     namespaceName: string;
+    /**
+     * Current workgroup status (e.g. `"AVAILABLE"`).
+     */
     status: string;
+    /**
+     * DNS address of the workgroup endpoint (pgwire host).
+     */
     endpointAddress: string | undefined;
+    /**
+     * Port of the workgroup endpoint (5439 by default).
+     */
     endpointPort: number | undefined;
+    /**
+     * Whether the endpoint is reachable from the public internet.
+     */
     publiclyAccessible: boolean | undefined;
   },
   never,

@@ -57,9 +57,21 @@ export interface SequenceStore extends Resource<
   "AWS.Omics.SequenceStore",
   SequenceStoreProps,
   {
+    /**
+     * ID of the sequence store.
+     */
     sequenceStoreId: string;
+    /**
+     * ARN of the sequence store.
+     */
     sequenceStoreArn: string;
+    /**
+     * Name of the sequence store.
+     */
     name: string;
+    /**
+     * When the sequence store was created (ISO-8601).
+     */
     creationTime: string;
   },
   never,

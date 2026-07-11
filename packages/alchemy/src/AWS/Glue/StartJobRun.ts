@@ -16,6 +16,10 @@ export interface StartJobRunRequest extends Omit<
  * `FAILED`, `TIMEOUT`, …).
  * @binding
  * @section Running Jobs
+ * Provide the `StartJobRunHttp` implementation layer on the Function effect
+ * (`.pipe(Effect.provide(AWS.Glue.StartJobRunHttp))`), bind the job in the
+ * init phase, then start runs at runtime.
+ *
  * @example Start a job run from a handler
  * ```typescript
  * // init

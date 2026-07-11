@@ -13,10 +13,15 @@ import type { RestApi } from "./RestApi.ts";
  * Integration configuration for an API Gateway method (passed to `putIntegration`).
  */
 export interface MethodIntegrationProps {
+  /** Integration type: `AWS`, `AWS_PROXY`, `HTTP`, `HTTP_PROXY`, or `MOCK`. */
   type: ag.IntegrationType;
+  /** HTTP method used to call the backend (always `POST` for Lambda integrations). */
   integrationHttpMethod?: string;
+  /** Integration endpoint URI (Lambda invocation ARN or HTTP URL). */
   uri?: Input<string>;
+  /** `VPC_LINK` for private integrations, otherwise `INTERNET`. */
   connectionType?: ag.ConnectionType;
+  /** ID of the `VpcLink` when `connectionType` is `VPC_LINK`. */
   connectionId?: string;
   /**
    * IAM role ARN used by API Gateway for integration credentials.
@@ -24,19 +29,28 @@ export interface MethodIntegrationProps {
    * This is not a secret value; API Gateway stores an ARN or passthrough marker.
    */
   credentials?: string;
+  /** Maps integration request parameters from method request parameters. */
   requestParameters?: { [key: string]: string | undefined };
+  /** Request body mapping templates keyed by content type. */
   requestTemplates?: { [key: string]: string | undefined };
+  /** How unmapped content types pass through (`WHEN_NO_MATCH`, `WHEN_NO_TEMPLATES`, `NEVER`). */
   passthroughBehavior?: string;
+  /** Cache namespace for integration responses. */
   cacheNamespace?: string;
+  /** Request parameters whose values form the cache key. */
   cacheKeyParameters?: string[];
+  /** Payload encoding conversion (`CONVERT_TO_BINARY` or `CONVERT_TO_TEXT`). */
   contentHandling?: ag.ContentHandlingStrategy;
   /**
    * Integration timeout (e.g. `"29 seconds"` or `Duration.seconds(29)`;
    * a bare number is milliseconds). Sent to the API in milliseconds.
    */
   timeoutInMillis?: Duration.Input;
+  /** TLS settings for HTTP integrations (e.g. `insecureSkipVerification`). */
   tlsConfig?: ag.TlsConfig;
+  /** How the integration response is transferred to the client. */
   responseTransferMode?: ag.ResponseTransferMode;
+  /** Target resource of the integration, where the API distinguishes one from `uri`. */
   integrationTarget?: string;
 }
 
@@ -73,12 +87,19 @@ export interface MethodProps {
    * @default "NONE"
    */
   authorizationType?: string;
+  /** ID of the `Authorizer` when `authorizationType` is `CUSTOM` or `COGNITO_USER_POOLS`. */
   authorizerId?: string;
+  /** Require callers to present an API key. */
   apiKeyRequired?: boolean;
+  /** Friendly operation name (e.g. for SDK generation). */
   operationName?: string;
+  /** Accepted request parameters; `true` marks a parameter required. */
   requestParameters?: { [key: string]: boolean | undefined };
+  /** Request body models keyed by content type. */
   requestModels?: { [key: string]: string | undefined };
+  /** ID of a request validator applied to this method. */
   requestValidatorId?: string;
+  /** OAuth scopes for `COGNITO_USER_POOLS` authorization. */
   authorizationScopes?: string[];
   /** When set, `putIntegration` is applied after `putMethod`. */
   integration?: MethodIntegrationProps;
@@ -181,6 +202,10 @@ export interface MethodType extends Resource<
  */
 export const MethodResource = Resource<MethodType>("AWS.ApiGateway.Method");
 
+/**
+ * `Input`-accepting mirror of {@link MethodProps} used by the `Method`
+ * wrapper function — see {@link MethodProps} for per-field documentation.
+ */
 export interface MethodInputProps {
   restApi?: RestApi;
   restApiId?: Input<string>;

@@ -51,13 +51,21 @@ export interface User extends Resource<
   "AWS.IAM.User",
   UserProps,
   {
+    /** The ARN of the user. */
     userArn: string;
+    /** The name of the user. */
     userName: string;
+    /** The stable unique ID of the user. */
     userId: string | undefined;
+    /** The IAM path of the user. */
     path: string | undefined;
+    /** The managed policy ARN used as the permissions boundary, if any. */
     permissionsBoundary: string | undefined;
+    /** Managed policy ARNs attached to the user. */
     managedPolicyArns: string[];
+    /** Inline policies embedded in the user, keyed by policy name. */
     inlinePolicies: Record<string, PolicyDocument>;
+    /** The tags applied to the user. */
     tags: Record<string, string>;
   },
   never,

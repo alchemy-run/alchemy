@@ -52,9 +52,21 @@ export interface PrivateDnsNamespace extends Resource<
   "AWS.CloudMap.PrivateDnsNamespace",
   PrivateDnsNamespaceProps,
   {
+    /**
+     * The unique identifier of the namespace.
+     */
     namespaceId: string;
+    /**
+     * The ARN of the namespace.
+     */
     namespaceArn: string;
+    /**
+     * Name of the namespace (the private DNS domain, e.g. `internal.example`).
+     */
     namespaceName: string;
+    /**
+     * The private Route 53 hosted zone Cloud Map created for the namespace.
+     */
     hostedZoneId: string | undefined;
   },
   {},

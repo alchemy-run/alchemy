@@ -24,6 +24,9 @@ export interface Schema extends Resource<
   "AWS.VerifiedPermissions.Schema",
   SchemaProps,
   {
+    /**
+     * ID of the policy store the schema belongs to.
+     */
     policyStoreId: string;
   },
   {},

@@ -128,9 +128,21 @@ export interface SearchJob extends Resource<
   "AWS.BackupSearch.SearchJob",
   SearchJobProps,
   {
+    /**
+     * Service-assigned unique ID of the search job.
+     */
     searchJobIdentifier: string;
+    /**
+     * ARN of the search job.
+     */
     searchJobArn: string;
+    /**
+     * Name of the search job.
+     */
     name: string | undefined;
+    /**
+     * Current status of the search job (e.g. `RUNNING`, `COMPLETED`).
+     */
     status: string;
   },
   never,

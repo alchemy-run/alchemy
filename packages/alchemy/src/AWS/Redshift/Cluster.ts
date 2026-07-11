@@ -158,23 +158,78 @@ export interface Cluster extends Resource<
   "AWS.Redshift.Cluster",
   ClusterProps,
   {
+    /**
+     * Unique identifier of the cluster.
+     */
     clusterIdentifier: string;
+    /**
+     * ARN of the cluster.
+     */
     clusterArn: string;
+    /**
+     * ARN of the cluster's namespace (used by datashares and the Data API).
+     */
     clusterNamespaceArn: string | undefined;
+    /**
+     * Current cluster status (e.g. `"available"`).
+     */
     clusterStatus: string;
+    /**
+     * Node type of the cluster (e.g. `"ra3.large"`).
+     */
     nodeType: string;
+    /**
+     * Number of compute nodes in the cluster.
+     */
     numberOfNodes: number;
+    /**
+     * Name of the initial database.
+     */
     dbName: string;
+    /**
+     * Admin (master) user name.
+     */
     masterUsername: string | undefined;
+    /**
+     * DNS address of the cluster endpoint (pgwire host).
+     */
     endpointAddress: string | undefined;
+    /**
+     * Port of the cluster endpoint (5439 by default).
+     */
     endpointPort: number | undefined;
+    /**
+     * ID of the VPC the cluster runs in.
+     */
     vpcId: string | undefined;
+    /**
+     * Availability zone the cluster is placed in.
+     */
     availabilityZone: string | undefined;
+    /**
+     * Name of the cluster subnet group the cluster is placed in, if any.
+     */
     clusterSubnetGroupName: string | undefined;
+    /**
+     * Whether the cluster endpoint is reachable from the public internet.
+     */
     publiclyAccessible: boolean | undefined;
+    /**
+     * Whether the cluster's data is encrypted at rest.
+     */
     encrypted: boolean | undefined;
+    /**
+     * KMS key encrypting the cluster, if any.
+     */
     kmsKeyId: string | undefined;
+    /**
+     * ARN of the Secrets Manager secret holding the admin password when
+     * `manageMasterPassword` is enabled.
+     */
     masterPasswordSecretArn: string | undefined;
+    /**
+     * Tags on the cluster (including internal Alchemy tags).
+     */
     tags: Record<string, string>;
   },
   never,

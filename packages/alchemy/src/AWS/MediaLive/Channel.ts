@@ -127,11 +127,17 @@ export interface Channel extends Resource<
   "AWS.MediaLive.Channel",
   ChannelProps,
   {
+    /** Server-assigned unique id of the channel. */
     channelId: string;
+    /** ARN of the channel. */
     channelArn: string;
+    /** Name of the channel. */
     channelName: string | undefined;
+    /** Current lifecycle state (e.g. `IDLE`, `RUNNING`). */
     state: medialive.ChannelState | undefined;
+    /** Pipeline class (`STANDARD` or `SINGLE_PIPELINE`). */
     channelClass: medialive.ChannelClass | undefined;
+    /** Egress endpoints the channel writes output through. */
     egressEndpoints: medialive.ChannelEgressEndpoint[];
   },
   never,

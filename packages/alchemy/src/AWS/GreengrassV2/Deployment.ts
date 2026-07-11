@@ -72,12 +72,19 @@ export interface Deployment extends Resource<
   "AWS.GreengrassV2.Deployment",
   DeploymentProps,
   {
+    /** The unique ID of the deployment. */
     deploymentId: string;
+    /** The ARN of the deployment. */
     deploymentArn: string;
+    /** The ARN of the target core device or thing group. */
     targetArn: string;
+    /** The revision of the deployment. */
     revisionId?: string;
+    /** The current status of the deployment (`ACTIVE`, `COMPLETED`, ...). */
     deploymentStatus?: string;
+    /** The ID of the IoT job that rolls the deployment out to core devices. */
     iotJobId?: string;
+    /** The ARN of the IoT job that rolls the deployment out to core devices. */
     iotJobArn?: string;
   },
   never,

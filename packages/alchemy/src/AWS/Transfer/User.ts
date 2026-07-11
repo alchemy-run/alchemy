@@ -59,11 +59,29 @@ export interface User extends Resource<
   "AWS.Transfer.User",
   UserProps,
   {
+    /**
+     * User name clients authenticate as.
+     */
     userName: string;
+    /**
+     * ID of the Transfer Family server the user belongs to.
+     */
     serverId: string;
+    /**
+     * ARN of the user.
+     */
     arn: string;
+    /**
+     * IAM role ARN granting the user access to the storage backend.
+     */
     role: string | undefined;
+    /**
+     * Landing directory when the user connects.
+     */
     homeDirectory: string | undefined;
+    /**
+     * Current tags reported for the user.
+     */
     tags: Record<string, string>;
   },
   never,

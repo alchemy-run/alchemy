@@ -287,50 +287,74 @@ const wrapDurableContext = (
  * log and calls back into the Effect body with a fresh per-invocation `Scope`
  * and the `DurableStep`/`DurableExecutionContext` services.
  */
+type WrappedDurableHandler = (
+  event: any,
+  context: lambda.Context,
+) => Promise<any>;
+
 export const makeDurableListener = (options: {
   name: string;
   run: (input: unknown) => Effect.Effect<unknown>;
 }): Effect.Effect<Serverless.FunctionListener> =>
-  Effect.gen(function* () {
-    const sdk = yield* loadDurableSdk;
+  // `Effect.sync`, NOT `Effect.gen` yielding `loadDurableSdk`: the listener is
+  // CONSTRUCTED when the host resolves `runtimeContext.exports`, which happens
+  // at PLAN/DEPLOY time (`Platform.ts` does `yield* runtimeContext.exports`).
+  // Importing `@aws/durable-execution-sdk-js` there both contradicts the "never
+  // at plan time" contract and stalls the deploy (the SDK's module init
+  // touches the AWS client). Defer the load to the first real invocation and
+  // memoize it.
+  Effect.sync(() => {
+    // Bind the SDK-wrapped handler once, on first invocation, and reuse it.
+    let wrapped: WrappedDurableHandler | undefined;
+    const ensureWrapped: Effect.Effect<WrappedDurableHandler> = Effect.suspend(
+      () =>
+        wrapped !== undefined
+          ? Effect.succeed(wrapped)
+          : loadDurableSdk.pipe(
+              Effect.map((sdk) => {
+                wrapped = sdk.withDurableExecution(async (event, dctx) => {
+                  // The SDK extracts the customer payload from the EXECUTION
+                  // operation and hands it to us on every (re-)invocation.
+                  const envelope = asDurableEnvelope(event);
+                  const params =
+                    envelope !== undefined ? envelope.params : event;
 
-    const wrapped = sdk.withDurableExecution(async (event, dctx) => {
-      // The SDK extracts the customer payload from the EXECUTION operation
-      // and hands it to us on every (re-)invocation.
-      const envelope = asDurableEnvelope(event);
-      const params = envelope !== undefined ? envelope.params : event;
-
-      // Fresh request scope per durable invocation, matching the Lambda
-      // dispatcher / Worker / Workflow bridges.
-      const scope = Scope.makeUnsafe();
-      const exit = await Effect.runPromiseExit(
-        options.run(params).pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              Layer.succeed(DurableStep, wrapDurableContext(dctx)),
-              Layer.succeed(DurableExecutionContext, {
-                executionArn: dctx.executionContext.durableExecutionArn,
+                  // Fresh request scope per durable invocation, matching the
+                  // Lambda dispatcher / Worker / Workflow bridges.
+                  const scope = Scope.makeUnsafe();
+                  const exit = await Effect.runPromiseExit(
+                    options.run(params).pipe(
+                      Effect.provide(
+                        Layer.mergeAll(
+                          Layer.succeed(DurableStep, wrapDurableContext(dctx)),
+                          Layer.succeed(DurableExecutionContext, {
+                            executionArn:
+                              dctx.executionContext.durableExecutionArn,
+                          }),
+                          Layer.succeed(HandlerContext, dctx.lambdaContext),
+                          Layer.succeed(Scope.Scope, scope),
+                        ),
+                      ),
+                    ),
+                  );
+                  if (!isScopeEjected(scope)) {
+                    await Scope.close(scope, exit).pipe(
+                      Effect.ignoreCause({
+                        log: "Warn",
+                        message: "Durable invocation scope close failed",
+                      }),
+                      Effect.runPromise,
+                    );
+                  }
+                  if (Exit.isSuccess(exit)) {
+                    return exit.value;
+                  }
+                  throw Cause.squash(exit.cause);
+                });
+                return wrapped;
               }),
-              Layer.succeed(HandlerContext, dctx.lambdaContext),
-              Layer.succeed(Scope.Scope, scope),
             ),
-          ),
-        ),
-      );
-      if (!isScopeEjected(scope)) {
-        await Scope.close(scope, exit).pipe(
-          Effect.ignoreCause({
-            log: "Warn",
-            message: "Durable invocation scope close failed",
-          }),
-          Effect.runPromise,
-        );
-      }
-      if (Exit.isSuccess(exit)) {
-        return exit.value;
-      }
-      throw Cause.squash(exit.cause);
-    });
+    );
 
     // `HandlerContext` is a runtime-only requirement satisfied unconditionally
     // by the Lambda dispatcher, which provides it (and `Scope`) to every
@@ -351,11 +375,13 @@ export const makeDurableListener = (options: {
       }
       return Effect.gen(function* () {
         const context = yield* HandlerContext;
+        // Lazily load + memoize the SDK on the first real invocation.
+        const run = yield* ensureWrapped;
         // The SDK owns the checkpoint protocol from here: it replays the log,
         // runs new work, and returns the SUCCEEDED/FAILED/PENDING envelope
         // Lambda interprets. A rejection here is a protocol-level failure —
         // let it surface as an invocation error.
-        return yield* Effect.promise(() => wrapped(event, context));
+        return yield* Effect.promise(() => run(event, context));
       });
     }) as unknown as Serverless.FunctionListener;
   });

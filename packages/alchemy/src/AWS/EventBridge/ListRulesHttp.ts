@@ -8,6 +8,12 @@ import { isBindingHost } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
 import { ListRules, type ListRulesRequest } from "./ListRules.ts";
 
+/**
+ * HTTP implementation of {@link ListRules}. At deploy time it grants
+ * `events:ListRules`; at runtime it calls the EventBridge API with the host
+ * Function's credentials. Provide this layer on the Function using the
+ * binding.
+ */
 export const ListRulesHttp = Layer.effect(
   ListRules,
   Effect.gen(function* () {

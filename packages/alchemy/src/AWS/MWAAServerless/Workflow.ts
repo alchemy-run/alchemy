@@ -126,11 +126,17 @@ export interface Workflow extends Resource<
   "AWS.MWAAServerless.Workflow",
   WorkflowProps,
   {
+    /** Name of the workflow. */
     name: string;
+    /** ARN of the workflow. */
     workflowArn: string;
+    /** Latest workflow version (a new version is published on each update). */
     workflowVersion: string | undefined;
+    /** Current lifecycle status of the workflow. */
     workflowStatus: mwaa.WorkflowStatus | undefined;
+    /** ARN of the IAM role the workflow's tasks assume. */
     roleArn: string | undefined;
+    /** How runs are triggered (e.g. scheduled or on-demand). */
     triggerMode: string | undefined;
   },
   never,

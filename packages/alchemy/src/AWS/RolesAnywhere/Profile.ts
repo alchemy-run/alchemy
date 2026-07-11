@@ -82,10 +82,25 @@ export interface Profile extends Resource<
   "AWS.RolesAnywhere.Profile",
   ProfileProps,
   {
+    /**
+     * Unique ID of the profile.
+     */
     profileId: string;
+    /**
+     * ARN of the profile.
+     */
     profileArn: string;
+    /**
+     * Name of the profile.
+     */
     profileName: string;
+    /**
+     * IAM role ARNs the profile can vend sessions for.
+     */
     roleArns: string[];
+    /**
+     * Whether the profile is enabled.
+     */
     enabled: boolean;
   },
   never,

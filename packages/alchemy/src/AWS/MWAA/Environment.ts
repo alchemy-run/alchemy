@@ -183,19 +183,33 @@ export interface Environment extends Resource<
   "AWS.MWAA.Environment",
   EnvironmentProps,
   {
+    /** Name of the environment. */
     environmentName: string;
+    /** ARN of the environment. */
     arn: string;
+    /** Current lifecycle status (e.g. `CREATING`, `AVAILABLE`). */
     status: string;
+    /** Host name of the Airflow web server UI. */
     webserverUrl: string | undefined;
+    /** ARN of the execution role Airflow tasks run as. */
     executionRoleArn: string | undefined;
+    /** ARN of the service-linked role MWAA uses to manage the environment. */
     serviceRoleArn: string | undefined;
+    /** Running Apache Airflow version. */
     airflowVersion: string | undefined;
+    /** Environment size class (e.g. `mw1.small`). */
     environmentClass: string | undefined;
+    /** ARN of the S3 bucket holding DAG code. */
     sourceBucketArn: string | undefined;
+    /** Relative S3 path to the DAGs folder. */
     dagS3Path: string | undefined;
+    /** Celery executor queue used by the environment's workers. */
     celeryExecutorQueue: string | undefined;
+    /** VPC endpoint service name for the Airflow metadata database. */
     databaseVpcEndpointService: string | undefined;
+    /** VPC endpoint service name for the Airflow web server. */
     webserverVpcEndpointService: string | undefined;
+    /** Tags on the environment (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

@@ -62,7 +62,9 @@ export interface Project extends Resource<
   "AWS.DataBrew.Project",
   ProjectProps,
   {
+    /** Name of the project. */
     projectName: string;
+    /** ARN of the project. */
     projectArn: string;
   },
   {},

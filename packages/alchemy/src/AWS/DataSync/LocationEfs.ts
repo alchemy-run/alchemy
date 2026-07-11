@@ -63,7 +63,9 @@ export interface LocationEfs extends Resource<
   "AWS.DataSync.LocationEfs",
   LocationEfsProps,
   {
+    /** ARN of the DataSync location. */
     locationArn: string;
+    /** URI of the location (`efs://…`). */
     locationUri: string;
   },
   {},
@@ -90,6 +92,21 @@ export interface LocationEfs extends Resource<
  *   securityGroupArns: [
  *     `arn:aws:ec2:${region}:${accountId}:security-group/${sgId}`,
  *   ],
+ * });
+ * ```
+ *
+ * @section Transferring Data
+ * @example Back up EFS to S3
+ * ```typescript
+ * const dest = yield* AWS.DataSync.LocationS3("Backups", {
+ *   s3BucketArn: bucket.bucketArn,
+ *   bucketAccessRoleArn: role.roleArn,
+ * });
+ *
+ * const task = yield* AWS.DataSync.Task("EfsBackup", {
+ *   sourceLocationArn: location.locationArn,
+ *   destinationLocationArn: dest.locationArn,
+ *   schedule: { ScheduleExpression: "cron(0 2 * * ? *)" },
  * });
  * ```
  */

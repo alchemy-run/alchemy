@@ -32,7 +32,29 @@ export type MetricSinkError =
  * failures, so a failed call surfaces directly on the sink's error channel
  * as the typed `PutMetricDataError` union.
  *
+ * Provide `CloudWatch.MetricSinkHttp` (which itself needs
+ * `CloudWatch.PutMetricDataHttp`) on the hosting Lambda Function:
+ * `Effect.provide(Layer.provideMerge(AWS.CloudWatch.MetricSinkHttp, AWS.CloudWatch.PutMetricDataHttp))`.
+ *
  * @binding
+ * @section Streaming Metrics
+ * @example Stream Datums into CloudWatch
+ * ```typescript
+ * // init — grants cloudwatch:PutMetricData; all datums publish under Namespace
+ * const sink = yield* AWS.CloudWatch.MetricSink({
+ *   Namespace: "MyApp/Payments",
+ * });
+ *
+ * // runtime — datums are packed into 1000-datum PutMetricData batches
+ * yield* Stream.fromIterable(
+ *   payments.map((payment) => ({
+ *     MetricName: "PaymentProcessed",
+ *     Dimensions: [{ Name: "Region", Value: payment.region }],
+ *     Value: payment.amount,
+ *     Unit: "Count",
+ *   }) satisfies AWS.CloudWatch.MetricSinkDatum),
+ * ).pipe(Stream.run(sink));
+ * ```
  */
 export interface MetricSink extends Binding.Service<
   MetricSink,

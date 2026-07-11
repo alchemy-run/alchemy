@@ -59,10 +59,15 @@ export interface Vehicle extends Resource<
   "AWS.IoTFleetWise.Vehicle",
   VehicleProps,
   {
+    /** The name of the vehicle (also the backing IoT thing name). */
     vehicleName: string;
+    /** The ARN of the vehicle. */
     vehicleArn: string;
+    /** The model manifest the vehicle conforms to. */
     modelManifestArn: string;
+    /** The decoder manifest the vehicle uses. */
     decoderManifestArn: string;
+    /** The static attributes stored on the vehicle. */
     attributes: Record<string, string>;
   },
   never,

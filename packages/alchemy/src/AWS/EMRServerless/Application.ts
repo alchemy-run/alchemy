@@ -107,11 +107,17 @@ export interface Application extends Resource<
   "AWS.EMRServerless.Application",
   ApplicationProps,
   {
+    /** The ID of the application. */
     applicationId: string;
+    /** The name of the application. */
     applicationName: string;
+    /** The ARN of the application. */
     applicationArn: string;
+    /** The application type (`SPARK` or `HIVE`). */
     type: string;
+    /** The EMR release label the application runs (e.g. `emr-7.5.0`). */
     releaseLabel: string;
+    /** The application state (e.g. `CREATED`, `STARTED`, `STOPPED`). */
     state?: string;
   },
   {},

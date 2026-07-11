@@ -11,13 +11,17 @@ const normalizeBasePath = (basePath: string | undefined) =>
   basePath === undefined || basePath === "" ? "(none)" : basePath;
 
 export interface BasePathMappingProps {
+  /** The custom domain name to map (e.g. `api.example.com`). */
   domainName: string;
+  /** Domain name ID, required for private custom domain names. */
   domainNameId?: string;
   /**
    * Base path segment; omit or empty string for root mapping (`(none)` in API Gateway).
    */
   basePath?: string;
+  /** ID of the REST API the path maps to. */
   restApiId: Input<string>;
+  /** Name of the API stage requests are routed to. */
   stage?: string;
 }
 

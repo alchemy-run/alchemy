@@ -82,8 +82,11 @@ export interface Ruleset extends Resource<
   "AWS.DataBrew.Ruleset",
   RulesetProps,
   {
+    /** Name of the ruleset. */
     rulesetName: string;
+    /** ARN of the ruleset. */
     rulesetArn: string;
+    /** ARN of the dataset the ruleset validates. */
     targetArn: string;
   },
   {},

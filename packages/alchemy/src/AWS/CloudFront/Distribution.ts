@@ -114,22 +114,69 @@ export interface DistributionOrigin {
 }
 
 export interface DistributionBehavior {
+  /**
+   * ID of the origin (or origin group) this behavior routes requests to.
+   */
   targetOriginId: string;
+  /**
+   * How viewers may connect (e.g. `redirect-to-https`, `https-only`).
+   */
   viewerProtocolPolicy?: cloudfront.ViewerProtocolPolicy;
+  /**
+   * HTTP methods CloudFront accepts and forwards to the origin.
+   */
   allowedMethods?: cloudfront.Method[];
+  /**
+   * HTTP methods whose responses CloudFront caches.
+   */
   cachedMethods?: cloudfront.Method[];
+  /**
+   * Whether CloudFront automatically compresses eligible responses.
+   */
   compress?: boolean;
+  /**
+   * Cache policy ID (a managed policy or a `CachePolicy`) controlling the
+   * cache key and TTLs.
+   */
   cachePolicyId?: string;
+  /**
+   * Origin request policy ID controlling which viewer values CloudFront
+   * forwards to the origin.
+   */
   originRequestPolicyId?: string;
+  /**
+   * Response headers policy ID applied to viewer responses.
+   */
   responseHeadersPolicyId?: string;
+  /**
+   * Legacy forwarded-values settings. Prefer `cachePolicyId` /
+   * `originRequestPolicyId` for new configurations.
+   */
   forwardedValues?: cloudfront.ForwardedValues;
+  /**
+   * Minimum time responses stay cached, e.g. `"1 hour"` (a bare number is
+   * milliseconds). Used with `forwardedValues`.
+   */
   minTtl?: Duration.Input;
+  /**
+   * Default time responses stay cached when the origin sends no caching
+   * headers.
+   */
   defaultTtl?: Duration.Input;
+  /**
+   * Maximum time responses stay cached.
+   */
   maxTtl?: Duration.Input;
+  /**
+   * CloudFront Functions to run on viewer request/response events.
+   */
   functionAssociations?: {
     functionArn: string;
     eventType: cloudfront.EventType;
   }[];
+  /**
+   * Lambda@Edge functions to run on viewer/origin request/response events.
+   */
   lambdaFunctionAssociations?: {
     lambdaFunctionArn: string;
     eventType: cloudfront.EventType;
@@ -164,9 +211,23 @@ export interface DistributionBehavior {
 }
 
 export interface DistributionViewerCertificate {
+  /**
+   * Serve HTTPS with the default `*.cloudfront.net` certificate (no custom
+   * domains).
+   */
   cloudFrontDefaultCertificate?: boolean;
+  /**
+   * ARN of an ACM certificate (must live in `us-east-1`) covering the
+   * distribution's aliases.
+   */
   acmCertificateArn?: string;
+  /**
+   * How CloudFront serves HTTPS to viewers (`sni-only` for modern clients).
+   */
   sslSupportMethod?: cloudfront.SSLSupportMethod;
+  /**
+   * Minimum TLS protocol version viewers must support.
+   */
   minimumProtocolVersion?: cloudfront.MinimumProtocolVersion;
   /**
    * Legacy IAM certificate ID.
@@ -399,6 +460,28 @@ export interface Distribution extends Resource<
  * hosted zone ID needed for Route 53 alias records.
  * @resource
  * @section Creating Distributions
+ * @example CDN in Front of an HTTP Origin
+ * ```typescript
+ * import * as AWS from "alchemy/AWS";
+ *
+ * const distribution = yield* AWS.CloudFront.Distribution("ApiCdn", {
+ *   origins: [
+ *     {
+ *       id: "api",
+ *       domainName: "abc123.lambda-url.us-west-2.on.aws",
+ *       customOriginConfig: { originProtocolPolicy: "https-only" },
+ *     },
+ *   ],
+ *   defaultCacheBehavior: {
+ *     targetOriginId: "api",
+ *     viewerProtocolPolicy: "redirect-to-https",
+ *     cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
+ *     originRequestPolicyId:
+ *       AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+ *   },
+ * });
+ * ```
+ *
  * @example Private S3 Origin
  * ```typescript
  * const distribution = yield* Distribution("WebsiteCdn", {
@@ -423,6 +506,20 @@ export interface Distribution extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Invalidating the Cache
+ * @example Purge Paths on Deploy
+ * ```typescript
+ * // declaratively, whenever `version` changes:
+ * yield* AWS.CloudFront.Invalidation("PurgeBlog", {
+ *   distributionId: distribution.distributionId,
+ *   paths: ["/blog/*"],
+ *   version: buildId,
+ * });
+ * ```
+ *
+ * To purge at runtime from a Lambda Function, bind
+ * `CloudFront.CreateInvalidation(distribution)` instead.
  */
 export const Distribution = Resource<Distribution>(
   "AWS.CloudFront.Distribution",

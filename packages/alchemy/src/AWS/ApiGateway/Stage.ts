@@ -22,6 +22,7 @@ export interface StageProps {
    * ID of the REST API. Usually derived from `restApi.restApiId`.
    */
   restApiId?: Input<string>;
+  /** Name of the stage (e.g. `prod`); forms the URL path segment. */
   stageName: string;
   /**
    * The `deploymentId` this stage points at. Pass `deployment.deploymentId`
@@ -29,19 +30,29 @@ export interface StageProps {
    * before creating the stage.
    */
   deploymentId: Input<string>;
+  /** Description of the stage. */
   description?: string;
+  /** Enable a dedicated cache cluster for the stage. */
   cacheClusterEnabled?: boolean;
+  /** Cache cluster size in GB (e.g. `"0.5"`). */
   cacheClusterSize?: ag.CacheClusterSize;
+  /** Stage variables available to integrations (e.g. `${stageVariables.foo}`). */
   variables?: { [key: string]: string | undefined };
+  /** Version of the associated API documentation to serve. */
   documentationVersion?: string;
+  /** Canary release settings for the stage. */
   canarySettings?: ag.CanarySettings;
+  /** Enable AWS X-Ray tracing for the stage. */
   tracingEnabled?: boolean;
   /**
    * Map of resource path pattern to method settings; keys use `{resourcePath}/{httpMethod}`.
    */
   methodSettings?: { [key: string]: ag.MethodSetting | undefined };
+  /** Access log destination ARN and log format for the stage. */
   accessLogSettings?: ag.AccessLogSettings;
+  /** ARN of an AWS WAF web ACL to associate with the stage. */
   webAclArn?: string;
+  /** User-defined tags for the stage. */
   tags?: Record<string, string>;
 }
 

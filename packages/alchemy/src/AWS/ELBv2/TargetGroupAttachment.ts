@@ -36,9 +36,13 @@ export interface TargetGroupAttachment extends Resource<
   "AWS.ELBv2.TargetGroupAttachment",
   TargetGroupAttachmentProps,
   {
+    /** The ARN of the target group the target is registered with. */
     targetGroupArn: TargetGroupArn;
+    /** The registered target: an instance ID, IP address, or Lambda/ALB ARN. */
     targetId: string;
+    /** The port the target receives traffic on, if applicable. */
     port: number | undefined;
+    /** The Availability Zone the target was registered in, if specified. */
     availabilityZone: string | undefined;
   },
   never,

@@ -6,6 +6,30 @@ import { isBindingHost } from "../Lambda/Function.ts";
 import { EncryptData, type EncryptDataRequest } from "./EncryptData.ts";
 import type { Key } from "./Key.ts";
 
+/**
+ * HTTP implementation of {@link EncryptData} — grants the host Function
+ * `payment-cryptography:EncryptData` on the key and calls the
+ * Payment Cryptography Data API at runtime.
+ * @example Provide on a Lambda Function
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const key = yield* PaymentCryptography.Key("DataKey", { ... });
+ *   const encrypt = yield* PaymentCryptography.EncryptData(key);
+ *
+ *   return {
+ *     fetch: Effect.gen(function* () {
+ *       const encrypted = yield* encrypt({
+ *         PlainText: plainTextHex,
+ *         EncryptionAttributes: {
+ *           Symmetric: { Mode: "CBC", InitializationVector: iv },
+ *         },
+ *       });
+ *       // ...
+ *     }),
+ *   };
+ * }).pipe(Effect.provide(PaymentCryptography.EncryptDataHttp))
+ * ```
+ */
 export const EncryptDataHttp = Layer.effect(
   EncryptData,
   Effect.gen(function* () {

@@ -41,11 +41,29 @@ export interface Dataset extends Resource<
   "AWS.Personalize.Dataset",
   DatasetProps,
   {
+    /**
+     * ARN of the dataset.
+     */
     datasetArn: string;
+    /**
+     * Name of the dataset.
+     */
     name: string;
+    /**
+     * Dataset type (`Interactions`, `Items`, `Users`, or `Actions`).
+     */
     datasetType: string;
+    /**
+     * Dataset status (e.g. `ACTIVE`, `CREATE PENDING`).
+     */
     status: string;
+    /**
+     * ARN of the schema the dataset conforms to.
+     */
     schemaArn: string;
+    /**
+     * ARN of the dataset group the dataset belongs to.
+     */
     datasetGroupArn: string;
   },
   never,

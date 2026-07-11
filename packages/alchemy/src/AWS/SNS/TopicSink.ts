@@ -26,7 +26,23 @@ export type TopicSinkError =
  * permanent and dropped. Exhausting retries fails the sink with a typed
  * `BatchRetryExhaustedError` carrying the stranded entries.
  *
+ * The binding grants the host function `sns:Publish` on the topic. Provide
+ * the `TopicSinkHttp` layer (which itself needs `PublishBatchHttp`) on the
+ * Function to implement the binding.
  * @binding
+ * @section Streaming Messages into a Topic
+ * @example Run a Stream into a Topic
+ * ```typescript
+ * // init (provide SNS.TopicSinkHttp + SNS.PublishBatchHttp on the Function)
+ * const sink = yield* SNS.TopicSink(topic);
+ *
+ * // runtime: batching, size limits, and transient-failure retry are handled
+ * // by the sink — each element is a PublishBatchRequestEntry minus `Id`.
+ * yield* Stream.fromIterable(messages).pipe(
+ *   Stream.map((message) => ({ Message: message })),
+ *   Stream.run(sink),
+ * );
+ * ```
  */
 export interface TopicSink extends Binding.Service<
   TopicSink,

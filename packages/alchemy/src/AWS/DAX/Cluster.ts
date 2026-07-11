@@ -102,20 +102,35 @@ export interface Cluster extends Resource<
   "AWS.DAX.Cluster",
   ClusterProps,
   {
+    /** Name of the DAX cluster. */
     clusterName: string;
+    /** ARN of the DAX cluster. */
     clusterArn: string;
+    /** Current cluster status (e.g. `available`, `creating`). */
     status: string;
+    /** Compute/memory node type of the cluster's nodes. */
     nodeType: string;
+    /** Total number of nodes in the cluster. */
     totalNodes: number | undefined;
+    /** Number of nodes currently in `available` status. */
     activeNodes: number | undefined;
+    /** Hostname of the cluster discovery endpoint. */
     discoveryEndpointAddress: string | undefined;
+    /** Port of the cluster discovery endpoint. */
     discoveryEndpointPort: number | undefined;
+    /** Full `dax://` (or `daxs://` for TLS) discovery endpoint URL clients connect to. */
     discoveryEndpointUrl: string | undefined;
+    /** Name of the subnet group the cluster's nodes are placed into. */
     subnetGroupName: string | undefined;
+    /** ARN of the IAM role DAX assumes to reach DynamoDB. */
     iamRoleArn: string | undefined;
+    /** Name of the parameter group attached to the cluster. */
     parameterGroupName: string | undefined;
+    /** Security group IDs attached to the cluster's nodes. */
     securityGroupIds: string[];
+    /** Endpoint encryption in transit (`NONE` or `TLS`). */
     clusterEndpointEncryptionType: string | undefined;
+    /** Current tags on the cluster. */
     tags: Record<string, string>;
   },
   never,

@@ -40,9 +40,21 @@ export interface Capability extends Resource<
   "AWS.B2BI.Capability",
   CapabilityProps,
   {
+    /**
+     * Service-assigned unique ID of the capability.
+     */
     capabilityId: string;
+    /**
+     * ARN of the capability.
+     */
     capabilityArn: string;
+    /**
+     * Name of the capability.
+     */
     name: string;
+    /**
+     * Capability type (`edi`).
+     */
     type: string;
   },
   never,

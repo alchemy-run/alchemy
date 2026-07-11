@@ -30,6 +30,25 @@ export type DeliveryStreamSinkError =
  * `BatchRetryExhaustedError` carrying the stranded records.
  *
  * @binding
+ * @section Streaming Records
+ * @example Run a Stream of Records into the Delivery Stream
+ * ```typescript
+ * // init — bind the sink (provide AWS.Firehose.DeliveryStreamSinkHttp on the Function)
+ * const sink = yield* AWS.Firehose.DeliveryStreamSink(deliveryStream);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime — stream newline-framed records into Firehose
+ *     yield* Stream.fromIterable(lines).pipe(
+ *       Stream.map((line) => ({
+ *         Data: new TextEncoder().encode(`${line}\n`),
+ *       })),
+ *       Stream.run(sink),
+ *     );
+ *     return HttpServerResponse.json({ ok: true });
+ *   }),
+ * };
+ * ```
  */
 export interface DeliveryStreamSink extends Binding.Service<
   DeliveryStreamSink,

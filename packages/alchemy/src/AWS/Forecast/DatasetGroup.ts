@@ -42,9 +42,13 @@ export interface DatasetGroup extends Resource<
   "AWS.Forecast.DatasetGroup",
   DatasetGroupProps,
   {
+    /** The ARN of the dataset group. */
     datasetGroupArn: string;
+    /** The name of the dataset group. */
     datasetGroupName: string;
+    /** The forecasting domain of the group, e.g. `RETAIL` or `CUSTOM`. */
     domain: string;
+    /** The dataset group status, e.g. `ACTIVE`. */
     status: string;
   },
   never,

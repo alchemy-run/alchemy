@@ -52,6 +52,43 @@ export class AthenaQueryFailed extends Data.TaggedError("AthenaQueryFailed")<{
  * const result = yield* runQuery({ QueryString: "SELECT 1" });
  * // result.rows[0] === ["_col0"] (header), result.rows[1] === ["1"]
  * ```
+ *
+ * @example Bind a WorkGroup to a Lambda Function
+ * ```typescript
+ * import * as Athena from "alchemy/AWS/Athena";
+ * import * as Lambda from "alchemy/AWS/Lambda";
+ * import * as S3 from "alchemy/AWS/S3";
+ * import * as Output from "alchemy/Output";
+ *
+ * export class QueryFunction extends Lambda.Function<Lambda.Function>()(
+ *   "QueryFunction",
+ * ) {}
+ *
+ * export default QueryFunction.make(
+ *   { main: import.meta.url, url: true, timeout: Duration.seconds(60) },
+ *   Effect.gen(function* () {
+ *     const bucket = yield* S3.Bucket("Results", { forceDestroy: true });
+ *     const workGroup = yield* Athena.WorkGroup("Analytics", {
+ *       outputLocation: Output.interpolate`s3://${bucket.bucketName}/results/`,
+ *       enforceWorkGroupConfiguration: true,
+ *     });
+ *
+ *     // grants athena:StartQueryExecution/GetQueryExecution/GetQueryResults
+ *     // on the workgroup, S3 access on the results bucket, and Glue catalog
+ *     // reads for table-backed queries
+ *     const runQuery = yield* Athena.Query(workGroup, bucket);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const result = yield* runQuery({
+ *           QueryString: "SELECT COUNT(*) AS c FROM my_db.people",
+ *         });
+ *         return yield* HttpServerResponse.json({ rows: result.rows });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Athena.QueryHttp)),
+ * );
+ * ```
  */
 export interface Query extends Binding.Service<
   Query,

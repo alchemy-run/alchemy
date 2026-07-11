@@ -90,7 +90,13 @@ export interface CustomAction extends Resource<
   "AWS.Chatbot.CustomAction",
   CustomActionProps,
   {
+    /**
+     * Name of the custom action.
+     */
     actionName: string;
+    /**
+     * The ARN of the custom action.
+     */
     customActionArn: string;
   },
   never,

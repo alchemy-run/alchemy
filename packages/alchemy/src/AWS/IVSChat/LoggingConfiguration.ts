@@ -58,9 +58,21 @@ export interface LoggingConfiguration extends Resource<
   "AWS.IVSChat.LoggingConfiguration",
   LoggingConfigurationProps,
   {
+    /**
+     * The logging configuration's physical name.
+     */
     loggingConfigurationName: string;
+    /**
+     * ARN of the logging configuration.
+     */
     loggingConfigurationArn: string;
+    /**
+     * Unique ID of the logging configuration.
+     */
     loggingConfigurationId: string;
+    /**
+     * Lifecycle state reported by IVS Chat (e.g. `ACTIVE`).
+     */
     state: string | undefined;
   },
   never,

@@ -71,29 +71,53 @@ export interface DBInstance extends Resource<
   "AWS.DocDB.DBInstance",
   DBInstanceProps,
   {
+    /** The instance identifier (unique per account/region). */
     dbInstanceIdentifier: string;
+    /** The ARN of the instance. */
     dbInstanceArn: string;
+    /** The cluster this instance belongs to. */
     dbClusterIdentifier: string | undefined;
+    /** The instance endpoint hostname. */
     endpointAddress: string | undefined;
+    /** The port the instance accepts connections on. */
     endpointPort: number | undefined;
+    /** The compute class of the instance, e.g. `db.t3.medium`. */
     dbInstanceClass: string | undefined;
+    /** The database engine (`docdb`). */
     engine: string | undefined;
+    /** The engine version running on the instance. */
     engineVersion: string | undefined;
+    /** The current status of the instance, e.g. `available`. */
     status: string | undefined;
+    /** The failover promotion tier of the instance. */
     promotionTier: number | undefined;
+    /** Whether the instance is publicly accessible. */
     publiclyAccessible: boolean | undefined;
+    /** The DB subnet group the instance is deployed into. */
     dbSubnetGroupName: string | undefined;
+    /** The Availability Zone the instance runs in. */
     availabilityZone: string | undefined;
+    /** The weekly window during which maintenance can occur. */
     preferredMaintenanceWindow: string | undefined;
+    /** Number of days automated backups are retained (cluster-managed). */
     backupRetentionPeriod: number | undefined;
+    /** The KMS key used for storage encryption. */
     kmsKeyId: string | undefined;
+    /** Whether storage is encrypted at rest. */
     storageEncrypted: boolean | undefined;
+    /** The CA certificate identifier used by the instance. */
     caCertificateIdentifier: string | undefined;
+    /** Whether Performance Insights is enabled. */
     performanceInsightsEnabled: boolean | undefined;
+    /** The log types exported to CloudWatch Logs. */
     enabledCloudwatchLogsExports: string[];
+    /** The immutable region-unique resource ID of the instance. */
     dbiResourceId: string | undefined;
+    /** Whether minor engine upgrades apply automatically. */
     autoMinorVersionUpgrade: boolean | undefined;
+    /** Whether instance tags are copied to snapshots. */
     copyTagsToSnapshot: boolean | undefined;
+    /** The tags attached to the instance. */
     tags: Record<string, string>;
   },
   never,

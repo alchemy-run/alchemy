@@ -65,18 +65,31 @@ export interface Graph extends Resource<
   "AWS.NeptuneGraph.Graph",
   GraphProps,
   {
+    /** Server-assigned unique id of the graph (e.g. `g-abc123`). */
     graphId: string;
+    /** Name of the graph. */
     graphName: string;
+    /** ARN of the graph. */
     graphArn: string;
+    /** HTTPS query endpoint of the graph. */
     endpoint: string | undefined;
+    /** Current lifecycle status (e.g. `CREATING`, `AVAILABLE`). */
     status: string | undefined;
+    /** Provisioned memory in m-NCUs. */
     provisionedMemory: number | undefined;
+    /** Whether the endpoint is reachable from the public internet. */
     publicConnectivity: boolean | undefined;
+    /** Number of read replicas. */
     replicaCount: number | undefined;
+    /** KMS key encrypting the graph, if customer-managed. */
     kmsKeyIdentifier: string | undefined;
+    /** Vector search embedding dimension, if enabled. */
     vectorSearchDimension: number | undefined;
+    /** Whether deletion protection is enabled. */
     deletionProtection: boolean | undefined;
+    /** Creation time of the graph (ISO 8601). */
     createTime: string | undefined;
+    /** Tags on the graph (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

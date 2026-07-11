@@ -89,10 +89,25 @@ export interface EventDestination extends Resource<
   "AWS.PinpointSMSVoiceV2.EventDestination",
   EventDestinationProps,
   {
+    /**
+     * Configuration set the destination belongs to.
+     */
     configurationSetName: string;
+    /**
+     * ARN of the owning configuration set.
+     */
     configurationSetArn: string;
+    /**
+     * Name of the event destination.
+     */
     eventDestinationName: string;
+    /**
+     * Whether event delivery is enabled.
+     */
     enabled: boolean;
+    /**
+     * Event types routed to the destination (e.g. `ALL`, `TEXT_DELIVERED`).
+     */
     matchingEventTypes: string[];
   },
   never,

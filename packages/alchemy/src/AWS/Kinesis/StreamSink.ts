@@ -23,7 +23,22 @@ export type StreamSinkError =
  * a bounded schedule; exhausting retries fails the sink with a typed
  * `BatchRetryExhaustedError` carrying the stranded records.
  *
+ * Provide the implementation with `Effect.provide(AWS.Kinesis.StreamSinkHttp)`.
  * @binding
+ * @section Writing Streams of Records
+ * @example Run an Effect Stream into a Kinesis Stream
+ * ```typescript
+ * // init — bind the sink to the stream
+ * const sink = yield* AWS.Kinesis.StreamSink(stream);
+ *
+ * // runtime — batches into PutRecords calls of up to 500 records / 5 MiB
+ * yield* Stream.fromIterable(
+ *   orders.map((order) => ({
+ *     PartitionKey: order.id,
+ *     Data: new TextEncoder().encode(JSON.stringify(order)),
+ *   })),
+ * ).pipe(Stream.run(sink));
+ * ```
  */
 export interface StreamSink extends Binding.Service<
   StreamSink,

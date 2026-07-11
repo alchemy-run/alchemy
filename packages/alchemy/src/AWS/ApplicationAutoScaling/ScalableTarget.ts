@@ -61,13 +61,38 @@ export interface ScalableTarget extends Resource<
   "AWS.ApplicationAutoScaling.ScalableTarget",
   ScalableTargetProps,
   {
+    /**
+     * Namespace of the AWS service that provides the resource.
+     */
     serviceNamespace: aas.ServiceNamespace;
+    /**
+     * Identifier of the scaled resource.
+     */
     resourceId: string;
+    /**
+     * Scalable dimension being managed.
+     */
     scalableDimension: aas.ScalableDimension;
+    /**
+     * ARN of the scalable target.
+     */
     scalableTargetArn: string;
+    /**
+     * Minimum capacity Application Auto Scaling may scale in to.
+     */
     minCapacity: number;
+    /**
+     * Maximum capacity Application Auto Scaling may scale out to.
+     */
     maxCapacity: number;
+    /**
+     * IAM role Application Auto Scaling uses to modify the target
+     * (service-linked role when none was supplied).
+     */
     roleArn: string;
+    /**
+     * Suspension state of dynamic and scheduled scaling activities.
+     */
     suspendedState: aas.SuspendedState | undefined;
   },
   never,

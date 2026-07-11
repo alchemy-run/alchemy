@@ -30,8 +30,11 @@ export interface ParameterGroup extends Resource<
   "AWS.DAX.ParameterGroup",
   ParameterGroupProps,
   {
+    /** Name of the parameter group. */
     parameterGroupName: string;
+    /** Description of the parameter group. */
     description: string | undefined;
+    /** Current non-default parameter values, keyed by parameter name. */
     parameters: Record<string, string>;
   },
   never,

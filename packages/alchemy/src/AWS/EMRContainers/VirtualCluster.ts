@@ -67,10 +67,15 @@ export interface VirtualCluster extends Resource<
   "AWS.EMRContainers.VirtualCluster",
   VirtualClusterProps,
   {
+    /** The ID of the virtual cluster. */
     virtualClusterId: string;
+    /** The name of the virtual cluster. */
     virtualClusterName: string;
+    /** The ARN of the virtual cluster. */
     virtualClusterArn: string;
+    /** The name of the EKS cluster backing the virtual cluster. */
     eksClusterName: string;
+    /** The virtual cluster state (e.g. `RUNNING`, `TERMINATING`). */
     state?: string;
   },
   {},

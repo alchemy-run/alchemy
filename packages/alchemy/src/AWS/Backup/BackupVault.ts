@@ -47,7 +47,13 @@ export interface BackupVault extends Resource<
   "AWS.Backup.BackupVault",
   BackupVaultProps,
   {
+    /**
+     * Name of the backup vault.
+     */
     backupVaultName: string;
+    /**
+     * ARN of the backup vault.
+     */
     backupVaultArn: string;
   },
   never,

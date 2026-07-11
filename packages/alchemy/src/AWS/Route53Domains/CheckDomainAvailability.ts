@@ -17,6 +17,8 @@ export interface CheckDomainAvailabilityRequest
  *
  * Note that if the returned `Availability` is `PENDING` you must submit
  * another request to determine the availability of the domain name.
+ * Provide the implementation with
+ * `Effect.provide(AWS.Route53Domains.CheckDomainAvailabilityHttp)`.
  *
  * @binding
  * @section Checking Domain Availability

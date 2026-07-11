@@ -75,8 +75,17 @@ export interface BackupSelection extends Resource<
   "AWS.Backup.BackupSelection",
   BackupSelectionProps,
   {
+    /**
+     * Service-assigned unique ID of the selection.
+     */
     selectionId: string;
+    /**
+     * Name of the selection.
+     */
     selectionName: string;
+    /**
+     * ID of the backup plan the selection is attached to.
+     */
     backupPlanId: string;
   },
   never,

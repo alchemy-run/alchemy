@@ -254,7 +254,9 @@ export interface Project extends Resource<
   "AWS.CodeBuild.Project",
   ProjectProps,
   {
+    /** Physical name of the build project. */
     projectName: string;
+    /** ARN of the build project. */
     projectArn: string;
   },
   never,

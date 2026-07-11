@@ -25,6 +25,28 @@ export interface GetLogEventsRequest extends Omit<
  *   startFromHead: true,
  * });
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Provide the GetLogEventsHttp layer on the Function's init Effect;
+ * // combine with Layer.mergeAll when using several Logs bindings.
+ * export default TailFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const logGroup = yield* AWS.Logs.LogGroup("AppLogs", {});
+ *     const getLogEvents = yield* AWS.Logs.GetLogEvents(logGroup);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { events } = yield* getLogEvents({
+ *           logStreamName: "my-stream",
+ *           startFromHead: true,
+ *         });
+ *         return HttpServerResponse.json({ events });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.Logs.GetLogEventsHttp)),
+ * );
+ * ```
  */
 export interface GetLogEvents extends Binding.Service<
   GetLogEvents,

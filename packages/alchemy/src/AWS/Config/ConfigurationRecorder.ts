@@ -121,7 +121,9 @@ export interface ConfigurationRecorder extends Resource<
   "AWS.Config.ConfigurationRecorder",
   ConfigurationRecorderProps,
   {
+    /** Physical name of the configuration recorder. */
     recorderName: string;
+    /** ARN of the configuration recorder. */
     recorderArn: string;
   },
   never,

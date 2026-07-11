@@ -126,39 +126,70 @@ export interface DBCluster extends Resource<
   "AWS.Neptune.DBCluster",
   DBClusterProps,
   {
+    /** Identifier of the cluster. */
     dbClusterIdentifier: string;
+    /** ARN of the cluster. */
     dbClusterArn: string;
+    /** Name of the subnet group the cluster is placed in. */
     dbSubnetGroupName: string | undefined;
+    /** Name of the attached cluster parameter group. */
     dbClusterParameterGroupName: string | undefined;
+    /** Writer (cluster) endpoint host name. */
     endpoint: string | undefined;
+    /** Load-balanced reader endpoint host name. */
     readerEndpoint: string | undefined;
+    /** Port the cluster listens on (default 8182). */
     port: number | undefined;
+    /** Database engine (`neptune`). */
     engine: string;
+    /** Running engine version. */
     engineVersion: string | undefined;
+    /** Current lifecycle status (e.g. `creating`, `available`). */
     status: string | undefined;
+    /** IDs of the VPC security groups attached to the cluster. */
     vpcSecurityGroupIds: string[];
+    /** Automated backup retention period, in days. */
     backupRetentionPeriod: number | undefined;
+    /** Daily window during which automated backups are taken. */
     preferredBackupWindow: string | undefined;
+    /** Weekly window during which maintenance may occur. */
     preferredMaintenanceWindow: string | undefined;
+    /** Whether storage is encrypted at rest. */
     storageEncrypted: boolean | undefined;
+    /** KMS key encrypting the cluster's storage. */
     kmsKeyId: string | undefined;
+    /** Whether deletion protection is enabled. */
     deletionProtection: boolean | undefined;
+    /** Whether IAM database authentication is enabled. */
     iamDatabaseAuthenticationEnabled: boolean | undefined;
+    /** Serverless v2 (NCU) scaling range, if configured. */
     serverlessV2ScalingConfiguration:
       | { minCapacity: number | undefined; maxCapacity: number | undefined }
       | undefined;
+    /** Instances that are members of the cluster. */
     dbClusterMembers: Array<{
+      /** Identifier of the member instance. */
       dbInstanceIdentifier: string | undefined;
+      /** Whether the member is the cluster's writer. */
       isClusterWriter: boolean | undefined;
+      /** Failover promotion priority of the member. */
       promotionTier: number | undefined;
     }>;
+    /** Immutable, region-unique identifier of the cluster. */
     dbClusterResourceId: string | undefined;
+    /** Route 53 hosted zone id of the cluster endpoints. */
     hostedZoneId: string | undefined;
+    /** Whether the cluster has instances in multiple Availability Zones. */
     multiAZ: boolean | undefined;
+    /** Log types exported to CloudWatch Logs (e.g. `audit`). */
     enabledCloudwatchLogsExports: string[];
+    /** Creation time of the cluster (ISO 8601). */
     clusterCreateTime: string | undefined;
+    /** Storage type (`standard` or `iopt1`). */
     storageType: string | undefined;
+    /** Whether cluster tags are copied to snapshots. */
     copyTagsToSnapshot: boolean | undefined;
+    /** Tags on the cluster (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

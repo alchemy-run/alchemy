@@ -55,9 +55,21 @@ export interface BrowserCustom extends Resource<
   "AWS.BedrockAgentCore.BrowserCustom",
   BrowserCustomProps,
   {
+    /**
+     * The unique identifier of the browser.
+     */
     browserId: string;
+    /**
+     * The ARN of the browser.
+     */
     browserArn: string;
+    /**
+     * Name of the browser.
+     */
     name: string;
+    /**
+     * Current status of the browser (e.g. `READY`).
+     */
     status: string;
   }
 > {}

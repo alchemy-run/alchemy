@@ -111,9 +111,22 @@ export interface StateMachine extends Resource<
   "AWS.StepFunctions.StateMachine",
   StateMachineProps,
   {
+    /**
+     * Physical name of the state machine.
+     */
     stateMachineName: string;
+    /**
+     * ARN of the state machine — pass it to `StartExecution` or reference it
+     * from other workflows.
+     */
     stateMachineArn: string;
+    /**
+     * Workflow type (`STANDARD` or `EXPRESS`).
+     */
     type: StateMachineType;
+    /**
+     * ARN of the IAM execution role the workflow assumes.
+     */
     roleArn: string;
     /**
      * Name of the auto-created execution role. `undefined` when an explicit
@@ -122,6 +135,10 @@ export interface StateMachine extends Resource<
     roleName: string | undefined;
   },
   {
+    /**
+     * IAM policy statements bindings attach to the auto-created execution
+     * role (e.g. service-integration permissions collected by `fromProgram`).
+     */
     policyStatements: PolicyStatement[];
   },
   Providers

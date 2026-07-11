@@ -17,7 +17,9 @@ export interface GetDomainDetailRequest
  * the function runs.
  *
  * Requesting detail for a domain that is not registered in the current
- * account fails with a typed `DomainNotFound` error.
+ * account fails with a typed `DomainNotFound` error. Provide the
+ * implementation with
+ * `Effect.provide(AWS.Route53Domains.GetDomainDetailHttp)`.
  *
  * @binding
  * @section Reading Domain Details

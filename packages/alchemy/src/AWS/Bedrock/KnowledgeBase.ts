@@ -60,9 +60,22 @@ export interface KnowledgeBase extends Resource<
   "AWS.Bedrock.KnowledgeBase",
   KnowledgeBaseProps,
   {
+    /**
+     * The unique identifier of the knowledge base.
+     */
     knowledgeBaseId: string;
+    /**
+     * The ARN of the knowledge base.
+     */
     knowledgeBaseArn: string;
+    /**
+     * Name of the knowledge base.
+     */
     name: string;
+    /**
+     * The ARN of the execution role the knowledge base assumes to access the
+     * embedding model and vector store.
+     */
     roleArn: string;
   }
 > {}

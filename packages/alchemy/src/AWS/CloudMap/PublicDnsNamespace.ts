@@ -45,9 +45,21 @@ export interface PublicDnsNamespace extends Resource<
   "AWS.CloudMap.PublicDnsNamespace",
   PublicDnsNamespaceProps,
   {
+    /**
+     * The unique identifier of the namespace.
+     */
     namespaceId: string;
+    /**
+     * The ARN of the namespace.
+     */
     namespaceArn: string;
+    /**
+     * Name of the namespace (the public DNS domain).
+     */
     namespaceName: string;
+    /**
+     * The public Route 53 hosted zone Cloud Map created for the namespace.
+     */
     hostedZoneId: string | undefined;
   },
   {},

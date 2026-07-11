@@ -35,15 +35,25 @@ export interface ServiceSpecificCredential extends Resource<
   "AWS.IAM.ServiceSpecificCredential",
   ServiceSpecificCredentialProps,
   {
+    /** The IAM user the credential belongs to. */
     userName: string;
+    /** The AWS service the credential is scoped to (e.g. `codecommit.amazonaws.com`). */
     serviceName: string;
+    /** The unique ID of the credential. */
     serviceSpecificCredentialId: string;
+    /** Whether the credential is `Active` or `Inactive`. */
     status: iam.StatusType;
+    /** When the credential was created. */
     createDate: Date | undefined;
+    /** When the credential expires, if an age was configured. */
     expirationDate: Date | undefined;
+    /** The generated service-specific user name. */
     serviceUserName: string | undefined;
+    /** The generated credential alias, if the service issues one. */
     serviceCredentialAlias: string | undefined;
+    /** The generated password. AWS only returns it at creation; later reads preserve the originally stored redacted value. */
     servicePassword: Redacted.Redacted<string> | undefined;
+    /** The generated secret. AWS only returns it at creation; later reads preserve the originally stored redacted value. */
     serviceCredentialSecret: Redacted.Redacted<string> | undefined;
   },
   never,

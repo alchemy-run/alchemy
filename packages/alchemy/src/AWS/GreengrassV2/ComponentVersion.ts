@@ -31,8 +31,11 @@ export interface ComponentVersion extends Resource<
   "AWS.GreengrassV2.ComponentVersion",
   ComponentVersionProps,
   {
+    /** The ARN of this component version. */
     arn: string;
+    /** The name of the component. */
     componentName: string;
+    /** The semantic version of the component. */
     componentVersion: string;
   },
   never,

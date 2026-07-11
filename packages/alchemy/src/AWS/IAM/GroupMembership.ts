@@ -22,7 +22,9 @@ export interface GroupMembership extends Resource<
   "AWS.IAM.GroupMembership",
   GroupMembershipProps,
   {
+    /** The group whose membership is managed. */
     groupName: string;
+    /** The user names currently in the group. */
     userNames: string[];
   },
   never,

@@ -161,7 +161,9 @@ export interface Dataset extends Resource<
   "AWS.DataBrew.Dataset",
   DatasetProps,
   {
+    /** Name of the dataset. */
     datasetName: string;
+    /** ARN of the dataset. */
     datasetArn: string;
   },
   {},

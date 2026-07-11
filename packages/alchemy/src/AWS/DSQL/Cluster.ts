@@ -34,8 +34,11 @@ export interface Cluster extends Resource<
   "AWS.DSQL.Cluster",
   ClusterProps,
   {
+    /** The unique cluster identifier assigned by DSQL. */
     clusterId: string;
+    /** The ARN of the cluster. */
     clusterArn: string;
+    /** The current status of the cluster, e.g. `ACTIVE`. */
     status: string;
     /**
      * The public cluster endpoint hostname, e.g.
@@ -43,6 +46,7 @@ export interface Cluster extends Resource<
      * using an IAM-generated auth token as the password.
      */
     endpoint: string;
+    /** Whether deletion protection is enabled on the cluster. */
     deletionProtectionEnabled: boolean;
   },
   never,

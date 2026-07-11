@@ -147,8 +147,11 @@ export interface ConfigRule extends Resource<
   "AWS.Config.ConfigRule",
   ConfigRuleProps,
   {
+    /** Physical name of the config rule. */
     configRuleName: string;
+    /** ARN of the config rule. */
     configRuleArn: string;
+    /** Unique AWS-assigned rule ID. */
     configRuleId: string;
   },
   never,

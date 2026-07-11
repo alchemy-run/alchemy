@@ -83,11 +83,29 @@ export interface MicrosoftTeamsChannelConfiguration extends Resource<
   "AWS.Chatbot.MicrosoftTeamsChannelConfiguration",
   MicrosoftTeamsChannelConfigurationProps,
   {
+    /**
+     * Name of the channel configuration.
+     */
     configurationName: string;
+    /**
+     * The ARN of the channel configuration.
+     */
     chatConfigurationArn: string;
+    /**
+     * The Microsoft Teams team ID.
+     */
     teamId: string;
+    /**
+     * The Microsoft Entra (Azure AD) tenant ID.
+     */
     tenantId: string;
+    /**
+     * The Microsoft Teams channel ID.
+     */
     teamsChannelId: string;
+    /**
+     * Current state of the configuration (e.g. `ENABLED`).
+     */
     state: string | undefined;
   },
   never,

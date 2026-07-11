@@ -58,6 +58,18 @@ export interface ThingType extends Resource<
  *   searchableAttributes: ["location", "model"],
  * });
  * ```
+ *
+ * @example Create a Thing of this Type
+ * ```typescript
+ * const thingType = yield* ThingType("sensor-type", {
+ *   searchableAttributes: ["location"],
+ * });
+ *
+ * const thing = yield* Thing("sensor", {
+ *   thingTypeName: thingType.thingTypeName,
+ *   attributes: { location: "warehouse-a" },
+ * });
+ * ```
  */
 export const ThingType = Resource<ThingType>("AWS.IoT.ThingType");
 

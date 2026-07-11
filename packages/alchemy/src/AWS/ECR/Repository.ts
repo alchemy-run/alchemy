@@ -57,13 +57,21 @@ export interface Repository extends Resource<
   "AWS.ECR.Repository",
   RepositoryProps,
   {
+    /** The name of the repository. */
     repositoryName: RepositoryName;
+    /** The ARN of the repository. */
     repositoryArn: RepositoryArn;
+    /** The URI used to push/pull images, e.g. `<account>.dkr.ecr.<region>.amazonaws.com/<name>`. */
     repositoryUri: RepositoryUri;
+    /** The AWS account ID of the registry. */
     registryId: string;
+    /** Whether image tags are `MUTABLE` or `IMMUTABLE`. */
     imageTagMutability: ecr.ImageTagMutability;
+    /** The JSON lifecycle policy applied to the repository, if any. */
     lifecyclePolicyText?: string;
+    /** The JSON repository permissions policy, if any. */
     policy?: string;
+    /** The tags attached to the repository. */
     tags: Record<string, string>;
   },
   never,

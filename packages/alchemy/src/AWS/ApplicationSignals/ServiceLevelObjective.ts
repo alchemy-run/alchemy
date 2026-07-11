@@ -68,8 +68,17 @@ export interface ServiceLevelObjective extends Resource<
   "AWS.ApplicationSignals.ServiceLevelObjective",
   ServiceLevelObjectiveProps,
   {
+    /**
+     * Name of the service level objective.
+     */
     sloName: string;
+    /**
+     * ARN of the service level objective.
+     */
     sloArn: string;
+    /**
+     * How the SLO is evaluated (`PeriodBased` or `RequestBased`).
+     */
     evaluationType: appsignals.EvaluationType | undefined;
   },
   never,

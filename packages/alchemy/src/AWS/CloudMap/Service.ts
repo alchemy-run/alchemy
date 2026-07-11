@@ -96,10 +96,25 @@ export interface Service extends Resource<
   "AWS.CloudMap.Service",
   ServiceProps,
   {
+    /**
+     * The unique identifier of the service.
+     */
     serviceId: string;
+    /**
+     * The ARN of the service.
+     */
     serviceArn: string;
+    /**
+     * Name of the service.
+     */
     serviceName: string;
+    /**
+     * The namespace the service belongs to.
+     */
     namespaceId: string;
+    /**
+     * Name of the namespace the service belongs to.
+     */
     namespaceName: string;
   },
   {},

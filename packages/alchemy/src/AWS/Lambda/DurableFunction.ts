@@ -392,7 +392,14 @@ const composeDurableImpl = (
     const sendCallbackHeartbeat =
       yield* Lambda.sendDurableExecutionCallbackHeartbeat;
 
-    const FunctionName = yield* host.functionName;
+    // Capture the function-name Output WITHOUT resolving it. This is a
+    // self-reference — `host` is the very Function this wrapper's init is
+    // building — and `functionName`'s Output source only registers during
+    // that function's own reconcile. Yielding it here (init/plan time) would
+    // block forever (the reconcile that produces it waits on this init to
+    // finish). Resolve it lazily inside the runtime callables instead, the
+    // same posture as `InvokeFunctionHttp`.
+    const FunctionName = host.functionName;
 
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       // Self-binding: the statements land on this function's own execution
@@ -447,7 +454,10 @@ const composeDurableImpl = (
       name,
       start: (options) =>
         Effect.gen(function* () {
-          const functionName = yield* FunctionName;
+          // `FunctionName` is the host's own unresolved Output (captured raw at
+          // init to avoid the plan-time self-reference deadlock). Resolve both
+          // stages — Output → Accessor → string — lazily at runtime.
+          const functionName = yield* yield* FunctionName;
           const response = yield* invoke({
             FunctionName: functionName,
             InvocationType: "Event",
@@ -464,7 +474,7 @@ const composeDurableImpl = (
         getDurableExecution({ DurableExecutionArn: executionArn }),
       list: (options) =>
         Effect.gen(function* () {
-          const functionName = yield* FunctionName;
+          const functionName = yield* yield* FunctionName;
           return yield* listDurableExecutionsByFunction({
             FunctionName: functionName,
             DurableExecutionName: options?.name,

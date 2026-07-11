@@ -55,11 +55,17 @@ export interface Configuration extends Resource<
   "AWS.MQ.Configuration",
   ConfigurationProps,
   {
+    /** Server-assigned unique id of the configuration (e.g. `c-1234...`). */
     configurationId: string;
+    /** ARN of the configuration. */
     configurationArn: string;
+    /** Name of the configuration. */
     configurationName: string;
+    /** Latest published revision number. */
     configurationRevision: number;
+    /** Broker engine the configuration targets (`ACTIVEMQ` or `RABBITMQ`). */
     engineType: string;
+    /** Engine version the configuration targets. */
     engineVersion: string | undefined;
   },
   never,

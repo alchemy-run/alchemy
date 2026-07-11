@@ -53,12 +53,33 @@ export interface Service extends Resource<
   "AWS.VpcLattice.Service",
   ServiceProps,
   {
+    /**
+     * Service-assigned unique ID of the service.
+     */
     serviceId: string;
+    /**
+     * ARN of the service.
+     */
     serviceArn: string;
+    /**
+     * Physical name of the service.
+     */
     name: string;
+    /**
+     * Current lifecycle status (e.g. `ACTIVE`).
+     */
     status: string;
+    /**
+     * Lattice-generated DNS name clients resolve the service by.
+     */
     dnsName?: string;
+    /**
+     * Effective authorization type.
+     */
     authType: ServiceNetworkAuthType;
+    /**
+     * Current tags reported for the service.
+     */
     tags: Record<string, string>;
   },
   never,

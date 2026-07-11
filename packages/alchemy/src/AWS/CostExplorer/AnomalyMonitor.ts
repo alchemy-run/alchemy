@@ -50,9 +50,13 @@ export interface AnomalyMonitor extends Resource<
   "AWS.CostExplorer.AnomalyMonitor",
   AnomalyMonitorProps,
   {
+    /** ARN of the anomaly monitor. */
     monitorArn: string;
+    /** Name of the anomaly monitor. */
     monitorName: string;
+    /** Type of the monitor (`DIMENSIONAL` or `CUSTOM`). */
     monitorType: string;
+    /** Current tags on the monitor. */
     tags: Record<string, string>;
   },
   never,

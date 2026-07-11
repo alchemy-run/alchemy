@@ -72,12 +72,34 @@ export interface Channel extends Resource<
   "AWS.IVS.Channel",
   ChannelProps,
   {
+    /**
+     * The channel's physical name.
+     */
     channelName: string;
+    /**
+     * ARN of the channel.
+     */
     channelArn: string;
+    /**
+     * RTMPS ingest endpoint broadcast software sends video to
+     * (authenticated with a `StreamKey`).
+     */
     ingestEndpoint: string;
+    /**
+     * Playback URL viewers use to watch the channel's live stream.
+     */
     playbackUrl: string;
+    /**
+     * Channel type (resolution/bitrate tier) reported by IVS.
+     */
     type: string | undefined;
+    /**
+     * Latency mode reported by IVS (`LOW` or `NORMAL`).
+     */
     latencyMode: string | undefined;
+    /**
+     * Whether playback requires a signed authorization token.
+     */
     authorized: boolean | undefined;
   },
   never,

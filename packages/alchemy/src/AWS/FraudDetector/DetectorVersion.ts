@@ -78,9 +78,13 @@ export interface DetectorVersion extends Resource<
   "AWS.FraudDetector.DetectorVersion",
   DetectorVersionProps,
   {
+    /** The identifier of the parent detector. */
     detectorId: string;
+    /** The generated version identifier, e.g. `"1"`. */
     detectorVersionId: string;
+    /** The ARN of the detector version. */
     arn: string;
+    /** The version status: `DRAFT`, `ACTIVE`, or `INACTIVE`. */
     status: string;
   },
   never,

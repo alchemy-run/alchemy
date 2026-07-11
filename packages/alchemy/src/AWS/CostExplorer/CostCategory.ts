@@ -55,9 +55,13 @@ export interface CostCategory extends Resource<
   "AWS.CostExplorer.CostCategory",
   CostCategoryProps,
   {
+    /** ARN of the cost category. */
     costCategoryArn: string;
+    /** Name of the cost category. */
     name: string;
+    /** ISO timestamp the current rule version took effect. */
     effectiveStart: string | undefined;
+    /** Current tags on the cost category. */
     tags: Record<string, string>;
   },
   never,

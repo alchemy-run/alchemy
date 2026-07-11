@@ -47,7 +47,9 @@ export interface SignalCatalog extends Resource<
   "AWS.IoTFleetWise.SignalCatalog",
   SignalCatalogProps,
   {
+    /** The name of the signal catalog. */
     signalCatalogName: string;
+    /** The ARN of the signal catalog. */
     signalCatalogArn: string;
   },
   never,

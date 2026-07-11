@@ -88,8 +88,17 @@ export interface Agent extends Resource<
   "AWS.Bedrock.Agent",
   AgentProps,
   {
+    /**
+     * The unique identifier of the agent.
+     */
     agentId: string;
+    /**
+     * The ARN of the agent.
+     */
     agentArn: string;
+    /**
+     * Name of the agent.
+     */
     agentName: string;
     /** The DRAFT version identifier (always `"DRAFT"`). */
     agentVersion: string;

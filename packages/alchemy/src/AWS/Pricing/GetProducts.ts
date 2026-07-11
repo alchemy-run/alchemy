@@ -13,7 +13,8 @@ export interface GetProductsRequest extends pricing.GetProductsRequest {}
  * `pricing:GetProducts` (the action has no resource-level IAM). Calls are
  * pinned to `us-east-1`, the region that serves the Price List API,
  * regardless of where the function runs. Each `PriceList` entry is a JSON
- * string describing one product and its terms.
+ * string describing one product and its terms. Provide the implementation
+ * with `Effect.provide(AWS.Pricing.GetProductsHttp)`.
  *
  * @binding
  * @section Querying Products

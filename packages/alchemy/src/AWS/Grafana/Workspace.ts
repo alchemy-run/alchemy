@@ -67,10 +67,15 @@ export interface Workspace extends Resource<
   "AWS.Grafana.Workspace",
   WorkspaceProps,
   {
+    /** The unique ID of the workspace. */
     workspaceId: string;
+    /** The ARN of the workspace. */
     workspaceArn: string;
+    /** The URL of the workspace's Grafana console. */
     endpoint: string;
+    /** The Grafana version the workspace runs. */
     grafanaVersion: string;
+    /** The current status of the workspace (`ACTIVE`, `CREATING`, ...). */
     status: string;
   },
   never,

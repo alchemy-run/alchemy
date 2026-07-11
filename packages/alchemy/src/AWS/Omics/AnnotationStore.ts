@@ -48,9 +48,13 @@ export interface AnnotationStoreProps {
    * File parsing options for `TSV` stores. Immutable.
    */
   storeOptions?: {
+    /** Parsing options for TSV-format annotation files. */
     tsvStoreOptions: {
+      /** The store's annotation type (e.g. `GENERIC`, `CHR_POS_REF_ALT`). */
       annotationType?: string;
+      /** Maps TSV format fields to the store's header columns. */
       formatToHeader?: Record<string, string>;
+      /** Column-name-to-type entries describing the store's schema. */
       schema?: Record<string, string>[];
     };
   };
@@ -74,9 +78,21 @@ export interface AnnotationStore extends Resource<
   "AWS.Omics.AnnotationStore",
   AnnotationStoreProps,
   {
+    /**
+     * ID of the annotation store.
+     */
     annotationStoreId: string;
+    /**
+     * ARN of the annotation store.
+     */
     annotationStoreArn: string;
+    /**
+     * Name of the annotation store.
+     */
     name: string;
+    /**
+     * Store status (e.g. `ACTIVE`, `CREATING`, `UPDATING`, `FAILED`).
+     */
     status: string;
   },
   never,

@@ -30,7 +30,9 @@ export interface Label extends Resource<
   "AWS.FraudDetector.Label",
   LabelProps,
   {
+    /** The name of the label. */
     name: string;
+    /** The ARN of the label. */
     arn: string;
   },
   never,

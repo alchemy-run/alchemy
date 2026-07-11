@@ -134,9 +134,21 @@ export interface Table extends Resource<
   "AWS.Keyspaces.Table",
   TableProps,
   {
+    /**
+     * Name of the keyspace containing the table.
+     */
     keyspaceName: string;
+    /**
+     * The table's physical name.
+     */
     tableName: string;
+    /**
+     * ARN of the table.
+     */
     tableArn: string;
+    /**
+     * Lifecycle status of the table (e.g. `CREATING`, `ACTIVE`).
+     */
     status: string;
     /**
      * ARN of the most recent CDC stream, when `cdcSpecification` is enabled.

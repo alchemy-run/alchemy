@@ -47,12 +47,19 @@ export interface ServiceLinkedRole extends Resource<
   "AWS.IAM.ServiceLinkedRole",
   ServiceLinkedRoleProps,
   {
+    /** The name of the service-linked role. */
     roleName: string;
+    /** The ARN of the service-linked role. */
     roleArn: string;
+    /** The stable unique ID of the role. */
     roleId: string | undefined;
+    /** The IAM path of the role. */
     path: string | undefined;
+    /** The AWS service principal the role is linked to. */
     awsServiceName: string;
+    /** The custom suffix appended to the role name, if any. */
     customSuffix: string | undefined;
+    /** The description of the role. */
     description: string | undefined;
   },
   never,

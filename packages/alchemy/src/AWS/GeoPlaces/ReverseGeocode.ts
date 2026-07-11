@@ -14,6 +14,10 @@ import * as Binding from "../../Binding.ts";
  *
  * @binding
  * @section Reverse Geocoding
+ * Provide the `ReverseGeocodeHttp` implementation layer on the Function effect
+ * (`.pipe(Effect.provide(AWS.GeoPlaces.ReverseGeocodeHttp))`), bind in the
+ * init phase, then call the client at runtime.
+ *
  * @example Reverse geocode a position
  * ```typescript
  * // init

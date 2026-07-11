@@ -107,8 +107,11 @@ export interface EventDataStore extends Resource<
   "AWS.CloudTrail.EventDataStore",
   EventDataStoreProps,
   {
+    /** ARN of the event data store (its stable identity). */
     eventDataStoreArn: string;
+    /** Name of the event data store. */
     name: string;
+    /** Current status (e.g. `ENABLED`, `STARTING_INGESTION`). */
     status: string;
   },
   never,

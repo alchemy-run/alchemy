@@ -323,6 +323,7 @@ const inferProxyEngineFamily = (engine: string) => {
  * The return value intentionally exposes the underlying `DB*` resources so
  * users can expand into the lower-level surface without rewriting the stack.
  * @resource
+ * @section Creating a Database
  * @example Start a Small Aurora Cluster
  * ```typescript
  * const db = yield* AWS.RDS.Aurora("AppDb", {
@@ -331,6 +332,7 @@ const inferProxyEngineFamily = (engine: string) => {
  * });
  * ```
  *
+ * @section Scaling Out
  * @example Add Readers and a Proxy
  * ```typescript
  * const db = yield* AWS.RDS.Aurora("AppDb", {
@@ -339,6 +341,18 @@ const inferProxyEngineFamily = (engine: string) => {
  *   readers: 2,
  *   proxy: true,
  * });
+ * ```
+ *
+ * @section Querying from a Function
+ * @example Query over the Data API
+ * ```typescript
+ * // the Data API is enabled by default (dataApi: true) — bind
+ * // AWS.RDSData.ExecuteStatement to query without a VPC socket
+ * const executeStatement = yield* AWS.RDSData.ExecuteStatement(db.cluster, {
+ *   secret: db.secret,
+ *   database: "app",
+ * });
+ * const result = yield* executeStatement({ sql: "SELECT 1" });
  * ```
  */
 export const Aurora = (id: string, props: AuroraProps) =>

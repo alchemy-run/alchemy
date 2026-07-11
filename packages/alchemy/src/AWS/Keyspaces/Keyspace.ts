@@ -27,8 +27,18 @@ export interface Keyspace extends Resource<
   "AWS.Keyspaces.Keyspace",
   KeyspaceProps,
   {
+    /**
+     * The keyspace's physical name.
+     */
     keyspaceName: string;
+    /**
+     * ARN of the keyspace.
+     */
     keyspaceArn: string;
+    /**
+     * Replication strategy of the keyspace (`SINGLE_REGION` or
+     * `MULTI_REGION`).
+     */
     replicationStrategy: string;
   },
   never,

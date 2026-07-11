@@ -47,9 +47,21 @@ export interface ExportJob extends Resource<
   "AWS.BackupSearch.ExportJob",
   ExportJobProps,
   {
+    /**
+     * Service-assigned unique ID of the export job.
+     */
     exportJobIdentifier: string;
+    /**
+     * ARN of the export job.
+     */
     exportJobArn: string;
+    /**
+     * ARN of the search job whose results are exported.
+     */
     searchJobArn: string | undefined;
+    /**
+     * Current status of the export job (e.g. `RUNNING`, `COMPLETED`).
+     */
     status: string;
   },
   never,

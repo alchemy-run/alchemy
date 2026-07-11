@@ -128,10 +128,25 @@ export interface Key extends Resource<
   "AWS.PaymentCryptography.Key",
   KeyProps,
   {
+    /**
+     * ARN of the key.
+     */
     keyArn: string;
+    /**
+     * Key state (e.g. `CREATE_COMPLETE`, `DELETE_PENDING`).
+     */
     keyState: string;
+    /**
+     * Key check value (KCV) used to verify the key material.
+     */
     keyCheckValue: string;
+    /**
+     * Whether the key is enabled for cryptographic operations.
+     */
     enabled: boolean;
+    /**
+     * Whether the key material can be exported.
+     */
     exportable: boolean;
   },
   never,

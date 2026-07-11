@@ -103,8 +103,17 @@ export interface Stack extends Resource<
   "AWS.CloudFormation.Stack",
   StackProps,
   {
+    /**
+     * Name of the stack.
+     */
     stackName: string;
+    /**
+     * The unique stack ID (ARN).
+     */
     stackId: string;
+    /**
+     * Current status of the stack (e.g. `CREATE_COMPLETE`, `UPDATE_COMPLETE`).
+     */
     stackStatus: string;
     /** Template outputs keyed by output name. */
     outputs: Record<string, string>;

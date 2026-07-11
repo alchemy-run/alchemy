@@ -34,6 +34,34 @@ export interface RecognizeTextRequest extends Omit<
  * });
  * const intent = reply.sessionState?.intent?.name;
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Bind the alias in the init phase, call in the handler, and provide
+ * // the RecognizeTextHttp layer on the Function's init Effect.
+ * export default ChatFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const alias = yield* AWS.LexV2.BotAlias("Live", {
+ *       botId: version.botId,
+ *       botVersion: version.botVersion,
+ *     });
+ *     const recognizeText = yield* AWS.LexV2.RecognizeText(alias);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const reply = yield* recognizeText({
+ *           localeId: "en_US",
+ *           sessionId: "user-123",
+ *           text: "hello",
+ *         });
+ *         return HttpServerResponse.json({
+ *           intent: reply.sessionState?.intent?.name ?? null,
+ *         });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.LexV2.RecognizeTextHttp)),
+ * );
+ * ```
  */
 export interface RecognizeText extends Binding.Service<
   RecognizeText,

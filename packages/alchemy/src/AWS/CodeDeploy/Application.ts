@@ -32,10 +32,13 @@ export interface Application extends Resource<
   "AWS.CodeDeploy.Application",
   ApplicationProps,
   {
+    /** Physical name of the application. */
     applicationName: string;
     /** Unique CodeDeploy-assigned application ID. */
     applicationId: string;
+    /** ARN of the application. */
     applicationArn: string;
+    /** The compute platform (`Lambda`, `Server`, or `ECS`). */
     computePlatform: string;
   },
   never,

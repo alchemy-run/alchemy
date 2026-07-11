@@ -68,9 +68,21 @@ export interface Memory extends Resource<
   "AWS.BedrockAgentCore.Memory",
   MemoryProps,
   {
+    /**
+     * The unique identifier of the memory.
+     */
     memoryId: string;
+    /**
+     * The ARN of the memory.
+     */
     memoryArn: string;
+    /**
+     * Name of the memory.
+     */
     name: string;
+    /**
+     * Current status of the memory (e.g. `ACTIVE`).
+     */
     status: string;
   }
 > {}

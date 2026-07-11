@@ -94,8 +94,17 @@ export interface Pipe extends Resource<
   "AWS.Pipes.Pipe",
   PipeProps,
   {
+    /**
+     * Name of the pipe.
+     */
     pipeName: string;
+    /**
+     * ARN of the pipe.
+     */
     pipeArn: string;
+    /**
+     * Observed state of the pipe (e.g. `RUNNING`, `STOPPED`).
+     */
     currentState: string | undefined;
   },
   never,

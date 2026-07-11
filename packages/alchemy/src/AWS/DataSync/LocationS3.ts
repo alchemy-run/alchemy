@@ -52,7 +52,9 @@ export interface LocationS3 extends Resource<
   "AWS.DataSync.LocationS3",
   LocationS3Props,
   {
+    /** ARN of the DataSync location. */
     locationArn: string;
+    /** URI of the location (`s3://…`). */
     locationUri: string;
   },
   {},

@@ -13,6 +13,10 @@ import * as Binding from "../../Binding.ts";
  *
  * @binding
  * @section Fetching Map Tiles
+ * Provide the `GetTileHttp` implementation layer on the Function effect
+ * (`.pipe(Effect.provide(AWS.GeoMaps.GetTileHttp))`), bind in the init phase,
+ * then call the client at runtime.
+ *
  * @example Fetch a vector tile
  * ```typescript
  * // init

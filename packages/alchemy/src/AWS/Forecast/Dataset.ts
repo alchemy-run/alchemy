@@ -77,10 +77,15 @@ export interface Dataset extends Resource<
   "AWS.Forecast.Dataset",
   DatasetProps,
   {
+    /** The ARN of the dataset. */
     datasetArn: string;
+    /** The name of the dataset. */
     datasetName: string;
+    /** The forecasting domain of the dataset, e.g. `RETAIL` or `CUSTOM`. */
     domain: string;
+    /** The dataset type, e.g. `TARGET_TIME_SERIES`. */
     datasetType: string;
+    /** The dataset status, e.g. `ACTIVE`. */
     status: string;
   },
   never,

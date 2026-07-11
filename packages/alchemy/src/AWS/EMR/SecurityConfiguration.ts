@@ -28,7 +28,9 @@ export interface SecurityConfiguration extends Resource<
   "AWS.EMR.SecurityConfiguration",
   SecurityConfigurationProps,
   {
+    /** The name of the security configuration. */
     securityConfigurationName: string;
+    /** The JSON document of the security configuration. */
     securityConfiguration: string;
   },
   never,

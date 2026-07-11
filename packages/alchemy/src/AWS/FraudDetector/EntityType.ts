@@ -31,7 +31,9 @@ export interface EntityType extends Resource<
   "AWS.FraudDetector.EntityType",
   EntityTypeProps,
   {
+    /** The name of the entity type. */
     name: string;
+    /** The ARN of the entity type. */
     arn: string;
   },
   never,

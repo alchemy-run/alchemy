@@ -74,11 +74,29 @@ export interface SlackChannelConfiguration extends Resource<
   "AWS.Chatbot.SlackChannelConfiguration",
   SlackChannelConfigurationProps,
   {
+    /**
+     * Name of the channel configuration.
+     */
     configurationName: string;
+    /**
+     * The ARN of the channel configuration.
+     */
     chatConfigurationArn: string;
+    /**
+     * The Slack workspace (team) ID.
+     */
     slackTeamId: string;
+    /**
+     * The Slack channel ID.
+     */
     slackChannelId: string;
+    /**
+     * Name of the Slack workspace.
+     */
     slackTeamName: string;
+    /**
+     * Current state of the configuration (e.g. `ENABLED`).
+     */
     state: string | undefined;
   },
   never,

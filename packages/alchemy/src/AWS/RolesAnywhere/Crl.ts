@@ -47,10 +47,25 @@ export interface Crl extends Resource<
   "AWS.RolesAnywhere.Crl",
   CrlProps,
   {
+    /**
+     * Unique ID of the CRL.
+     */
     crlId: string;
+    /**
+     * ARN of the CRL.
+     */
     crlArn: string;
+    /**
+     * Name of the CRL.
+     */
     crlName: string;
+    /**
+     * ARN of the trust anchor the CRL applies to.
+     */
     trustAnchorArn: string;
+    /**
+     * Whether the CRL is enabled (revocation checks are enforced).
+     */
     enabled: boolean;
   },
   never,

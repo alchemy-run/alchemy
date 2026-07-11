@@ -21,6 +21,38 @@ export interface GetQueryResultsRequest extends Logs.GetQueryResultsRequest {}
  *   // response.results is an array of field/value rows
  * }
  * ```
+ *
+ * @example Poll Until Complete
+ * ```typescript
+ * // Bounded, declarative polling — never a while-loop.
+ * const results = yield* getQueryResults({ queryId }).pipe(
+ *   Effect.repeat({
+ *     schedule: Schedule.spaced("2 seconds"),
+ *     until: (r) => r.status === "Complete",
+ *     times: 15,
+ *   }),
+ * );
+ * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Provide the layer on the Function's init Effect, merged with
+ * // StartQueryHttp since the two bindings are always used together.
+ * export default InsightsFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const logGroup = yield* AWS.Logs.LogGroup("AppLogs", {});
+ *     const startQuery = yield* AWS.Logs.StartQuery(logGroup);
+ *     const getQueryResults = yield* AWS.Logs.GetQueryResults(logGroup);
+ *     // ... start the query and poll for results in the fetch handler
+ *     return { fetch: handler };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(AWS.Logs.StartQueryHttp, AWS.Logs.GetQueryResultsHttp),
+ *     ),
+ *   ),
+ * );
+ * ```
  */
 export interface GetQueryResults extends Binding.Service<
   GetQueryResults,

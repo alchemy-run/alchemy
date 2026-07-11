@@ -120,11 +120,17 @@ export interface Endpoint extends Resource<
   "AWS.DMS.Endpoint",
   EndpointProps,
   {
+    /** The endpoint identifier (unique per account/region). */
     endpointIdentifier: string;
+    /** The ARN of the endpoint. */
     endpointArn: string;
+    /** Whether the endpoint is a `source` or `target`. */
     endpointType: string;
+    /** The database engine of the endpoint, e.g. `postgres`, `mysql`. */
     engineName: string;
+    /** The current status of the endpoint, e.g. `active`. */
     status: string | undefined;
+    /** The tags attached to the endpoint. */
     tags: Record<string, string>;
   },
   never,

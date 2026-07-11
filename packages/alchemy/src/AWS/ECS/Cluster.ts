@@ -49,14 +49,23 @@ export interface Cluster extends Resource<
   "AWS.ECS.Cluster",
   ClusterProps,
   {
+    /** The ARN of the cluster. */
     clusterArn: ClusterArn;
+    /** The name of the cluster. */
     clusterName: ClusterName;
+    /** The current status of the cluster, e.g. `ACTIVE`. */
     status: string;
+    /** The cluster settings, e.g. Container Insights. */
     settings: ecs.ClusterSetting[];
+    /** The execute-command configuration of the cluster. */
     configuration?: ecs.ClusterConfiguration;
+    /** The capacity providers associated with the cluster. */
     capacityProviders: string[];
+    /** The default capacity provider strategy for the cluster. */
     defaultCapacityProviderStrategy: ecs.CapacityProviderStrategyItem[];
+    /** The default Service Connect namespace. */
     serviceConnectDefaults?: ecs.ClusterServiceConnectDefaultsRequest;
+    /** The tags attached to the cluster. */
     tags: Record<string, string>;
   },
   never,

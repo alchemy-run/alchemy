@@ -28,7 +28,14 @@ export interface Activity extends Resource<
   "AWS.StepFunctions.Activity",
   ActivityProps,
   {
+    /**
+     * Physical name of the activity.
+     */
     activityName: string;
+    /**
+     * ARN of the activity — reference it from a state machine Task state's
+     * `Resource` field.
+     */
     activityArn: string;
   },
   never,

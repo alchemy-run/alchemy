@@ -24,6 +24,7 @@ export interface LoggingConfiguration extends Resource<
   "AWS.NetworkFirewall.LoggingConfiguration",
   LoggingConfigurationProps,
   {
+    /** ARN of the firewall the logging configuration applies to. */
     firewallArn: string;
   },
   never,

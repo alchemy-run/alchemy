@@ -6,8 +6,24 @@ import type { InsightRuleResource } from "./binding-common.ts";
 type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
 
 /**
- * Runtime binding for `cloudwatch:DisableInsightRules`.
+ * Runtime binding for `cloudwatch:DisableInsightRules` — pause data
+ * collection for the bound Contributor Insights rules. Bind it to one or
+ * more {@link InsightRule} resources; the rule names are injected
+ * automatically.
+ *
+ * Provide `CloudWatch.DisableInsightRulesHttp` on the hosting Lambda
+ * Function to satisfy the requirement.
  * @binding
+ * @section Managing Insight Rules
+ * @example Pause a Contributor Insights Rule
+ * ```typescript
+ * // init — grants cloudwatch:DisableInsightRules on the rule
+ * const disableInsightRules = yield* AWS.CloudWatch.DisableInsightRules(rule);
+ *
+ * // runtime
+ * const result = yield* disableInsightRules();
+ * const failures = result.Failures ?? []; // empty on success
+ * ```
  */
 export interface DisableInsightRules extends Binding.Service<
   DisableInsightRules,

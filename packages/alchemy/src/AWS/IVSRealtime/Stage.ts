@@ -64,11 +64,29 @@ export interface Stage extends Resource<
   "AWS.IVSRealtime.Stage",
   StageProps,
   {
+    /**
+     * The stage's physical name.
+     */
     stageName: string;
+    /**
+     * ARN of the stage.
+     */
     stageArn: string;
+    /**
+     * WHIP ingest endpoint for WebRTC publishers.
+     */
     whipEndpoint: string | undefined;
+    /**
+     * Endpoint delivering stage events.
+     */
     eventsEndpoint: string | undefined;
+    /**
+     * RTMP ingest endpoint for broadcast software.
+     */
     rtmpEndpoint: string | undefined;
+    /**
+     * RTMPS (TLS) ingest endpoint for broadcast software.
+     */
     rtmpsEndpoint: string | undefined;
   },
   never,

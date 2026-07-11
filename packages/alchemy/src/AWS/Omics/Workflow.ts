@@ -94,9 +94,21 @@ export interface Workflow extends Resource<
   "AWS.Omics.Workflow",
   WorkflowProps,
   {
+    /**
+     * ID of the workflow.
+     */
     workflowId: string;
+    /**
+     * ARN of the workflow.
+     */
     workflowArn: string;
+    /**
+     * Name of the workflow.
+     */
     name: string;
+    /**
+     * Workflow status (e.g. `ACTIVE`, `CREATING`, `UPDATING`, `FAILED`).
+     */
     status: string;
   },
   never,

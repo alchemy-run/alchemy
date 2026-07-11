@@ -56,12 +56,19 @@ export interface Channel extends Resource<
   "AWS.MediaPackageV2.Channel",
   ChannelProps,
   {
+    /** Name of the channel group the channel belongs to. */
     channelGroupName: string;
+    /** Name of the channel. */
     channelName: string;
+    /** ARN of the channel. */
     channelArn: string;
+    /** Ingest container type (`HLS` or `CMAF`). */
     inputType: string | undefined;
+    /** Redundant ingest endpoints the encoder pushes content to. */
     ingestEndpoints: {
+      /** Ingest endpoint id (e.g. `"1"`, `"2"`). */
       id: string | undefined;
+      /** Ingest URL the encoder pushes to. */
       url: string | undefined;
     }[];
   },

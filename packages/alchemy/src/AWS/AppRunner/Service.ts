@@ -205,10 +205,25 @@ export interface Service extends Resource<
   "AWS.AppRunner.Service",
   ServiceProps,
   {
+    /**
+     * Name of the App Runner service.
+     */
     serviceName: string;
+    /**
+     * ARN of the service.
+     */
     serviceArn: string;
+    /**
+     * ID of the service.
+     */
     serviceId: string;
+    /**
+     * Default HTTPS endpoint of the service (`xxxx.awsapprunner.com`).
+     */
     serviceUrl: string | undefined;
+    /**
+     * Current status of the service (e.g. `RUNNING`, `OPERATION_IN_PROGRESS`).
+     */
     status: string;
   },
   never,

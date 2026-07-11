@@ -64,9 +64,13 @@ export interface Task extends Resource<
   "AWS.DataSync.Task",
   TaskProps,
   {
+    /** ARN of the DataSync task. */
     taskArn: string;
+    /** Current task status (e.g. `AVAILABLE`, `RUNNING`). */
     taskStatus: datasync.TaskStatus;
+    /** ARN of the source location. */
     sourceLocationArn: string;
+    /** ARN of the destination location. */
     destinationLocationArn: string;
   },
   {},

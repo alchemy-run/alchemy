@@ -50,7 +50,26 @@ import type { RouterProps } from "./shared.ts";
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   routes: {
- *     "/*": { url: api.functionUrl },
+ *     "/api/*": { url: api.functionUrl },
+ *     "/*": { bucket: assetsBucket },
+ *   },
+ * });
+ * ```
+ *
+ * @section Attaching Sites
+ * @example Serve A StaticSite Through The Router
+ * ```typescript
+ * const router = yield* Router("WebsiteRouter", {
+ *   invalidation: { paths: "all", wait: true },
+ * });
+ *
+ * // The site registers itself in the Router's KV store; no new
+ * // distribution is created.
+ * const docs = yield* AWS.Website.StaticSite("DocsSite", {
+ *   path: "./docs/dist",
+ *   router: {
+ *     instance: router,
+ *     path: "/docs",
  *   },
  * });
  * ```

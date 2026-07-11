@@ -31,9 +31,13 @@ export interface SubnetGroup extends Resource<
   "AWS.DAX.SubnetGroup",
   SubnetGroupProps,
   {
+    /** Name of the subnet group. */
     subnetGroupName: string;
+    /** Description of the subnet group. */
     description: string | undefined;
+    /** ID of the VPC the subnets belong to. */
     vpcId: string | undefined;
+    /** IDs of the subnets in the group. */
     subnetIds: string[];
   },
   never,
@@ -54,6 +58,17 @@ export interface SubnetGroup extends Resource<
  * const subnetGroup = yield* SubnetGroup("DaxSubnets", {
  *   description: "DAX cluster subnets",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
+ * });
+ * ```
+ *
+ * @section Placing a Cluster
+ * @example Cluster in the Subnet Group
+ * ```typescript
+ * const cluster = yield* Cluster("Cache", {
+ *   nodeType: "dax.t3.small",
+ *   replicationFactor: 1,
+ *   iamRoleArn: role.roleArn,
+ *   subnetGroupName: subnetGroup.subnetGroupName,
  * });
  * ```
  */

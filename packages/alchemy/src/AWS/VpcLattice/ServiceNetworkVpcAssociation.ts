@@ -39,11 +39,29 @@ export interface ServiceNetworkVpcAssociation extends Resource<
   "AWS.VpcLattice.ServiceNetworkVpcAssociation",
   ServiceNetworkVpcAssociationProps,
   {
+    /**
+     * Service-assigned unique ID of the association.
+     */
     associationId: string;
+    /**
+     * ARN of the association.
+     */
     associationArn: string;
+    /**
+     * Current lifecycle status (e.g. `ACTIVE`, `CREATE_IN_PROGRESS`).
+     */
     status: string;
+    /**
+     * ID of the associated service network.
+     */
     serviceNetworkId?: string;
+    /**
+     * ID of the associated VPC.
+     */
     vpcId?: string;
+    /**
+     * Current tags reported for the association.
+     */
     tags: Record<string, string>;
   },
   never,

@@ -8,7 +8,16 @@ export type StreamRecord<Data> = TableRecord<Data>;
 
 export type StreamEvent<Data> = TableEvent<Data>;
 
-/** @binding */
+/**
+ * Event source binding that subscribes a Lambda function to a DynamoDB
+ * table's change stream. Enables the stream on the table (via the binding
+ * contract) and creates the Lambda event source mapping.
+ *
+ * Prefer the {@link consumeTableChanges} helper for ergonomic use; provide
+ * the runtime-specific implementation layer (e.g. `Lambda.TableEventSource`)
+ * on the Function.
+ * @binding
+ */
 export interface TableEventSource extends Binding.Service<
   TableEventSource,
   "AWS.DynamoDB.TableEventSource",
@@ -87,16 +96,44 @@ export interface StreamsProps extends TableEventSourceProps {
 /**
  * Consume change data capture events from a DynamoDB table via a Lambda
  * event source mapping. The stream is enabled automatically through the
- * binding contract.
+ * binding contract. The handler receives each delivered batch as an Effect
+ * `Stream` of change records.
  *
- * @example Consume table changes
+ * Provide `Lambda.TableEventSource` on the Function to satisfy the binding.
+ *
+ * @example Log every table change
  * ```typescript
  * yield* DynamoDB.consumeTableChanges(
  *   table,
- *   { streamViewType: "NEW_AND_OLD_IMAGES" },
- *   Effect.fn(function* (record) {
- *     yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
- *   }),
+ *   { streamViewType: "NEW_AND_OLD_IMAGES", startingPosition: "TRIM_HORIZON" },
+ *   (stream) =>
+ *     stream.pipe(
+ *       Stream.runForEach((record) =>
+ *         Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb.Keys)}`),
+ *       ),
+ *     ),
+ * );
+ * ```
+ *
+ * @example Forward changes to an SQS queue via QueueSink
+ * ```typescript
+ * const sink = yield* AWS.SQS.QueueSink(queue);
+ *
+ * yield* DynamoDB.consumeTableChanges(
+ *   table,
+ *   { streamViewType: "NEW_AND_OLD_IMAGES", batchSize: 10 },
+ *   (stream) =>
+ *     stream.pipe(
+ *       Stream.map((record) => ({
+ *         MessageBody: JSON.stringify({
+ *           eventName: record.eventName,
+ *           keys: record.dynamodb.Keys,
+ *           newImage: record.dynamodb.NewImage,
+ *         }),
+ *       })),
+ *       Stream.run(sink),
+ *       Effect.orDie,
+ *     ),
  * );
  * ```
  */

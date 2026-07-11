@@ -29,6 +29,36 @@ export interface PutLogEventsRequest extends Omit<
  *   logEvents: [{ timestamp: now, message: "user.login id=123" }],
  * });
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Bind in the init phase, call in the handler, and provide the
+ * // PutLogEventsHttp layer on the Function's init Effect.
+ * export default AuditFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const logGroup = yield* AWS.Logs.LogGroup("AuditLogs", {
+ *       retentionInDays: "30 days",
+ *     });
+ *     const stream = yield* AWS.Logs.LogStream("AuditStream", {
+ *       logGroupName: logGroup.logGroupName,
+ *     });
+ *     const putLogEvents = yield* AWS.Logs.PutLogEvents(logGroup);
+ *     const LogStreamName = yield* stream.logStreamName;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const timestamp = yield* Clock.currentTimeMillis;
+ *         yield* putLogEvents({
+ *           logStreamName: yield* LogStreamName,
+ *           logEvents: [{ timestamp, message: "audit.event" }],
+ *         });
+ *         return HttpServerResponse.text("ok");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.Logs.PutLogEventsHttp)),
+ * );
+ * ```
  */
 export interface PutLogEvents extends Binding.Service<
   PutLogEvents,

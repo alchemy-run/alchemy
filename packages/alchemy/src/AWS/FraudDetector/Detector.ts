@@ -35,8 +35,11 @@ export interface Detector extends Resource<
   "AWS.FraudDetector.Detector",
   DetectorProps,
   {
+    /** The detector identifier. */
     detectorId: string;
+    /** The ARN of the detector. */
     arn: string;
+    /** The event type the detector evaluates. */
     eventTypeName: string;
   },
   never,
@@ -55,6 +58,45 @@ export interface Detector extends Resource<
  * ```typescript
  * const detector = yield* FraudDetector.Detector("checkout", {
  *   eventTypeName: purchase.name,
+ * });
+ * ```
+ *
+ * @example Detector with an Active Version
+ * ```typescript
+ * const detector = yield* FraudDetector.Detector("checkout", {
+ *   eventTypeName: purchase.name,
+ * });
+ *
+ * const version = yield* FraudDetector.DetectorVersion("v1", {
+ *   detectorId: detector.detectorId,
+ *   status: "ACTIVE",
+ *   rules: [
+ *     {
+ *       ruleId: "high_risk",
+ *       expression: '$email == "fraud@example.com"',
+ *       outcomes: [review.name],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @section Runtime Predictions
+ * Bind `GetEventPrediction` in the init phase (providing the
+ * `GetEventPredictionHttp` layer on the Function effect) and score events at
+ * runtime against the detector's `ACTIVE` version.
+ *
+ * @example Score an event from a Lambda
+ * ```typescript
+ * // init
+ * const getEventPrediction = yield* FraudDetector.GetEventPrediction(detector);
+ *
+ * // runtime
+ * const { ruleResults } = yield* getEventPrediction({
+ *   eventId: "order-123",
+ *   eventTypeName: "purchase",
+ *   eventTimestamp: new Date().toISOString(),
+ *   entities: [{ entityType: "customer", entityId: "cust-1" }],
+ *   eventVariables: { email: "buyer@example.com", ip: "1.2.3.4" },
  * });
  * ```
  */

@@ -145,10 +145,15 @@ export interface Crawler extends Resource<
   "AWS.Glue.Crawler",
   CrawlerProps,
   {
+    /** The name of the crawler. */
     crawlerName: string;
+    /** The ARN of the crawler. */
     crawlerArn: string;
+    /** The IAM role the crawler assumes. */
     role: string;
+    /** The Glue database the crawler writes discovered tables to. */
     databaseName: string | undefined;
+    /** The crawler state: `READY`, `RUNNING`, or `STOPPING`. */
     state: string | undefined;
   },
   {},

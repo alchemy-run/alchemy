@@ -69,8 +69,11 @@ export interface Vault extends Resource<
   "AWS.Glacier.Vault",
   VaultProps,
   {
+    /** The name of the vault. */
     vaultName: string;
+    /** The ARN of the vault. */
     vaultArn: string;
+    /** ISO-8601 timestamp of when the vault was created. */
     creationDate: string;
   },
   never,

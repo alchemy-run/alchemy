@@ -58,12 +58,19 @@ export interface User extends Resource<
   "AWS.MemoryDB.User",
   UserProps,
   {
+    /** Name of the user. */
     userName: string;
+    /** ARN of the user. */
     userArn: string;
+    /** Current lifecycle status (e.g. `active`, `modifying`). */
     status: string;
+    /** Access string defining the user's permissions. */
     accessString: string | undefined;
+    /** How the user authenticates (`password` or `iam`). */
     authenticationType: string | undefined;
+    /** Minimum engine version the user is compatible with. */
     minimumEngineVersion: string | undefined;
+    /** Tags on the user (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

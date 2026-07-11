@@ -9,7 +9,8 @@ import * as Binding from "../../Binding.ts";
  * Polly is a pure pay-per-call service with no resource to manage: the
  * binding takes no arguments and grants the function
  * `polly:SynthesizeSpeech`. The response `AudioStream` is a byte `Stream`
- * of the encoded audio (raw distilled types, no marshalling).
+ * of the encoded audio (raw distilled types, no marshalling). Provide the
+ * implementation with `Effect.provide(AWS.Polly.SynthesizeSpeechHttp)`.
  *
  * @binding
  * @section Synthesizing Speech

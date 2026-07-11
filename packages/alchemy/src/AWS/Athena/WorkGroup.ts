@@ -78,10 +78,25 @@ export interface WorkGroup extends Resource<
   "AWS.Athena.WorkGroup",
   WorkGroupProps,
   {
+    /**
+     * Name of the workgroup.
+     */
     workGroupName: WorkGroupName;
+    /**
+     * ARN of the workgroup.
+     */
     workGroupArn: WorkGroupArn;
+    /**
+     * Whether the workgroup accepts queries.
+     */
     state: "ENABLED" | "DISABLED";
+    /**
+     * S3 location query results are written to (`s3://bucket/prefix/`).
+     */
     outputLocation: string | undefined;
+    /**
+     * Tags on the workgroup.
+     */
     tags: Record<string, string>;
   },
   never,

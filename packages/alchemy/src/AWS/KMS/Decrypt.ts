@@ -48,6 +48,25 @@ export interface DecryptRequest extends Omit<kms.DecryptRequest, "KeyId"> {}
  * ```typescript
  * const decrypt = yield* AWS.KMS.Decrypt("alias/app-key");
  * ```
+ *
+ * @section Wiring
+ * @example Provide the Implementation on a Lambda Function
+ * ```typescript
+ * // Provide the DecryptHttp layer on the Function's init Effect,
+ * // merged with the other KMS layers the function binds.
+ * export default CryptoFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const key = yield* AWS.KMS.Key("AppKey");
+ *     const encrypt = yield* AWS.KMS.Encrypt(key);
+ *     const decrypt = yield* AWS.KMS.Decrypt(key);
+ *     // ... use encrypt/decrypt in the fetch handler
+ *     return { fetch: handler };
+ *   }).pipe(
+ *     Effect.provide(Layer.mergeAll(AWS.KMS.EncryptHttp, AWS.KMS.DecryptHttp)),
+ *   ),
+ * );
+ * ```
  */
 export interface Decrypt extends Binding.Service<
   Decrypt,

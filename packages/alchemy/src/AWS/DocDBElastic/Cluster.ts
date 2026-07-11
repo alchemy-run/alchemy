@@ -93,21 +93,37 @@ export interface Cluster extends Resource<
   "AWS.DocDBElastic.Cluster",
   ClusterProps,
   {
+    /** The name of the elastic cluster. */
     clusterName: string;
+    /** The ARN of the elastic cluster. */
     clusterArn: string;
+    /** The current status of the cluster, e.g. `ACTIVE`. */
     status: string;
+    /** The MongoDB-compatible connection endpoint. */
     clusterEndpoint: string | undefined;
+    /** The administrator username. */
     adminUserName: string;
+    /** The authentication type (`PLAIN_TEXT` or `SECRET_ARN`). */
     authType: string;
+    /** vCPU capacity of each shard (2, 4, 8, 16, 32, or 64). */
     shardCapacity: number;
+    /** Number of shards in the cluster. */
     shardCount: number;
+    /** Number of replica instances per shard. */
     shardInstanceCount: number | undefined;
+    /** The VPC security groups attached to the cluster. */
     vpcSecurityGroupIds: string[];
+    /** The subnets the cluster is deployed into. */
     subnetIds: string[];
+    /** The KMS key used for encryption at rest. */
     kmsKeyId: string;
+    /** The weekly window during which maintenance can occur. */
     preferredMaintenanceWindow: string;
+    /** Number of days automated backups are retained. */
     backupRetentionPeriod: number | undefined;
+    /** The daily window during which automated backups run. */
     preferredBackupWindow: string | undefined;
+    /** The tags attached to the cluster. */
     tags: Record<string, string>;
   },
   never,

@@ -125,22 +125,33 @@ export interface Table extends Resource<
   "AWS.DynamoDB.Table",
   TableProps,
   {
+    /** The unique ID AWS assigns to the table. */
     tableId: string;
+    /** The physical name of the table. */
     tableName: TableName;
+    /** The ARN of the table. */
     tableArn: TableArn;
+    /** The partition (hash) key attribute name. */
     partitionKey: string;
+    /** The sort (range) key attribute name, if defined. */
     sortKey: string | undefined;
+    /** ARN of the most recent DynamoDB stream (when streams are enabled). */
     latestStreamArn: string | undefined;
+    /** The current stream configuration (when streams are enabled). */
     streamSpecification: DynamoDB.StreamSpecification | undefined;
+    /** Descriptions of the table's local secondary indexes. */
     localSecondaryIndexes:
       | DynamoDB.LocalSecondaryIndexDescription[]
       | undefined;
+    /** Descriptions of the table's global secondary indexes. */
     globalSecondaryIndexes:
       | DynamoDB.GlobalSecondaryIndexDescription[]
       | undefined;
+    /** The point-in-time recovery status of the table. */
     pointInTimeRecoveryDescription:
       | DynamoDB.PointInTimeRecoveryDescription
       | undefined;
+    /** The tags attached to the table. */
     tags: Record<string, string> | undefined;
   },
   TableBinding,

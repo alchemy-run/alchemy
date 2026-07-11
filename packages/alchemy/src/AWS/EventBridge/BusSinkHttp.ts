@@ -63,6 +63,13 @@ const selectFailed = (
   });
 };
 
+/**
+ * HTTP implementation of {@link BusSink}. At deploy time it grants
+ * `events:PutEvents` on the bound bus (or the default bus); at runtime it
+ * batches stream elements into `PutEvents` calls (10 entries / 256 KiB) with
+ * bounded retry of transient per-entry failures. Provide this layer on the
+ * Function using the sink.
+ */
 export const BusSinkHttp = Layer.effect(
   BusSink,
   Effect.gen(function* () {

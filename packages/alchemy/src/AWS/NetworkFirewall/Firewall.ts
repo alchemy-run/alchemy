@@ -68,9 +68,13 @@ export interface Firewall extends Resource<
   "AWS.NetworkFirewall.Firewall",
   FirewallProps,
   {
+    /** Name of the firewall. */
     firewallName: string;
+    /** ARN of the firewall. */
     firewallArn: string;
+    /** Server-assigned unique id of the firewall. */
     firewallId: string;
+    /** ID of the VPC the firewall is provisioned into. */
     vpcId: string;
     /**
      * The VPC endpoint IDs of the provisioned firewall endpoints, one per

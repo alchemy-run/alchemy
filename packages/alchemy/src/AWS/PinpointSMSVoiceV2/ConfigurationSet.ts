@@ -42,7 +42,13 @@ export interface ConfigurationSet extends Resource<
   "AWS.PinpointSMSVoiceV2.ConfigurationSet",
   ConfigurationSetProps,
   {
+    /**
+     * Name of the configuration set.
+     */
     configurationSetName: string;
+    /**
+     * ARN of the configuration set.
+     */
     configurationSetArn: string;
   },
   never,

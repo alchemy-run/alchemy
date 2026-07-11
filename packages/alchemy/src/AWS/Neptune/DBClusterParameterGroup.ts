@@ -42,11 +42,17 @@ export interface DBClusterParameterGroup extends Resource<
   "AWS.Neptune.DBClusterParameterGroup",
   DBClusterParameterGroupProps,
   {
+    /** Name of the parameter group. */
     dbClusterParameterGroupName: string;
+    /** ARN of the parameter group. */
     dbClusterParameterGroupArn: string | undefined;
+    /** Parameter group family (e.g. `neptune1.4`). */
     family: string;
+    /** Description of the parameter group. */
     description: string | undefined;
+    /** Non-default parameter values applied to the group. */
     parameters: Record<string, string>;
+    /** Tags on the parameter group (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

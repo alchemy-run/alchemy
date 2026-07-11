@@ -58,11 +58,29 @@ export interface ScalingPolicy extends Resource<
   "AWS.ApplicationAutoScaling.ScalingPolicy",
   ScalingPolicyProps,
   {
+    /**
+     * Name of the scaling policy.
+     */
     policyName: string;
+    /**
+     * ARN of the scaling policy.
+     */
     policyArn: string;
+    /**
+     * Namespace of the AWS service that provides the scalable target.
+     */
     serviceNamespace: aas.ServiceNamespace;
+    /**
+     * Identifier of the scaled resource.
+     */
     resourceId: string;
+    /**
+     * Scalable dimension the policy applies to.
+     */
     scalableDimension: aas.ScalableDimension;
+    /**
+     * Policy type (`TargetTrackingScaling` or `StepScaling`).
+     */
     policyType: aas.PolicyType;
     /**
      * CloudWatch alarms created and managed by Application Auto Scaling for

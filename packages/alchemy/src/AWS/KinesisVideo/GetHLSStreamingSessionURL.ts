@@ -28,6 +28,31 @@ export interface GetHLSStreamingSessionURLRequest extends Omit<
  *   PlaybackMode: "LIVE",
  * });
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Provide the GetHLSStreamingSessionURLHttp layer on the Function's
+ * // init Effect. Data-plane calls fan out to GetDataEndpoint first, so
+ * // allow a generous timeout.
+ * export default PlaybackFunction.make(
+ *   { main: import.meta.url, url: true, timeout: Duration.seconds(30) },
+ *   Effect.gen(function* () {
+ *     const stream = yield* AWS.KinesisVideo.Stream("Camera", {
+ *       mediaType: "video/h264",
+ *       dataRetentionInHours: "24 hours",
+ *     });
+ *     const getHls = yield* AWS.KinesisVideo.GetHLSStreamingSessionURL(stream);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { HLSStreamingSessionURL } = yield* getHls({
+ *           PlaybackMode: "LIVE",
+ *         });
+ *         return HttpServerResponse.json({ url: HLSStreamingSessionURL });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.KinesisVideo.GetHLSStreamingSessionURLHttp)),
+ * );
+ * ```
  */
 export interface GetHLSStreamingSessionURL extends Binding.Service<
   GetHLSStreamingSessionURL,

@@ -54,9 +54,22 @@ export interface Blueprint extends Resource<
   "AWS.BedrockDataAutomation.Blueprint",
   BlueprintProps,
   {
+    /**
+     * The ARN of the blueprint.
+     */
     blueprintArn: string;
+    /**
+     * Name of the blueprint.
+     */
     blueprintName: string;
+    /**
+     * The stage (`DEVELOPMENT` or `LIVE`) of the blueprint.
+     */
     blueprintStage: string;
+    /**
+     * The modality (`DOCUMENT`, `IMAGE`, `AUDIO`, or `VIDEO`) the blueprint
+     * extracts custom output from.
+     */
     type: string;
   },
   never,

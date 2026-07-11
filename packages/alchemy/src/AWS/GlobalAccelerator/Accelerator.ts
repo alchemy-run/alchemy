@@ -49,13 +49,21 @@ export interface Accelerator extends Resource<
   "AWS.GlobalAccelerator.Accelerator",
   AcceleratorProps,
   {
+    /** The ARN of the accelerator. */
     acceleratorArn: string;
+    /** The name of the accelerator. */
     name: string;
+    /** The DNS name that points to the accelerator's static IPv4 addresses. */
     dnsName: string | undefined;
+    /** The DNS name for dual-stack (IPv4 + IPv6) accelerators. */
     dualStackDnsName: string | undefined;
+    /** The static anycast IP addresses assigned to the accelerator. */
     ipAddresses: string[];
+    /** The IP address type: `IPV4` or `DUAL_STACK`. */
     ipAddressType: string;
+    /** Whether the accelerator accepts and routes traffic. */
     enabled: boolean;
+    /** Deployment status: `DEPLOYED` or `IN_PROGRESS`. */
     status: string;
   },
   never,

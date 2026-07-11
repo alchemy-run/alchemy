@@ -31,7 +31,9 @@ export interface Domain extends Resource<
   "AWS.CodeArtifact.Domain",
   DomainProps,
   {
+    /** Physical name of the domain. */
     domainName: string;
+    /** ARN of the domain. */
     domainArn: string;
     /** AWS account ID that owns the domain. */
     owner: string;

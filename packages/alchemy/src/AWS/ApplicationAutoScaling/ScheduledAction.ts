@@ -65,13 +65,37 @@ export interface ScheduledAction extends Resource<
   "AWS.ApplicationAutoScaling.ScheduledAction",
   ScheduledActionProps,
   {
+    /**
+     * Name of the scheduled action.
+     */
     scheduledActionName: string;
+    /**
+     * ARN of the scheduled action.
+     */
     scheduledActionArn: string;
+    /**
+     * Namespace of the AWS service that provides the scalable target.
+     */
     serviceNamespace: aas.ServiceNamespace;
+    /**
+     * Identifier of the scaled resource.
+     */
     resourceId: string;
+    /**
+     * Scalable dimension the action applies to.
+     */
     scalableDimension: aas.ScalableDimension;
+    /**
+     * Schedule expression (`at(...)`, `rate(...)`, or `cron(...)`).
+     */
     schedule: string;
+    /**
+     * IANA timezone the schedule is evaluated in.
+     */
     timezone: string | undefined;
+    /**
+     * Capacity bounds applied when the action fires.
+     */
     scalableTargetAction: aas.ScalableTargetAction | undefined;
   },
   never,

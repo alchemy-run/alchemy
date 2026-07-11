@@ -119,18 +119,31 @@ export interface ServerlessCache extends Resource<
   "AWS.ElastiCache.ServerlessCache",
   ServerlessCacheProps,
   {
+    /** The name of the serverless cache. */
     serverlessCacheName: string;
+    /** The ARN of the serverless cache. */
     serverlessCacheArn: string;
+    /** The cache status (e.g. `creating`, `available`, `modifying`). */
     status: string;
+    /** The cache engine (`valkey`, `redis`, or `memcached`). */
     engine: string;
+    /** The major engine version (e.g. `8`). */
     majorEngineVersion: string | undefined;
+    /** The full engine version the cache is running. */
     fullEngineVersion: string | undefined;
+    /** The DNS hostname of the primary endpoint. */
     endpointAddress: string;
+    /** The port of the primary endpoint (6379 for valkey/redis, 11211 for memcached). */
     endpointPort: number;
+    /** The DNS hostname of the reader endpoint, when the engine exposes one. */
     readerEndpointAddress: string | undefined;
+    /** The port of the reader endpoint, when the engine exposes one. */
     readerEndpointPort: number | undefined;
+    /** The IDs of the security groups associated with the cache. */
     securityGroupIds: string[];
+    /** The IDs of the subnets the cache is deployed in. */
     subnetIds: string[];
+    /** The tags applied to the cache. */
     tags: Record<string, string>;
   },
   never,

@@ -50,9 +50,21 @@ export interface CodeInterpreter extends Resource<
   "AWS.BedrockAgentCore.CodeInterpreter",
   CodeInterpreterProps,
   {
+    /**
+     * The unique identifier of the code interpreter.
+     */
     codeInterpreterId: string;
+    /**
+     * The ARN of the code interpreter.
+     */
     codeInterpreterArn: string;
+    /**
+     * Name of the code interpreter.
+     */
     name: string;
+    /**
+     * Current status of the code interpreter (e.g. `READY`).
+     */
     status: string;
   }
 > {}

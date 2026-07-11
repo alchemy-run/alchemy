@@ -42,8 +42,11 @@ export interface Fleet extends Resource<
   "AWS.IoTFleetWise.Fleet",
   FleetProps,
   {
+    /** The unique ID of the fleet. */
     fleetId: string;
+    /** The ARN of the fleet. */
     fleetArn: string;
+    /** The signal catalog associated with the fleet. */
     signalCatalogArn: string;
   },
   never,

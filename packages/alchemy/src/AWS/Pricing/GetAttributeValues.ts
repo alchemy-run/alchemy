@@ -15,7 +15,8 @@ export interface GetAttributeValuesRequest
  * binding takes no arguments and grants the function
  * `pricing:GetAttributeValues` (the action has no resource-level IAM).
  * Calls are pinned to `us-east-1`, the region that serves the Price List
- * API.
+ * API. Provide the implementation with
+ * `Effect.provide(AWS.Pricing.GetAttributeValuesHttp)`.
  *
  * @binding
  * @section Listing Attribute Values

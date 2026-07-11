@@ -232,8 +232,11 @@ export interface Job extends Resource<
   "AWS.DataBrew.Job",
   JobProps,
   {
+    /** Name of the job. */
     jobName: string;
+    /** ARN of the job. */
     jobArn: string;
+    /** Type of the job (`PROFILE` or `RECIPE`). */
     type: string;
   },
   {},

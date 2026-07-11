@@ -6,6 +6,12 @@ import { isBindingHost } from "../Lambda/Function.ts";
 import { DescribeRule, type DescribeRuleRequest } from "./DescribeRule.ts";
 import type { Rule } from "./Rule.ts";
 
+/**
+ * HTTP implementation of {@link DescribeRule}. At deploy time it grants
+ * `events:DescribeRule` on the bound rule; at runtime it calls the
+ * EventBridge API with the host Function's credentials. Provide this layer on
+ * the Function using the binding.
+ */
 export const DescribeRuleHttp = Layer.effect(
   DescribeRule,
   Effect.gen(function* () {

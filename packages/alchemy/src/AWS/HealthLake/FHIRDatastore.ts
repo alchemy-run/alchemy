@@ -76,12 +76,19 @@ export interface FHIRDatastore extends Resource<
   "AWS.HealthLake.FHIRDatastore",
   FHIRDatastoreProps,
   {
+    /** The unique ID of the datastore. */
     datastoreId: string;
+    /** The ARN of the datastore. */
     datastoreArn: string;
+    /** The name of the datastore. */
     datastoreName: string;
+    /** The current status of the datastore (`ACTIVE`, `CREATING`, ...). */
     datastoreStatus: string;
+    /** The FHIR REST API endpoint of the datastore. */
     datastoreEndpoint: string;
+    /** The FHIR version of the datastore (`R4`). */
     datastoreTypeVersion: string;
+    /** The tags applied to the datastore. */
     tags: Record<string, string>;
   },
   never,

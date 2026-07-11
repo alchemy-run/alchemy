@@ -56,9 +56,21 @@ export interface SecurityPolicy extends Resource<
   "AWS.OpenSearchServerless.SecurityPolicy",
   SecurityPolicyProps,
   {
+    /**
+     * Name of the security policy.
+     */
     policyName: string;
+    /**
+     * Policy type (`encryption` or `network`).
+     */
     type: string;
+    /**
+     * Version of the policy, used for optimistic-concurrency updates.
+     */
     policyVersion: string;
+    /**
+     * Description of the security policy.
+     */
     description?: string;
   },
   {},

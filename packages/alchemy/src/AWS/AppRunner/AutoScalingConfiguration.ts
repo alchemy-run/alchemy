@@ -63,11 +63,29 @@ export interface AutoScalingConfiguration extends Resource<
   "AWS.AppRunner.AutoScalingConfiguration",
   AutoScalingConfigurationProps,
   {
+    /**
+     * Name of the auto scaling configuration.
+     */
     autoScalingConfigurationName: string;
+    /**
+     * ARN of this auto scaling configuration revision.
+     */
     autoScalingConfigurationArn: string;
+    /**
+     * Revision number of the configuration (revisions are immutable).
+     */
     autoScalingConfigurationRevision: number;
+    /**
+     * Maximum concurrent requests per instance before scaling out.
+     */
     maxConcurrency: number | undefined;
+    /**
+     * Minimum number of provisioned instances.
+     */
     minSize: number | undefined;
+    /**
+     * Maximum number of instances the service may scale out to.
+     */
     maxSize: number | undefined;
   },
   never,

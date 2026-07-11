@@ -36,9 +36,21 @@ export interface HttpNamespace extends Resource<
   "AWS.CloudMap.HttpNamespace",
   HttpNamespaceProps,
   {
+    /**
+     * The unique identifier of the namespace.
+     */
     namespaceId: string;
+    /**
+     * The ARN of the namespace.
+     */
     namespaceArn: string;
+    /**
+     * Name of the namespace.
+     */
     namespaceName: string;
+    /**
+     * The name clients use to discover instances via the HTTP discovery API.
+     */
     httpName: string | undefined;
   },
   {},

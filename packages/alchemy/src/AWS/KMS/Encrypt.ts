@@ -43,6 +43,33 @@ export interface EncryptRequest extends Omit<kms.EncryptRequest, "KeyId"> {}
  * // Uses a key managed outside this stack; IAM is scoped via kms:RequestAlias.
  * const encrypt = yield* AWS.KMS.Encrypt("alias/app-key");
  * ```
+ *
+ * @section Wiring
+ * @example Provide the Implementation on a Lambda Function
+ * ```typescript
+ * // Bind in the init phase, call in the handler, and provide the
+ * // EncryptHttp layer on the Function's init Effect (merge the other
+ * // KMS layers with Layer.mergeAll when using several bindings).
+ * export default CryptoFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const key = yield* AWS.KMS.Key("AppKey");
+ *     const encrypt = yield* AWS.KMS.Encrypt(key);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const body = yield* request.text;
+ *         const { CiphertextBlob } = yield* encrypt({
+ *           Plaintext: new TextEncoder().encode(body),
+ *         });
+ *         return HttpServerResponse.json({
+ *           ciphertext: Buffer.from(CiphertextBlob!).toString("base64"),
+ *         });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.KMS.EncryptHttp)),
+ * );
+ * ```
  */
 export interface Encrypt extends Binding.Service<
   Encrypt,

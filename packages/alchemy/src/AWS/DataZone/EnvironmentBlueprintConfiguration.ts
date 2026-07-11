@@ -21,6 +21,7 @@ export interface BlueprintLakeFormationConfiguration {
  * A provisioning configuration attached to a blueprint configuration.
  */
 export interface BlueprintProvisioningConfiguration {
+  /** Lake Formation settings applied when the blueprint provisions environments. */
   lakeFormationConfiguration: BlueprintLakeFormationConfiguration;
 }
 
@@ -117,6 +118,26 @@ export interface EnvironmentBlueprintConfiguration extends Resource<
  *     regionalParameters: {
  *       "us-west-2": { S3Location: "s3://my-datalake-bucket" },
  *     },
+ *   },
+ * );
+ * ```
+ *
+ * @example Blueprint with Lake Formation Provisioning
+ * ```typescript
+ * const config = yield* DataZone.EnvironmentBlueprintConfiguration(
+ *   "datalake",
+ *   {
+ *     domainId: domain.domainId,
+ *     environmentBlueprint: "DefaultDataLake",
+ *     enabledRegions: ["us-west-2"],
+ *     provisioningRoleArn: provisioningRole.roleArn,
+ *     provisioningConfigurations: [
+ *       {
+ *         lakeFormationConfiguration: {
+ *           locationRegistrationRole: registrationRole.roleArn,
+ *         },
+ *       },
+ *     ],
  *   },
  * );
  * ```

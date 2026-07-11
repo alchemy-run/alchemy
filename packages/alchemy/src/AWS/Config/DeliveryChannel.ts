@@ -49,7 +49,9 @@ export interface DeliveryChannel extends Resource<
   "AWS.Config.DeliveryChannel",
   DeliveryChannelProps,
   {
+    /** Physical name of the delivery channel. */
     deliveryChannelName: string;
+    /** S3 bucket configuration snapshots and history are delivered to. */
     s3BucketName: string;
   },
   never,

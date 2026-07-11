@@ -26,7 +26,37 @@ export type QueueSinkError =
  * permanent and dropped. Exhausting retries fails the sink with a typed
  * `BatchRetryExhaustedError` carrying the stranded entries.
  *
+ * The binding grants the host function `sqs:SendMessage` and
+ * `sqs:SendMessageBatch` on the queue. Provide the `QueueSinkHttp` layer
+ * (which itself needs `SendMessageBatchHttp`) on the Function to implement
+ * the binding.
  * @binding
+ * @section Streaming Messages into a Queue
+ * @example Run a Stream into a Queue
+ * ```typescript
+ * // init (provide SQS.QueueSinkHttp + SQS.SendMessageBatchHttp on the Function)
+ * const sink = yield* SQS.QueueSink(queue);
+ *
+ * // runtime: batching, size limits, and transient-failure retry are handled
+ * // by the sink — each element is a SendMessageBatchRequestEntry minus `Id`.
+ * yield* Stream.fromIterable(messages).pipe(
+ *   Stream.map((message) => ({ MessageBody: message })),
+ *   Stream.run(sink),
+ * );
+ * ```
+ *
+ * @example Forward Event-Source Records into a Result Queue
+ * ```typescript
+ * const sink = yield* SQS.QueueSink(resultQueue);
+ *
+ * yield* SQS.consumeQueueMessages(sourceQueue, (records) =>
+ *   records.pipe(
+ *     Stream.map((record) => ({ MessageBody: record.body })),
+ *     Stream.run(sink),
+ *     Effect.orDie,
+ *   ),
+ * );
+ * ```
  */
 export interface QueueSink extends Binding.Service<
   QueueSink,

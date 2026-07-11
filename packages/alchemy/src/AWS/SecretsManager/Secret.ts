@@ -72,11 +72,30 @@ export interface Secret extends Resource<
   "AWS.SecretsManager.Secret",
   SecretProps,
   {
+    /**
+     * ARN of the secret.
+     */
     secretArn: string;
+    /**
+     * Name of the secret.
+     */
     secretName: string;
+    /**
+     * Version ID of the `AWSCURRENT` secret value, if a value has been set.
+     */
     versionId: string | undefined;
+    /**
+     * Description of the secret.
+     */
     description: string | undefined;
+    /**
+     * KMS key ID (or ARN) used to encrypt the secret value, if a
+     * customer-managed key was configured.
+     */
     kmsKeyId: string | undefined;
+    /**
+     * Tags on the secret.
+     */
     tags: Record<string, string>;
   },
   never,

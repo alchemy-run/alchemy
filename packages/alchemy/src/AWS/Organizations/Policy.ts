@@ -55,13 +55,37 @@ export interface Policy extends Resource<
   "AWS.Organizations.Policy",
   PolicyProps,
   {
+    /**
+     * ID of the policy (e.g. `p-examplepolicyid`).
+     */
     policyId: PolicyId;
+    /**
+     * ARN of the policy.
+     */
     policyArn: PolicyArn;
+    /**
+     * Policy name.
+     */
     name: string;
+    /**
+     * Policy description.
+     */
     description: string | undefined;
+    /**
+     * Organizations policy type.
+     */
     type: organizations.PolicyType | undefined;
+    /**
+     * Whether the policy is an AWS-managed policy (e.g. `FullAWSAccess`).
+     */
     awsManaged: boolean | undefined;
+    /**
+     * Parsed policy document as currently stored by AWS Organizations.
+     */
     document: ServiceControlPolicyDocument;
+    /**
+     * Tags on the policy.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -70,7 +94,60 @@ export interface Policy extends Resource<
 
 /**
  * An AWS Organizations policy such as an SCP or tag policy.
+ *
+ * Attach it to a root, OU, or account with {@link PolicyAttachment}. Changing
+ * `type` or `name` replaces the policy; document and description changes
+ * update in place.
  * @resource
+ * @section Creating Policies
+ * @example Service Control Policy (Typed Document)
+ * ```typescript
+ * const denyLeaveOrg = yield* Policy("DenyLeaveOrg", {
+ *   type: "SERVICE_CONTROL_POLICY",
+ *   description: "Prevent member accounts from leaving the organization",
+ *   document: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Deny",
+ *         Action: ["organizations:LeaveOrganization"],
+ *         Resource: "*",
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * @example Tag Policy (Raw JSON)
+ * ```typescript
+ * const tagPolicy = yield* Policy("RequireEnvTag", {
+ *   type: "TAG_POLICY",
+ *   document: JSON.stringify({
+ *     tags: {
+ *       environment: {
+ *         tag_key: { "@@assign": "environment" },
+ *         tag_value: { "@@assign": ["dev", "staging", "prod"] },
+ *       },
+ *     },
+ *   }),
+ * });
+ * ```
+ *
+ * @section Attaching Policies
+ * @example Attach an SCP to the Organization Root
+ * ```typescript
+ * const root = yield* Root("Root", {});
+ *
+ * const scpEnabled = yield* RootPolicyType("ScpEnabled", {
+ *   rootId: root.rootId,
+ *   policyType: "SERVICE_CONTROL_POLICY",
+ * });
+ *
+ * yield* PolicyAttachment("DenyLeaveOrgOnRoot", {
+ *   policyId: denyLeaveOrg.policyId,
+ *   targetId: scpEnabled.rootId,
+ * });
+ * ```
  */
 export const Policy = Resource<Policy>("AWS.Organizations.Policy");
 

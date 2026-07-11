@@ -26,9 +26,23 @@ export interface RecordAliasTarget {
   evaluateTargetHealth?: boolean;
 }
 
+/**
+ * Fully-resolved alias target as stored in the record's attributes — a
+ * `RecordAliasTarget` with all `Input` values resolved.
+ */
 export interface ResolvedRecordAliasTarget {
+  /**
+   * Hosted zone ID for the alias target.
+   */
   hostedZoneId: string;
+  /**
+   * DNS name for the alias target.
+   */
   dnsName: string;
+  /**
+   * Whether Route 53 evaluates target health for the alias.
+   * @default false
+   */
   evaluateTargetHealth?: boolean;
 }
 

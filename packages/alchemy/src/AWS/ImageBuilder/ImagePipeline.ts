@@ -85,10 +85,15 @@ export interface ImagePipeline extends Resource<
   "AWS.ImageBuilder.ImagePipeline",
   ImagePipelineProps,
   {
+    /** The name of the image pipeline. */
     imagePipelineName: string;
+    /** The ARN of the image pipeline. */
     imagePipelineArn: string;
+    /** The OS platform of the pipeline's recipe (`Linux` / `Windows`). */
     platform: string | undefined;
+    /** Whether the pipeline is `ENABLED` or `DISABLED`. */
     status: string | undefined;
+    /** When the pipeline was created. */
     dateCreated: string | undefined;
   },
   never,

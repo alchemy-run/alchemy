@@ -42,10 +42,25 @@ export interface ServiceNetwork extends Resource<
   "AWS.VpcLattice.ServiceNetwork",
   ServiceNetworkProps,
   {
+    /**
+     * Service-assigned unique ID of the service network.
+     */
     serviceNetworkId: string;
+    /**
+     * ARN of the service network.
+     */
     serviceNetworkArn: string;
+    /**
+     * Physical name of the service network.
+     */
     name: string;
+    /**
+     * Effective authorization type.
+     */
     authType: ServiceNetworkAuthType;
+    /**
+     * Current tags reported for the service network.
+     */
     tags: Record<string, string>;
   },
   never,

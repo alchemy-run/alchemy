@@ -54,9 +54,13 @@ export interface InputSecurityGroup extends Resource<
   "AWS.MediaLive.InputSecurityGroup",
   InputSecurityGroupProps,
   {
+    /** Server-assigned unique id of the input security group. */
     inputSecurityGroupId: string;
+    /** ARN of the input security group. */
     inputSecurityGroupArn: string;
+    /** Current state (e.g. `IDLE`, `IN_USE`). */
     state: medialive.InputSecurityGroupState | undefined;
+    /** Allowlisted source CIDR blocks. */
     whitelistRules: string[];
   },
   never,

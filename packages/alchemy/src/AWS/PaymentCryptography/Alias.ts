@@ -26,7 +26,13 @@ export interface Alias extends Resource<
   "AWS.PaymentCryptography.Alias",
   AliasProps,
   {
+    /**
+     * Name of the alias (starts with `alias/`).
+     */
     aliasName: string;
+    /**
+     * ARN of the key the alias points to, if attached.
+     */
     keyArn: string | undefined;
   },
   never,

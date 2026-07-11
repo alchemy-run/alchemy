@@ -73,10 +73,15 @@ export interface Listener extends Resource<
   "AWS.ELBv2.Listener",
   ListenerProps,
   {
+    /** The ARN of the listener. */
     listenerArn: ListenerArn;
+    /** The ARN of the load balancer the listener is attached to. */
     loadBalancerArn: LoadBalancerArn;
+    /** The ARN of the target group from the default forward action, if any. */
     targetGroupArn: TargetGroupArn | undefined;
+    /** The port the listener accepts connections on. */
     port: number;
+    /** The protocol for connections (e.g. `HTTP`, `HTTPS`, `TCP`, `TLS`). */
     protocol: string;
   },
   never,

@@ -11,6 +11,8 @@ import * as Binding from "../../Binding.ts";
  * `rekognition:DetectLabels` (the action has no resource-level IAM).
  * Pass the image as raw bytes (`Image.Bytes`) or as an S3 object
  * reference (`Image.S3Object`) — raw distilled types, no marshalling.
+ * Provide the implementation with
+ * `Effect.provide(AWS.Rekognition.DetectLabelsHttp)`.
  *
  * @binding
  * @section Detecting Labels

@@ -89,6 +89,31 @@ type ChangesHandler<TDoc, Req> = (
  * @param cluster The DocumentDB cluster to consume change events from.
  * @param props Event-source configuration (database, collection, credentials).
  * @param process The handler invoked with a stream of change records.
+ *
+ * @example Consume change-stream events in a Lambda function
+ * ```typescript
+ * // inside the Function's Effect.gen, with
+ * // Effect.provide(AWS.Lambda.DocDBClusterEventSource)
+ * const secretArn = yield* cluster.masterUserSecretArn;
+ * yield* AWS.DocDB.consumeClusterChanges(
+ *   cluster,
+ *   {
+ *     databaseName: "app",
+ *     collectionName: "orders",
+ *     secretArn,
+ *     fullDocument: "UpdateLookup",
+ *     startingPosition: "LATEST",
+ *   },
+ *   (stream) =>
+ *     stream.pipe(
+ *       Stream.runForEach((record) =>
+ *         Effect.log(
+ *           `${record.event.operationType}: ${JSON.stringify(record.event.documentKey)}`,
+ *         ),
+ *       ),
+ *     ),
+ * );
+ * ```
  */
 export function consumeClusterChanges<TDoc = unknown, Req = never>(
   cluster: DBCluster,

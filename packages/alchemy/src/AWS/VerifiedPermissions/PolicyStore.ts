@@ -45,7 +45,14 @@ export interface PolicyStore extends Resource<
   "AWS.VerifiedPermissions.PolicyStore",
   PolicyStoreProps,
   {
+    /**
+     * Service-assigned unique ID of the policy store — pass it to
+     * {@link Policy}, {@link Schema}, and `IsAuthorized`.
+     */
     policyStoreId: string;
+    /**
+     * ARN of the policy store.
+     */
     policyStoreArn: string;
   },
   {},

@@ -18,13 +18,38 @@ import {
  * enters a lifecycle wait state.
  */
 export interface LifecycleActionDetail {
+  /**
+   * Token identifying this specific lifecycle action; pass it to
+   * `complete`/`heartbeat` on the {@link CompleteLifecycleAction} binding.
+   */
   LifecycleActionToken: string;
+  /**
+   * Name of the Auto Scaling Group the instance belongs to.
+   */
   AutoScalingGroupName: string;
+  /**
+   * Name of the lifecycle hook that paused the instance.
+   */
   LifecycleHookName: string;
+  /**
+   * ID of the EC2 instance in the wait state.
+   */
   EC2InstanceId: string;
+  /**
+   * The paused transition (e.g. `autoscaling:EC2_INSTANCE_LAUNCHING`).
+   */
   LifecycleTransition: string;
+  /**
+   * Metadata configured on the hook via `notificationMetadata`.
+   */
   NotificationMetadata?: string;
+  /**
+   * Where the instance is coming from (e.g. `EC2` or `WarmPool`).
+   */
   Origin?: string;
+  /**
+   * Where the instance is headed (e.g. `AutoScalingGroup` or `WarmPool`).
+   */
   Destination?: string;
 }
 
@@ -99,6 +124,50 @@ const detailTypeFor = (transition: string): string =>
  *         })
  *         .pipe(Effect.orDie),
  *     ),
+ * );
+ * ```
+ *
+ * @example Register the event source inside a Lambda Function
+ * ```typescript
+ * import * as AWS from "alchemy/AWS";
+ * import {
+ *   CompleteLifecycleAction,
+ *   CompleteLifecycleActionHttp,
+ *   consumeLifecycleActions,
+ * } from "alchemy/AWS/AutoScaling";
+ *
+ * export class DrainFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
+ *   "DrainFunction",
+ * ) {}
+ *
+ * export default DrainFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const lifecycle = yield* CompleteLifecycleAction(group);
+ *
+ *     // creates the LifecycleHook on the group and subscribes this Function
+ *     // to the matching EventBridge lifecycle events
+ *     yield* consumeLifecycleActions(
+ *       group,
+ *       { lifecycleTransition: "TERMINATING" },
+ *       (events) =>
+ *         Stream.runForEach(events, (event) =>
+ *           lifecycle
+ *             .complete({
+ *               LifecycleHookName: event.detail.LifecycleHookName,
+ *               LifecycleActionToken: event.detail.LifecycleActionToken,
+ *               LifecycleActionResult: "CONTINUE",
+ *             })
+ *             .pipe(Effect.orDie),
+ *         ),
+ *     );
+ *
+ *     return {};
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(AWS.Lambda.EventSource, CompleteLifecycleActionHttp),
+ *     ),
+ *   ),
  * );
  * ```
  */

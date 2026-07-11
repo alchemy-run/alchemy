@@ -26,11 +26,17 @@ export interface SSHPublicKey extends Resource<
   "AWS.IAM.SSHPublicKey",
   SSHPublicKeyProps,
   {
+    /** The IAM user the SSH public key belongs to. */
     userName: string;
+    /** The unique ID of the SSH public key. */
     sshPublicKeyId: string;
+    /** The MD5 fingerprint of the SSH public key. */
     fingerprint: string;
+    /** The SSH public key material. */
     sshPublicKeyBody: string;
+    /** Whether the key is `Active` or `Inactive`. */
     status: iam.StatusType;
+    /** When the key was uploaded. */
     uploadDate: Date | undefined;
   },
   never,

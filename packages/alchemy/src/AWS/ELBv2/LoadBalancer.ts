@@ -81,15 +81,25 @@ export interface LoadBalancer extends Resource<
   "AWS.ELBv2.LoadBalancer",
   LoadBalancerProps,
   {
+    /** The ARN of the load balancer. */
     loadBalancerArn: LoadBalancerArn;
+    /** The name of the load balancer. */
     loadBalancerName: LoadBalancerName;
+    /** The public DNS name of the load balancer. */
     dnsName: string;
+    /** The Route 53 hosted zone ID for alias records targeting the load balancer. */
     canonicalHostedZoneId: string;
+    /** The ID of the VPC the load balancer resides in. */
     vpcId: string;
+    /** Whether the load balancer is `internet-facing` or `internal`. */
     scheme: string;
+    /** The load balancer type (`application`, `network`, or `gateway`). */
     type: string;
+    /** The IDs of the security groups attached to the load balancer. */
     securityGroups: string[];
+    /** The IDs of the subnets the load balancer spans. */
     subnets: string[];
+    /** The tags applied to the load balancer. */
     tags: Record<string, string>;
   },
   never,

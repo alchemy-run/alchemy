@@ -81,14 +81,42 @@ export interface LifecycleHook extends Resource<
   "AWS.AutoScaling.LifecycleHook",
   LifecycleHookProps,
   {
+    /**
+     * Name of the lifecycle hook.
+     */
     lifecycleHookName: LifecycleHookName;
+    /**
+     * Name of the Auto Scaling Group the hook is attached to.
+     */
     autoScalingGroupName: string;
+    /**
+     * The paused transition (e.g. `autoscaling:EC2_INSTANCE_LAUNCHING`).
+     */
     lifecycleTransition: string;
+    /**
+     * Seconds an instance stays paused before `defaultResult` applies.
+     */
     heartbeatTimeout: number;
+    /**
+     * Maximum total seconds an instance can remain in the wait state
+     * (100x heartbeat, capped by AWS).
+     */
     globalTimeout: number;
+    /**
+     * Action taken when the hook times out (`CONTINUE` or `ABANDON`).
+     */
     defaultResult: string;
+    /**
+     * SNS/SQS target lifecycle notifications are published to, if any.
+     */
     notificationTargetARN?: string;
+    /**
+     * IAM role used to publish to the notification target, if any.
+     */
     roleARN?: string;
+    /**
+     * Metadata delivered with each lifecycle event.
+     */
     notificationMetadata?: string;
   },
   never,

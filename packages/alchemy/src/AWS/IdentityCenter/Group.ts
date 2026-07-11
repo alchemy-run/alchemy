@@ -34,11 +34,17 @@ export interface Group extends Resource<
   "AWS.IdentityCenter.Group",
   GroupProps,
   {
+    /** The identity store containing the group. */
     identityStoreId: string;
+    /** The unique ID of the group. */
     groupId: string;
+    /** The display name of the group. */
     displayName: string | undefined;
+    /** The description of the group. */
     description: string | undefined;
+    /** When the group was created. */
     createdAt: Date | undefined;
+    /** When the group was last updated. */
     updatedAt: Date | undefined;
   },
   never,

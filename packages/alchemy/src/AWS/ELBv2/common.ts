@@ -29,6 +29,7 @@ export interface ForwardTarget {
  * with session stickiness so a client stays pinned to a single target group.
  */
 export interface ForwardAction {
+  /** Discriminator identifying this as a forward action. */
   type: "forward";
   /** One or more target groups to forward to (weighted). */
   targetGroups: ForwardTarget[];
@@ -52,6 +53,7 @@ export interface ForwardAction {
  * original request.
  */
 export interface RedirectAction {
+  /** Discriminator identifying this as a redirect action. */
   type: "redirect";
   /** The redirect status code. */
   statusCode: "HTTP_301" | "HTTP_302";
@@ -72,6 +74,7 @@ export interface RedirectAction {
  * balancer without forwarding to any target.
  */
 export interface FixedResponseAction {
+  /** Discriminator identifying this as a fixed-response action. */
   type: "fixedResponse";
   /** The HTTP response status code (2XX/4XX/5XX). */
   statusCode: string;
@@ -86,19 +89,38 @@ export interface FixedResponseAction {
  * (OIDC) identity provider before forwarding to the next action.
  */
 export interface AuthenticateOidcAction {
+  /** Discriminator identifying this as an authenticate-OIDC action. */
   type: "authenticateOidc";
+  /** The OIDC issuer identifier of the identity provider (IdP). */
   issuer: string;
+  /** The authorization endpoint of the IdP. */
   authorizationEndpoint: string;
+  /** The token endpoint of the IdP. */
   tokenEndpoint: string;
+  /** The user info endpoint of the IdP. */
   userInfoEndpoint: string;
+  /** The OAuth 2.0 client identifier registered with the IdP. */
   clientId: string;
   /** Required on first use; omit with `useExistingClientSecret: true` to keep the existing one. */
   clientSecret?: Redacted.Redacted<string>;
+  /**
+   * The set of user claims requested from the IdP.
+   * @default "openid"
+   */
   scope?: string;
+  /**
+   * The name of the cookie used to maintain session information.
+   * @default "AWSELBAuthSessionCookie"
+   */
   sessionCookieName?: string;
   /** The maximum duration of the authentication session — e.g. `"7 days"`. Sent to AWS as whole seconds. */
   sessionTimeout?: Duration.Input;
+  /**
+   * Behavior when the user is not authenticated (`deny`, `allow`, or `authenticate`).
+   * @default "authenticate"
+   */
   onUnauthenticatedRequest?: "deny" | "allow" | "authenticate";
+  /** Set to `true` on updates to keep the client secret already stored on the action. */
   useExistingClientSecret?: boolean;
 }
 
@@ -107,14 +129,30 @@ export interface AuthenticateOidcAction {
  * Cognito user pool before forwarding to the next action.
  */
 export interface AuthenticateCognitoAction {
+  /** Discriminator identifying this as an authenticate-Cognito action. */
   type: "authenticateCognito";
+  /** The ARN of the Cognito user pool. */
   userPoolArn: string;
+  /** The ID of the Cognito user pool client. */
   userPoolClientId: string;
+  /** The domain prefix or fully-qualified domain of the Cognito user pool. */
   userPoolDomain: string;
+  /**
+   * The set of user claims requested from Cognito.
+   * @default "openid"
+   */
   scope?: string;
+  /**
+   * The name of the cookie used to maintain session information.
+   * @default "AWSELBAuthSessionCookie"
+   */
   sessionCookieName?: string;
   /** The maximum duration of the authentication session — e.g. `"7 days"`. Sent to AWS as whole seconds. */
   sessionTimeout?: Duration.Input;
+  /**
+   * Behavior when the user is not authenticated (`deny`, `allow`, or `authenticate`).
+   * @default "authenticate"
+   */
   onUnauthenticatedRequest?: "deny" | "allow" | "authenticate";
 }
 

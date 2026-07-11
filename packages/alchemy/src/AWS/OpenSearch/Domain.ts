@@ -225,13 +225,37 @@ export interface Domain extends Resource<
   "AWS.OpenSearch.Domain",
   DomainProps,
   {
+    /**
+     * Name of the domain.
+     */
     domainName: string;
+    /**
+     * ARN of the domain.
+     */
     domainArn: string;
+    /**
+     * Unique identifier of the domain (`account-id/domain-name`).
+     */
     domainId: string;
+    /**
+     * Engine version running on the domain (e.g. `OpenSearch_2.19`).
+     */
     engineVersion: string | undefined;
+    /**
+     * Domain-specific HTTPS endpoint for search and index requests.
+     */
     endpoint: string | undefined;
+    /**
+     * Whether domain creation has completed.
+     */
     created: boolean;
+    /**
+     * Whether a configuration change is currently being applied.
+     */
     processing: boolean;
+    /**
+     * Tags on the domain.
+     */
     tags: Record<string, string>;
   },
   never,

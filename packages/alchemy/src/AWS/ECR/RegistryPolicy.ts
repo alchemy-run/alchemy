@@ -25,7 +25,9 @@ export interface RegistryPolicy extends Resource<
   "AWS.ECR.RegistryPolicy",
   RegistryPolicyProps,
   {
+    /** The AWS account ID of the registry. */
     registryId: string;
+    /** The JSON registry permissions policy as stored by ECR. */
     policy: string;
   },
   never,

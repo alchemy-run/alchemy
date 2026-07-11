@@ -17,8 +17,25 @@ export interface ExecuteSqlRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for the deprecated `rds-data:ExecuteSql` API.
+ * Runtime binding for the deprecated `rds-data:ExecuteSql` API (Aurora
+ * Serverless v1 era). Prefer `AWS.RDSData.ExecuteStatement`, which supports
+ * named parameters and transactions.
+ *
+ * Bind it to a Data-API-enabled `DBCluster` and its credentials secret;
+ * provide the implementation with `Effect.provide(AWS.RDSData.ExecuteSqlHttp)`.
  * @binding
+ * @section Legacy SQL Execution
+ * @example Run Raw SQL Statements
+ * ```typescript
+ * // init
+ * const executeSql = yield* AWS.RDSData.ExecuteSql(db.cluster, {
+ *   secret: db.secret,
+ *   database: "app",
+ * });
+ *
+ * // runtime — statements are passed as a single string, no parameters
+ * const result = yield* executeSql({ sqlStatements: "SELECT 1" });
+ * ```
  */
 export interface ExecuteSql extends Binding.Service<
   ExecuteSql,

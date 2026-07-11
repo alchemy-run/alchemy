@@ -80,11 +80,15 @@ export interface DeploymentGroup extends Resource<
   "AWS.CodeDeploy.DeploymentGroup",
   DeploymentGroupProps,
   {
+    /** Physical name of the deployment group. */
     deploymentGroupName: string;
     /** Unique CodeDeploy-assigned deployment-group ID. */
     deploymentGroupId: string;
+    /** ARN of the deployment group. */
     deploymentGroupArn: string;
+    /** Name of the application this group belongs to. */
     applicationName: string;
+    /** ARN of the service role CodeDeploy assumes for deployments. */
     serviceRoleArn: string;
   },
   never,

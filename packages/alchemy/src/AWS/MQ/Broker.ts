@@ -188,9 +188,13 @@ export interface Broker extends Resource<
   "AWS.MQ.Broker",
   BrokerProps,
   {
+    /** Server-assigned unique id of the broker (e.g. `b-1234...`). */
     brokerId: string;
+    /** ARN of the broker. */
     brokerArn: string;
+    /** Name of the broker. */
     brokerName: string;
+    /** Current lifecycle state (e.g. `CREATION_IN_PROGRESS`, `RUNNING`). */
     brokerState: string;
     /** Wire-level connection endpoints (protocol URIs) for the broker. */
     endpoints: string[] | undefined;
@@ -268,6 +272,30 @@ export interface Broker extends Resource<
  *     timeZone: "UTC",
  *   },
  * });
+ * ```
+ *
+ * @section Consuming Messages
+ * Subscribe a Lambda function to broker queues from the init phase via
+ * {@link consumeBrokerMessages}. The event-source mapping, IAM grants, and
+ * runtime dispatch are created automatically (provide
+ * `Lambda.BrokerEventSource` on the function).
+ *
+ * @example Process queue messages in a Lambda function
+ * ```typescript
+ * // init
+ * yield* MQ.consumeBrokerMessages(
+ *   broker,
+ *   {
+ *     queues: ["orders"],
+ *     credentialsSecretArn: secret.secretArn,
+ *   },
+ *   (messages) =>
+ *     messages.pipe(
+ *       Stream.runForEach((message) =>
+ *         Effect.log(`received: ${message.data}`),
+ *       ),
+ *     ),
+ * );
  * ```
  */
 export const Broker = Resource<Broker>("AWS.MQ.Broker");

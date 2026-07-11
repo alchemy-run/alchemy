@@ -44,10 +44,15 @@ export interface Listener extends Resource<
   "AWS.GlobalAccelerator.Listener",
   ListenerProps,
   {
+    /** The ARN of the listener. */
     listenerArn: string;
+    /** The ARN of the accelerator the listener is attached to. */
     acceleratorArn: string;
+    /** The port ranges the listener accepts connections on. */
     portRanges: PortRange[];
+    /** The listener protocol: `TCP` or `UDP`. */
     protocol: string;
+    /** The client affinity setting: `NONE` or `SOURCE_IP`. */
     clientAffinity: string;
   },
   never,

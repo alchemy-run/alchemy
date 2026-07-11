@@ -78,11 +78,30 @@ export interface Namespace extends Resource<
   "AWS.RedshiftServerless.Namespace",
   NamespaceProps,
   {
+    /**
+     * Name of the namespace.
+     */
     namespaceName: string;
+    /**
+     * ARN of the namespace.
+     */
     namespaceArn: string;
+    /**
+     * Unique ID of the namespace.
+     */
     namespaceId: string;
+    /**
+     * Name of the first database created in the namespace.
+     */
     dbName: string | undefined;
+    /**
+     * ARN of the Secrets Manager secret holding the admin password when
+     * `manageAdminPassword` is enabled.
+     */
     adminPasswordSecretArn: string | undefined;
+    /**
+     * Current namespace status (e.g. `"AVAILABLE"`).
+     */
     status: string;
   },
   never,

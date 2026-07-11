@@ -94,9 +94,21 @@ export interface AccessPoint extends Resource<
   "AWS.S3Files.AccessPoint",
   AccessPointProps,
   {
+    /**
+     * Unique ID of the access point.
+     */
     accessPointId: string;
+    /**
+     * ARN of the access point.
+     */
     accessPointArn: string;
+    /**
+     * ID of the file system the access point attaches to.
+     */
     fileSystemId: string;
+    /**
+     * Current lifecycle status of the access point (e.g. `AVAILABLE`).
+     */
     status: string;
   },
   never,

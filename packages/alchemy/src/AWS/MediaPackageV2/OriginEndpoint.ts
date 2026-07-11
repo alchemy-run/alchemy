@@ -88,7 +88,9 @@ export interface OriginEndpointProps {
 }
 
 interface ManifestRef {
+  /** Name of the manifest. */
   manifestName: string;
+  /** Playback URL of the manifest on the group's egress domain. */
   url: string;
 }
 
@@ -96,14 +98,23 @@ export interface OriginEndpoint extends Resource<
   "AWS.MediaPackageV2.OriginEndpoint",
   OriginEndpointProps,
   {
+    /** Name of the channel group the endpoint belongs to. */
     channelGroupName: string;
+    /** Name of the channel the endpoint packages content from. */
     channelName: string;
+    /** Name of the origin endpoint. */
     originEndpointName: string;
+    /** ARN of the origin endpoint. */
     originEndpointArn: string;
+    /** Output container type (`TS`, `CMAF`, or `ISM`). */
     containerType: string;
+    /** HLS manifests served by the endpoint. */
     hlsManifests: ManifestRef[];
+    /** Low-latency HLS manifests served by the endpoint. */
     lowLatencyHlsManifests: ManifestRef[];
+    /** DASH manifests served by the endpoint. */
     dashManifests: ManifestRef[];
+    /** Microsoft Smooth Streaming manifests served by the endpoint. */
     mssManifests: ManifestRef[];
   },
   never,

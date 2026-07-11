@@ -28,8 +28,18 @@ export interface AuthPolicy extends Resource<
   "AWS.VpcLattice.AuthPolicy",
   AuthPolicyProps,
   {
+    /**
+     * ID or ARN of the service network or service the policy is attached to.
+     */
     resourceIdentifier: string;
+    /**
+     * The attached policy document as a JSON string.
+     */
     policy: string;
+    /**
+     * Policy state reported by the API (`Active` or `Inactive` — `Inactive`
+     * when the target's `authType` is `NONE`).
+     */
     state: string | undefined;
   },
   never,

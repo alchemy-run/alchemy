@@ -43,8 +43,17 @@ export interface ExecuteStatementRequest extends Omit<
 export class RedshiftStatementFailed extends Data.TaggedError(
   "RedshiftStatementFailed",
 )<{
+  /**
+   * ID of the failed statement.
+   */
   readonly statementId: string;
+  /**
+   * Terminal status the statement ended in (`"FAILED"` or `"ABORTED"`).
+   */
   readonly status: string;
+  /**
+   * Error message reported by Redshift, if any.
+   */
   readonly error: string | undefined;
 }> {}
 
@@ -100,6 +109,12 @@ export interface StatementsClient {
  * {@link Workgroup}. Exposes `execute`/`describe`/`getResult` plus a composite
  * `query` that submits a statement and polls until it finishes.
  *
+ * At deploy time it grants `redshift-data:*` on the workgroup (plus
+ * `redshift-serverless:GetCredentials` for IAM auth) and publishes the
+ * workgroup name to the host Function. The Data API is HTTP-based — no
+ * driver, no VPC reach, and no credential plumbing required. Provide the
+ * implementation with `Effect.provide(AWS.RedshiftData.StatementsHttp)`.
+ *
  * @binding
  * @section Running SQL
  * @example Query a Workgroup
@@ -107,6 +122,36 @@ export interface StatementsClient {
  * const sql = yield* RedshiftData.Statements(workgroup, { database: "dev" });
  * const result = yield* sql.query("SELECT 1 AS n");
  * // result.Records -> [[{ longValue: 1 }]]
+ * ```
+ *
+ * @example Serve Query Results from a Lambda Function
+ * ```typescript
+ * export default QueryFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const namespace = yield* RedshiftServerless.Namespace("Analytics", {
+ *       dbName: "analytics",
+ *       adminUsername: "admin",
+ *       manageAdminPassword: true,
+ *     });
+ *     const workgroup = yield* RedshiftServerless.Workgroup("Analytics", {
+ *       namespaceName: namespace.namespaceName,
+ *       baseCapacity: 8,
+ *     });
+ *     // init — bind the Data API to the workgroup
+ *     const sql = yield* RedshiftData.Statements(workgroup, {
+ *       database: "analytics",
+ *     });
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime — submit a statement and wait for its rows
+ *         const result = yield* sql.query("SELECT count(*) AS n FROM events");
+ *         return yield* HttpServerResponse.json({ records: result.Records });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(RedshiftData.StatementsHttp)),
+ * );
  * ```
  */
 export interface Statements extends Binding.Service<

@@ -28,6 +28,24 @@ export interface GetMediaRequest extends Omit<
  *   StartSelector: { StartSelectorType: "EARLIEST" },
  * });
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Provide the GetMediaHttp layer on the Function's init Effect; merge
+ * // with the other KinesisVideo layers when using several bindings.
+ * export default MediaFunction.make(
+ *   { main: import.meta.url, url: true, timeout: Duration.seconds(30) },
+ *   Effect.gen(function* () {
+ *     const stream = yield* AWS.KinesisVideo.Stream("Camera", {
+ *       mediaType: "video/h264",
+ *       dataRetentionInHours: "24 hours",
+ *     });
+ *     const getMedia = yield* AWS.KinesisVideo.GetMedia(stream);
+ *     // ... read media.Payload in the fetch handler
+ *     return { fetch: handler };
+ *   }).pipe(Effect.provide(AWS.KinesisVideo.GetMediaHttp)),
+ * );
+ * ```
  */
 export interface GetMedia extends Binding.Service<
   GetMedia,

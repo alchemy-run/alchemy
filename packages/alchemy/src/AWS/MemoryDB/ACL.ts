@@ -35,11 +35,17 @@ export interface ACL extends Resource<
   "AWS.MemoryDB.ACL",
   ACLProps,
   {
+    /** Name of the ACL. */
     aclName: string;
+    /** ARN of the ACL. */
     aclArn: string;
+    /** Current lifecycle status (e.g. `creating`, `active`). */
     status: string;
+    /** Names of the users in the ACL. */
     userNames: string[];
+    /** Minimum engine version the ACL is compatible with. */
     minimumEngineVersion: string | undefined;
+    /** Tags on the ACL (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

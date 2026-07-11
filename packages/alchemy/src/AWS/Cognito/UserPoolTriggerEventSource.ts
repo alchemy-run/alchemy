@@ -85,7 +85,31 @@ export type UserPoolTriggerEventSourceService = <
  * `lambda:InvokeFunction` Permission for `cognito-idp.amazonaws.com`; at
  * runtime it dispatches matching trigger events to the handler and returns
  * the handler's (mutated) event to Cognito.
+ *
+ * Use the {@link onUserPoolTrigger} helper (or the per-slot shorthands
+ * {@link onPreSignUp}, {@link onPostConfirmation},
+ * {@link onPreTokenGeneration}, {@link onCustomMessage}) rather than the
+ * service directly, and provide `Lambda.UserPoolTriggerEventSource` on the
+ * hosting function.
  * @binding
+ * @section Handling User Pool Triggers
+ * @example Auto-confirm Sign-ups from a Lambda Function
+ * ```typescript
+ * export default AuthFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const pool = yield* Cognito.UserPool("Users", {});
+ *
+ *     // deploy: wires PreSignUp in the pool's LambdaConfig + invoke Permission
+ *     // runtime: dispatches PreSignUp_* events to this handler
+ *     yield* Cognito.onPreSignUp(pool, (event) =>
+ *       Effect.sync(() => Cognito.autoConfirmUser(event, { verifyEmail: true })),
+ *     );
+ *
+ *     return {};
+ *   }).pipe(Effect.provide(Lambda.UserPoolTriggerEventSource)),
+ * );
+ * ```
  */
 export interface UserPoolTriggerEventSource extends Binding.Service<
   UserPoolTriggerEventSource,

@@ -61,15 +61,46 @@ export interface PhoneNumber extends Resource<
   "AWS.PinpointSMSVoiceV2.PhoneNumber",
   PhoneNumberProps,
   {
+    /**
+     * ID of the phone number.
+     */
     phoneNumberId: string;
+    /**
+     * ARN of the phone number.
+     */
     phoneNumberArn: string;
+    /**
+     * The provisioned phone number in E.164 format.
+     */
     phoneNumber: string;
+    /**
+     * Provisioning status (e.g. `PENDING`, `ACTIVE`).
+     */
     status: string;
+    /**
+     * Two-letter ISO country code of the number.
+     */
     isoCountryCode: string;
+    /**
+     * Message type the number is registered for (`TRANSACTIONAL` or
+     * `PROMOTIONAL`).
+     */
     messageType: string;
+    /**
+     * Capabilities of the number (`SMS`, `VOICE`, `MMS`).
+     */
     numberCapabilities: string[];
+    /**
+     * Number type (e.g. `LONG_CODE`, `TOLL_FREE`, `TEN_DLC`).
+     */
     numberType: string;
+    /**
+     * Monthly leasing price in USD.
+     */
     monthlyLeasingPrice: string;
+    /**
+     * Opt-out list associated with the number.
+     */
     optOutListName: string;
   },
   never,

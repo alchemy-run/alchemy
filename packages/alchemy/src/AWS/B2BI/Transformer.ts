@@ -53,9 +53,21 @@ export interface Transformer extends Resource<
   "AWS.B2BI.Transformer",
   TransformerProps,
   {
+    /**
+     * Service-assigned unique ID of the transformer.
+     */
     transformerId: string;
+    /**
+     * ARN of the transformer.
+     */
     transformerArn: string;
+    /**
+     * Name of the transformer.
+     */
     name: string;
+    /**
+     * Current status (`active` or `inactive`).
+     */
     status: string;
   },
   never,

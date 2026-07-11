@@ -48,9 +48,21 @@ export interface Partnership extends Resource<
   "AWS.B2BI.Partnership",
   PartnershipProps,
   {
+    /**
+     * Service-assigned unique ID of the partnership.
+     */
     partnershipId: string;
+    /**
+     * ARN of the partnership.
+     */
     partnershipArn: string;
+    /**
+     * ID of the profile the partnership belongs to.
+     */
     profileId: string;
+    /**
+     * Service-assigned ID of the trading partner.
+     */
     tradingPartnerId: string | undefined;
   },
   never,

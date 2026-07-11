@@ -10,7 +10,8 @@ export interface SearchRequest extends Omit<RE2.SearchInput, "ViewArn"> {}
  *
  * Bind this operation to a `View` inside a function runtime to get a
  * callable that automatically injects the view's ARN. Results are the
- * intersection of the `QueryString` and the view's filter.
+ * intersection of the `QueryString` and the view's filter. Provide the
+ * implementation with `Effect.provide(AWS.ResourceExplorer.SearchHttp)`.
  * @binding
  * @section Searching Resources
  * @example Search for S3 buckets

@@ -38,11 +38,17 @@ export interface SubnetGroup extends Resource<
   "AWS.MemoryDB.SubnetGroup",
   SubnetGroupProps,
   {
+    /** Name of the subnet group. */
     subnetGroupName: string;
+    /** ARN of the subnet group. */
     subnetGroupArn: string;
+    /** Description of the subnet group. */
     description: string | undefined;
+    /** ID of the VPC the subnets belong to. */
     vpcId: string | undefined;
+    /** IDs of the subnets in the group. */
     subnetIds: string[];
+    /** Tags on the subnet group (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

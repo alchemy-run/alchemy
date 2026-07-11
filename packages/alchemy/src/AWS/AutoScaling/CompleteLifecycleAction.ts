@@ -62,6 +62,57 @@ export interface CompleteLifecycleActionClient {
  *   LifecycleActionResult: "CONTINUE",
  * });
  * ```
+ *
+ * @example Drain launching instances from a Lambda Function
+ * ```typescript
+ * import * as AWS from "alchemy/AWS";
+ * import {
+ *   CompleteLifecycleAction,
+ *   CompleteLifecycleActionHttp,
+ *   consumeLifecycleActions,
+ * } from "alchemy/AWS/AutoScaling";
+ *
+ * export class LifecycleFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
+ *   "LifecycleFunction",
+ * ) {}
+ *
+ * export default LifecycleFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const lifecycle = yield* CompleteLifecycleAction(group);
+ *
+ *     yield* consumeLifecycleActions(
+ *       group,
+ *       { lifecycleTransition: "LAUNCHING", heartbeatTimeout: "300 seconds" },
+ *       (events) =>
+ *         Stream.runForEach(events, (event) =>
+ *           lifecycle
+ *             .complete({
+ *               LifecycleHookName: event.detail.LifecycleHookName,
+ *               LifecycleActionToken: event.detail.LifecycleActionToken,
+ *               LifecycleActionResult: "CONTINUE",
+ *             })
+ *             .pipe(Effect.orDie),
+ *         ),
+ *     );
+ *
+ *     return {};
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(AWS.Lambda.EventSource, CompleteLifecycleActionHttp),
+ *     ),
+ *   ),
+ * );
+ * ```
+ *
+ * @example Buy more time with a heartbeat
+ * ```typescript
+ * // reset the heartbeat timeout while a long drain is still in progress
+ * yield* lifecycle.heartbeat({
+ *   LifecycleHookName: event.detail.LifecycleHookName,
+ *   LifecycleActionToken: event.detail.LifecycleActionToken,
+ * });
+ * ```
  */
 export interface CompleteLifecycleAction extends Binding.Service<
   CompleteLifecycleAction,

@@ -170,18 +170,31 @@ export interface ServerHost extends Resource<
   "AWS.EKS.ServerHost",
   ServerHostProps,
   {
+    /** The name of the EKS cluster the server runs on. */
     clusterName: string;
+    /** The Kubernetes namespace the server's objects live in. */
     namespace: string;
+    /** The name of the Kubernetes Deployment running the server. */
     deploymentName: string;
+    /** The name of the Kubernetes Service exposing the server. */
     serviceName: string;
+    /** The name of the service account the pods run as. */
     serviceAccountName: string;
+    /** The container port the server listens on. */
     port: number;
+    /** The URI of the container image the deployment runs. */
     imageUri: string;
+    /** The name of the ECR repository holding the server image. */
     repositoryName: string;
+    /** The URI of the ECR repository holding the server image. */
     repositoryUri: string;
+    /** The ARN of the IAM role pods assume via Pod Identity. */
     roleArn: string;
+    /** The name of the IAM role pods assume via Pod Identity. */
     roleName: string;
+    /** The ARN of the Pod Identity association binding the role. */
     associationArn: string;
+    /** The ID of the Pod Identity association binding the role. */
     associationId: string;
     /**
      * The LoadBalancer hostname when `serviceType` is `LoadBalancer`, otherwise
@@ -189,7 +202,9 @@ export interface ServerHost extends Resource<
      * cloud load balancer is still provisioning.
      */
     url: string | undefined;
+    /** References to the Kubernetes objects created for the server. */
     kubernetesObjects: KubernetesObjectRef[];
+    /** The content hash of the bundled server code. */
     code: {
       hash: string;
     };

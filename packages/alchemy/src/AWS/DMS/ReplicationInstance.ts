@@ -88,13 +88,21 @@ export interface ReplicationInstance extends Resource<
   "AWS.DMS.ReplicationInstance",
   ReplicationInstanceProps,
   {
+    /** The replication instance identifier (unique per account/region). */
     replicationInstanceIdentifier: string;
+    /** The ARN of the replication instance. */
     replicationInstanceArn: string;
+    /** The compute class of the instance, e.g. `dms.t3.micro`. */
     replicationInstanceClass: string;
+    /** The current status of the instance, e.g. `available`. */
     status: string | undefined;
+    /** The DMS engine version running on the instance. */
     engineVersion: string | undefined;
+    /** The private IP addresses of the instance. */
     privateIpAddresses: string[];
+    /** The public IP addresses of the instance (when publicly accessible). */
     publicIpAddresses: string[];
+    /** The tags attached to the replication instance. */
     tags: Record<string, string>;
   },
   never,

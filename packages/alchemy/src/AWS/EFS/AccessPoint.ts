@@ -69,8 +69,11 @@ export interface AccessPoint extends Resource<
   "AWS.EFS.AccessPoint",
   AccessPointProps,
   {
+    /** The ID of the access point (e.g. `fsap-0123456789abcdef0`). */
     accessPointId: string;
+    /** The ARN of the access point. */
     accessPointArn: string;
+    /** The ID of the EFS file system the access point belongs to. */
     fileSystemId: string;
   },
   {},

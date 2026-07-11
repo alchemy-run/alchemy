@@ -131,8 +131,11 @@ export interface Pipeline extends Resource<
   "AWS.CodePipeline.Pipeline",
   PipelineProps,
   {
+    /** Physical name of the pipeline. */
     pipelineName: string;
+    /** ARN of the pipeline. */
     pipelineArn: string;
+    /** Version number, incremented by CodePipeline on every structure update. */
     pipelineVersion: number;
   },
   never,

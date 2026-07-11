@@ -47,7 +47,39 @@ export interface KafkaEventSourceProps {
   provisionedPollerConfig?: Lambda.ProvisionedPollerConfig;
 }
 
-/** @binding */
+/**
+ * Event source connecting topics on an MSK `ServerlessCluster` to the
+ * hosting compute.
+ *
+ * The contract is a `Binding.Service`; the Lambda implementation layer
+ * (`AWS.Lambda.KafkaEventSource`) grants the IAM actions MSK IAM
+ * authentication requires, creates an event source mapping on the cluster,
+ * and forwards `aws:kafka` records into the handler's `Stream`. Use the
+ * {@link consumeKafkaTopic} helper rather than calling the service directly.
+ * @binding
+ * @section Consuming Topics
+ * @example Consume a Topic in a Lambda Function
+ * ```typescript
+ * export default MyFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const cluster = yield* AWS.Kafka.ServerlessCluster("Events", {
+ *       subnetIds,
+ *     });
+ *
+ *     // init — registers the event source mapping and the record handler
+ *     yield* AWS.Kafka.consumeKafkaTopic(
+ *       cluster,
+ *       { topics: ["orders"], consumerGroupId: "my-service" },
+ *       (records) =>
+ *         records.pipe(Stream.runForEach((r) => Effect.log(r.value))),
+ *     );
+ *
+ *     return {};
+ *   }).pipe(Effect.provide(AWS.Lambda.KafkaEventSource)),
+ * );
+ * ```
+ */
 export interface KafkaEventSource extends Binding.Service<
   KafkaEventSource,
   "AWS.Kafka.KafkaEventSource",
@@ -74,6 +106,20 @@ export type KafkaEventSourceService = <StreamReq = never, Req = never>(
  * authentication requires, creates an event source mapping pointing at the
  * cluster, and forwards matching `aws:kafka` records into the supplied
  * `Stream`.
+ *
+ * @example Consume the "orders" topic
+ * ```typescript
+ * yield* AWS.Kafka.consumeKafkaTopic(
+ *   cluster,
+ *   { topics: ["orders"], startingPosition: "TRIM_HORIZON" },
+ *   (records) =>
+ *     records.pipe(
+ *       Stream.runForEach((record) =>
+ *         Effect.log(Buffer.from(record.value, "base64").toString("utf8")),
+ *       ),
+ *     ),
+ * );
+ * ```
  */
 export const consumeKafkaTopic = <
   C extends ServerlessCluster,

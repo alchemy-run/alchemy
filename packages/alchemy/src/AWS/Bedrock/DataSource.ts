@@ -62,8 +62,17 @@ export interface DataSource extends Resource<
   "AWS.Bedrock.DataSource",
   DataSourceProps,
   {
+    /**
+     * The unique identifier of the knowledge base the data source belongs to.
+     */
     knowledgeBaseId: string;
+    /**
+     * The unique identifier of the data source.
+     */
     dataSourceId: string;
+    /**
+     * Name of the data source.
+     */
     name: string;
   }
 > {}

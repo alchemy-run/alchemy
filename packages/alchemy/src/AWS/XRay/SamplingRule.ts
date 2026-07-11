@@ -89,7 +89,14 @@ export interface SamplingRule extends Resource<
   "AWS.XRay.SamplingRule",
   SamplingRuleProps,
   {
+    /**
+     * Name of the sampling rule.
+     */
     ruleName: string;
+    /**
+     * ARN of the sampling rule
+     * (`arn:aws:xray:{region}:{account}:sampling-rule/{name}`).
+     */
     ruleArn: string;
   },
   never,

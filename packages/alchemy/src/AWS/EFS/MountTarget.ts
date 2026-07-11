@@ -40,11 +40,17 @@ export interface MountTarget extends Resource<
   "AWS.EFS.MountTarget",
   MountTargetProps,
   {
+    /** The ID of the mount target (e.g. `fsmt-0123456789abcdef0`). */
     mountTargetId: string;
+    /** The ID of the EFS file system the mount target belongs to. */
     fileSystemId: string;
+    /** The ID of the subnet the mount target was created in. */
     subnetId: string;
+    /** The IPv4 address at which the file system is reachable in the subnet. */
     ipAddress: string | undefined;
+    /** The ID of the network interface created for the mount target. */
     networkInterfaceId: string | undefined;
+    /** The name of the Availability Zone the mount target resides in. */
     availabilityZoneName: string | undefined;
   },
   {},

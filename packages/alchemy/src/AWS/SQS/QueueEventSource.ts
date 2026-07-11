@@ -29,6 +29,24 @@ type MessagesHandler<Req> = (
  * @param queue The SQS queue to consume messages from.
  * @param props Optional event-source configuration.
  * @param process The handler invoked with a stream of SQS records (last argument).
+ *
+ * @example
+ * ```typescript
+ * yield* SQS.consumeQueueMessages(queue, (records) =>
+ *   records.pipe(Stream.runForEach((record) => Effect.log(record.body))),
+ * );
+ * ```
+ *
+ * @example With batching configuration
+ * ```typescript
+ * yield* SQS.consumeQueueMessages(queue, { batchSize: 10 }, (records) =>
+ *   records.pipe(
+ *     Stream.map((record) => ({ MessageBody: record.body })),
+ *     Stream.run(sink),
+ *     Effect.orDie,
+ *   ),
+ * );
+ * ```
  */
 export function consumeQueueMessages<Q extends Queue, Req = never>(
   queue: Q,
@@ -58,7 +76,25 @@ export function consumeQueueMessages<Q extends Queue, Req = never>(
  * The contract is a `Binding.Service`; the host-specific implementation
  * layers are `Lambda.QueueEventSource` (event-source mapping + runtime
  * dispatch) and `Server.SQSQueueEventSource` (long-poll receive loop).
+ * Consume it through the {@link consumeQueueMessages} helper.
  * @binding
+ * @section Consuming a Queue
+ * @example Consume Messages in a Lambda Function
+ * ```typescript
+ * export default WorkerFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const queue = yield* SQS.Queue("Jobs");
+ *
+ *     // registers the event-source mapping and the runtime dispatcher
+ *     yield* SQS.consumeQueueMessages(queue, { batchSize: 10 }, (records) =>
+ *       records.pipe(
+ *         Stream.runForEach((record) => Effect.log(record.body)),
+ *       ),
+ *     );
+ *   }).pipe(Effect.provide(Lambda.QueueEventSource)),
+ * );
+ * ```
  */
 export interface QueueEventSource extends Binding.Service<
   QueueEventSource,

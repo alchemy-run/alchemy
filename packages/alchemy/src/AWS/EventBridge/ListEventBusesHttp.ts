@@ -8,6 +8,12 @@ import {
   type ListEventBusesRequest,
 } from "./ListEventBuses.ts";
 
+/**
+ * HTTP implementation of {@link ListEventBuses}. At deploy time it grants
+ * `events:ListEventBuses`; at runtime it calls the EventBridge API with the
+ * host Function's credentials. Provide this layer on the Function using the
+ * binding.
+ */
 export const ListEventBusesHttp = Layer.effect(
   ListEventBuses,
   Effect.gen(function* () {

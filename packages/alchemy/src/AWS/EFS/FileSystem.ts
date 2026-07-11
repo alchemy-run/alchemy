@@ -103,7 +103,9 @@ export interface FileSystem extends Resource<
   "AWS.EFS.FileSystem",
   FileSystemProps,
   {
+    /** The ID of the file system (e.g. `fs-0123456789abcdef0`). */
     fileSystemId: string;
+    /** The ARN of the file system. */
     fileSystemArn: string;
   },
   {},

@@ -47,13 +47,21 @@ export interface FargateProfile extends Resource<
   "AWS.EKS.FargateProfile",
   FargateProfileProps,
   {
+    /** The name of the Fargate profile. */
     fargateProfileName: string;
+    /** The ARN of the Fargate profile. */
     fargateProfileArn: string;
+    /** The name of the EKS cluster the profile belongs to. */
     clusterName: string;
+    /** The profile status (e.g. `CREATING`, `ACTIVE`). */
     status: eks.FargateProfileStatus;
+    /** The ARN of the pod execution role used by pods matched by the profile. */
     podExecutionRoleArn: string;
+    /** The IDs of the (private) subnets pods are launched into. */
     subnets: string[];
+    /** The namespace/label selectors that route pods onto Fargate. */
     selectors: eks.FargateProfileSelector[];
+    /** The tags applied to the Fargate profile. */
     tags: Record<string, string>;
   },
   never,

@@ -125,10 +125,15 @@ export interface Campaign extends Resource<
   "AWS.IoTFleetWise.Campaign",
   CampaignProps,
   {
+    /** The name of the campaign. */
     campaignName: string;
+    /** The ARN of the campaign. */
     campaignArn: string;
+    /** The current status of the campaign (`RUNNING`, `SUSPENDED`, ...). */
     status: string;
+    /** The signal catalog the campaign collects from. */
     signalCatalogArn: string | undefined;
+    /** The fleet or vehicle the campaign targets. */
     targetArn: string | undefined;
   },
   never,

@@ -40,11 +40,17 @@ export interface AccountAssignment extends Resource<
   "AWS.IdentityCenter.AccountAssignment",
   AccountAssignmentProps,
   {
+    /** The Identity Center instance the assignment lives in. */
     instanceArn: string;
+    /** The permission set provisioned to the target. */
     permissionSetArn: string;
+    /** The user or group ID that was assigned. */
     principalId: string;
+    /** Whether the principal is a `USER` or `GROUP`. */
     principalType: "USER" | "GROUP";
+    /** The AWS account ID the assignment targets. */
     targetId: string;
+    /** The target type (`AWS_ACCOUNT`). */
     targetType: "AWS_ACCOUNT";
   },
   never,

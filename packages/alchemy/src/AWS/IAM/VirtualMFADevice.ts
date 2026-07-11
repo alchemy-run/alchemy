@@ -42,13 +42,19 @@ export interface VirtualMFADevice extends Resource<
   "AWS.IAM.VirtualMFADevice",
   VirtualMFADeviceProps,
   {
+    /** The serial number (ARN) of the virtual MFA device. */
     serialNumber: string;
+    /** The user the device is enabled for, if activated. */
     userName: string | undefined;
+    /** When the device was activated, if activated. */
     enableDate: Date | undefined;
+    /** The base32 seed for configuring an authenticator app. AWS only returns it at creation. */
     base32StringSeed:
       | Redacted.Redacted<Uint8Array<ArrayBufferLike>>
       | undefined;
+    /** A QR-code PNG encoding the seed. AWS only returns it at creation. */
     qrCodePNG: Redacted.Redacted<Uint8Array<ArrayBufferLike>> | undefined;
+    /** The tags applied to the device. */
     tags: Record<string, string>;
   },
   never,

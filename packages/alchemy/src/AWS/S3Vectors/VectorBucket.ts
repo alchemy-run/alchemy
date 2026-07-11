@@ -50,7 +50,13 @@ export interface VectorBucket extends Resource<
   "AWS.S3Vectors.VectorBucket",
   VectorBucketProps,
   {
+    /**
+     * Name of the vector bucket.
+     */
     vectorBucketName: string;
+    /**
+     * ARN of the vector bucket.
+     */
     vectorBucketArn: string;
   },
   never,

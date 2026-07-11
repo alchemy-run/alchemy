@@ -42,9 +42,21 @@ export interface ReferenceStore extends Resource<
   "AWS.Omics.ReferenceStore",
   ReferenceStoreProps,
   {
+    /**
+     * ID of the reference store.
+     */
     referenceStoreId: string;
+    /**
+     * ARN of the reference store.
+     */
     referenceStoreArn: string;
+    /**
+     * Name of the reference store.
+     */
     name: string;
+    /**
+     * When the reference store was created (ISO-8601).
+     */
     creationTime: string;
   },
   never,

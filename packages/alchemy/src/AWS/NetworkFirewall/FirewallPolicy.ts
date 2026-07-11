@@ -44,8 +44,11 @@ export interface FirewallPolicy extends Resource<
   "AWS.NetworkFirewall.FirewallPolicy",
   FirewallPolicyProps,
   {
+    /** Name of the firewall policy. */
     firewallPolicyName: string;
+    /** ARN of the firewall policy. */
     firewallPolicyArn: string;
+    /** Server-assigned unique id of the firewall policy. */
     firewallPolicyId: string;
   },
   never,

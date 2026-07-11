@@ -28,6 +28,26 @@ export interface GetIceServerConfigRequest extends Omit<
  * // runtime
  * const { IceServerList } = yield* getIceServers({ ClientId: "viewer-1" });
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Provide the GetIceServerConfigHttp layer on the Function's init Effect.
+ * export default SignalingFunction.make(
+ *   { main: import.meta.url, url: true, timeout: Duration.seconds(30) },
+ *   Effect.gen(function* () {
+ *     const channel = yield* AWS.KinesisVideo.SignalingChannel("Doorbell");
+ *     const getIceServers = yield* AWS.KinesisVideo.GetIceServerConfig(channel);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { IceServerList } = yield* getIceServers({
+ *           ClientId: "viewer-1",
+ *         });
+ *         return HttpServerResponse.json({ iceServers: IceServerList });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.KinesisVideo.GetIceServerConfigHttp)),
+ * );
+ * ```
  */
 export interface GetIceServerConfig extends Binding.Service<
   GetIceServerConfig,

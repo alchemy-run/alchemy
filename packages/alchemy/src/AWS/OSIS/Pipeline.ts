@@ -112,12 +112,33 @@ export interface Pipeline extends Resource<
   "AWS.OSIS.Pipeline",
   PipelineProps,
   {
+    /**
+     * Name of the pipeline.
+     */
     pipelineName: string;
+    /**
+     * ARN of the pipeline.
+     */
     pipelineArn: string;
+    /**
+     * Pipeline status (e.g. `ACTIVE`, `CREATING`, `UPDATING`).
+     */
     status: string;
+    /**
+     * Minimum Ingestion OCUs the pipeline scales down to.
+     */
     minUnits: number | undefined;
+    /**
+     * Maximum Ingestion OCUs the pipeline scales up to.
+     */
     maxUnits: number | undefined;
+    /**
+     * URLs to ingest data into the pipeline.
+     */
     ingestEndpointUrls: string[] | undefined;
+    /**
+     * Tags on the pipeline.
+     */
     tags: Record<string, string>;
   },
   never,

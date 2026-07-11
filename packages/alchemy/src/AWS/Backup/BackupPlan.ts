@@ -97,9 +97,21 @@ export interface BackupPlan extends Resource<
   "AWS.Backup.BackupPlan",
   BackupPlanProps,
   {
+    /**
+     * Service-assigned unique ID of the backup plan.
+     */
     backupPlanId: string;
+    /**
+     * ARN of the backup plan.
+     */
     backupPlanArn: string;
+    /**
+     * Name of the backup plan.
+     */
     backupPlanName: string;
+    /**
+     * Version ID of the plan; updated each time the plan document changes.
+     */
     versionId: string;
   },
   never,

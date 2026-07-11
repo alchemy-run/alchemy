@@ -80,19 +80,33 @@ export interface Directory extends Resource<
   "AWS.DirectoryService.Directory",
   DirectoryProps,
   {
+    /** The ID of the directory, e.g. `d-1234567890`. */
     directoryId: string;
+    /** The fully qualified name of the directory. */
     directoryName: string;
+    /** The directory type, e.g. `SimpleAD` or `MicrosoftAD`. */
     type: string;
+    /** The current lifecycle stage of the directory, e.g. `Active`. */
     stage: string;
+    /** The size of a Simple AD directory (`Small` or `Large`). */
     size: string | undefined;
+    /** The edition of a Microsoft AD directory (`Standard` or `Enterprise`). */
     edition: string | undefined;
+    /** The directory alias used for the access URL. */
     alias: string | undefined;
+    /** The access URL of the directory, e.g. `<alias>.awsapps.com`. */
     accessUrl: string | undefined;
+    /** The IP addresses of the directory's DNS servers. */
     dnsIpAddrs: string[];
+    /** The security group created for the directory's controllers. */
     securityGroupId: string | undefined;
+    /** The VPC the directory is deployed into. */
     vpcId: string | undefined;
+    /** The subnets hosting the directory's domain controllers. */
     subnetIds: string[];
+    /** The Availability Zones the directory spans. */
     availabilityZones: string[];
+    /** The tags attached to the directory. */
     tags: Record<string, string>;
   },
   never,

@@ -10,7 +10,22 @@ export interface StopCodeInterpreterSessionRequest extends Omit<
 
 /**
  * Stops a running code interpreter session.
+ *
+ * Bind a {@link CodeInterpreter} inside a function runtime to end sessions
+ * opened with `StartCodeInterpreterSession` and release the sandbox.
+ * Provide `AgentCore.StopCodeInterpreterSessionHttp` on the Function effect
+ * to implement the binding.
+ *
  * @binding
+ * @section Stopping Sessions
+ * @example Stop a Session After Use
+ * ```typescript
+ * // init
+ * const stopSession = yield* AgentCore.StopCodeInterpreterSession(interpreter);
+ *
+ * // runtime (inside the handler)
+ * yield* stopSession({ sessionId: session.sessionId });
+ * ```
  */
 export interface StopCodeInterpreterSession extends Binding.Service<
   StopCodeInterpreterSession,

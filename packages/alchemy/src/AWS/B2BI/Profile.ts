@@ -45,10 +45,25 @@ export interface Profile extends Resource<
   "AWS.B2BI.Profile",
   ProfileProps,
   {
+    /**
+     * Service-assigned unique ID of the profile.
+     */
     profileId: string;
+    /**
+     * ARN of the profile.
+     */
     profileArn: string;
+    /**
+     * Name of the profile.
+     */
     name: string;
+    /**
+     * Business name associated with the profile.
+     */
     businessName: string;
+    /**
+     * CloudWatch log group created for the profile when logging is enabled.
+     */
     logGroupName: string | undefined;
   },
   never,

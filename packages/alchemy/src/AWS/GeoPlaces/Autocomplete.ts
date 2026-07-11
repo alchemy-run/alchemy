@@ -13,6 +13,10 @@ import * as Binding from "../../Binding.ts";
  *
  * @binding
  * @section Autocompleting Queries
+ * Provide the `AutocompleteHttp` implementation layer on the Function effect
+ * (`.pipe(Effect.provide(AWS.GeoPlaces.AutocompleteHttp))`), bind in the init
+ * phase, then call the client at runtime.
+ *
  * @example Autocomplete a partial address
  * ```typescript
  * // init

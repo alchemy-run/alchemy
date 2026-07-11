@@ -126,36 +126,66 @@ export interface DBCluster extends Resource<
   "AWS.DocDB.DBCluster",
   DBClusterProps,
   {
+    /** The cluster identifier (unique per account/region). */
     dbClusterIdentifier: string;
+    /** The ARN of the cluster. */
     dbClusterArn: string;
+    /** The DB subnet group the cluster is deployed into. */
     dbSubnetGroupName: string | undefined;
+    /** The writer endpoint hostname of the cluster. */
     endpoint: string | undefined;
+    /** The load-balanced reader endpoint hostname. */
     readerEndpoint: string | undefined;
+    /** The port the cluster accepts connections on. */
     port: number | undefined;
+    /** The database engine (`docdb`). */
     engine: string;
+    /** The engine version running on the cluster. */
     engineVersion: string | undefined;
+    /** The current status of the cluster, e.g. `available`. */
     status: string | undefined;
+    /** The master (admin) username. */
     masterUsername: string | undefined;
+    /** ARN of the Secrets Manager secret holding the master credentials (when managed). */
     masterUserSecretArn: string | undefined;
+    /** The VPC security groups attached to the cluster. */
     vpcSecurityGroupIds: string[];
+    /** Number of days automated backups are retained. */
     backupRetentionPeriod: number | undefined;
+    /** The daily window during which automated backups run. */
     preferredBackupWindow: string | undefined;
+    /** The weekly window during which maintenance can occur. */
     preferredMaintenanceWindow: string | undefined;
+    /** Whether cluster storage is encrypted at rest. */
     storageEncrypted: boolean | undefined;
+    /** The KMS key used for storage encryption. */
     kmsKeyId: string | undefined;
+    /** Whether deletion protection is enabled. */
     deletionProtection: boolean | undefined;
+    /** The instances that are members of the cluster. */
     dbClusterMembers: Array<{
+      /** The identifier of the member instance. */
       dbInstanceIdentifier: string | undefined;
+      /** Whether this member is the cluster writer. */
       isClusterWriter: boolean | undefined;
+      /** The failover promotion tier of the member. */
       promotionTier: number | undefined;
     }>;
+    /** The immutable region-unique resource ID of the cluster. */
     dbClusterResourceId: string | undefined;
+    /** The Route 53 hosted zone ID of the cluster endpoints. */
     hostedZoneId: string | undefined;
+    /** Whether the cluster has instances in multiple Availability Zones. */
     multiAZ: boolean | undefined;
+    /** The log types exported to CloudWatch Logs, e.g. `audit`, `profiler`. */
     enabledCloudwatchLogsExports: string[];
+    /** When the cluster was created (ISO timestamp). */
     clusterCreateTime: string | undefined;
+    /** The storage type, e.g. `standard` or `iopt1`. */
     storageType: string | undefined;
+    /** The network type, e.g. `IPV4` or `DUAL`. */
     networkType: string | undefined;
+    /** The tags attached to the cluster. */
     tags: Record<string, string>;
   },
   never,

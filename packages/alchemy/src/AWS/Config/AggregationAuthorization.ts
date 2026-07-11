@@ -35,8 +35,11 @@ export interface AggregationAuthorization extends Resource<
   "AWS.Config.AggregationAuthorization",
   AggregationAuthorizationProps,
   {
+    /** ARN of the aggregation authorization. */
     aggregationAuthorizationArn: string;
+    /** The aggregator account authorized to collect data. */
     authorizedAccountId: string;
+    /** The aggregator region authorized to collect data. */
     authorizedAwsRegion: string;
   },
   never,

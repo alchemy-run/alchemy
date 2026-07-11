@@ -39,7 +39,13 @@ export type StreamMode = "PROVISIONED" | "ON_DEMAND";
 export type EncryptionType = "NONE" | "KMS";
 
 export type WarmThroughput = {
+  /**
+   * Requested warm throughput in MiBps.
+   */
   targetMiBps?: number;
+  /**
+   * Warm throughput currently provisioned by AWS, in MiBps.
+   */
   currentMiBps?: number;
 };
 

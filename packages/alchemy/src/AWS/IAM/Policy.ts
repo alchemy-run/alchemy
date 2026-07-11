@@ -151,16 +151,27 @@ export interface Policy extends Resource<
   "AWS.IAM.Policy",
   PolicyProps,
   {
+    /** The ARN of the policy. */
     policyArn: PolicyArn;
+    /** The name of the policy. */
     policyName: PolicyName;
+    /** The stable unique ID of the policy. */
     policyId: string | undefined;
+    /** The IAM path of the policy. */
     path: string | undefined;
+    /** The version currently set as the default (e.g. `v2`). */
     defaultVersionId: string | undefined;
+    /** How many IAM identities the policy is attached to. */
     attachmentCount: number | undefined;
+    /** How many IAM identities use the policy as a permissions boundary. */
     permissionsBoundaryUsageCount: number | undefined;
+    /** Whether the policy can be attached to IAM identities. */
     isAttachable: boolean | undefined;
+    /** The description of the policy. */
     description: string | undefined;
+    /** The policy document of the default version. */
     policyDocument: PolicyDocument;
+    /** The tags applied to the policy. */
     tags: Record<string, string>;
   },
   never,

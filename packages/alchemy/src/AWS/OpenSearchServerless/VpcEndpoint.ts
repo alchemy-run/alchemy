@@ -36,8 +36,17 @@ export interface VpcEndpoint extends Resource<
   "AWS.OpenSearchServerless.VpcEndpoint",
   VpcEndpointProps,
   {
+    /**
+     * Unique identifier of the VPC endpoint.
+     */
     vpcEndpointId: string;
+    /**
+     * Name of the VPC endpoint.
+     */
     endpointName: string;
+    /**
+     * Endpoint status (e.g. `ACTIVE`, `PENDING`, `DELETING`).
+     */
     status?: string;
   },
   {},

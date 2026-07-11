@@ -12,8 +12,11 @@ import { createInternalTags, tagRecord } from "../../Tags.ts";
 import { syncTags } from "./common.ts";
 
 export interface DomainNameProps {
+  /** The custom domain name (e.g. `api.example.com`). */
   domainName: string;
+  /** Display name of a self-managed edge certificate. */
   certificateName?: string;
+  /** PEM body of a self-managed edge certificate. */
   certificateBody?: string;
   /**
    * The private key of the server certificate (self-managed certificates).
@@ -21,17 +24,32 @@ export interface DomainNameProps {
    * preserves redaction.
    */
   certificatePrivateKey?: Redacted.Redacted<string>;
+  /** PEM chain of a self-managed edge certificate. */
   certificateChain?: string;
+  /** ARN of an ACM certificate for EDGE endpoints (must live in us-east-1). */
   certificateArn?: string;
+  /** Display name of the regional certificate. */
   regionalCertificateName?: string;
+  /** ARN of an ACM certificate for REGIONAL endpoints (same region as the API). */
   regionalCertificateArn?: string;
+  /** Endpoint type for the domain (EDGE, REGIONAL, or PRIVATE). */
   endpointConfiguration?: ag.EndpointConfiguration;
+  /**
+   * Minimum TLS version served (e.g. `TLS_1_2`).
+   * @default "TLS_1_2"
+   */
   securityPolicy?: ag.SecurityPolicy;
+  /** Access mode of the domain name endpoint. */
   endpointAccessMode?: ag.EndpointAccessMode;
+  /** Mutual TLS (client certificate) authentication configuration. */
   mutualTlsAuthentication?: ag.MutualTlsAuthenticationInput;
+  /** ARN of the certificate proving domain ownership when mutual TLS is enabled. */
   ownershipVerificationCertificateArn?: string;
+  /** Resource policy (JSON) for private custom domain names. */
   policy?: string;
+  /** Routing mode of the domain name (base-path vs routing-rule based). */
   routingMode?: ag.RoutingMode;
+  /** User-defined tags for the domain name. */
   tags?: Record<string, string>;
 }
 

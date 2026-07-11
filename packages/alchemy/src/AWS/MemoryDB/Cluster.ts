@@ -135,19 +135,33 @@ export interface Cluster extends Resource<
   "AWS.MemoryDB.Cluster",
   ClusterProps,
   {
+    /** Name of the cluster. */
     clusterName: string;
+    /** ARN of the cluster. */
     clusterArn: string;
+    /** Current lifecycle status (e.g. `creating`, `available`). */
     status: string;
+    /** Node instance type (e.g. `db.t4g.small`). */
     nodeType: string;
+    /** Engine (`redis` or `valkey`). */
     engine: string;
+    /** Running engine version. */
     engineVersion: string | undefined;
+    /** DNS address of the cluster endpoint. */
     endpointAddress: string | undefined;
+    /** Port of the cluster endpoint. */
     endpointPort: number | undefined;
+    /** Name of the ACL attached to the cluster. */
     aclName: string | undefined;
+    /** Name of the parameter group in use. */
     parameterGroupName: string | undefined;
+    /** Name of the subnet group the cluster's nodes are placed in. */
     subnetGroupName: string | undefined;
+    /** Whether in-transit encryption (TLS) is enabled. */
     tlsEnabled: boolean | undefined;
+    /** Number of shards in the cluster. */
     numberOfShards: number | undefined;
+    /** Tags on the cluster (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

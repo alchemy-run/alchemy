@@ -72,7 +72,42 @@ export interface StreamEventSourceProps {
   metricsConfig?: Lambda.EventSourceMappingMetricsConfig;
 }
 
-/** @binding */
+/**
+ * Event source connecting a Kinesis `Stream` to the hosting compute.
+ *
+ * The contract is a `Binding.Service`; the Lambda implementation layer
+ * (`AWS.Lambda.StreamEventSource`) creates an event source mapping on the
+ * stream, grants the read IAM actions, and forwards `aws:kinesis` records
+ * into the handler's `Stream`. Use the {@link consumeStreamRecords} helper
+ * rather than calling the service directly.
+ * @binding
+ * @section Consuming Records
+ * @example Process Stream Records in a Lambda Function
+ * ```typescript
+ * export default MyFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const stream = yield* AWS.Kinesis.Stream("OrdersStream");
+ *
+ *     // init — registers the event source mapping and the record handler
+ *     yield* AWS.Kinesis.consumeStreamRecords(
+ *       stream,
+ *       { startingPosition: "LATEST", batchSize: 10 },
+ *       (records) =>
+ *         records.pipe(
+ *           Stream.runForEach((record) =>
+ *             Effect.log(
+ *               Buffer.from(record.kinesis.data, "base64").toString("utf8"),
+ *             ),
+ *           ),
+ *         ),
+ *     );
+ *
+ *     return {};
+ *   }).pipe(Effect.provide(AWS.Lambda.StreamEventSource)),
+ * );
+ * ```
+ */
 export interface StreamEventSource extends Binding.Service<
   StreamEventSource,
   "AWS.Kinesis.StreamEventSource",
@@ -96,6 +131,24 @@ export type StreamEventSourceService = <StreamReq = never, Req = never>(
  *
  * The Lambda runtime implementation creates an event source mapping and forwards
  * matching `aws:kinesis` records into the supplied `Stream`.
+ *
+ * @example Forward stream records into an SQS queue
+ * ```typescript
+ * const sink = yield* AWS.SQS.QueueSink(queue);
+ *
+ * yield* AWS.Kinesis.consumeStreamRecords(
+ *   stream,
+ *   { startingPosition: "LATEST" },
+ *   (records) =>
+ *     records.pipe(
+ *       Stream.map((record) => ({
+ *         MessageBody: Buffer.from(record.kinesis.data, "base64").toString("utf8"),
+ *       })),
+ *       Stream.run(sink),
+ *       Effect.orDie,
+ *     ),
+ * );
+ * ```
  */
 export const consumeStreamRecords = <
   S extends KinesisStream,

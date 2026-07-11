@@ -83,10 +83,25 @@ export interface Runtime extends Resource<
   "AWS.BedrockAgentCore.Runtime",
   RuntimeProps,
   {
+    /**
+     * The unique identifier of the agent runtime.
+     */
     agentRuntimeId: string;
+    /**
+     * The ARN of the agent runtime.
+     */
     agentRuntimeArn: string;
+    /**
+     * The current version of the agent runtime (bumped on every update).
+     */
     agentRuntimeVersion: string;
+    /**
+     * Name of the agent runtime.
+     */
     agentRuntimeName: string;
+    /**
+     * Current status of the agent runtime (e.g. `READY`).
+     */
     status: string;
   }
 > {}

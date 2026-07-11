@@ -55,9 +55,21 @@ export interface TrustAnchor extends Resource<
   "AWS.RolesAnywhere.TrustAnchor",
   TrustAnchorProps,
   {
+    /**
+     * Unique ID of the trust anchor.
+     */
     trustAnchorId: string;
+    /**
+     * ARN of the trust anchor.
+     */
     trustAnchorArn: string;
+    /**
+     * Name of the trust anchor.
+     */
     trustAnchorName: string;
+    /**
+     * Whether the trust anchor is enabled.
+     */
     enabled: boolean;
   },
   never,

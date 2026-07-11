@@ -51,7 +51,13 @@ export interface Group extends Resource<
   "AWS.XRay.Group",
   GroupProps,
   {
+    /**
+     * Name of the group.
+     */
     groupName: string;
+    /**
+     * ARN of the group.
+     */
     groupArn: string;
   },
   never,

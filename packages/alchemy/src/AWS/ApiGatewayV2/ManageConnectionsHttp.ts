@@ -16,6 +16,21 @@ import type { ApiGatewayV2Stage } from "./Stage.ts";
  * HTTP implementation of the {@link ManageConnections} binding. Signs
  * `@connections` requests with the Lambda's IAM role against the stage's
  * callback endpoint.
+ *
+ * Provide it on the hosting Lambda function's Effect so the binding is
+ * available at runtime:
+ *
+ * @example
+ * ```typescript
+ * export default MyFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const connections = yield* ApiGatewayV2.ManageConnections(stage);
+ *     // ... register WebSocket routes that push via `connections`
+ *     return {};
+ *   }).pipe(Effect.provide(ApiGatewayV2.ManageConnectionsHttp)),
+ * );
+ * ```
  */
 export const ManageConnectionsHttp = Layer.effect(
   ManageConnections,

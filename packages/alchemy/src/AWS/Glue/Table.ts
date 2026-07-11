@@ -125,9 +125,13 @@ export interface Table extends Resource<
   "AWS.Glue.Table",
   TableProps,
   {
+    /** The (lowercase) name of the table. */
     tableName: string;
+    /** The name of the database the table belongs to. */
     databaseName: string;
+    /** The ARN of the table. */
     tableArn: string;
+    /** The AWS account ID of the Data Catalog the table lives in. */
     catalogId: string;
   },
   {},

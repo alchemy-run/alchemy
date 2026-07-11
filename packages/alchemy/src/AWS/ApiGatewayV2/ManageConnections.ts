@@ -43,6 +43,10 @@ export interface ManageConnectionsClient {
  * for WebSocket APIs. The binding grants `execute-api:ManageConnections`
  * scoped to the stage's `@connections` ARN and targets the stage's
  * callback endpoint (`https://{apiId}.execute-api.{region}.amazonaws.com/{stage}`).
+ *
+ * Provide `ApiGatewayV2.ManageConnectionsHttp` on the hosting function's
+ * Effect (`Effect.provide(ApiGatewayV2.ManageConnectionsHttp)`) to satisfy
+ * the binding.
  * @binding
  * @section Pushing to clients
  * @example Echo a message back to the sender

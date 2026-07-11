@@ -209,46 +209,169 @@ export interface DBInstance extends Resource<
   "AWS.RDS.DBInstance",
   DBInstanceProps,
   {
+    /**
+     * Identifier of the instance.
+     */
     dbInstanceIdentifier: string;
+    /**
+     * ARN of the instance.
+     */
     dbInstanceArn: string;
+    /**
+     * Aurora cluster the instance belongs to, if any.
+     */
     dbClusterIdentifier: string | undefined;
+    /**
+     * DNS address of the instance endpoint.
+     */
     endpointAddress: string | undefined;
+    /**
+     * Port of the instance endpoint.
+     */
     endpointPort: number | undefined;
+    /**
+     * Instance class (e.g. `db.serverless`, `db.t3.micro`).
+     */
     dbInstanceClass: string | undefined;
+    /**
+     * Database engine.
+     */
     engine: string | undefined;
+    /**
+     * Engine version in use.
+     */
     engineVersion: string | undefined;
+    /**
+     * Status of the instance (e.g. `available`).
+     */
     status: string | undefined;
+    /**
+     * Failover promotion tier inside the cluster.
+     */
     promotionTier: number | undefined;
+    /**
+     * Whether the instance has a public address.
+     */
     publiclyAccessible: boolean | undefined;
+    /**
+     * Subnet group the instance is placed in.
+     */
     dbSubnetGroupName: string | undefined;
+    /**
+     * Parameter groups applied to the instance.
+     */
     dbParameterGroupNames: string[];
+    /**
+     * Allocated storage in GiB.
+     */
     allocatedStorage: number | undefined;
+    /**
+     * Storage autoscaling ceiling in GiB.
+     */
     maxAllocatedStorage: number | undefined;
+    /**
+     * Storage type (e.g. `gp3`, `io1`, `aurora`).
+     */
     storageType: string | undefined;
+    /**
+     * Provisioned IOPS.
+     */
     iops: number | undefined;
+    /**
+     * Storage throughput in MiBps (gp3).
+     */
     storageThroughput: number | undefined;
+    /**
+     * Whether the instance is Multi-AZ.
+     */
     multiAZ: boolean | undefined;
+    /**
+     * Availability Zone of the instance.
+     */
     availabilityZone: string | undefined;
+    /**
+     * Standby AZ for Multi-AZ deployments.
+     */
     secondaryAvailabilityZone: string | undefined;
+    /**
+     * Backup retention period in days.
+     */
     backupRetentionPeriod: number | undefined;
+    /**
+     * Daily backup window (`hh:mm-hh:mm` UTC).
+     */
     preferredBackupWindow: string | undefined;
+    /**
+     * Weekly maintenance window.
+     */
     preferredMaintenanceWindow: string | undefined;
+    /**
+     * KMS key used for storage encryption.
+     */
     kmsKeyId: string | undefined;
+    /**
+     * Whether storage is encrypted.
+     */
     storageEncrypted: boolean | undefined;
+    /**
+     * CA certificate identifier.
+     */
     caCertificateIdentifier: string | undefined;
+    /**
+     * Whether IAM database authentication is enabled.
+     */
     iamDatabaseAuthenticationEnabled: boolean | undefined;
+    /**
+     * Whether Performance Insights is enabled.
+     */
     performanceInsightsEnabled: boolean | undefined;
+    /**
+     * Enhanced-monitoring granularity in seconds.
+     */
     monitoringInterval: number | undefined;
+    /**
+     * ARN of the enhanced-monitoring CloudWatch Logs stream.
+     */
     enhancedMonitoringResourceArn: string | undefined;
+    /**
+     * Log types exported to CloudWatch Logs.
+     */
     enabledCloudwatchLogsExports: string[];
+    /**
+     * Whether deletion protection is enabled.
+     */
     deletionProtection: boolean | undefined;
+    /**
+     * Immutable region-unique instance resource ID (used in IAM auth ARNs).
+     */
     dbiResourceId: string | undefined;
+    /**
+     * Master username.
+     */
     masterUsername: string | undefined;
+    /**
+     * ARN of the Secrets Manager secret holding master credentials.
+     */
     masterUserSecretArn: string | undefined;
+    /**
+     * Option group memberships.
+     */
     optionGroupMemberships: string[];
+    /**
+     * License model.
+     */
     licenseModel: string | undefined;
+    /**
+     * Configured database port.
+     */
     dbInstancePort: number | undefined;
+    /**
+     * Network type (`IPV4` or `DUAL`).
+     */
     networkType: string | undefined;
+    /**
+     * Tags on the instance.
+     */
     tags: Record<string, string>;
   },
   never,

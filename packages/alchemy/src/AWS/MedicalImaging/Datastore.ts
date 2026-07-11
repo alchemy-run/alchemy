@@ -45,11 +45,17 @@ export interface Datastore extends Resource<
   "AWS.MedicalImaging.Datastore",
   DatastoreProps,
   {
+    /** Server-assigned unique id of the data store. */
     datastoreId: string;
+    /** Name of the data store. */
     datastoreName: string;
+    /** ARN of the data store. */
     datastoreArn: string;
+    /** Current lifecycle status (e.g. `CREATING`, `ACTIVE`). */
     datastoreStatus: string;
+    /** ARN of the KMS key encrypting the data store, if customer-managed. */
     kmsKeyArn: string | undefined;
+    /** Tags on the data store (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

@@ -27,6 +27,35 @@ export interface StartQueryRequest extends Omit<
  *   endTime: endEpochSeconds,
  * });
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Insights queries are asynchronous: start one, then poll with the
+ * // GetQueryResults binding. Provide both HTTP layers with Layer.mergeAll.
+ * export default InsightsFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const logGroup = yield* AWS.Logs.LogGroup("AppLogs", {});
+ *     const startQuery = yield* AWS.Logs.StartQuery(logGroup);
+ *     const getQueryResults = yield* AWS.Logs.GetQueryResults(logGroup);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const now = yield* Clock.currentTimeMillis;
+ *         const { queryId } = yield* startQuery({
+ *           queryString: "fields @timestamp, @message | limit 10",
+ *           startTime: Math.floor(now / 1000) - 3600,
+ *           endTime: Math.floor(now / 1000),
+ *         });
+ *         return HttpServerResponse.json({ queryId });
+ *       }),
+ *     };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(AWS.Logs.StartQueryHttp, AWS.Logs.GetQueryResultsHttp),
+ *     ),
+ *   ),
+ * );
+ * ```
  */
 export interface StartQuery extends Binding.Service<
   StartQuery,

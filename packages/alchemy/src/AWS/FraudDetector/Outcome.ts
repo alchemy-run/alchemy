@@ -30,7 +30,9 @@ export interface Outcome extends Resource<
   "AWS.FraudDetector.Outcome",
   OutcomeProps,
   {
+    /** The name of the outcome. */
     name: string;
+    /** The ARN of the outcome. */
     arn: string;
   },
   never,

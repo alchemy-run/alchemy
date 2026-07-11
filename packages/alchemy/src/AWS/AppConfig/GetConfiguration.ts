@@ -28,6 +28,9 @@ export interface GetConfigurationResult {
  * `GetLatestConfiguration`: the binding starts a session on first use, caches
  * the poll token, and returns the latest content on each call.
  *
+ * Provide `AppConfig.GetConfigurationHttp` on the hosting function's Effect
+ * (`Effect.provide(AppConfig.GetConfigurationHttp)`) to satisfy the binding.
+ *
  * @binding
  * @section Reading Live Configuration
  * @example Fetch config from a Lambda

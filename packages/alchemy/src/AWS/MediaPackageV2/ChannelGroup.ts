@@ -32,8 +32,11 @@ export interface ChannelGroup extends Resource<
   "AWS.MediaPackageV2.ChannelGroup",
   ChannelGroupProps,
   {
+    /** Name of the channel group. */
     channelGroupName: string;
+    /** ARN of the channel group. */
     channelGroupArn: string;
+    /** Shared egress domain that serves all origin endpoints in the group. */
     egressDomain: string;
   },
   never,

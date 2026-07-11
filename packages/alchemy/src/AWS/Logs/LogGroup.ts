@@ -68,13 +68,76 @@ export interface LogGroup extends Resource<
 > {}
 
 /**
- * A CloudWatch Logs log group.
+ * A CloudWatch Logs log group — the container for log streams and the unit
+ * that retention, encryption, metric filters, and subscriptions attach to.
  * @resource
  * @section Creating Log Groups
  * @example ECS Task Log Group
  * ```typescript
  * const logs = yield* LogGroup("TaskLogs", {
  *   retentionInDays: "7 days",
+ * });
+ * ```
+ *
+ * @example Encrypted Log Group with Deletion Protection
+ * ```typescript
+ * const key = yield* AWS.KMS.Key("LogsKey");
+ * const logs = yield* LogGroup("AuditLogs", {
+ *   retentionInDays: "30 days",
+ *   kmsKeyId: key.keyArn,
+ *   deletionProtectionEnabled: true,
+ * });
+ * ```
+ *
+ * @section Writing Custom Log Events
+ * Declare a `LogStream` and use the `PutLogEvents` binding inside a Lambda
+ * function (or the batching `LogEventSink` for high-volume streams).
+ *
+ * @example Custom Audit Trail from a Lambda Function
+ * ```typescript
+ * // init
+ * const logGroup = yield* AWS.Logs.LogGroup("AuditLogs", {
+ *   retentionInDays: "30 days",
+ * });
+ * const stream = yield* AWS.Logs.LogStream("AuditStream", {
+ *   logGroupName: logGroup.logGroupName,
+ *   logStreamName: "audit",
+ * });
+ * const putLogEvents = yield* AWS.Logs.PutLogEvents(logGroup);
+ *
+ * // runtime
+ * yield* putLogEvents({
+ *   logStreamName: "audit",
+ *   logEvents: [{ timestamp, message: "user.login id=123" }],
+ * });
+ * ```
+ *
+ * @section Consuming Log Events
+ * @example React to Error Logs
+ * ```typescript
+ * // Subscribe a Lambda handler to matching events (creates the
+ * // subscription filter + invoke permission automatically).
+ * yield* AWS.Logs.consumeLogEvents(
+ *   logGroup,
+ *   { filterPattern: "?ERROR ?Error" },
+ *   (events) =>
+ *     Stream.runForEach(events, (event) =>
+ *       Effect.log(`${event.logStream}: ${event.message}`),
+ *     ),
+ * );
+ * ```
+ *
+ * @section Metrics
+ * @example Count Errors with a Metric Filter
+ * ```typescript
+ * yield* AWS.Logs.MetricFilter("ErrorCount", {
+ *   logGroupName: logGroup.logGroupName,
+ *   filterPattern: '"ERROR"',
+ *   metricTransformations: [{
+ *     metricName: "ErrorCount",
+ *     metricNamespace: "MyApp",
+ *     metricValue: "1",
+ *   }],
  * });
  * ```
  */

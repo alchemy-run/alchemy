@@ -14,6 +14,10 @@ import * as Binding from "../../Binding.ts";
  *
  * @binding
  * @section Calculating Isolines
+ * Provide the `CalculateIsolinesHttp` implementation layer on the Function
+ * effect (`.pipe(Effect.provide(AWS.GeoRoutes.CalculateIsolinesHttp))`), bind
+ * in the init phase, then call the client at runtime.
+ *
  * @example Calculate a 10-minute drive-time isoline
  * ```typescript
  * // init

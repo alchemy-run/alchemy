@@ -11,7 +11,8 @@ export interface GenerateMacRequest extends Omit<
 /**
  * Runtime binding for `payment-cryptography:GenerateMac` — computes a
  * Message Authentication Code over hex-encoded message data under a
- * {@link Key}.
+ * {@link Key}. Provide `GenerateMacHttp` on the Function to satisfy this
+ * service.
  * @binding
  * @section Generating MACs
  * @example Generate an HMAC over message data

@@ -57,15 +57,45 @@ export interface ScheduledAction extends Resource<
   "AWS.AutoScaling.ScheduledAction",
   ScheduledActionProps,
   {
+    /**
+     * Name of the scheduled action.
+     */
     scheduledActionName: ScheduledActionName;
+    /**
+     * ARN of the scheduled action.
+     */
     scheduledActionARN: string;
+    /**
+     * Name of the Auto Scaling Group the action applies to.
+     */
     autoScalingGroupName: string;
+    /**
+     * Cron expression for recurring actions.
+     */
     recurrence?: string;
+    /**
+     * ISO-8601 time the action first fires.
+     */
     startTime?: string;
+    /**
+     * ISO-8601 time after which the recurrence stops.
+     */
     endTime?: string;
+    /**
+     * IANA timezone the recurrence is evaluated in.
+     */
     timeZone?: string;
+    /**
+     * Minimum group size applied when the action fires.
+     */
     minSize?: number;
+    /**
+     * Maximum group size applied when the action fires.
+     */
     maxSize?: number;
+    /**
+     * Desired capacity applied when the action fires.
+     */
     desiredCapacity?: number;
   },
   never,

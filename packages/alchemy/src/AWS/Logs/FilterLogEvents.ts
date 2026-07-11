@@ -25,6 +25,24 @@ export interface FilterLogEventsRequest extends Omit<
  *   limit: 100,
  * });
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // Provide the FilterLogEventsHttp layer on the Function's init Effect.
+ * export default SearchFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const logGroup = yield* AWS.Logs.LogGroup("AppLogs", {});
+ *     const filterLogEvents = yield* AWS.Logs.FilterLogEvents(logGroup);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const response = yield* filterLogEvents({ filterPattern: '"ERROR"' });
+ *         return HttpServerResponse.json({ events: response.events });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.Logs.FilterLogEventsHttp)),
+ * );
+ * ```
  */
 export interface FilterLogEvents extends Binding.Service<
   FilterLogEvents,

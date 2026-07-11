@@ -67,8 +67,17 @@ export interface Room extends Resource<
   "AWS.IVSChat.Room",
   RoomProps,
   {
+    /**
+     * The room's physical name.
+     */
     roomName: string;
+    /**
+     * ARN of the room.
+     */
     roomArn: string;
+    /**
+     * Unique ID of the room.
+     */
     roomId: string;
   },
   never,

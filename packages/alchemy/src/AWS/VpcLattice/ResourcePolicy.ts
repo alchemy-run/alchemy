@@ -29,7 +29,13 @@ export interface ResourcePolicy extends Resource<
   "AWS.VpcLattice.ResourcePolicy",
   ResourcePolicyProps,
   {
+    /**
+     * ARN of the service network or service the policy is attached to.
+     */
     resourceArn: string;
+    /**
+     * The attached policy document as a JSON string.
+     */
     policy: string;
   },
   never,

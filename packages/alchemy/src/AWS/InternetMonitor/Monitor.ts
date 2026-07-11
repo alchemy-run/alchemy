@@ -64,13 +64,21 @@ export interface Monitor extends Resource<
   "AWS.InternetMonitor.Monitor",
   MonitorProps,
   {
+    /** The name of the monitor. */
     monitorName: string;
+    /** The ARN of the monitor. */
     monitorArn: string;
+    /** The current status of the monitor (`ACTIVE`, `INACTIVE`, ...). */
     status: string;
+    /** The health-event data-processing status of the monitor. */
     processingStatus: string | undefined;
+    /** The ARNs of the resources the monitor watches. */
     resources: string[];
+    /** The effective cap on monitored city-networks. */
     maxCityNetworksToMonitor: number | undefined;
+    /** The effective percentage of traffic monitored. */
     trafficPercentageToMonitor: number | undefined;
+    /** The tags applied to the monitor. */
     tags: Record<string, string>;
   },
   never,

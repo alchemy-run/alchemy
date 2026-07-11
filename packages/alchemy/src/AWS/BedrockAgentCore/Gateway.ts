@@ -73,10 +73,26 @@ export interface Gateway extends Resource<
   "AWS.BedrockAgentCore.Gateway",
   GatewayProps,
   {
+    /**
+     * The unique identifier of the gateway.
+     */
     gatewayId: string;
+    /**
+     * The ARN of the gateway.
+     */
     gatewayArn: string;
+    /**
+     * The MCP endpoint URL clients connect to (available once the gateway is
+     * `READY`).
+     */
     gatewayUrl: string | undefined;
+    /**
+     * Name of the gateway.
+     */
     name: string;
+    /**
+     * Current status of the gateway (e.g. `READY`).
+     */
     status: string;
   }
 > {}

@@ -16,8 +16,11 @@ import { Stage } from "./Stage.ts";
  * `AWS.Lambda.Function`) qualifies.
  */
 export interface HttpApiHandler {
+  /** The logical ID of the handler function. */
   readonly LogicalId: string;
+  /** ARN of the Lambda function that serves requests. */
   readonly functionArn: Output.Output<string>;
+  /** Name of the Lambda function that serves requests. */
   readonly functionName: Output.Output<string>;
 }
 
@@ -66,7 +69,8 @@ export interface HttpApiProps {
  * The Lambda receives the same event shape as a Function URL, so an
  * Effect-native `fetch` handler works unchanged behind the API.
  *
- * @example
+ * @section Creating an HTTP API
+ * @example Front a Lambda function
  * ```typescript
  * const fn = yield* MyFunction;
  * const { url } = yield* ApiGatewayV2.HttpApi("Api", { handler: fn });

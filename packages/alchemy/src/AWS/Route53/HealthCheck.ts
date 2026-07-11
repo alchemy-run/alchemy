@@ -123,6 +123,29 @@ export interface HealthCheck extends Resource<
  *   failureThreshold: 3,
  * });
  * ```
+ *
+ * @section Gating DNS Failover
+ * @example Fail Over a Record When the Check Fails
+ * ```typescript
+ * const check = yield* HealthCheck("PrimaryHealth", {
+ *   type: "HTTPS",
+ *   fullyQualifiedDomainName: "primary.example.com",
+ *   resourcePath: "/health",
+ *   port: 443,
+ * });
+ * // Route 53 answers with the PRIMARY record only while the check passes;
+ * // see `Record` for the matching SECONDARY record.
+ * const primary = yield* Record("Primary", {
+ *   hostedZoneId: zone.id,
+ *   name: "app.example.com",
+ *   type: "A",
+ *   ttl: "60 seconds",
+ *   records: ["1.2.3.4"],
+ *   setIdentifier: "primary",
+ *   failover: "PRIMARY",
+ *   healthCheckId: check.id,
+ * });
+ * ```
  */
 export const HealthCheck = Resource<HealthCheck>("AWS.Route53.HealthCheck");
 

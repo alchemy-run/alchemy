@@ -13,6 +13,10 @@ import * as Binding from "../../Binding.ts";
  *
  * @binding
  * @section Geocoding Addresses
+ * Provide the `GeocodeHttp` implementation layer on the Function effect
+ * (`.pipe(Effect.provide(AWS.GeoPlaces.GeocodeHttp))`), bind in the init
+ * phase, then call the client at runtime.
+ *
  * @example Geocode an address to coordinates
  * ```typescript
  * // init

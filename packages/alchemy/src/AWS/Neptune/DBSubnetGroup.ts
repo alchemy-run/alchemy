@@ -34,11 +34,17 @@ export interface DBSubnetGroup extends Resource<
   "AWS.Neptune.DBSubnetGroup",
   DBSubnetGroupProps,
   {
+    /** Name of the subnet group. */
     dbSubnetGroupName: string;
+    /** ARN of the subnet group. */
     dbSubnetGroupArn: string | undefined;
+    /** ID of the VPC the subnets belong to. */
     vpcId: string | undefined;
+    /** IDs of the subnets in the group. */
     subnetIds: string[];
+    /** Status of the subnet group (e.g. `Complete`). */
     status: string | undefined;
+    /** Tags on the subnet group (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

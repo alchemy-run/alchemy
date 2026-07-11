@@ -95,7 +95,63 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  * Runtime binding that resolves connection settings for an Aurora cluster,
  * proxy, or proxy endpoint using a Secrets Manager secret or IAM database
  * authentication.
+ *
+ * Binding it yields an Effect (not a callable) that resolves a
+ * `ConnectionInfo` — host, port, credentials, and a ready-to-use `url` —
+ * fresh on every execution. No socket is opened; feed the result into your
+ * database driver. Provide the implementation with
+ * `Effect.provide(AWS.RDS.ConnectHttp)`.
  * @binding
+ * @section Connecting to a Database
+ * @example Resolve Credentials from a Secret
+ * ```typescript
+ * export default MyFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const db = yield* AWS.RDS.Aurora("AppDb", {
+ *       subnetIds: [subnetA.subnetId, subnetB.subnetId],
+ *       securityGroupIds: [dbSecurityGroup.groupId],
+ *     });
+ *     // init — bind the cluster + admin secret; grants
+ *     // secretsmanager:GetSecretValue and (optionally) attaches the
+ *     // function to the given subnets/security groups
+ *     const connect = yield* AWS.RDS.Connect(db.cluster, {
+ *       secret: db.secret,
+ *       database: "app",
+ *       subnetIds: [subnetA.subnetId, subnetB.subnetId],
+ *       securityGroupIds: [appSecurityGroup.groupId],
+ *     });
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime — resolve host/port/credentials, hand `info.url`
+ *         // (Redacted) to postgres.js / pg / drizzle
+ *         const info = yield* connect;
+ *         return yield* HttpServerResponse.json({
+ *           host: info.host,
+ *           port: info.port,
+ *           database: info.database,
+ *         });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(AWS.RDS.ConnectHttp)),
+ * );
+ * ```
+ *
+ * @example IAM Database Authentication
+ * ```typescript
+ * // init — grants rds-db:connect for the `app_iam` user; the runtime half
+ * // presigns a short-lived (15 minute) auth token as the password
+ * const connect = yield* AWS.RDS.Connect(db.cluster, {
+ *   auth: "iam",
+ *   username: "app_iam",
+ *   database: "app",
+ * });
+ *
+ * // runtime — long-lived pools should wire info.refreshPassword into the
+ * // driver's lazy-password hook so each new connection gets a fresh token
+ * const info = yield* connect;
+ * ```
  */
 export interface Connect extends Binding.Service<
   Connect,

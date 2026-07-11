@@ -47,8 +47,17 @@ export interface RunGroup extends Resource<
   "AWS.Omics.RunGroup",
   RunGroupProps,
   {
+    /**
+     * ID of the run group.
+     */
     runGroupId: string;
+    /**
+     * ARN of the run group.
+     */
     runGroupArn: string;
+    /**
+     * Name of the run group.
+     */
     name: string;
   },
   never,

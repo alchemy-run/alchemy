@@ -60,10 +60,15 @@ export interface RuleGroup extends Resource<
   "AWS.NetworkFirewall.RuleGroup",
   RuleGroupProps,
   {
+    /** Name of the rule group. */
     ruleGroupName: string;
+    /** ARN of the rule group. */
     ruleGroupArn: string;
+    /** Server-assigned unique id of the rule group. */
     ruleGroupId: string;
+    /** Rule group type (`STATELESS` or `STATEFUL`). */
     type: string;
+    /** Reserved rule capacity of the group. */
     capacity: number;
   },
   never,

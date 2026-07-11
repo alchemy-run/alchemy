@@ -61,23 +61,41 @@ export interface DBInstance extends Resource<
   "AWS.Neptune.DBInstance",
   DBInstanceProps,
   {
+    /** Identifier of the instance. */
     dbInstanceIdentifier: string;
+    /** ARN of the instance. */
     dbInstanceArn: string;
+    /** Identifier of the cluster the instance belongs to. */
     dbClusterIdentifier: string | undefined;
+    /** Instance endpoint host name. */
     endpointAddress: string | undefined;
+    /** Port the instance listens on. */
     endpointPort: number | undefined;
+    /** Compute class of the instance (e.g. `db.r5.large`, `db.serverless`). */
     dbInstanceClass: string | undefined;
+    /** Database engine (`neptune`). */
     engine: string | undefined;
+    /** Running engine version. */
     engineVersion: string | undefined;
+    /** Current lifecycle status (e.g. `creating`, `available`). */
     status: string | undefined;
+    /** Failover promotion priority of the instance. */
     promotionTier: number | undefined;
+    /** Name of the subnet group the instance is placed in. */
     dbSubnetGroupName: string | undefined;
+    /** Availability Zone the instance runs in. */
     availabilityZone: string | undefined;
+    /** Weekly window during which maintenance may occur. */
     preferredMaintenanceWindow: string | undefined;
+    /** Whether storage is encrypted at rest. */
     storageEncrypted: boolean | undefined;
+    /** KMS key encrypting the instance's storage. */
     kmsKeyId: string | undefined;
+    /** Immutable, region-unique identifier of the instance. */
     dbiResourceId: string | undefined;
+    /** Whether minor engine upgrades are applied automatically. */
     autoMinorVersionUpgrade: boolean | undefined;
+    /** Tags on the instance (user + internal Alchemy tags). */
     tags: Record<string, string>;
   },
   never,

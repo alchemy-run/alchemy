@@ -8,6 +8,12 @@ import { isBindingHost } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
 import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
 
+/**
+ * HTTP implementation of {@link PutEvents}. At deploy time it grants
+ * `events:PutEvents` on the bound bus (or the default bus); at runtime it
+ * calls the EventBridge API with the host Function's credentials. Provide
+ * this layer on the Function using the binding.
+ */
 export const PutEventsHttp = Layer.effect(
   PutEvents,
   Effect.gen(function* () {

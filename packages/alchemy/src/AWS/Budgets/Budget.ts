@@ -106,7 +106,13 @@ export interface Budget extends Resource<
   "AWS.Budgets.Budget",
   BudgetProps,
   {
+    /**
+     * Name of the budget.
+     */
     budgetName: string;
+    /**
+     * The AWS account ID that owns the budget.
+     */
     accountId: string;
   },
   never,

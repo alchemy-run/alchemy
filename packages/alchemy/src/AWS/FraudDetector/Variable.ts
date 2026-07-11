@@ -51,9 +51,13 @@ export interface Variable extends Resource<
   "AWS.FraudDetector.Variable",
   VariableProps,
   {
+    /** The name of the variable. */
     name: string;
+    /** The ARN of the variable. */
     arn: string;
+    /** The data type of the variable, e.g. `STRING` or `FLOAT`. */
     dataType: string;
+    /** The data source of the variable, e.g. `EVENT`. */
     dataSource: string;
   },
   never,

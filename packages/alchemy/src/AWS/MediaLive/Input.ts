@@ -91,13 +91,21 @@ export interface Input extends Resource<
   "AWS.MediaLive.Input",
   InputProps,
   {
+    /** Server-assigned unique id of the input. */
     inputId: string;
+    /** ARN of the input. */
     inputArn: string;
+    /** Name of the input. */
     inputName: string | undefined;
+    /** Current lifecycle state (e.g. `DETACHED`, `ATTACHED`). */
     state: medialive.InputState | undefined;
+    /** The input type (e.g. `RTMP_PUSH`, `URL_PULL`). */
     type: medialive.InputType | undefined;
+    /** `STANDARD` (two ingest endpoints) or `SINGLE_PIPELINE`. */
     inputClass: medialive.InputClass | undefined;
+    /** Resolved ingest destinations (push URLs) for the input. */
     destinations: medialive.InputDestination[];
+    /** IDs of the attached input security groups. */
     securityGroups: string[];
   },
   never,

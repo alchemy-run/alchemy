@@ -35,8 +35,17 @@ export interface PlaybackKeyPair extends Resource<
   "AWS.IVS.PlaybackKeyPair",
   PlaybackKeyPairProps,
   {
+    /**
+     * The key pair's physical name.
+     */
     playbackKeyPairName: string;
+    /**
+     * ARN of the imported playback key pair.
+     */
     playbackKeyPairArn: string;
+    /**
+     * Fingerprint of the imported public key.
+     */
     fingerprint: string | undefined;
   },
   never,

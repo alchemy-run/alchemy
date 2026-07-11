@@ -12,6 +12,7 @@ export interface VerifyMacRequest extends Omit<
  * Runtime binding for `payment-cryptography:VerifyMac` — verifies a Message
  * Authentication Code against hex-encoded message data under a {@link Key}.
  * A mismatched MAC fails with the typed `VerificationFailedException`.
+ * Provide `VerifyMacHttp` on the Function to satisfy this service.
  * @binding
  * @section Verifying MACs
  * @example Verify an HMAC

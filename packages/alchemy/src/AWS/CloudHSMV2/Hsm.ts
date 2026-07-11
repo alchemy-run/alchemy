@@ -33,12 +33,33 @@ export interface Hsm extends Resource<
   "AWS.CloudHSMV2.Hsm",
   HsmProps,
   {
+    /**
+     * The unique identifier of the HSM.
+     */
     hsmId: string;
+    /**
+     * The cluster the HSM belongs to.
+     */
     clusterId: string;
+    /**
+     * The Availability Zone the HSM was placed in.
+     */
     availabilityZone: string | undefined;
+    /**
+     * The subnet the HSM's ENI lives in.
+     */
     subnetId: string | undefined;
+    /**
+     * The elastic network interface attached to the HSM.
+     */
     eniId: string | undefined;
+    /**
+     * The IP address of the HSM's ENI.
+     */
     eniIp: string | undefined;
+    /**
+     * Current state of the HSM (e.g. `ACTIVE`).
+     */
     state: string;
   },
   never,

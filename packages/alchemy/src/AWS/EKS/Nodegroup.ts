@@ -92,22 +92,39 @@ export interface Nodegroup extends Resource<
   "AWS.EKS.Nodegroup",
   NodegroupProps,
   {
+    /** The name of the node group. */
     nodegroupName: string;
+    /** The ARN of the node group. */
     nodegroupArn: string;
+    /** The name of the EKS cluster the node group belongs to. */
     clusterName: string;
+    /** The node group status (e.g. `CREATING`, `ACTIVE`, `UPDATING`). */
     status: eks.NodegroupStatus;
+    /** The capacity type (`ON_DEMAND`, `SPOT`, or `CAPACITY_BLOCK`). */
     capacityType: eks.CapacityTypes | undefined;
+    /** The scaling configuration (min/max/desired size). */
     scalingConfig: eks.NodegroupScalingConfig | undefined;
+    /** The EC2 instance types the node group launches. */
     instanceTypes: string[];
+    /** The IDs of the subnets nodes are launched into. */
     subnets: string[];
+    /** The AMI type of the nodes (e.g. `AL2023_x86_64_STANDARD`). */
     amiType: eks.AMITypes | undefined;
+    /** The ARN of the IAM role attached to the nodes. */
     nodeRole: string;
+    /** The Kubernetes labels applied to nodes in the group. */
     labels: Record<string, string>;
+    /** The Kubernetes taints applied to nodes in the group. */
     taints: eks.Taint[];
+    /** The root device disk size in GiB, when not using a launch template. */
     diskSize: number | undefined;
+    /** The Kubernetes version of the node group. */
     version: string | undefined;
+    /** The AMI release version of the node group. */
     releaseVersion: string | undefined;
+    /** The rolling-update configuration (max unavailable). */
     updateConfig: eks.NodegroupUpdateConfig | undefined;
+    /** The tags applied to the node group. */
     tags: Record<string, string>;
   },
   never,

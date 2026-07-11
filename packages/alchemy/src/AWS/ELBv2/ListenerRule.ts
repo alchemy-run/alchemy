@@ -40,9 +40,13 @@ export interface ListenerRule extends Resource<
   "AWS.ELBv2.ListenerRule",
   ListenerRuleProps,
   {
+    /** The ARN of the rule. */
     ruleArn: RuleArn;
+    /** The ARN of the listener the rule is attached to. */
     listenerArn: ListenerArn;
+    /** The rule's evaluation priority (lower numbers evaluate first). */
     priority: number;
+    /** Whether this is the listener's default rule. */
     isDefault: boolean;
   },
   never,

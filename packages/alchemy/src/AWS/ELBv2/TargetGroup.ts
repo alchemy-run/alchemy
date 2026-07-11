@@ -70,15 +70,19 @@ export interface TargetGroup extends Resource<
   "AWS.ELBv2.TargetGroup",
   TargetGroupProps,
   {
+    /** The ARN of the target group. */
     targetGroupArn: TargetGroupArn;
+    /** The name of the target group. */
     targetGroupName: TargetGroupName;
     /** Undefined for `lambda` target groups (they have no port). */
     port: number | undefined;
     /** Undefined for `lambda` target groups (they have no protocol). */
     protocol: string | undefined;
+    /** The target type (`instance`, `ip`, `lambda`, or `alb`). */
     targetType: string;
     /** Undefined for `lambda` target groups (they are not VPC-scoped). */
     vpcId: string | undefined;
+    /** The tags applied to the target group. */
     tags: Record<string, string>;
   },
   never,

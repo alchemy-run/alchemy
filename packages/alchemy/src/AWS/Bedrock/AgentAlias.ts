@@ -55,9 +55,21 @@ export interface AgentAlias extends Resource<
   "AWS.Bedrock.AgentAlias",
   AgentAliasProps,
   {
+    /**
+     * The unique identifier of the agent the alias routes to.
+     */
     agentId: string;
+    /**
+     * The unique identifier of the alias.
+     */
     agentAliasId: string;
+    /**
+     * The ARN of the alias.
+     */
     agentAliasArn: string;
+    /**
+     * Name of the alias.
+     */
     agentAliasName: string;
   }
 > {}

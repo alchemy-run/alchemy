@@ -50,8 +50,11 @@ export interface Repository extends Resource<
   "AWS.CodeArtifact.Repository",
   RepositoryProps,
   {
+    /** Physical name of the repository. */
     repositoryName: string;
+    /** ARN of the repository. */
     repositoryArn: string;
+    /** Name of the domain containing the repository. */
     domainName: string;
     /** AWS account ID that owns the containing domain. */
     domainOwner: string;

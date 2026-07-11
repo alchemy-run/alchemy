@@ -19,7 +19,9 @@ export interface ListenerCertificate extends Resource<
   "AWS.ELBv2.ListenerCertificate",
   ListenerCertificateProps,
   {
+    /** The ARN of the listener the certificate is attached to. */
     listenerArn: ListenerArn;
+    /** The ARN of the ACM/IAM certificate. */
     certificateArn: string;
   },
   never,

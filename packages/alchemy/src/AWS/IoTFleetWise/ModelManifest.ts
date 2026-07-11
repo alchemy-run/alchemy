@@ -56,9 +56,13 @@ export interface ModelManifest extends Resource<
   "AWS.IoTFleetWise.ModelManifest",
   ModelManifestProps,
   {
+    /** The name of the model manifest. */
     modelManifestName: string;
+    /** The ARN of the model manifest. */
     modelManifestArn: string;
+    /** The current status of the manifest (`ACTIVE`, `DRAFT`, ...). */
     status: string;
+    /** The signal catalog the manifest's nodes come from. */
     signalCatalogArn: string | undefined;
   },
   never,

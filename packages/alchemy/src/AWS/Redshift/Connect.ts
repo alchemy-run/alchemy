@@ -97,7 +97,8 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * configure Drizzle with `prepare: false` and avoid `RETURNING` (Redshift
  * does not support either). The host Function must be able to reach the
  * cluster endpoint (attach it to the cluster's VPC, or make the cluster
- * `publiclyAccessible`).
+ * `publiclyAccessible`). Provide the implementation with
+ * `Effect.provide(AWS.Redshift.ConnectHttp)`.
  *
  * @binding
  * @section Connecting to a Cluster

@@ -127,7 +127,13 @@ export interface Export extends Resource<
   "AWS.BCMDataExports.Export",
   ExportProps,
   {
+    /**
+     * Name of the export.
+     */
     exportName: string;
+    /**
+     * The ARN of the export.
+     */
     exportArn: string;
   },
   never,

@@ -64,13 +64,37 @@ export interface Collection extends Resource<
   "AWS.OpenSearchServerless.Collection",
   CollectionProps,
   {
+    /**
+     * Unique identifier of the collection.
+     */
     collectionId: string;
+    /**
+     * Name of the collection.
+     */
     collectionName: string;
+    /**
+     * ARN of the collection.
+     */
     collectionArn: string;
+    /**
+     * Collection type (`SEARCH`, `TIMESERIES`, or `VECTORSEARCH`).
+     */
     type?: string;
+    /**
+     * Collection status (e.g. `ACTIVE`, `CREATING`, `DELETING`).
+     */
     status?: string;
+    /**
+     * ARN of the KMS key encrypting the collection.
+     */
     kmsKeyArn?: string;
+    /**
+     * OpenSearch endpoint for data-plane requests.
+     */
     collectionEndpoint?: string;
+    /**
+     * OpenSearch Dashboards endpoint for the collection.
+     */
     dashboardEndpoint?: string;
   },
   {},

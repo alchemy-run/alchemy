@@ -66,7 +66,8 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * configure Drizzle with `prepare: false` and avoid `RETURNING` (Redshift
  * does not support either). The host Function must be able to reach the
  * workgroup endpoint (attach it to the workgroup's VPC, or make the
- * workgroup `publiclyAccessible`).
+ * workgroup `publiclyAccessible`). Provide the implementation with
+ * `Effect.provide(AWS.RedshiftServerless.ConnectHttp)`.
  *
  * @binding
  * @section Connecting to a Workgroup

@@ -54,12 +54,33 @@ export interface ScalingPolicy extends Resource<
   "AWS.AutoScaling.ScalingPolicy",
   ScalingPolicyProps,
   {
+    /**
+     * ARN of the scaling policy.
+     */
     policyArn: string;
+    /**
+     * Name of the scaling policy.
+     */
     policyName: ScalingPolicyName;
+    /**
+     * Name of the Auto Scaling Group the policy is attached to.
+     */
     autoScalingGroupName: string;
+    /**
+     * Policy type (e.g. `TargetTrackingScaling`).
+     */
     policyType: string;
+    /**
+     * Target value the tracked metric is held at.
+     */
     targetValue: number;
+    /**
+     * Predefined metric being tracked.
+     */
     predefinedMetricType: string;
+    /**
+     * CloudWatch alarms created by EC2 Auto Scaling to drive the policy.
+     */
     alarms: string[];
   },
   never,
@@ -67,8 +88,39 @@ export interface ScalingPolicy extends Resource<
 > {}
 
 /**
- * A target-tracking scaling policy for an Auto Scaling Group.
+ * A target-tracking scaling policy for an Auto Scaling Group. EC2 Auto
+ * Scaling creates and manages the CloudWatch alarms that keep the tracked
+ * metric at `targetValue` by adjusting the group's desired capacity.
  * @resource
+ * @section Creating a Scaling Policy
+ * @example Track average CPU utilization
+ * ```typescript
+ * import { AutoScalingGroup, ScalingPolicy } from "alchemy/AWS/AutoScaling";
+ *
+ * const group = yield* AutoScalingGroup("Fleet", {
+ *   launchTemplate: template,
+ *   subnetIds: [subnet.subnetId],
+ *   minSize: 1,
+ *   maxSize: 4,
+ * });
+ *
+ * const policy = yield* ScalingPolicy("CpuPolicy", {
+ *   autoScalingGroup: group,
+ *   predefinedMetricType: "ASGAverageCPUUtilization",
+ *   targetValue: 60,
+ * });
+ * ```
+ *
+ * @example Scale on ALB requests per target without scale-in
+ * ```typescript
+ * const policy = yield* ScalingPolicy("RequestPolicy", {
+ *   autoScalingGroup: group,
+ *   predefinedMetricType: "ALBRequestCountPerTarget",
+ *   targetValue: 1000,
+ *   disableScaleIn: true,
+ *   estimatedInstanceWarmup: "3 minutes",
+ * });
+ * ```
  */
 export const ScalingPolicy = Resource<ScalingPolicy>(
   "AWS.AutoScaling.ScalingPolicy",

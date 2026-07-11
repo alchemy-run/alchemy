@@ -9,8 +9,23 @@ export interface GetDashboardRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `cloudwatch:GetDashboard`.
+ * Runtime binding for `cloudwatch:GetDashboard` — read the body and
+ * metadata of the bound {@link Dashboard}; the dashboard name is injected
+ * automatically.
+ *
+ * Provide `CloudWatch.GetDashboardHttp` on the hosting Lambda Function to
+ * satisfy the requirement.
  * @binding
+ * @section Reading Dashboards
+ * @example Read a Bound Dashboard
+ * ```typescript
+ * // init — grants cloudwatch:GetDashboard on the dashboard
+ * const getDashboard = yield* AWS.CloudWatch.GetDashboard(dashboard);
+ *
+ * // runtime
+ * const result = yield* getDashboard();
+ * const widgets = JSON.parse(result.DashboardBody ?? "{}").widgets;
+ * ```
  */
 export interface GetDashboard extends Binding.Service<
   GetDashboard,

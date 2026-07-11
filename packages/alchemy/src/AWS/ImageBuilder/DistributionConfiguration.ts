@@ -43,8 +43,11 @@ export interface DistributionConfiguration extends Resource<
   "AWS.ImageBuilder.DistributionConfiguration",
   DistributionConfigurationProps,
   {
+    /** The name of the distribution configuration. */
     distributionConfigurationName: string;
+    /** The ARN of the distribution configuration. */
     distributionConfigurationArn: string;
+    /** When the distribution configuration was created. */
     dateCreated: string | undefined;
   },
   never,

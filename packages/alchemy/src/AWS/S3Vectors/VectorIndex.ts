@@ -55,8 +55,17 @@ export interface Index extends Resource<
   "AWS.S3Vectors.Index",
   IndexProps,
   {
+    /**
+     * Name of the vector bucket containing the index.
+     */
     vectorBucketName: string;
+    /**
+     * Name of the index.
+     */
     indexName: string;
+    /**
+     * ARN of the index.
+     */
     indexArn: string;
   },
   never,

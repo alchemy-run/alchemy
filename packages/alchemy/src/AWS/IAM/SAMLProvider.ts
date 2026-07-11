@@ -37,11 +37,17 @@ export interface SAMLProvider extends Resource<
   "AWS.IAM.SAMLProvider",
   SAMLProviderProps,
   {
+    /** The ARN of the SAML provider. */
     samlProviderArn: string;
+    /** The name of the SAML provider. */
     name: string;
+    /** The unique ID AWS assigns to the provider. */
     samlProviderUUID: string | undefined;
+    /** The SAML metadata document from the identity provider. */
     samlMetadataDocument: string | undefined;
+    /** Whether SAML assertions must be encrypted (`Required` / `Allowed`). */
     assertionEncryptionMode: iam.AssertionEncryptionModeType | undefined;
+    /** The tags applied to the provider. */
     tags: Record<string, string>;
   },
   never,

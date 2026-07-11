@@ -33,7 +33,13 @@ export interface OptOutList extends Resource<
   "AWS.PinpointSMSVoiceV2.OptOutList",
   OptOutListProps,
   {
+    /**
+     * Name of the opt-out list.
+     */
     optOutListName: string;
+    /**
+     * ARN of the opt-out list.
+     */
     optOutListArn: string;
   },
   never,

@@ -64,9 +64,13 @@ export interface AnomalySubscription extends Resource<
   "AWS.CostExplorer.AnomalySubscription",
   AnomalySubscriptionProps,
   {
+    /** ARN of the anomaly subscription. */
     subscriptionArn: string;
+    /** Name of the anomaly subscription. */
     subscriptionName: string;
+    /** Account ID the subscription belongs to. */
     accountId: string | undefined;
+    /** Current tags on the subscription. */
     tags: Record<string, string>;
   },
   never,

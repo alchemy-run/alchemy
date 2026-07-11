@@ -47,12 +47,33 @@ export interface ClusterSubnetGroup extends Resource<
   "AWS.Redshift.ClusterSubnetGroup",
   ClusterSubnetGroupProps,
   {
+    /**
+     * Name of the subnet group.
+     */
     clusterSubnetGroupName: string;
+    /**
+     * ARN of the subnet group.
+     */
     clusterSubnetGroupArn: string;
+    /**
+     * Description of the subnet group.
+     */
     description: string | undefined;
+    /**
+     * ID of the VPC the subnets belong to.
+     */
     vpcId: string | undefined;
+    /**
+     * IDs of the subnets in the group.
+     */
     subnetIds: string[];
+    /**
+     * Status of the subnet group (e.g. `"Complete"`).
+     */
     subnetGroupStatus: string | undefined;
+    /**
+     * Tags on the subnet group (including internal Alchemy tags).
+     */
     tags: Record<string, string>;
   },
   never,

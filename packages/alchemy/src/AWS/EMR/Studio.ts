@@ -102,10 +102,15 @@ export interface Studio extends Resource<
   "AWS.EMR.Studio",
   StudioProps,
   {
+    /** The ID of the Studio (e.g. `es-0123456789ABCDEFGHIJKLMNOP`). */
     studioId: string;
+    /** The ARN of the Studio. */
     studioArn: string;
+    /** The name of the Studio. */
     studioName: string;
+    /** The unique access URL of the Studio. */
     url: string | undefined;
+    /** The tags applied to the Studio. */
     tags: Record<string, string>;
   },
   never,

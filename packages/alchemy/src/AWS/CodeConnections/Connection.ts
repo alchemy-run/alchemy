@@ -40,7 +40,9 @@ export interface Connection extends Resource<
   "AWS.CodeConnections.Connection",
   ConnectionProps,
   {
+    /** Physical name of the connection. */
     connectionName: string;
+    /** ARN of the connection (referenced by CodePipeline source actions). */
     connectionArn: string;
     /**
      * Connection state. A freshly created connection is `PENDING` until the
@@ -48,6 +50,7 @@ export interface Connection extends Resource<
      * becomes `AVAILABLE`.
      */
     connectionStatus: string;
+    /** The source provider (`GitHub`, `GitLab`, `Bitbucket`, ...). */
     providerType: string;
   },
   never,

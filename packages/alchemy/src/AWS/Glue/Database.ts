@@ -50,8 +50,11 @@ export interface Database extends Resource<
   "AWS.Glue.Database",
   DatabaseProps,
   {
+    /** The (lowercase) name of the database. */
     databaseName: string;
+    /** The ARN of the database. */
     databaseArn: string;
+    /** The AWS account ID of the Data Catalog the database lives in. */
     catalogId: string;
   },
   {},

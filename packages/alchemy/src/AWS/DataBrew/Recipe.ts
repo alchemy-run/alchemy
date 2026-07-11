@@ -73,7 +73,9 @@ export interface Recipe extends Resource<
   "AWS.DataBrew.Recipe",
   RecipeProps,
   {
+    /** Name of the recipe. */
     recipeName: string;
+    /** ARN of the recipe. */
     recipeArn: string;
     /** Latest published version (e.g. `"1.0"`), or `"LATEST_WORKING"` if never published. */
     recipeVersion: string;

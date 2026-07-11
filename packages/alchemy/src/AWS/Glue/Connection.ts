@@ -76,9 +76,13 @@ export interface Connection extends Resource<
   "AWS.Glue.Connection",
   ConnectionProps,
   {
+    /** The name of the connection. */
     connectionName: string;
+    /** The ARN of the connection. */
     connectionArn: string;
+    /** The connection type, e.g. `JDBC`. */
     connectionType: string;
+    /** The AWS account ID of the Data Catalog the connection lives in. */
     catalogId: string;
   },
   {},

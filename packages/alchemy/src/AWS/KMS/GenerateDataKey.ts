@@ -49,6 +49,27 @@ export interface GenerateDataKeyRequest extends Omit<
  * ```typescript
  * const generateDataKey = yield* AWS.KMS.GenerateDataKey("alias/app-key");
  * ```
+ *
+ * @section Wiring
+ * @example Provide the Implementation on a Lambda Function
+ * ```typescript
+ * // Envelope encryption pairs GenerateDataKey with Decrypt — provide
+ * // both HTTP layers on the Function's init Effect.
+ * export default EnvelopeFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const key = yield* AWS.KMS.Key("DataKey");
+ *     const generateDataKey = yield* AWS.KMS.GenerateDataKey(key);
+ *     const decrypt = yield* AWS.KMS.Decrypt(key);
+ *     // ... generate a data key, encrypt locally, store the CiphertextBlob
+ *     return { fetch: handler };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(AWS.KMS.GenerateDataKeyHttp, AWS.KMS.DecryptHttp),
+ *     ),
+ *   ),
+ * );
+ * ```
  */
 export interface GenerateDataKey extends Binding.Service<
   GenerateDataKey,

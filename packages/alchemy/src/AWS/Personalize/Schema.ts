@@ -47,9 +47,22 @@ export interface Schema extends Resource<
   "AWS.Personalize.Schema",
   SchemaProps,
   {
+    /**
+     * ARN of the schema.
+     */
     schemaArn: string;
+    /**
+     * Name of the schema.
+     */
     name: string;
+    /**
+     * Avro schema definition as a JSON string.
+     */
     schema: string;
+    /**
+     * Domain of the schema (`ECOMMERCE` or `VIDEO_ON_DEMAND`) when it is a
+     * domain schema.
+     */
     domain: string | undefined;
   },
   never,

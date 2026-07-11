@@ -37,9 +37,21 @@ export interface AccessPolicy extends Resource<
   "AWS.OpenSearchServerless.AccessPolicy",
   AccessPolicyProps,
   {
+    /**
+     * Name of the access policy.
+     */
     policyName: string;
+    /**
+     * Policy type (`data`).
+     */
     type: string;
+    /**
+     * Version of the policy, used for optimistic-concurrency updates.
+     */
     policyVersion: string;
+    /**
+     * Description of the access policy.
+     */
     description?: string;
   },
   {},

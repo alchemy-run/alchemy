@@ -88,10 +88,15 @@ export interface Trail extends Resource<
   "AWS.CloudTrail.Trail",
   TrailProps,
   {
+    /** Physical name of the trail. */
     trailName: string;
+    /** ARN of the trail. */
     trailArn: string;
+    /** The region in which the trail was created. */
     homeRegion: string;
+    /** S3 bucket the trail delivers log files to. */
     s3BucketName: string;
+    /** Whether the trail is currently logging. */
     isLogging: boolean;
   },
   never,

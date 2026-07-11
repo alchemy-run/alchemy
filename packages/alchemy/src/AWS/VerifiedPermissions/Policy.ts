@@ -27,7 +27,13 @@ export interface Policy extends Resource<
   "AWS.VerifiedPermissions.Policy",
   PolicyProps,
   {
+    /**
+     * ID of the policy store the policy belongs to.
+     */
     policyStoreId: string;
+    /**
+     * Service-assigned unique ID of the policy within the store.
+     */
     policyId: string;
   },
   {},

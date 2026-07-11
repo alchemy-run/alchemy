@@ -37,12 +37,19 @@ export interface Subscription extends Resource<
   "AWS.SNS.Subscription",
   SubscriptionProps,
   {
+    /** ARN of the subscription. */
     subscriptionArn: SubscriptionArn;
+    /** ARN of the topic the subscription is attached to. */
     topicArn: string;
+    /** Delivery protocol of the subscription (e.g. `lambda`, `sqs`, `https`). */
     protocol: string;
+    /** Endpoint receiving deliveries, such as a Lambda function or queue ARN. */
     endpoint: string | undefined;
+    /** AWS account ID that owns the subscription. */
     owner: string | undefined;
+    /** Whether the subscription is still awaiting endpoint confirmation. */
     pendingConfirmation: boolean;
+    /** Raw SNS subscription attributes keyed by AWS attribute name. */
     attributes: Record<string, string>;
   },
   never,
@@ -63,6 +70,31 @@ export interface Subscription extends Resource<
  *   topicArn: topic.topicArn,
  *   protocol: "lambda",
  *   endpoint: fn.functionArn,
+ * });
+ * ```
+ *
+ * @example Fan Out a Topic to an SQS Queue
+ * ```typescript
+ * const topic = yield* SNS.Topic("Events");
+ * const queue = yield* SQS.Queue("Notifications");
+ *
+ * const subscription = yield* Subscription("QueueSubscription", {
+ *   topicArn: topic.topicArn,
+ *   protocol: "sqs",
+ *   endpoint: queue.queueArn,
+ *   returnSubscriptionArn: true,
+ * });
+ * ```
+ *
+ * @example Filtered Subscription
+ * ```typescript
+ * const subscription = yield* Subscription("OrderSubscription", {
+ *   topicArn: topic.topicArn,
+ *   protocol: "sqs",
+ *   endpoint: queue.queueArn,
+ *   attributes: {
+ *     FilterPolicy: JSON.stringify({ type: ["order"] }),
+ *   },
  * });
  * ```
  */

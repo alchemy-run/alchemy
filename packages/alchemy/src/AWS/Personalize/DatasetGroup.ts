@@ -43,9 +43,22 @@ export interface DatasetGroup extends Resource<
   "AWS.Personalize.DatasetGroup",
   DatasetGroupProps,
   {
+    /**
+     * ARN of the dataset group.
+     */
     datasetGroupArn: string;
+    /**
+     * Name of the dataset group.
+     */
     name: string;
+    /**
+     * Dataset group status (e.g. `ACTIVE`, `CREATE PENDING`).
+     */
     status: string;
+    /**
+     * Domain of the dataset group (`ECOMMERCE` or `VIDEO_ON_DEMAND`) when
+     * it is a domain dataset group.
+     */
     domain: string | undefined;
   },
   never,

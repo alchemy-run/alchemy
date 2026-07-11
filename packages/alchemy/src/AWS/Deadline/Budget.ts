@@ -161,6 +161,26 @@ export interface Budget extends Resource<
  *   },
  * });
  * ```
+ *
+ * @example Graduated Thresholds
+ * ```typescript
+ * // Let in-flight tasks finish at 90%, cancel everything at 100%.
+ * const budget = yield* AWS.Deadline.Budget("QueueBudget", {
+ *   farmId: farm.farmId,
+ *   queueId: queue.queueId,
+ *   approximateDollarLimit: 500,
+ *   actions: [
+ *     { type: "STOP_SCHEDULING_AND_COMPLETE_TASKS", thresholdPercentage: 90 },
+ *     { type: "STOP_SCHEDULING_AND_CANCEL_TASKS", thresholdPercentage: 100 },
+ *   ],
+ *   schedule: {
+ *     fixed: {
+ *       startTime: "2026-01-01T00:00:00Z",
+ *       endTime: "2026-02-01T00:00:00Z",
+ *     },
+ *   },
+ * });
+ * ```
  */
 export const Budget = Resource<Budget>("AWS.Deadline.Budget");
 

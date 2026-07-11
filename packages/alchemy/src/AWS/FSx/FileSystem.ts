@@ -81,10 +81,15 @@ export interface FileSystem extends Resource<
   "AWS.FSx.FileSystem",
   FileSystemProps,
   {
+    /** The generated ID of the file system, e.g. `fs-0123456789abcdef0`. */
     fileSystemId: string;
+    /** The ARN of the file system. */
     fileSystemArn: string;
+    /** The engine of the file system: `LUSTRE`, `WINDOWS`, `ONTAP`, or `OPENZFS`. */
     fileSystemType: fsx.FileSystemType;
+    /** The DNS name clients mount, e.g. `fs-....fsx.us-west-2.amazonaws.com`. */
     dnsName: string | undefined;
+    /** The VPC the file system's network interfaces live in. */
     vpcId: string | undefined;
   },
   {},

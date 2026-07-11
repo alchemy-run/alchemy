@@ -69,9 +69,13 @@ export interface DecoderManifest extends Resource<
   "AWS.IoTFleetWise.DecoderManifest",
   DecoderManifestProps,
   {
+    /** The name of the decoder manifest. */
     decoderManifestName: string;
+    /** The ARN of the decoder manifest. */
     decoderManifestArn: string;
+    /** The current status of the manifest (`ACTIVE`, `DRAFT`, ...). */
     status: string;
+    /** The model manifest the decoders map to. */
     modelManifestArn: string | undefined;
   },
   never,

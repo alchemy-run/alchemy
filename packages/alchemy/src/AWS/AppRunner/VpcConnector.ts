@@ -45,11 +45,29 @@ export interface VpcConnector extends Resource<
   "AWS.AppRunner.VpcConnector",
   VpcConnectorProps,
   {
+    /**
+     * Name of the VPC connector.
+     */
     vpcConnectorName: string;
+    /**
+     * ARN of this VPC connector revision.
+     */
     vpcConnectorArn: string;
+    /**
+     * Revision number of the connector (revisions are immutable).
+     */
     vpcConnectorRevision: number;
+    /**
+     * Subnets the connector attaches to.
+     */
     subnets: string[];
+    /**
+     * Security groups applied to outbound traffic.
+     */
     securityGroups: string[];
+    /**
+     * Current status of the connector (e.g. `ACTIVE`).
+     */
     status: string;
   },
   never,

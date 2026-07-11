@@ -69,11 +69,30 @@ export interface FileSystem extends Resource<
   "AWS.S3Files.FileSystem",
   FileSystemProps,
   {
+    /**
+     * Unique ID of the file system.
+     */
     fileSystemId: string;
+    /**
+     * ARN of the file system.
+     */
     fileSystemArn: string;
+    /**
+     * Name of the S3 general purpose bucket backing the file system.
+     */
     bucket: string;
+    /**
+     * ARN of the IAM role the file system uses to access the backing bucket.
+     */
     roleArn: string;
+    /**
+     * Current lifecycle status of the file system (e.g. `AVAILABLE`).
+     */
     status: string;
+    /**
+     * Key prefix within the backing bucket that scopes the file system, if
+     * one was configured.
+     */
     prefix?: string;
   },
   never,

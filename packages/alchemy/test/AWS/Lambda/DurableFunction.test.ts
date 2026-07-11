@@ -45,9 +45,10 @@ describe("Lambda DurableFunction", () => {
     { timeout: 30_000 },
   );
 
-  // Full lifecycle: first deploy vendors the Durable Execution SDK and waits
-  // out IAM propagation — it exceeds the standard 240s budget (~420s), so it
-  // is gated for the coordinator's long run: AWS_TEST_DURABLE=1.
+  // Full lifecycle: a real deploy (bundling + vendoring the Durable Execution
+  // SDK + waiting out IAM role propagation) plus a live durable execution with
+  // a suspend/resume. A warm run is ~40s; a cold first deploy can take a few
+  // minutes. Gated off the default fast suite: AWS_TEST_DURABLE=1.
   describe.skipIf(!process.env.AWS_TEST_DURABLE)("lifecycle", () => {
     let functionName: string;
 
@@ -76,11 +77,29 @@ describe("Lambda DurableFunction", () => {
       "runs a 2-step + sleep orchestration to completion",
       (_stack) =>
         Effect.gen(function* () {
+          // Durable executions must target a QUALIFIED ARN (a published
+          // version or alias) — invoking the unqualified function is rejected
+          // with `InvalidParameterValueException`. Publish a version and pin
+          // the execution to it. The freshly-deployed code may still be
+          // updating, so retry while the function reports a pending update.
+          const published = yield* Lambda.publishVersion({
+            FunctionName: functionName,
+          }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ResourceConflictException",
+              schedule: Schedule.spaced("3 seconds"),
+              times: 20,
+            }),
+          );
+          const qualifier = published.Version!;
+          expect(qualifier).toBeTruthy();
+
           // Start: async Invoke with the alchemy envelope and an idempotent
           // execution name (safe to re-run — same name + same payload
           // reattaches to the existing execution).
           const started = yield* Lambda.invoke({
             FunctionName: functionName,
+            Qualifier: qualifier,
             InvocationType: "Event",
             DurableExecutionName: "durable-test-flow-1",
             Payload: encodeDurableEnvelope("DurableFlow", {

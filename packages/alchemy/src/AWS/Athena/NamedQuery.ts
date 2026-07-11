@@ -37,11 +37,29 @@ export interface NamedQuery extends Resource<
   "AWS.Athena.NamedQuery",
   NamedQueryProps,
   {
+    /**
+     * Unique ID of the named query.
+     */
     namedQueryId: string;
+    /**
+     * Name of the saved query.
+     */
     name: string;
+    /**
+     * The saved SQL statement.
+     */
     queryString: string;
+    /**
+     * Database the query runs against.
+     */
     database: string;
+    /**
+     * Description of the query.
+     */
     description: string | undefined;
+    /**
+     * Workgroup the query is saved in.
+     */
     workGroup: string;
   },
   never,

@@ -91,13 +91,38 @@ export interface Server extends Resource<
   "AWS.Transfer.Server",
   ServerProps,
   {
+    /**
+     * AWS-assigned server ID (e.g. `s-0123456789abcdef0`). Clients connect to
+     * `{serverId}.server.transfer.{region}.amazonaws.com`.
+     */
     serverId: string;
+    /**
+     * ARN of the server.
+     */
     arn: string;
+    /**
+     * Where the server endpoint is hosted (`PUBLIC` or `VPC`).
+     */
     endpointType: string;
+    /**
+     * Storage domain the server serves files from (`S3` or `EFS`).
+     */
     domain: string;
+    /**
+     * How users authenticate.
+     */
     identityProviderType: string;
+    /**
+     * File-transfer protocols the server exposes.
+     */
     protocols: string[];
+    /**
+     * Current lifecycle state (e.g. `ONLINE`, `STARTING`).
+     */
     state: string | undefined;
+    /**
+     * Current tags reported for the server.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -117,6 +142,49 @@ export interface Server extends Resource<
  *   domain: "S3",
  *   endpointType: "PUBLIC",
  *   identityProviderType: "SERVICE_MANAGED",
+ * });
+ * ```
+ *
+ * @section Adding Users
+ * @example SFTP Server with a Service-Managed User
+ * ```typescript
+ * const server = yield* Server("Sftp", {
+ *   protocols: ["SFTP"],
+ *   identityProviderType: "SERVICE_MANAGED",
+ * });
+ *
+ * // Role Transfer Family assumes to access the S3 storage backend
+ * const role = yield* AWS.IAM.Role("TransferUserRole", {
+ *   assumeRolePolicyDocument: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { Service: "transfer.amazonaws.com" },
+ *         Action: ["sts:AssumeRole"],
+ *       },
+ *     ],
+ *   },
+ *   inlinePolicies: {
+ *     s3: {
+ *       Version: "2012-10-17",
+ *       Statement: [
+ *         {
+ *           Effect: "Allow",
+ *           Action: ["s3:ListBucket", "s3:GetObject", "s3:PutObject"],
+ *           Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
+ *         },
+ *       ],
+ *     },
+ *   },
+ * });
+ *
+ * const user = yield* User("Alice", {
+ *   serverId: server.serverId,
+ *   userName: "alice",
+ *   role: role.roleArn,
+ *   homeDirectory: Output.interpolate`/${bucket.bucketName}/alice`,
+ *   sshPublicKeyBody: "ssh-ed25519 AAAA...",
  * });
  * ```
  */

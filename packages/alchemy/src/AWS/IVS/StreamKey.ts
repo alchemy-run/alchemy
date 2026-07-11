@@ -27,8 +27,18 @@ export interface StreamKey extends Resource<
   "AWS.IVS.StreamKey",
   StreamKeyProps,
   {
+    /**
+     * ARN of the stream key.
+     */
     streamKeyArn: string;
+    /**
+     * ARN of the channel the stream key authorizes broadcasts to.
+     */
     channelArn: string;
+    /**
+     * The secret stream key value used by broadcast software to
+     * authenticate against the channel's ingest endpoint.
+     */
     value: Redacted.Redacted<string> | undefined;
   },
   never,

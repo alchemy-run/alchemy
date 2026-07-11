@@ -135,6 +135,36 @@ export interface Key extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Runtime Operations
+ * Bind the KMS crypto operations to the key inside a Lambda function.
+ * Each binding grants least-privilege IAM (the exact key ARN) and injects
+ * the `KeyId` automatically.
+ *
+ * @example Encrypt and Decrypt from a Lambda Function
+ * ```typescript
+ * // init
+ * const key = yield* AWS.KMS.Key("AppKey");
+ * const encrypt = yield* AWS.KMS.Encrypt(key);
+ * const decrypt = yield* AWS.KMS.Decrypt(key);
+ *
+ * // runtime
+ * const { CiphertextBlob } = yield* encrypt({
+ *   Plaintext: new TextEncoder().encode("secret"),
+ * });
+ * const { Plaintext } = yield* decrypt({ CiphertextBlob });
+ * ```
+ *
+ * @example Envelope Encryption with a Data Key
+ * ```typescript
+ * // init
+ * const generateDataKey = yield* AWS.KMS.GenerateDataKey(key);
+ *
+ * // runtime — encrypt locally with the plaintext key, store the blob
+ * const { Plaintext, CiphertextBlob } = yield* generateDataKey({
+ *   KeySpec: "AES_256",
+ * });
+ * ```
  */
 export const Key = Resource<Key>("AWS.KMS.Key");
 

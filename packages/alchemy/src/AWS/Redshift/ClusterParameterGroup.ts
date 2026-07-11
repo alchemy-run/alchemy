@@ -46,11 +46,29 @@ export interface ClusterParameterGroup extends Resource<
   "AWS.Redshift.ClusterParameterGroup",
   ClusterParameterGroupProps,
   {
+    /**
+     * Name of the parameter group.
+     */
     clusterParameterGroupName: string;
+    /**
+     * ARN of the parameter group.
+     */
     clusterParameterGroupArn: string;
+    /**
+     * Parameter group family (e.g. `"redshift-2.0"`).
+     */
     family: string;
+    /**
+     * Description of the parameter group.
+     */
     description: string | undefined;
+    /**
+     * Non-default parameter values applied to the group.
+     */
     parameters: Record<string, string>;
+    /**
+     * Tags on the parameter group (including internal Alchemy tags).
+     */
     tags: Record<string, string>;
   },
   never,

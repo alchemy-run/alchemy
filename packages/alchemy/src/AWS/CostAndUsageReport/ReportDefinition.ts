@@ -127,13 +127,21 @@ export interface ReportDefinition extends Resource<
   "AWS.CostAndUsageReport.ReportDefinition",
   ReportDefinitionProps,
   {
+    /** Name of the report definition. */
     reportName: string;
+    /** ARN of the report definition. */
     reportArn: string;
+    /** Granularity of the report (`HOURLY`, `DAILY`, `MONTHLY`). */
     timeUnit: string;
+    /** File format of the report (`textORcsv` or `Parquet`). */
     format: string;
+    /** Compression applied to report files (`ZIP`, `GZIP`, `Parquet`). */
     compression: string;
+    /** Name of the S3 bucket the report is delivered to. */
     s3Bucket: string;
+    /** S3 key prefix the report is delivered under. */
     s3Prefix: string;
+    /** Region of the delivery S3 bucket. */
     s3Region: string;
   },
   never,

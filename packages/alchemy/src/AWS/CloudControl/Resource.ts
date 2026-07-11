@@ -39,6 +39,7 @@ export interface CloudControlResource extends makeResource<
   "AWS.CloudControl.Resource",
   CloudControlResourceProps,
   {
+    /** The CloudFormation resource type name (e.g. `AWS::SSM::Parameter`). */
     typeName: string;
     /** The resource's primary identifier assigned by Cloud Control. */
     identifier: string;

@@ -46,6 +46,31 @@ export type LogEventSinkError =
  *   Stream.run(sink),
  * );
  * ```
+ *
+ * @example Wire into a Lambda Function
+ * ```typescript
+ * // LogEventSinkHttp batches over the PutLogEvents binding, so provide
+ * // PutLogEventsHttp into it with Layer.provideMerge.
+ * export default IngestFunction.make(
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     const logGroup = yield* AWS.Logs.LogGroup("IngestLogs", {});
+ *     yield* AWS.Logs.LogStream("IngestStream", {
+ *       logGroupName: logGroup.logGroupName,
+ *       logStreamName: "ingest-stream",
+ *     });
+ *     const sink = yield* AWS.Logs.LogEventSink(logGroup, {
+ *       logStreamName: "ingest-stream",
+ *     });
+ *     // ... run streams of InputLogEvents into `sink` in the fetch handler
+ *     return { fetch: handler };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.provideMerge(AWS.Logs.LogEventSinkHttp, AWS.Logs.PutLogEventsHttp),
+ *     ),
+ *   ),
+ * );
+ * ```
  */
 export interface LogEventSink extends Binding.Service<
   LogEventSink,

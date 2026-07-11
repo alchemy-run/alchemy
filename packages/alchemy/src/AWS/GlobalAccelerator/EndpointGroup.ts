@@ -105,19 +105,33 @@ export interface EndpointGroup extends Resource<
   "AWS.GlobalAccelerator.EndpointGroup",
   EndpointGroupProps,
   {
+    /** The ARN of the endpoint group. */
     endpointGroupArn: string;
+    /** The ARN of the listener the endpoint group is attached to. */
     listenerArn: string;
+    /** The AWS Region the group's endpoints live in. */
     endpointGroupRegion: string;
+    /** The percentage of listener traffic dialed to this group. */
     trafficDialPercentage: number;
+    /** The health-check protocol: `TCP`, `HTTP`, or `HTTPS`. */
     healthCheckProtocol: string;
+    /** The port used for health checks. */
     healthCheckPort: number | undefined;
+    /** The path used for HTTP/HTTPS health checks. */
     healthCheckPath: string | undefined;
+    /** Seconds between health checks. */
     healthCheckIntervalSeconds: number;
+    /** Consecutive checks required to flip an endpoint's health state. */
     thresholdCount: number;
+    /** The endpoints in the group with their observed health. */
     endpoints: {
+      /** The endpoint's ID (ALB/NLB ARN, EIP allocation ID, or instance ID). */
       endpointId: string | undefined;
+      /** Relative traffic weight of the endpoint. */
       weight: number | undefined;
+      /** Observed health: `HEALTHY`, `UNHEALTHY`, or `INITIAL`. */
       healthState: string | undefined;
+      /** Whether the client IP is preserved through to the endpoint. */
       clientIPPreservationEnabled: boolean | undefined;
     }[];
   },

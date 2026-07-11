@@ -19,17 +19,33 @@ export interface RestApiProps {
    * If omitted, Alchemy generates a deterministic physical name.
    */
   name?: string;
+  /** Description of the REST API. */
   description?: string;
+  /** A version identifier for the API. */
   version?: string;
+  /** ID of an existing REST API to clone the new API from. */
   cloneFrom?: string;
+  /** Media types treated as binary (e.g. `image/png`; a star-slash-star entry covers all types). */
   binaryMediaTypes?: string[];
+  /** Minimum response size in bytes that triggers compression (0-10485760); unset disables compression. */
   minimumCompressionSize?: number;
+  /**
+   * Where API Gateway reads the API key on requests (`HEADER` or `AUTHORIZER`).
+   * @default "HEADER"
+   */
   apiKeySource?: ag.ApiKeySourceType;
+  /** Endpoint type for the API (EDGE, REGIONAL, or PRIVATE). */
   endpointConfiguration?: ag.EndpointConfiguration;
   /** Resource policy document as a JSON string. */
   policy?: string;
+  /**
+   * Disable the default `execute-api` endpoint (serve only via custom domains).
+   * @default false
+   */
   disableExecuteApiEndpoint?: boolean;
+  /** Minimum TLS version served by the API endpoint. */
   securityPolicy?: ag.SecurityPolicy;
+  /** Access mode of the API endpoint. */
   endpointAccessMode?: ag.EndpointAccessMode;
   /** User-defined tags (Alchemy internal tags are merged automatically). */
   tags?: Record<string, string>;

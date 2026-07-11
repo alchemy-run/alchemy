@@ -88,9 +88,21 @@ export interface DataAutomationProject extends Resource<
   "AWS.BedrockDataAutomation.DataAutomationProject",
   DataAutomationProjectProps,
   {
+    /**
+     * The ARN of the project.
+     */
     projectArn: string;
+    /**
+     * Name of the project.
+     */
     projectName: string;
+    /**
+     * The stage (`DEVELOPMENT` or `LIVE`) of the project.
+     */
     projectStage: string;
+    /**
+     * Current status of the project (e.g. `COMPLETED`).
+     */
     status: string;
   },
   never,

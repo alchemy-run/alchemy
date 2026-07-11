@@ -13,6 +13,10 @@ import * as Binding from "../../Binding.ts";
  *
  * @binding
  * @section Rendering Static Maps
+ * Provide the `GetStaticMapHttp` implementation layer on the Function effect
+ * (`.pipe(Effect.provide(AWS.GeoMaps.GetStaticMapHttp))`), bind in the init
+ * phase, then call the client at runtime.
+ *
  * @example Render a static map centered on a point
  * ```typescript
  * // init

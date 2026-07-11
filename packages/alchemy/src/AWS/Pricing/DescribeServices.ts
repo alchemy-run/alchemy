@@ -16,6 +16,8 @@ export interface DescribeServicesRequest
  * The binding takes no arguments and grants the function
  * `pricing:DescribeServices` (the action has no resource-level IAM). Calls
  * are pinned to `us-east-1`, the region that serves the Price List API.
+ * Provide the implementation with
+ * `Effect.provide(AWS.Pricing.DescribeServicesHttp)`.
  *
  * @binding
  * @section Discovering Services

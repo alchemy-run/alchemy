@@ -38,12 +38,19 @@ export interface PermissionSet extends Resource<
   "AWS.IdentityCenter.PermissionSet",
   PermissionSetProps,
   {
+    /** The Identity Center instance the permission set lives in. */
     instanceArn: string;
+    /** The ARN of the permission set. */
     permissionSetArn: string;
+    /** The name of the permission set. */
     name: string;
+    /** The description of the permission set. */
     description: string | undefined;
+    /** The session duration in ISO-8601 format (e.g. `PT8H`). */
     sessionDuration: string | undefined;
+    /** The relay state URL users land on after federating, if set. */
     relayState: string | undefined;
+    /** When the permission set was created. */
     createdDate: Date | undefined;
   },
   never,

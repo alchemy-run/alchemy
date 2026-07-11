@@ -34,12 +34,19 @@ export interface DBSubnetGroup extends Resource<
   "AWS.DocDB.DBSubnetGroup",
   DBSubnetGroupProps,
   {
+    /** The subnet group name (unique per account/region). */
     dbSubnetGroupName: string;
+    /** The ARN of the subnet group. */
     dbSubnetGroupArn: string | undefined;
+    /** The VPC the subnets belong to. */
     vpcId: string | undefined;
+    /** The IDs of the subnets in the group. */
     subnetIds: string[];
+    /** The current status of the subnet group, e.g. `Complete`. */
     status: string | undefined;
+    /** The network types the group supports, e.g. `IPV4`. */
     supportedNetworkTypes: string[] | undefined;
+    /** The tags attached to the subnet group. */
     tags: Record<string, string>;
   },
   never,

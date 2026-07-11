@@ -108,6 +108,18 @@ export interface Monitor extends Resource<
  *   roleArn: monitorRole.roleArn,
  * });
  * ```
+ *
+ * @example Export the Monitor URL
+ * ```typescript
+ * // The monitor's web console URL is available as an output attribute —
+ * // return it from the stack so users know where to sign in.
+ * const monitor = yield* AWS.Deadline.Monitor("StudioMonitor", {
+ *   subdomain: "studio-renders",
+ *   identityCenterInstanceArn: identityCenterArn,
+ *   roleArn: monitorRole.roleArn,
+ * });
+ * return { monitorUrl: monitor.url };
+ * ```
  */
 export const Monitor = Resource<Monitor>("AWS.Deadline.Monitor");
 

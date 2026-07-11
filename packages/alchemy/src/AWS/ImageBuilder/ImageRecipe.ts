@@ -104,11 +104,17 @@ export interface ImageRecipe extends Resource<
   "AWS.ImageBuilder.ImageRecipe",
   ImageRecipeProps,
   {
+    /** The name of the image recipe. */
     imageRecipeName: string;
+    /** The ARN of the image recipe. */
     imageRecipeArn: string;
+    /** The semantic version of the recipe. */
     semanticVersion: string;
+    /** The OS platform of the recipe (`Linux` / `Windows`). */
     platform: string | undefined;
+    /** The base image the recipe builds on. */
     parentImage: string | undefined;
+    /** When the recipe was created. */
     dateCreated: string | undefined;
   },
   never,

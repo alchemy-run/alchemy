@@ -89,9 +89,13 @@ export interface InfrastructureConfiguration extends Resource<
   "AWS.ImageBuilder.InfrastructureConfiguration",
   InfrastructureConfigurationProps,
   {
+    /** The name of the infrastructure configuration. */
     infrastructureConfigurationName: string;
+    /** The ARN of the infrastructure configuration. */
     infrastructureConfigurationArn: string;
+    /** The instance profile builds run with. */
     instanceProfileName: string | undefined;
+    /** When the infrastructure configuration was created. */
     dateCreated: string | undefined;
   },
   never,
