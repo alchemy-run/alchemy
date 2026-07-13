@@ -12,13 +12,13 @@ import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import {
-  isDurableObjectExport,
-  type DurableObjectExport,
-} from "./DurableObject.ts";
-import {
   isWorkflowExport,
   type WorkflowExport,
 } from "../Workflows/Workflow.ts";
+import {
+  isDurableObjectExport,
+  type DurableObjectExport,
+} from "./DurableObject.ts";
 
 export interface WorkerBundleOptions {
   id: string;
@@ -37,6 +37,7 @@ export interface WorkerBundleOptions {
       };
   stack: { name: string; stage: string };
   extraOptions: Bundle.BundleExtraOptions | undefined;
+  enableTestLogger: boolean;
 }
 
 export const WorkerBundle = Effect.gen(function* () {
@@ -72,10 +73,16 @@ export const WorkerBundle = Effect.gen(function* () {
         options.entry.kind === "effect"
           ? [
               virtualEntryPlugin(
-                makeEffectVirtualEntry(options.entry.exports, options.stack),
+                makeEffectVirtualEntry(
+                  options.entry.exports,
+                  options.stack,
+                  options.enableTestLogger,
+                ),
               ),
             ]
-          : undefined,
+          : options.enableTestLogger
+            ? [virtualEntryPlugin(makeAsyncWorkerVirtualEntry)]
+            : undefined,
       ],
       checks: {
         // Suppress unresolved import warnings for unrelated AWS packages
@@ -139,9 +146,18 @@ export const WorkerBundle = Effect.gen(function* () {
   };
 });
 
+const makeAsyncWorkerVirtualEntry = (importPath: string) => `
+import { patchConsole } from "alchemy/Cloudflare";
+patchConsole();
+import entrypoint from ${JSON.stringify(importPath)};
+export * from ${JSON.stringify(importPath)};
+export default entrypoint;
+`;
+
 export const makeEffectVirtualEntry = (
   exports: Record<string, DurableObjectExport | WorkflowExport>,
   stack: { name: string; stage: string },
+  enableTestLogger: boolean,
 ) => {
   const doClasses: string[] = [];
   const wfClasses: string[] = [];
@@ -158,10 +174,12 @@ export const makeEffectVirtualEntry = (
 import * as Effect from "effect/Effect";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
-import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""} } from "alchemy/Cloudflare";
+import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ${enableTestLogger ? "patchConsole" : ""} } from "alchemy/Cloudflare";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
 import entrypoint from ${JSON.stringify(importPath)};
+
+${enableTestLogger ? "patchConsole();" : ""}
 
 const meta = {
   entrypoint,
