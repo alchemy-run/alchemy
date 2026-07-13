@@ -1,3 +1,12 @@
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
+import { sha256 } from "../../Util/sha256";
+
+export const TEST_LOGGER_WORKER_NAME = "alchemy-test-logger";
+
 /**
  * Source of the account-level `alchemy-test-logger` worker. Kept as a raw,
  * dependency-free ESM string so the provider can upload it directly (like
@@ -99,3 +108,117 @@ export class ${TEST_LOGGER_CLASS_NAME} extends DurableObject {
   }
 }
 `;
+
+const ensureTestLoggerWorker = Effect.fn(function* (accountId: string) {
+  const versionTag = yield* sha256(LOGGER_WORKER_SCRIPT);
+
+  const existing = yield* workers
+    .getScriptScriptAndVersionSetting({
+      accountId,
+      scriptName: TEST_LOGGER_WORKER_NAME,
+    })
+    .pipe(
+      Effect.catchTag(
+        ["WorkerNotFound", "WorkerHasNoVersions"],
+        () => Effect.undefined,
+      ),
+    );
+
+  const hasVersionTag = existing?.tags?.includes(versionTag) ?? false;
+  const hasClass = (existing?.bindings ?? []).some(
+    (binding) =>
+      binding.type === "durable_object_namespace" &&
+      "className" in binding &&
+      binding.className === TEST_LOGGER_CLASS_NAME,
+  );
+
+  if (hasVersionTag && hasClass) {
+    return;
+  }
+
+  yield* workers
+    .putScript({
+      accountId,
+      scriptName: TEST_LOGGER_WORKER_NAME,
+      metadata: {
+        mainModule: "main.mjs",
+        compatibilityDate: "2026-03-17",
+        bindings: [
+          {
+            type: "durable_object_namespace",
+            name: "LOGGER",
+            className: TEST_LOGGER_CLASS_NAME,
+          },
+        ],
+        migrations: hasClass
+          ? undefined
+          : {
+              oldTag: undefined,
+              newTag: undefined,
+              newClasses: [],
+              deletedClasses: [],
+              renamedClasses: [],
+              transferredClasses: [],
+              newSqliteClasses: [TEST_LOGGER_CLASS_NAME],
+            },
+        // The logger must not tail itself into Workers Logs noise.
+        observability: { enabled: false },
+        tags: [versionTag],
+      },
+      files: [
+        new File([LOGGER_WORKER_SCRIPT], "main.mjs", {
+          type: "application/javascript+module",
+        }),
+      ],
+    })
+    .pipe(transientRetry());
+  yield* workers
+    .createScriptSubdomain({
+      accountId,
+      scriptName: "alchemy-test-logger",
+      enabled: true,
+      previewsEnabled: true,
+    })
+    .pipe(transientRetry());
+});
+
+const transientRetry = () =>
+  Effect.retry({
+    while: (e) =>
+      Predicate.isTagged(e, "WorkerNotFound") ||
+      Predicate.isTagged(e, "InternalServerError") ||
+      Predicate.isTagged(e, "UnknownCloudflareError"),
+    schedule: Schedule.exponential(200),
+    times: 10,
+  });
+
+/**
+ * Opt-in switch for the test-logging pipeline, read by the Cloudflare
+ * Worker provider during diff/reconcile. A `Context.Reference` so it
+ * defaults to `false` everywhere (CLI deploys never see it) and the test
+ * harness can flip it on for a whole deploy with a single
+ * `Effect.provideService` — no fixture/stack changes required.
+ */
+export const TestLoggingPolicy = Context.Reference<boolean>(
+  "alchemy/Cloudflare/TestLoggingPolicy",
+  { defaultValue: () => false },
+);
+export const testLoggerBindings = (workerName: string, doName: string) =>
+  [
+    {
+      type: "durable_object_namespace" as const,
+      name: "ALCHEMY_TEST_LOGGER",
+      className: TEST_LOGGER_CLASS_NAME,
+      scriptName: TEST_LOGGER_WORKER_NAME,
+    },
+    {
+      type: "plain_text" as const,
+      name: "ALCHEMY_TEST_LOGGER_WORKER_NAME",
+      text: workerName,
+    },
+    {
+      type: "plain_text" as const,
+      name: "ALCHEMY_TEST_LOGGER_DO_NAME",
+      text: doName,
+    },
+  ] satisfies workers.PutScriptRequest["metadata"]["bindings"];
