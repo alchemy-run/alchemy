@@ -8,6 +8,7 @@ import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "@effect/vitest";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/unstable/http/HttpBody";
@@ -58,6 +59,9 @@ provider("create, update, delete standard queue", (stack) =>
         return yield* Queue("TestQueue", {
           visibilityTimeout: "30 seconds",
           delaySeconds: "0 seconds",
+          // exercise the non-string Duration.Input forms end-to-end
+          messageRetentionPeriod: Duration.days(4),
+          receiveMessageWaitTimeSeconds: 10_000, // bare number = millis
         });
       }),
     );
@@ -69,6 +73,12 @@ provider("create, update, delete standard queue", (stack) =>
     });
     expect(queueAttributes.Attributes?.VisibilityTimeout).toEqual("30");
     expect(queueAttributes.Attributes?.DelaySeconds).toEqual("0");
+    expect(queueAttributes.Attributes?.MessageRetentionPeriod).toEqual(
+      "345600",
+    );
+    expect(queueAttributes.Attributes?.ReceiveMessageWaitTimeSeconds).toEqual(
+      "10",
+    );
 
     // Update the queue
     const updatedQueue = yield* stack.deploy(
@@ -76,6 +86,8 @@ provider("create, update, delete standard queue", (stack) =>
         return yield* Queue("TestQueue", {
           visibilityTimeout: "60 seconds",
           delaySeconds: "5 seconds",
+          messageRetentionPeriod: "5 days",
+          receiveMessageWaitTimeSeconds: "20 seconds",
         });
       }),
     );
@@ -84,6 +96,8 @@ provider("create, update, delete standard queue", (stack) =>
     yield* waitForQueueAttributeMatch(updatedQueue.queueUrl, {
       VisibilityTimeout: "60",
       DelaySeconds: "5",
+      MessageRetentionPeriod: "432000",
+      ReceiveMessageWaitTimeSeconds: "20",
     });
 
     yield* stack.destroy();
@@ -218,15 +232,31 @@ provider(
 );
 
 // Engine-level adoption tests for SQS Queue.
+//
+// These tests wipe the engine state mid-test, which makes the live queue
+// invisible to the framework's automatic scratch-stack teardown. To satisfy
+// the "test passing implies zero leftover cloud resources" contract they:
+//   1. use a DETERMINISTIC queue name (stable across runs, so a re-run
+//      reclaims any prior orphan instead of minting a new one),
+//   2. pre-clean the name at the start (idempotent delete-if-exists; the
+//      provider's `QueueDeletedRecently` retry rides out SQS's 60s
+//      recreate-after-delete window), and
+//   3. guarantee cleanup with `Effect.ensuring(deleteQueueIfExists(...))`,
+//      which runs on success, failure, AND interruption.
+const ADOPT_QUEUE_NAME = "alchemy-test-sqs-adopt";
+const TAKEOVER_QUEUE_NAME = "alchemy-test-sqs-takeover";
+
 provider(
   "owned queue (matching alchemy tags) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const queueName = `alchemy-test-sqs-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      const queueName = ADOPT_QUEUE_NAME;
+
+      // Reclaim a leftover from a previously-killed run (idempotent no-op
+      // when the account is clean).
+      yield* deleteQueueIfExists(queueName);
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
@@ -256,16 +286,18 @@ provider(
 
       yield* stack.destroy();
       yield* assertQueueDeleted(initial.queueUrl);
-    }),
+    }).pipe(Effect.ensuring(deleteQueueIfExists(ADOPT_QUEUE_NAME))),
 );
 
 provider("foreign-tagged queue requires adopt(true) to take over", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const queueName = `alchemy-test-sqs-takeover-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    const queueName = TAKEOVER_QUEUE_NAME;
+
+    // Reclaim a leftover from a previously-killed run (idempotent no-op
+    // when the account is clean).
+    yield* deleteQueueIfExists(queueName);
 
     const original = yield* stack.deploy(
       Effect.gen(function* () {
@@ -295,7 +327,7 @@ provider("foreign-tagged queue requires adopt(true) to take over", (stack) =>
 
     yield* stack.destroy();
     yield* assertQueueDeleted(takenOver.queueUrl);
-  }),
+  }).pipe(Effect.ensuring(deleteQueueIfExists(TAKEOVER_QUEUE_NAME))),
 );
 
 provider(
@@ -686,6 +718,26 @@ const waitForQueueMessage = (queueUrl: string) =>
         Schedule.both(Schedule.recurs(20)),
       ),
     }),
+  );
+
+/**
+ * Idempotent out-of-band delete by queue name. Used by the adoption tests
+ * (which wipe engine state mid-test, hiding the queue from the automatic
+ * scratch-stack teardown) both as a pre-clean at test start and as an
+ * `Effect.ensuring` finalizer, so it must never fail: not-found is success,
+ * and any residual transient error is retried on a bounded schedule then
+ * swallowed.
+ */
+const deleteQueueIfExists = (queueName: string) =>
+  SQS.getQueueUrl({ QueueName: queueName }).pipe(
+    Effect.flatMap((r) => SQS.deleteQueue({ QueueUrl: r.QueueUrl! })),
+    Effect.catchTag("QueueDoesNotExist", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.spaced("2 seconds").pipe(
+        Schedule.both(Schedule.recurs(5)),
+      ),
+    }),
+    Effect.catch(() => Effect.void),
   );
 
 const assertQueueDeleted = Effect.fn(function* (queueUrl: string) {

@@ -27,23 +27,7 @@ const cleanupLaunchTemplate = ec2
 // to zero so no EC2 instances launch), resolve the provider from context via the
 // typed `findProvider`, call `list()`, and assert the deployed group appears in
 // the exhaustively paginated result.
-//
-// Gated off by default: the entire distilled `auto-scaling` service is currently
-// non-functional against the live API. The `aws-query` protocol derives the
-// request `Action` from the input shape's identifier (stripping a trailing
-// `Request|Input|Message`), but AutoScaling's Smithy input shapes do not follow
-// that convention — `describeAutoScalingGroups` takes `AutoScalingGroupNamesType`
-// — so every describe call sends `Action=AutoScalingGroupNamesType` and AWS
-// rejects it:
-//
-//   UnknownAwsError: Could not find operation AutoScalingGroupNamesType for
-//   version 2011-01-01  (errorTag: InvalidAction)
-//
-// This is a distilled generator/protocol bug affecting the whole service (the ASG
-// resource has never been live-tested), not the `list()` implementation. Once the
-// `aws-query` Action derivation uses the real operation name, run this with
-// AWS_TEST_AUTOSCALING=1.
-test.provider.skipIf(!process.env.AWS_TEST_AUTOSCALING)(
+test.provider(
   "list enumerates the deployed auto scaling group",
   (stack) =>
     Effect.gen(function* () {
@@ -143,6 +127,9 @@ test.provider(
             minSize: 0,
             maxSize: 0,
             desiredCapacity: 0,
+            // Duration.Input props — whole seconds on the wire.
+            defaultCooldown: "45 seconds",
+            healthCheckGracePeriod: "2 minutes",
           });
           return {
             templateId: template.launchTemplateId.as<string>(),
@@ -159,7 +146,12 @@ test.provider(
         String(deployed.templateDefaultVersion),
       );
 
-      // Out-of-band: the live group carries the id-only spec.
+      // Duration.Input props round-trip as whole seconds in the attributes.
+      expect(deployed.group.defaultCooldown).toEqual(45);
+      expect(deployed.group.healthCheckGracePeriod).toEqual(120);
+
+      // Out-of-band: the live group carries the id-only spec and the
+      // Duration-derived second counts on the wire.
       const described = yield* autoscaling.describeAutoScalingGroups({
         AutoScalingGroupNames: [wholeAsgName],
       } as any);
@@ -167,6 +159,8 @@ test.provider(
       expect(live?.LaunchTemplate?.LaunchTemplateId).toEqual(
         deployed.templateId,
       );
+      expect(live?.DefaultCooldown).toEqual(45);
+      expect(live?.HealthCheckGracePeriod).toEqual(120);
 
       yield* stack.destroy();
     }).pipe(Effect.ensuring(cleanupWholeAsg)),

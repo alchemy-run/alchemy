@@ -1,5 +1,6 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -324,11 +325,18 @@ export const PolicyProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryOrganizations(
-            organizations
-              .deletePolicy({ PolicyId: output.policyId })
-              .pipe(
-                Effect.catchTag("PolicyNotFoundException", () => Effect.void),
-              ),
+            organizations.deletePolicy({ PolicyId: output.policyId }).pipe(
+              // Detaching a policy (the attachment's delete) propagates
+              // asynchronously — deletePolicy issued right after the detach
+              // can still observe the policy as attached. Retry through the
+              // typed dependency-violation tag, bounded.
+              Effect.retry({
+                while: (error) => error._tag === "PolicyInUseException",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 8,
+              }),
+              Effect.catchTag("PolicyNotFoundException", () => Effect.void),
+            ),
           );
         }),
       };

@@ -12,6 +12,7 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,9 +32,18 @@ test.provider("list enumerates the deployed service", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
+    // Reclaim any revisions a previously-killed run left behind, and
+    // guarantee full deletion (deregister + delete) on success, failure,
+    // and interruption.
+    const family = "alchemy-test-ecs-service-list";
+    yield* reclaimTaskDefinitionFamily(family);
+    yield* Effect.addFinalizer(() =>
+      reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+    );
+
     // Register a minimal Fargate task definition pointing at a public image.
     const registered = yield* ecs.registerTaskDefinition({
-      family: "alchemy-test-ecs-service-list",
+      family,
       networkMode: "awsvpc",
       requiresCompatibilities: ["FARGATE"],
       cpu: "256",
@@ -53,13 +63,6 @@ test.provider("list enumerates the deployed service", (stack) =>
         new Error("registerTaskDefinition returned no task definition ARN"),
       );
     }
-    // Safety net: deregister the out-of-band task definition on scope close even
-    // if the body fails — leaves it INACTIVE rather than orphaned as ACTIVE.
-    yield* Effect.addFinalizer(() =>
-      ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.ignore),
-    );
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
@@ -97,9 +100,7 @@ test.provider("list enumerates the deployed service", (stack) =>
 
     yield* stack.destroy();
 
-    yield* ecs
-      .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-      .pipe(Effect.catchTag("ClientException", () => Effect.void));
+    yield* reclaimTaskDefinitionFamily(family);
   }),
 );
 
@@ -116,8 +117,14 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const family = "alchemy-test-ecs-service-inplace";
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
+
       const registered = yield* ecs.registerTaskDefinition({
-        family: "alchemy-test-ecs-service-inplace",
+        family,
         networkMode: "awsvpc",
         requiresCompatibilities: ["FARGATE"],
         cpu: "256",
@@ -132,12 +139,6 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
-      // Safety net: deregister the out-of-band task definition on scope close.
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(Effect.ignore),
-      );
 
       const deployService = (props: {
         desiredCount: number;
@@ -216,9 +217,7 @@ test.provider(
       expect(tagMap.keep).toBeUndefined();
 
       yield* stack.destroy();
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 240_000 },
 );
@@ -281,8 +280,14 @@ test.provider(
 
       yield* stack.destroy();
 
+      const family = "alchemy-test-ecs-service-manuallb";
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
+
       const registered = yield* ecs.registerTaskDefinition({
-        family: "alchemy-test-ecs-service-manuallb",
+        family,
         networkMode: "awsvpc",
         requiresCompatibilities: ["FARGATE"],
         cpu: "256",
@@ -297,12 +302,6 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
-      // Safety net: deregister the out-of-band task definition on scope close.
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(Effect.ignore),
-      );
 
       // Resolve two available AZs in the active region — hardcoding zone
       // names breaks as soon as the profile targets a different region.
@@ -410,6 +409,9 @@ test.provider(
             loadBalancers: [
               { targetGroupArn, containerName: "app", containerPort: 80 },
             ],
+            // Duration.Input audit coverage: only valid on services with a
+            // load balancer — assert the wire value round-trips as seconds.
+            healthCheckGracePeriodSeconds: "45 seconds",
           });
         }),
       );
@@ -426,6 +428,9 @@ test.provider(
       expect(lbs.length).toBe(1);
       expect(lbs[0]?.containerName).toBe("app");
       expect(lbs[0]?.targetGroupArn).toBe(targetGroupArn);
+
+      // Duration.Input round-trip: `"45 seconds"` landed on the wire as 45.
+      expect(described.services?.[0]?.healthCheckGracePeriodSeconds).toBe(45);
 
       // Delete the service first (it references the target group), then tear
       // down the out-of-band ELBv2 resources, then the rest of the stack.
@@ -447,9 +452,7 @@ test.provider(
         .pipe(Effect.catch(() => Effect.void));
 
       yield* stack.destroy();
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 240_000 },
 );
@@ -474,8 +477,14 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const family = "alchemy-test-ecs-service-wedged";
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
+
       const registered = yield* ecs.registerTaskDefinition({
-        family: "alchemy-test-ecs-service-wedged",
+        family,
         networkMode: "awsvpc",
         requiresCompatibilities: ["FARGATE"],
         cpu: "256",
@@ -490,12 +499,6 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
-      // Safety net: deregister the out-of-band task definition on scope close.
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(Effect.ignore),
-      );
 
       const deployService = () =>
         stack.deploy(
@@ -566,9 +569,7 @@ test.provider(
       expect(recovered.clusterArn).toEqual(created.clusterArn);
 
       yield* stack.destroy();
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 240_000 },
 );

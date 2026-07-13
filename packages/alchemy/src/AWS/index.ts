@@ -180,6 +180,7 @@ export * as RUM from "./RUM/index.ts";
 export * as S3 from "./S3/index.ts";
 export * as S3Control from "./S3Control/index.ts";
 export * as S3Files from "./S3Files/index.ts";
+export * as S3Tables from "./S3Tables/index.ts";
 export * as S3Vectors from "./S3Vectors/index.ts";
 export * as SageMaker from "./SageMaker/index.ts";
 export * as SageMakerRuntime from "./SageMakerRuntime/index.ts";

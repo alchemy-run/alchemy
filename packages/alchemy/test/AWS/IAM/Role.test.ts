@@ -31,6 +31,7 @@ test.provider("create, update, and delete role", (stack) =>
       Effect.gen(function* () {
         return yield* Role("IamRole", {
           assumeRolePolicyDocument: assumeRolePolicy,
+          maxSessionDuration: "2 hours",
           managedPolicyArns: [
             "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
           ],
@@ -57,11 +58,14 @@ test.provider("create, update, and delete role", (stack) =>
       RoleName: role.roleName,
     });
     expect(created.Role.RoleName).toBe(role.roleName);
+    // Duration.Input prop converts to whole wire seconds.
+    expect(created.Role.MaxSessionDuration).toBe(7200);
 
     yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Role("IamRole", {
           assumeRolePolicyDocument: assumeRolePolicy,
+          maxSessionDuration: "1 hour",
           managedPolicyArns: [],
           inlinePolicies: {
             AllowLogs: {
@@ -92,6 +96,10 @@ test.provider("create, update, and delete role", (stack) =>
     ).toMatchObject({
       env: "prod",
     });
+
+    // The reconcile sync path applies the changed Duration prop.
+    const updated = yield* IAM.getRole({ RoleName: role.roleName });
+    expect(updated.Role.MaxSessionDuration).toBe(3600);
 
     yield* stack.destroy();
 
@@ -237,15 +245,30 @@ test.provider("list enumerates the deployed role", (stack) =>
 // without one, `createPhysicalName` derives a fresh name from a per-deploy
 // random `instanceId`, so the cold-start `read` lookup would never find
 // the original role.
+//
+// These tests wipe the state store mid-test, so the framework's automatic
+// scratch-stack teardown cannot always see the role. Each test therefore
+// uses a DETERMINISTIC role name, pre-cleans any leftover from a previously
+// killed run, and guarantees an idempotent out-of-band delete via
+// `Effect.ensuring` so a pass (or interruption) never orphans the role.
+const deleteRoleIfExists = (roleName: string) =>
+  IAM.deleteRole({ RoleName: roleName }).pipe(
+    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+    Effect.asVoid,
+    // Any non-not-found failure is a real cleanup bug — surface it loudly.
+    Effect.orDie,
+  );
+
 test.provider(
   "owned role (matching alchemy tags) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const roleName = `alchemy-test-role-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      const roleName = "alchemy-test-role-adopt";
+
+      // Reclaim a leftover from a previously killed run.
+      yield* deleteRoleIfExists(roleName);
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
@@ -284,7 +307,7 @@ test.provider(
         Effect.option,
       );
       expect(deleted._tag).toBe("None");
-    }),
+    }).pipe(Effect.ensuring(deleteRoleIfExists("alchemy-test-role-adopt"))),
 );
 
 test.provider(
@@ -294,9 +317,10 @@ test.provider(
       yield* stack.destroy();
 
       // Use a deterministic shared physical name for both deploys.
-      const sharedRoleName = `alchemy-test-role-takeover-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      const sharedRoleName = "alchemy-test-role-takeover";
+
+      // Reclaim a leftover from a previously killed run.
+      yield* deleteRoleIfExists(sharedRoleName);
 
       const original = yield* stack.deploy(
         Effect.gen(function* () {
@@ -342,5 +366,5 @@ test.provider(
         Effect.option,
       );
       expect(deleted._tag).toBe("None");
-    }),
+    }).pipe(Effect.ensuring(deleteRoleIfExists("alchemy-test-role-takeover"))),
 );

@@ -65,10 +65,23 @@ const assertRuleDeleting = (ruleName: string) =>
 // (NoAvailableConfigurationRecorderException otherwise). Capture-and-restore:
 // if the account has none, stand up a minimal recorder on the Config
 // service-linked role for the duration of the test and delete it afterwards;
-// an existing recorder is left untouched.
+// an existing foreign recorder is left untouched. The recorder name is a
+// deterministic constant unique to this test so a leftover from a
+// previously-killed run is RECLAIMED (and thus cleaned up at the end)
+// instead of orphaning forever.
+const TEST_RECORDER_NAME = "alchemy-test-configrule-recorder";
+
 const ensureRecorder = Effect.gen(function* () {
   const existing = yield* config.describeConfigurationRecorders({});
-  if ((existing.ConfigurationRecorders ?? []).length > 0) {
+  const recorders = existing.ConfigurationRecorders ?? [];
+  if (recorders.some((r) => r.name === TEST_RECORDER_NAME)) {
+    // Leftover from a previously-killed run — reclaim it so the release
+    // finalizer deletes it when this run finishes.
+    return true;
+  }
+  if (recorders.length > 0) {
+    // A foreign recorder already exists (only one per account/region is
+    // allowed) — use it, never touch it.
     return false;
   }
   yield* iam
@@ -82,7 +95,7 @@ const ensureRecorder = Effect.gen(function* () {
   yield* config
     .putConfigurationRecorder({
       ConfigurationRecorder: {
-        name: "default",
+        name: TEST_RECORDER_NAME,
         roleARN: role.Role.Arn,
         recordingGroup: { resourceTypes: ["AWS::S3::Bucket"] },
       },
@@ -98,11 +111,20 @@ const ensureRecorder = Effect.gen(function* () {
   return true;
 });
 
+// Idempotent: tolerates the recorder already being gone.
 const removeRecorderIfCreated = (created: boolean) =>
   created
     ? config
-        .deleteConfigurationRecorder({ ConfigurationRecorderName: "default" })
-        .pipe(Effect.ignore)
+        .deleteConfigurationRecorder({
+          ConfigurationRecorderName: TEST_RECORDER_NAME,
+        })
+        .pipe(
+          Effect.catchTag(
+            "NoSuchConfigurationRecorderException",
+            () => Effect.void,
+          ),
+          Effect.orDie,
+        )
     : Effect.void;
 
 test.provider(
@@ -110,7 +132,13 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const createdRecorder = yield* ensureRecorder;
+      // acquireRelease guarantees the out-of-band recorder is deleted on
+      // success, failure, AND interruption; the deterministic name +
+      // reclaim in ensureRecorder means a re-run converges on any orphan
+      // from a previously-killed run.
+      yield* Effect.acquireRelease(ensureRecorder, (created) =>
+        removeRecorderIfCreated(created),
+      );
 
       yield* Effect.gen(function* () {
         const rule = yield* stack.deploy(
@@ -202,7 +230,7 @@ test.provider(
 
         yield* stack.destroy();
         yield* assertRuleDeleting(renamed.configRuleName);
-      }).pipe(Effect.ensuring(removeRecorderIfCreated(createdRecorder)));
+      });
     }),
   { timeout: 120_000 },
 );

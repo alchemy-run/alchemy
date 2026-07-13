@@ -72,10 +72,10 @@ test.provider(
   { timeout: 120_000 },
 );
 
-// Full mTLS-verify lifecycle: upload a CA bundle to a stack-owned bucket, create
-// an ACTIVE trust store, then destroy. Gated — requires an account that can
-// create trust stores and an S3 bucket.
-test.provider.skipIf(!process.env.ELBV2_TEST_MTLS)(
+// Full mTLS-verify lifecycle: upload a CA bundle to a stack-owned bucket,
+// create an ACTIVE trust store, then destroy. Runs ungated — verified live on
+// the standard testing account (completes in a few seconds).
+test.provider(
   "trust store full lifecycle from an uploaded CA bundle",
   (stack) =>
     Effect.gen(function* () {

@@ -45,7 +45,7 @@ const zoneNotYetListable =
 // creating with a *fresh* CallerReference when it's truly absent) sidesteps
 // that trap — an absent/poisoned zone always re-creates cleanly, and a present
 // zone is reused without ever hitting the conflict path.
-const ensureZone = findZoneIdByName.pipe(
+const resolveZone = findZoneIdByName.pipe(
   Effect.flatMap((existing) =>
     existing !== undefined
       ? Effect.succeed(normalizeId(existing))
@@ -73,6 +73,23 @@ const ensureZone = findZoneIdByName.pipe(
     schedule: Schedule.spaced("5 seconds"),
     times: 24,
   }),
+);
+
+// Cache the resolved id at module scope: both tests in this file run
+// sequentially in the same fork, and a first-time create can lag
+// `listHostedZones` long enough that the second test's lookup misses and
+// creates a DUPLICATE zone (same name + fresh CallerReference succeeds).
+let standingZoneId: string | undefined;
+const ensureZone = Effect.suspend(() =>
+  standingZoneId !== undefined
+    ? Effect.succeed(standingZoneId)
+    : resolveZone.pipe(
+        Effect.tap((id) =>
+          Effect.sync(() => {
+            standingZoneId = id;
+          }),
+        ),
+      ),
 );
 
 // Create/delete the record set out of band. The Alchemy engine's own deploy

@@ -1,23 +1,32 @@
 /**
  * KMS binding tests (Encrypt / Decrypt / GenerateDataKey).
  *
- * COST NOTE — standing test key:
- * KMS keys cost $1/mo each and have a 7-day minimum pending-deletion window,
- * so this suite must NOT create-and-delete keys per run. The `Key` resource
- * has no user-assignable identity (only a cloud-generated keyId), so it can't
- * be adopted across runs from the scratch stack's in-memory state. Instead:
+ * COST + CLEANUP NOTE — the shared test key:
+ * KMS keys cost $1/mo while enabled and have a 7-day minimum pending-deletion
+ * window (pending-deletion keys are NOT billed), so this suite neither keeps
+ * a permanently-enabled key nor creates a brand-new key per run. The `Key`
+ * resource has no user-assignable identity (only a cloud-generated keyId), so
+ * it can't be adopted across runs from the scratch stack's in-memory state.
+ * Instead the key is acquired/released out-of-band via distilled KMS around
+ * the whole suite:
  *
- * - One standing key is addressed by the deterministic alias
+ * - During the run the key is addressed by the deterministic alias
  *   `alias/alchemy-test-bindings` (see `STANDING_KEY_ALIAS` in `handler.ts`).
- * - `beforeAll` ensures it exists out-of-band via distilled KMS
- *   (`describeKey` on the alias; `createKey` + `createAlias` on the
- *   first-ever run) and NEVER schedules deletion.
+ * - `beforeAll` (`ensureStandingKey`) reclaims the previous run's key — via
+ *   the alias if an interrupted run left it behind, otherwise by the key's
+ *   unique description (`STANDING_KEY_DESCRIPTION`) — cancelling its
+ *   scheduled deletion and re-creating the alias. Only on the first-ever run
+ *   (or >7 days after the last run) does it `createKey`.
+ * - `afterAll` (`releaseStandingKey`) deletes the alias and schedules the
+ *   key for deletion (7-day window, idempotent) so a passing run leaves no
+ *   alias and no enabled/billed key behind — PendingDeletion is KMS's
+ *   terminal "deleted" state; keys pending deletion are not billed and
+ *   cannot be removed any faster.
  * - The Lambda fixture binds the crypto operations by alias name — the
  *   bindings accept `Key | AliasName`, and the alias form scopes IAM with the
  *   `kms:RequestAlias` condition so the key never needs to live in the stack.
  *
- * The fixture stack (Lambda only) is destroyed normally; the standing key and
- * alias are intentionally left behind.
+ * The fixture stack (Lambda only) is destroyed normally.
  */
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
@@ -27,6 +36,7 @@ import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
@@ -53,6 +63,8 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
 }> {}
+
+class CryptoNotAuthorized extends Data.TaggedError("CryptoNotAuthorized") {}
 
 // Cold re-inits under parallel load surface as transient 5xx from the fixture
 // — retry those; a genuine 4xx/assertion failure is returned immediately.
@@ -92,8 +104,51 @@ const fromBase64 = (value: string) =>
   Effect.sync(() => Buffer.from(value, "base64").toString("utf8"));
 
 /**
- * Ensure the standing test key exists and is usable. Creates it exactly once
- * per AWS account (first-ever run); never deletes it.
+ * Unique marker for the shared test key. The alias is deleted at teardown,
+ * so this description is what identifies the previous run's (pending-
+ * deletion) key for reclaim.
+ */
+const STANDING_KEY_DESCRIPTION =
+  "Shared key for alchemy AWS.KMS binding tests — scheduled for deletion after each run, reclaimed by description (see test/AWS/KMS/Bindings.test.ts)";
+
+/**
+ * Find the shared test key by its unique description. Used to reclaim the
+ * previous run's key when the alias has already been deleted by
+ * {@link releaseStandingKey}.
+ */
+const findStandingKeyByDescription = Effect.gen(function* () {
+  const keys = yield* kms.listKeys.pages({}).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Keys ?? [])),
+  );
+  const metadatas = yield* Effect.all(
+    keys.map((key) =>
+      kms.describeKey({ KeyId: key.KeyId! }).pipe(
+        Effect.map((response) => response.KeyMetadata),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      ),
+    ),
+    { concurrency: 5 },
+  );
+  return metadatas.find(
+    (metadata) => metadata?.Description === STANDING_KEY_DESCRIPTION,
+  );
+});
+
+/** Converge an existing (possibly pending-deletion/disabled) key to enabled. */
+const reviveKey = Effect.fn(function* (metadata: kms.KeyMetadata) {
+  if (metadata.KeyState === "PendingDeletion") {
+    yield* kms.cancelKeyDeletion({ KeyId: metadata.KeyId });
+    yield* kms.enableKey({ KeyId: metadata.KeyId });
+  } else if (metadata.Enabled === false) {
+    yield* kms.enableKey({ KeyId: metadata.KeyId });
+  }
+});
+
+/**
+ * Acquire the shared test key: reclaim the previous run's key (cancelling
+ * its scheduled deletion and re-creating the alias), or create it on the
+ * first-ever run. Paired with {@link releaseStandingKey} in `afterAll`.
  */
 const ensureStandingKey = Effect.gen(function* () {
   const existing = yield* kms.describeKey({ KeyId: STANDING_KEY_ALIAS }).pipe(
@@ -102,33 +157,40 @@ const ensureStandingKey = Effect.gen(function* () {
   );
 
   if (existing?.KeyId) {
-    // Heal external interference — this suite never disables or deletes the
-    // standing key itself.
-    if (existing.KeyState === "PendingDeletion") {
-      yield* kms.cancelKeyDeletion({ KeyId: existing.KeyId });
-      yield* kms.enableKey({ KeyId: existing.KeyId });
-    } else if (existing.Enabled === false) {
-      yield* kms.enableKey({ KeyId: existing.KeyId });
-    }
+    // The alias survived (a previous run was interrupted before release, or
+    // external interference disabled the key) — converge to enabled.
+    yield* reviveKey(existing);
     return existing.KeyId;
   }
 
-  const created = yield* kms.createKey({
-    Description:
-      "Standing key for alchemy AWS.KMS binding tests — never deleted (see test/AWS/KMS/Bindings.test.ts)",
-    Tags: [{ TagKey: "alchemy:standing-fixture", TagValue: "kms-bindings" }],
-  });
-  const keyId = created.KeyMetadata?.KeyId;
-  if (!keyId) {
-    return yield* Effect.die(new Error("createKey returned no key ID"));
-  }
+  // Alias absent — the normal case after a clean release. Reclaim the
+  // previous run's pending-deletion key by its unique description before
+  // resorting to creating a new one.
+  const reclaimed = yield* findStandingKeyByDescription;
+  const keyId = reclaimed?.KeyId
+    ? yield* reviveKey(reclaimed).pipe(Effect.map(() => reclaimed.KeyId!))
+    : yield* kms
+        .createKey({
+          Description: STANDING_KEY_DESCRIPTION,
+          Tags: [
+            { TagKey: "alchemy:standing-fixture", TagValue: "kms-bindings" },
+          ],
+        })
+        .pipe(
+          Effect.flatMap((created) =>
+            created.KeyMetadata?.KeyId
+              ? Effect.succeed(created.KeyMetadata.KeyId)
+              : Effect.die(new Error("createKey returned no key ID")),
+          ),
+        );
+
   yield* kms
     .createAlias({ AliasName: STANDING_KEY_ALIAS, TargetKeyId: keyId })
     .pipe(
       Effect.catchTag("AlreadyExistsException", () =>
         // Lost a create race with a parallel run: the alias already points at
-        // another key. Schedule ours for deletion so it doesn't become a
-        // $1/mo orphan, and fall through to the alias's actual target.
+        // another key. Schedule ours for deletion so it doesn't become an
+        // orphan, and fall through to the alias's actual target.
         kms
           .scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 })
           .pipe(Effect.ignore),
@@ -136,6 +198,40 @@ const ensureStandingKey = Effect.gen(function* () {
     );
   const described = yield* kms.describeKey({ KeyId: STANDING_KEY_ALIAS });
   return described.KeyMetadata!.KeyId;
+});
+
+/**
+ * Release the shared test key: delete the alias and schedule the key for
+ * deletion (7-day minimum window — KMS keys cannot be hard-deleted) so a
+ * passing run leaves no alias and no enabled/billed key behind. Idempotent —
+ * tolerates the alias/key already being gone or the key already pending
+ * deletion (a concurrent run's release, or a re-run after a partial
+ * teardown).
+ */
+const releaseStandingKey = Effect.gen(function* () {
+  const viaAlias = yield* kms.describeKey({ KeyId: STANDING_KEY_ALIAS }).pipe(
+    Effect.map((response) => response.KeyMetadata),
+    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+  );
+
+  yield* kms
+    .deleteAlias({ AliasName: STANDING_KEY_ALIAS })
+    .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+
+  // If the alias was already gone (interrupted earlier release), fall back to
+  // the description lookup so an enabled key never survives teardown.
+  const target = viaAlias ?? (yield* findStandingKeyByDescription);
+  if (target?.KeyId && target.KeyState !== "PendingDeletion") {
+    yield* kms
+      .scheduleKeyDeletion({ KeyId: target.KeyId, PendingWindowInDays: 7 })
+      .pipe(
+        // Already pending deletion (raced with another run) or already gone.
+        Effect.catchTag(
+          ["KMSInvalidStateException", "NotFoundException"],
+          () => Effect.void,
+        ),
+      );
+  }
 });
 
 describe("KMS Bindings", () => {
@@ -178,11 +274,54 @@ describe("KMS Bindings", () => {
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
+
+      // The fresh Lambda role's IAM policy propagates eventually — /ready
+      // exercises no KMS permission, so also probe a full encrypt/decrypt
+      // round-trip (bounded) before letting the tests run. Without this the
+      // first /decrypt occasionally lands before kms:Decrypt is authorized.
+      yield* Effect.logInfo("KMS test setup: probing crypto authorization");
+      yield* Effect.gen(function* () {
+        const probePlaintext = yield* toBase64("kms-iam-propagation-probe");
+        const encrypted = (yield* postJson("/encrypt", {
+          plaintextBase64: probePlaintext,
+        })) as { ciphertextBase64?: string };
+        if (!encrypted.ciphertextBase64) {
+          return yield* Effect.fail(new CryptoNotAuthorized());
+        }
+        const decrypted = (yield* postJson("/decrypt", {
+          ciphertextBase64: encrypted.ciphertextBase64,
+        })) as { ok: boolean };
+        if (!decrypted.ok) {
+          return yield* Effect.fail(new CryptoNotAuthorized());
+        }
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "CryptoNotAuthorized",
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(30)),
+          ),
+        }),
+      );
     }),
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 60_000 });
+  // Release the out-of-band key even if the stack destroy fails — a passing
+  // (or failing) run must never leave an enabled KMS key behind.
+  afterAll(
+    sharedStack
+      .destroy()
+      .pipe(
+        Effect.ensuring(
+          Core.withProviders(
+            releaseStandingKey,
+            testOptions,
+            "KMSBindings",
+          ).pipe(Effect.orDie),
+        ),
+      ),
+    { timeout: 120_000 },
+  );
 
   describe("Encrypt", () => {
     test.provider("encrypts a payload under the standing key", (_stack) =>

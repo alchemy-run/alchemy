@@ -25,8 +25,11 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const key = yield* Key("ManagedKey", {
               description: "alchemy kms smoke v1",
+              // Duration.Input props: the provider converts these to whole
+              // wire days (7 and 90) — asserted out-of-band below.
               deletionWindowInDays: "7 days",
               enableKeyRotation: true,
+              rotationPeriodInDays: "90 days",
               tags: {
                 Environment: "test",
                 Owner: "alice",
@@ -50,6 +53,10 @@ describe("AWS.KMS.Key", () => {
           KeyId: initial.key.keyId,
         });
         expect(rotation.KeyRotationEnabled).toEqual(true);
+        // `rotationPeriodInDays: "90 days"` (Duration.Input) must reach the
+        // wire as the whole number 90.
+        expect(rotation.RotationPeriodInDays).toEqual(90);
+        expect(initial.key.rotationPeriodInDays).toEqual(90);
 
         const initialTags = yield* listTags(initial.key.keyId);
         expect(initialTags.Environment).toEqual("test");
@@ -456,10 +463,10 @@ describe("AWS.KMS.Key", () => {
   });
 
   const assertKeyPendingDeletion = Effect.fn(function* (keyId: string) {
-    yield* KMS.describeKey({ KeyId: keyId }).pipe(
+    const metadata = yield* KMS.describeKey({ KeyId: keyId }).pipe(
       Effect.flatMap((response) =>
         response.KeyMetadata!.KeyState === "PendingDeletion"
-          ? Effect.void
+          ? Effect.succeed(response.KeyMetadata!)
           : Effect.fail(new KeyNotPendingDeletion()),
       ),
       Effect.retry({
@@ -469,6 +476,15 @@ describe("AWS.KMS.Key", () => {
         ),
       }),
     );
+    // Every key in this suite uses `deletionWindowInDays: "7 days"`
+    // (Duration.Input) — the scheduled DeletionDate must land ~7 wire days
+    // out, proving the Duration→days conversion round-trips through
+    // scheduleKeyDeletion.
+    const now = yield* Effect.sync(() => Date.now());
+    const windowDays =
+      (metadata.DeletionDate!.getTime() - now) / (24 * 60 * 60 * 1000);
+    expect(windowDays).toBeGreaterThan(6);
+    expect(windowDays).toBeLessThanOrEqual(7.1);
   });
 
   const getAlias = Effect.fn(function* (aliasName: string) {

@@ -50,6 +50,8 @@ test.provider(
       });
       expect(observed.HealthCheck.HealthCheckConfig.FailureThreshold).toBe(3);
       expect(observed.HealthCheck.HealthCheckConfig.ResourcePath).toBe("/");
+      // Duration.Input prop round-trips to the wire as integer seconds.
+      expect(observed.HealthCheck.HealthCheckConfig.RequestInterval).toBe(30);
 
       const tags = yield* route53.listTagsForResource({
         ResourceType: "healthcheck",

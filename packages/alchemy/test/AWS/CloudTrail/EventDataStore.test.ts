@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,42 +34,73 @@ test.provider(
 // typed `CloudTrailLakeOnboardingClosed` tag. On a non-onboarded account
 // this proves the patch; on an onboarded account the create succeeds and
 // is immediately deleted (PENDING_DELETION incurs no cost).
+const PROBE_STORE_NAME = "alchemy-test-cloudtrail-lake-probe";
+
+// Idempotent, name-keyed cleanup for the out-of-band probe store. Because
+// the probe's name is deterministic, this reclaims a leftover from a
+// previously-killed run as well as the one created by this run. A store
+// already in PENDING_DELETION is considered cleaned (Lake deletion always
+// goes through a 7-day, zero-cost PENDING_DELETION window — there is no
+// harder delete).
+const deleteProbeStoreIfExists = Effect.gen(function* () {
+  const stores = yield* cloudtrail.listEventDataStores({});
+  const existing = (stores.EventDataStores ?? []).find(
+    (s) => s.Name === PROBE_STORE_NAME && s.Status !== "PENDING_DELETION",
+  );
+  if (existing?.EventDataStoreArn !== undefined) {
+    yield* cloudtrail
+      .deleteEventDataStore({ EventDataStore: existing.EventDataStoreArn })
+      .pipe(
+        // A store still finishing creation can transiently conflict.
+        Effect.retry({
+          while: (e) => e._tag === "ConflictException",
+          schedule: Schedule.exponential("2 seconds"),
+          times: 8,
+        }),
+        Effect.catchTag(
+          [
+            "EventDataStoreNotFoundException",
+            "InactiveEventDataStoreException",
+          ],
+          () => Effect.void,
+        ),
+      );
+  }
+});
+
 test.provider(
   "createEventDataStore is either typed onboarding-closed or a real create",
   () =>
     Effect.gen(function* () {
+      // Pre-clean: reclaim a leftover probe store from a killed prior run
+      // so the deterministic name is free and the test converges.
+      yield* deleteProbeStoreIfExists;
       const attempt = yield* Effect.result(
         cloudtrail.createEventDataStore({
-          Name: "alchemy-test-cloudtrail-lake-probe",
+          Name: PROBE_STORE_NAME,
           MultiRegionEnabled: false,
           RetentionPeriod: 7,
           TerminationProtectionEnabled: false,
         }),
       );
-      if (Result.isSuccess(attempt)) {
-        // Onboarded account — clean up immediately.
-        yield* cloudtrail
-          .deleteEventDataStore({
-            EventDataStore: attempt.success.EventDataStoreArn!,
-          })
-          .pipe(
-            Effect.catchTag(
-              [
-                "EventDataStoreNotFoundException",
-                "InactiveEventDataStoreException",
-              ],
-              () => Effect.void,
-            ),
-          );
-        return;
+      if (Result.isFailure(attempt)) {
+        expect([
+          "CloudTrailLakeOnboardingClosed",
+          // A prior probe's store still pending deletion holds the name on
+          // an onboarded account.
+          "EventDataStoreAlreadyExistsException",
+        ]).toContain(attempt.failure._tag);
       }
-      expect([
-        "CloudTrailLakeOnboardingClosed",
-        // A prior probe's store still pending deletion holds the name on
-        // an onboarded account.
-        "EventDataStoreAlreadyExistsException",
-      ]).toContain(attempt.failure._tag);
-    }),
+      // Onboarded-account success path: the ensuring finalizer below
+      // deletes the store (PENDING_DELETION incurs no cost).
+    }).pipe(
+      // Guaranteed cleanup on success, failure, AND interruption. Keyed on
+      // the deterministic name, so it also covers the create-succeeded-but-
+      // fiber-killed-before-response window on the next run's pre-clean.
+      // orDie (not swallow): a failed cleanup must fail the test loudly —
+      // a green run must imply zero leftovers.
+      Effect.ensuring(deleteProbeStoreIfExists.pipe(Effect.orDie)),
+    ),
 );
 
 const STORE_NAME = "alchemy-test-cloudtrail-eds";

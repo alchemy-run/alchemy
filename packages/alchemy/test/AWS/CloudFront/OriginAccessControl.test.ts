@@ -9,10 +9,8 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
-
 describe("AWS.CloudFront.OriginAccessControl", () => {
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "list enumerates the deployed origin access control",
     (stack) =>
       Effect.gen(function* () {

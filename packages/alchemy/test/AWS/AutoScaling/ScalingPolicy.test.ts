@@ -22,20 +22,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // instances launch) with a target-tracking policy, resolve the provider from
 // context via the typed `findProvider`, call `list()`, and assert the deployed
 // policy appears in the exhaustively paginated result.
-//
-// SKIP gate: a ScalingPolicy requires a parent AutoScalingGroup, which requires
-// a LaunchTemplate. Deploying a LaunchTemplate currently fails during plan with
-// a pre-existing bug in the sibling `AWS/AutoScaling/LaunchTemplate.ts`
-// provider (out of scope for this resource): its `read` adoption path calls
-// `ec2.describeLaunchTemplates` by name, AWS rejects a missing template with
-//   UnknownAwsError: At least one of the launch templates specified in the
-//   request does not exist.   (errorTag: InvalidLaunchTemplateName.NotFoundException)
-// distilled EC2 does not type that error on `describeLaunchTemplates`, and the
-// provider's `isLaunchTemplateNotFound` duck-types the wrong tag string, so the
-// catch misses and the whole plan fails. The identical failure reproduces in
-// the sibling `AutoScalingGroup.test.ts` "list" case. Gated behind an env var
-// so an environment with the LaunchTemplate provider fixed runs it unchanged.
-test.provider.skipIf(!process.env.AWS_TEST_SCALING_POLICY_LIST)(
+test.provider(
   "list enumerates the deployed scaling policy",
   (stack) =>
     Effect.gen(function* () {
@@ -173,11 +160,21 @@ test.provider(
               autoScalingGroup: group,
               predefinedMetricType: "ASGAverageCPUUtilization",
               targetValue: 50,
+              // Duration.Input prop — whole seconds on the wire.
+              estimatedInstanceWarmup: "90 seconds",
             });
           }),
         );
 
       const created = yield* deployPolicy();
+
+      // Duration.Input round-trips to the wire as whole seconds.
+      const liveCreated = yield* autoscaling.describePolicies({
+        PolicyNames: [created.policyName],
+      });
+      expect(liveCreated.ScalingPolicies?.[0]?.EstimatedInstanceWarmup).toEqual(
+        90,
+      );
 
       // Rewrite the policy's persisted row into the wedged shape an
       // interrupted deploy leaves behind: `creating`, no attributes, and the

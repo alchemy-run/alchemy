@@ -82,11 +82,27 @@ describe("AutoScaling LifecycleHook event source + CompleteLifecycleAction", () 
     "CompleteLifecycleAction binding is IAM-wired (no AccessDenied)",
     (_stack) =>
       Effect.gen(function* () {
-        const response = yield* HttpClient.execute(
+        // A freshly attached IAM policy is eventually consistent — the first
+        // invocations after deploy can still see AccessDenied. Poll (bounded)
+        // until the call stops failing authorization, then assert.
+        const body = yield* HttpClient.execute(
           HttpClientRequest.post(`${baseUrl}/complete-bogus`),
+        ).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? response.json
+              : Effect.fail(
+                  new Error(`Function not ready: ${response.status}`),
+                ),
+          ),
+          Effect.map((json) => json as { ok: boolean; tag: string }),
+          Effect.repeat({
+            until: (b) =>
+              b.tag !== "AccessDenied" && b.tag !== "AccessDeniedException",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 10,
+          }),
         );
-        expect(response.status).toBe(200);
-        const body = (yield* response.json) as { ok: boolean; tag: string };
         // The SDK call reached AWS with valid credentials/policy: either it
         // succeeded, or it failed for a resource reason (no active lifecycle
         // action) — never an authorization failure.
@@ -94,5 +110,6 @@ describe("AutoScaling LifecycleHook event source + CompleteLifecycleAction", () 
           body.tag,
         );
       }),
+    { timeout: 60_000 },
   );
 });

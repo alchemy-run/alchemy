@@ -191,6 +191,7 @@ import * as RUM from "./RUM/index.ts";
 import * as S3 from "./S3/index.ts";
 import * as S3Control from "./S3Control/index.ts";
 import * as S3Files from "./S3Files/index.ts";
+import * as S3Tables from "./S3Tables/index.ts";
 import * as S3Vectors from "./S3Vectors/index.ts";
 import * as SageMaker from "./SageMaker/index.ts";
 import * as Scheduler from "./Scheduler/index.ts";
@@ -750,6 +751,9 @@ export const providers = () =>
       S3Control.StorageLensConfiguration,
       S3Files.AccessPoint,
       S3Files.FileSystem,
+      S3Tables.TableBucket,
+      S3Tables.Namespace,
+      S3Tables.Table,
       S3Vectors.VectorBucket,
       S3Vectors.Index,
       SageMaker.Model,
@@ -1263,6 +1267,9 @@ export const providers = () =>
           LexV2.SlotTypeProvider(),
           S3Files.FileSystemProvider(),
           S3Files.AccessPointProvider(),
+          S3Tables.TableBucketProvider(),
+          S3Tables.NamespaceProvider(),
+          S3Tables.TableProvider(),
           S3Vectors.VectorBucketProvider(),
           S3Vectors.IndexProvider(),
           SageMaker.ModelProvider(),

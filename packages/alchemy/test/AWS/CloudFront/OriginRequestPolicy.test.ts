@@ -9,10 +9,8 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
-
 describe("AWS.CloudFront.OriginRequestPolicy", () => {
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "create, update, and delete an origin request policy",
     (stack) =>
       Effect.gen(function* () {
@@ -67,9 +65,19 @@ describe("AWS.CloudFront.OriginRequestPolicy", () => {
           created.originRequestPolicyId,
         );
 
-        const after = yield* cloudfront.getOriginRequestPolicy({
-          Id: updated.originRequestPolicyId,
-        });
+        // Control-plane reads are eventually consistent — poll until the
+        // update is visible, then assert.
+        const after = yield* cloudfront
+          .getOriginRequestPolicy({ Id: updated.originRequestPolicyId })
+          .pipe(
+            Effect.repeat({
+              schedule: Schedule.fixed("2 seconds"),
+              until: (r) =>
+                r.OriginRequestPolicy?.OriginRequestPolicyConfig?.Comment ===
+                "updated",
+              times: 15,
+            }),
+          );
         expect(
           after.OriginRequestPolicy?.OriginRequestPolicyConfig?.Comment,
         ).toEqual("updated");
@@ -88,7 +96,7 @@ describe("AWS.CloudFront.OriginRequestPolicy", () => {
     300_000,
   );
 
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "list enumerates the deployed origin request policy",
     (stack) =>
       Effect.gen(function* () {

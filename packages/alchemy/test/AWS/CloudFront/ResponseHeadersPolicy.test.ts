@@ -9,10 +9,8 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
-
 describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "create, update, and delete a response headers policy",
     (stack) =>
       Effect.gen(function* () {
@@ -85,9 +83,19 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
           created.responseHeadersPolicyId,
         );
 
-        const after = yield* cloudfront.getResponseHeadersPolicy({
-          Id: updated.responseHeadersPolicyId,
-        });
+        // Control-plane reads are eventually consistent — poll until the
+        // update is visible, then assert.
+        const after = yield* cloudfront
+          .getResponseHeadersPolicy({ Id: updated.responseHeadersPolicyId })
+          .pipe(
+            Effect.repeat({
+              schedule: Schedule.fixed("2 seconds"),
+              until: (r) =>
+                r.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig
+                  ?.Comment === "updated",
+              times: 15,
+            }),
+          );
         expect(
           after.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Comment,
         ).toEqual("updated");
@@ -108,7 +116,7 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "list enumerates the deployed response headers policy",
     (stack) =>
       Effect.gen(function* () {

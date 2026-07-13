@@ -27,11 +27,18 @@ describe("AWS.IAM.ServiceSpecificCredential", () => {
               {
                 userName: user.userName,
                 serviceName: "codecommit.amazonaws.com",
+                // Duration.Input prop — converted to whole wire days.
+                credentialAgeDays: "30 days",
               },
             );
             return { user, credential };
           }),
         );
+
+        // The Duration prop round-trips as an expiration ~30 days out, and
+        // the creation-only secret is captured as a Redacted output.
+        expect(deployed.credential.expirationDate).toBeDefined();
+        expect(deployed.credential.servicePassword).toBeDefined();
 
         const provider = yield* Provider.findProvider(
           ServiceSpecificCredential,

@@ -37,6 +37,8 @@ describe("AWS.CloudFront.Distribution", () => {
                   domainName: bucket.bucketRegionalDomainName,
                   s3Origin: true,
                   originAccessControlId: oac.originAccessControlId,
+                  // Duration.Input → wire whole-seconds conversion under test.
+                  connectionTimeout: "5 seconds",
                 },
               ],
               defaultRootObject: "index.html",
@@ -52,6 +54,10 @@ describe("AWS.CloudFront.Distribution", () => {
                     Forward: "none",
                   },
                 },
+                // Duration.Input → wire whole-seconds conversion under test.
+                minTtl: 0,
+                defaultTtl: "5 minutes",
+                maxTtl: "1 hour",
               },
             });
 
@@ -90,6 +96,12 @@ describe("AWS.CloudFront.Distribution", () => {
         expect(current.Distribution?.DomainName).toEqual(
           deployed.distribution.domainName,
         );
+        // Duration.Input props reached the wire as whole seconds.
+        const config = current.Distribution?.DistributionConfig;
+        expect(config?.Origins?.Items?.[0]?.ConnectionTimeout).toEqual(5);
+        expect(config?.DefaultCacheBehavior?.MinTTL).toEqual(0);
+        expect(config?.DefaultCacheBehavior?.DefaultTTL).toEqual(300);
+        expect(config?.DefaultCacheBehavior?.MaxTTL).toEqual(3600);
 
         const control = yield* cloudfront.getOriginAccessControl({
           Id: deployed.oac.originAccessControlId,

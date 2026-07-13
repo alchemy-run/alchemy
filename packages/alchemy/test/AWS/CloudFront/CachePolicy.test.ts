@@ -9,10 +9,8 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
-
 describe("AWS.CloudFront.CachePolicy", () => {
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "create, update, and delete a cache policy",
     (stack) =>
       Effect.gen(function* () {
@@ -68,9 +66,18 @@ describe("AWS.CloudFront.CachePolicy", () => {
 
         expect(updated.cachePolicyId).toEqual(created.cachePolicyId);
 
-        const after = yield* cloudfront.getCachePolicy({
-          Id: updated.cachePolicyId,
-        });
+        // Control-plane reads are eventually consistent — poll until the
+        // update is visible, then assert the exact wire values.
+        const after = yield* cloudfront
+          .getCachePolicy({ Id: updated.cachePolicyId })
+          .pipe(
+            Effect.repeat({
+              schedule: Schedule.fixed("2 seconds"),
+              until: (r) =>
+                r.CachePolicy?.CachePolicyConfig?.Comment === "updated",
+              times: 15,
+            }),
+          );
         expect(after.CachePolicy?.CachePolicyConfig?.Comment).toEqual(
           "updated",
         );
@@ -83,7 +90,7 @@ describe("AWS.CloudFront.CachePolicy", () => {
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "list enumerates the deployed cache policy",
     (stack) =>
       Effect.gen(function* () {

@@ -27,6 +27,24 @@ const waitUntilRoleGone = (roleName: string) =>
 const testServiceName = "autoscaling.amazonaws.com";
 const testSuffix = "AlchemyTest";
 const testAdoptSuffix = "AlchemyAdopt";
+// Deterministic physical name of the out-of-band SLR the adoption test
+// creates: Auto Scaling names suffixed SLRs `AWSServiceRoleForAutoScaling_
+// {suffix}`.
+const adoptRoleName = `AWSServiceRoleForAutoScaling_${testAdoptSuffix}`;
+
+// Idempotent out-of-band cleanup for the adoption SLR — safe when the stack
+// already deleted it (or it never fully created). Submits the async deletion
+// task and tolerates not-found.
+const deleteAdoptRoleIfExists = IAM.deleteServiceLinkedRole({
+  RoleName: adoptRoleName,
+}).pipe(
+  Effect.catchTag("NoSuchEntityException", () =>
+    Effect.succeed({ DeletionTaskId: "" }),
+  ),
+  Effect.asVoid,
+  // Any non-not-found failure is a real cleanup bug — surface it loudly.
+  Effect.orDie,
+);
 
 describe("AWS.IAM.ServiceLinkedRole", () => {
   test.provider(
@@ -121,7 +139,12 @@ describe("AWS.IAM.ServiceLinkedRole", () => {
 
         const deleted = yield* waitUntilRoleGone(adopted.roleName);
         expect(deleted._tag).toBe("None");
-      }),
+      }).pipe(
+        // The role is created out-of-band, so the scratch stack only cleans
+        // it once the deploy adopts it. Guarantee deletion on failure or
+        // interruption in the window between create and adoption.
+        Effect.ensuring(deleteAdoptRoleIfExists),
+      ),
     { timeout: 120_000 },
   );
 });

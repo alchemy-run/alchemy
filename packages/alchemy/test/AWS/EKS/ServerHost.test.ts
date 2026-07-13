@@ -163,7 +163,10 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS ServerHost E2E", () => {
     "bound DynamoDB PutItem writes an item from inside the pod",
     () =>
       Effect.gen(function* () {
-        const itemId = `eks-${Date.now()}`;
+        // Deterministic id: the table is created fresh by this suite's deploy
+        // (beforeAll starts with a destroy), so no stale item can pre-exist,
+        // and a stable id keeps re-runs convergent instead of accreting items.
+        const itemId = "eks-serverhost-put-item";
         const res = yield* HttpClient.get(`${baseUrl}/put?id=${itemId}`).pipe(
           Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 12 }),
         );

@@ -48,29 +48,39 @@ test.provider.skipIf(!clusterName)(
   "list enumerates the deployed access entry",
   (stack) =>
     Effect.gen(function* () {
-      const cleanup = Effect.gen(function* () {
-        yield* iam
-          .deleteRole({ RoleName: principalRoleName })
-          .pipe(Effect.catch(() => Effect.void));
-      });
+      // Idempotent delete: safe when the role never existed (pre-clean) or was
+      // already removed (post-clean after a partial prior run).
+      const deletePrincipalRole = iam
+        .deleteRole({ RoleName: principalRoleName })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
 
       yield* stack.destroy();
-      yield* cleanup;
 
+      // acquireRelease guarantees the out-of-band role is deleted on success,
+      // failure, AND interruption; the deterministic name + pre-clean above
+      // means a re-run reclaims any orphan from a previously-killed run.
       yield* Effect.gen(function* () {
-        const role = yield* iam.createRole({
-          RoleName: principalRoleName,
-          AssumeRolePolicyDocument: JSON.stringify({
-            Version: "2012-10-17",
-            Statement: [
-              {
-                Effect: "Allow",
-                Principal: { Service: "ec2.amazonaws.com" },
-                Action: "sts:AssumeRole",
-              },
-            ],
-          }),
-        });
+        const role = yield* Effect.acquireRelease(
+          // Pre-clean a leftover from a killed run, then create.
+          deletePrincipalRole.pipe(
+            Effect.andThen(
+              iam.createRole({
+                RoleName: principalRoleName,
+                AssumeRolePolicyDocument: JSON.stringify({
+                  Version: "2012-10-17",
+                  Statement: [
+                    {
+                      Effect: "Allow",
+                      Principal: { Service: "ec2.amazonaws.com" },
+                      Action: "sts:AssumeRole",
+                    },
+                  ],
+                }),
+              }),
+            ),
+          ),
+          () => deletePrincipalRole.pipe(Effect.catch(() => Effect.void)),
+        );
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
@@ -89,7 +99,7 @@ test.provider.skipIf(!clusterName)(
         ).toBe(true);
 
         yield* stack.destroy();
-      }).pipe(Effect.ensuring(cleanup));
+      }).pipe(Effect.scoped);
     }),
   { timeout: 240_000 },
 );

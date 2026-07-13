@@ -4,7 +4,12 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { testSamlMetadataDocument, testSamlProviderName } from "./fixtures.ts";
+import * as Redacted from "effect/Redacted";
+import {
+  testPrivateKey,
+  testSamlMetadataDocument,
+  testSamlProviderName,
+} from "./fixtures.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,9 +23,14 @@ describe("AWS.IAM.SAMLProvider", () => {
           return yield* SAMLProvider("ListResource", {
             name: testSamlProviderName,
             samlMetadataDocument: testSamlMetadataDocument,
+            // Redacted prop — unwrapped to the wire private key at create.
+            assertionEncryptionMode: "Allowed",
+            addPrivateKey: Redacted.make(testPrivateKey),
           });
         }),
       );
+
+      expect(deployed.assertionEncryptionMode).toBe("Allowed");
 
       const provider = yield* Provider.findProvider(SAMLProvider);
       const all = yield* provider.list();

@@ -3,6 +3,7 @@ import { Volume } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as kms from "@distilled.cloud/aws/kms";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -61,11 +62,59 @@ test.provider(
   { timeout: 120_000 },
 );
 
+// The standing test key shared with test/AWS/KMS ($1/mo, 7-day deletion
+// window — never created/deleted per run). An account nuke can remove it or
+// leave it pending deletion, which makes encrypted-volume creation fail
+// asynchronously (the volume silently transitions to error/deleted), so heal
+// it before deploying.
+const STANDING_KEY_ALIAS = "alias/alchemy-test-bindings";
+
+const ensureStandingKey = Effect.gen(function* () {
+  const existing = yield* kms.describeKey({ KeyId: STANDING_KEY_ALIAS }).pipe(
+    Effect.map((response) => response.KeyMetadata),
+    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+  );
+
+  if (existing?.KeyId) {
+    if (existing.KeyState === "PendingDeletion") {
+      yield* kms.cancelKeyDeletion({ KeyId: existing.KeyId });
+      yield* kms.enableKey({ KeyId: existing.KeyId });
+    } else if (existing.Enabled === false) {
+      yield* kms.enableKey({ KeyId: existing.KeyId });
+    }
+    return existing.KeyId;
+  }
+
+  const created = yield* kms.createKey({
+    Description:
+      "Standing key for alchemy AWS binding tests — never deleted (see test/AWS/KMS/Bindings.test.ts)",
+    Tags: [{ TagKey: "alchemy:standing-fixture", TagValue: "kms-bindings" }],
+  });
+  const keyId = created.KeyMetadata?.KeyId;
+  if (!keyId) {
+    return yield* Effect.die(new Error("createKey returned no key ID"));
+  }
+  yield* kms
+    .createAlias({ AliasName: STANDING_KEY_ALIAS, TargetKeyId: keyId })
+    .pipe(
+      Effect.catchTag("AlreadyExistsException", () =>
+        // Lost a create race with a parallel run: schedule ours for deletion
+        // so it doesn't become a $1/mo orphan.
+        kms
+          .scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 })
+          .pipe(Effect.ignore),
+      ),
+    );
+  const described = yield* kms.describeKey({ KeyId: STANDING_KEY_ALIAS });
+  return described.KeyMetadata!.KeyId;
+});
+
 test.provider(
   "create an encrypted volume with the standing KMS alias",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* ensureStandingKey;
 
       const volume = yield* stack.deploy(
         Effect.gen(function* () {

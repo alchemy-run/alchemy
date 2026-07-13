@@ -33,6 +33,15 @@ const unwrapString = (
       ? value
       : Redacted.value(value);
 
+const unwrapBinary = (
+  value: Uint8Array | Redacted.Redacted<Uint8Array> | undefined,
+): Uint8Array | undefined =>
+  value === undefined
+    ? undefined
+    : value instanceof Uint8Array
+      ? value
+      : Redacted.value(value);
+
 // Typed wait-until-gone: the provider deletes with
 // `ForceDeleteWithoutRecovery`, which completes asynchronously — poll
 // `describeSecret` (bounded) until it fails with the typed
@@ -98,6 +107,62 @@ test.provider("create, update value, destroy", (stack) =>
 
     yield* stack.destroy();
 
+    yield* assertSecretDeleted(secret.secretArn);
+  }),
+);
+
+// Audit: `secretBinary` is declared as `Redacted.Redacted<Uint8Array>` — this
+// exercises the Redacted conversion end-to-end at deploy time: create with a
+// binary value, verify the exact bytes on the wire out-of-band via distilled,
+// rotate the binary value in place, and verify the new bytes.
+// Deterministic checked-in constants (never generated at test time),
+// exercising non-UTF8 bytes through the base64 transport.
+const BINARY_V1 = new Uint8Array([0, 1, 2, 3, 250, 251, 252, 253, 254, 255]);
+const BINARY_V2 = new Uint8Array([42, 7, 128, 129, 130, 0, 255]);
+
+test.provider("binary secret value round-trips (Redacted prop)", (stack) =>
+  Effect.gen(function* () {
+    const secret = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Secret("BinaryLifecycleSecret", {
+          description: "binary lifecycle v1",
+          secretBinary: Redacted.make(BINARY_V1),
+        });
+      }),
+    );
+
+    expect(secret.secretArn).toContain("arn:aws:secretsmanager:");
+    expect(secret.versionId).toBeTruthy();
+
+    // Out-of-band verification via distilled: exact bytes on the wire.
+    const v1 = yield* secretsmanager.getSecretValue({
+      SecretId: secret.secretArn,
+    });
+    expect(Array.from(unwrapBinary(v1.SecretBinary)!)).toEqual(
+      Array.from(BINARY_V1),
+    );
+    expect(unwrapString(v1.SecretString)).toBeUndefined();
+
+    // Rotate the binary value in place (no replacement).
+    const updated = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Secret("BinaryLifecycleSecret", {
+          description: "binary lifecycle v2",
+          secretBinary: Redacted.make(BINARY_V2),
+        });
+      }),
+    );
+    expect(updated.secretArn).toBe(secret.secretArn);
+    expect(updated.versionId).not.toBe(secret.versionId);
+
+    const v2 = yield* secretsmanager.getSecretValue({
+      SecretId: secret.secretArn,
+    });
+    expect(Array.from(unwrapBinary(v2.SecretBinary)!)).toEqual(
+      Array.from(BINARY_V2),
+    );
+
+    yield* stack.destroy();
     yield* assertSecretDeleted(secret.secretArn);
   }),
 );

@@ -335,43 +335,56 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const bucketName = `alchemy-test-s3-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      // Deterministic name: the state wipe below intentionally makes the
+      // bucket invisible to the scratch stack's auto-destroy for a window, so
+      // the name must be stable across runs — a re-run then reclaims any
+      // orphan left by a previously-killed run instead of minting a new one.
+      const bucketName = "alchemy-test-s3-adopt-bucket";
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Bucket("AdoptableBucket", {
-            bucketName,
-            forceDestroy: true,
-          });
-        }),
-      );
-      expect(initial.bucketName).toEqual(bucketName);
+      // Idempotent pre-clean: reclaim a leftover from a prior interrupted run.
+      yield* deleteBucketIfExists(bucketName);
 
-      // Wipe state — bucket stays in S3.
       yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: "test",
-          fqn: "AdoptableBucket",
-        });
-      }).pipe(Effect.provide(stack.state));
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Bucket("AdoptableBucket", {
+              bucketName,
+              forceDestroy: true,
+            });
+          }),
+        );
+        expect(initial.bucketName).toEqual(bucketName);
 
-      const adopted = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Bucket("AdoptableBucket", {
-            bucketName,
-            forceDestroy: true,
+        // Wipe state — bucket stays in S3.
+        yield* Effect.gen(function* () {
+          const state = yield* yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "AdoptableBucket",
           });
-        }),
+        }).pipe(Effect.provide(stack.state));
+
+        const adopted = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Bucket("AdoptableBucket", {
+              bucketName,
+              forceDestroy: true,
+            });
+          }),
+        );
+
+        expect(adopted.bucketArn).toEqual(initial.bucketArn);
+
+        yield* stack.destroy();
+        yield* assertBucketDeleted(bucketName);
+      }).pipe(
+        // Guaranteed out-of-band cleanup: while state is wiped the bucket is
+        // outside the scratch stack, so the framework's ensuring-destroy can't
+        // see it. This finalizer runs on success, failure, AND interruption;
+        // it's a no-op when stack.destroy already deleted the bucket.
+        Effect.ensuring(deleteBucketIfExists(bucketName).pipe(Effect.ignore)),
       );
-
-      expect(adopted.bucketArn).toEqual(initial.bucketArn);
-
-      yield* stack.destroy();
-      yield* assertBucketDeleted(bucketName);
     }),
 );
 
@@ -1075,6 +1088,21 @@ test.provider(
     }),
   { timeout: 180_000 },
 );
+
+// Idempotent out-of-band delete for the adoption test's deterministically
+// named bucket. Tolerates the bucket never existing / already deleted
+// (typed NoSuchBucket) and retries transient failures a bounded number of
+// times. The bucket is always empty in that test, so deleteBucket suffices.
+const deleteBucketIfExists = Effect.fn(function* (bucketName: string) {
+  yield* S3.deleteBucket({ Bucket: bucketName }).pipe(
+    Effect.catchTag("NoSuchBucket", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.exponential(200).pipe(
+        Schedule.both(Schedule.recurs(5)),
+      ),
+    }),
+  );
+});
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 

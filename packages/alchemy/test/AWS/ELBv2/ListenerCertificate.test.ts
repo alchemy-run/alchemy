@@ -2,15 +2,13 @@ import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2";
 import { Listener, ListenerCertificate, LoadBalancer } from "@/AWS/ELBv2";
 import * as Test from "@/Test/Vitest";
-import * as acm from "@distilled.cloud/aws/acm";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 import { getDefaultVpc } from "../DefaultVpc.ts";
+import { deleteCertBestEffort, ensureImportedCert } from "./fixtures/acm.ts";
 import {
   DEFAULT_CERT_PEM,
   DEFAULT_KEY_PEM,
@@ -24,56 +22,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-// Find an existing imported test certificate by domain (a previous run may
-// have left one behind) or import the checked-in self-signed fixture. Import
-// without a CertificateArn mints a new certificate each call, so reuse keeps
-// repeated runs deterministic and leak-free.
-const ensureImportedCert = Effect.fn(function* (
-  domainName: string,
-  certPem: string,
-  keyPem: string,
-) {
-  const pages = yield* acm.listCertificates
-    .pages({ CertificateStatuses: ["ISSUED"] })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.CertificateSummaryList ?? []),
-      ),
-    );
-  const existing = pages.find((c) => c.DomainName === domainName);
-  if (existing?.CertificateArn) {
-    return existing.CertificateArn;
-  }
-  const encode = (pem: string) =>
-    Effect.sync(() => new TextEncoder().encode(pem));
-  const imported = yield* acm.importCertificate({
-    Certificate: yield* encode(certPem),
-    PrivateKey: yield* encode(keyPem),
-  });
-  expect(imported.CertificateArn).toBeTruthy();
-  return imported.CertificateArn!;
-});
-
-// Deleting right after the listener detaches can race eventual consistency;
-// retry briefly, then leave the certificate behind (the next run reuses it).
-const deleteCertBestEffort = Effect.fn(function* (certificateArn: string) {
-  yield* acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "ResourceInUseException",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
-    }),
-    Effect.catchTag("ResourceInUseException", () =>
-      Effect.logWarning(
-        `certificate ${certificateArn} still in use; leaving it for reuse`,
-      ),
-    ),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-  );
-});
 
 // Attach an extra SNI certificate to an HTTPS listener via the standalone
 // ListenerCertificate resource, verify out-of-band, then remove the resource

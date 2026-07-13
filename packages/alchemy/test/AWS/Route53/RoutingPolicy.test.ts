@@ -20,7 +20,7 @@ const findSet = (
 
 const zoneName = "alchemy-route53-routing.alchemy.";
 
-describe.skipIf(process.env.FAST)(() => {
+describe.skipIf(process.env.FAST)("RoutingPolicy", () => {
   test.provider(
     "weighted, failover, and alias routing records",
     (stack) =>
@@ -99,6 +99,8 @@ describe.skipIf(process.env.FAST)(() => {
         const green = findSet(sets, `api.${zoneName}`, "green");
         expect(blue?.Weight).toBe(90);
         expect(green?.Weight).toBe(10);
+        // Duration.Input ttl ("60 seconds") lands on the wire as TTL: 60.
+        expect(blue?.TTL).toBe(60);
 
         const primary = findSet(sets, `app.${zoneName}`, "primary");
         const secondary = findSet(sets, `app.${zoneName}`, "secondary");

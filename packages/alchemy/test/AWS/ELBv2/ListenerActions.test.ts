@@ -6,8 +6,11 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import { getDefaultVpc } from "../DefaultVpc.ts";
+import { deleteCertBestEffort, ensureImportedCert } from "./fixtures/acm.ts";
+import { DEFAULT_CERT_PEM, DEFAULT_KEY_PEM } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -256,6 +259,10 @@ test.provider(
       expect(forward?.ForwardConfig?.TargetGroupStickinessConfig?.Enabled).toBe(
         true,
       );
+      // Duration.Input "1 hour" must reach the wire as whole seconds.
+      expect(
+        forward?.ForwardConfig?.TargetGroupStickinessConfig?.DurationSeconds,
+      ).toBe(3600);
 
       yield* stack.destroy();
 
@@ -267,6 +274,107 @@ test.provider(
           Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(0)),
         );
       expect(after).toBe(0);
+    }).pipe(logLevel),
+  { timeout: 600_000 },
+);
+
+// Live-verifies the audited prop conversions on the authenticate-oidc action:
+// `clientSecret` is a Redacted<string> (unwrapped to the plain secret on the
+// wire — AWS rejects a non-string) and `sessionTimeout` is a Duration.Input
+// serialized as whole seconds. ELBv2 stores the OIDC endpoints without calling
+// the IdP at configure time, so dummy HTTPS endpoints are sufficient.
+test.provider(
+  "authenticate-oidc action: Redacted clientSecret + Duration sessionTimeout",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const certArn = yield* ensureImportedCert(
+        "default.elbv2-test.alchemy.internal",
+        DEFAULT_CERT_PEM,
+        DEFAULT_KEY_PEM,
+      );
+
+      const azResult = yield* EC2.describeAvailabilityZones({});
+      const azs =
+        azResult.AvailabilityZones?.filter(
+          (az) => az.State === "available",
+        ).flatMap((az) => (az.ZoneName ? [az.ZoneName] : [])) ?? [];
+      const [az1, az2] = azs;
+      expect(az1).toBeTruthy();
+      expect(az2).toBeTruthy();
+
+      const defaultVpc = yield* getDefaultVpc;
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const subnet1 = yield* Subnet("OidcSubnet1", {
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(226),
+            availabilityZone: az1,
+          });
+          const subnet2 = yield* Subnet("OidcSubnet2", {
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(227),
+            availabilityZone: az2,
+          });
+          const lb = yield* LoadBalancer("OidcLb", {
+            subnets: [subnet1.subnetId, subnet2.subnetId],
+            scheme: "internal",
+            type: "application",
+          });
+          const listener = yield* Listener("OidcListener", {
+            loadBalancerArn: lb.loadBalancerArn,
+            port: 443,
+            protocol: "HTTPS",
+            certificateArn: certArn,
+            defaultActions: [
+              {
+                type: "authenticateOidc",
+                issuer: "https://idp.elbv2-test.alchemy.internal",
+                authorizationEndpoint:
+                  "https://idp.elbv2-test.alchemy.internal/authorize",
+                tokenEndpoint: "https://idp.elbv2-test.alchemy.internal/token",
+                userInfoEndpoint:
+                  "https://idp.elbv2-test.alchemy.internal/userinfo",
+                clientId: "alchemy-test-client",
+                clientSecret: Redacted.make("alchemy-test-client-secret"),
+                sessionTimeout: "7 days",
+                onUnauthenticatedRequest: "deny",
+              },
+              {
+                type: "fixedResponse",
+                statusCode: "200",
+                contentType: "text/plain",
+                messageBody: "authenticated",
+              },
+            ],
+          });
+          return { listenerArn: listener.listenerArn };
+        }),
+      );
+
+      const observed = yield* elbv2
+        .describeListeners({ ListenerArns: [deployed.listenerArn] })
+        .pipe(Effect.map((r) => r.Listeners?.[0]));
+
+      const oidc = observed?.DefaultActions?.find(
+        (a) => a.Type === "authenticate-oidc",
+      );
+      // The create succeeding proves the Redacted secret was unwrapped to the
+      // plain string on the wire (AWS validates ClientSecret is present).
+      // Describe never echoes the secret back.
+      expect(oidc?.AuthenticateOidcConfig?.ClientId).toBe(
+        "alchemy-test-client",
+      );
+      // Duration.Input "7 days" must reach the wire as whole seconds.
+      expect(oidc?.AuthenticateOidcConfig?.SessionTimeout).toBe(604800);
+      expect(oidc?.AuthenticateOidcConfig?.OnUnauthenticatedRequest).toBe(
+        "deny",
+      );
+
+      yield* stack.destroy();
+      yield* deleteCertBestEffort(certArn);
     }).pipe(logLevel),
   { timeout: 600_000 },
 );
