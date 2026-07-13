@@ -2090,6 +2090,53 @@ export default handler;
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
 
+          // Lambda auto-creates /aws/lambda/{name} on the first invoke and
+          // deleteFunction does NOT remove it — without this every deleted
+          // function leaks an orphaned log group. Worse, the Lambda service
+          // flushes the final log batch asynchronously (observed up to ~35s
+          // after the last invoke, even after BOTH the function and its role
+          // are already deleted), silently re-creating a just-deleted group.
+          // The only reliable reap is a bounded watch over that flush window.
+          // A provably-quiescent group (last ingestion > 2 minutes ago —
+          // every pending flush has long since landed) deletes in a single
+          // call, so routine deletes of idle functions stay fast; a group
+          // with recent ingestion — or one that does not exist yet, where a
+          // first flush may still be in flight — is re-reaped on a short
+          // bounded schedule.
+          const logGroupName = `/aws/lambda/${output.functionName}`;
+          const reapLogGroup = logs
+            .deleteLogGroup({ logGroupName })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+          const lastIngestion = yield* logs
+            .describeLogStreams({
+              logGroupName,
+              orderBy: "LastEventTime",
+              descending: true,
+              limit: 1,
+            })
+            .pipe(
+              Effect.map((r) => r.logStreams?.[0]?.lastIngestionTime),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const now = yield* Effect.sync(() => Date.now());
+          const quiescent =
+            lastIngestion !== undefined && now - lastIngestion > 120_000;
+          if (quiescent) {
+            yield* reapLogGroup;
+          } else {
+            // Reaps at t=0s / 20s / 40s — each attempt is idempotent.
+            yield* reapLogGroup.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("20 seconds"),
+                times: 2,
+              }),
+            );
+          }
+
           yield* iam
             .deleteRole({
               RoleName: output.roleName,

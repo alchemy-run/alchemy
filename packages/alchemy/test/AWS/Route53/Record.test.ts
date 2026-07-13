@@ -11,9 +11,9 @@ import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-// Deterministic, reused across runs. Route53 keys a public-zone create on
-// `CallerReference`, so re-running reuses the same zone rather than piling up
-// duplicates. (`example.com` is reserved by AWS, hence the bespoke name.)
+// Deterministic zone name so a crashed run's leftover zone is reclaimed by
+// the next run's lookup-first `resolveZone` (and then deleted by `teardownZone`).
+// (`example.com` is reserved by AWS, hence the bespoke name.)
 const zoneName = "alchemy-route53-list-test.com.";
 const callerReference = "alchemy-route53-record-list-test-v2";
 const recordName = `list-record.${zoneName}`;
@@ -29,22 +29,24 @@ const findZoneIdByName = route53.listHostedZones.pages({}).pipe(
   Effect.map((zones) => zones.find((zone) => zone.Name === zoneName)?.Id),
 );
 
-// The hosted zone is a *standing* fixture — created once and reused across
-// runs (we look it up by name first and only create on a genuine miss). We
-// deliberately do NOT delete the zone on teardown. A short retry absorbs the
-// brief list eventual-consistency right after a first-time create, when a
-// create can race ahead of the zone appearing in `listHostedZones`.
+// The hosted zone is a *suite-scoped* fixture — resolved once (lookup-first,
+// create on a genuine miss) and shared by both tests in this file, then
+// deleted by the `teardownZone` finalizer below so a passing run leaves the
+// account clean. A short retry absorbs the brief list eventual-consistency
+// right after a first-time create, when a create can race ahead of the zone
+// appearing in `listHostedZones`.
 const zoneNotYetListable =
   "hosted zone not found after HostedZoneAlreadyExists";
 
 // List first, create only on a genuine miss. The previous create-first design
-// got permanently poisoned whenever the standing zone was deleted (e.g. by a
-// nuke): the stable `CallerReference` stays claimed during a long propagation
-// window, so `createHostedZone` keeps returning `HostedZoneAlreadyExists` while
-// `listHostedZones` still shows nothing. Looking the zone up first (and only
-// creating with a *fresh* CallerReference when it's truly absent) sidesteps
-// that trap — an absent/poisoned zone always re-creates cleanly, and a present
-// zone is reused without ever hitting the conflict path.
+// got permanently poisoned whenever the zone was deleted (as the `teardownZone`
+// teardown now does every run): a stable `CallerReference` stays claimed
+// during a long propagation window, so `createHostedZone` keeps returning
+// `HostedZoneAlreadyExists` while `listHostedZones` still shows nothing.
+// Looking the zone up first (and only creating with a *fresh* CallerReference
+// when it's truly absent) sidesteps that trap — an absent/poisoned zone
+// always re-creates cleanly, and a present zone is reused without ever
+// hitting the conflict path.
 const resolveZone = findZoneIdByName.pipe(
   Effect.flatMap((existing) =>
     existing !== undefined
@@ -91,6 +93,51 @@ const ensureZone = Effect.suspend(() =>
         ),
       ),
 );
+
+// Suite teardown: purge any test records still in the zone (idempotent — the
+// happy path already deleted them) and delete the zone itself so a passing
+// run leaves ZERO Route53 leftovers. Runs as `Effect.ensuring` on the LAST
+// test in this file (test-body cleanup keeps the provider environment in
+// scope, unlike `afterAll`). Re-creation on the next run is safe because
+// `resolveZone` is lookup-first with a fresh CallerReference — and if a run
+// dies before the teardown fires, the deterministic zone name lets the next
+// run reclaim AND delete the leftover.
+const teardownZone = Effect.gen(function* () {
+  const id = yield* findZoneIdByName;
+  if (id === undefined) return;
+  const zoneId = normalizeId(id);
+  const sets = yield* route53
+    .listResourceRecordSets({ HostedZoneId: zoneId, MaxItems: 100 })
+    .pipe(
+      Effect.map((r) => r.ResourceRecordSets ?? []),
+      Effect.catchTag("NoSuchHostedZone", () => Effect.succeed([])),
+    );
+  const deletable = sets.filter((s) => s.Type !== "SOA" && s.Type !== "NS");
+  if (deletable.length > 0) {
+    yield* route53
+      .changeResourceRecordSets({
+        HostedZoneId: zoneId,
+        ChangeBatch: {
+          Comment: "Record.test.ts suite teardown",
+          Changes: deletable.map((set) => ({
+            Action: "DELETE" as const,
+            ResourceRecordSet: set,
+          })),
+        },
+      })
+      .pipe(
+        Effect.asVoid,
+        Effect.catchTag("InvalidChangeBatch", () => Effect.void),
+        Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+      );
+  }
+  yield* route53.deleteHostedZone({ Id: zoneId }).pipe(
+    Effect.asVoid,
+    Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+  );
+  // Drop the module-scope cache so a hypothetical later user re-resolves.
+  standingZoneId = undefined;
+}).pipe(Effect.orDie);
 
 // Create/delete the record set out of band. The Alchemy engine's own deploy
 // path is currently blocked by a distilled schema bug (see the file footer),
@@ -156,8 +203,8 @@ test.provider(
       );
 
       yield* changeRecord(hostedZoneId, "DELETE");
-      // Leave the hosted zone standing — see `ensureZone` above. Deleting it
-      // would poison the stable `CallerReference` for the next run.
+      // The zone stays up for the next test in this file; the `teardownZone`
+      // teardown deletes it once the suite is done.
       yield* stack.destroy();
 
       expect(found).toBe(true);
@@ -293,9 +340,14 @@ test.provider(
         ),
       ).toBe(true);
 
-      // The standing zone is left in place (see `ensureZone` — deleting it
-      // poisons the CallerReference); destroy() removes the record.
+      // destroy() removes the record; the zone itself is deleted by the
+      // `teardownZone` ensuring below.
       yield* stack.destroy();
-    }),
+    }).pipe(
+      // This is the LAST test in the file, so it owns the shared zone's
+      // teardown — success, failure, or interruption all leave the account
+      // Route53-clean.
+      Effect.ensuring(teardownZone),
+    ),
   { timeout: 240_000 },
 );

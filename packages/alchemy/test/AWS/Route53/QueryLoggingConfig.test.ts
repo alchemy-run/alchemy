@@ -66,30 +66,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // Out-of-band us-east-1 prerequisites: two log groups and the resource
-      // policy that lets Route 53 write to them. (The Logs LogGroup /
-      // ResourcePolicy resources follow the ambient region, so the test
-      // provisions these via distilled directly.)
       const { Account: accountId } = yield* sts.getCallerIdentity({});
-      yield* ensureLogGroup(LOG_GROUP_A);
-      yield* ensureLogGroup(LOG_GROUP_B);
-      yield* inUsEast1(
-        logs.putResourcePolicy({
-          policyName: POLICY_NAME,
-          policyDocument: JSON.stringify({
-            Version: "2012-10-17",
-            Statement: [
-              {
-                Effect: "Allow",
-                Principal: { Service: "route53.amazonaws.com" },
-                Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
-                Resource: `arn:aws:logs:us-east-1:${accountId}:log-group:/aws/route53/alchemy-test-qlc-*`,
-              },
-            ],
-          }),
-        }),
-      );
-
       const logGroupArnA = `arn:aws:logs:us-east-1:${accountId}:log-group:${LOG_GROUP_A}`;
       const logGroupArnB = `arn:aws:logs:us-east-1:${accountId}:log-group:${LOG_GROUP_B}`;
 
@@ -100,7 +77,35 @@ test.provider(
         yield* removePolicy;
       });
 
+      // Everything from the first out-of-band create onwards runs under
+      // `Effect.ensuring(cleanup)` so a failure at ANY point (including while
+      // provisioning the prerequisites themselves) still tears down the log
+      // groups + resource policy. All ops are idempotent (AlreadyExists /
+      // NotFound caught), so re-runs reclaim any leftovers from a crash.
       yield* Effect.gen(function* () {
+        // Out-of-band us-east-1 prerequisites: two log groups and the resource
+        // policy that lets Route 53 write to them. (The Logs LogGroup /
+        // ResourcePolicy resources follow the ambient region, so the test
+        // provisions these via distilled directly.)
+        yield* ensureLogGroup(LOG_GROUP_A);
+        yield* ensureLogGroup(LOG_GROUP_B);
+        yield* inUsEast1(
+          logs.putResourcePolicy({
+            policyName: POLICY_NAME,
+            policyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "route53.amazonaws.com" },
+                  Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+                  Resource: `arn:aws:logs:us-east-1:${accountId}:log-group:/aws/route53/alchemy-test-qlc-*`,
+                },
+              ],
+            }),
+          }),
+        );
+
         // Create.
         const created = yield* stack.deploy(
           Effect.gen(function* () {

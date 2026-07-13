@@ -45,7 +45,11 @@ export const ensureImportedCert = Effect.fn(function* (
 
 /**
  * Deleting right after the listener detaches can race eventual consistency;
- * retry briefly, then leave the certificate behind (the next run reuses it).
+ * retry briefly, then leave the certificate behind (the next run's
+ * `ensureImportedCert` reclaims it by domain). Not-found is success
+ * (idempotent), still-in-use is the documented leave-for-reuse path, and any
+ * other error is a defect — so the error channel is `never` and this is a
+ * valid `Effect.ensuring` finalizer.
  */
 export const deleteCertBestEffort = Effect.fn(function* (
   certificateArn: string,
@@ -63,5 +67,6 @@ export const deleteCertBestEffort = Effect.fn(function* (
       ),
     ),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.orDie,
   );
 });

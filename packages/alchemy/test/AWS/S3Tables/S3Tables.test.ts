@@ -5,8 +5,75 @@ import * as s3tables from "@distilled.cloud/aws/s3tables";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// Auto-generated table-bucket names are `${testNameSlug}-${id}-${stage}-`
+// truncated + a random instance-id suffix. A run killed mid-deploy (before
+// state persists) leaves buckets that `stack.destroy()` cannot see, and the
+// suffix changes on every run so a re-run never reclaims them by name. Sweep
+// by the deterministic prefix at test start so a passing run always implies
+// a clean account. MUST match the lifecycle test's name slug below.
+const LIFECYCLE_BUCKET_PREFIX = "table-bucket-namespace-table-lifecycle-";
+
+const purgeOrphanedTableBuckets = Effect.gen(function* () {
+  const buckets = yield* s3tables.listTableBuckets.pages({}).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).flatMap((page) => page.tableBuckets ?? []),
+    ),
+  );
+  yield* Effect.forEach(
+    buckets.filter((b) => b.name.startsWith(LIFECYCLE_BUCKET_PREFIX)),
+    (bucket) =>
+      Effect.gen(function* () {
+        const tables = yield* s3tables.listTables
+          .pages({ tableBucketARN: bucket.arn })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.tables ?? []),
+            ),
+          );
+        yield* Effect.forEach(tables, (t) =>
+          s3tables
+            .deleteTable({
+              tableBucketARN: bucket.arn,
+              namespace: t.namespace[0]!,
+              name: t.name,
+            })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
+        );
+        const namespaces = yield* s3tables.listNamespaces
+          .pages({ tableBucketARN: bucket.arn })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.namespaces ?? []),
+            ),
+          );
+        yield* Effect.forEach(namespaces, (ns) =>
+          s3tables
+            .deleteNamespace({
+              tableBucketARN: bucket.arn,
+              namespace: ns.namespace[0]!,
+            })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
+        );
+        yield* s3tables.deleteTableBucket({ tableBucketARN: bucket.arn }).pipe(
+          // Child deletes are eventually consistent; ride out the window.
+          Effect.retry({
+            while: (e) => e._tag === "ConflictException",
+            schedule: Schedule.exponential(500).pipe(
+              Schedule.both(Schedule.recurs(8)),
+            ),
+          }),
+          Effect.catchTag("NotFoundException", () => Effect.void),
+        );
+      }),
+  );
+});
 
 // Poll a getter until it reports the resource is gone (typed
 // NotFoundException), bounded so a stuck delete fails fast.
@@ -35,6 +102,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* purgeOrphanedTableBuckets;
 
       const { bucket, namespace, table } = yield* stack.deploy(
         Effect.gen(function* () {
