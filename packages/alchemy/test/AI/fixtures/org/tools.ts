@@ -1,13 +1,14 @@
 /**
  * Tool interfaces of the organization. Pure contracts — physics comes from
  * Layers (a DevBox container for Bash/Grep/ReadFile/EditFile, Octokit for
- * the GitHub tools, a Discord client for Reply, a human or an automated
- * system for Approve/AskHuman).
+ * the GitHub tools, a human or an automated system for Approve/AskHuman).
  *
  * The autonomy dial: `Approve` and `AskHuman` are ordinary Tools. Whether a
  * ring is human-supervised or autonomous is decided by which Layer
  * implements them for that ring (`ApproveHuman` posts to #maintainers and
  * durably waits; `ApproveAuto` runs the test suite) — never by the charter.
+ * `AskHuman` stays in the catalog even while no charter interpolates it:
+ * capability by omission is a fact about Req, not about the vocabulary.
  */
 import * as AI from "@/AI/index.ts";
 import { command, issue, message, path, pattern, pr } from "./vocabulary.ts";
@@ -46,11 +47,18 @@ Open a pull request resolving ${issue}. Returns the created ${pr}.
 The PR body must cite the issue and the evidence that criteria are
 met.` {}
 
+export class MergePullRequest extends AI.Tool<MergePullRequest>()(
+  "mergePullRequest",
+)`
+Merge ${pr}. Fails unless the pull request has an approved review
+and green checks — merging is the last act of a case, never a way
+to skip review.` {}
+
 // ── surfaces ───────────────────────────────────────────────────
 
-export class Reply extends AI.Tool<Reply>()("reply")`
-Post ${message} on the current surface — the Discord thread, the
-GitHub issue, or the pull request review that triggered this work.` {}
+export class Comment extends AI.Tool<Comment>()("comment")`
+Comment ${message} on the GitHub issue or pull request that
+triggered this work.` {}
 
 // ── human-class tools (the autonomy dial) ──────────────────────
 

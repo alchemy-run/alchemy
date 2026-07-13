@@ -18,7 +18,7 @@ import type { Process } from "./Process.ts";
  * transitivity.
  *
  * ```ts
- * AI.every("1 week")} study the traces of ${AI.observe(Flywheel)} and
+ * Each week, study the traces of ${AI.observe(Flywheel)} and
  * ${AI.observe(Helpdesk)}: cluster failures; find prompts correlated
  * with reopened issues.
  * ```

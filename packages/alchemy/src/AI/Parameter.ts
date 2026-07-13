@@ -2,8 +2,9 @@ import * as S from "effect/Schema";
 
 /**
  * A `Parameter` term is a **capability term** (with `Tool` — design §1
- * taxonomy): pure vocabulary, never interpreted. Spliced into a `Tool`'s
- * template it becomes one field of that tool's parameters schema; its
+ * taxonomy): pure vocabulary, never interpreted. Interpolated into a
+ * `Tool`'s template it becomes one field of that tool's parameters
+ * schema; its
  * own template is the field's description. Description and schema are
  * one artifact.
  */

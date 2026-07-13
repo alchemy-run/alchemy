@@ -14,7 +14,7 @@ import { repairToolPairing, SYNTHETIC_ABORTED } from "./Pairing.ts";
  * This module encodes the **kernel-default agent policy** — the execution
  * ring's control parameters, which are deliberately not terms (§8.2):
  *
- * - trigger = the dispatch inbox (a `Dispatched` feedback starts a run)
+ * - inbox   = the dispatch mailbox (a `Dispatched` feedback starts a run)
  * - halt    = "model returned no tool calls"
  * - fold    = append to the carried transcript
  *

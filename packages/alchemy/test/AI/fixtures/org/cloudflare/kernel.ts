@@ -4,7 +4,8 @@
  *
  * The shape follows the harness-archaeology decisions (design §9.3):
  *
- * - `Ring` — one Durable Object class; one *instance* per ring. Its
+ * - `Ring` — one Durable Object class; one *instance* per ring (the
+ *   org currently runs one: ResolveGitHubIssue). Its
  *   storage holds **two planes** (never a second transcript):
  *   plane 1 — the mutable admission ledger (idempotent by delivery id,
  *   per-ring FIFO; leases are advisory because DOs are single-threaded);
@@ -119,17 +120,22 @@ export const CloudflareKernelLive = Layer.effect(
           if (!AI.isProcess(term)) return agentService();
 
           // A loop's runs live in its named DO instance. Subscribe the
-          // charter's sources: resolve each source's channel tag from
-          // ambient context (it is in the loop's Req — the same mechanism
-          // as tool refs) and let the channel Layer do the two-phase bind
-          // (plan: provision the webhook; runtime: stream).
-          for (const trigger of (term.refs as any[]).filter(AI.isTrigger)) {
-            for (const source of trigger.sources) {
+          // charter's MACHINE-OBSERVED exit sources
+          // (`AI.exit(AI.when(source, …))` — possibly several): resolve
+          // each source's channel tag from ambient context (it is in the
+          // loop's Req — the same mechanism as tool refs) and let the
+          // channel Layer do the two-phase bind (plan: provision the
+          // webhook; runtime: stream). `AI.when` sources are NOT
+          // subscribed — delivery is always outside code (the front door).
+          for (const halt of (term.refs as any[]).filter(AI.isHalt)) {
+            for (const source of (halt as { sources?: unknown[] }).sources ??
+              []) {
               if (AI.isEventSource(source) && source.channel) {
                 const channel = yield* source.channel;
                 const stream = yield* channel.subscribe(source);
-                // TODO(Phase 2): pipe the stream into this ring's
-                // admission ledger, keyed by delivery id.
+                // TODO(Phase 2): correlate the stream against this ring's
+                // parked runs (the source's `key`, or the halt's `match`
+                // override), keyed by delivery id.
                 void stream;
               }
             }
@@ -149,8 +155,8 @@ export const CloudflareKernelLive = Layer.effect(
     });
 
     function agentService() {
-      // Kernel-default control parameters: trigger = the send/dispatch
-      // inbox, halt = "model returned no tool calls" (kernel policy),
+      // Kernel-default control parameters: inbox = the send/dispatch
+      // mailbox, halt = "model returned no tool calls" (kernel policy),
       // fold = the carried transcript. Same five verbs as a ring.
       const todo = () =>
         Effect.die(new Error("TODO(Phase 2): interpret the agent turn"));
@@ -196,7 +202,9 @@ export const CloudflareKernelLive = Layer.effect(
             .pipe(Effect.asVoid),
         run: () =>
           Effect.die(
-            new Error("TODO(Phase 2): serve triggers via DO alarms + queues"),
+            new Error(
+              "TODO(Phase 2): serve the mailbox via DO alarms + queues",
+            ),
           ),
         steer: (input: unknown) =>
           rings

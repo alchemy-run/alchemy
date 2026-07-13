@@ -11,8 +11,8 @@ import type { HaltOutcome } from "./Step.ts";
  * Agent is one of the two **process terms** (with `Process` — the
  * `InterpretableTerm` union): the only term class the Kernel interprets,
  * each interpretation acquiring a ring (one serial admission loop) of
- * its own. The capability terms it splices (`Tool`, `Parameter`) are
- * compiled into its turns — they never get rings.
+ * its own. The capability terms it interpolates (`Tool`, `Parameter`)
+ * are compiled into its turns — they never get rings.
  *
  * The `<Self>()` form makes the agent a `Context.Service` **tag**, so:
  *
@@ -60,7 +60,7 @@ export interface Agent<
  * supplied by **kernel defaults** instead of refs (see
  * designs/ai/reports/agent-loop-algebra.md):
  *
- * - trigger = the send/dispatch inbox (each message is a work item)
+ * - inbox   = the send/dispatch mailbox (each message is a work item)
  * - halt    = "model returned no tool calls" (kernel policy — never a
  *   term: the execution ring's exit is model-behavior lore the charter
  *   may not override)

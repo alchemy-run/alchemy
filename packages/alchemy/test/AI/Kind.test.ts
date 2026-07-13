@@ -27,8 +27,7 @@ const Channel = AI.Process("Channel", {
   charter: (name: string) => AI.charter`
 You are the #${name} channel. Decide how the room responds. ${AI.body}
 Always ${Announce} once before resolving.
-${AI.until(S.String)`the post is resolved — resolve with a one-line summary`}
-${AI.budget({ iterations: 4 })}`,
+${AI.until(S.String)`the post is resolved — resolve with a one-line summary`}`,
   meta: { category: "channel", icon: "hash" },
 });
 

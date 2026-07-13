@@ -1,11 +1,9 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { Budget } from "./Budget.ts";
 import type { BudgetExceeded, Refused } from "./Errors.ts";
-import type { Halt } from "./Halt.ts";
 import type { Services } from "./Services.ts";
-import type { Trigger } from "./Trigger.ts";
+import type { Halt, When } from "./Signature.ts";
 
 /**
  * The live handle every interpreted **process term** produces — one
@@ -25,15 +23,18 @@ import type { Trigger } from "./Trigger.ts";
  *    ordered enqueue; no join). The conformance suite asserts the identity
  *    `dispatch = send + await` — if `send` ever grows semantics beyond
  *    admission, there are two protocols again.
- * 3. `run` — the trigger-lift (`effect ∘ serve`): serve the term's
- *    triggers forever. `never` is a theorem (the trigger stream is
- *    unbounded), not a declaration — and on some harnesses "running"
- *    degenerates to "reachable" (a ring compiled to routes + alarms).
+ * 3. `run` — vestigial since auto-delivery was demoted (canon §2:
+ *    delivery is always outside code): it joins the ring's unbounded
+ *    life. `never` remains a theorem — the ring serves admissions until
+ *    its Scope closes.
  * 4. `steer` — the run's contravariant input: mid-run messages admitted
  *    durably and promoted at the next iteration boundary (never
- *    mid-turn); promotion resets the step allowance. Under
- *    `AI.concurrency > 1` steering needs a run key (the work item's
- *    world identity) — typed in Phase 2.
+ *    mid-turn); promotion resets the step allowance. Two addressing
+ *    forms: `steer(msg)` targets the active run (or parks for the next
+ *    turn), `steer(runKey, msg)` targets a SPECIFIC run by its run key
+ *    (the session minted at admission, visible on the `run.admitted`
+ *    row) — the actor-model `tell` to a running actor. A keyed steer to
+ *    a parked machine-exit run wakes it for another work round.
  * 5. `interrupt` — not part of the channel algebra at all: Scope
  *    authority (§0.6 "authority flows down"), realized as a control
  *    admission through the same inbox. In-flight tool calls settle as
@@ -52,9 +53,23 @@ export interface ProcessService<Out = void, In = unknown, Err = never> {
   dispatch(item: In): Effect.Effect<Out, Err, RuntimeContext>;
   /** Admit one work item, fire-and-forget (the admission half alone). */
   send(item: In): Effect.Effect<void, never, RuntimeContext>;
-  /** Serve the ring: consume triggers and dispatch runs until interrupted. */
+  /**
+   * Join the ring's unbounded life (serves admissions until the Scope
+   * closes). Vestigial: auto-delivery is demoted — delivery is always
+   * explicit outside code (`send`/`dispatch`/`steer`).
+   */
   run(): Effect.Effect<never, Err, RuntimeContext>;
-  /** Mid-run input, promoted at the next iteration boundary. */
+  /**
+   * Run-key–addressed input: deliver a message to a SPECIFIC run. The
+   * run key is the session minted at admission (the `run.admitted`
+   * row's `session`). Delivered at the run's next boundary; wakes a
+   * parked machine-exit run for another work round.
+   */
+  steer(
+    runKey: string,
+    input: unknown,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  /** Mid-run input to the active run, promoted at the next boundary. */
   steer(input: unknown): Effect.Effect<void, never, RuntimeContext>;
   /** Scope authority: settle in-flight work as interrupted, fold, mark. */
   interrupt(): Effect.Effect<void, never, RuntimeContext>;
@@ -80,21 +95,20 @@ export type ProcessOut<Refs extends any[]> = [
     : never;
 
 /**
- * Derives a process's `In` channel — the union of its triggers' work-item
- * types. `AI.each(issue)` contributes the parameter's schema type,
- * `AI.on(source)` the event schema, `AI.every` contributes `void`.
+ * Derives a process's `In` channel — the union of its accepted messages'
+ * work-item types: `AI.when(source)` contributes the event schema.
  *
- * A charter with no trigger refs is dispatch-driven: `In = unknown`
+ * A charter with no `when` expressions is dispatch-driven: `In = unknown`
  * (any work item may be admitted), not `never` — a `never` inbox would
  * make `dispatch` uncallable, which is the perpetual treatment and
- * belongs to the halt, not the trigger.
+ * belongs to the halt, not the accepted-message declaration.
  */
 export type ProcessIn<Refs extends any[]> = [
-  Extract<Refs[number], Trigger<any, any>>,
+  Extract<Refs[number], When<any, any>>,
 ] extends [never]
   ? unknown
   : Refs[number] extends infer R
-    ? R extends Trigger<infer In, any>
+    ? R extends When<infer In, any>
       ? In
       : never
     : never;
@@ -102,35 +116,40 @@ export type ProcessIn<Refs extends any[]> = [
 /**
  * Derives a process's error channel from its refs:
  *
- * - a `Budget` ref places `BudgetExceeded` in `Err` (ceilings + stall);
- * - a bounded exit (`AI.until` — i.e. `Out` is not `never`) places
- *   `Refused` in `Err`: a run may conclude its goal is unachievable, and
- *   that typed give-up is not a budget exhaustion. Perpetual rings
- *   (`AI.never` or no halt) have nothing to give up on.
+ * - `BudgetExceeded` is UNCONDITIONAL: budgets are provided where the
+ *   term is provided (the `AI.budget({...})` Layer, or the kernel's own
+ *   default guards when none is given) — the kernel always enforces
+ *   some ceiling, so exhaustion is always a typed possibility;
+ * - a bounded exit (`AI.until` / `AI.exit` — i.e. `Out` is not `never`)
+ *   places `Refused` in `Err`: a run may conclude its goal is
+ *   unachievable, and that typed give-up is not a budget exhaustion.
+ *   Perpetual rings (`AI.never` or no halt) have nothing to give up on.
  */
 export type ProcessErr<Refs extends any[]> =
-  | ([Extract<Refs[number], Budget>] extends [never] ? never : BudgetExceeded)
+  | BudgetExceeded
   | ([ProcessOut<Refs>] extends [never] ? never : Refused);
 
 /**
- * A `Process` term is a charter: prose policy whose refs wire trigger,
- * body, halt, fold, and budget. Like all terms it is pure data — behavior
- * comes from interpreters (the Kernel).
+ * A `Process` term is a charter: prose policy whose refs wire the
+ * signature (accepted messages, halt), body, fold, and budget. Like all
+ * terms it is pure data — behavior comes from interpreters (the Kernel).
  *
  * Process is the **general process term** (`Agent` is its kernel-default
  * specialization — same denotation, control parameters supplied by kernel
  * policy instead of charter refs). Process terms are the only term class
  * the Kernel interprets, each interpretation acquiring a ring of its own.
- * Its control refs (trigger/halt/fold/check/budget) are parameters *of*
- * that ring, not terms with rings of their own.
+ * Its signature/control refs (when/halt/fold/check/budget) are
+ * parameters *of* that ring, not terms with rings of their own.
  *
- * A process is `In → Effect<Out, Err, Req>` lifted over a trigger stream:
+ * A process is `In → Effect<Out, Err, Req>` lifted over its inbox:
  *
  * - `Out` — what a halted run resolves to. Derived from the halt ref:
  *   `AI.until` → `void` (or its schema type); `AI.never` → `never`.
- * - `In` — the work-item shape a run is given. Derived from the triggers.
- * - `Err` — abnormal exits: `BudgetExceeded` when a budget is declared;
- *   `Refused` when the exit is bounded (`AI.until`) — a run may conclude
+ * - `In` — the work-item shape a run is given. Derived from the
+ *   accepted-message (`AI.when`) declarations.
+ * - `Err` — abnormal exits: `BudgetExceeded` always (some ceiling —
+ *   provided Layer or kernel default — is always enforced); `Refused`
+ *   when the exit is bounded (`AI.until`/`AI.exit`) — a run may conclude
  *   its goal is unachievable, which is neither success nor exhaustion.
  * - `Req` — the *tags* of the charter's refs (tools, agents, nested
  *   processes, event channels), including refs nested in control-ref
@@ -147,10 +166,18 @@ export type ProcessErr<Refs extends any[]> =
  *   inner ring (its tag joins `Req`).
  * - `${AI.observe(Process)}` references its Trace read-only (nothing joins).
  * - `${Tool}` grants the process-level machinery that capability.
- * - Control refs (`AI.on`/`AI.each`/`AI.every`, `AI.until`/`AI.never`,
- *   `AI.check`, `AI.fold`, `AI.budget`, `AI.concurrency`) wire the ring's
- *   semantics. The halt names what ends a run; the check names who judges
- *   it; the fold names who compresses it.
+ * - `${Event}` (a bare EventSource mention) grants publication: it joins
+ *   the term's `emits`, permits `ctx.emit(Event, payload)`, and places
+ *   the source's channel tag in `Req` when channel-backed. The grant is
+ *   owner-sensitive (canon §2a ruling 4): a world-owned catalog source
+ *   (`GitHub.IssueOpened(repo)`) affords nothing by bare mention — it
+ *   renders as vocabulary and grants no publication.
+ * - Signature/control refs (`AI.when`, `AI.until`/`AI.exit`/`AI.never`,
+ *   `AI.check`, `AI.fold`, `AI.concurrency`) wire the ring's semantics.
+ *   The `when` names the accepted messages; the halt names what ends a
+ *   run; the check names who judges it; the fold names who compresses it.
+ *   (Budgets are NOT charter refs — provide `AI.budget({...})` as a
+ *   Layer where the term's implementation is provided.)
  *
  * Like `Agent`, the `<Self>()` form makes the process a `Context.Service`
  * **tag**: interpolating `${Fix}` in an outer charter contributes the tag
@@ -234,8 +261,8 @@ const isCharterBody = (ref: unknown): ref is CharterBody =>
 /**
  * Splice an instance's template into a scaffold at its `${AI.body}`
  * marker. Pure data surgery: strings concatenate at the seam, refs
- * interleave. The scaffold's refs around the body — triggers, halts,
- * budgets, standard tools — are constitutional: instances cannot
+ * interleave. The scaffold's refs around the body — accepted messages,
+ * halts, budgets, standard tools — are constitutional: instances cannot
  * remove them, only add their own.
  */
 export const spliceCharter = (

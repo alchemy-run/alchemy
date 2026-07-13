@@ -117,8 +117,7 @@ Work EXACTLY like this:
    "open the vault with code <code>".
 6. Only after approval, call resolve with the code.
 ${AI.until(S.Struct({ code: S.Number }))`the vault code is assembled and approved`}
-${AI.check(vaultDoor(vault))}
-${AI.budget({ iterations: 8 })}` {}
+${AI.check(vaultDoor(vault))}` {}
 
 // ─── physics ─────────────────────────────────────────────────────
 
@@ -256,6 +255,7 @@ describe("the org stress test", () => {
               ScoutCharlieLive,
               ApprovalViaAsk,
               AI.AskHubMemory,
+              AI.budget({ iterations: 8 }),
               RuntimeContext.phantom,
             ),
           ),

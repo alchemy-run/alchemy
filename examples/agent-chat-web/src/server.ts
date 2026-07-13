@@ -1,8 +1,15 @@
 /**
- * The org server (designs/ai/org-chat.md): channels and agents from
- * ./org.ts, each interpreted onto its own ring; conversations route by
- * target prefix (`engineering/post-…` → the channel ring,
- * `dm:Sage/main` → Sage's ring); the sidebar is `GET /api/topology`.
+ * The org server — THE FRONT DOOR (canon §5: delivery is always code).
+ * Channels and agents from ./org.ts, each interpreted onto its own
+ * ring. Every delivery is explicit here: the serving tier validates a
+ * UI message, adapts it into the typed domain input (`toPostThread` —
+ * the anti-corruption seam), routes by target prefix
+ * (`engineering/post-…` → the channel ring, `dm:Sage/main` → Sage's
+ * ring), and admits it with `send`. No process self-subscribes:
+ * `AI.when(PostOpened)` in org.ts is a pure input declaration. The one
+ * kernel-internal subscription is the #issues machine exit
+ * (`AI.exit(AI.when(IssueClosed), match)`), which observes the world through
+ * the shared EventBus. The sidebar is `GET /api/topology`.
  *
  *   ANTHROPIC_API_KEY=sk-… bun run server   # port 8787
  *   bun run dev                             # Vite proxies /api + /v1
@@ -132,6 +139,8 @@ const EngineeringLayer = EngineeringLive.pipe(
 );
 const SupportLayer = AI.layer(Support).pipe(
   Layer.provide([kernelLayer, HelperLive, PostReplyLive, RuntimeContext.phantom]),
+  // budget is a Layer, not prose: the same ceiling the charter used to splice
+  Layer.provide(AI.budget({ iterations: 6 })),
 );
 const IssuesLayer = AI.layer(Issues).pipe(
   Layer.provide([
@@ -193,7 +202,12 @@ const Server = HttpRouter.serve(
   Layer.provide([SessionsLive, kernelLayer]),
   // idleTimeout: 0 — Bun.serve defaults to killing connections idle
   // for 10s, which severs SSE windows mid-run
-  Layer.provide(BunHttpServer.layer({ port: 8787, idleTimeout: 0 })),
+  Layer.provide(
+    BunHttpServer.layer({
+      port: Number(process.env.PORT ?? 8787),
+      idleTimeout: 0,
+    }),
+  ),
 );
 
 BunRuntime.runMain(Layer.launch(Server));

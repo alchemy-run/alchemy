@@ -52,8 +52,7 @@ class Compute extends AI.Process<Compute>()("Compute")`
 You compute arithmetic expressions step by step. You never do
 arithmetic yourself: use ${Multiply} for every single multiplication,
 one call per step.
-${AI.until(S.Struct({ answer: S.Number }))`the expression is fully computed`}
-${AI.budget({ iterations: 6 })}` {}
+${AI.until(S.Struct({ answer: S.Number }))`the expression is fully computed`}` {}
 
 class Chief extends AI.Agent<Chief>()("Chief")`
 You are a chief of staff who cannot do arithmetic at all. For any
@@ -68,8 +67,7 @@ class AuditedCompute extends AI.Process<AuditedCompute>()("AuditedCompute")`
 You compute arithmetic expressions step by step. Use ${Multiply} for
 every single multiplication, one call per step.
 ${AI.until(S.Struct({ answer: S.Number }))`the expression is fully computed`}
-${AI.check(Auditor)`re-derive the arithmetic yourself and accept only an exactly correct answer`}
-${AI.budget({ iterations: 6 })}` {}
+${AI.check(Auditor)`re-derive the arithmetic yourself and accept only an exactly correct answer`}` {}
 
 // ─── physics ─────────────────────────────────────────────────────
 
@@ -94,6 +92,8 @@ const makeHarness = () => {
         invocations.push(input);
         return { product: input.a * input.b };
       })) as never),
+    // budget is a Layer now (never prose) — same ceilings as before
+    AI.budget({ iterations: 6 }),
     RuntimeContext.phantom,
   );
   return { layer, invocations };
@@ -625,9 +625,10 @@ status in one short sentence.` {}
     { timeout: 120_000 },
   );
 
-  // it.live: run() + the poll wait on the real clock
+  // it.live: front-door delivery (canon §5: delivery is always code) —
+  // the world event reaches the ring only through an explicit send
   it.live.skipIf(apiKey === undefined)(
-    "the trigger runtime: a world event wakes a perpetual ring",
+    "front-door delivery: a world event is sent explicitly to a perpetual ring",
     () =>
       Effect.gen(function* () {
         const Alarm = AI.EventSource(
@@ -640,7 +641,7 @@ Log ${note} as the answer to the work item. Call exactly once per item.` {}
         class NightWatch extends AI.Process<NightWatch>()("NightWatch")`
 You answer questions that arrive as work items. For each item, compute
 the answer and call ${LogAnswer} with it, then stop.
-${AI.on(Alarm)}
+${AI.when(Alarm)}
 ${AI.never`health = one log_answer call per alarm`}` {}
 
         const logged: string[] = [];
@@ -655,7 +656,15 @@ ${AI.never`health = one log_answer call per alarm`}` {}
             const kernel = yield* AI.Kernel;
             const bus = yield* AI.EventBus;
             const watch = yield* kernel.interpret(NightWatch);
-            yield* Effect.forkChild(watch.run());
+            // the front door: subscribe to the world, adapt, send —
+            // AI.when(Alarm) declares the input; it delivers nothing
+            const alarms = yield* bus.subscribe(Alarm);
+            yield* Effect.forkChild(
+              Stream.runForEach(alarms, (event) =>
+                // adapt: the wire is untyped; the front door owns decoding
+                watch.send(event as { question: string }),
+              ),
+            );
             yield* Effect.sleep("100 millis");
             // the world rings the alarm
             yield* bus.publish(Alarm, {
@@ -681,7 +690,7 @@ ${AI.never`health = one log_answer call per alarm`}` {}
           ),
         );
 
-        // the event woke the ring; the model served it and logged the answer
+        // the front door delivered; the model served it and logged the answer
         expect(logged.length).toBeGreaterThan(0);
         expect(logged[0]).toContain("100");
       }),

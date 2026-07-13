@@ -1,123 +1,87 @@
 /**
- * The rings of the organization, inner to outer:
+ * The org's one Process: {@link ResolveGitHubIssue} — resolves a GitHub
+ * issue end to end (triage → pull request → review → merge), settled by
+ * the WORLD closing the issue, never by the model's claim.
  *
- *   Fix          task loop     — one issue, Ralph semantics, halts per run
- *   Flywheel     product loop  — perpetual, dispatches Fix runs
- *   Helpdesk     support loop  — perpetual, Discord-facing
- *   Autoresearch system loop   — weekly, observes the others' traces
+ * The repository is the CONTRIVED `test-alchemy` sandbox (repos.ts) so
+ * live iteration cuts issues on a repo we own and can reset; the real
+ * alchemy + distilled flywheel lives in `services/alchemy-org`.
  *
- * Coupling audit: Helpdesk → Flywheel exists only because Support holds
- * ${CreateIssue} and Flywheel triggers on IssueOpened — every inter-ring
- * hop crosses GitHub or Discord. Deleting a ring stops its mail; it breaks
- * nothing.
+ * The GitHub sources come from the CORE catalog (src/GitHub/Events.ts).
+ * Delivery is the DERIVED front door (canon §5): the worker composes
+ * `GitHub.frontDoor(ResolveGitHubIssue)`, which reads the `AI.when` /
+ * `AI.exit` declarations below and wires `consumeRepositoryEvents`
+ * underneath — `issues.opened` creates a run, `issue_comment.created`
+ * steers it, and `issues.closed` settles it (observed by the kernel
+ * through the exit's channel subscription, correlated by the source's
+ * own `key`: `owner/repository#number`). Budget is NOT prose — the
+ * worker provides `AI.budget({...})` as a Layer next to the kernel.
  */
+import * as S from "effect/Schema";
 import * as AI from "@/AI/index.ts";
-import {
-  Engineer,
-  Judge,
-  ReleaseBlogger,
-  Reviewer,
-  Scribe,
-  Support,
-  Triage,
-} from "./agents.ts";
-import * as Discord from "./discord-events.ts";
-import * as Github from "./github-events.ts";
-import { alchemyEffect, distilled } from "./repos.ts";
-import { AskHuman, Bash, OpenPullRequest, Reply } from "./tools.ts";
-import { issue, pr, PullRequestRef } from "./vocabulary.ts";
+import * as GitHub from "@/GitHub/index.ts";
+import { Engineer, Reviewer } from "./agents.ts";
+import { testAlchemy } from "./repos.ts";
+import { MergePullRequest, Comment, SearchIssues } from "./tools.ts";
+import { IssueRef } from "./vocabulary.ts";
 
 /**
- * The task loop. `Out = PullRequestRef` (a halted run resolves with the PR
- * it opened), `In = issue` (from `AI.each`), `Err = BudgetExceeded`.
- *
- * The halt names what ends a run; the check names who judges it (the
- * maker/checker split — Engineer's claim of done-ness is not a signal);
- * the fold names who compresses it.
+ * Published when an issue is handed to engineering — org-internal (no
+ * channel: deliverable on the harness bus), declared by its bare
+ * mention in the charter (the unmarked grant, canon §2a).
  */
-export class Fix extends AI.Process<Fix>()("Fix")`
-One issue, one loop, one task per iteration.
-
-${AI.each(issue)} give ${Engineer} a completely fresh context: the
-issue, its criteria, CONTRIBUTING.md, and .alchemy/NOTES.md. Carry
-no conversation history — the repo and the notes are the only
-memory this loop is allowed.
-
-${AI.until(PullRequestRef)`every acceptance criterion is checked
-and the run resolves with the ${pr} the Engineer opened`}
-
-${AI.check(Judge)`grade each iteration against the issue's
-criteria: run ${Bash} yourself — the Engineer's claim of done-ness
-is not a signal; an off-goal verdict becomes the next iteration's
-first input`}
-
-${AI.fold(Scribe)`distill lessons into .alchemy/NOTES.md after
-every iteration, successful or not`}
-
-${AI.budget({ tokens: "5M", wallClock: "2h", iterations: 12, stall: 3 })}` {}
+export const EngineeringStarted = AI.EventSource(
+  "org.engineering.started",
+  IssueRef,
+);
 
 /**
- * The product loop. Perpetual (`Out = never`); wakes on GitHub events
- * across both managed repositories and dispatches typed Fix runs.
+ * Published when work is blocked on a maintainer — the run parks on its
+ * machine-observed exit right after.
  */
-export class Flywheel extends AI.Process<Flywheel>()("Flywheel")`
-The development flywheel for the alchemy-run repositories.
-
-${AI.on(Github.IssueOpened(alchemyEffect), Github.IssueOpened(distilled))}
-run ${Triage}.
-
-${AI.on(Github.IssueLabeled(alchemyEffect, "ready"), Github.IssueLabeled(distilled, "ready"))}
-dispatch a ${Fix} run — at most ${AI.concurrency(3)} in flight,
-smallest estimates first.
-
-${AI.on(Github.PullRequestOpened(alchemyEffect), Github.PullRequestOpened(distilled))}
-assign ${Reviewer}; a rejected review reopens the originating
-${Fix} run with the review attached as new acceptance criteria.
-
-${AI.on(Github.Push(alchemyEffect, { branch: "main", titlePrefix: "chore(release):" }))}
-hand off to ${ReleaseBlogger}.
-
-${AI.never`no exit; merge rate, time-to-first-response, and reopen
-rate are folded weekly and posted via ${Reply} to #maintainers`}
-
-${AI.fold(Scribe)`weekly: cluster the traces; the top recurring
-failure becomes a docs or process issue, filed with evidence`}
-
-${AI.budget({ usd: "250", wallClock: "168h" })}` {}
+export const IssueParked = AI.EventSource(
+  "org.issue.parked",
+  S.Struct({
+    owner: S.String,
+    repository: S.String,
+    number: S.Number,
+    blocker: S.String,
+  }),
+);
 
 /**
- * The support loop. Perpetual, Discord-facing. Uses a bare fold — Scribe's
- * own template is the fold policy.
+ * One issue, one run: created when the issue opens, steered by its
+ * comments, settled when GitHub closes it — the machine-observed exit
+ * (`AI.exit(AI.when(IssueClosed(...)))`) correlates runs by the
+ * source's natural key, so the charter never restates the plumbing.
  */
-export class Helpdesk extends AI.Process<Helpdesk>()("Helpdesk")`
-${AI.on(Discord.ThreadCreated({ guild: "alchemy", channel: "#help" }))}
-run ${Support}.
+export class ResolveGitHubIssue extends AI.Process<ResolveGitHubIssue>()(
+  "ResolveGitHubIssue",
+)`
+You resolve GitHub issues for the test-alchemy repository, from the
+moment one opens until GitHub closes it.
 
-${AI.on(Discord.Mention({ guild: "alchemy", user: "@alchemy" }))}
-run ${Support}.
+${AI.when(GitHub.IssueOpened(testAlchemy))}, read it, then
+${SearchIssues} for duplicates and prior discussion. If it is a
+duplicate or a question you can answer, ${Comment} asking the reporter
+to close it. Otherwise write acceptance criteria: a checklist
+verifiable by a command or a test.
 
-${AI.fold(Scribe)}
+Hand the issue and its criteria to ${Engineer}, announcing
+${EngineeringStarted} so the rest of the org sees the work moving.
+The Engineer opens a pull request when the tests are green.
 
-${AI.never`support does not halt while the product lives; thread
-resolution rate is the health signal, folded weekly`}` {}
+Ask ${Reviewer} to review that pull request against the issue. If the
+review requests changes, send it back to ${Engineer} with the review
+attached as new acceptance criteria. Once approved,
+${MergePullRequest} — it refuses to merge without an approved review.
 
-/**
- * The system loop. Observes — does not run — the other rings, so their
- * requirements do not flow in: note the absent ${Approve}. The system ring
- * cannot be granted merge authority by any Layer; enforced by Req, not
- * prose. Its exit signal is a human act arriving as a GitHub event.
- */
-export class Autoresearch extends AI.Process<Autoresearch>()("Autoresearch")`
-${AI.every("1 week")} study the traces of ${AI.observe(Flywheel)}
-and ${AI.observe(Helpdesk)}: cluster failures; find prompts
-correlated with reopened issues; find tools agents misuse or avoid.
+${AI.when(GitHub.IssueCommented(testAlchemy))}, read it and adjust:
+a comment can change the criteria, unblock the work, or resolve the
+issue outright.
 
-Propose improvements via ${OpenPullRequest} against src/org/ —
-edits to agent templates, new tools, changed Layer wiring. Every
-proposal must cite the traces that motivated it and include an eval
-that would have caught the failure. You may ${AskHuman} to
-understand intent.
+If you are blocked on something only a maintainer can decide, publish
+${IssueParked} naming what you need, and wait.
 
-${AI.until`a maintainer closes the experiment`}
-
-${AI.budget({ tokens: "10M", wallClock: "6h" })}` {}
+${AI.exit(AI.when(GitHub.IssueClosed(testAlchemy)))`whether the merged
+pull request closed it or a maintainer closed it by hand`}` {}

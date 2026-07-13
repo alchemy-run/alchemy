@@ -1,5 +1,7 @@
 # Agent / Loop — the underlying algebra
 
+> **Status note (July 2026).** The formal model below is still correct, but the design has since converged on an **actor/message reading** as the primary interpretation of the same algebra, and one elimination (the trigger-lift, `serve`/`run()`) has been demoted to vestigial. See the [v2 addendum](#v2-addendum) at the end of this file, and the canon: [designs/ai/business-processes.md](../business-processes.md). Where a section below is superseded, an inline note points to the addendum; the math is left standing.
+
 A design-research report answering: **what IS the difference between `Agent` and `Loop`, mathematically? Is one a special case of the other? Is there one general abstraction both are instances of?**
 
 Method: `designs/ai/alchemy-ai-design.md` read end to end (§0, §1, §2, §8, §9 closely); every file in `packages/alchemy/src/AI`; the reference org fixtures (`test/AI/fixtures/org`, `test/AI/Org.types.ts`, `test/AI/Loop.types.test.ts`); the harness reports (`pi.md`, `ai-sdk.md`, `codex.md`, `opencode.md`, `mastra.md`, `eve.md`); and Effect v4's `Channel` type (`node_modules/effect/dist/Channel.d.ts`). Every claim about existing code cites `file:line`; claims sourced from the design doc or the survey reports are marked as such.
@@ -15,7 +17,7 @@ Run<Out, Err, Req>          ≅ Channel<KernelEvent, Err, Out, Steer, never, nev
 Process<In, Out, Err, Req>  =  (item: In) → Run<Out, Err, Req>
 ```
 
-— a Kleisli arrow into a channel monad that *emits events* (covariant), *accepts steering* (contravariant), *completes with a typed result* (covariant), and *demands capabilities* (`Req`). `dispatch`, `run()`, `steer`, `interrupt`, and `AI.observe` are the five canonical **eliminations** of this one object, and the ring-vs-run distinction is **derived** (the Effect view vs the trigger-lifted view of the same channel).
+— a Kleisli arrow into a channel monad that *emits events* (covariant), *accepts steering* (contravariant), *completes with a typed result* (covariant), and *demands capabilities* (`Req`). `dispatch`, `run()`, `steer`, `interrupt`, and `AI.observe` are the five canonical **eliminations** of this one object, and the ring-vs-run distinction is **derived** (the Effect view vs the trigger-lifted view of the same channel). *(v2: the actor reading of this object is now primary and `run()`/the trigger-lift is vestigial — see the [addendum](#v2-addendum).)*
 
 - **Semantically, Agent ⊂ Loop**: an Agent term denotes a Process whose control parameters (trigger, halt, fold, budget) are kernel defaults instead of reified refs. The design doc already says this in its own vocabulary: the agent turn "is Kernel-internal and deliberately has **no halt term**; that exit is kernel policy" (design §8.2 ring table, ~line 946).
 - **Operationally, Loop = serve(hylo(body))**: the loop runtime (§2.5) is an unfold-then-fold (hylomorphism) whose body arrow is built from agent turns, with `Fold` the algebra, `Halt`+`Check` the termination coalgebra, `Budget` the fuel grading — so "Loop = iterated Agent" is also true, *at the interpretation level*, not the term level.
@@ -127,7 +129,7 @@ Triggers<In>                := Stream<In>            -- with merge as the monoid
 
 1. `effect : Run<Out, Err> → Effect<Out, Err, Req>` — drain the events, keep the done value. `dispatch = effect ∘ process`.
 2. `stream : Run<Out, Err> → Stream<E, Err, Req>` — keep the events, erase the done value. This is the **Trace view**, and `AI.observe` (`src/AI/Observe.ts:26-47`) is precisely access to this projection *without* `Env` — see the variance theorem below.
-3. `serve : Triggers<In> × Process<In, Out, Err> → Run<never, Err>` — the **trigger-lift**: `serve(t, p) = t.concatMap(p)` (with the charter's `Concurrency` as the merge policy). `OutDone = never` because the trigger stream is unbounded. `run() = effect(serve(triggers, p)) : Effect<never, Err>` (`Loop.ts:66`).
+3. `serve : Triggers<In> × Process<In, Out, Err> → Run<never, Err>` — the **trigger-lift**: `serve(t, p) = t.concatMap(p)` (with the charter's `Concurrency` as the merge policy). `OutDone = never` because the trigger stream is unbounded. `run() = effect(serve(triggers, p)) : Effect<never, Err>` (`Loop.ts:66`). *(v2: DEMOTED — see the [addendum](#v2-addendum). `AI.on` is now a pure input declaration with no auto-delivery; delivery is always outside code, so `serve`/`run()` is vestigial and the mailbox drain is kernel-internal.)*
 4. `steer` — a write to the run's `InElem`, delivered at the iteration boundary (design §9.3: "steering = mid-run input delivered at the iteration boundary… promotion resets the step allowance"; pi.md §2.1 documents the same two delivery points empirically).
 5. `interrupt` — not a channel operation at all: it is **Scope authority** over the run's fiber, entering operationally as a control admission through the same inbox (design §3.1 plane 1; fixture `test/AI/fixtures/org/cloudflare/kernel.ts:150-158` already routes it that way).
 
@@ -192,7 +194,7 @@ This is not an analogy — it is the §8.2 ring table read as math: the executio
 | `Tool` | degenerate Process: `In → Effect<Out, Err, RuntimeContext>` — no events, no steering, no interpretation (`OutElem = never`) | `Tool.ts:66-78` |
 | `Agent` | `Process<AgentIn, Message, never>` at kernel-default control parameters; also **the atomic body arrow** the kernel knows how to interpret | `Agent.ts:29-59` |
 | `Loop` | `Process<LoopIn, LoopOut, LoopErr>` = `serve ∘ hylo(body, …refs)`; the term is the only syntax for supplying the hylo's control parameters | `Loop.ts:129-155` |
-| `Trigger` | the `Triggers<In>` object; `on`/`each`/`every` are constructors; multiple triggers = monoid merge | `Trigger.ts:40-65` |
+| `Trigger` | the `Triggers<In>` object; `on`/`each`/`every` are constructors; multiple triggers = monoid merge *(v2: demoted to pure input declarations — no delivery semantics; see the [addendum](#v2-addendum))* | `Trigger.ts:40-65` |
 | `Halt` | selects `OutDone` (+ the termination predicate's prose); `never` ⇒ `OutDone = never` | `Halt.ts:32-40` |
 | `Check` | the grading of the termination coalgebra — an *agent arrow in verdict position*, `(Trace, halt) → Verdict` | `Check.ts:32-40` |
 | `Fold` | the algebra `(Carried, TraceSeg) → Carried` — an *agent arrow in algebra position* | `Fold.ts:30-38` |
@@ -230,10 +232,12 @@ dispatch(item) = admit(item) andThen await(done)    : Effect<Out, Err>
 
 ### 2.5 Where do `steer` and `interrupt` live?
 
-- **`steer` is `InElem`** — the contravariant input channel of a *run*, with delivery pinned to the iteration boundary and a step-allowance reset (design §9.3; pi's two queues with precise delivery points, pi.md §2.1; OpenCode's steer-vs-queue promotion, opencode.md §2.5). It belongs on the unified service. One unresolved addressing question the model surfaces: with `AI.concurrency(3)`, "the active run" is ambiguous — `steer` ultimately needs a run key (the work item's world identity again). Codex types this rejection vocabulary (`ExpectedTurnMismatch`, codex.md Insight 12). Phase 2 concern; flag it now.
+- **`steer` is `InElem`** — the contravariant input channel of a *run*, with delivery pinned to the iteration boundary and a step-allowance reset (design §9.3; pi's two queues with precise delivery points, pi.md §2.1; OpenCode's steer-vs-queue promotion, opencode.md §2.5). It belongs on the unified service. One unresolved addressing question the model surfaces: with `AI.concurrency(3)`, "the active run" is ambiguous — `steer` ultimately needs a run key (the work item's world identity again). Codex types this rejection vocabulary (`ExpectedTurnMismatch`, codex.md Insight 12). *(v2: RESOLVED as predicted — `steer(runKey, msg)` is P0 in the canon; in the actor reading it is simply "send a message to a running actor", see the [addendum](#v2-addendum).)*
 - **`interrupt` is not a channel input at all — it is Scope authority**, the downward-flowing half of §0.6, realized operationally as a control admission through the same inbox (no second control plane — Eve failed to ship durable cancel five times through a separate hook layer, eve.md Insight 5; the fixture already routes `interrupt` through `admit`, `kernel.ts:150-158`). It stays on the service as a verb but is *not* part of the Kleisli/Channel algebra; it is part of the fiber model. This is why it never appears in `Err`.
 
 ### 2.6 Ring vs run: derived, as hoped
+
+*(v2 note: this section's math stands, but the trigger-lift it analyzes is now vestigial — see the [addendum](#v2-addendum). The run/ring split survives as the actor/mailbox split.)*
 
 `run()` = `effect(serve(triggers, process))`. The `never` in its type is a *theorem*, not a declaration: `serve`'s `OutDone` is `never` because the trigger stream is unbounded, independently of the run's `Out`. A perpetual charter (`AI.never`) additionally sets the *run's* `Out = never` — two different `never`s, and the code already keeps them distinct (`Loop.ts:53-61` doc comment: "Out is run-scoped… the ring never resolves"). In Channel terms: the ring is the Stream view of the lifted process; a run is the Effect view of one application. On the Cloudflare harness `run()` degenerates further — "a ring's charter compiles to routes… 'running' means 'reachable'" (design §3.1) — confirming that `run()` is a harness detail of elimination (3), not a primitive.
 
@@ -257,9 +261,11 @@ export interface ProcessService<Out = void, In = unknown, Err = never> {
   dispatch(item: In): Effect.Effect<Out, Err>;
   /** Admit one work item, fire-and-forget (the admission half alone). */
   send(item: In): Effect.Effect<void>;
-  /** Serve the ring: the trigger-lift. Done = never by construction. */
+  /** Serve the ring: the trigger-lift. Done = never by construction.
+   *  (v2: vestigial — no auto-delivery; see the addendum.) */
   run(): Effect.Effect<never, Err>;
-  /** Mid-run input, promoted at the iteration boundary (InElem). */
+  /** Mid-run input, promoted at the iteration boundary (InElem).
+   *  (v2: addressed by run key — steer(runKey, msg); see the addendum.) */
   steer(input: unknown): Effect.Effect<void>;
   /** Scope authority: settle in-flight work as interrupted, fold, mark. */
   interrupt(): Effect.Effect<void>;
@@ -359,7 +365,7 @@ Net: two mock TODO sites change; zero charters, zero audits, zero agent/tool def
 - *Aggressive `AgentIn` derivation* (§3.2) could misread vocabulary-mentions as inputs. Ship conservative; spike separately.
 - *`send`-vs-`dispatch` divergence*: if `send` ever grows semantics beyond "admission without join" (e.g. its own delivery guarantees), the identity `dispatch = send + await` breaks and we have two protocols again. The conformance suite should assert the identity.
 - *`steer` under concurrency*: the unified service inherits the existing ambiguity (which run?). The model says the answer is the work-item key; typing that is Phase 2, but the interface comment should say so now rather than let harnesses guess (Codex's typed steering rejections are the reference, codex.md Insight 12).
-- *`run()` temptation*: keeping `run()` on the service invites memory-harness code to treat "a resident fiber" as the definition of a served ring. It is one implementation of elimination (3); the Cloudflare harness's "running means reachable" is another. The doc comment should state that `run()` is `effect ∘ serve`, not a primitive.
+- *`run()` temptation*: keeping `run()` on the service invites memory-harness code to treat "a resident fiber" as the definition of a served ring. It is one implementation of elimination (3); the Cloudflare harness's "running means reachable" is another. The doc comment should state that `run()` is `effect ∘ serve`, not a primitive. *(v2: this worry resolved itself by demotion — with auto-delivery removed, `run()` is vestigial; see the [addendum](#v2-addendum).)*
 - *Perpetual-agent confusion*: `AgentService.dispatch: Effect<Message>` resolves per turn even though the agent-as-conversation is perpetual — because perpetuity lives in the *serving* (the inbox never ends), not the run. This is the same run/ring split as loops; the unification makes it uniform rather than introducing it.
 
 **If the honest verdict had been "keep them fully distinct":** the mathematical argument would have to be that Agent and Loop have different *kinds* — arrow vs arrow-transformer. That argument fails at the service level: once constructed, a Loop term denotes an arrow-with-serving exactly as an Agent does (both are `Term → Process`); the transformer is the *constructor's parameters* (the control refs), not the constructed object. The kind distinction is real, and it lives precisely where this report keeps it: in the term language. The services were never two things.
@@ -391,3 +397,120 @@ Net: two mock TODO sites change; zero charters, zero audits, zero agent/tool def
 | Admit/promote inbox; "Session Drain has no durable identity" | survey | opencode.md §2.1, §2.5 |
 | Task mode vs conversation mode leaks through the runtime | survey | eve.md §2.1, §3 (weakness 7) |
 | `Channel<out OutElem, out OutErr, out OutDone, in InElem, …, out Env>` | effect v4 | `node_modules/effect/dist/Channel.d.ts:117, 171-173` |
+
+---
+
+<a id="v2-addendum"></a>
+
+## v2 addendum — the actor/message reading (July 2026)
+
+The design converged (four owner review rounds; canon:
+[designs/ai/business-processes.md](../business-processes.md)) on an
+**actor system whose behaviors can be written in prose** as the resting
+model. This addendum records how that resting point lands on the
+algebra above: mostly as a change of *primary interpretation*, once as
+a genuine demotion, and nowhere as a refutation of the math.
+
+### A.1 The actor reading is now the primary interpretation
+
+The report derived one semantic object — `Process<In, Out, Err, Req> =
+In → Run<Out, Err, Req> ≅ Channel` — and read it operationally as
+"loop = serve(hylo(body))". The resting model reads the **same object**
+as an actor, and that reading is now primary:
+
+| Algebra (this report) | Actor reading (canon) |
+|---|---|
+| a **run** of the interpreted process | an **actor**: created by its first message, identity = `(term, work item)` — the virtual-actor discipline (exists on first message, addressed by identity) |
+| the admission mailbox + serial drain (§2.4's admit-then-await) | the actor's **mailbox**, serial processing — kernel-internal |
+| `send(item)` — the admission half | **tell** |
+| `dispatch(item)` — admit + await `OutDone` | **ask** — and the human **Ask protocol** is the same pattern pointed at a person |
+| `steer` — a write to the run's `InElem` at the iteration boundary | a **message to a running actor**, addressed by run key: `steer(runKey, msg)` (P0; resolves §2.5's flagged ambiguity exactly as predicted — the answer was the work-item key) |
+| `interrupt` — Scope authority, not a channel op (§2.5) | **supervision**: Scope, budgets, parent-child interrupt cascade |
+| `OutElem` — the emitted event stream | **broadcast**: typed `ctx.emit(EventSource, payload)`; an `EventSource` is a named broadcast channel, and an "event" is just a broadcast message |
+| the term's behavior (charter / handler / codemode) | the actor's **behavior** — interchangeable Layers behind one tag; hot code swap = redeploy with a `promptHash` diff |
+
+Two unifications the actor reading adds on top of the algebra:
+
+- **Everything is a message.** An *instruction* is an addressed message
+  (a plain schema — `In`); an *event* is a broadcast message
+  (`OutElem`, typed by `EventSource`). The framework never
+  distinguishes them; the contravariant/covariant position in the
+  Channel is exactly the address/broadcast distinction, and the
+  message's name and tense carry the rest.
+- **Delivery is always explicit code.** The deterministic world (APIs,
+  webhook front doors, cron, your DB transactions, denial/routing)
+  sends; actors react. No process self-subscribes. This is what demotes
+  the trigger-lift (A.2).
+
+### A.2 The trigger-lift (`serve`, elimination 3) is DEMOTED
+
+The one genuine supersession. §1.3's elimination (3) treated `serve :
+Triggers<In> × Process → Run<never>` as a canonical elimination and
+`run()` as its Effect view. The resting model removes **auto-delivery**
+entirely:
+
+- **`AI.when(X)` (renamed from `AI.on` in the signature reduction) is
+  a pure input declaration** — it types `In`, renders in the prose,
+  and appears in topology. No subscription runtime stands behind it;
+  the kernel does not wire events to mailboxes.
+- **Delivery is outside code**: the front door
+  (`consumeRepositoryEvents`-style consumers, HTTP routes, platform
+  cron) validates, denies, adapts transport payloads to domain
+  messages, and picks the door — `send`/`dispatch` to create an actor,
+  `steer(runKey, msg)` to reach a running one. The consuming call site
+  carries the provisioning compile fence.
+- **`AI.every` / `AI.each` are deleted** with it: cron is platform cron
+  calling `send`; queues are consumers calling `send`.
+- **`run()` is therefore vestigial.** The `Triggers<In>` monoid and the
+  module-action law (§1.4) remain true of any stream you *choose* to
+  drain into `send` in your own code — but the framework no longer
+  performs the lift, and the mailbox drain is kernel-internal.
+
+Nothing else in the eliminations moves: `dispatch` (1), the `stream` /
+`AI.observe` projection (2), `steer` (4), and `interrupt` (5) are all
+load-bearing in the actor reading — indeed (4) is *promoted* (run-key
+steering is P0).
+
+### A.3 "Everything becomes a Process" held up
+
+The report's central claims survive intact:
+
+- **Agent ⊂ Process** remains a denotational fact: an Agent term
+  denotes a Process at kernel-default control parameters (§2.1). The
+  service unification shipped in spirit: one `ProcessService`, the
+  actor verbs (`dispatch`/`send`/`steer`/`interrupt` — `run()` is
+  gone), one kernel `interpret`.
+- **Deterministic / codemode / prose are Layer choices** behind one
+  algebraic object — `AI.process(Term, ctor)` (effectful-constructor
+  form is now canonical), `AI.layer(Term)`, `AI.layer(Term)` + codemode
+  `ToolMode` Layers, or a hand-rolled `Layer.effect`. This is the
+  report's "one semantic object, interchangeable interpretations"
+  carried to its conclusion: the *behavior* of the actor is the only
+  thing the Layer swaps.
+- **Exits are unchanged**: `AI.until(schema)` (model-declared, graded),
+  `AI.until(source, match)` (machine-observed; per-item `match`
+  correlation is P0 — the halt-derives-`Out` law of §1.4 is
+  untouched), `AI.never` (perpetual).
+- **§2.4's verdicts landed**: `send` = the admission half of `dispatch`
+  (now simply *tell* vs *ask*); the `session` parameter died — identity
+  rides in `In` as the work item, which is exactly the actor's
+  identity.
+- **State never entered the algebra, and stays out**: a family of
+  state constructs (`AI.state`, keyed ring families, `AI.Entity`) was
+  explored and rejected in the review rounds (see
+  `bp-ddd-event-storming.md` §4 for the full history). State is your DB
+  outside the process, or a userland fold over the facts a run emitted
+  (the Trace) — which the algebra already predicted: the fold-as-
+  checkpoint law (§1.4) says the fold over `OutElem` is the only
+  carried state.
+
+### A.4 What to read where
+
+- The canon (decisions, doctrine, build order):
+  [designs/ai/business-processes.md](../business-processes.md).
+- The DDD/Event-Storming embedding and the history of the rejected
+  constructs: [bp-ddd-event-storming.md](./bp-ddd-event-storming.md).
+- This report remains the reference for the formal model: the Channel
+  denotation, the variance theorem, the hylo reading of the loop
+  runtime, and the laws in §1.4 — all still in force under the actor
+  vocabulary.

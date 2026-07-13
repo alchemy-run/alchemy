@@ -1,7 +1,7 @@
-import { isBudget, isConcurrency } from "./Budget.ts";
+import { isConcurrency } from "./Budget.ts";
 import { isCheck } from "./Check.ts";
 import { isFold } from "./Fold.ts";
-import { isHalt } from "./Halt.ts";
+import { isHalt } from "./Signature.ts";
 import type { Process } from "./Process.ts";
 
 /**
@@ -14,15 +14,12 @@ export interface LintIssue {
   readonly code:
     | "multiple-halts"
     | "conflicting-halts"
-    | "multiple-budgets"
     | "multiple-concurrency"
     | "multiple-folds"
     | "multiple-checks"
     | "undeclared-perpetuity"
-    | "unbounded-until"
     | "perpetual-check"
     | "perpetual-fold"
-    | "perpetual-budget"
     | "perpetual-multistep";
   readonly message: string;
 }
@@ -35,23 +32,23 @@ export interface LintIssue {
  *
  * The rules:
  *
- * - **At most one of each positional role.** Multiple `AI.budget`,
- *   `AI.concurrency`, `AI.fold`, or `AI.check` refs are an error: there
- *   is exactly one iteration boundary, so a second fold/check has no
- *   position, and merged budget semantics ("tightest wins"? per-ref
- *   accounting?) would be a silent guess. Say what you mean once.
- * - **At most one halt.** Two `AI.until`s make the run's `Out` a union at
+ * - **At most one of each positional role.** Multiple `AI.concurrency`,
+ *   `AI.fold`, or `AI.check` refs are an error: there is exactly one
+ *   iteration boundary, so a second fold/check has no position. Say
+ *   what you mean once. (Budgets are no longer charter refs — they are
+ *   provided as a Layer via `AI.budget({...})`, and the kernel always
+ *   enforces some ceiling, so there is no budget cardinality to lint.)
+ * - **At most one halt.** Two halts make the run's `Out` a union at
  *   the type level — which member resolved is invisible to the caller —
- *   and `AI.until` + `AI.never` is a contradiction (`never` absorbs into
- *   the union, silently typing a perpetual-declared ring as bounded).
- *   Both are errors. Disjunctive exit conditions belong in one `until`'s
- *   prose, with one resolution type.
+ *   and a bounded halt + `AI.never` is a contradiction (`never` absorbs
+ *   into the union, silently typing a perpetual-declared ring as
+ *   bounded). Both are errors. Disjunctive exit conditions belong in one
+ *   halt (one `until`'s prose, or one `AI.exit(AI.when(A, B))`), with
+ *   one resolution type.
  * - **Undeclared perpetuity is a warning.** No halt at all types the loop
  *   `Out = never` — legal, and consumers already hold an unusable
  *   `Effect<never, …>` — but a perpetual ring must say so: `AI.never`
  *   with the health signals that substitute for an exit.
- * - **Unbounded `until` is a warning.** A bounded loop with no budget is
- *   a soft runaway: "goal met" is the exit that might never fire.
  */
 export const lint = (
   loop: Process<any, any, any, any, any, any[], any>,
@@ -60,7 +57,6 @@ export const lint = (
   const refs: any[] = loop.refs;
 
   const halts = refs.filter(isHalt);
-  const budgets = refs.filter(isBudget);
 
   if (halts.length > 1) {
     const modes = new Set(halts.map((h) => h.mode));
@@ -87,14 +83,6 @@ export const lint = (
     });
   }
 
-  if (halts.some((h) => h.mode === "until") && budgets.length === 0) {
-    issues.push({
-      severity: "warning",
-      code: "unbounded-until",
-      message: `charter "${loop["~alchemy/Name"]}" has a bounded exit but no AI.budget — "goal met" is the exit that might never fire`,
-    });
-  }
-
   // perpetual/goal doctrine (reassess §D): a perpetual ring (AI.never)
   // serves one kernel-default turn per work item; the run machinery
   // (check/fold/budget) is run-scoped and has nothing to bind to.
@@ -115,13 +103,6 @@ export const lint = (
         severity: "warning",
         code: "perpetual-fold",
         message: `charter "${loop["~alchemy/Name"]}" is perpetual (AI.never) but declares AI.fold — the fold is run-scoped and a perpetual run is a single turn with nothing to carry.`,
-      });
-    }
-    if (budgets.length > 0) {
-      issues.push({
-        severity: "warning",
-        code: "perpetual-budget",
-        message: `charter "${loop["~alchemy/Name"]}" is perpetual (AI.never) with an AI.budget — a budget that stops the SERVER is an outage, not an exit. Clarify per-item semantics or move the budget onto the goal the ring dispatches.`,
       });
     }
     // multi-step per-item work with no run boundary: the tell is
@@ -149,7 +130,6 @@ export const lint = (
   }
 
   for (const [code, count] of [
-    ["multiple-budgets", budgets.length],
     ["multiple-concurrency", refs.filter(isConcurrency).length],
     ["multiple-folds", refs.filter(isFold).length],
     ["multiple-checks", refs.filter(isCheck).length],

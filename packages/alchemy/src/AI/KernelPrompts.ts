@@ -30,10 +30,12 @@
 export const kernelPrompts = {
   // ── control-ref render blocks (in-prose, via Render.displayRef) ──
   // These are rendered WHERE THE AUTHOR INTERPOLATED THE REF (§A):
-  // `${AI.until(S)\`…\`}` renders `haltContract`, `${AI.budget(…)}`
-  // renders `budgetNote`, etc. — so the model finally sees the exit
-  // condition and the ceilings, in the author's own placement, and the
-  // kernel no longer re-appends a separate heading.
+  // `${AI.until(S)\`…\`}` and `${AI.exit(AI.when(X))\`…\`}` render
+  // `haltContract`, etc. — so the model sees the exit condition in the
+  // author's own placement, and the kernel no longer re-appends a
+  // separate heading. (Budgets are NOT prose: they are provided as a
+  // Layer — `AI.budget({...})` — and the kernel enforces them; there is
+  // no budget render arm.)
   haltContract: (input: {
     readonly haltProse: string;
     readonly hasSchema: boolean;
@@ -54,47 +56,40 @@ export const kernelPrompts = {
     "\n\nThis is a perpetual ring: you serve one work item per run, " +
     `forever. Health prose: ${input.healthProse}`,
 
-  /** The ceilings, rendered where `${AI.budget(…)}` sits in the charter. */
-  budgetNote: (limits: {
-    readonly tokens?: string;
-    readonly wallClock?: string;
-    readonly iterations?: number;
-    readonly usd?: string;
-    readonly stall?: number;
-  }): string => {
-    const clauses: string[] = [];
-    if (limits.iterations !== undefined)
-      clauses.push(`at most ${limits.iterations} iterations`);
-    if (limits.tokens !== undefined) clauses.push(`${limits.tokens} tokens`);
-    if (limits.wallClock !== undefined) clauses.push(`${limits.wallClock}`);
-    if (limits.usd !== undefined) clauses.push(`$${limits.usd}`);
-    if (limits.stall !== undefined)
-      clauses.push(`${limits.stall} iterations without progress`);
-    if (clauses.length === 0) return "";
-    return (
-      "\n\n# Budget\n" +
-      `You have ${clauses.join(", ")}. Exceeding any of these ends the ` +
-      "run as a budget failure — work efficiently."
-    );
-  },
-
   /** Rendered where `${AI.concurrency(n)}` sits. */
   concurrencyNote: (n: number): string => `at most ${n} in flight`,
 
-  /** Rendered where `${AI.on/each/every(…)}` sits. */
-  triggerNote: (input: {
-    readonly mode: "on" | "each" | "every";
-    readonly sources: string;
-  }): string => {
-    switch (input.mode) {
-      case "on":
-        return `woken by ${input.sources}`;
-      case "each":
-        return `serving a queue of ${input.sources}`;
-      case "every":
-        return `on a schedule (${input.sources})`;
+  /** The shared clause over a set of sources — each source owns its
+   * clause (the combinator contract, prose guide §2.2): a `description`
+   * renders verbatim ("an issue opens in owner/repo" — a full clause,
+   * no "arrives" suffix); description-less sources keep the legacy
+   * "{names} arrives" fallback (one suffix when ALL lack descriptions;
+   * per-source "{name} arrives" in a mixed set), joined " or ".
+   * Composed by `whenNote` ("when {clause}") and the machine-observed
+   * exit ("This run ends when: {clause}"). */
+  sourceClause: (
+    sources: ReadonlyArray<{
+      readonly name: string;
+      readonly description?: string;
+    }>,
+  ): string => {
+    if (sources.every((s) => s.description === undefined)) {
+      return `${sources.map((s) => s.name).join(" or ")} arrives`;
     }
+    return sources
+      .map((s) => s.description ?? `${s.name} arrives`)
+      .join(" or ");
   },
+
+  /** Rendered where `${AI.when(…)}` sits (declaration-only: the prose
+   * names the accepted message; delivery is outside code). Reads as the
+   * sentence's own conjunction: "when {clause}". */
+  whenNote: (input: {
+    readonly sources: ReadonlyArray<{
+      readonly name: string;
+      readonly description?: string;
+    }>;
+  }): string => `when ${kernelPrompts.sourceClause(input.sources)}`,
 
   // ── boundary inputs ─────────────────────────────────────────────
   boundaryNag: (): string =>

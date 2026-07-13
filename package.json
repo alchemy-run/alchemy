@@ -63,6 +63,7 @@
       "examples/*",
       "examples/monorepo-single-stack/*",
       "examples/monorepo-multi-stack/*",
+      "services/*",
       "benchmark/*",
       "distilled/packages/*"
     ],

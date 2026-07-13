@@ -18,7 +18,7 @@ The stack of claims, from bottom to top:
 2. **Declarations are pure data.** An `Agent`, `Tool`, or `Loop` term contains zero behavior — only `{ name, template, refs }`. Behavior comes from interpreters.
 3. **The Kernel is a service.** The engine that runs terms is itself a `Context.Tag` provided by a `Layer`. Harnesses (in-memory, Cloudflare, wrapped third-party) are interchangeable interpretations of the same terms.
 4. **The Kernel has no component vocabulary.** Memory, compaction, sandboxes, context policies, sub-agents — the Kernel interface knows none of these words. They exist only as services that particular Kernel *implementations* pull from their own `R`. This is the central architectural inversion relative to Mastra/LangChain-style frameworks, where such components are top-level framework concepts.
-5. **Loops are the unit of organization.** Execution loop ⊂ task loop ⊂ product loop ⊂ system loop ⊂ oversight loop. Each ring is a charter (prose) with typed trigger, halt, fold, and budget refs. Loops of different scale share one grammar but iterate over different kinds of state.
+5. **Processes are the unit of organization.** Execution loop ⊂ task loop ⊂ product loop ⊂ system loop ⊂ oversight loop. Each is a charter (prose) with a typed **message signature** — accepted messages (`AI.when`), published messages (event mentions), and exit (`AI.until`/`AI.never`) — plus check, fold, and budget expressions. Processes of different scale share one grammar but iterate over different kinds of state.
 6. **Authority flows down; information flows up.** Outer rings fork inner rings (interruption, budgets, supervision propagate down via Effect's fiber/Scope model). Inner rings communicate up only through return values, published events, and typed errors — never by calling upward.
 7. **Loops couple through the world.** Between rings, communication crosses external durable surfaces (GitHub issues, PRs, Discord threads). This makes the org auditable, replayable, and human-legible by construction, and makes loops individually deletable.
 8. **The fold is the unit of both memory and durability.** Compressing an iteration's history into carried state is simultaneously the memory strategy (compaction, observational memory, note-taking) and the durability checkpoint (what survives eviction). One operation, two payoffs.
@@ -46,13 +46,15 @@ No prior system has: (a) prompts whose interpolations are compile-checked depend
 
 Everything in this section is *data and types only*. No runtime behavior beyond object construction. This is the initial encoding; Phases 2–3 are its algebras.
 
-"Term" is the broad word for every pure-data node of the language, but the kinds are not peers — they fall into three classes with different fates at interpretation time:
+**Terms are declarations; Expressions are references.** A Term is a named pure-data declaration (`Process`, `Agent`, `Tool`, `Parameter`, `EventSource`, `Skill`). What appears inside a template is an **Expression** — a reference that evaluates to prose at render time and to types/topology at compile time. Term kinds fall into three classes with different fates at interpretation time:
 
-- **Process terms** — `Agent` and `Loop`. The only *interpretable* kinds (the `InterpretableTerm` union in `Kernel.ts`): each denotes a Process `In → Run<Out, Err>` and interprets into a live `ProcessService` with an admission mailbox and **one ring** (serial loop) whose lifetime is its Layer's. When we say "one loop per interpreted term", this is the only class being counted.
-- **Capability terms** — `Tool` and `Parameter`. Never interpreted; *compiled into* their host process's turn: the tool's template becomes a toolkit description, its `Parameter` refs become the schema, its tag resolves to a handler from ambient context. No inbox, no run, no ring.
-- **Control refs** — `Trigger`, `Halt`, `Fold`, `Check`, `Budget`, `Concurrency`, `Observe` (plus `EventSource`, which triggers consume). Parameters *of* a process term's ring: what feeds the mailbox, when a run exits, how state compresses, which ceilings fire. They configure loops; they aren't loops.
+- **Process terms** — `Agent` and `Process`. The only *interpretable* kinds (the `InterpretableTerm` union in `Kernel.ts`): each denotes a Process `In → Run<Out, Err>` and interprets into a live `ProcessService` with an admission mailbox and **one ring** (serial mailbox-drain loop) whose lifetime is its Layer's.
+- **Capability terms** — `Tool` and `Parameter`. Never interpreted; *compiled into* their host process's turn: the tool's template becomes a toolkit description, its `Parameter` expressions become the schema, its tag resolves to a handler from ambient context. No inbox, no run, no ring.
+- **Signature and control expressions** — the **message signature** (`AI.when`, event mentions, `AI.until`, `AI.never` — see §1.2.2) plus `Fold`, `Check`, `Budget`, `Concurrency`, `Observe`. Parameters *of* a process term's ring: what the process accepts and publishes, when a run exits, how state compresses, which ceilings fire.
 
-Splicing a process term into a charter (`${Engineer}` in Fix) contributes a *dependency on its tag*, never a new ring — how many rings exist is a Layer-composition fact: provide `AI.layer(Engineer)` once and memoization shares one Engineer ring across every referencing parent; provide a fresh copy per parent and each gets a private Engineer. The charter never decides this; the deployment does.
+The governing rule of the expression grammar — **unmarked grants, marked roles**: an unmarked reference to a term grants its affordance (`${Tool}` → may call; `${Agent}`/`${Process}` → may consult/dispatch; `${Event}` → may publish, for org-internal sources), while marked expressions declare signature roles that obligate a counterparty (`AI.when` — someone must deliver; `AI.until` — the kernel must correlate and settle). A truly inert mention is plain text or `${X.name}` (every term exposes `name`).
+
+Referencing a process term in a charter (`${Engineer}` in Fix) contributes a *dependency on its tag*, never a new ring — how many rings exist is a Layer-composition fact: provide `AI.layer(Engineer)` once and memoization shares one Engineer ring across every referencing parent; provide a fresh copy per parent and each gets a private Engineer. The charter never decides this; the deployment does.
 
 ### 1.1 Existing terms (recap of current implementation)
 
@@ -66,80 +68,71 @@ Conventions preserved throughout: curried constructors, `~alchemy/Kind` discrimi
 
 ### 1.2 New term kinds
 
-> **Renamed (July 2026): `Loop` is now `Process`.** The agent-loop
-> algebra had already concluded Agent and Loop denote the same object —
-> a Process `In → Run<Out, Err>` — so the general term now carries the
-> general name: `AI.Process` is the charter-controlled process term and
-> `Agent` is its kernel-default specialization. Historical sections
-> below keep the original vocabulary; read `Loop` as `Process`.
+#### 1.2.1 `Process`
 
-#### 1.2.1 `Loop` (now `Process`)
+(Formerly `Loop` — the agent-loop algebra concluded Agent and Loop denote the same object, a Process `In → Run<Out, Err>`, so the general term carries the general name; `Agent` is its kernel-default specialization.)
 
-Channel-first type parameters, mirroring `Effect<A, E, R>` — a loop is `In → Effect<Out, Err, Req>` lifted over a trigger stream, and every channel is **derived from the refs**:
+Channel-first type parameters, mirroring `Effect<A, E, R>` — a process is `In → Effect<Out, Err, Req>`, and every channel is **derived from the expressions in its template**:
 
 ```ts
-export interface Loop<
-  Out = void,        // what a halted run resolves to — derived from the halt ref
-  In = unknown,      // the work-item shape — derived from the trigger refs
+export interface Process<
+  Out = void,        // what a settled run resolves to — derived from the exit expression
+  In = unknown,      // the work-item shape — derived from AI.when declarations
   Err = never,       // abnormal exits — BudgetExceeded when a budget is declared
-  Req = never,       // services — derived from all refs, incl. nested template refs
+  Req = never,       // services — derived from all expressions, incl. nested template refs
   Name extends string = string,
   Refs extends any[] = any[],
-  Self = LoopService<Out, In, Err>,
+  Self = ProcessService<Out, In, Err>,
 > {
   [Symbol.iterator](): Effect.EffectIterator<Effect.Effect<Self, never, Req>>
-  "~alchemy/Kind": "Loop"
+  "~alchemy/Kind": "Process"
   "~alchemy/Name": Name
   template: TemplateStringsArray
   refs: Refs
-  new (): LoopService<Out, In, Err>
+  new (): ProcessService<Out, In, Err>
 }
 
-/** The live handle a Loop term interprets into. */
-export interface LoopService<Out = void, In = unknown, Err = never> {
-  /** Execute one run of the loop for a single work item. */
+/** The live handle a Process term interprets into (§2.1 for the full verb set). */
+export interface ProcessService<Out = void, In = unknown, Err = never> {
+  /** ask — admit a work item and await its settled value. */
   dispatch(item: In): Effect.Effect<Out, Err>
-  /** Serve the ring: consume triggers and dispatch runs until interrupted. */
-  run(): Effect.Effect<never, Err>
-}
-
-export const Loop: {
-  <Self>(): <Name extends string>(name: Name) =>
-    <const Refs extends any[]>(
-      template: TemplateStringsArray,
-      ...refs: Refs
-    ) => Loop<LoopOut<Refs>, LoopIn<Refs>, LoopErr<Refs>, LoopServices<Refs>, Name, Refs, Self>
-      & Context.Service<Self, LoopService<LoopOut<Refs>, LoopIn<Refs>, LoopErr<Refs>>>
-  // + non-Self overload, mirroring Agent
+  /** tell — the admission half alone. */
+  send(item: In): Effect.Effect<void>
+  /** message a running actor, addressed by run key. */
+  steer(runKey: string, input: unknown): Effect.Effect<void>
 }
 ```
 
-Like Agent, the loop class is a **tag** (§1.4): `yield* Fix` resolves the live `LoopService` from context, and `AI.layer(Fix)` is its kernel-derived default implementation. Instances are branded with the loop's name so distinct loops stay distinct types (structural typing would otherwise collapse every perpetual `LoopService<never, …>` into one tag). One TS footgun, learned empirically: use the class name as a type (`Fix`), never `InstanceType<typeof Fix>` — the circular `class Fix extends AI.Loop<Fix>()(…)` heritage makes `InstanceType` silently resolve to `any`.
+Like Agent, the process class is a **tag** (§1.4): `yield* Fix` resolves the live `ProcessService` from context, and `AI.layer(Fix)` is its kernel-derived default implementation. Instances are branded with the process's name so distinct processes stay distinct types (structural typing would otherwise collapse every perpetual `ProcessService<never, …>` into one tag). One TS footgun, learned empirically: use the class name as a type (`Fix`), never `InstanceType<typeof Fix>` — the circular `class Fix extends AI.Process<Fix>()(…)` heritage makes `InstanceType` silently resolve to `any`.
 
-A `Loop` term is a **charter**: prose policy whose refs wire trigger, body, halt, check, fold, and budget. Interpolating an `Agent` delegates to it; interpolating another `Loop` nests it (the outer ring may dispatch typed runs of the inner ring — `dispatch` is typed `In → Effect<Out, Err>` end to end); interpolating a `Tool` grants the loop-level machinery that capability (e.g. a health-report `Reply`); `AI.observe(Loop)` references its Trace read-only, contributing nothing to `Req`.
+A `Process` term is a **charter**: prose policy whose expressions wire the message signature, delegation, check, fold, and budget. Referencing an `Agent` delegates to it; referencing another `Process` nests it (the outer may dispatch typed runs of the inner — `dispatch` is typed `In → Effect<Out, Err>` end to end); referencing a `Tool` grants that capability; `AI.observe(Process)` references its Trace read-only, contributing nothing to `Req`.
 
-`Out` is **run-scoped**: a *run* is the loop applied to one work item, and `dispatch` resolves when the halt condition is met. The *ring* — the stream of runs serving triggers — never resolves (`run(): Effect<never, …>`); a perpetual (`AI.never`) ring additionally has `Out = never`, so even a single run never returns.
+`Out` is **run-scoped**: a *run* is the process applied to one work item — an **actor**, created by its first message — and `dispatch` resolves when the exit condition is met. A perpetual (`AI.never`) run has `Out = never`: it never returns; it is settled only by `interrupt` or Scope death. There is no `run()`/serve verb — the mailbox drain is kernel-internal, and **nothing feeds a process except explicit code** (`send`/`dispatch`/`steer` from the deterministic world).
 
-#### 1.2.2 Control refs
+#### 1.2.2 The message signature and control expressions
 
-Control refs are marker terms that only mean something inside a `Loop` (or, for `Budget`, also inside an `Agent`) template. Each is pure data with its own `~alchemy/Kind`.
+A process is a function, and the signature expressions are its type written in prose, arranged as {inbound, outbound} × {continuing, terminal}:
+
+|  | continues the run | settles the run |
+|---|---|---|
+| **inbound** | `${AI.when(X)}` | `${AI.until(X, match)}` |
+| **outbound** | `${Event}` (mention = publish grant) | `${AI.until(schema)}` → `Out` |
 
 ```ts
-// ── Triggers (derive `In`) ────────────────────────────────
-export interface Trigger<In = unknown> {
-  "~alchemy/Kind": "Trigger"
-  mode: "on" | "each" | "every"
-  sources: ReadonlyArray<EventSource<any> | Parameter | Cron>
-}
-
-AI.on(source, …more)  // wake on external events (variadic; In = union of schemas)
-AI.each(param)        // consume a durable work queue of `param`-shaped items
-AI.every("1 week")    // scheduled (cron / alarm); In = void
+// ── Accepted messages (derive `In`) ──────────────────────
+AI.when(source, …more)  // "I accept broadcast message X" (variadic; In = union of schemas)
 ```
 
-Triggers are not template tags — they carry no nested refs and contribute nothing to `Req`; their entire payload is the `In` channel.
+`AI.when(X)` is a **pure input declaration**: it types `In`, renders as the sentence's own conjunction ("`${AI.when(PostOpened)}` a member starts a thread, …"), and appears in topology. It delivers **nothing** — no kernel subscription, no auto-delivery; the deterministic world's front door consumes the wire and calls `send`/`dispatch`/`steer` (§1.2.3). An *addressed* instruction needs no declaration at all — its plain schema types `In` through the process's input. `AI.when` contributes no channel tag to `Req` (the provisioning compile fence rides the consuming call site); machine-observed exits and event mentions do, since those stay process-side. The temporal family is `when` / `until` / `never`; the retired constructors (`AI.on`, `AI.each`, `AI.every`, `AI.emit`) are deleted — cron is platform cron in front-door code, queues are queue consumers calling `send`, and publishing is declared by the unmarked event mention.
 
 ```ts
+// ── Published messages (outbound; org-internal sources only) ──
+class Engineering extends AI.Process<Engineering>()("Engineering")`
+…read the thread and route it, publishing ${PostRouted} with the
+destination you chose.` {}
+// the bare mention grants ctx.emit(PostRouted, …), joins `emits`
+// in topology, and contributes PostRouted's channel tag to Req
+```
 // ── Halts (derive `Out`) ──────────────────────────────────
 export interface Halt<Refs extends any[] = any[], Out = void> {
   "~alchemy/Kind": "Halt"
@@ -205,15 +198,14 @@ Design notes:
 - **`until` is a nested template.** The halt condition is simultaneously human-readable policy and a typed dependency on concrete signals (the `${Bash}` ref). Nested refs flow into the loop's `Req` (§1.3). This is the load-bearing trick of the whole DX — spiked and confirmed. Bounded-by-machine and bounded-by-human are the same type: "a maintainer closes the experiment" is a halt signal arriving as a GitHub event, exactly like `${Bash}` reporting green.
 - **The halt names *what* ends a run; the check names *who* judges it; the fold names *who* compresses it.** The check is the maker/checker split applied to the stop condition (§8: Osmani; Karpathy's immutable harness; Meta's held-out tracker; swyx draws the judge positionally inside the /goal ring). Like the fold it is a positional role invoked by the kernel at the iteration boundary, not at the model's discretion. Absent a check, the kernel's default judge policy grades the halt condition itself. The check's structural guarantee at term level is capability-shaped: the Judge's toolbox (run, read — never edit) is a different `Req` than the doer's; the kernel additionally enforces verifier-outside-write-scope at interpretation time (§2).
 - **Budget ceilings are the "exits that always fire".** "Goal met" is the exit that might never fire; ceilings (hard limits + the `stall` no-progress detector) are typed as `BudgetExceeded` in `Err`, a failure for the parent to investigate, not a budget to spend. Stagnation *detection* (repetition, oscillation, diminishing delta) is kernel policy; the `stall` ceiling is what makes it a typed exit rather than a log line.
-- **Folds are agents, not a special mechanism.** Ralph-style loops express "carry nothing" by folding into repository artifacts; OM-style loops fold into carried observation state. Same ref kind, opposite philosophies, chosen per-loop in prose. Bare `AI.fold(Scribe)` uses the agent's own template as the fold policy.
-- **`each` vs `on` unify underneath.** Both denote a `Stream<In>` at interpretation time; `each` additionally implies a durable queue with acknowledgement semantics. Keep both constructors for DX, one runtime concept.
+- **Folds are agents, not a special mechanism.** Ralph-style loops express "carry nothing" by folding into repository artifacts; OM-style loops fold into carried observation state. Same expression kind, opposite philosophies, chosen per-process in prose. Bare `AI.fold(Scribe)` uses the agent's own template as the fold policy.
 - **`observe` is the anti-delegation ref.** Interpolating a Loop delegates (its tag flows into `Req`, and resolving the service grants `dispatch` — the power to act); observing it grants trace access only. This is what lets the system ring study the rings it improves without inheriting `Approve` from them — the constitutional constraint, enforced by `Req`. **Decided (pending implementation):** observation is not `Req`-free forever — it should contribute a *read-grant tag* (`TraceRead<"Flywheel">`-shaped), never the ring's own tag: the deployment must explicitly grant "this ring may read that ring's trace" (a compile fence), and the grant Layer is where redaction/event-class filters live (§9.3's confidentiality note). The invariant that survives: observation can never grant the power to act, because the subject's service tag never enters the observer's `Req`.
 - **Fan-out gets no term.** Parallel dispatch inside a body is `Effect.all` / `Stream` concurrency in the interpreter and `AI.concurrency` in the charter. A pipeline without feedback is not a loop and is not dignified with a Kind (§8.5).
-- **Duplicate control refs are a lint, not a type error.** Construction stays total; `AI.lint(term)` (pure, data-only — runnable in tests, editors, and by the Kernel before interpretation) enforces cardinality and coherence: at most one budget/concurrency/fold/check (`error` — there is exactly one iteration boundary, so a second positional ref has no position, and merged-budget semantics would be a silent guess); at most one halt (`error` — two `until`s make `Out` an opaque union, and `until` + `never` is a contradiction that `never` silently absorbs at the type level); no halt at all (`warning: undeclared-perpetuity` — legal, `Out = never`, but a perpetual ring must say `AI.never` with its health signals); `until` without a budget (`warning: unbounded-until` — "goal met" is the exit that might never fire). Multiple *triggers* are legal and meaningful: `In` is their union.
+- **Duplicate control expressions are a lint, not a type error.** Construction stays total; `AI.lint(term)` (pure, data-only — runnable in tests, editors, and by the Kernel before interpretation) enforces cardinality and coherence: at most one budget/concurrency/fold/check (`error` — there is exactly one iteration boundary, so a second positional ref has no position, and merged-budget semantics would be a silent guess); at most one halt (`error` — two `until`s make `Out` an opaque union, and `until` + `never` is a contradiction that `never` silently absorbs at the type level); no halt at all (`warning: undeclared-perpetuity` — legal, `Out = never`, but a perpetual process must say `AI.never` with its health signals); `until` without a budget (`warning: unbounded-until` — "goal met" is the exit that might never fire). Multiple *`AI.when` declarations* are legal and meaningful: `In` is their union.
 
 #### 1.2.3 `EventSource`, channels, and event schemas
 
-Typed event families used by triggers and published by provider packages. `EventSource` follows the **binding idiom** exactly (see `designs/ai/reports/bindings-architecture.md`): the declaration is *pure definition data* — name, schema, and `props` — and all behavior (provisioning and delivery) lives in the per-cloud Layer implementing the family's channel tag. There is no effect on a declaration anywhere in alchemy, and EventSource is no exception.
+Typed event families consumed by front doors, accepted via `AI.when`, and published by provider packages and processes. `EventSource` follows the **binding idiom** exactly (see `designs/ai/reports/bindings-architecture.md`): the declaration is *pure definition data* — name, schema, and `props` — and all behavior (provisioning and delivery) lives in the per-cloud Layer implementing the family's channel tag. There is no effect on a declaration anywhere in alchemy, and EventSource is no exception.
 
 ```ts
 /** the harness-side delivery machinery for an event family */
@@ -246,13 +238,15 @@ Github.IssueOpened(repo)
 //               { repo, event: "issues", filter: { action: "opened" } }>
 ```
 
-This is how the pure representation reaches physical infrastructure — **declaring the subscription is what provisions the wire**:
+Sources are **scoped by construction**: the provider catalog is resource-generic, and the constructor closes over a specific resource — `Github.IssueOpened(repo)` is an `EventSource` *instance* carrying that repo's provisioning props. This is also how **domain-specific prose** works: an Alchemy `Resource` is itself a legal expression (rendering its resolved identity at interpretation time via the dynamic-prose seam, contributing a dependency edge and no capability), and its scoped sources are what charters accept: `${AI.when(Github.IssueOpened(alchemy))}`.
 
-1. *Pure representation* — `${AI.on(Github.IssueOpened(repo))}` in a charter puts `GitHubEvents` in the loop's `Req` (the trigger contributes its sources' channel tags — the one thing a trigger contributes, since it is not a template tag).
-2. *Type-only requirement* — nothing runs until a Layer provides `GitHubEvents`; forget it and the deployment does not type-check. The channel Layer's own requirements are the **second, transitive compile fence**: `GitHubEventsLive` requires `GitHub.RepositoryEventSource`, so forgetting `GitHubRepositoryEventSourceLive` on the Worker also fails to compile.
-3. *Infrastructure Layer* — the kernel, interpreting the loop's triggers in the host's init phase, resolves each source's channel tag from ambient context (the same mechanism as tool refs — §2.2) and calls `subscribe(source)`. The Cloudflare Layer dedupes wires per `(repo, event)`, then delegates to `GitHub.RepositoryEventSource` — whose Worker implementation **provisions a repository `Webhook` resource pointing at the Worker at deploy time** (FQN-deduped, namespaced under the host) and registers the signature-verifying delivery listener at runtime. Provisioning is driven by the union of *subscribed* sources' props — never a side list, so a charter subscribing to a new repo provisions its webhook by construction. A source with no channel (`Channel = never`) is kernel-internal — deliverable only by the harness's own bus (tests, `AI.Kernel.memory`).
+**Provisioning attaches where consumption happens** — declaring-provisions-the-wire holds, at the *consuming call site*:
 
-Cross-loop coupling happens **only** through `EventSource`s and shared `Tool`s. No term may reference another loop's internals.
+1. *Inbound (the front door).* The world-side consumer — `GitHub.consumeRepositoryEvents(repo, handler)` in the host's init phase — carries the compile fence: it requires `GitHub.RepositoryEventSource`, whose Worker implementation **provisions the repository `Webhook` resource pointing at the Worker at deploy time** (FQN-deduped, namespaced under the host) and registers the signature-verifying delivery listener at runtime. The handler is deterministic code: validate, deny, adapt the transport payload to a domain message, then `send`/`dispatch`/`steer` the target process. A process's `AI.when(X)` declares acceptance only — it provisions nothing and subscribes to nothing.
+2. *Machine-observed exits.* The one kernel-internal subscription: a charter's `AI.until(source, match)` has the kernel watch the source and settle the specific run whose `match` correlates — "when does this run end" is the process's own contract, not delivery.
+3. *Outbound.* An org-internal source mentioned in a charter (`${PostRouted}`) contributes its channel tag to the process's `Req` — forget the channel Layer and the deployment does not type-check. `ctx.emit(PostRouted, payload)` writes one durable Trace row and publishes on the channel. A source with no channel (`Channel = never`) is kernel-internal — deliverable only by the harness's own bus (tests, `AI.Kernel.memory`).
+
+Cross-process coupling happens **only** through `EventSource`s and shared `Tool`s. No term may reference another process's internals.
 
 ### 1.3 Type-level extraction (channels from refs)
 
@@ -268,26 +262,27 @@ type LeafServices<R> =
   : never
 
 export type RefServices<R> =
-    R extends Halt<infer Inner, any>        ? LeafServices<Inner[number]>
+    R extends Halt<infer Inner, any>        ? LeafServices<Inner[number]>   // incl. the machine-observed source's channel tag
   : R extends Fold<infer A, infer Inner>    ? LeafServices<A> | LeafServices<Inner[number]>
   : R extends Check<infer A, infer Inner>   ? LeafServices<A> | LeafServices<Inner[number]>
-  : R extends Trigger<any, infer Channels>  ? Channels   // event-channel tags
+  : R extends When<any>                     ? never   // acceptance declares, never obligates — the fence rides the front door
+  : R extends EventSource<any, infer Ch, any> ? Ch    // mention = publish grant: the source's channel tag
   : LeafServices<R>              // Observe matches no arm: contributes nothing
 
 export type Services<Refs extends any[]> =
   Refs[number] extends infer A ? RefServices<A> : never
 
 // Out / In / Err
-export type LoopOut<Refs> = /* Halt ref present ? its Out : never */
-export type LoopIn<Refs>  = /* union of the Trigger refs' In */
-export type LoopErr<Refs> = /* Budget ref present ? BudgetExceeded : never */
+export type ProcessOut<Refs> = /* exit expression present ? its Out : never */
+export type ProcessIn<Refs>  = /* union of the AI.when declarations' In */
+export type ProcessErr<Refs> = /* Budget expression present ? BudgetExceeded : never */
 ```
 
-Nesting is deliberately capped at depth 1: control refs may contain Tool/Agent/Loop refs, but not further control refs — the sane semantic limit, and inference stays fast and legible (spike confirmed; the reference org type-checks in ~2s under the scoped tsconfig).
+Nesting is deliberately capped at depth 1: control expressions may contain Tool/Agent/Process refs, but not further control expressions — the sane semantic limit, and inference stays fast and legible (spike confirmed; the reference org type-checks in ~2s under the scoped tsconfig).
 
 ### 1.4 Terms are tags; implementation is Layer composition
 
-Every `<Self>()`-form term — `Tool`, `Agent`, `Loop` — is a `Context.Service` **tag**. This is the load-bearing architectural decision of the implementation phase, and it answers "how does the pure representation reach the infrastructure":
+Every `<Self>()`-form term — `Tool`, `Agent`, `Process` — is a `Context.Service` **tag**. This is the load-bearing architectural decision of the implementation phase, and it answers "how does the pure representation reach the infrastructure":
 
 ```
 pure representation  →  type-only Layer requirements  →  kernel + infra Layers
@@ -320,7 +315,7 @@ const OrgLive = Layer.mergeAll(FlywheelLive, HelpdeskLive, AutoresearchLive, Fix
 export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()("Org",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const fix = yield* Fix                    // typed LoopService from context
+    const fix = yield* Fix                    // typed ProcessService from context
     return { fetch: /* POST /issues/:n/fix → fix.dispatch(issue) : Effect<PullRequestRef, BudgetExceeded> */ }
   }).pipe(Effect.provide(OrgLive)),           // one Effect.provide, one composed Layer
 ) {}
@@ -328,7 +323,7 @@ export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()("Org",
 
 `AI.layer(term)` is implemented as `Layer.effect(term, Kernel.pipe(Effect.flatMap(k => k.interpret(term))))` — the kernel resolves the term's ref tags from the ambient context at interpretation time, which is exactly why the Layer's requirements are `Kernel | term's Req`.
 
-One TS footgun, learned empirically: refer to term instance types by class name (`Fix`, `Engineer`), never `InstanceType<typeof Fix>` — the circular `class Fix extends AI.Loop<Fix>()(…)` heritage makes `InstanceType` silently resolve to `any` (which then defeats every `Extract`-based assertion downstream). Instances are branded with the term's name so distinct terms stay distinct types.
+One TS footgun, learned empirically: refer to term instance types by class name (`Fix`, `Engineer`), never `InstanceType<typeof Fix>` — the circular `class Fix extends AI.Process<Fix>()(…)` heritage makes `InstanceType` silently resolve to `any` (which then defeats every `Extract`-based assertion downstream). Instances are branded with the term's name so distinct terms stay distinct types.
 
 ### 1.5 The missing halt is a type, not an error
 
@@ -340,22 +335,23 @@ The taxonomy's sharpest lesson — a loop without its wired exit signal doesn't 
 
 (The earlier `RequireHalt` constructor-constraint design was spiked and rejected: the circular tuple constraint degraded inference and produced arity errors instead of legible ones, and it made construction partial for no semantic gain — `Out = never` already prices the omission correctly.)
 
-Rejected stricter variants, for the record: requiring ≥1 trigger (a triggerless loop is a valid dispatch-only work queue); forbidding budget-less `AI.until` loops (a real risk — but a kernel lint, not a constructor error, for the same reasons).
+Rejected stricter variants, for the record: requiring ≥1 `AI.when` (a declaration-less process is a valid dispatch-only actor — addressed messages need no declaration); forbidding budget-less `AI.until` processes (a real risk — but a kernel lint, not a constructor error, for the same reasons).
 
 ### 1.6 The renderer
 
 A single canonical, **pure, deterministic** function from a term to prompt text:
 
 ```
-render(term: Agent | Loop | Tool | Halt | Fold): string
+render(term: Agent | Process | Tool | Halt | Fold): string
 ```
 
 Rules:
 
 - `${Parameter}` inside a Tool template → the parameter's name, marked (` `path` `), with the parameter's own description contributing to the tool's JSON-schema `description` fields.
-- `${Tool}` inside an Agent/Loop/Halt template → the tool's name plus (configurable) a one-line summary; full tool contracts render into the tool-schema section, not the prose, to preserve prompt-cache stability.
-- `${Agent}` / `${Loop}` → the referent's name; the referent's own template is *not* inlined (delegation, not concatenation).
-- Control refs render as structured sections after the prose (Triggers / Halt / Fold / Budget), or inline where interpolated — decide once in Phase 0 and never change (see next point).
+- `${Tool}` inside an Agent/Process/Halt template → the tool's name plus (configurable) a one-line summary; full tool contracts render into the tool-schema section, not the prose, to preserve prompt-cache stability.
+- `${Agent}` / `${Process}` → the referent's name; the referent's own template is *not* inlined (delegation, not concatenation).
+- `${EventSource}` → the event's name (an org-internal mention is the publish grant; a world-owned catalog source renders as vocabulary and grants nothing). `${AI.when(X)}` renders inline as the sentence's conjunction. `${Resource}` → its resolved identity (interpretation-time; the dynamic-prose seam). `${X.name}` is a plain-string interpolation — inert by construction.
+- Control expressions render inline where interpolated (the reassessment fixed the renderer eliding them — `AI.budget` must be shown to the model).
 - `promptHash = hash(render(term))`. Prompts are content-addressed: versioned like any resource, diffable in PRs, usable as prompt-cache keys, and comparable by the system loop across deployments. The renderer must therefore be dependency-free and clock-free.
 - Shared `Parameter`s may need per-use description overrides (`ReadFile`'s `path` is "the file to read", not "the file to search"). Provide `param.as\`override\`` producing a derived Parameter; defer if Phase 0 shows it complicates extraction.
 
@@ -389,14 +385,17 @@ You grade work you did not do, against a spec you did not write.
 Verify each criterion mechanically: ${Bash} to run the suite
 yourself, ${ReadFile} to inspect the diff. You never edit.` {}
 
-// loops — charters with typed control refs
-export class Fix extends AI.Loop<Fix>()("Fix")`
-One issue, one loop, one task per iteration.
+// processes — charters with a typed message signature. Fix is
+// dispatch-created: the front door (an issue labeled "ready", a
+// maintainer's API call) sends the ${issue} as its first message.
+export class Fix extends AI.Process<Fix>()("Fix")`
+One issue, one run, one task per iteration. Your work item is the
+${issue} whose acceptance criteria are your entire specification.
 
-${AI.each(issue)} give ${Engineer} a completely fresh context:
-the issue, its criteria, CONTRIBUTING.md, and .alchemy/NOTES.md.
+Give ${Engineer} a completely fresh context each iteration: the
+issue, its criteria, CONTRIBUTING.md, and .alchemy/NOTES.md.
 Carry no conversation history — the repo and the notes are the
-only memory this loop is allowed.
+only memory this process is allowed.
 
 ${AI.until(PullRequestRef)`every acceptance criterion is checked
 and the run resolves with the ${pr} the Engineer opened`}
@@ -414,9 +413,9 @@ ${AI.budget({ tokens: "5M", wallClock: "2h", iterations: 12, stall: 3 })}` {}
 // Req = Grep | ReadFile | EditFile | Bash | OpenPullRequest | CreateIssue
 ```
 
-Capability denial by omission: a charter that never interpolates `${Approve}` has no `Approve` in its `Req`; no Layer can grant it merge authority. Constitutional constraints on the system loop are enforced by the type system, not by prose.
+Capability denial by omission: a charter that never references `${Approve}` has no `Approve` in its `Req`; no Layer can grant it merge authority. Constitutional constraints on the system loop are enforced by the type system, not by prose.
 
-**Phase 1 deliverables:** `Loop.ts`, `Trigger.ts`, `Halt.ts`, `Check.ts`, `Fold.ts`, `Budget.ts`, `Errors.ts`, `EventSource.ts`, `Observe.ts`; extended `Services`; renderer + `promptHash`; type-level test suite covering channel derivation, ref extraction, nested-template flow, capability-omission, observation-without-inheritance; renderer golden tests. *Status: all terms landed and verified against the reference org (`test/AI/fixtures/org`, audited by `test/AI/Org.types.ts` + `test/AI/Loop.types.test.ts`); renderer + `promptHash` outstanding.*
+**Phase 1 deliverables** (all landed; layout has since evolved): `Process.ts`, `Signature.ts` (`when`/`until`/`never` — the consolidated message signature), `Check.ts`, `Fold.ts`, `Budget.ts`, `Errors.ts`, `EventSource.ts`, `Observe.ts`; extended `Services`; renderer + `promptHash`; type-level test suite covering channel derivation, expression extraction, nested-template flow, capability-omission, observation-without-inheritance. *Status: all terms landed and verified against the reference org (`test/AI/fixtures/org`, audited by `test/AI/Org.types.ts`); `promptHash` outstanding.*
 
 ---
 
@@ -442,7 +441,7 @@ export interface KernelService {
   readonly interpret: <T extends InterpretableTerm>(
     term: T,
   ) => Effect.Effect<TermService<T>, KernelError, TermReq<T>>
-  // TermService<Loop<O,I,E,…>> = LoopService<O,I,E>; TermService<Agent…> = AgentService
+  // TermService<Process<O,I,E,…>> = ProcessService<O,I,E>; TermService<Agent…> = AgentService
 
   /** Live firehose: all interpreted process terms' events, deltas included.
       No replay guarantee — for dev UIs and dashboards. */
@@ -458,21 +457,20 @@ export class Kernel extends Context.Service<Kernel, KernelService>()("alchemy/AI
 
 That is the whole contract. Note the vocabulary that is **absent**: memory, compaction, context, sandbox, session-store, sub-agent, model. The Kernel interface has no opinion about any of them.
 
-**One service shape, two process terms** (the Agent/Loop algebra, `designs/ai/reports/agent-loop-algebra.md`): interpreting a process term — Agent or Loop, the only interpretable kinds (§1 taxonomy) — produces a `ProcessService<Out, In, Err>` — semantically a *Process* `In → Run<Out, Err>` whose denotation is Effect's `Channel` (events out, steering in, halt-derived `Out`, `Req` as Env), with the public surface kept to the Channel's five canonical eliminations:
+**One service shape, two process terms** (the Agent/Process algebra, `designs/ai/reports/agent-loop-algebra.md`): interpreting a process term — Agent or Process, the only interpretable kinds (§1 taxonomy) — produces a `ProcessService<Out, In, Err>` — semantically a *Process* `In → Run<Out, Err>` whose denotation is Effect's `Channel` (events out, steering in, exit-derived `Out`, `Req` as Env). The actor reading is primary: a run is an actor created by its first message, and the verbs are the actor verbs:
 
 ```ts
 export interface ProcessService<Out = void, In = unknown, Err = never> {
-  dispatch(item: In): Effect<Out, Err, RuntimeContext>  // admit + await the done value
-  send(item: In): Effect<void, never, RuntimeContext>   // the admission half alone
-  run(): Effect<never, Err, RuntimeContext>             // the trigger-lift (never is structural)
-  steer(input: unknown): Effect<void, never, RuntimeContext>  // InElem, promoted at the boundary
+  dispatch(item: In): Effect<Out, Err, RuntimeContext>  // ask — admit + await the done value
+  send(item: In): Effect<void, never, RuntimeContext>   // tell — the admission half alone
+  steer(runKey: string, input: unknown): Effect<void, never, RuntimeContext>  // message a running actor
+  steer(input: unknown): Effect<void, never, RuntimeContext>   // active-run form
   interrupt(): Effect<void, never, RuntimeContext>      // Scope authority, via the same inbox
 }
-// LoopService<O,I,E> extends ProcessService<O,I,E>       (channels from refs)
-// AgentService<I,O>  extends ProcessService<O,I,never>   (channels from kernel defaults)
+// the mailbox drain is kernel-internal; nothing feeds it but these verbs
 ```
 
-The verdict that shaped this: Agent ⊂ Loop *denotationally* (an Agent is the hylomorphism at kernel-default control parameters: trigger = the inbox, halt = "no more tool calls", fold = the transcript) and Loop = iterated-agent *operationally* — but the **term kinds stay distinct**, because the control refs are parameters of an arrow *transformer* that only charters may supply: collapsing the terms would let prose override the execution ring's exit, which is model-behavior lore the kernel owns (§8.2, §8.5). `Check`/`Fold` keep `A extends Agent` — "agent" in a positional role means exactly "arrow the kernel interprets". Three consequences landed with it: `session` is **deleted** (a run is keyed by `(term, work item)`; world identity rides in `In` — the Discord thread, the GitHub issue); `send = dispatch − join` is a conformance-suite identity, not a second protocol; and `Err = never` on agents is a theorem (tool errors are model-visible results; harness failures are `KernelError`).
+The verdict that shaped this: Agent ⊂ Process *denotationally* (an Agent is the hylomorphism at kernel-default control parameters: input = the inbox, exit = "no more tool calls", fold = the transcript) and Process = iterated-agent *operationally* — but the **term kinds stay distinct**, because the control expressions are parameters of an arrow *transformer* that only charters may supply: collapsing the terms would let prose override the execution ring's exit, which is model-behavior lore the kernel owns (§8.2, §8.5). `Check`/`Fold` keep `A extends Agent` — "agent" in a positional role means exactly "arrow the kernel interprets". Three consequences landed with it: `session` is **deleted** (a run is keyed by `(term, work item)`; world identity rides in `In` — the Discord thread, the GitHub issue); `send = dispatch − join` is a conformance-suite identity, not a second protocol; and `Err = never` on agents is a theorem (tool errors are model-visible results; harness failures are `KernelError`).
 
 The two event surfaces are deliberately *not* unified (§9.3, learned from OpenCode v2): the live stream includes ephemeral deltas and may drop on disconnect (consumers refresh and resubscribe); the trace is cursor-bearing and replayable, and observation over it is a pure storage read — it neither wakes the ring nor resets any keepalive. `steer` delivers durable mid-run input at the next iteration boundary (resetting the step allowance; under `AI.concurrency > 1` it needs a run key — the work item's world identity — typed in Phase 2); `interrupt` settles in-flight tools as interrupted results, folds, and leaves a model-visible marker in the Trace. The richer handle surfaces (`status`, per-handle streams) harden in Phase 2.
 
@@ -503,9 +501,9 @@ Providing `WriteFileR2` vs `WriteFileDevBox` is invisible to the Kernel; it just
 
 `interpret(term)` is a three-stage compiler plus a driver, built on `effect/unstable/ai` (`LanguageModel`, `Tool.dynamic` — runtime schemas, exactly what terms are — `Toolkit`, `Chat`, `Response.StreamPart`; providers `@effect/ai-anthropic`/`-openai`):
 
-- **Stage A — link** (init phase, once per Layer construction): walk `term.refs` and compile — Tool tags resolve their impls from ambient context and become `Tool.dynamic` + Toolkit handler entries (description = the rendered tool template; parameters from the interpolated `Parameter` refs); interpolated Agents/Loops resolve their `ProcessService`s and become **delegation tools** (handler = `dispatch`, parameters = the callee's `In` schema — agent-as-tool with summary return); trigger sources `subscribe` (the two-phase bind); `AI.until(schema)` becomes a synthetic `resolve` tool + `give_up` (halt-as-tool, §9.3); human-class tools become tools whose handlers issue `Ask`; Check/Fold agents stay **out of the toolkit** — they are positional arrows invoked by the kernel at the boundary. Products: one `Toolkit.WithHandler`, the rendered prompt + `promptHash`, trigger streams, control parameters. *Status: Tool compilation, delegation tools (summary return: `Completed → text`, typed loop exits → model-visible failure text; `task: string` params pending the callee-`In` schema), and halt-as-tool are landed in the memory kernel; trigger subscribe, Ask-backed tools, and `promptHash` are not yet.*
+- **Stage A — link** (init phase, once per Layer construction): walk `term.refs` and compile — Tool tags resolve their impls from ambient context and become `Tool.dynamic` + Toolkit handler entries (description = the rendered tool template; parameters from the referenced `Parameter` expressions); referenced Agents/Processes resolve their `ProcessService`s and become **delegation tools** (handler = `dispatch`, parameters = the callee's `In` schema — agent-as-tool with summary return); a machine-observed exit (`AI.until(source, match)`) registers the **one kernel-internal subscription** — input delivery is never subscribed, that's the front door's job; `AI.until(schema)` becomes a synthetic `resolve` tool + `give_up` (halt-as-tool, §9.3); org-internal event mentions become the run's typed publish grants; human-class tools become tools whose handlers issue `Ask`; Check/Fold agents stay **out of the toolkit** — they are positional arrows invoked by the kernel at the boundary. Products: one `Toolkit.WithHandler`, the rendered prompt + `promptHash`, exit correlation, control parameters. *Status: Tool compilation, delegation tools, halt-as-tool, machine-exit subscription with per-item `match`, and typed emits are landed in the memory kernel; Ask-backed tools and `promptHash` are not yet.*
 - **Stage B — the turn driver**: the §2.4 step machine drives `LanguageModel.streamText({ prompt, toolkit, toolChoice })`; stream parts arrive as `Feedback`, commands go out, budgets decrement per command, pairing repairs on read. `Chat`'s serializable state is a candidate transcript carrier inside `StepState`.
-- **Stage C — the loop runtime**: the §2.5 hylomorphism — triggers → admission → per work item, iterate Stage-B turns; at each boundary drain steers, run Check (verdict), run Fold (checkpoint), decide (goal-met / `Refused` / ceiling / interrupt).
+- **Stage C — the process runtime**: the §2.5 hylomorphism — explicit admissions (`send`/`dispatch`/`steer`) → per work item, iterate Stage-B turns; at each boundary drain steers, run Check (verdict), run Fold (checkpoint), decide (goal-met / `Refused` / ceiling / interrupt / machine-observed exit).
 
 The model provider is the `LanguageModel` Layer — one more piece of per-term physics, overridable per agent exactly like `Bash`.
 
@@ -573,19 +571,21 @@ Rules (amended per §9.3):
 ### 2.5 The loop runtime (normative semantics)
 
 ```
-triggers (merged Streams) ─┐
-steers / controls ─────────┴→ ONE ordered, idempotent admission inbox
+world-side send / dispatch ─┐   (the front door: webhook handlers, APIs,
+steers / controls ──────────┴→   cron — always explicit code)
+                              ONE ordered, idempotent admission inbox
   → admit work item (dedupe by delivery id; respect Concurrency, Budget)
-  → iteration: run body (agent turns / inner-loop forks) → Trace
+  → iteration: run body (agent turns / inner-process forks) → Trace
   → drain steers (promote at the boundary; reset the step allowance)
-  → check: Check agent grades the halt condition against the Trace
-           (default judge policy when no Check ref). Verdicts are
+  → check: Check agent grades the exit condition against the Trace
+           (default judge policy when no Check expression). Verdicts are
            four-valued: goal-met | off-goal(feedback → next iteration's
            first input) | waiting(stop, ask the human, stay active) |
            check-failed(park with reason — a broken judge NEVER re-loops)
   → fold: (carried, Trace) → carried'          // an Agent invocation or const
-  → halt: goal-met | Refused (ratified give-up) | budget/stall ceiling
-          | interrupt → LoopExit
+  → exit: goal-met | Refused (ratified give-up) | budget/stall ceiling
+          | interrupt | machine-observed event (until(source, match) —
+          the run parks between rounds and settles when ITS event lands)
   → repeat
 ```
 
@@ -711,6 +711,99 @@ dynamic prose within a static `Req` upper bound. The vocabulary teaches
 common-first: Tool → Agent → Effect code → `AI.process` → the prose
 charter last.
 
+### 2.12 The actor resting point (July 2026)
+
+A second review round (four owner review rounds over the business-
+process reports, plus the signature-reduction and domain-prose rounds)
+converged on the resting model that the rest of this document now
+reflects. **Canon for the process model is
+[designs/ai/business-processes.md](./business-processes.md)** — where
+this document disagrees with that file, that file wins.
+
+**Two worlds, one seam.** The **deterministic world** is plain Effect
+code + Alchemy infrastructure: APIs and webhook handlers, validation
+and denial (a 409 happens before anything reaches a process), routing
+and addressing, your database and its transactions, cron, projections
+and read models — nothing there is an AI concept. The **reactive
+world** is Processes: actors whose behavior can be written in prose,
+model-written code (codemode), or plain Effect code — a Layer choice
+behind one tag. **Delivery is always code you can read**: the
+deterministic world sends; actors react; no process self-subscribes.
+
+**The actor mapping.** A Process **run is an actor**, created by its
+first message; identity = `(term, work item)`. `send` is `tell`;
+`dispatch` is `ask` (send + await reply) — and the human **Ask
+protocol** is the same pattern pointed at a person; `steer(runKey,
+msg)` is a message to a running actor; supervision/kill is Scope +
+budgets + `interrupt` (the parent-child cascade already built);
+broadcast/pub-sub is typed `ctx.emit(EventSource, payload)` —
+an "event" is just a broadcast message. Behaviors (charter prose,
+codemode, `AI.process` handlers) are interchangeable Layers behind
+the one term tag; hot code swap is a redeploy with a `promptHash`
+diff.
+
+**Everything is a message.** *Instructions* are addressed messages —
+plain schemas, no construct; APIs/routes are the command surface, and
+validation/denial happens in the handler or DB transaction before
+anything is dispatched. *Events* are broadcast messages — an
+`EventSource` is a named broadcast channel. The framework never
+distinguishes them; the message's name and tense carry the meaning,
+and the actor's prose interprets it.
+
+**Removed concepts** (each explored and rejected as framework surface;
+the full ledger with reasoning is business-processes.md §3):
+`AI.command`; `AI.key` + keyed ring families (the run *is* the
+instance); `AI.state`/`AI.var` + staged commits (state is your DB —
+outside, in your transaction — or a userland fold over the Trace);
+business refusal from inside the process; the auto-delivering trigger
+runtime; `AI.policy`, `AI.context`, `AI.aggregate`/`AI.Entity` — DDD
+and Event Storming are embedded as documented patterns, never
+implemented as constructs; and `effect/unstable/workflow` as the
+durable-codemode substrate (the kernel's own Trace is the memoization
+ledger).
+
+**What survived and was added.** (1) Typed `ctx.emit(EventSource,
+payload)` — one durable Trace row AND a typed EventBus publication.
+(2) Run-key steering (`steer(runKey, msg)`) + **per-item `match`
+correlation** on the machine-observed exit (`AI.until(source, match)`)
++ re-admission of settled keys — the exit subscription is KEPT and
+kernel-internal; it is input *delivery* that is never kernel-owned.
+(3) Effectful-constructor `AI.process` (resources resolved once at
+Layer build; bare-function form as sugar). (4) The front door —
+world-side consuming call sites like `consumeRepositoryEvents` —
+validates, denies, adapts (transport → domain message), and picks the
+door (`send`/`dispatch` create; `steer` targets a running actor); the
+consuming call site carries the provisioning compile fence.
+Everything from earlier rounds that this round did not touch —
+`ToolMode`/`CodeExecutor` seams, codemode, Skills, protocol-tool
+terms, the KernelPrompts dissolution, prose doctrine — stands.
+
+**The signature reduction** (the round that followed). Terms are
+declarations; what appears in a template is an **Expression**
+("splice" is retired). The message signature is one concept, the 2×2
+{inbound, outbound} × {continuing, terminal}: `AI.when(X)` (renamed
+from `AI.on` — completes the temporal family *when/until/never* and
+drops the auto-wired `onEvent` connotation), `AI.until(X, match)`,
+the unmarked event mention, `AI.until(schema)` → `Out`. The governing
+rule — **unmarked grants, marked roles**: an unmarked reference grants
+the term's affordance (`${Tool}` may call, `${Event}` may publish),
+marked expressions declare roles that obligate a counterparty.
+`AI.emit` was deleted as redundant markup (the sentence already
+carries the verb); `AI.each`/`AI.every` deleted outright;
+`Trigger.ts`/`Emit.ts`/`Halt.ts` consolidated into `Signature.ts`.
+
+**Domain-specific prose** (the round after that). Affordances are
+**owner-sensitive**: a world-owned catalog event (`GitHub.IssueOpened`
+— only the world can publish it) affords nothing, so its bare mention
+is inert vocabulary; inbound use is always `AI.when`. **Resources are
+expressions**: an Alchemy `Resource` in a charter renders its resolved
+identity at interpretation time (the dynamic-prose seam; `promptHash`
+per interpretation makes infra drift a hot code swap) and contributes
+a dependency edge, never a capability. **Scoped event sources**
+(`GitHub.IssueOpened(repo)`) bridge provider catalogs and
+per-resource charters; they are what `AI.when` accepts and what the
+front door provisions.
+
 ### 2.11a Org Chat (the autonomous Discord/Slack)
 
 Proposed in **[designs/ai/org-chat.md](./org-chat.md)**: channels,
@@ -745,7 +838,7 @@ The order (each step independently testable; 1–3 are pure, no provider needed)
 4. ✅ **Stage-B turn driver (memory kernel, `KernelMemory.ts`)** — `streamText` + `disableToolCallResolution`; write-ahead emission through the `TraceStore` seam (§2.7: `model.requested` before the wire, `tool.requested` before execution, terminals with `Usage`; `model.delta` live-only); transactional budget decrement off `FinishPart.usage` with ceilings from the `KernelPolicy` `Context.Reference`. Not yet: RW-lock tool scheduler (tools run serially in call order), `ToolInterceptor`.
 5. ◐ **Admission ledger + Coordinator reduction** — the memory ring is landed: one `forkScoped` serial loop per process term over an unbounded mailbox, `dispatch = send + join` (reply seats via `Deferred`), `steer` as admission (mid-turn inbox / idle park / halt-race re-park), `interrupt` as control admission. Not yet: durable ledger rows, join/coalesce-wake reduction, delivery-id idempotence.
 6. ◐ **Ask protocol** — the memory slice is landed (`src/AI/Ask.ts`): one protocol, two sides — the requesting side is the `Ask` service the kernel provides *to tool executions* (scoped per command: deterministic ask id from the command id, durable `ask.requested` row **before** the park, `ask.answered` after), so a human-class tool is ordinary user code (`yield* Ask`, park, obey the verdict); the answering side is the `AskHub` seam (`pending` / `answer`, in-memory default, harness-overridable). Answers are verdict + optional amendment, and denials are model-visible failed results, never thrown. The park is just an in-flight tool execution, so the §2.8b interrupt race frees parked asks for free. `wait_run` (§2.8c) rides the same shape: joining a background run is a park keyed by run id. Not yet: durable park rows across restart (the ledger), answer signing, `PolicyAmended` fold state, `SteerError` union, budget-continuation asks.
-7. ◐ **Stage-C loop runtime** — dispatch-driven bounded loops are landed: `interpret(Loop)` compiles the charter + halt prose, **halt-as-tool** (`resolve` with JSON-string-wrapped value validated strictly in the kernel handler — wire-lenient so schema-invalid resolves bounce as tool errors for self-correction; `give_up` → typed `Refused`), iterated turns with the transcript-carry fold, boundary nag, charter `AI.budget` iterations/tokens → typed `BudgetExceeded`, and a default iteration guard for budget-less loops (defect, not typed exit). **Triggers are landed** (the memory slice): loops subscribe their trigger sources at interpretation time (the two-phase bind's plan half — channel-backed sources resolve their family tag from ambient context and `subscribe`; kernel-internal sources ride the new `EventBus` seam, whose memory implementation registers subscriptions eagerly so pre-`run()` events buffer), and `run()` is now genuinely the trigger-lift: drain the merged streams into the mailbox as unjoined admissions, forever. `AI.every("30 seconds")` compiles to a spaced schedule stream (cron expressions defer to the Cloudflare harness); `AI.each` contributes no stream — the ring's mailbox *is* the durable queue and `send` is its producer. **Perpetual rings (`AI.never`) are now legal**: each work item is served as one kernel-default turn and the ring never resolves; a charter with *no* halt at all is linted at interpretation ("undeclared perpetuity", §1.4). **`AI.check` is landed** (maker/checker on the stop condition, §8.2): the verifier resolves from ambient context like a delegate (its run/read-only physics are a Layer fact), the kernel invokes it at the boundary *when the worker claims resolution* — the claim is graded before it is believed — and the verdict is parsed from the judge's completed text (`goal-met` accepts; `off-goal` discards the resolution and feeds the judge's reason as the next iteration's first input; ungradable ⇒ **check-failed**, a defect in the memory kernel — a broken judge never silently re-loops). Lesson the live test taught: the judge's prompt must carry the run's *work item*, not just the claim — without the mandate there is nothing to verify against, and an honest judge correctly rejects everything. Not yet: trigger streams feeding `run()`, `AI.fold` agents at the boundary, the `waiting` verdict arm (needs the Ask park), N-consecutive `Refused` ratification, grading quiescent non-claim boundaries, idle-wake continuation, `prompts/` kernel assets with `kernelAssetsHash`.
+7. ◐ **Stage-C process runtime** — dispatch-driven bounded loops are landed: `interpret(Process)` compiles the charter + halt prose, **halt-as-tool** (`resolve` with JSON-string-wrapped value validated strictly in the kernel handler — wire-lenient so schema-invalid resolves bounce as tool errors for self-correction; `give_up` → typed `Refused`), iterated turns with the transcript-carry fold, boundary nag, charter `AI.budget` iterations/tokens → typed `BudgetExceeded`, and a default iteration guard for budget-less loops (defect, not typed exit). **Delivery is world-side** (the actor resting point): the kernel subscribes nothing for input — `AI.when(X)` is declaration-only, and front-door code feeds the mailbox via explicit `send`/`dispatch`/`steer` (the `EventBus` seam remains for tests, typed emits, and the machine-observed exit's kernel-internal subscription, now with per-item `match` correlation and parked-run wake-on-steer). The retired `AI.on`/`AI.each`/`AI.every` runtime is deleted. **Perpetual rings (`AI.never`) are legal**: each work item is served as one kernel-default turn and the ring never resolves; a charter with *no* halt at all is linted at interpretation ("undeclared perpetuity", §1.4). **`AI.check` is landed** (maker/checker on the stop condition, §8.2): the verifier resolves from ambient context like a delegate (its run/read-only physics are a Layer fact), the kernel invokes it at the boundary *when the worker claims resolution* — the claim is graded before it is believed — and the verdict is parsed from the judge's completed text (`goal-met` accepts; `off-goal` discards the resolution and feeds the judge's reason as the next iteration's first input; ungradable ⇒ **check-failed**, a defect in the memory kernel — a broken judge never silently re-loops). Lesson the live test taught: the judge's prompt must carry the run's *work item*, not just the claim — without the mandate there is nothing to verify against, and an honest judge correctly rejects everything. Not yet: `AI.fold` agents at the boundary, the `waiting` verdict arm (needs the Ask park), N-consecutive `Refused` ratification, grading quiescent non-claim boundaries, idle-wake continuation, `prompts/` kernel assets with `kernelAssetsHash`.
 8. ☐ **`ContextPolicy` seam** — placement-owning contract; `truncate` default (pair-atomic, prompt-preserving); Anthropic server-side context management as a free second policy.
 9. ☐ **`ApproveGuardian` layer** — `generateObject` judge, fail-closed timeout, denial circuit breaker.
 10. ☐ **`CloudflareAgent.test.ts`** — the Ring DO grown from mock to Phase-2-backed: admit → dispatch → turn with a gated tool → park/answer-with-amendment → steer semantics → halt ordered after the plane-2 commit → trace replay to an identical fold → evict-and-recover with fossil check.
@@ -764,7 +857,7 @@ export const Harness: Layer.Layer<
   | AiLanguageModel                          // provider — user's choice
   | Cloudflare.DurableObjectState            // the hosting DO (ring state)
   | Cloudflare.Workflows.Binding             // iteration-scale durability
-  | Cloudflare.Queues.Binding                // `each` work queues
+  | Cloudflare.Queues.Binding                // work-queue buffering
 > = Layer.effect(AI.Kernel, Effect.gen(function* () { ... }))
 ```
 
@@ -837,16 +930,19 @@ Because the Phase 2 step machine keeps `StepState` serializable by construction 
 
 Replay constraint (restated because it is the one way to lose): everything between Activities must be deterministic. Model calls, tool calls, and container exec are Activities/steps; folds and `step` are pure. Enforce by construction: folds execute in a context providing neither `Clock` nor `Random`.
 
-#### Triggers → physics
+#### Ingestion → physics (the front door on Cloudflare)
 
-| Term | Cloudflare mechanism |
+Charters compile to **no delivery routes** — ingestion is world-side code in the Worker's init phase, and each mechanism ends in an explicit verb:
+
+| World input | Cloudflare mechanism |
 |---|---|
-| `AI.on(Github.*)`, `AI.on(Discord.*)` | Webhook → Worker route → `Router` → ring DO stimulus (Queues-buffered for burst) |
-| `AI.on(KernelEvent)` (parent watching child) | internal bus: DO → Queues/RPC to subscribing ring DO |
-| `AI.each(param)` | Queue + DO-side dedupe/ack ledger |
-| `AI.every(cron)` | DO alarm (per-ring) or Workflow cron (per-run) |
+| GitHub / Discord webhooks | `consumeRepositoryEvents(repo, handler)` → validate/deny/adapt → `send`/`dispatch`/`steer` a ring DO (Queues-buffered for burst) |
+| cross-process events (parent watching child, org-internal messages) | typed emits on the EventBus → front-door subscriber → explicit `send`/`steer` |
+| work queues | Queue consumer → `send` (the ring's mailbox + DO-side dedupe/ack ledger is the durable queue) |
+| cron | platform cron (DO alarm / Workflow cron) → handler → `send` |
+| machine-observed exits (`AI.until(source, match)`) | the ONE kernel-internal subscription: the harness correlates the observed event to the parked run whose `match` accepts it |
 
-A ring's charter compiles to **routes**, not to a resident `Stream.merge`. `LoopHandle.run` on this harness registers routes and returns; "running" means "reachable".
+"Running" means "reachable": a process's ring DO wakes when the front door delivers, decides, and sleeps.
 
 #### Human-backed tools
 
@@ -901,36 +997,41 @@ compress; you never narrate.` {}
 ```
 
 ```ts
-export class Flywheel extends AI.Loop<Flywheel>()("Flywheel")`
-The development flywheel for alchemy-run repos.
+// scoped sources: the catalog constructor closes over the resource
+const repos = GitHub.Organization("alchemy-run");
 
-${AI.on(Github.IssueOpened({ org: "alchemy-run" }))} run ${Triage}.
+export class Flywheel extends AI.Process<Flywheel>()("Flywheel")`
+The development flywheel for the ${repos} repositories.
 
-${AI.on(Github.IssueLabeled({ org: "alchemy-run", label: "ready" }))}
-dispatch a ${Fix} run — at most ${AI.concurrency(3)} in flight,
-smallest estimates first.
+${AI.when(Github.IssueOpened(repos))} arrives, run ${Triage}.
 
-${AI.on(Github.PullRequestOpened({ org: "alchemy-run" }))} assign
+${AI.when(Github.IssueLabeled(repos, "ready"))} arrives, dispatch a
+${Fix} run — at most ${AI.concurrency(3)} in flight, smallest
+estimates first.
+
+${AI.when(Github.PullRequestOpened(repos))} arrives, assign
 ${Reviewer}; a rejected review reopens the originating ${Fix} with
 the review attached as new acceptance criteria.
 
-${AI.on(Github.Push({ branch: "main", titlePrefix: "chore(release):" }))}
-hand off to ${ReleaseBlogger}.
+${AI.when(Github.Push(repos, { branch: "main", titlePrefix: "chore(release):" }))}
+arrives, hand off to ${ReleaseBlogger}.
 
 ${AI.never`no exit; merge rate, time-to-first-response, and reopen
 rate are folded weekly and posted via ${Reply} to #maintainers`}` {}
 
-export class Helpdesk extends AI.Loop<Helpdesk>()("Helpdesk")`
-${AI.on(Discord.ThreadCreated({ channel: "#help" }))} run ${Support}.
-${AI.on(Discord.Mention({ user: "@alchemy" }))} run ${Support}.
+export class Helpdesk extends AI.Process<Helpdesk>()("Helpdesk")`
+${AI.when(Discord.ThreadCreated("#help"))} or
+${AI.when(Discord.Mention("@alchemy"))} arrives, run ${Support}.
 ${AI.fold(Scribe)`weekly: cluster threads; the top recurring
 confusion becomes a docs issue, filed with evidence`}
 ${AI.never`support does not halt while the product lives`}` {}
 
-export class Autoresearch extends AI.Loop<Autoresearch>()("Autoresearch")`
-${AI.every("1 week")} study the traces of ${Flywheel} and
-${Helpdesk}: cluster failures; find prompts correlated with
-reopened issues; find tools agents misuse or avoid.
+// Autoresearch is dispatch-created: platform cron sends the weekly
+// mandate; the charter declares no acceptance — its In is the mandate.
+export class Autoresearch extends AI.Process<Autoresearch>()("Autoresearch")`
+Study the traces of ${Flywheel} and ${Helpdesk}: cluster failures;
+find prompts correlated with reopened issues; find tools agents
+misuse or avoid.
 
 Propose improvements as PRs against src/org/ — edits to agent
 templates, new tools, changed Layer wiring. Every proposal must
@@ -942,7 +1043,9 @@ ${AI.until`a maintainer closes the experiment`}` {}
 // merge authority by any Layer — enforced by Req, not prose.
 ```
 
-Coupling audit: `Helpdesk → Flywheel` exists only because `Support` holds `${CreateIssue}` and `Flywheel` triggers on `IssueOpened`. Every inter-ring hop crosses GitHub or Discord — durable, auditable, human-readable. Deleting a ring stops its mail; it breaks nothing.
+The `AI.when` declarations type each charter's `In` and tell the model what arrives — **delivery is the front door's** (§4.3): webhook handlers and platform cron call `send`/`dispatch`/`steer`; no charter is woken by the kernel.
+
+Coupling audit: `Helpdesk → Flywheel` exists only because `Support` holds `${CreateIssue}` and the front door routes `IssueOpened` to `Flywheel`. Every inter-ring hop crosses GitHub or Discord — durable, auditable, human-readable. Deleting a process stops its mail; it breaks nothing.
 
 ### 4.2 Physics (`src/org/topology.ts`)
 
@@ -993,14 +1096,25 @@ export class Ring extends Cloudflare.DurableObject<Ring>()(
 export const FixWorkflow = Cloudflare.Workflows.Workflow("Fix",
   Cloudflare.AI.workflowOf(FixLive))
 
-// ingress: webhooks → Router → ring stimuli
+// ingress: THE FRONT DOOR — deterministic code that validates,
+// denies, adapts (transport → domain message), and picks the door
 export default Cloudflare.Worker("Org", { main: import.meta.url },
   Effect.gen(function* () {
-    const rings = yield* Ring
+    const flywheel = yield* Flywheel
+    const helpdesk = yield* Helpdesk
     yield* Github.consumeOrganizationEvents({ org: "alchemy-run" },
-      Cloudflare.AI.route(rings))
+      (event) => Effect.gen(function* () {
+        switch (event.name) {
+          case "issues":        // adapt, then explicitly deliver
+            return yield* flywheel.send(toIssueMessage(event.payload))
+          // …denial (duplicate deliveries, closed repos) happens HERE,
+          // as code — a 4xx/skip before anything reaches a process
+        }
+      }))
     yield* Discord.consumeGuildEvents({ guild: "alchemy" },
-      Cloudflare.AI.route(rings))
+      (event) => helpdesk.send(toThreadMessage(event)))
+    // platform cron → the weekly Autoresearch mandate
+    yield* Cloudflare.cron("0 0 * * 1", () => autoresearch.send(weeklyMandate))
   }))
 ```
 
@@ -1010,16 +1124,18 @@ One `alchemy deploy` provisions: the Worker, the Ring DO namespace, the Fix Work
 
 ```
 Discord #help thread
+  → front door: consumeGuildEvents → helpdesk.send
   → Ring(Helpdesk) DO wakes → Support agent turn (doFiber)
   → CreateIssue ────────────────────────── GitHub
-  → webhook: IssueOpened → Ring(Flywheel) → Triage → labeled ready
-  → webhook: IssueLabeled → spawn Workflow Fix#N
+  → webhook → front door → flywheel.send(IssueOpened) → Triage → labeled ready
+  → webhook → front door → fix.dispatch(#N) → Workflow Fix#N
        ⟳ iterations: Engineer, fresh context; step.do per iteration;
-         fold → NOTES.md; halt when Bash reports green
-  → PR opened → webhook → Reviewer → Approve
+         fold → NOTES.md; exit when Bash reports green
+  → PR opened → webhook → front door → Reviewer → Approve
        (ApproveHuman: step.waitForEvent, ≤7 days)
-  → merge → Push(chore(release):) → ReleaseBlogger → blog post
-  → weekly alarm → Autoresearch reads Trace → PR against src/org/
+  → merge → Push(chore(release):) → front door → ReleaseBlogger → blog post
+  → platform cron → front door → autoresearch.send(weekly mandate)
+       → Autoresearch reads Trace → PR against src/org/
 ```
 
 Phase 4 ships when this trace executes on production Cloudflare with a human approving exactly one step, and every hop is visible in the Trace/OTel view.
@@ -1062,7 +1178,7 @@ Phase 4 ships when this trace executes on production Cloudflare with a human app
 
 ## 7. Glossary
 
-**Term** — pure-data declaration; the broad word for every node of the language, split into three classes (§1). **Process term** — `Agent` or `Loop`: the only interpretable kinds; each denotes a Process `In → Run<Out, Err>` and interprets into a `ProcessService` with its own ring. **Capability term** — `Tool` or `Parameter`: compiled into a host process's toolkit, never interpreted, no ring. **Control ref** — `Trigger`/`Halt`/`Fold`/`Check`/`Budget`/`Concurrency`/`Observe`: parameters of a process term's ring. **Ref** — an interpolated value in a term's template; the unit of dependency. **Charter** — a Loop's template. **Ring** — a loop at some organizational scale; operationally, the single serial mailbox-drain loop a process term interprets into (one ring per process-term Layer). **Check** — the positional verifier: an agent assigned to grade the halt condition at the iteration boundary; the maker/checker split applied to the stop condition. **Fold** — the boundary compression of an iteration's Trace into carried state; the unit of memory and of durability. **Trace** — the persisted `KernelEvent` log; single source for memory, replay, observability, and autoresearch. **Kernel** — the `Context.Tag` whose implementations interpret terms. **Harness** — a Kernel implementation Layer plus its private component services. **Seam** — a `Context.Tag` internal to a harness (Durability, ContextPolicy, Sandbox…), invisible to the Kernel interface. **Autonomy dial** — the choice of Layer implementing human-class tools per ring. **Oversight loop** — the humans editing this repository.
+**Term** — pure-data *declaration*: a named node of the language (`Process`, `Agent`, `Tool`, `Parameter`, `EventSource`, `Skill`), split into three classes (§1). **Expression** — a reference inside a term's template; evaluates to prose at render time and to types/topology at compile time; the unit of dependency. Unmarked expressions grant the term's affordance; marked expressions (`AI.when`, `AI.until`) declare signature roles. **Process term** — `Agent` or `Process`: the only interpretable kinds; each denotes a Process `In → Run<Out, Err>` and interprets into a `ProcessService` with its own ring. **Run** — the process applied to one work item: an **actor**, created by its first message, addressed by run key `(term, work item)`. **Capability term** — `Tool` or `Parameter`: compiled into a host process's toolkit, never interpreted, no ring. **Message signature** — the {inbound, outbound} × {continuing, terminal} grid: `AI.when(X)` accepts, the event mention publishes, `AI.until` settles, `AI.never` declares perpetuity. **Front door** — the deterministic world-side code that consumes wires (webhooks, APIs, cron), validates, denies, adapts, and delivers via `send`/`dispatch`/`steer`; the only source of process input. **Charter** — a Process's template. **Ring** — operationally, the single serial mailbox-drain loop a process term interprets into (one ring per process-term Layer); kernel-internal. **Check** — the positional verifier: an agent assigned to grade the exit condition at the iteration boundary; the maker/checker split applied to the stop condition. **Fold** — the boundary compression of an iteration's Trace into carried state; the unit of memory and of durability. **Trace** — the persisted `KernelEvent` log; single source for memory, replay, observability, and autoresearch. **Kernel** — the `Context.Tag` whose implementations interpret terms. **Harness** — a Kernel implementation Layer plus its private component services. **Seam** — a `Context.Tag` internal to a harness (Durability, ContextPolicy, Sandbox…), invisible to the Kernel interface. **Autonomy dial** — the choice of Layer implementing human-class tools per ring. **Oversight loop** — the humans editing this repository.
 
 ## 8. Loop design research (July 2026 survey)
 
@@ -1128,9 +1244,9 @@ The illustrated ring bodies matter as much as the labels. Ring 2's body is envir
 |---|---|---|
 | Token loop | not represented — inside the model | — |
 | Execution loop / agent turn | `Agent` term; the act–observe cycle is Kernel-internal and deliberately has **no halt term** | kernel policy (turn ends on no more tool calls) |
-| Task loop / `/goal` | `Loop` + `AI.each(param)` + `AI.until(schema)` + `AI.fold` + `AI.budget` — the `Fix` sketch | `Out = Schema["Type"]`, `Err = BudgetExceeded` |
-| Product loop / MetaLoop | `Loop` + `AI.on(events)` + `AI.never` + `AI.concurrency`, dispatching `${Fix}` — the `Flywheel` sketch | `Out = never`; health signals in the `never` prose |
-| System loop | `Loop` + `AI.every(cron)` + `AI.observe(rings)` + `AI.until`, no `Approve` in `Req` — the `Autoresearch` sketch | `Out` from the halt; merge gate structural (absence of ref) |
+| Task loop / `/goal` | `Process`, dispatch-created (the front door sends the work item) + `AI.until(schema)` + `AI.fold` + `AI.budget` — the `Fix` sketch | `Out = Schema["Type"]`, `Err = BudgetExceeded` |
+| Product loop / MetaLoop | `Process` + `AI.when(events)` + `AI.never` + `AI.concurrency`, dispatching `${Fix}` — the `Flywheel` sketch | `Out = never`; health signals in the `never` prose |
+| System loop | `Process`, cron-dispatched (platform cron → front door → `send`) + `AI.observe(rings)` + `AI.until`, no `Approve` in `Req` — the `Autoresearch` sketch | `Out` from the exit; merge gate structural (absence of ref) |
 | Oversight loop | not a term — the source file, code review, `alchemy deploy` | "yours to call" |
 
 Two gaps the diagrams sharpen beyond §8.4's list: (a) the positional judge (point 4 above); (b) MetaLoop's exit "collaboration and competition" implies *comparative* evaluation among concurrently spawned runs — culling by selection. `AI.concurrency(3)` says how many are in flight; nothing yet names the selection/culling policy ("smallest estimates first" lives only in the Flywheel prose). Likely kernel policy + charter prose, but now documented.
@@ -1168,7 +1284,7 @@ Grouped by which of our term channels carries the requirement. ✅ = the current
 
 **Trigger / `In` channel**
 
-- ✅ The settled trigger taxonomy — event (`AI.on`), queue/parameter (`AI.each`), cadence (`AI.every`) — matches LangChain's event-driven loops, Warp's webhook-vs-schedule split (inner loop event-triggered, improvement loop schedule-triggered), and Osmani's automations ("the heartbeat… what make a loop an actual loop and not just one run you did once").
+- ✅ The settled input taxonomy — event, queue, cadence — matches LangChain's event-driven loops, Warp's webhook-vs-schedule split (inner loop event-triggered, improvement loop schedule-triggered), and Osmani's automations ("the heartbeat… what make a loop an actual loop and not just one run you did once"). In the resting model all three are front-door mechanisms ending in an explicit verb (`AI.when` declares acceptance; delivery is code), which is *stronger* on Horthy's factor 8 — the trigger wiring is literally in your code.
 - ✅ Signals from outside the codebase as first-class inputs: `EventSource` is world-side by design. [Factory.ai; Tížková]
 - ⚠️ **Signal filtering/prioritization**: not every event should wake the outer ring; Gavrilescu's first advice is "invest in your signals." Trigger predicates/prioritization are unmodeled — probably kernel policy, but the charter prose may need a typed place to name the filter.
 - ❌ **Ambient/absence triggers**: Krieger's standing-responsibility delegation and Claude Tag's "follow up on stalled tasks" fire on *lack* of progress, not on an event. No current constructor expresses "when X has been silent for N days." Defer, but record it.
@@ -1247,7 +1363,7 @@ Eight production systems studied at source level (one research agent each; full 
 3. **Maker/checker retrofitted everywhere it was missing**: Mastra's networks shipped LLM self-assessed completion, admitted it hallucinates, and retrofitted external-validation scorers + a goal judge with read-only tools and its own thread. `AI.check` is positionally correct from day one.
 4. **Subagents are composition, not a kernel feature** (§2.4): all eight. Child = child session/thread/ring; results return distilled; recursion denied by construction or blocklist.
 5. **Memory/compaction as private seams**: pi's replaceable preparation, Mastra's processors, AI SDK's `prepareStep` + userland. Nobody puts memory in the kernel interface. Codex's mid-turn summary-placement lore (model-trained position sensitivity) proves *why*: it's provider-coupled and would poison a public interface.
-6. **Nobody provisions the wire.** Flue verifies webhooks but the user creates them; Eve attaches via `vercel connect` out-of-band; Mastra provisions Slack imperatively at runtime. `EventSource<In, Channel>` → `Req` → Layer → provisioned Webhook resource remains genuinely unoccupied territory (§1.2.3's claim survives contact with all eight).
+6. **Nobody provisions the wire.** Flue verifies webhooks but the user creates them; Eve attaches via `vercel connect` out-of-band; Mastra provisions Slack imperatively at runtime. Declaring-provisions-the-wire remains genuinely unoccupied territory (§1.2.3's claim survives contact with all eight) — in the current model the declaration that provisions is the *consuming* call site (`consumeRepositoryEvents` carries the compile fence), not the process's acceptance expression.
 
 ### 9.3 Decisions adopted into the design (the flow-through)
 

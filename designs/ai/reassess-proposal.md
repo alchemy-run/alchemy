@@ -1,5 +1,16 @@
 # Reassessment — the proposal (synthesis of five reports)
 
+> **Forward pointer (July 2026):** a second reassessment round —
+> business processes / the actor resting point — has since converged;
+> the canon for the process model is now
+> [designs/ai/business-processes.md](./business-processes.md). This
+> document remains accurate for what it covers (control refs rendering
+> in prose, the three exit sources, deterministic `AI.process` paths,
+> dynamic prose via `AI.value`) — except where the trigger auto-delivery
+> runtime is concerned: that runtime is now demoted (delivery is always
+> world-side code via `send`/`dispatch`/`steer`; only the
+> machine-observed halt subscription remains kernel-internal).
+
 Status: **BUILT** (July 2026). All of A–F landed, each tested and
 committed; the example is rebuilt as the tutorial (§E). Summary of
 what shipped:

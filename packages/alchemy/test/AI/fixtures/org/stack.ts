@@ -1,48 +1,51 @@
 /**
  * The deployment sketch: the same Alchemy program that defines the agents
- * provisions the infrastructure they run on and the surfaces they manage.
+ * provisions the infrastructure they run on and the surface they manage.
  *
- * What deploys today: the two GitHub repositories (and, once wired, their
- * webhook event sources). What deploys in later phases: the ring Durable
- * Objects hosting Flywheel/Helpdesk/Autoresearch, the Fix Workflow, the
- * work queue, and the DevBox containers — each ring's charter compiling to
- * routes from the webhook ingestion to the ring's stimulus handler.
+ * What deploys today: the contrived `test-alchemy` sandbox repository
+ * (and, once wired, its webhook event source). What deploys in later
+ * phases: the Ring Durable Object hosting ResolveGitHubIssue, the work
+ * queue, and the DevBox containers — the charter compiling to routes from
+ * the webhook ingestion to the ring's stimulus handler.
  */
 import * as Effect from "effect/Effect";
 import * as GitHub from "@/GitHub/index.ts";
 import * as Alchemy from "@/index.ts";
 import { localState } from "@/State/LocalState.ts";
-import { alchemyEffect, distilled } from "./repos.ts";
+import { testAlchemy } from "./repos.ts";
 
 export const OrgStack = Alchemy.Stack(
   "AlchemyOrg",
   { providers: GitHub.providers(), state: localState() },
   Effect.gen(function* () {
-    const alchemy = yield* GitHub.Repository("alchemy-effect", {
-      owner: alchemyEffect.owner,
-      name: alchemyEffect.repository,
-      description: "Infrastructure-as-Effects",
-      hasIssues: true,
-      deleteBranchOnMerge: true,
-    });
+    // The exported const IS the resource: yielding it here provisions
+    // the sandbox, and it is the same instance every other yield of
+    // `testAlchemy` resolves (resources are memoized by FQN).
+    const repo = yield* testAlchemy;
 
-    const distilledRepo = yield* GitHub.Repository("distilled", {
-      owner: distilled.owner,
-      name: distilled.repository,
-      description: "Typed cloud SDKs, distilled from OpenAPI",
-      hasIssues: true,
-      deleteBranchOnMerge: true,
-    });
+    // Resource-first scoped sources (canon §2a ruling 6): the SAME
+    // resource that provisions the repository scopes its event catalog —
+    // here the RESOLVED (yielded) form, whose deterministic name derives
+    // from the resource's FQN (stable logical identity — unchanged by a
+    // repository rename) and whose provisioning props come from its
+    // identity props. The charter in processes.ts passes the exported
+    // const itself (the DEFERRED form — module scope, before any deploy);
+    // both forms name the same wire — the one
+    // GitHub.frontDoor(ResolveGitHubIssue) consumes.
+    const issueOpened = GitHub.IssueOpened(repo);
+    const issueClosed = GitHub.IssueClosed(repo);
 
-    // TODO(phase 3+): provision the org runtime alongside the surfaces —
-    //   - Ring DO namespace hosting Flywheel / Helpdesk / Autoresearch
-    //   - Fix Workflow (iteration-scale durability) + `each` work queue
-    //   - DevBox containers backing Bash/Grep/ReadFile/EditFile layers
-    //   - webhook registrations routing GitHub/Discord events to rings
+    // TODO(phase 3+): provision the org runtime alongside the surface —
+    //   - Ring DO namespace hosting ResolveGitHubIssue
+    //   - work queue + DevBox containers backing Bash/Grep/ReadFile/
+    //     EditFile layers
+    //   - webhook registrations routing GitHub events to the ring
 
     return {
-      alchemy: alchemy.fullName,
-      distilled: distilledRepo.fullName,
+      repository: repo.fullName,
+      // the scoped sources are pure data — surface their identities so
+      // the deploy output shows what the org subscribes to
+      sources: [issueOpened.name, issueClosed.name],
     };
   }),
 );

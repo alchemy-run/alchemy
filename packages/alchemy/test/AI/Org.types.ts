@@ -3,44 +3,37 @@
  * that the topology's authority boundaries are facts of the type system,
  * not conventions. Never executed — tsc is the test runner for this file.
  *
- * Two levels are audited:
+ * Three levels are audited:
  *
  * 1. **Term level** — a term's `Req` is the union of its refs' *tags*
  *    (interpolation is dependency declaration).
  * 2. **Layer level** — transitive capability flow is Layer composition:
- *    `AI.layer(Fix).pipe(Layer.provide(AI.layer(Engineer)))` eliminates
- *    the Engineer tag and surfaces Engineer's tools. Capability denial is
- *    the fact that `Approve` appears nowhere in a ring's Layer closure.
+ *    `AI.layer(ResolveGitHubIssue).pipe(Layer.provide(AI.layer(Reviewer)))`
+ *    eliminates the Reviewer tag and surfaces the Reviewer's tools.
+ *    Capability denial is the fact that `Approve` appears nowhere in
+ *    the ring's Layer closure unless the Reviewer's Layer is the door.
+ * 3. **Front-door level** — `GitHub.frontDoor(ResolveGitHubIssue)` is a Layer
+ *    requiring exactly the term's tag + the wire; the delivery compile
+ *    fence rides the consuming call site, never the term.
  */
+import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
+import * as S from "effect/Schema";
 import * as AI from "@/AI/index.ts";
-import {
-  Engineer,
-  Judge,
-  ReleaseBlogger,
-  Reviewer,
-  Scribe,
-  Support,
-  Triage,
-} from "./fixtures/org/agents.ts";
-import { DiscordEvents } from "./fixtures/org/discord-events.ts";
-import { GitHubEvents } from "./fixtures/org/github-events.ts";
-import {
-  Autoresearch,
-  Fix,
-  Flywheel,
-  Helpdesk,
-} from "./fixtures/org/processes.ts";
+import * as GitHub from "@/GitHub/index.ts";
+import { Engineer, Reviewer } from "./fixtures/org/agents.ts";
+import { ResolveGitHubIssue } from "./fixtures/org/processes.ts";
+import { testAlchemy } from "./fixtures/org/repos.ts";
 import type {
   Approve,
   AskHuman,
   Bash,
-  CreateIssue,
   EditFile,
   Grep,
+  MergePullRequest,
   OpenPullRequest,
   ReadFile,
-  Reply,
+  Comment,
   SearchIssues,
 } from "./fixtures/org/tools.ts";
 
@@ -57,17 +50,38 @@ type ChannelsOf<L> =
     ? { out: Out; in: In; err: Err; req: Req }
     : never;
 
-type FixC = ChannelsOf<typeof Fix>;
-type FlywheelC = ChannelsOf<typeof Flywheel>;
-type HelpdeskC = ChannelsOf<typeof Helpdesk>;
-type AutoresearchC = ChannelsOf<typeof Autoresearch>;
+// ─── ResolveGitHubIssue: the one ring (one Process, multiple agents) ──────
+// One GitHub issue owned end to end; the WORLD (GitHub closing the
+// issue) settles the case, never the model's claim.
 
-// ─── Fix: the task loop ──────────────────────────────────────────
-// A run consumes one issue and resolves with the PR it opened.
+type ResolveGitHubIssueC = ChannelsOf<typeof ResolveGitHubIssue>;
 
-type _fix_in = Assert<
+// In = the union of its accepted broadcast messages (AI.when): a case
+// is created by IssueOpened and steered by IssueCommented — the same
+// inbox, two doors, both chosen by the (derived) front door.
+type IssueOpenedItem = {
+  readonly owner: string;
+  readonly repository: string;
+  readonly number: number;
+  readonly title: string;
+  readonly body: string;
+};
+type IssueCommentedItem = {
+  readonly owner: string;
+  readonly repository: string;
+  readonly number: number;
+  readonly author: string;
+  readonly comment: string;
+};
+type _iw_in = Assert<
+  IsEqual<ResolveGitHubIssueC["in"], IssueOpenedItem | IssueCommentedItem>
+>;
+
+// Out = the machine-observed exit's EVENT payload (AI.exit(AI.when(source))):
+// dispatch resolves with what GitHub said when it closed the issue.
+type _iw_out = Assert<
   IsEqual<
-    FixC["in"],
+    ResolveGitHubIssueC["out"],
     {
       readonly owner: string;
       readonly repository: string;
@@ -75,134 +89,163 @@ type _fix_in = Assert<
     }
   >
 >;
-type _fix_out = Assert<
-  IsEqual<
-    FixC["out"],
-    {
-      readonly owner: string;
-      readonly repository: string;
-      readonly number: number;
-      readonly url: string;
-    }
-  >
+type _iw_err = Assert<
+  IsEqual<ResolveGitHubIssueC["err"], AI.BudgetExceeded | AI.Refused>
 >;
-type _fix_err = Assert<IsEqual<FixC["err"], AI.BudgetExceeded | AI.Refused>>;
 
-// Term level: Req is the tags of the charter's refs — the delegated
-// agents (Engineer), the positional verifier (Judge) and fold (Scribe),
-// and loop-level tools nested in control-ref templates (Bash in the
-// check's grading policy). The agents' own toolboxes are *their* layers'
-// requirements, not the loop's.
-type _fix_engineer = Assert<Has<FixC["req"], Engineer>>;
-type _fix_judge = Assert<Has<FixC["req"], Judge>>;
-type _fix_scribe = Assert<Has<FixC["req"], Scribe>>;
-type _fix_bash = Assert<Has<FixC["req"], Bash>>;
-type _fix_no_grep = Assert<Not<Has<FixC["req"], Grep>>>;
-type _fix_no_reviewer = Assert<Not<Has<FixC["req"], Reviewer>>>;
-// Fix can neither merge nor escalate — by omission, not by policy
-type _fix_no_approve = Assert<Not<Has<FixC["req"], Approve>>>;
-type _fix_no_askHuman = Assert<Not<Has<FixC["req"], AskHuman>>>;
+// Term level: the process delegates to exactly two agents (their own
+// toolboxes are *their* layers' requirements, not the process's) and
+// holds its own tools — it triages, replies, and merges itself.
+type _iw_engineer = Assert<Has<ResolveGitHubIssueC["req"], Engineer>>;
+type _iw_reviewer = Assert<Has<ResolveGitHubIssueC["req"], Reviewer>>;
+type _iw_reply = Assert<Has<ResolveGitHubIssueC["req"], Comment>>;
+type _iw_search = Assert<Has<ResolveGitHubIssueC["req"], SearchIssues>>;
+type _iw_merge = Assert<Has<ResolveGitHubIssueC["req"], MergePullRequest>>;
+// …plus the machine-observed exit's channel obligation: observing
+// GitHub.IssueClosed(repo) is a process-side obligation, so the
+// GitHub.Events tag joins Req — the deployment cannot type-check
+// without the channel's Layer.
+type _iw_channel = Assert<Has<ResolveGitHubIssueC["req"], GitHub.GitHubEvents>>;
 
-// Layer level: providing the agents' kernel-derived layers eliminates
-// their tags and surfaces their toolboxes — the transitive closure.
-const FixLive = AI.layer(Fix).pipe(
-  Layer.provide([AI.layer(Engineer), AI.layer(Judge), AI.layer(Scribe)]),
+// Capability by omission — the merge gate: ResolveGitHubIssue holds
+// MergePullRequest (whose own prose refuses without an approved
+// review) but NOT Approve — approval lives only in the Reviewer's
+// template (the autonomy dial). It also cannot touch the repo directly
+// (no Grep/EditFile/Bash/OpenPullRequest — those are the Engineer's,
+// behind its Layer) and cannot escalate (no AskHuman).
+type _iw_no_approve = Assert<Not<Has<ResolveGitHubIssueC["req"], Approve>>>;
+type _iw_no_editFile = Assert<Not<Has<ResolveGitHubIssueC["req"], EditFile>>>;
+type _iw_no_grep = Assert<Not<Has<ResolveGitHubIssueC["req"], Grep>>>;
+type _iw_no_bash = Assert<Not<Has<ResolveGitHubIssueC["req"], Bash>>>;
+type _iw_no_openPr = Assert<
+  Not<Has<ResolveGitHubIssueC["req"], OpenPullRequest>>
+>;
+type _iw_no_askHuman = Assert<Not<Has<ResolveGitHubIssueC["req"], AskHuman>>>;
+
+// AI.when contributes NO channel tag (delivery is outside code): the
+// GitHub.Events obligation above comes from the halt alone. WhenOnly
+// proves the negative — `when` on channel-backed world sources with no
+// machine exit leaves Req channel-free. (testAlchemy is the DEFERRED
+// form — the exported un-yielded resource Effect — proving the widened
+// constructor changes no Req derivation.)
+class WhenOnly extends AI.Process<WhenOnly>()("WhenOnly")`
+${AI.when(GitHub.IssueOpened(testAlchemy))} accepted, never
+auto-delivered. ${AI.never`perpetual demo ring`}` {}
+type _when_no_channel = Assert<
+  Not<Has<ChannelsOf<typeof WhenOnly>["req"], GitHub.GitHubEvents>>
+>;
+
+// World-owned mentions contribute no publish topology (canon §2a ruling
+// 4, held at the TYPE level): a bare mention of a world-owned catalog
+// source is inert vocabulary — no publish grant, no channel obligation.
+class Vocabulary extends AI.Process<Vocabulary>()("Vocabulary")`
+${GitHub.IssueOpened(testAlchemy)} is vocabulary here — the world
+publishes it; this process never can.
+${AI.never`perpetual demo ring`}` {}
+type _vocab_no_channel = Assert<
+  Not<Has<ChannelsOf<typeof Vocabulary>["req"], GitHub.GitHubEvents>>
+>;
+
+// …while an ORG-internal channel-backed mention IS the publish grant:
+// the channel tag joins Req (publishing needs the channel's physics).
+class OrgChat extends Context.Service<OrgChat, AI.EventChannelService>()(
+  "org/Chat",
+) {}
+const OrgAnnounce = AI.EventSource("org.announce", S.Void, OrgChat);
+class Announcer extends AI.Process<Announcer>()("Announcer")`
+Publish ${OrgAnnounce} when anything noteworthy happens.
+${AI.never`perpetual demo ring`}` {}
+type _announcer_channel = Assert<
+  Has<ChannelsOf<typeof Announcer>["req"], OrgChat>
+>;
+
+// ─── Layer level: merge authority enters through exactly one door ──
+// The Reviewer's template is the only ${Approve} in the org.
+
+const ResolveGitHubIssueLive = AI.layer(ResolveGitHubIssue).pipe(
+  Layer.provide([AI.layer(Engineer), AI.layer(Reviewer)]),
 );
-type FixClosure =
-  typeof FixLive extends Layer.Layer<any, any, infer R> ? R : never;
+type ResolveGitHubIssueClosure =
+  typeof ResolveGitHubIssueLive extends Layer.Layer<any, any, infer R>
+    ? R
+    : never;
 
-// the Engineer's toolbox flows in through its layer…
-type _fixl_grep = Assert<Has<FixClosure, Grep>>;
-type _fixl_read = Assert<Has<FixClosure, ReadFile>>;
-type _fixl_edit = Assert<Has<FixClosure, EditFile>>;
-type _fixl_openPr = Assert<Has<FixClosure, OpenPullRequest>>;
-// …the fold's (Scribe → CreateIssue) and the kernel itself…
-type _fixl_createIssue = Assert<Has<FixClosure, CreateIssue>>;
-type _fixl_kernel = Assert<Has<FixClosure, AI.Kernel>>;
+// providing the agents' layers eliminated their tags and surfaced
+// their toolboxes — Approve is in the closure through the Reviewer's
+// door, the repo tools through the Engineer's…
+type _iwl_approve = Assert<Has<ResolveGitHubIssueClosure, Approve>>;
+type _iwl_grep = Assert<Has<ResolveGitHubIssueClosure, Grep>>;
+type _iwl_editFile = Assert<Has<ResolveGitHubIssueClosure, EditFile>>;
+type _iwl_openPr = Assert<Has<ResolveGitHubIssueClosure, OpenPullRequest>>;
+type _iwl_readFile = Assert<Has<ResolveGitHubIssueClosure, ReadFile>>;
+type _iwl_kernel = Assert<Has<ResolveGitHubIssueClosure, AI.Kernel>>;
 // …the agent tags are eliminated…
-type _fixl_no_engineer = Assert<Not<Has<FixClosure, Engineer>>>;
-// …and the whole closure still cannot demand merge authority.
-type _fixl_no_approve = Assert<Not<Has<FixClosure, Approve>>>;
-type _fixl_no_askHuman = Assert<Not<Has<FixClosure, AskHuman>>>;
+type _iwl_no_engineer = Assert<Not<Has<ResolveGitHubIssueClosure, Engineer>>>;
+type _iwl_no_reviewer = Assert<Not<Has<ResolveGitHubIssueClosure, Reviewer>>>;
+// …and the channel obligation survives composition until a channel
+// Layer discharges it.
+type _iwl_channel = Assert<Has<ResolveGitHubIssueClosure, GitHub.GitHubEvents>>;
 
-// ─── Flywheel: the product loop ──────────────────────────────────
-// Perpetual; wakes on GitHub events from both managed repositories.
-
-type _fw_out = Assert<IsEqual<FlywheelC["out"], never>>;
-// subscribing to GitHub sources places the channel tag in Req —
-// declaring the subscription obligates the webhook infrastructure
-type _fw_channel = Assert<Has<FlywheelC["req"], GitHubEvents>>;
-type _fw_no_discord = Assert<Not<Has<FlywheelC["req"], DiscordEvents>>>;
-// dispatching Fix nests the loop tag; running agents contributes theirs
-type _fw_fix = Assert<Has<FlywheelC["req"], Fix>>;
-type _fw_triage = Assert<Has<FlywheelC["req"], Triage>>;
-type _fw_reviewer = Assert<Has<FlywheelC["req"], Reviewer>>;
-type _fw_blogger = Assert<Has<FlywheelC["req"], ReleaseBlogger>>;
-// nested control-ref templates still contribute loop-level tools
-type _fw_reply = Assert<Has<FlywheelC["req"], Reply>>;
-
-// Layer level: merge authority enters the closure through exactly one
-// door — the Reviewer, whose template interpolates ${Approve}.
-const FlywheelLive = AI.layer(Flywheel).pipe(
-  Layer.provide([
-    FixLive,
-    AI.layer(Triage),
-    AI.layer(Reviewer),
-    AI.layer(ReleaseBlogger),
-    AI.layer(Scribe),
-  ]),
+// WITHOUT the Reviewer's layer, no composition can demand Approve: the
+// Reviewer tag stays open, but Approve appears nowhere.
+const ResolveGitHubIssueNoReviewer = AI.layer(ResolveGitHubIssue).pipe(
+  Layer.provide(AI.layer(Engineer)),
 );
-type FlywheelClosure =
-  typeof FlywheelLive extends Layer.Layer<any, any, infer R> ? R : never;
-
-type _fwl_approve = Assert<Has<FlywheelClosure, Approve>>;
-type _fwl_channel = Assert<Has<FlywheelClosure, GitHubEvents>>;
-type _fwl_bash = Assert<Has<FlywheelClosure, Bash>>;
-
-// ─── Helpdesk: the support loop ──────────────────────────────────
-// Perpetual, un-budgeted, Discord-facing.
-
-type _hd_out = Assert<IsEqual<HelpdeskC["out"], never>>;
-type _hd_err = Assert<IsEqual<HelpdeskC["err"], never>>;
-type _hd_channel = Assert<Has<HelpdeskC["req"], DiscordEvents>>;
-type _hd_support = Assert<Has<HelpdeskC["req"], Support>>;
-
-const HelpdeskLive = AI.layer(Helpdesk).pipe(
-  Layer.provide([AI.layer(Support), AI.layer(Scribe)]),
-);
-type HelpdeskClosure =
-  typeof HelpdeskLive extends Layer.Layer<any, any, infer R> ? R : never;
-
-// Support escalates to humans and files issues; it does not merge.
-type _hdl_askHuman = Assert<Has<HelpdeskClosure, AskHuman>>;
-type _hdl_createIssue = Assert<Has<HelpdeskClosure, CreateIssue>>;
-type _hdl_no_approve = Assert<Not<Has<HelpdeskClosure, Approve>>>;
-
-// ─── Autoresearch: the system loop ───────────────────────────────
-// Observes Flywheel and Helpdesk; halts when a maintainer closes the
-// experiment; proposes PRs it cannot merge.
-
-type _ar_out = Assert<IsEqual<AutoresearchC["out"], void>>;
-type _ar_in = Assert<IsEqual<AutoresearchC["in"], void>>; // cron-driven
-type _ar_propose = Assert<Has<AutoresearchC["req"], OpenPullRequest>>;
-type _ar_askHuman = Assert<Has<AutoresearchC["req"], AskHuman>>;
-
-// THE constitutional constraint: observation grants trace access, not
-// capabilities. Autoresearch studies the rings it improves without
-// inheriting their tags — so no Layer composition, however creative, can
-// route Approve (or Bash, or the Engineer) into its closure, because its
-// Req never demands them.
-type _ar_no_approve = Assert<Not<Has<AutoresearchC["req"], Approve>>>;
-type _ar_no_engineer = Assert<Not<Has<AutoresearchC["req"], Engineer>>>;
-type _ar_no_flywheel = Assert<Not<Has<AutoresearchC["req"], Flywheel>>>;
-type _ar_no_bash = Assert<Not<Has<AutoresearchC["req"], Bash>>>;
-type _ar_no_channels = Assert<
-  Not<Has<AutoresearchC["req"], GitHubEvents | DiscordEvents>>
+type ResolveGitHubIssueNoReviewerClosure =
+  typeof ResolveGitHubIssueNoReviewer extends Layer.Layer<any, any, infer R>
+    ? R
+    : never;
+type _iwnr_reviewer_open = Assert<
+  Has<ResolveGitHubIssueNoReviewerClosure, Reviewer>
+>;
+type _iwnr_no_approve = Assert<
+  Not<Has<ResolveGitHubIssueNoReviewerClosure, Approve>>
 >;
 
-// ─── cross-ring coupling audit ───────────────────────────────────
-// Helpdesk → Flywheel coupling exists only through the world: Support
-// holds CreateIssue (GitHub side effect) and Flywheel triggers on
-// IssueOpened (GitHub event). Neither ring's Req contains the other.
-type _no_ring_coupling_hd = Assert<Not<Has<HelpdeskC["req"], Flywheel>>>;
-type _no_ring_coupling_fw = Assert<Not<Has<FlywheelC["req"], Helpdesk>>>;
+// The transitive compile fence: discharging GitHub.Events with the CORE
+// channel Layer surfaces its own requirement on the substrate binding —
+// forgetting GitHubRepositoryEventSourceLive on the Worker fails to
+// type-check.
+const ResolveGitHubIssueWired = ResolveGitHubIssueLive.pipe(
+  Layer.provide(GitHub.GitHubEventsLive),
+);
+type ResolveGitHubIssueWiredClosure =
+  typeof ResolveGitHubIssueWired extends Layer.Layer<any, any, infer R>
+    ? R
+    : never;
+type _iww_no_channel = Assert<
+  Not<Has<ResolveGitHubIssueWiredClosure, GitHub.GitHubEvents>>
+>;
+type _iww_fence = Assert<
+  Has<ResolveGitHubIssueWiredClosure, GitHub.RepositoryEventSource>
+>;
+
+// ─── the DERIVED front door (canon §5) ───────────────────────────
+// GitHub.frontDoor(ResolveGitHubIssue) is a Layer requiring exactly the term's
+// tag (the routing needs the live service) + the wire (the consuming
+// call site carries the provisioning compile fence). It provides
+// nothing and never demands the kernel or the channel — delivery is
+// world-side code, not kernel machinery.
+
+const FrontDoor = GitHub.frontDoor(ResolveGitHubIssue);
+// NOTE: `Layer<in ROut, …>` is contravariant in its first parameter and
+// `any` is assignable to everything EXCEPT `never` — so a literal
+// `Layer.Layer<any, any, infer R>` pattern (used elsewhere in this file)
+// silently fails to match the `Layer<never, …>` that Layer.effectDiscard
+// produces. Infer all three slots instead.
+type FrontDoorR =
+  typeof FrontDoor extends Layer.Layer<infer _A, infer _E, infer R> ? R : never;
+type FrontDoorOut =
+  typeof FrontDoor extends Layer.Layer<infer A, infer _E, infer _R> ? A : never;
+
+type _fd_term = Assert<Has<FrontDoorR, ResolveGitHubIssue>>;
+type _fd_wire = Assert<Has<FrontDoorR, GitHub.RepositoryEventSource>>;
+// exactly those two — nothing else rides in…
+type _fd_exact = Assert<
+  IsEqual<FrontDoorR, ResolveGitHubIssue | GitHub.RepositoryEventSource>
+>;
+type _fd_no_channel = Assert<Not<Has<FrontDoorR, GitHub.GitHubEvents>>>;
+type _fd_no_kernel = Assert<Not<Has<FrontDoorR, AI.Kernel>>>;
+type _fd_no_agents = Assert<Not<Has<FrontDoorR, Engineer | Reviewer>>>;
+// …and it provides nothing (Layer.effectDiscard: pure wiring).
+type _fd_out = Assert<IsEqual<FrontDoorOut, never>>;

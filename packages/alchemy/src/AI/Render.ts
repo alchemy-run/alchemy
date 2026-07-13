@@ -12,14 +12,18 @@ import { kernelPrompts } from "./KernelPrompts.ts";
  *   told to fill.
  * - `Tool` / `Agent` / `Process` refs render as their declared name — prose
  *   mentions the collaborator; wiring stays out of band.
- * - **Control refs render their model-facing prose IN PLACE** (§A): a
- *   `Halt` renders its halt-contract block (or the perpetual note),
- *   `Budget` renders the ceilings, `Concurrency`/`Trigger` render
- *   inline. This is why the kernel no longer re-appends a separate
- *   `# Halt condition` heading — the author's `${AI.until(…)}` /
- *   `${AI.budget(…)}` placement IS the rendered contract. (Before this,
- *   every control ref rendered to the empty string and the budget was
- *   never shown to the model at all.)
+ * - bare `EventSource` refs (`${X}` — the publish grant, canon §2a)
+ *   render as the event's name, exactly like a Tool mention — the grant
+ *   is topology metadata; the prose around the expression carries the
+ *   verb. (`${X.name}` interpolates a plain string: same render, no
+ *   grant.)
+ * - **Signature/control refs render their model-facing prose IN PLACE**
+ *   (§A): a `Halt` renders its halt-contract block (or the perpetual
+ *   note), `Concurrency`/`When` render inline. This is why the kernel
+ *   no longer re-appends a separate `# Halt condition` heading — the
+ *   author's `${AI.until(…)}` / `${AI.exit(AI.when(…))}` placement IS
+ *   the rendered contract. (Budgets are NOT prose: `AI.budget({...})`
+ *   is a Layer the kernel enforces — nothing renders.)
  * - `Check` / `Fold` render the empty string in the HOST prompt: their
  *   prose is recipient-scoped (it renders into the verifier's / fold
  *   agent's prompt, not the worker's). `Observe` renders nothing.
@@ -58,6 +62,12 @@ const displayRef = (
       return `{${String(name)}}`;
     case "Tool":
       return String(name);
+    case "EventSource":
+      // the unmarked mention renders as the event's name in place, like
+      // a Tool mention. Owner-insensitive by design (canon §2a ruling
+      // 4): a world-owned source grants nothing by bare mention, but it
+      // still renders its name — the mention is vocabulary.
+      return String(name);
     case "Value": {
       const resolved = resolveValue?.(ref);
       if (resolved !== undefined) return resolved;
@@ -71,7 +81,29 @@ const displayRef = (
         schema: unknown;
         template: TemplateStringsArray;
         refs: ReadonlyArray<unknown>;
+        sources?: ReadonlyArray<Record<string, unknown>>;
       };
+      if (halt.mode !== "never" && halt.sources !== undefined) {
+        // A machine-observed exit (`AI.exit(AI.when(...))`): the sources
+        // own the clause (descriptions joined " or "; "{name} arrives"
+        // fallback — the same clause builder as `when`), and the
+        // callable form's authored prose joins after an em dash:
+        // "This run ends when: {clause} — {prose}".
+        const clause = kernelPrompts.sourceClause(
+          halt.sources.map((source) => ({
+            name: String(source["~alchemy/Name"] ?? ""),
+            description:
+              typeof source["description"] === "string"
+                ? source["description"]
+                : undefined,
+          })),
+        );
+        const prose = renderTemplate(halt.template, halt.refs);
+        return kernelPrompts.haltContract({
+          haltProse: prose.length > 0 ? `${clause} — ${prose}` : clause,
+          hasSchema: halt.schema !== undefined,
+        });
+      }
       const prose = renderTemplate(halt.template, halt.refs);
       return halt.mode === "never"
         ? kernelPrompts.perpetualNote({ healthProse: prose })
@@ -80,24 +112,25 @@ const displayRef = (
             hasSchema: halt.schema !== undefined,
           });
     }
-    case "Budget":
-      return kernelPrompts.budgetNote((ref as { limits: any }).limits);
     case "Concurrency":
       return kernelPrompts.concurrencyNote((ref as { n: number }).n);
-    case "Trigger": {
-      const trigger = ref as {
-        mode: "on" | "each" | "every";
+    case "When": {
+      const accepted = ref as {
         sources: ReadonlyArray<Record<string, unknown>>;
       };
-      const sources = trigger.sources
-        .map((source) =>
-          source["~alchemy/Kind"] === "Cron"
-            ? String(source.expression)
-            : String(source["~alchemy/Name"] ?? ""),
-        )
-        .filter((label) => label.length > 0)
-        .join(", ");
-      return kernelPrompts.triggerNote({ mode: trigger.mode, sources });
+      // Each source owns its clause (the combinator contract): a
+      // description renders as a full "when ___" clause; a
+      // description-less source keeps the "{name} arrives" fallback.
+      const sources = accepted.sources
+        .map((source) => ({
+          name: String(source["~alchemy/Name"] ?? ""),
+          description:
+            typeof source["description"] === "string"
+              ? source["description"]
+              : undefined,
+        }))
+        .filter((source) => source.name.length > 0);
+      return kernelPrompts.whenNote({ sources });
     }
     // Check/Fold prose is recipient-scoped; Observe is silent.
     default:

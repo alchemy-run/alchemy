@@ -1,18 +1,28 @@
 /**
- * The org (designs/ai/org-chat.md + reassess-proposal.md): channels,
+ * The org (designs/ai/business-processes.md — the canon): channels,
  * agents, and their hierarchy — process terms whose sidebar is derived
- * by `AI.topology`. This example is the TUTORIAL for the reassessment:
+ * by `AI.topology`. This example is the TUTORIAL for the resting point:
  * it shows the same "channel" three ways —
  *
- * - `#engineering` — a **deterministic** coordinator (`AI.process`): a
- *   routing classifier LEAF picks members, `Effect.all` fans out, and
- *   `ctx.post` relays. No LLM in the coordination path (reassess §C).
+ * - `#engineering` — a **deterministic** coordinator (`AI.process`,
+ *   effectful-constructor form: dependencies resolve once at Layer
+ *   build): a routing classifier LEAF picks members, `Effect.forEach`
+ *   fans out, `ctx.post` relays, and the route decision is a **typed
+ *   emit** (`ctx.emit(PostRouted, …)` — one durable Trace row AND a
+ *   typed EventBus publication, granted by the bare `${PostRouted}`
+ *   mention in the term). No LLM in the coordination path.
  * - `#support` — a **prose** coordinator (a `Process` charter): the
- *   rarer, open-ended form where a charter drives the room (§the
- *   Process term is opt-in).
+ *   rarer, open-ended form where a charter drives the room.
  * - `#issues` — a **goal** process with a **machine-observed exit**
- *   (`AI.until(IssueClosed)`): the run settles when the world closes
- *   the issue, not on a model claim (reassess §B).
+ *   (`AI.exit(AI.when(IssueClosed), match)`): the run settles when the
+ *   world closes ITS issue — the per-item `match` correlates each
+ *   observed close to the run whose Post names that issue number, so
+ *   concurrent runs never steal each other's exits.
+ *
+ * Delivery is always code (canon §5): `AI.when(PostOpened)` is a pure
+ * input declaration — the server's front door (ChatSessions) validates,
+ * adapts UI messages into typed `PostThread`s, and delivers explicitly
+ * with `send`. Nothing here self-subscribes.
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -91,52 +101,82 @@ a JSON object {"members":["Sage"|"Scout"...],"reason":"…"}: Sage for
 depth (architecture, code, trade-offs), Scout for speed (quick takes),
 BOTH when it is urgent and deep. Never empty.` {}
 
-// the channel term: a goal per Post (Out = the resolution). No charter —
-// its ProcessService is a handler, not a model loop.
+// the typed broadcast the coordinator publishes: "this Post was routed"
+// — a fact other code may subscribe to. The bare ${PostRouted} mention
+// on the term below IS the publish grant (canon §2a), so topology knows
+// the published language
+export const PostRouted = AI.EventSource(
+  "workspace.post.routed",
+  S.Struct({
+    post: S.String,
+    members: S.Array(S.String),
+    reason: S.String,
+  }),
+);
+
+// the channel term: a goal per Post (Out = the resolution). Minimal
+// charter prose — its ProcessService is a handler, not a model loop.
+// AI.when declares the input (types In); the bare ${PostRouted} mention
+// grants the publication (the sentence carries the verb).
 export class Engineering extends AI.Process<Engineering>()("engineering")`
-${AI.on(PostOpened)}
+${AI.when(PostOpened)} route it and publish ${PostRouted} with the decision.
 ${AI.until(S.String)`the Post is resolved`}` {}
 
-export const EngineeringLive = AI.process(Engineering, (post, ctx) =>
+// the effectful-constructor form (canon §2): the Effect resolves the
+// classifier and members ONCE at Layer build; the returned handler
+// closes over them — no per-run resolution, no model in the loop.
+export const EngineeringLive = AI.process(
+  Engineering,
   Effect.gen(function* () {
     const classify = yield* Classify;
     const sage = yield* Sage;
     const scout = yield* Scout;
     const members = { Sage: sage, Scout: scout } as const;
 
-    // the leaf: fuzzy routing, with a deterministic fallback. The parse
-    // is a TYPED failure (Effect.try), not a synchronous throw — so the
-    // fallback (orElseSucceed) actually catches malformed model output
-    // (code fences, prose) instead of it becoming an uncaught defect.
-    const routed = yield* classify
-      .dispatch(formatPost(post))
-      .pipe(
-        Effect.flatMap((raw) =>
-          Effect.try(() => {
-            const t = completedText(raw);
-            const json = t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1);
-            return JSON.parse(json) as unknown;
-          }),
-        ),
-        Effect.flatMap((json) => S.decodeUnknownEffect(Routing)(json)),
-        Effect.orElseSucceed(() => ({
-          members: ["Scout"] as ReadonlyArray<"Sage" | "Scout">,
-          reason: "fallback: default to a quick take",
-        })),
-      );
-    yield* ctx.emit("routing", routed);
+    return (post: PostThread, ctx: AI.ProcessContext) =>
+      Effect.gen(function* () {
+        // the leaf: fuzzy routing, with a deterministic fallback. The parse
+        // is a TYPED failure (Effect.try), not a synchronous throw — so the
+        // fallback (orElseSucceed) actually catches malformed model output
+        // (code fences, prose) instead of it becoming an uncaught defect.
+        const routed = yield* classify
+          .dispatch(formatPost(post))
+          .pipe(
+            Effect.flatMap((raw) =>
+              Effect.try(() => {
+                const t = completedText(raw);
+                const json = t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1);
+                return JSON.parse(json) as unknown;
+              }),
+            ),
+            Effect.flatMap((json) => S.decodeUnknownEffect(Routing)(json)),
+            Effect.orElseSucceed(() => ({
+              members: ["Scout"] as ReadonlyArray<"Sage" | "Scout">,
+              reason: "fallback: default to a quick take",
+            })),
+          );
+        // the typed emit: ONE durable Trace row + a typed EventBus
+        // publication — subscribers see exactly what the Trace records
+        yield* ctx.emit(PostRouted, {
+          post: post.id,
+          members: routed.members,
+          reason: routed.reason,
+        });
 
-    // deterministic fan-out + relay — the coordination path has no LLM
-    const selected = [...new Set(routed.members)];
-    yield* Effect.forEach(
-      selected,
-      (name) =>
-        ctx.run(name, members[name].dispatch(formatPost(post))).pipe(
-          Effect.flatMap((answer) => ctx.post(name, completedText(answer))),
-        ),
-      { concurrency: "unbounded" },
-    );
-    return `resolved by ${selected.join(", ")}`;
+        // deterministic fan-out + relay — the coordination path has no LLM
+        const selected = [...new Set(routed.members)];
+        yield* Effect.forEach(
+          selected,
+          (name) =>
+            ctx.run(name, members[name].dispatch(formatPost(post))).pipe(
+              Effect.flatMap((answer) =>
+                ctx.post(name, completedText(answer)),
+              ),
+            ),
+          { concurrency: "unbounded" },
+        );
+        return `resolved by ${selected.join(", ")}`;
+      });
   }),
 );
 
@@ -146,9 +186,8 @@ export class Support extends AI.Process<Support>()("support")`
 You are the #support channel coordinator — never a participant. Relay
 ${Helper}'s reply with ${PostReply} (author "Helper"), then resolve.
 Escalate engineering-shaped problems by saying so in your resolution.
-${AI.on(PostOpened)}
-${AI.until(S.String)`the user's question is answered or escalated`}
-${AI.budget({ iterations: 6 })}` {}
+${AI.when(PostOpened)}
+${AI.until(S.String)`the user's question is answered or escalated`}` {}
 
 // ─── #issues: a GOAL with a MACHINE-OBSERVED exit ───────────────
 
@@ -161,14 +200,18 @@ class CloseIssue extends AI.Tool<CloseIssue>()("close_issue")`
 Close issue ${issueNumber} once it is resolved.` {}
 
 // the run settles when the WORLD closes the issue — not a model claim.
-// The model may cause it (close_issue) or a human may.
+// The model may cause it (close_issue) or a human may. The per-item
+// `match` correlates each observed close to THIS run's work item (the
+// Post that names that issue number), so concurrent runs of #issues
+// each exit only on THEIR issue's close (canon §2: P0 correlation).
 export class Issues extends AI.Process<Issues>()("issues")`
 Work the issue described in the Post. If the Post explicitly says the
 fix is already verified/applied, close it immediately with ${CloseIssue}
 using its issue number. Otherwise investigate with ${Sage}, and close it
 with ${CloseIssue} only when genuinely resolved.
-${AI.on(PostOpened)}
-${AI.until(IssueClosed)}` {}
+${AI.when(PostOpened)}
+${AI.exit(AI.when(IssueClosed), (post: PostThread, event) =>
+  post.messages.some((message) => message.text.includes(`#${event.number}`)))}` {}
 
 // ─── physics ─────────────────────────────────────────────────────
 

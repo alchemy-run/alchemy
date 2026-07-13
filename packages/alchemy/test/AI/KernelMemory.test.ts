@@ -1204,8 +1204,7 @@ describe("interrupt cascade (§2.8b)", () => {
 
 class Quest extends AI.Process<Quest>()("Quest")`
 Find the answer using ${Grep}.
-${AI.until(S.Struct({ answer: S.Number }))`the numeric answer is found`}
-${AI.budget({ iterations: 3 })}` {}
+${AI.until(S.Struct({ answer: S.Number }))`the numeric answer is found`}` {}
 
 /** Interpret + dispatch one work item through the Quest loop. */
 const questThrough = (
@@ -1232,6 +1231,9 @@ const questThrough = (
         Layer.mergeAll(
           AI.memory.pipe(Layer.provide(model.layer)),
           Layer.succeed(Grep, (() => Effect.succeed("42 spotted")) as never),
+          // budget is a Layer now (never prose): provided where the term
+          // is interpreted, enforced by the kernel as before
+          AI.budget({ iterations: 3 }),
           RuntimeContext.phantom,
         ),
       ),
@@ -1345,8 +1347,7 @@ You are the judge. Grade strictly; never trust the worker.` {}
         class CheckedQuest extends AI.Process<CheckedQuest>()("CheckedQuest")`
 Find the answer using ${Grep}.
 ${AI.until(S.Struct({ answer: S.Number }))`the numeric answer is found`}
-${AI.check(Judge)`the answer must equal 42 exactly`}
-${AI.budget({ iterations: 4 })}` {}
+${AI.check(Judge)`the answer must equal 42 exactly`}` {}
 
         let judgeCalls = 0;
         let questRounds = 0;
@@ -1421,6 +1422,7 @@ ${AI.budget({ iterations: 4 })}` {}
               ),
               Layer.succeed(Grep, (() =>
                 Effect.succeed("42 spotted")) as never),
+              AI.budget({ iterations: 4 }),
               RuntimeContext.phantom,
             ),
           ),
@@ -1470,8 +1472,7 @@ ${AI.check(
         ? { verdict: "goal-met" }
         : { verdict: "off-goal", reason: "the answer must be exactly 42" };
     }),
-)}
-${AI.budget({ iterations: 4 })}` {}
+)}` {}
 
       let rounds = 0;
       const calls: LanguageModel.ProviderOptions[] = [];
@@ -1519,6 +1520,7 @@ ${AI.budget({ iterations: 4 })}` {}
           Layer.mergeAll(
             AI.memory.pipe(Layer.provide(model)),
             Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+            AI.budget({ iterations: 4 }),
             RuntimeContext.phantom,
           ),
         ),
@@ -1543,8 +1545,7 @@ You are the rubber stamp.` {}
         class StampedQuest extends AI.Process<StampedQuest>()("StampedQuest")`
 Find the answer with ${Grep}.
 ${AI.until(S.Struct({ answer: S.Number }))`the answer is found`}
-${AI.check(Rubber)}
-${AI.budget({ iterations: 3 })}` {}
+${AI.check(Rubber)}` {}
 
         let questRounds = 0;
         const model = Layer.effect(
@@ -1592,6 +1593,7 @@ ${AI.budget({ iterations: 3 })}` {}
                   Layer.provide([kernelLayer, RuntimeContext.phantom]),
                 ),
                 Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+                AI.budget({ iterations: 3 }),
                 RuntimeContext.phantom,
               ),
             ),
@@ -1638,7 +1640,11 @@ Just keep working with ${Grep}.` {}
   );
 });
 
-// ─── the trigger runtime (§2.5) ──────────────────────────────────
+// ─── front-door delivery (canon §5: delivery is always code) ─────
+//
+// `AI.when(X)` is a PURE input declaration — the kernel never
+// auto-subscribes accepted-message sources. The front door subscribes
+// to the world itself, adapts, and delivers with explicit `send`.
 
 const Ping = AI.EventSource(
   "test.ping",
@@ -1656,73 +1662,136 @@ Record ${observation} in the log. Call this for every work item.` {}
 class Watcher extends AI.Process<Watcher>()("Watcher")`
 You watch for pings. For every work item, call ${Recorder} with the
 ping's note, then stop.
-${AI.on(Ping)}
+${AI.when(Ping)}
 ${AI.never`health = one record row per ping`}` {}
 
-describe("the trigger runtime (§2.5)", () => {
-  it.effect("run() serves a kernel-internal EventSource as admissions", () =>
-    Effect.gen(function* () {
-      // every Watcher turn: record the input, then quiesce
-      let rounds = 0;
-      const model = Layer.effect(
-        LanguageModel.LanguageModel,
-        LanguageModel.make({
-          generateText: () => Effect.die(new Error("streamText only")),
-          streamText: () =>
-            Stream.suspend(() =>
-              Stream.fromIterable(
-                ++rounds % 2 === 1
-                  ? [
-                      toolCall(`c${rounds}`, "record", {
-                        observation: `saw ping ${rounds}`,
-                      }),
-                      finish("tool-calls"),
-                    ]
-                  : [...text("recorded"), finish("stop")],
+describe("front-door delivery (declaration-only AI.when)", () => {
+  it.effect(
+    "the kernel never auto-subscribes; the front door sends explicitly",
+    () =>
+      Effect.gen(function* () {
+        // every Watcher turn: record the input, then quiesce
+        let rounds = 0;
+        const model = Layer.effect(
+          LanguageModel.LanguageModel,
+          LanguageModel.make({
+            generateText: () => Effect.die(new Error("streamText only")),
+            streamText: () =>
+              Stream.suspend(() =>
+                Stream.fromIterable(
+                  ++rounds % 2 === 1
+                    ? [
+                        toolCall(`c${rounds}`, "record", {
+                          observation: `saw ping ${rounds}`,
+                        }),
+                        finish("tool-calls"),
+                      ]
+                    : [...text("recorded"), finish("stop")],
+                ),
               ),
-            ),
-        }),
-      );
-      const recorded: string[] = [];
-      const RecorderLive = Layer.succeed(Recorder, ((input: {
-        observation: string;
-      }) =>
-        Effect.sync(() => {
-          recorded.push(input.observation);
-          return "logged";
-        })) as never);
+          }),
+        );
+        const recorded: string[] = [];
+        const RecorderLive = Layer.succeed(Recorder, ((input: {
+          observation: string;
+        }) =>
+          Effect.sync(() => {
+            recorded.push(input.observation);
+            return "logged";
+          })) as never);
 
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const kernel = yield* AI.Kernel;
-          const bus = yield* AI.EventBus;
-          const watcher = yield* kernel.interpret(Watcher);
-          // serve the ring's triggers in the background
-          yield* Effect.forkChild(watcher.run());
-          yield* Effect.yieldNow;
-          // the world pings twice
-          yield* bus.publish(Ping, { n: 1, note: "first" });
-          yield* bus.publish(Ping, { n: 2, note: "second" });
-          // rows are truth: wait for two halted turns (clock-free poll)
-          for (let spins = 0; spins < 50_000; spins++) {
-            if (recorded.length >= 2) return;
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const bus = yield* AI.EventBus;
+            const watcher = yield* kernel.interpret(Watcher);
+            // THE FRONT DOOR: outside code owns the subscription and
+            // the delivery — subscribe to the world, adapt, send.
+            const pings = yield* bus.subscribe(Ping);
+            yield* Effect.forkChild(
+              Stream.runForEach(pings, (event) =>
+                // adapt: the wire is untyped; the front door owns decoding
+                watcher.send(event as { n: number; note: string }),
+              ),
+            );
             yield* Effect.yieldNow;
-          }
-          return yield* Effect.die(new Error("pings never served"));
-        }),
-      ).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            AI.memory.pipe(Layer.provide([model, AI.EventBusMemory])),
-            AI.EventBusMemory,
-            RecorderLive,
-            RuntimeContext.phantom,
+            // the world pings twice — nothing reaches the ring except
+            // through the front door's explicit sends
+            yield* bus.publish(Ping, { n: 1, note: "first" });
+            yield* bus.publish(Ping, { n: 2, note: "second" });
+            // rows are truth: wait for two halted turns (clock-free poll)
+            for (let spins = 0; spins < 50_000; spins++) {
+              if (recorded.length >= 2) return;
+              yield* Effect.yieldNow;
+            }
+            return yield* Effect.die(new Error("pings never served"));
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              AI.memory.pipe(Layer.provide([model, AI.EventBusMemory])),
+              AI.EventBusMemory,
+              RecorderLive,
+              RuntimeContext.phantom,
+            ),
           ),
-        ),
-      );
+        );
 
-      // both events became runs, in order, on the one serial ring
-      expect(recorded).toEqual(["saw ping 1", "saw ping 3"]);
-    }),
+        // both events became runs, in order, on the one serial ring
+        expect(recorded).toEqual(["saw ping 1", "saw ping 3"]);
+      }),
+  );
+
+  it.effect(
+    "run() no longer drains accepted-message sources into the mailbox",
+    () =>
+      Effect.gen(function* () {
+        const RecorderLive = Layer.succeed(Recorder, (() =>
+          Effect.succeed("logged")) as never);
+        const model = Layer.effect(
+          LanguageModel.LanguageModel,
+          LanguageModel.make({
+            generateText: () => Effect.die(new Error("streamText only")),
+            streamText: () =>
+              Stream.fromIterable([...text("recorded"), finish("stop")]),
+          }),
+        );
+
+        const admitted: string[] = [];
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const bus = yield* AI.EventBus;
+            const watcher = yield* kernel.interpret(Watcher);
+            // the firehose sees every admission — there must be none
+            yield* Effect.forkChild(
+              Stream.runForEach(kernel.events, (event) =>
+                Effect.sync(() => {
+                  if (event.type === "run.admitted") admitted.push(event.type);
+                }),
+              ),
+            );
+            yield* Effect.forkChild(watcher.run());
+            yield* Effect.yieldNow;
+            // publishing on the declared accepted-message source delivers
+            // NOTHING: AI.when is declaration-only
+            yield* bus.publish(Ping, { n: 1, note: "undelivered" });
+            for (let spins = 0; spins < 5_000; spins++) {
+              yield* Effect.yieldNow;
+            }
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              AI.memory.pipe(Layer.provide([model, AI.EventBusMemory])),
+              AI.EventBusMemory,
+              RecorderLive,
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        expect(admitted).toEqual([]);
+      }),
   );
 });

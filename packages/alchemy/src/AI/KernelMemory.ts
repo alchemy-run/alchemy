@@ -19,11 +19,10 @@ import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
-import * as Duration from "effect/Duration";
 import * as Schedule from "effect/Schedule";
 import { isAgent } from "./Agent.ts";
 import { Ask, AskHub, makeMemoryAskHub } from "./Ask.ts";
-import { type Budget, isBudget } from "./Budget.ts";
+import { BudgetPolicy } from "./Budget.ts";
 import {
   type Check,
   type CheckVerdict,
@@ -35,9 +34,9 @@ import { EventBus, makeMemoryEventBus } from "./EventBus.ts";
 import {
   type EventChannelService,
   type EventSource,
-  isEventSource,
+  isWorldOwned,
 } from "./EventSource.ts";
-import { type Halt, isHalt } from "./Halt.ts";
+import { type Halt, isHalt } from "./Signature.ts";
 import { eventId } from "./Ids.ts";
 import { Kernel, type KernelService } from "./Kernel.ts";
 import { kernelPrompts } from "./KernelPrompts.ts";
@@ -46,7 +45,6 @@ import type { Parameter } from "./Parameter.ts";
 import { renderTemplate } from "./Render.ts";
 import * as Step from "./Step.ts";
 import type { Tool } from "./Tool.ts";
-import { type Cron, isTrigger, type Trigger } from "./Trigger.ts";
 import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
 
 /**
@@ -71,17 +69,18 @@ import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
  *    is load-bearing (§9.3): `effect/ai` never executes tools.
  * 3. **Settle** — tool failures are model-visible results, never thrown
  *    (`Err = never` on agents is a theorem); a Process's typed exits are
- *    `Refused` (ratified give-up) and `BudgetExceeded` (charter budget);
- *    harness failures are defects.
+ *    `Refused` (ratified give-up) and `BudgetExceeded` (the provided —
+ *    or default — budget policy); harness failures are defects.
  * 4. **Persist** — every external effect is preceded by a durable Trace
  *    row (§2.7 write-ahead) through the {@link TraceStore} seam.
  *
- * Deliberately absent (later build-order steps): trigger streams feeding
- * `run()` (EventSource channels), `AI.check`/`AI.fold` agents at the
- * boundary (the defaults apply: no check, transcript-carry fold), the
- * StepState stash (recovery), and N-consecutive `Refused` ratification
- * (a single evidence-bearing give_up refuses). Perpetual charters
- * (`AI.never` / no halt) are rejected until the trigger runtime lands.
+ * Deliberately absent: auto-delivery (canon §2 — `AI.when` is a pure
+ * input declaration; delivery is ALWAYS explicit outside code via
+ * `send`/`dispatch`/`steer`; only machine-observed halts subscribe, and
+ * that subscription is kernel-internal), `AI.check`/`AI.fold` agents at
+ * the boundary beyond the defaults (no check, transcript-carry fold),
+ * the StepState stash (recovery), and N-consecutive `Refused`
+ * ratification (a single evidence-bearing give_up refuses).
  */
 export const KernelPolicy = Context.Reference<{
   readonly maxModelCalls: number;
@@ -95,6 +94,33 @@ export const KernelPolicy = Context.Reference<{
 }>("alchemy/AI/KernelPolicy", {
   defaultValue: () => ({ maxModelCalls: 24 }),
 });
+
+/**
+ * The default machine-exit correlation for one source (precedence:
+ * explicit `halt.match` > THIS > any-event): settle only when the run's
+ * work item and the observed event name the same world entity —
+ * `source.key` equality, the same function the front door steers by.
+ * Guarded: if computing either side's key throws or yields `undefined`
+ * (a work item that isn't the event's shape — e.g. a plain-string demo
+ * item), fall back to ACCEPTING the event, preserving the keyless
+ * any-event behavior rather than parking the run forever.
+ */
+const keyEqualityMatch = (
+  source: EventSource<any, any, any>,
+): ((item: unknown, event: unknown) => boolean) => {
+  const key = source.key;
+  if (key === undefined) return () => true;
+  return (item, event) => {
+    try {
+      const itemKey = key(item);
+      const eventKey = key(event);
+      if (itemKey === undefined || eventKey === undefined) return true;
+      return itemKey === eventKey;
+    } catch {
+      return true;
+    }
+  };
+};
 
 /** Sum a response's known token totals; `undefined` = provider reported none. */
 const usageTokens = (usage: {
@@ -184,15 +210,11 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
       );
       let oneShot = 0;
 
-      // ── triggers (§2.5): subscribe at interpretation time (the
-      // two-phase bind's plan half); run() drains the streams. `each`
-      // contributes nothing here — the ring's mailbox IS the durable
-      // queue and send() is its producer. Shared by the model-driven
-      // interpretProcess and the deterministic `process` handler path.
       // subscribe one EventSource → its runtime stream (channel-backed
       // resolves the family tag from ambient context; kernel-internal
-      // goes through the harness bus). Shared by triggers and by
-      // machine-observed halts (reassess §B).
+      // goes through the harness bus). Used ONLY by machine-observed
+      // halts (reassess §B) — auto-delivery is demoted (canon §2:
+      // AI.when is declaration-only; delivery is always outside code).
       const subscribeSource = Effect.fn(function* (
         source: EventSource<any, any, any>,
       ) {
@@ -243,34 +265,6 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         );
       });
 
-      const subscribeTriggers = Effect.fn(function* (
-        refs: ReadonlyArray<unknown>,
-      ) {
-        const triggerStreams: Stream.Stream<unknown>[] = [];
-        for (const trigger of refs.filter(isTrigger) as Trigger<any, any>[]) {
-          if (trigger.mode === "every") {
-            const expression = (trigger.sources[0] as Cron).expression;
-            if (Option.isNone(Duration.fromInput(expression as never))) {
-              return yield* Effect.die(
-                new Error(
-                  `AI.every(${JSON.stringify(expression)}): cron expressions land with the Cloudflare harness — the memory kernel supports durations ("30 seconds", "1 hour")`,
-                ),
-              );
-            }
-            triggerStreams.push(
-              Stream.fromSchedule(
-                Schedule.spaced(expression as Duration.Input),
-              ).pipe(Stream.map(() => `tick: scheduled wake (${expression})`)),
-            );
-          } else if (trigger.mode === "on") {
-            for (const source of trigger.sources.filter(isEventSource)) {
-              triggerStreams.push(yield* subscribeSource(source));
-            }
-          }
-        }
-        return triggerStreams;
-      });
-
       /**
        * The ring: ONE serial loop per process term, started when the
        * Layer is built (forkScoped — release the Layer, the ring dies).
@@ -298,6 +292,10 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               kind: string,
               payload?: unknown,
             ) => Effect.Effect<unknown>;
+            /** Drain any run-key–addressed steers parked for this run. */
+            readonly takeSteers: () => Prompt.Message[];
+            /** Park until a run-key–addressed steer arrives for this run. */
+            readonly awaitSteer: Effect.Effect<Prompt.Message[]>;
           },
         ) => Effect.Effect<unknown, unknown>;
         /**
@@ -306,13 +304,6 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
          * authority flows down, no orphaned token burn.
          */
         readonly children?: Set<{ readonly cancel: Effect.Effect<void> }>;
-        /**
-         * The trigger streams (§2.5): `run()` drains them into the
-         * mailbox as unjoined admissions — the trigger-lift. Subscribed
-         * at interpretation time (the two-phase bind's plan half);
-         * consumed when the ring is served.
-         */
-        readonly triggers?: ReadonlyArray<Stream.Stream<unknown>>;
       }) {
         const { termName, system, compiled, policy } = options;
 
@@ -323,6 +314,36 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // Process this IS the §2.5 boundary drain: parked steers enter the
         // next iteration's first round. Single-threaded mutation is safe.
         const parkedSteers: Prompt.Message[] = [];
+        // Run-key addressing (canon §1: `steer(runKey, msg)` is the
+        // actor-model tell to a running actor). The run key is the
+        // session minted at admission — the `run.admitted` row's
+        // `session`, so outside code correlates from the Trace. Keyed
+        // steers park here until THEIR run's next boundary; a keyed
+        // steer to a parked machine-exit run completes its wake seat so
+        // the run serves another work round. Single-threaded mutation.
+        const keyedSteers = new Map<string, Prompt.Message[]>();
+        const parkWakes = new Map<string, Deferred.Deferred<void>>();
+        let activeSession: string | undefined;
+        const takeKeyedSteers = (runKey: string): Prompt.Message[] => {
+          const messages = keyedSteers.get(runKey) ?? [];
+          keyedSteers.delete(runKey);
+          return messages;
+        };
+        const awaitKeyedSteer = (
+          runKey: string,
+        ): Effect.Effect<Prompt.Message[]> =>
+          Effect.suspend(() => {
+            const now = takeKeyedSteers(runKey);
+            if (now.length > 0) return Effect.succeed(now);
+            return Effect.gen(function* () {
+              const wake = yield* Deferred.make<void>();
+              parkWakes.set(runKey, wake);
+              yield* Deferred.await(wake).pipe(
+                Effect.ensuring(Effect.sync(() => parkWakes.delete(runKey))),
+              );
+              return takeKeyedSteers(runKey);
+            });
+          });
         let activeInbox: Step.Feedback[] | undefined;
         // set by interrupt(): un-started commands of the current batch
         // are abandoned (the machine settles them as aborted results)
@@ -708,6 +729,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 : Effect.suspend(() => {
                     current = admission;
                     const session = `${termName}#${oneShot++}`;
+                    activeSession = session;
                     return Effect.flatMap(
                       Effect.exit(
                         // the admission is a durable fact (§2.7): without
@@ -728,11 +750,17 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                             session,
                             runTurn,
                             emitRow,
+                            takeSteers: () => takeKeyedSteers(session),
+                            awaitSteer: awaitKeyedSteer(session),
                           }),
                         ).pipe(
                           Effect.ensuring(
                             Effect.sync(() => {
                               current = undefined;
+                              activeSession = undefined;
+                              // a settled run's undelivered keyed steers
+                              // are dropped (the actor is gone)
+                              keyedSteers.delete(session);
                             }),
                           ),
                         ),
@@ -826,35 +854,44 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           // send = the admission half alone (fire-and-forget)
           send: (item: unknown) =>
             Effect.asVoid(Queue.offer(mailbox, { item })),
-          // run = the trigger-lift (§2.5): drain the trigger streams
-          // into the mailbox as unjoined admissions, forever; without
-          // triggers it degenerates to joining the ring's unbounded life
-          run: () =>
-            options.triggers === undefined || options.triggers.length === 0
-              ? Fiber.join(ring)
-              : Effect.andThen(
-                  Stream.runDrain(
-                    Stream.mergeAll(options.triggers, {
-                      concurrency: "unbounded",
-                    }).pipe(
-                      Stream.tap((item) =>
-                        Effect.asVoid(Queue.offer(mailbox, { item })),
-                      ),
-                    ),
-                  ),
-                  Fiber.join(ring),
-                ),
-          // steer = mid-run admission: into the active turn's feedback
-          // inbox (promoted at its next boundary), or parked for the
-          // next turn's/iteration's round 1 when nothing is active
-          steer: (input: unknown) =>
-            Effect.sync(() => {
-              const messages = toMessages(input);
+          // run = join the ring's unbounded life. Vestigial (canon §2):
+          // auto-delivery is demoted — the mailbox drain is
+          // kernel-internal and delivery is explicit outside code.
+          run: () => Fiber.join(ring),
+          // steer = mid-run admission, two addressing forms:
+          //
+          // - steer(msg): into the ACTIVE turn's feedback inbox
+          //   (promoted at its next boundary), or parked for the next
+          //   turn's/iteration's round 1 when nothing is active;
+          // - steer(runKey, msg): addressed to a SPECIFIC run. The
+          //   active run's turn takes it now; otherwise it parks keyed
+          //   and wakes the run's park seat (a parked machine-exit run
+          //   serves another work round).
+          steer: (first: unknown, second?: unknown) =>
+            Effect.suspend(() => {
+              if (second !== undefined) {
+                const runKey = String(first);
+                const messages = toMessages(second);
+                if (runKey === activeSession && activeInbox !== undefined) {
+                  activeInbox.push({ _tag: "Steered", messages });
+                  return Effect.void;
+                }
+                keyedSteers.set(runKey, [
+                  ...(keyedSteers.get(runKey) ?? []),
+                  ...messages,
+                ]);
+                const wake = parkWakes.get(runKey);
+                return wake !== undefined
+                  ? Effect.asVoid(Deferred.succeed(wake, void 0))
+                  : Effect.void;
+              }
+              const messages = toMessages(first);
               if (activeInbox !== undefined) {
                 activeInbox.push({ _tag: "Steered", messages });
               } else {
                 parkedSteers.push(...messages);
               }
+              return Effect.void;
             }),
           // interrupt = Scope authority as a control admission (§0.6),
           // CASCADING (§2.8b): children first — every in-flight
@@ -931,10 +968,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             }),
           );
         }
-        const budget = (term.refs.find(isBudget) as Budget | undefined)?.limits;
+        // budget is provided where the term is provided (a Layer via
+        // AI.budget({...})), never spliced in prose — resolved here per
+        // term at interpretation, defaulting to no explicit ceilings
+        // (the kernel's own guards below still apply)
+        const budget = yield* BudgetPolicy;
         const policy = yield* KernelPolicy;
-
-        const triggerStreams = yield* subscribeTriggers(term.refs);
 
         // ── perpetual rings (AI.never): now legal — each work item is
         // served as ONE kernel-default turn (agent semantics per item);
@@ -956,7 +995,6 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             compiled,
             policy,
             children,
-            triggers: triggerStreams,
             runItem: (item, run) =>
               Effect.map(
                 run.runTurn({
@@ -975,13 +1013,15 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // end, not the model's claim. No resolve/give_up tools — the
         // model works the item with its own tools; the run settles when
         // the exit source delivers a matching event (Out = the payload).
-        // Reconciler doctrine: the model may CAUSE the event (closing the
-        // issue), but the run settles on OBSERVING it. v1: one work round
-        // then park on the exit (agent-closes and human-closes both work;
-        // multi-round-before-park and steer-during-park are follow-ups).
-        if (halt.source !== undefined) {
-          const source = halt.source;
-          const match = halt.match ?? (() => true);
+        // The halt's `match` correlates events to THIS run's work item
+        // (canon §2: per-item correlation is P0) — concurrent runs of
+        // one term each exit only on THEIR event. Reconciler doctrine:
+        // the model may CAUSE the event (closing the issue), but the run
+        // settles on OBSERVING it. Each round parks on the exit; a
+        // run-key steer (`steer(runKey, msg)`) wakes the parked run for
+        // another work round with the steered input.
+        if (halt.sources !== undefined) {
+          const sources = halt.sources;
           const steerCell: SteerCell = {};
           const children = new Set<{ readonly cancel: Effect.Effect<void> }>();
           const compiled = yield* compileTools(
@@ -996,52 +1036,87 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             compiled,
             policy,
             children,
-            triggers: triggerStreams,
             runItem: (item, run) =>
-              // scoped: the exit watcher fiber dies when the run returns
+              // scoped: the exit watcher fibers die when the run returns
               Effect.scoped(
                 Effect.gen(function* () {
-                  // watch the exit source; the first matching event settles
+                  // watch every exit source (AI.exit(AI.when(A, B)) exits
+                  // on A or B); the first correlated event settles.
+                  // Correlation precedence: the explicit match override >
+                  // per-source key equality > any event from the source.
                   const exit = yield* Deferred.make<unknown>();
-                  const stream = yield* subscribeSource(source);
-                  yield* Effect.forkScoped(
-                    Stream.runForEach(stream, (event) =>
-                      match(item, event)
-                        ? Effect.asVoid(Deferred.succeed(exit, event))
-                        : Effect.void,
-                    ),
-                  );
-                  // one work round: the model does what it can (comment,
-                  // call a close tool, …) — its own action may cause the
-                  // exit event
-                  const { outcome } = yield* run.runTurn({
-                    session: `${run.session}/i1`,
-                    seed: [],
-                    input: toMessages(item),
-                  });
-                  if (outcome._tag === "Interrupted") {
-                    return yield* Effect.die(
-                      new Error("interim: interrupted source-halt run"),
+                  for (const source of sources) {
+                    const match = halt.match ?? keyEqualityMatch(source);
+                    const stream = yield* subscribeSource(source);
+                    yield* Effect.forkScoped(
+                      Stream.runForEach(stream, (event) =>
+                        match(item, event)
+                          ? Effect.asVoid(Deferred.succeed(exit, event))
+                          : Effect.void,
+                      ),
                     );
                   }
-                  // PARK until the world declares the exit (returns
-                  // immediately if the turn already caused it)
-                  yield* run.emitRow(
-                    run.session,
-                    "run.parked",
-                    run.session,
-                    "parked",
-                    {},
-                  );
-                  const value = yield* Deferred.await(exit);
-                  yield* run.emitRow(
-                    run.session,
-                    "run.resolved",
-                    run.session,
-                    "resolved",
-                    { observed: true, value },
-                  );
-                  return value;
+                  let seed: ReadonlyArray<Prompt.Message> = [];
+                  let input = toMessages(item);
+                  let iterations = 0;
+                  while (true) {
+                    iterations++;
+                    // a work round: the model does what it can (comment,
+                    // call a close tool, …) — its own action may cause
+                    // the exit event. Keyed steers that raced the round
+                    // join its input.
+                    const { outcome, state } = yield* run.runTurn({
+                      session: `${run.session}/i${iterations}`,
+                      seed,
+                      input: [...input, ...run.takeSteers()],
+                    });
+                    if (outcome._tag === "Interrupted") {
+                      return yield* Effect.die(
+                        new Error("interim: interrupted source-halt run"),
+                      );
+                    }
+                    // PARK until the world declares the exit (immediate
+                    // if the turn already caused it) — or a run-key
+                    // steer wakes the run for another work round
+                    yield* run.emitRow(
+                      run.session,
+                      "run.parked",
+                      run.session,
+                      `parked-${iterations}`,
+                      {},
+                    );
+                    const wake = yield* Effect.raceFirst(
+                      Effect.map(Deferred.await(exit), (event) => ({
+                        _tag: "exit" as const,
+                        event,
+                      })),
+                      Effect.map(run.awaitSteer, (messages) => ({
+                        _tag: "steer" as const,
+                        messages,
+                      })),
+                    );
+                    if (wake._tag === "exit") {
+                      yield* run.emitRow(
+                        run.session,
+                        "run.resolved",
+                        run.session,
+                        "resolved",
+                        { observed: true, value: wake.event },
+                      );
+                      return wake.event;
+                    }
+                    // steered awake: fold = carry the transcript; the
+                    // steer is the next round's input
+                    yield* run.emitRow(
+                      run.session,
+                      "run.steered",
+                      run.session,
+                      `steered-${iterations}`,
+                      { messages: wake.messages.length },
+                    );
+                    seed = state.messages;
+                    input = wake.messages;
+                  }
                 }),
               ),
           });
@@ -1193,9 +1268,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             ? kernelPrompts.verifiedNote()
             : "");
 
-        const maxIterations = budget?.iterations ?? policy.maxIterations ?? 24;
+        const maxIterations = budget.iterations ?? policy.maxIterations ?? 24;
         const tokenCeiling =
-          budget?.tokens !== undefined
+          budget.tokens !== undefined
             ? parseTokenBudget(budget.tokens)
             : undefined;
 
@@ -1205,7 +1280,6 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           compiled,
           policy,
           children,
-          triggers: triggerStreams,
           runItem: (item, run) =>
             Effect.gen(function* () {
               currentRun = {};
@@ -1219,20 +1293,17 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 const { outcome, state } = yield* run.runTurn({
                   session: `${run.session}/i${iterations}`,
                   seed: transcript,
-                  input,
+                  // run-key–addressed steers join this run's boundary
+                  input: [...input, ...run.takeSteers()],
                 });
                 cumulativeTokens += state.tokensUsed;
 
-                // a turn-level harness ceiling inside a budgeted loop is
-                // the loop's typed exit; without a budget it is a defect
+                // a turn-level harness ceiling is the loop's typed exit:
+                // the kernel always enforces SOME ceiling (provided
+                // budget or default guard), so exhaustion is always a
+                // typed possibility (ProcessErr carries BudgetExceeded
+                // unconditionally)
                 if (outcome._tag === "BudgetExceeded") {
-                  if (budget === undefined) {
-                    return yield* Effect.die(
-                      new Error(
-                        `loop ${termName} hit the per-turn harness ceiling (${outcome.limit}) without a charter budget`,
-                      ),
-                    );
-                  }
                   return yield* Effect.fail(
                     new BudgetExceeded({
                       loop: termName,
@@ -1356,25 +1427,21 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     new BudgetExceeded({
                       loop: termName,
                       limit: "tokens",
-                      budget: budget!.tokens!,
+                      budget: budget.tokens!,
                       used: cumulativeTokens,
                       resumeHint: "raise the token budget to resume",
                     }),
                   );
                 }
                 if (iterations >= maxIterations) {
-                  if (budget?.iterations === undefined) {
-                    return yield* Effect.die(
-                      new Error(
-                        `loop ${termName} exceeded the kernel's default iteration guard (${maxIterations}) without a charter budget`,
-                      ),
-                    );
-                  }
+                  // provided ceiling or the kernel's default guard — both
+                  // exhaust as the SAME typed exit (BudgetExceeded is
+                  // unconditional in ProcessErr)
                   return yield* Effect.fail(
                     new BudgetExceeded({
                       loop: termName,
                       limit: "iterations",
-                      budget: budget.iterations,
+                      budget: budget.iterations ?? maxIterations,
                       used: iterations,
                       resumeHint: "raise the iteration budget to resume",
                     }),
@@ -1400,8 +1467,8 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
 
       // ── deterministic handler path (reassess §C): the same ring, a
       // per-item runItem that calls the user's handler with a
-      // ProcessContext instead of running model turns. Triggers, steer,
-      // interrupt, run.admitted/run.settled all come from makeRing.
+      // ProcessContext instead of running model turns. Steer, interrupt,
+      // run.admitted/run.settled all come from makeRing.
       const interpretHandler = Effect.fn(function* (
         term: { "~alchemy/Name": string; refs: unknown[] },
         handler: (
@@ -1411,13 +1478,11 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
       ) {
         const termName = term["~alchemy/Name"];
         const policy = yield* KernelPolicy;
-        const triggerStreams = yield* subscribeTriggers(term.refs);
         const service = yield* makeRing({
           termName,
           system: "",
           compiled: { toolkit: undefined, handlers: new Map() },
           policy,
-          triggers: triggerStreams,
           runItem: (item, run) => {
             let ordinal = 0;
             const emit = (type: string, payload?: unknown) => {
@@ -1427,7 +1492,33 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               );
             };
             const ctx: ProcessContext = {
-              emit,
+              // typed emit (canon §4 addition 1): one durable
+              // `message.emitted` row AND a typed EventBus publication.
+              // No staged-commit machinery exists in the memory kernel —
+              // the row commits immediately, like every other ctx emit;
+              // atomicity with the run's terminal is Phase-3 ledger work.
+              emit: ((
+                typeOrSource: string | EventSource<any, any, any>,
+                payload?: unknown,
+              ) =>
+                typeof typeOrSource === "string"
+                  ? emit(typeOrSource, payload)
+                  : // owner gate (canon §2a ruling 4): a world-owned
+                    // source has no publish affordance — a process
+                    // cannot publish what only the world emits
+                    isWorldOwned(typeOrSource)
+                    ? Effect.die(
+                        new Error(
+                          `cannot ctx.emit(${typeOrSource["~alchemy/Name"]}): the source is world-owned — only the world publishes it; a process may observe it (AI.when / AI.until), never publish it`,
+                        ),
+                      )
+                    : Effect.andThen(
+                        emit("message.emitted", {
+                          source: typeOrSource["~alchemy/Name"],
+                          event: payload,
+                        }),
+                        eventBus.publish(typeOrSource, payload),
+                      )) as ProcessContext["emit"],
               post: (author, text) => emit("message.posted", { author, text }),
               run: <A, E, R>(
                 agent: string,

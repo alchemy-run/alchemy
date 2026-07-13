@@ -48,8 +48,7 @@ workspace. The test suite is failing. Diagnose and fix it:
 - NEVER modify test files — the tests are the specification
 - re-run the suite to verify
 
-${AI.until`\`bun test\` exits 0 — every test passes`}
-${AI.budget({ iterations: 8 })}` {}
+${AI.until`\`bun test\` exits 0 — every test passes`}` {}
 
 // ─── the workspace fixture ───────────────────────────────────────
 
@@ -148,6 +147,7 @@ describe("the local coding agent", () => {
             Layer.mergeAll(
               KernelLive,
               localToolbox(root).pipe(Layer.provide(PlatformLive)),
+              AI.budget({ iterations: 8 }),
               RuntimeContext.phantom,
             ),
           ),

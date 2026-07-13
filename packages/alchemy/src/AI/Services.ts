@@ -2,12 +2,15 @@ import type * as Context from "effect/Context";
 import type { Check } from "./Check.ts";
 import type { EventSource } from "./EventSource.ts";
 import type { Fold } from "./Fold.ts";
-import type { Halt } from "./Halt.ts";
+import type { Halt, When } from "./Signature.ts";
 import type { ToolImpl } from "./Tool.ts";
-import type { Trigger } from "./Trigger.ts";
 import type { Value } from "./Value.ts";
 
-/** The channel tags of any EventSource refs (machine-observed halts). */
+/**
+ * The channel tags of any EventSource refs — machine-observed halts or
+ * bare event mentions (publish grants): publishing to / observing a
+ * channel-backed source needs the channel's physics.
+ */
 type EventChannels<R> =
   R extends EventSource<any, infer Channel, any>
     ? [Channel] extends [never]
@@ -39,43 +42,64 @@ type LeafServices<R> =
       : never;
 
 /**
- * Requirements contributed by any ref:
+ * Requirements contributed by any expression:
  *
- * - control refs with nested templates — `Halt` (`AI.until\`…${Bash}…\``),
- *   `Fold`, `Check` — contribute their nested refs' tags (and, for
- *   fold/check, the assigned agent's tag);
- * - `Trigger` contributes its event sources' **channel tags** — the
- *   services a harness must provide to deliver those events (e.g. a
- *   `GitHubEvents` channel implemented by webhook provisioning + routing);
+ * - signature/control expressions with nested templates — `Halt`
+ *   (`AI.until\`…${Bash}…\``), `Fold`, `Check` — contribute their nested
+ *   refs' tags (and, for fold/check, the assigned agent's tag);
+ * - `When` contributes **nothing** (canon §2: `AI.when` is a pure input
+ *   declaration — it types `In`, renders in prose, appears in topology;
+ *   delivery is always outside code, so the provisioning compile fence
+ *   lives at the consuming call site, not on the process);
+ * - a bare `EventSource` mention is the **publish grant** (canon §2a):
+ *   it contributes the source's **channel tag** when channel-backed
+ *   (publishing needs the channel's physics). The grant is
+ *   **owner-sensitive** (ruling 4): a world-owned source (a provider
+ *   catalog's, marked `owner: "world"` — its type narrows
+ *   `~alchemy/Owner` to the literal) affords nothing by bare mention —
+ *   the world publishes it, a process never can — so it contributes no
+ *   channel tag. A machine-observed halt on the same source still does
+ *   (the Halt arm above): observing the world needs the channel's
+ *   physics;
  * - everything else is a leaf.
  *
- * Nesting is deliberately capped at depth 1: control refs may contain
- * Tool/Agent/Process refs, but not further control refs.
+ * Nesting is deliberately capped at depth 1: signature/control
+ * expressions may contain Tool/Agent/Process refs, but not further
+ * signature/control expressions.
  */
 export type RefServices<R> =
   R extends Halt<infer Inner, any>
     ?
-        // a machine-observed halt (`AI.until(source)`) carries its exit
-        // EventSource in refs — its channel tag must join Req, exactly like
-        // a trigger's (reassess §B)
+        // a machine-observed halt (`AI.exit(AI.when(...))`) carries its
+        // exit EventSources in the declared Refs type (a source-typed
+        // pseudo-entry whose Channel is the union of the when's channel
+        // tags) — each channel must join Req (the kernel observes the
+        // world on the process's behalf; reassess §B)
         LeafServices<Inner[number]> | EventChannels<Inner[number]>
     : R extends Fold<infer A, infer Inner>
       ? LeafServices<A> | LeafServices<Inner[number]>
       : R extends Check<infer A, infer Inner>
         ? LeafServices<A> | LeafServices<Inner[number]>
-        : R extends Trigger<any, infer Channels>
-          ? Channels
-          : // a dynamic-prose Value contributes its resolved-value
-            // service's tag (reassess §F): the value is a declared
-            // dependency, provided by a Layer
-            R extends Value<infer Id>
-            ? Id
-            : LeafServices<R>;
+        : R extends When<any, any>
+          ? // declaration-only: no auto-delivery, no channel obligation
+            never
+          : R extends EventSource<any, any, any>
+            ? // the unmarked mention = the publish grant — unless the
+              // source is world-owned (inert vocabulary, no affordance)
+              R extends { "~alchemy/Owner": "world" }
+              ? never
+              : EventChannels<R>
+            : // a dynamic-prose Value contributes its resolved-value
+              // service's tag (reassess §F): the value is a declared
+              // dependency, provided by a Layer
+              R extends Value<infer Id>
+              ? Id
+              : LeafServices<R>;
 
 /**
- * Folds a term's interpolated refs into its requirement union (`Req`).
- * Interpolation is dependency declaration: mentioning a tool in a template
- * is what places it in the dependency graph.
+ * Folds a term's interpolated expressions into its requirement union
+ * (`Req`). Interpolation is dependency declaration: mentioning a tool in
+ * a template is what places it in the dependency graph.
  */
 export type Services<Refs extends any[]> = Refs[number] extends infer A
   ? RefServices<A>

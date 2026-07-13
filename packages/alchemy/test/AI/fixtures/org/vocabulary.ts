@@ -36,5 +36,5 @@ export const command = AI.Parameter("command", S.String)`
 A shell command to execute inside the sandboxed DevBox.`;
 
 export const message = AI.Parameter("message", S.String)`
-A message to post on the current surface (Discord thread, GitHub
-issue, or pull request review).`;
+A message to post on the current surface (GitHub issue or pull
+request review).`;

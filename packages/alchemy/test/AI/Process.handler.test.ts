@@ -28,6 +28,16 @@ const topic = AI.Parameter("topic", S.String)`what to look into`;
 class Desk extends AI.Process<Desk>()("Desk")`
 ${AI.until(S.String)`the desk has answered`}` {}
 
+// a typed broadcast the desk may publish (kernel-internal source), and
+// a term whose bare ${X} mention IS the publish grant (canon §2a)
+const Routed = AI.EventSource(
+  "desk.routed",
+  S.Struct({ to: S.String, reason: S.String }),
+);
+class RoutingDesk extends AI.Process<RoutingDesk>()("RoutingDesk")`
+Route each question; publish ${Routed} to announce the route.
+${AI.until(S.String)`the desk has answered`}` {}
+
 const usage = {
   inputTokens: {
     uncached: undefined,
@@ -157,6 +167,112 @@ describe("AI.process — deterministic handler", () => {
       expect((trace[0]!.payload as any).item).toBe("hello");
     }),
   );
+
+  it.effect(
+    "effectful constructor resolves deps once; typed ctx.emit rows the Trace AND publishes",
+    () =>
+      Effect.gen(function* () {
+        // the effectful-constructor form: dependencies resolve ONCE at
+        // Layer build; the returned handler closes over them
+        let builds = 0;
+        const DeskLive = AI.process(
+          RoutingDesk,
+          Effect.gen(function* () {
+            const sage = yield* Sage;
+            builds++;
+            return (item: unknown, ctx: AI.ProcessContext) =>
+              Effect.gen(function* () {
+                // typed emit: payload checked against Routed's schema
+                yield* ctx.emit(Routed, {
+                  to: "Sage",
+                  reason: "depth",
+                });
+                yield* sage.dispatch(`look into: ${String(item)}`);
+                return `answered: ${String(item)}`;
+              });
+          }),
+        );
+
+        const kernelLayer = AI.memory.pipe(
+          Layer.provide([
+            scriptedModel([
+              [...text("use an LRU"), finish("stop")],
+              [...text("use an LRU"), finish("stop")],
+            ]),
+            AI.EventBusMemory,
+          ]),
+        );
+
+        const { published, trace, answers } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const bus = yield* AI.EventBus;
+            const desk = yield* RoutingDesk;
+            // subscribe BEFORE dispatch: the typed publication must be
+            // observable on the bus (one durable row + one publication)
+            const routed = yield* bus.subscribe(Routed);
+            const first = yield* desk.dispatch("caching");
+            const second = yield* desk.dispatch("sharding");
+            const published = yield* Stream.runCollect(
+              routed.pipe(Stream.take(2)),
+            );
+            const trace = yield* Stream.runCollect(
+              kernel
+                .trace("RoutingDesk")
+                .pipe(Stream.takeUntil((e) => e.type === "run.settled")),
+            );
+            return { published, trace, answers: [first, second] };
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              DeskLive.pipe(
+                Layer.provide([
+                  kernelLayer,
+                  AI.EventBusMemory,
+                  AI.layer(Sage).pipe(
+                    Layer.provide([
+                      kernelLayer,
+                      Layer.succeed(Grep, (() =>
+                        Effect.succeed("hit")) as never),
+                      RuntimeContext.phantom,
+                    ]),
+                  ),
+                  RuntimeContext.phantom,
+                ]),
+              ),
+              kernelLayer,
+              AI.EventBusMemory,
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        // the constructor Effect ran once, not once per run
+        expect(builds).toBe(1);
+        expect(answers).toEqual(["answered: caching", "answered: sharding"]);
+        // the typed publication reached the bus, schema-shaped
+        expect([...published]).toEqual([
+          { to: "Sage", reason: "depth" },
+          { to: "Sage", reason: "depth" },
+        ]);
+        // …and the SAME fact is one durable Trace row
+        const emitted = [...trace].find((e) => e.type === "message.emitted");
+        expect(emitted).toBeDefined();
+        expect(emitted!.payload).toEqual({
+          source: "desk.routed",
+          event: { to: "Sage", reason: "depth" },
+        });
+      }),
+  );
+
+  it("a bare event mention joins the declared published language (topology)", () => {
+    const [node] = AI.topology(RoutingDesk);
+    expect(node!.emits).toEqual(["desk.routed"]);
+    // and the desk that declares nothing publishes nothing (statically)
+    const [plain] = AI.topology(Desk);
+    expect(plain!.emits).toEqual([]);
+  });
 });
 
 void topic;

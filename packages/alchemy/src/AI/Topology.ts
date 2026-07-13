@@ -9,6 +9,7 @@
  * fold, served as JSON.
  */
 import { isAgent } from "./Agent.ts";
+import { isEventSource, isWorldOwned } from "./EventSource.ts";
 import { isProcess } from "./Process.ts";
 import { renderTemplate } from "./Render.ts";
 import { isTool } from "./Tool.ts";
@@ -26,6 +27,12 @@ export interface TopologyNode {
   readonly children: ReadonlyArray<TopologyNode>;
   /** Interpolated Tool refs — the capabilities. */
   readonly tools: ReadonlyArray<string>;
+  /**
+   * The declared published language: event names from bare `${X}`
+   * EventSource mentions (the publish grant, canon §2a) — "this process
+   * may publish X".
+   */
+  readonly emits: ReadonlyArray<string>;
 }
 
 interface TermLike {
@@ -36,9 +43,13 @@ interface TermLike {
   readonly "~alchemy/Meta"?: unknown;
 }
 
-/** Refs nested one level down in control-ref templates (halt/check/fold). */
+/** Refs nested one level down in control-ref templates (halt/check/fold).
+ * Accepts function-shaped refs: a machine-observed exit
+ * (`AI.exit(AI.when(...))`) is a callable Halt carrying `refs`. */
 const nestedRefs = (ref: unknown): ReadonlyArray<unknown> => {
-  if (typeof ref !== "object" || ref === null) return [];
+  if ((typeof ref !== "object" && typeof ref !== "function") || ref === null) {
+    return [];
+  }
   const record = ref as { refs?: unknown; agent?: unknown };
   const inner = Array.isArray(record.refs) ? record.refs : [];
   return record.agent !== undefined ? [record.agent, ...inner] : inner;
@@ -70,6 +81,15 @@ const nodeOf = (term: TermLike, kind: TopologyNode["kind"]): TopologyNode => {
       isTool(ref)
         ? [(ref as { "~alchemy/Name": string })["~alchemy/Name"]]
         : [],
+    ),
+    // only DIRECT mentions grant publication: a source nested inside a
+    // When/Halt expression keeps its own semantics (accept / exit), so
+    // the fold reads term.refs, not the flattened nested refs. The grant
+    // is owner-sensitive (canon §2a ruling 4): a world-owned source's
+    // bare mention is vocabulary, not a publish grant — the world
+    // publishes it, this process never can.
+    emits: term.refs.flatMap((ref) =>
+      isEventSource(ref) && !isWorldOwned(ref) ? [ref["~alchemy/Name"]] : [],
     ),
   };
 };

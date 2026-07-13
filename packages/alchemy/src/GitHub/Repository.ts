@@ -152,6 +152,18 @@ export interface Repository extends Resource<
     nodeId: string;
 
     /**
+     * Repository owner login — a stable identity prop echoed as an
+     * attribute (changing the owner replaces the repository).
+     */
+    owner: string;
+
+    /**
+     * Current repository name. Renames converge in place, so this always
+     * reflects the live name.
+     */
+    name: string;
+
+    /**
      * Full name in `owner/name` form.
      */
     fullName: string;
@@ -668,6 +680,8 @@ export const RepositoryProvider = () =>
 const attrsOf = (data: {
   id: number;
   node_id: string;
+  name: string;
+  owner: { login: string };
   full_name: string;
   html_url: string;
   git_url: string;
@@ -679,6 +693,8 @@ const attrsOf = (data: {
 }) => ({
   repoId: data.id,
   nodeId: data.node_id,
+  owner: data.owner.login,
+  name: data.name,
   fullName: data.full_name,
   htmlUrl: data.html_url,
   gitUrl: data.git_url,

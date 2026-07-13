@@ -1,10 +1,11 @@
 import type * as Effect from "effect/Effect";
+import type { EventSource } from "./EventSource.ts";
 
 /**
  * The handle a **deterministic** process handler receives (reassess §C):
  * `AI.process(term, (item, ctx) => Effect<Out, Err, R>)` lifts ordinary
  * Effect code into a term's full `ProcessService` — mailbox, `dispatch =
- * send + await`, trigger-lift, steer, interrupt — so a coordinator
+ * send + await`, steer, interrupt — so a coordinator
  * written as plain code (fan out with `Effect.all`, route with `Match`,
  * dispatch child agents via their resolved tags) is a first-class
  * process without hand-rolling the five verbs.
@@ -17,6 +18,24 @@ import type * as Effect from "effect/Effect";
  * — the ambient context is the one the process's Layer was built in.
  */
 export interface ProcessContext {
+  /**
+   * Publish a typed message on a declared {@link EventSource} (canon §4
+   * addition 1): ONE durable `message.emitted` Trace row AND a typed
+   * publication on the EventBus, so subscribers (machine-observed halts,
+   * front doors tailing the bus) see exactly what the Trace records.
+   *
+   * Durability note: the memory kernel has no staged-commit machinery —
+   * the row commits immediately (matching every other `ctx.*` emit) and
+   * the bus publication follows it; atomic commit with the run's
+   * terminal row is the Phase-3 ledger's job. Channel-backed sources
+   * publish on the harness bus in the memory kernel (the per-cloud
+   * channel Layer owns real-world publication).
+   *
+   * The declared publications of a term are its bare `${X}` EventSource
+   * mentions (the publish grant, canon §2a) — topology metadata; this
+   * method accepts any source at the type level.
+   */
+  emit<In>(source: EventSource<In, any, any>, payload: In): Effect.Effect<void>;
   /** Write a durable event row to this run's Trace (observability). */
   emit(type: string, payload?: unknown): Effect.Effect<void>;
   /**

@@ -1,13 +1,13 @@
 import * as Data from "effect/Data";
 
 /**
- * The typed abnormal exit of a budgeted {@link Process}: raised by the kernel
- * when a run exceeds one of its `AI.budget` ceilings — a hard limit
- * (tokens, wall-clock, iterations, dollars) or the no-progress detector
- * (`stall`).
- *
- * A `Budget` ref in a charter places `BudgetExceeded` in the loop's error
- * channel; parents catch it as escalation policy.
+ * The typed abnormal exit of a {@link Process}: raised by the kernel
+ * when a run exceeds one of its budget ceilings — a hard limit (tokens,
+ * wall-clock, iterations, dollars) or the no-progress detector
+ * (`stall`). Ceilings come from the provided `AI.budget({...})` Layer,
+ * or from the kernel's own default guards when none is given — so
+ * `BudgetExceeded` rides EVERY Process's error channel; parents catch
+ * it as escalation policy.
  *
  * A budget ceiling is a checkpoint, not a tombstone (§9.3): the ring
  * retains the fold and work item, so re-dispatch after a budget raise

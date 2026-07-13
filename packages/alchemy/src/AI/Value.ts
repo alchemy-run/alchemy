@@ -26,7 +26,7 @@ export interface Value<Id = any> {
   "~alchemy/Kind": "Value";
   /** Phantom carrier for the resolved-value service's Identifier. */
   "~alchemy/Id": Id;
-  /** The service tag whose (string) value is spliced into the prose. */
+  /** The service tag whose (string) value is interpolated into the prose. */
   tag: Context.Service<Id, string>;
 }
 

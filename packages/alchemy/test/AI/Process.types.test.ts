@@ -5,8 +5,10 @@
  * - nested control-ref templates (`AI.until`, `AI.check`, `AI.fold`) flow through
  * - capability denial by omission: an un-interpolated tool never appears in `Req`
  * - unhalted charters are typed perpetual (`Out = never`), not rejected
- * - channel derivation: `Out` from the halt, `In` from the triggers,
- *   `Err` from the budget
+ * - channel derivation: `Out` from the halt, `In` from the accepted
+ *   messages (`AI.when`), `Err` from the halt (`Refused` when bounded)
+ *   with `BudgetExceeded` unconditional (budgets are Layers, and the
+ *   kernel always enforces some ceiling)
  *
  * These assertions are purely type-level; the runtime tests just confirm
  * the terms are constructible pure data.
@@ -88,14 +90,20 @@ const ThreadCreated = AI.EventSource(
   "discord.thread.created",
   S.Struct({ channel: S.String, thread: S.String }),
 );
+// the addressed work item of a Fix run — a broadcast the front door
+// delivers explicitly (AI.when is declaration-only)
+const FixRequested = AI.EventSource("org.fix.requested", IssueRef);
+// platform cron sends this tick explicitly — the kernel serves no cron
+const WeeklyTick = AI.EventSource("org.cron.weekly", S.Void);
 
 // ─── loops — charters with typed control refs ────────────────────
 
-// the task loop — schema'd `until` (typed Out), `each` (typed In), budget (Err)
+// the task loop — schema'd `until` (typed Out), `when` (typed In);
+// budget is a Layer (AI.budget({...})) provided with the term, not prose
 class Fix extends AI.Process<Fix>()("Fix")`
 One issue, one loop, one task per iteration.
 
-${AI.each(issue)} give ${Engineer} a completely fresh context:
+${AI.when(FixRequested)} give ${Engineer} a completely fresh context:
 the issue, its criteria, CONTRIBUTING.md, and .alchemy/NOTES.md.
 
 ${AI.until(PrRef)`every criterion is checked and ${Bash} reports
@@ -106,21 +114,19 @@ ${AI.check(Judge)`grade each iteration; an off-goal verdict becomes
 the next iteration's first input`}
 
 ${AI.fold(Scribe)`distill lessons into .alchemy/NOTES.md after
-every iteration, successful or not`}
-
-${AI.budget({ tokens: "5M", wallClock: "2h", iterations: 12, stall: 3 })}` {}
+every iteration, successful or not`}` {}
 
 // the product loop — perpetual, nests Fix, never-halt with a nested ref
 class Flywheel extends AI.Process<Flywheel>()("Flywheel")`
 The development flywheel for alchemy-run repos.
 
-${AI.on(IssueOpened, IssueLabeled)} run ${Triage}, then dispatch a
+${AI.when(IssueOpened, IssueLabeled)} run ${Triage}, then dispatch a
 ${Fix} run when ready — at most ${AI.concurrency(3)} in flight,
 smallest estimates first.
 
-${AI.on(PullRequestOpened)} assign ${Reviewer}.
+${AI.when(PullRequestOpened)} assign ${Reviewer}.
 
-${AI.on(ThreadCreated)} watch support surfaces via ${SearchIssues}.
+${AI.when(ThreadCreated)} watch support surfaces via ${SearchIssues}.
 
 ${AI.never`no exit; merge rate, time-to-first-response, and reopen
 rate are folded weekly and posted via ${Reply} to #maintainers`}
@@ -130,7 +136,7 @@ confusion becomes a docs issue via ${CreateIssue}`}` {}
 
 // the system loop — observes Flywheel without inheriting its Req
 class Autoresearch extends AI.Process<Autoresearch>()("Autoresearch")`
-${AI.every("1 week")} study the traces of ${AI.observe(Flywheel)};
+${AI.when(WeeklyTick)} study the traces of ${AI.observe(Flywheel)};
 you may ${AI.observe(Scribe)}'s folds too. Escalate via ${AskHuman}.
 
 ${AI.until`a maintainer closes the experiment`}` {}
@@ -216,15 +222,15 @@ type _fw_out = Assert<IsEqual<FlywheelC["out"], never>>;
 // bare AI.until → void
 type _ar_out = Assert<IsEqual<AutoresearchC["out"], void>>;
 
-// ── In: derived from the triggers ──
+// ── In: derived from the accepted messages ──
 
-// AI.each(issue) → the parameter's schema type
+// AI.when(FixRequested) → the event's schema type
 type _fix_in = Assert<
   IsEqual<FixC["in"], { readonly repo: string; readonly number: number }>
 >;
-// AI.every → void
+// AI.when(WeeklyTick) with a Void schema → void
 type _ar_in = Assert<IsEqual<AutoresearchC["in"], void>>;
-// AI.on × 4 → union of the event schemas
+// AI.when × 4 → union of the event schemas
 type _fw_in_issue = Assert<
   Has<FlywheelC["in"], { readonly repo: string; readonly number: number }>
 >;
@@ -232,13 +238,16 @@ type _fw_in_label = Assert<
   Has<FlywheelC["in"], { readonly repo: string; readonly label: string }>
 >;
 
-// ── Err: derived from the budget and the halt ──
+// ── Err: BudgetExceeded unconditional; Refused from the halt ──
 
-// budget → BudgetExceeded; bounded exit (until) → Refused (a run may
+// BudgetExceeded rides EVERY process (budgets are provided as Layers —
+// or the kernel's default guards apply — so some ceiling is always
+// enforced); a bounded exit (until/exit) adds Refused (a run may
 // conclude its goal is unachievable — neither success nor exhaustion)
 type _fix_err = Assert<IsEqual<FixC["err"], AI.BudgetExceeded | AI.Refused>>;
-// perpetual + unbudgeted → nothing to exhaust, nothing to give up on
-type _fw_err = Assert<IsEqual<FlywheelC["err"], never>>;
+// perpetual → nothing to give up on (no Refused), but exhaustion is
+// still a typed possibility
+type _fw_err = Assert<IsEqual<FlywheelC["err"], AI.BudgetExceeded>>;
 
 // ── dispatch is typed end-to-end ──
 
@@ -255,11 +264,12 @@ type _dispatch_in = Assert<
 // undeclared perpetuity at interpretation time)
 
 class NoHalt extends AI.Process<NoHalt>()("NoHalt")`
-${AI.each(issue)} run ${Engineer} forever, unsupervised.` {}
+${AI.when(FixRequested)} run ${Engineer} forever, unsupervised.` {}
 
 type _nohalt_out = Assert<IsEqual<ChannelsOf<typeof NoHalt>["out"], never>>;
 
-// a Process with a halt but no trigger still compiles (triggers not required)
+// a Process with a halt but no accepted-message declaration still
+// compiles (`AI.when` is not required — dispatch types the input)
 class Idle extends AI.Process<Idle>()("Idle")`
 Do nothing. ${AI.never`a perpetual no-op ring`}` {}
 
@@ -271,8 +281,7 @@ describe("AI term language", () => {
     expect(Fix["~alchemy/Name"]).toBe("Fix");
     expect(Fix.refs.some(AI.isHalt)).toBe(true);
     expect(Fix.refs.some(AI.isFold)).toBe(true);
-    expect(Fix.refs.some(AI.isTrigger)).toBe(true);
-    expect(Fix.refs.some(AI.isBudget)).toBe(true);
+    expect(Fix.refs.some(AI.isWhen)).toBe(true);
   });
 
   it("control refs carry their nested templates and refs", () => {
@@ -285,12 +294,11 @@ describe("AI term language", () => {
     expect(fold.agent).toBe(Scribe);
     expect(fold.refs).toContain(CreateIssue);
 
-    const triggers = Flywheel.refs.filter(AI.isTrigger);
-    expect(triggers).toHaveLength(3);
-    expect(triggers[0]!.mode).toBe("on");
-    // variadic on: one trigger subscribing to two event sources
-    expect(triggers[0]!.sources).toHaveLength(2);
-    expect((triggers[0]!.sources[0] as AI.EventSource)["~alchemy/Name"]).toBe(
+    const accepted = Flywheel.refs.filter(AI.isWhen);
+    expect(accepted).toHaveLength(3);
+    // variadic when: one declaration accepting two event sources
+    expect(accepted[0]!.sources).toHaveLength(2);
+    expect((accepted[0]!.sources[0] as AI.EventSource)["~alchemy/Name"]).toBe(
       "github.issue.opened",
     );
   });
@@ -357,25 +365,24 @@ describe("AI.lint", () => {
     expect(AI.lint(Idle)).toEqual([]);
   });
 
-  it("a bounded exit without a budget is a soft runaway", () => {
-    expect(AI.lint(Autoresearch).map((issue) => issue.code)).toEqual([
-      "unbounded-until",
-    ]);
+  it("a bounded exit no longer lints on budget (budgets are Layers)", () => {
+    // the kernel always enforces some ceiling — default guard or the
+    // provided AI.budget Layer — so there is nothing to warn about
+    expect(AI.lint(Autoresearch)).toEqual([]);
   });
 
   it("duplicate positional refs are errors", () => {
-    class TwoBudgets extends AI.Process<TwoBudgets>()("TwoBudgets")`
-    ${AI.never`perpetual`} ${AI.budget({ usd: "1" })}
-    ${AI.budget({ usd: "2" })}` {}
-    expect(AI.lint(TwoBudgets)).toContainEqual(
-      expect.objectContaining({ severity: "error", code: "multiple-budgets" }),
+    class TwoFolds extends AI.Process<TwoFolds>()("TwoFolds")`
+    ${AI.never`perpetual`} ${AI.fold(Scribe)`carry`}
+    ${AI.fold(Scribe)`carry again`}` {}
+    expect(AI.lint(TwoFolds)).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "multiple-folds" }),
     );
   });
 
   it("until + never is a contradiction", () => {
     class Confused extends AI.Process<Confused>()("Confused")`
-    ${AI.until`done`} ${AI.never`also forever?`}
-    ${AI.budget({ usd: "1" })}` {}
+    ${AI.until`done`} ${AI.never`also forever?`}` {}
     expect(AI.lint(Confused)).toContainEqual(
       expect.objectContaining({ severity: "error", code: "conflicting-halts" }),
     );

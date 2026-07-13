@@ -25,7 +25,7 @@ import type { ProcessContext } from "./ProcessContext.ts";
  *   (`durable: false`) can never advance a trace cursor, never replay,
  *   and are excluded from folds. Only durable events carry `seq`.
  * - **Cause and auth ride every event.** `cause` is the parent command /
- *   trigger ref that produced this event (a seam without provenance rots
+ *   stimulus that produced this event (a seam without provenance rots
  *   — pi #5217); `auth` distinguishes human-initiated from ring-initiated
  *   work so approval policies and budgets can be caller-sensitive.
  */
@@ -44,7 +44,7 @@ export interface KernelEvent {
   /** Content hash of the rendered term that produced this event. */
   readonly term?: string;
   readonly session?: string;
-  /** The parent command id / trigger ref that caused this event. */
+  /** The parent command id / stimulus that caused this event. */
   readonly cause?: string;
   /** Caller provenance: who created the session vs who caused this turn. */
   readonly auth?: { readonly initiator: string; readonly current: string };
@@ -85,8 +85,8 @@ export interface KernelEvent {
  *
  * The other term classes never appear here: capability terms
  * (`Tool`/`Parameter`) are compiled *into* their host process's turn
- * (toolkit schema + handler resolved from context), and control refs
- * (`Trigger`/`Halt`/`Fold`/`Check`/`Budget`/`Concurrency`/`Observe`)
+ * (toolkit schema + handler resolved from context), and signature/control
+ * refs (`When`/`Halt`/`Fold`/`Check`/`Budget`/`Concurrency`/`Observe`)
  * parameterize the host's ring. Neither has runs, an inbox, or a ring
  * of its own.
  */
@@ -130,7 +130,7 @@ export interface KernelService {
    * of a model loop (reassess §C): the handler `(item, ctx) => Effect<
    * Out, Err>` becomes the ring's per-work-item work. Same ring
    * machinery as `interpret` — mailbox, dispatch = send + await,
-   * trigger-lift, steer, interrupt, `run.admitted`/`run.settled` — so a
+   * steer, interrupt, `run.admitted`/`run.settled` — so a
    * hand-written coordinator is a first-class process. The handler's
    * own requirements are provided by the process's Layer (like a
    * term's tool tags); `AI.process(term, handler)` packages this.
@@ -174,6 +174,18 @@ export class Kernel extends Context.Service<Kernel, KernelService>()(
  * ordinary `Context.Service` tag, so `Layer.effect(Engineer, impl)` works
  * — the kernel default is a convenience, not a privilege.
  */
+/** The deterministic handler shape `AI.process` lifts onto a term's ring. */
+export type ProcessHandler<P, R = never> = (
+  item: P extends Process<any, infer In, any, any, any, any[], any>
+    ? In
+    : unknown,
+  ctx: ProcessContext,
+) => Effect.Effect<
+  P extends Process<infer Out, any, any, any, any, any[], any> ? Out : never,
+  P extends Process<any, any, infer Err, any, any, any[], any> ? Err : never,
+  R
+>;
+
 /**
  * The deterministic-handler Layer for a process term (reassess §C):
  * `AI.process(Channel, (post, ctx) => …)` implements the term's tag
@@ -182,36 +194,57 @@ export class Kernel extends Context.Service<Kernel, KernelService>()(
  * `Kernel` are the Layer's inputs — discharged by ordinary Layer
  * composition, exactly like a term's tool tags under `AI.layer`.
  *
+ * Two forms (canon §2 implementation Layers):
+ *
+ * - **effectful constructor** (preferred) — `AI.process(Term, Effect<
+ *   Handler>)`: the Effect resolves dependencies ONCE at Layer build
+ *   (the same convention as Worker fixtures) and returns the handler:
+ *
+ *   ```ts
+ *   const Live = AI.process(Desk, Effect.gen(function* () {
+ *     const sage = yield* Sage;                 // resolved once
+ *     return (item, ctx) => Effect.gen(function* () { … });
+ *   }));
+ *   ```
+ *
+ * - **bare function** (sugar) — `AI.process(Term, (item, ctx) => …)`:
+ *   the handler resolves its dependencies per run from the ambient
+ *   context the Layer was built in.
+ *
  * This is the DEFAULT way to write a coordinator/router: deterministic
  * routing in code, LLM judgment reserved for leaves the code calls.
  * The prose `Process` charter (`AI.layer`) is the rarer artifact for
  * genuinely open-ended goal jobs.
  */
-export const process: <
-  P extends Process<any, any, any, any, any, any[], any> &
-    Context.Service<any, ProcessService<any, any, any>>,
-  R = never,
->(
-  term: P,
-  handler: (
-    item: P extends Process<any, infer In, any, any, any, any[], any>
-      ? In
-      : unknown,
-    ctx: import("./ProcessContext.ts").ProcessContext,
-  ) => Effect.Effect<
-    P extends Process<infer Out, any, any, any, any, any[], any> ? Out : never,
-    P extends Process<any, any, infer Err, any, any, any[], any> ? Err : never,
-    R
-  >,
-) => Layer.Layer<P["Identifier"], never, Kernel | R> = ((
-  term: any,
-  handler: any,
-): any =>
+export const process: {
+  // effectful constructor: resolve dependencies once at Layer build
+  <
+    P extends Process<any, any, any, any, any, any[], any> &
+      Context.Service<any, ProcessService<any, any, any>>,
+    R = never,
+    RMake = never,
+  >(
+    term: P,
+    make: Effect.Effect<ProcessHandler<P, R>, never, RMake>,
+  ): Layer.Layer<P["Identifier"], never, Kernel | R | RMake>;
+  // bare-function sugar
+  <
+    P extends Process<any, any, any, any, any, any[], any> &
+      Context.Service<any, ProcessService<any, any, any>>,
+    R = never,
+  >(
+    term: P,
+    handler: ProcessHandler<P, R>,
+  ): Layer.Layer<P["Identifier"], never, Kernel | R>;
+} = ((term: any, handler: any): any =>
   Layer.effect(
     term,
     Effect.gen(function* () {
       const kernel = yield* Kernel;
-      return yield* kernel.process(term, handler);
+      const resolved = Effect.isEffect(handler)
+        ? yield* handler as Effect.Effect<any>
+        : handler;
+      return yield* kernel.process(term, resolved);
     }) as any,
   )) as any;
 
