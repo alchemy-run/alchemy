@@ -1,9 +1,12 @@
 import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Alchemy";
+import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/workflow-async/stack.ts";
 
@@ -233,6 +236,74 @@ test.provider(
       expect(lastStatus.status).toBe("complete");
       expect(lastStatus.error).toBeFalsy();
       expect(lastStatus.output?.greeting).toBe("Hello, world!");
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// ---------------------------------------------------------------------------
+// Per-workflow limits: deploy a locally-hosted workflow declared with a step
+// limit, then read it back out-of-band from the versions API (the only read
+// that surfaces `limits`) to confirm it was applied.
+// ---------------------------------------------------------------------------
+
+const limitsWorkflowScript = `import { WorkflowEntrypoint } from "cloudflare:workers";
+export class LimitsWorkflow extends WorkflowEntrypoint {
+  async run(event, step) {
+    return await step.do("noop", async () => "ok");
+  }
+}
+export default {
+  async fetch() {
+    return new Response("ok");
+  },
+};
+`;
+
+// Read the applied step limit out-of-band via the versions API, retrying until
+// it propagates (bounded, so a missing limit fails fast).
+const waitForAppliedSteps = (workflowName: string, expected: number) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const versions = yield* workflows.listVersions
+      .items({ accountId, workflowName })
+      .pipe(Stream.runCollect);
+    return Array.from(versions)
+      .map((v) => v.limits?.steps ?? undefined)
+      .find((steps) => steps !== undefined);
+  }).pipe(
+    Effect.flatMap((steps) =>
+      steps === expected
+        ? Effect.succeed(steps)
+        : Effect.fail(new Error(`steps limit not applied yet: ${steps}`)),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+  );
+
+test.provider(
+  "async worker workflow binding applies a per-workflow step limit",
+  (scratch) =>
+    Effect.gen(function* () {
+      const steps = 100;
+
+      yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            worker: yield* Cloudflare.Worker("limits-workflow-worker", {
+              script: limitsWorkflowScript,
+              env: {
+                LIMITS_WORKFLOW: Cloudflare.Workflow("LimitsWorkflow", {
+                  limits: { steps },
+                }),
+              },
+            }),
+          };
+        }),
+      );
+
+      const applied = yield* waitForAppliedSteps("LimitsWorkflow", steps);
+      expect(applied).toBe(steps);
 
       yield* scratch.destroy();
     }).pipe(logLevel),

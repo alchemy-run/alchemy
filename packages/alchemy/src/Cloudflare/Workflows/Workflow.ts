@@ -288,6 +288,16 @@ export const isWorkflowExport = (value: unknown): value is WorkflowExport =>
   (value as any).kind === "workflow";
 
 /**
+ * Limits applied to the workflow on create or update.
+ */
+export interface WorkflowLimits {
+  /**
+   * Maximum number of steps a single workflow instance may execute.
+   */
+  steps?: number;
+}
+
+/**
  * Props for the reference (async) form of {@link Workflow}. Used when binding
  * a Workflow class to a plain async Worker (one without an Effect runtime) via
  * the Worker's `env`. Mirrors `DurableObjectProps`.
@@ -304,6 +314,23 @@ export interface WorkflowRefProps {
    * is hosted by the Worker that declares the binding.
    */
   scriptName?: Input<string>;
+  /**
+   * Limits applied to the workflow. Only applies when the workflow is hosted by
+   * the Worker that declares the binding; ignored when `scriptName` is set.
+   */
+  limits?: WorkflowLimits;
+}
+
+/**
+ * Props for the Effect-native form of {@link Workflow}
+ * (`Workflow(name, impl, props)`). Used when the workflow's implementation is
+ * defined inline by the hosting Worker.
+ */
+export interface WorkflowProps {
+  /**
+   * Limits applied to the workflow.
+   */
+  limits?: WorkflowLimits;
 }
 
 /**
@@ -321,6 +348,8 @@ export interface WorkflowLike<Params = unknown> {
   className?: string;
   /** @internal phantom */
   scriptName?: Input<string>;
+  /** @internal phantom */
+  limits?: WorkflowLimits;
   /** @internal phantom */
   Params?: Params;
 }
@@ -433,6 +462,7 @@ export interface WorkflowClass extends Effect.Effect<
     <Input = unknown, Result = unknown, InitReq = never>(
       name: string,
       impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
+      props?: WorkflowProps,
     ): Effect.Effect<
       WorkflowHandle<Input, Result>,
       never,
@@ -448,6 +478,7 @@ export interface WorkflowClass extends Effect.Effect<
   <Input = unknown, Result = unknown, InitReq = never>(
     name: string,
     impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
+    props?: WorkflowProps,
   ): Effect.Effect<
     WorkflowHandle<Input, Result>,
     never,
@@ -499,6 +530,19 @@ export class WorkflowScope extends Context.Service<
  *       return { received: input.name };
  *     });
  *   }),
+ * ) {}
+ * ```
+ *
+ * @example Setting a step limit
+ * ```typescript
+ * export default class MyWorkflow extends Cloudflare.Workflow<MyWorkflow>()(
+ *   "MyWorkflow",
+ *   Effect.gen(function* () {
+ *     return Effect.fn(function* (input: { name: string }) {
+ *       return { received: input.name };
+ *     });
+ *   }),
+ *   { limits: { steps: 25000 } },
  * ) {}
  * ```
  *
@@ -747,23 +791,28 @@ export class WorkflowScope extends Context.Service<
 export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
   ...args:
     | []
-    | [name: string, impl: Effect.Effect<WorkflowImpl<any, any>>]
+    | [
+        name: string,
+        impl: Effect.Effect<WorkflowImpl<any, any>>,
+        props?: WorkflowProps,
+      ]
     | [name: string, props?: WorkflowRefProps]
 ) => {
   if (args.length === 0) {
     return Workflow;
   }
-  const [name, second] = args;
+  const [name, second, props] = args;
   if (!Effect.isEffect(second)) {
     // Props-only (async) reference form: returns a plain `WorkflowLike` that an
     // async Worker binds via `env`. `WorkerAsyncBindings` emits the `workflow`
     // binding and drives `putWorkflow` for locally-hosted workflows.
-    const props = second as WorkflowRefProps | undefined;
+    const refProps = second as WorkflowRefProps | undefined;
     return {
       kind: TypeId,
       name,
-      className: props?.className ?? name,
-      scriptName: props?.scriptName,
+      className: refProps?.className ?? name,
+      scriptName: refProps?.scriptName,
+      limits: refProps?.limits,
     } satisfies WorkflowLike;
   }
   const impl = second;
@@ -778,6 +827,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
         workflowName,
         className: name,
         scriptName: worker.workerName,
+        limits: props?.limits,
       });
 
       // Add the workflow binding to the Worker metadata
@@ -864,6 +914,7 @@ export interface WorkflowResourceProps {
   workflowName: string;
   className: string;
   scriptName: string;
+  limits?: WorkflowLimits;
 }
 
 export interface WorkflowResourceAttrs {
@@ -956,6 +1007,7 @@ export const ProviderLive = () =>
         workflowName,
         className: news.className,
         scriptName: news.scriptName,
+        limits: news.limits,
       });
       return {
         workflowId: result.id,
