@@ -308,9 +308,10 @@ export const ConsumerProviderLive = () =>
             Effect.catchTag("ConsumerNotFound", () => Effect.void),
             Effect.retry({
               while: (e) => e === "still-attached",
-              schedule: Schedule.spaced("1 second").pipe(
-                Schedule.both(Schedule.recurs(30)),
-              ),
+              schedule: Schedule.max([
+                Schedule.spaced("1 second"),
+                Schedule.recurs(30),
+              ]),
             }),
             Effect.ignore,
           );
@@ -487,9 +488,10 @@ export const ConsumerProviderLive = () =>
           Effect.catchTag("ConsumerNotFound", () => Effect.void),
           Effect.retry({
             while: (e) => e === "still-attached",
-            schedule: Schedule.spaced("1 second").pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("1 second"),
+              Schedule.recurs(30),
+            ]),
           }),
           Effect.ignore,
         );
@@ -561,9 +563,10 @@ const toObserved = (c: {
 
 // ~60s budget — Worker reconcile uploads typically land in 2–10s,
 // but a fresh container/asset deploy can stretch that.
-const queueHandlerReadinessSchedule = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
+const queueHandlerReadinessSchedule = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(30),
+]);
 
 export const ConsumerProviderLocal = () =>
   RpcProvider.effect(

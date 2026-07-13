@@ -33,7 +33,7 @@ jobs:
       version: ${{ inputs.version }}
       repo: alchemy-run/alchemy-effect
       current-version: "2.0.0"
-      # Each package builds in its own publish job: the tsgo build pulls
+      # Each package builds in its own publish job: the tsc build pulls
       # in the alchemy -> distilled project-reference chain (distilled/aws
       # is huge), which doesn't fit the bump job's ubuntu-latest box.
       build-mode: per-package

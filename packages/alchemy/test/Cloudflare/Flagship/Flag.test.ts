@@ -26,9 +26,10 @@ const expectFlagGone = (accountId: string, appId: string, flagKey: string) =>
     Effect.flatMap(() => Effect.fail(new FlagStillExists())),
     Effect.retry({
       while: (e): e is FlagStillExists => e instanceof FlagStillExists,
-      schedule: Schedule.exponential("250 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("250 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag(
       ["FlagshipFlagNotFound", "FlagshipAppNotFound"],
@@ -312,9 +313,10 @@ test.provider(
             (f) =>
               f.appId === deployed.app.appId && f.key === deployed.flag.key,
           ),
-        schedule: Schedule.spaced("3 seconds").pipe(
-          Schedule.both(Schedule.recurs(30)),
-        ),
+        schedule: Schedule.max([
+          Schedule.spaced("3 seconds"),
+          Schedule.recurs(30),
+        ]),
       });
 
       expect(

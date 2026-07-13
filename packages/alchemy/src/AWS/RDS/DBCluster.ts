@@ -456,9 +456,10 @@ export const DBClusterProvider = () =>
         clusterId: string,
         { requireAvailable = true }: { requireAvailable?: boolean } = {},
       ) {
-        const readinessPolicy = Schedule.fixed("10 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const readinessPolicy = Schedule.max([
+          Schedule.fixed("10 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readCluster(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.DBClusterArn) {
@@ -762,9 +763,10 @@ export const DBClusterProvider = () =>
                 ),
               ),
             {
-              schedule: Schedule.fixed("15 seconds").pipe(
-                Schedule.both(Schedule.recurs(40)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("15 seconds"),
+                Schedule.recurs(40),
+              ]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

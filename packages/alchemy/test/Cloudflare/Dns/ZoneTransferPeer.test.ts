@@ -42,9 +42,10 @@ const expectGone = (accountId: string, peerId: string) =>
     Effect.catchTag("PeerNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PeerNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

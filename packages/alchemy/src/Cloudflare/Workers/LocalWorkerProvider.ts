@@ -204,6 +204,13 @@ export const LocalWorkerProvider = () =>
         bundle: Bundle.BundleOutput,
         proxy: WorkerProxy.WorkerProxyInstance,
       ) {
+        const previous = workerdScopes.get(worker.id);
+        if (previous) {
+          // Both runtimes use the same registry key. Close the old scope first so
+          // its unregister finalizer cannot delete the replacement registration.
+          yield* Scope.close(previous, Exit.void);
+          workerdScopes.delete(worker.id);
+        }
         const scope = yield* Effect.scope.pipe(Effect.flatMap(Scope.fork));
         const url = yield* runtime
           .start({
@@ -218,10 +225,6 @@ export const LocalWorkerProvider = () =>
             assets: toRuntimeAssets(worker.assets),
           })
           .pipe(Scope.provide(scope));
-        const previous = workerdScopes.get(worker.id);
-        if (previous) {
-          yield* Effect.forkDetach(Scope.close(previous, Exit.void));
-        }
         workerdScopes.set(worker.id, scope);
         yield* proxy.set(url);
         return url;

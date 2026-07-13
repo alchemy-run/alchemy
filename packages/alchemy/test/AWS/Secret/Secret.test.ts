@@ -55,9 +55,10 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
 // well over a minute on a fresh deploy under parallel load. Budget a
 // generous retry window for the very first request, then reuse the
 // warm URL for subsequent calls.
-const readinessSchedule = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(20)),
-);
+const readinessSchedule = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(20),
+]);
 
 const getJson = (url: string) =>
   HttpClient.get(url).pipe(

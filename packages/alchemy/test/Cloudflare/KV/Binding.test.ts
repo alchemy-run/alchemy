@@ -30,9 +30,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 // Bounded spaced schedule — caps total wait so a genuine failure
 // surfaces fast instead of an uncapped exponential blowing past the
 // test timeout while riding out cold-start propagation.
-const ready = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
+const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
 
 const untilOk = <E, R>(
   eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
@@ -61,9 +59,10 @@ class ValueMismatch extends Data.TaggedError("ValueMismatch")<{
 // KV is eventually consistent — a fresh write can take a while to be
 // visible to a read on a different binding/edge, so allow generous
 // retries on the read-back.
-const propagate = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(45)),
-);
+const propagate = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(45),
+]);
 
 const enc = encodeURIComponent;
 

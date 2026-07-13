@@ -67,10 +67,13 @@ const postImage = (url: string) =>
           looksLikeCloudflarePlaceholder(e.body)),
       // Cap each backoff at 5s (otherwise the exponential blows past a minute
       // per sleep and looks like a hang) and stop after 30 attempts.
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.either(Schedule.spaced("5 seconds")),
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("5 seconds"),
+        ]),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 

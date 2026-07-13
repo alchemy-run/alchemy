@@ -686,9 +686,10 @@ const hoistBootstrapStack = Effect.fn(function* ({
               // Secrets Store bindings) can take a while to serve
               // consistently; anything persisting past that is a real
               // failure to surface, not to spin on.
-              schedule: Schedule.fixed(500).pipe(
-                Schedule.both(Schedule.recurs(60)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed(500),
+                Schedule.recurs(60),
+              ]),
             }),
           );
       }
@@ -761,10 +762,13 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
           isTransientEdgeSessionError(error),
         // Cap the exponential delay at 2s so 15 retries stay within
         // ~30s instead of doubling unboundedly.
-        schedule: Schedule.exponential(200).pipe(
-          Schedule.either(Schedule.spaced("2 seconds")),
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential(200),
+            Schedule.spaced("2 seconds"),
+          ]),
+          Schedule.recurs(15),
+        ]),
       }),
     );
 
@@ -898,9 +902,10 @@ const waitForStateStoreVersion = (url: string) =>
       // Edge propagation is usually sub-second but production traces
       // show redeploys occasionally serving the old version for well
       // over 10s. Poll for ~30s before failing loudly.
-      schedule: Schedule.spaced("500 millis").pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("500 millis"),
+        Schedule.recurs(60),
+      ]),
     }),
     Effect.withSpan("state_store.wait_for_version", {
       attributes: {
@@ -938,9 +943,10 @@ const checkStateStoreVersion = (url: string) =>
           : Effect.fail(e),
       ),
       Effect.retry({
-        schedule: Schedule.spaced("250 millis").pipe(
-          Schedule.both(Schedule.recurs(40)),
-        ),
+        schedule: Schedule.max([
+          Schedule.spaced("250 millis"),
+          Schedule.recurs(40),
+        ]),
       }),
       Effect.catch(() => Effect.succeed(undefined)),
     );

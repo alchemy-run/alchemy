@@ -50,9 +50,10 @@ const expectGone = (accountId: string, monitorGroupId: string) =>
     Effect.catchTag("MonitorGroupNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "MonitorGroupNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

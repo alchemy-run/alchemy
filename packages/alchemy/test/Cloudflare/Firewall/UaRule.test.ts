@@ -85,9 +85,10 @@ const expectUaRuleGone = (zoneId: string, uaRuleId: string) =>
     Effect.catchTag("UaRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "UaRuleNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

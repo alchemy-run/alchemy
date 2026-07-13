@@ -47,9 +47,10 @@ test(
       // serving 200s keeps getting polled steadily, rather than the
       // unbounded exponential delay overshooting the test timeout.
       Effect.retry({
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.either(Schedule.spaced("3 seconds")),
-        ),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
         times: 40,
       }),
     );
@@ -97,9 +98,10 @@ test(
       // serving 200s keeps getting polled steadily, rather than the
       // unbounded exponential delay overshooting the test timeout.
       Effect.retry({
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.either(Schedule.spaced("3 seconds")),
-        ),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
         times: 40,
       }),
     );

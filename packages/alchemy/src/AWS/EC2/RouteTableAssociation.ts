@@ -412,13 +412,11 @@ const waitForAssociationState = (
       );
     }),
     {
-      schedule: Schedule.fixed(1000).pipe(
-        // Check every second
-        Schedule.both(Schedule.recurs(30)), // Max 30 seconds
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(30)]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
-                `Waiting for association to be ${targetState}... (${attempt + 1}s)`,
+                `Waiting for association to be ${targetState}... (${attempt}s)`,
               )
             : Effect.void,
         ),

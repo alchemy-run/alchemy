@@ -124,9 +124,10 @@ export const HostedZoneProvider = () =>
             Effect.map((r) => r.ChangeInfo.Status),
             Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
             Effect.repeat({
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(60)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(60),
+              ]),
               until: (status) => status === "INSYNC",
             }),
           );
@@ -384,9 +385,10 @@ export const HostedZoneProvider = () =>
             // in case a referencing record's delete is still propagating.
             Effect.retry({
               while: (e) => e._tag === "PriorRequestNotComplete",
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(10)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(10),
+              ]),
             }),
           );
         }),

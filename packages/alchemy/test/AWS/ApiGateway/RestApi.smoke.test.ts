@@ -102,16 +102,18 @@ test.provider.skipIf(!!process.env.FAST)(
           // Stage propagation + Lambda permission can take 30–90s after the
           // last create. Cap exponential at 10s so we keep polling at a
           // steady cadence instead of doubling out to multi-minute waits.
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.modifyDelay((d: Duration.Duration) =>
-              Effect.succeed(
-                Duration.isGreaterThan(d, Duration.seconds(10))
-                  ? Duration.seconds(10)
-                  : d,
+          schedule: Schedule.max([
+            Schedule.exponential(500).pipe(
+              Schedule.modifyDelay(({ duration: d }) =>
+                Effect.succeed(
+                  Duration.isGreaterThan(d, Duration.seconds(10))
+                    ? Duration.seconds(10)
+                    : d,
+                ),
               ),
             ),
-            Schedule.both(Schedule.recurs(20)),
-          ),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 

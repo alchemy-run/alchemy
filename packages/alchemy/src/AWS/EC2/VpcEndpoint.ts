@@ -714,11 +714,10 @@ const waitForVpcEndpointAvailable = (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "VpcEndpointPending",
-      schedule: Schedule.fixed(3000).pipe(
-        Schedule.both(Schedule.recurs(60)), // Max 3 minutes
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(60)]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
-            `Waiting for VPC Endpoint to be available... (${(attempt + 1) * 3}s)`,
+            `Waiting for VPC Endpoint to be available... (${attempt * 3}s)`,
           ),
         ),
       ),
@@ -752,11 +751,10 @@ const waitForVpcEndpointDeleted = (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "VpcEndpointDeleting",
-      schedule: Schedule.fixed(3000).pipe(
-        Schedule.both(Schedule.recurs(60)), // Max 3 minutes
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(60)]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
-            `Waiting for VPC Endpoint deletion... (${(attempt + 1) * 3}s)`,
+            `Waiting for VPC Endpoint deletion... (${attempt * 3}s)`,
           ),
         ),
       ),

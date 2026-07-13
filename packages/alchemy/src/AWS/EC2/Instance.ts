@@ -501,9 +501,10 @@ export const InstanceProvider = () =>
             while: (error) =>
               error instanceof InstanceStateMismatch ||
               isPendingInstanceLookupError(error),
-            schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("250 millis"),
+              Schedule.recurs(8),
+            ]),
           }),
         );
       });
@@ -530,9 +531,10 @@ export const InstanceProvider = () =>
             while: (error) => error instanceof InstanceStillExists,
             // Termination (shutting-down -> terminated) can take a couple of
             // minutes; the prior ~64s budget timed out intermittently.
-            schedule: Schedule.spaced("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(48)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("5 seconds"),
+              Schedule.recurs(48),
+            ]),
           }),
           Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
           Effect.catchTag("InstanceNotFound", () => Effect.void),
@@ -711,9 +713,10 @@ export const InstanceProvider = () =>
               .pipe(
                 Effect.retry({
                   while: isPendingInstanceProfileError,
-                  schedule: Schedule.exponential("500 millis").pipe(
-                    Schedule.both(Schedule.recurs(8)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential("500 millis"),
+                    Schedule.recurs(8),
+                  ]),
                 }),
               );
             const newInstanceId = created.Instances?.[0]?.InstanceId as

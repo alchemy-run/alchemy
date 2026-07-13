@@ -141,8 +141,9 @@ const assertVpcOriginDeleted = (id: string) =>
     Effect.retry({
       while: (error) =>
         error instanceof Error && error.message === "VpcOriginStillExists",
-      schedule: Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );

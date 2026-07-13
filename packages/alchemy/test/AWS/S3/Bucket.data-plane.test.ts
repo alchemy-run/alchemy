@@ -347,9 +347,7 @@ const assertBucketDeleted = Effect.fn(function* (bucketName: string) {
     Effect.flatMap(() => Effect.fail(new BucketStillExists())),
     Effect.retry({
       while: (e) => e._tag === "BucketStillExists",
-      schedule: Schedule.exponential(100).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
     }),
     Effect.catchTag("NotFound", () => Effect.void),
     Effect.catch(() => Effect.void),

@@ -33,9 +33,10 @@ const expectGone = (accountId: string, locationId: string) =>
     Effect.catchTag("GatewayLocationNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "LocationNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

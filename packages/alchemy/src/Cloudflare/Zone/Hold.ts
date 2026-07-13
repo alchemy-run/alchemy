@@ -109,10 +109,13 @@ export const isHold = (value: unknown): value is Hold =>
 // Cloudflare can transiently fail to authenticate a valid token, surfacing as
 // `Forbidden`. Retry with exponential backoff capped at 5s, bounded to ~8
 // attempts so a persistently-unauthorized call still fails fast.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("5 seconds")),
-  Schedule.both(Schedule.recurs(8)),
-);
+const forbiddenRetrySchedule = Schedule.max([
+  Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("5 seconds"),
+  ]),
+  Schedule.recurs(8),
+]);
 
 export const HoldProvider = () =>
   Provider.succeed(Hold, {

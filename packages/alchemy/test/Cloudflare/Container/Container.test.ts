@@ -181,9 +181,10 @@ describe.concurrent.each([
 
 // Cap exponential backoff at 3s — keeps the fast path snappy but stops the
 // geometric blow-up from dominating wall time when CF edge is slow.
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 const readinessRetries = 30;
 
 // While a freshly pre-created worker propagates, Cloudflare's edge serves

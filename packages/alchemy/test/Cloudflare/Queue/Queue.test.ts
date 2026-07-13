@@ -157,10 +157,10 @@ test.provider("list enumerates the deployed queue", (stack) =>
       description: "list() includes the deployed queue",
       effect: provider.list(),
       predicate: (all) => all.some((q) => q.queueId === deployed.queueId),
-      schedule: Schedule.both(
+      schedule: Schedule.max([
         Schedule.spaced("2 seconds"),
         Schedule.recurs(20),
-      ),
+      ]),
     });
 
     expect(all.some((q) => q.queueId === deployed.queueId)).toBe(true);

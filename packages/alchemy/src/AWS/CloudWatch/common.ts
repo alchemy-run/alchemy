@@ -89,9 +89,7 @@ export const retryConcurrent = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         error?._tag === "ConcurrentModificationException" ||
         error?._tag === "ConflictException" ||
         error?._tag === "LimitExceededException",
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
     }),
   );
 

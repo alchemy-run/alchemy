@@ -77,9 +77,10 @@ const expectGone = (accountId: string, configId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "ScanConfigNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

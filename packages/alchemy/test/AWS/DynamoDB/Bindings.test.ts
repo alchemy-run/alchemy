@@ -20,9 +20,10 @@ const sharedStack = Core.scratchStack(testOptions, "DynamoDBBindings");
 // up to ~90s when S3 throttling delays the Lambda code upload too.
 // Budget ~150s of readiness polling so we don't fail the whole suite on
 // a slow init.
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
 
 let baseUrl: string;
 const sourceTableId = "TestTable";
@@ -53,9 +54,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(6),
+      ]),
     }),
   );
 
@@ -602,9 +604,10 @@ describe("DynamoDB Bindings", () => {
         }).pipe(
           Effect.retry({
             while: (e) => e._tag === "QueryNotConsistent",
-            schedule: Schedule.fixed("500 millis").pipe(
-              Schedule.both(Schedule.recurs(20)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("500 millis"),
+              Schedule.recurs(20),
+            ]),
           }),
         );
 
@@ -729,8 +732,9 @@ const fetchUntil = <A>(
     ),
     Effect.retry({
       while: (e) => e._tag === "BindingNotConsistent",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );

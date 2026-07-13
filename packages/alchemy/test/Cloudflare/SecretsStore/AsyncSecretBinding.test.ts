@@ -36,9 +36,10 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
 }> {}
 
-const ready = Schedule.exponential("500 millis").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
+const ready = Schedule.max([
+  Schedule.exponential("500 millis"),
+  Schedule.recurs(30),
+]);
 
 const fetchWhenReady = (url: string) =>
   Effect.gen(function* () {

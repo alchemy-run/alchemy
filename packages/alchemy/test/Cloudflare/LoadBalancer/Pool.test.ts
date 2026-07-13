@@ -48,9 +48,10 @@ const expectGone = (accountId: string, poolId: string) =>
     Effect.catchTag("PoolNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PoolNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

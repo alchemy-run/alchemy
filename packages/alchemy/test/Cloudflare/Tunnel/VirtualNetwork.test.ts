@@ -40,9 +40,10 @@ const expectGone = (accountId: string, virtualNetworkId: string) =>
     Effect.catchTag("VirtualNetworkNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "VnetNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
