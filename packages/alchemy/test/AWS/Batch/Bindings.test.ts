@@ -2,10 +2,12 @@ import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
 import * as batch from "@distilled.cloud/aws/batch";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
@@ -17,6 +19,54 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "BatchBindings");
 
 let baseUrl: string;
+
+// AWS Batch auto-creates the shared, account-level `/aws/batch/job` log group
+// the first time a job writes logs — it is NOT deleted with the compute
+// environment / job queue / job definition. The JobDefinition provider reaps
+// the family's log *streams* on delete, but the group itself lingers, and a
+// stream flushed by a job finishing while the stack is mid-destroy can land
+// after that reap. So on teardown: delete every stream this suite caused
+// (family names are prefixed `{stackName}-`), then delete the group itself
+// only when zero streams remain (nothing else is using it). The Batch service
+// recreates the group on the next job, so deleting the empty group is safe.
+// Idempotent: every delete tolerates ResourceNotFoundException; any other
+// error is a defect so this is a valid `Effect.ensuring` finalizer.
+const reapBatchJobLogGroup = Core.withProviders(
+  Effect.gen(function* () {
+    const logGroupName = "/aws/batch/job";
+    const streams = yield* logs.describeLogStreams.pages({ logGroupName }).pipe(
+      Stream.runCollect,
+      Effect.map((pages) =>
+        Array.from(pages).flatMap((page) => page.logStreams ?? []),
+      ),
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
+    if (streams === undefined) return; // group never created / already reaped
+
+    const isTestOwned = (name: string | undefined): boolean =>
+      name !== undefined && name.startsWith(`${sharedStack.name}-`);
+    yield* Effect.forEach(
+      streams.filter((s) => isTestOwned(s.logStreamName)),
+      (s) =>
+        logs
+          .deleteLogStream({ logGroupName, logStreamName: s.logStreamName! })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          ),
+      { concurrency: 4 },
+    );
+
+    // Shared group: only remove it when no foreign streams remain.
+    if (streams.some((s) => !isTestOwned(s.logStreamName))) return;
+    yield* logs
+      .deleteLogGroup({ logGroupName })
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+  }).pipe(Effect.orDie),
+  testOptions,
+  sharedStack.name,
+);
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -103,7 +153,9 @@ describe("Batch Bindings", () => {
     }),
     { timeout: 300_000 },
   );
-  afterAll(sharedStack.destroy(), { timeout: 300_000 });
+  afterAll(sharedStack.destroy().pipe(Effect.ensuring(reapBatchJobLogGroup)), {
+    timeout: 300_000,
+  });
 
   describe("SubmitJob", () => {
     test.provider(

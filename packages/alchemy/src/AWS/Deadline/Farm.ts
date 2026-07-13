@@ -12,6 +12,7 @@ import {
   asPlain,
   deadlineArnOf,
   fetchDeadlineTags,
+  reapDeadlineLogGroups,
   retryWhileConflict,
   syncDeadlineTags,
 } from "./internal.ts";
@@ -275,6 +276,12 @@ export const FarmProvider = () =>
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
+          // Deadline auto-creates log groups under /aws/deadline/{farmId}/
+          // (queue job/session logs, fleet worker logs) and deleteFarm does
+          // NOT remove them. The farm only deletes once every sub-resource
+          // is fully gone, so by this point all of its log groups exist if
+          // they ever will — sweep the whole prefix.
+          yield* reapDeadlineLogGroups(`/aws/deadline/${output.farmId}`);
         }),
       };
     }),

@@ -1,7 +1,9 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as deadline from "@distilled.cloud/aws/deadline";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as EffectStream from "effect/Stream";
 import { diffTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 
@@ -66,6 +68,36 @@ export const syncDeadlineTags = Effect.fn(function* (
       tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
     });
   }
+});
+
+/**
+ * Deadline auto-creates CloudWatch log groups under
+ * `/aws/deadline/{farmId}/{queueId}` (queue job/session logs) and
+ * `/aws/deadline/{farmId}/{fleetId}/...` (fleet worker logs), and neither
+ * `deleteQueue` nor `deleteFarm` removes them — without this reap every
+ * deleted farm strands orphaned log groups. Idempotent: a group already
+ * gone (or never created) is not an error.
+ */
+export const reapDeadlineLogGroups = Effect.fn(function* (prefix: string) {
+  const groups = yield* logs.describeLogGroups
+    .pages({ logGroupNamePrefix: prefix })
+    .pipe(
+      EffectStream.runCollect,
+      Effect.map((chunk) =>
+        Array.from(chunk)
+          .flatMap((page) => page.logGroups ?? [])
+          .map((group) => group.logGroupName)
+          .filter((name): name is string => name != null),
+      ),
+    );
+  yield* Effect.forEach(
+    groups,
+    (logGroupName) =>
+      logs
+        .deleteLogGroup({ logGroupName })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    { concurrency: 4, discard: true },
+  );
 });
 
 // Explicitly-typed retry wrappers — an inline `Effect.retry` in provider

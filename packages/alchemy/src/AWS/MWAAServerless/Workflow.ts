@@ -1,3 +1,4 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -523,6 +524,63 @@ export const WorkflowProvider = () =>
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+
+          // MWAA Serverless auto-creates a per-workflow log group named
+          // `/aws/mwaa-serverless/{name}-{id}/` (the ARN's resource id,
+          // which includes the service-assigned 10-char suffix, plus a
+          // trailing slash) at CREATE time, and deleteWorkflow does NOT
+          // remove it — without this reap every deleted workflow (including
+          // the old workflow of a replacement) leaks an orphaned log group.
+          // A group with no streams or provably-quiescent ingestion (last
+          // ingestion > 2 minutes ago) has no pending flush and deletes in
+          // a single call, so routine deletes of never-run workflows stay
+          // fast. A group with recent ingestion — or one that does not
+          // exist yet — is re-reaped on a short bounded schedule
+          // (t=0s / 20s / 40s) to catch a late log flush from the
+          // workflow's final runs; each attempt is idempotent.
+          const workflowId = output.workflowArn.split(":workflow/")[1];
+          if (workflowId !== undefined) {
+            const logGroupName = `/aws/mwaa-serverless/${workflowId}/`;
+            const reapLogGroup = logs
+              .deleteLogGroup({ logGroupName })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+            const observed = yield* logs
+              .describeLogStreams({
+                logGroupName,
+                orderBy: "LastEventTime",
+                descending: true,
+                limit: 1,
+              })
+              .pipe(
+                Effect.map((r) => ({
+                  exists: true,
+                  lastIngestion: r.logStreams?.[0]?.lastIngestionTime,
+                })),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed({
+                    exists: false,
+                    lastIngestion: undefined as number | undefined,
+                  }),
+                ),
+              );
+            const now = yield* Effect.sync(() => Date.now());
+            const quiescent =
+              observed.exists &&
+              (observed.lastIngestion === undefined ||
+                now - observed.lastIngestion > 120_000);
+            if (quiescent) {
+              yield* reapLogGroup;
+            } else {
+              yield* reapLogGroup.pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("20 seconds"),
+                  times: 2,
+                }),
+              );
+            }
+          }
         }),
       });
     }),

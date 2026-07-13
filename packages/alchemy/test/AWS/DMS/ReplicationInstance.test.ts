@@ -8,6 +8,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { reapDmsOrphans } from "./reap.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -45,6 +46,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      // A previous hard-killed run (in-memory scratch state) may have
+      // orphaned the VPC fixture — reap it out-of-band before deploying.
+      yield* reapDmsOrphans;
 
       const azResult = yield* ec2.describeAvailabilityZones({});
       const azs = (azResult.AvailabilityZones ?? [])
@@ -106,6 +110,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         }),
       );
       expect(["gone", "deleting"]).toContain(status);
-    }),
+    }).pipe(
+      // Converge to zero leftovers even when the body (or the engine's own
+      // scratch destroy) fails: the reaper waits out the instance deletion
+      // and tears the VPC fixture down out-of-band with idempotent typed
+      // calls. `orDie` — a finalizer must not swallow its own failure.
+      Effect.ensuring(reapDmsOrphans.pipe(Effect.orDie)),
+    ),
   { timeout: 1_500_000 },
 );

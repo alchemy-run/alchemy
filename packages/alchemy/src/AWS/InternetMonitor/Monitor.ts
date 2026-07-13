@@ -1,3 +1,4 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -415,6 +416,50 @@ export const MonitorProvider = () =>
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+
+          // Internet Monitor auto-creates per-monitor CloudWatch log groups
+          // (/aws/internet-monitor/{name}/{byCity,byCountry,byMetro,
+          // bySubdivision}) that survive DeleteMonitor — reap them so the
+          // monitor leaves no orphans (same doctrine as the Lambda Function
+          // /aws/lambda/{name} log-group reap).
+          const logGroupPrefix = `/aws/internet-monitor/${name}`;
+          const reapLogGroups = logs
+            .describeLogGroups({ logGroupNamePrefix: logGroupPrefix })
+            .pipe(
+              Effect.map((r) => r.logGroups ?? []),
+              Effect.flatMap((groups) =>
+                Effect.forEach(
+                  groups.flatMap((g) =>
+                    // Exact-prefix guard: never reap a sibling monitor whose
+                    // name merely starts with ours.
+                    g.logGroupName !== undefined &&
+                    (g.logGroupName === logGroupPrefix ||
+                      g.logGroupName.startsWith(`${logGroupPrefix}/`))
+                      ? [g.logGroupName]
+                      : [],
+                  ),
+                  (logGroupName) =>
+                    logs
+                      .deleteLogGroup({ logGroupName })
+                      .pipe(
+                        Effect.catchTag(
+                          "ResourceNotFoundException",
+                          () => Effect.void,
+                        ),
+                      ),
+                  { concurrency: 4 },
+                ),
+              ),
+            );
+          // Log-group creation/delivery is asynchronous — a group can
+          // materialize shortly after the monitor is gone, so sweep again on
+          // a short bounded schedule (t=0s / 10s / 20s, each sweep idempotent).
+          yield* reapLogGroups.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("10 seconds"),
+              times: 2,
+            }),
+          );
         }),
       });
     }),

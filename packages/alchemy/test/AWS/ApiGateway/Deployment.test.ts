@@ -1,15 +1,56 @@
 import * as AWS from "@/AWS";
+import { retryOnApiStatusUpdating } from "@/AWS/ApiGateway/common.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// `deleteRestApi` is governed by a hard account-wide throttle (~1 request per
+// 30s). During a fleet-wide test wave the teardown of this suite can race
+// other suites' REST API deletes; if the vitest process is killed before the
+// provider's throttle retry wins, the REST API (and its ~21 auto-created
+// GatewayResponses) is stranded. The physical name is deterministic
+// (`{stack}-{logicalId}-{stage}-{suffix}`), so reap out-of-band by the
+// `-{logicalId}-test-` marker: run as a pre-clean before deploy (covers
+// strays from a previous killed run even when the state store was wiped) and
+// as an `Effect.ensuring` finalizer (covers mid-test failures).
+const reapRestApis = (logicalId: string) =>
+  ag.getRestApis.pages({}).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).flatMap((page) =>
+        (page.items ?? []).filter(
+          (api): api is ag.RestApi & { id: string } =>
+            api.id != null &&
+            (api.name?.includes(`-${logicalId}-test-`) ?? false),
+        ),
+      ),
+    ),
+    Effect.flatMap(
+      Effect.forEach((api) =>
+        retryOnApiStatusUpdating(
+          ag
+            .deleteRestApi({ restApiId: api.id })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
+        ),
+      ),
+    ),
+    Effect.asVoid,
+    // Finalizer contract: the error channel must be `never`. Any unexpected
+    // error here is a genuinely stuck delete and should surface as a defect.
+    Effect.orDie,
+  );
 
 test.provider.skipIf(!!process.env.FAST)(
   "create and delete deployment",
   (stack) =>
     Effect.gen(function* () {
+      yield* reapRestApis("AgDepApi");
+
       const { deployment } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgDepApi", {
@@ -32,13 +73,15 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(deployment.deploymentId).toBeDefined();
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.ensuring(reapRestApis("AgDepApi"))),
 );
 
 test.provider.skipIf(!!process.env.FAST)(
   "deployment trigger change creates new deployment",
   (stack) =>
     Effect.gen(function* () {
+      yield* reapRestApis("AgTrigApi");
+
       const { d1 } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgTrigApi", {
@@ -82,7 +125,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(d2.deploymentId).not.toEqual(d1.deploymentId);
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.ensuring(reapRestApis("AgTrigApi"))),
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -90,6 +133,7 @@ test.provider.skipIf(!!process.env.FAST)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* reapRestApis("AgListApi");
 
       const { deployment } = yield* stack.deploy(
         Effect.gen(function* () {
@@ -120,5 +164,5 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.ensuring(reapRestApis("AgListApi"))),
 );

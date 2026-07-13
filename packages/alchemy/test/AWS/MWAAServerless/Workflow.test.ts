@@ -4,6 +4,7 @@ import { Workflow } from "@/AWS/MWAAServerless";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Vitest";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sts from "@distilled.cloud/aws/sts";
@@ -115,6 +116,66 @@ class WorkflowStillExists extends Data.TaggedError("WorkflowStillExists")<{
   readonly workflowArn: string;
 }> {}
 
+class LogGroupStillExists extends Data.TaggedError("LogGroupStillExists")<{
+  readonly logGroupName: string;
+}> {}
+
+// MWAA Serverless auto-creates `/aws/mwaa-serverless/{arn resource id}/`
+// per workflow; the provider's delete reaps it. Derive the exact name from
+// the workflow ARN (the resource id embeds the service-assigned suffix).
+const logGroupNameFor = (workflowArn: string) =>
+  `/aws/mwaa-serverless/${workflowArn.split(":workflow/")[1]}/`;
+
+const assertLogGroupDeleted = (workflowArn: string) =>
+  Effect.gen(function* () {
+    const logGroupName = logGroupNameFor(workflowArn);
+    const found = yield* logs.describeLogGroups({
+      logGroupNamePrefix: logGroupName,
+    });
+    const exists = (found.logGroups ?? []).some(
+      (group) => group.logGroupName === logGroupName,
+    );
+    if (exists) {
+      return yield* Effect.fail(new LogGroupStillExists({ logGroupName }));
+    }
+  }).pipe(
+    Effect.retry({
+      while: (e): boolean => e._tag === "LogGroupStillExists",
+      schedule: Schedule.fixed("5 seconds").pipe(
+        Schedule.both(Schedule.recurs(5)),
+      ),
+    }),
+  );
+
+// Crash-resilience sweep: if a run dies between createWorkflow and the
+// provider delete, the auto-created log group (whose name embeds a
+// service-assigned random suffix we cannot predict up front) would orphan.
+// Reap every log group carrying this test's deterministic workflow-name
+// prefixes so an interrupted run is cleaned up by the next one.
+const TEST_LOG_GROUP_PREFIXES = [
+  // engine-generated physical name for the `Etl` logical ID
+  "/aws/mwaa-serverless/create-update-and-delete-a-workflow-Etl-",
+  // explicit rename used by the replacement phase
+  "/aws/mwaa-serverless/alchemy-mwaa-serverless-renamed-",
+];
+
+const reapTestLogGroups = Effect.gen(function* () {
+  for (const prefix of TEST_LOG_GROUP_PREFIXES) {
+    const found = yield* logs.describeLogGroups({
+      logGroupNamePrefix: prefix,
+    });
+    for (const group of found.logGroups ?? []) {
+      if (group.logGroupName !== undefined) {
+        yield* logs
+          .deleteLogGroup({ logGroupName: group.logGroupName })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+      }
+    }
+  }
+});
+
 const assertWorkflowDeleted = (workflowArn: string) =>
   findWorkflow(workflowArn).pipe(
     Effect.flatMap((workflow) =>
@@ -192,9 +253,13 @@ test.provider(
       expect(replaced.workflow.workflowArn).not.toBe(workflow.workflowArn);
       expect(replaced.workflow.name).toBe("alchemy-mwaa-serverless-renamed");
       yield* assertWorkflowDeleted(workflow.workflowArn);
+      // The replaced-away workflow's auto-created log group must be reaped
+      // along with it, or every rename leaks a log group.
+      yield* assertLogGroupDeleted(workflow.workflowArn);
 
       yield* stack.destroy();
       yield* assertWorkflowDeleted(replaced.workflow.workflowArn);
-    }),
+      yield* assertLogGroupDeleted(replaced.workflow.workflowArn);
+    }).pipe(Effect.ensuring(Effect.orDie(reapTestLogGroups))),
   { timeout: 600_000 },
 );

@@ -14,6 +14,7 @@ import {
   asPlain,
   deadlineArnOf,
   fetchDeadlineTags,
+  reapDeadlineLogGroups,
   retryWhileConflict,
   retryWhileFarmSettling,
   syncDeadlineTags,
@@ -411,6 +412,12 @@ export const QueueProvider = () =>
           ).pipe(
             // Exhausted retries: deletion is already converging server-side.
             Effect.catchTag("QueueStillExists", () => Effect.void),
+          );
+          // Deadline auto-creates /aws/deadline/{farmId}/{queueId} for the
+          // queue's job/session logs and deleteQueue does NOT remove it —
+          // reap it so a deleted queue leaves no orphaned log group.
+          yield* reapDeadlineLogGroups(
+            `/aws/deadline/${output.farmId}/${output.queueId}`,
           );
         }),
       };

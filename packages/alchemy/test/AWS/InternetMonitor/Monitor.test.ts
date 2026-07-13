@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import { Monitor } from "@/AWS/InternetMonitor";
 import * as Test from "@/Test/Vitest";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -106,6 +107,19 @@ describe("AWS.InternetMonitor.Monitor", () => {
 
         yield* stack.destroy();
         yield* assertMonitorGone(created.monitorName);
+
+        // Internet Monitor auto-creates per-monitor CloudWatch log groups
+        // (/aws/internet-monitor/{name}/{byCity,byCountry,byMetro,
+        // bySubdivision}) that survive DeleteMonitor. The provider delete
+        // reaps them — prove none remain after destroy.
+        const remainingLogGroups = yield* logs
+          .describeLogGroups({
+            logGroupNamePrefix: `/aws/internet-monitor/${created.monitorName}`,
+          })
+          .pipe(
+            Effect.map((r) => (r.logGroups ?? []).map((g) => g.logGroupName)),
+          );
+        expect(remainingLogGroups).toEqual([]);
       }),
     { timeout: 300_000 },
   );

@@ -3,17 +3,25 @@ import { Application } from "@/AWS/KinesisAnalyticsV2";
 import * as Test from "@/Test/Vitest";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
-import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import { makeDummyFlinkCodeZip } from "./dummy-zip.ts";
+import {
+  codeKey,
+  deleteCodeBucketIdempotent,
+  provisionCodeBucket,
+} from "./code-bucket.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const codeKey = "code/app.zip";
+// Deterministic out-of-band code buckets (see code-bucket.ts) — the Flink
+// code object must exist before the application resource, and an in-stack
+// bucket orphans on a crashed run because its generated name is lost with
+// the state.
+const appCodeBucket = "alchemy-test-kav2-app-code";
+const renameCodeBucket = "alchemy-test-kav2-rename-code";
 
 class ApplicationStillExists extends Data.TaggedError(
   "ApplicationStillExists",
@@ -45,29 +53,13 @@ describe.skipIf(!!process.env.FAST)(
 
           // Stage the code object BEFORE the application exists — the service
           // reads (and hashes) the object at create/update time.
-          const staged = yield* stack.deploy(
-            Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FlinkCodeBucket", {
-                forceDestroy: true,
-              });
-              return { bucket };
-            }),
-          );
-          const zip = yield* Effect.sync(() => makeDummyFlinkCodeZip());
-          yield* s3.putObject({
-            Bucket: staged.bucket.bucketName,
-            Key: codeKey,
-            Body: zip,
-          });
+          const codeBucketArn = yield* provisionCodeBucket(appCodeBucket);
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FlinkCodeBucket", {
-                forceDestroy: true,
-              });
               const app = yield* Application("FlinkApp", {
                 runtimeEnvironment: "FLINK-1_20",
-                code: { bucketArn: bucket.bucketArn, fileKey: codeKey },
+                code: { bucketArn: codeBucketArn, fileKey: codeKey },
                 environmentProperties: [
                   {
                     propertyGroupId: "AppProperties",
@@ -76,7 +68,7 @@ describe.skipIf(!!process.env.FAST)(
                 ],
                 tags: { Environment: "test" },
               });
-              return { bucket, app };
+              return { app };
             }),
           );
 
@@ -87,7 +79,7 @@ describe.skipIf(!!process.env.FAST)(
           expect(deployed.app.runtimeEnvironment).toEqual("FLINK-1_20");
           expect(deployed.app.roleName).toBeDefined();
           expect(deployed.app.serviceExecutionRole).toContain(":role/");
-          expect(deployed.app.codeBucketArn).toEqual(deployed.bucket.bucketArn);
+          expect(deployed.app.codeBucketArn).toEqual(codeBucketArn);
           expect(deployed.app.codeFileKey).toEqual(codeKey);
           expect(deployed.app.vpcConfigurationId).toBeUndefined();
 
@@ -133,12 +125,9 @@ describe.skipIf(!!process.env.FAST)(
           // Update runtime properties + tags in place (UpdateApplication).
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FlinkCodeBucket", {
-                forceDestroy: true,
-              });
               const app = yield* Application("FlinkApp", {
                 runtimeEnvironment: "FLINK-1_20",
-                code: { bucketArn: bucket.bucketArn, fileKey: codeKey },
+                code: { bucketArn: codeBucketArn, fileKey: codeKey },
                 environmentProperties: [
                   {
                     propertyGroupId: "AppProperties",
@@ -155,7 +144,7 @@ describe.skipIf(!!process.env.FAST)(
                 },
                 tags: { Environment: "production", Team: "platform" },
               });
-              return { bucket, app };
+              return { app };
             }),
           );
 
@@ -197,12 +186,9 @@ describe.skipIf(!!process.env.FAST)(
           // (observed-vs-desired diffing skips the UpdateApplication call).
           const steady = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FlinkCodeBucket", {
-                forceDestroy: true,
-              });
               const app = yield* Application("FlinkApp", {
                 runtimeEnvironment: "FLINK-1_20",
-                code: { bucketArn: bucket.bucketArn, fileKey: codeKey },
+                code: { bucketArn: codeBucketArn, fileKey: codeKey },
                 environmentProperties: [
                   {
                     propertyGroupId: "AppProperties",
@@ -219,7 +205,7 @@ describe.skipIf(!!process.env.FAST)(
                 },
                 tags: { Environment: "production", Team: "platform" },
               });
-              return { bucket, app };
+              return { app };
             }),
           );
           expect(steady.app.applicationVersionId).toEqual(
@@ -235,7 +221,7 @@ describe.skipIf(!!process.env.FAST)(
             .getRole({ RoleName: deployed.app.roleName! })
             .pipe(Effect.result);
           expect(Result.isFailure(roleResult)).toBe(true);
-        }),
+        }).pipe(Effect.ensuring(deleteCodeBucketIdempotent(appCodeBucket))),
       { timeout: 300_000 },
     );
 
@@ -245,45 +231,26 @@ describe.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           yield* stack.destroy();
 
-          const staged = yield* stack.deploy(
-            Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FlinkRenameBucket", {
-                forceDestroy: true,
-              });
-              return { bucket };
-            }),
-          );
-          const zip = yield* Effect.sync(() => makeDummyFlinkCodeZip());
-          yield* s3.putObject({
-            Bucket: staged.bucket.bucketName,
-            Key: codeKey,
-            Body: zip,
-          });
+          const codeBucketArn = yield* provisionCodeBucket(renameCodeBucket);
 
           const initial = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FlinkRenameBucket", {
-                forceDestroy: true,
-              });
               const app = yield* Application("RenamedApp", {
                 runtimeEnvironment: "FLINK-1_20",
-                code: { bucketArn: bucket.bucketArn, fileKey: codeKey },
+                code: { bucketArn: codeBucketArn, fileKey: codeKey },
               });
-              return { bucket, app };
+              return { app };
             }),
           );
 
           const replaced = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FlinkRenameBucket", {
-                forceDestroy: true,
-              });
               const app = yield* Application("RenamedApp", {
                 applicationName: "alchemy-test-kav2-renamed",
                 runtimeEnvironment: "FLINK-1_20",
-                code: { bucketArn: bucket.bucketArn, fileKey: codeKey },
+                code: { bucketArn: codeBucketArn, fileKey: codeKey },
               });
-              return { bucket, app };
+              return { app };
             }),
           );
 
@@ -301,7 +268,7 @@ describe.skipIf(!!process.env.FAST)(
           yield* stack.destroy();
 
           yield* assertApplicationDeleted(replaced.app.applicationName);
-        }),
+        }).pipe(Effect.ensuring(deleteCodeBucketIdempotent(renameCodeBucket))),
       { timeout: 300_000 },
     );
   },

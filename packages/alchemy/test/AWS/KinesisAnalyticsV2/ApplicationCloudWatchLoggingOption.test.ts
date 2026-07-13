@@ -5,16 +5,22 @@ import {
 } from "@/AWS/KinesisAnalyticsV2";
 import * as Test from "@/Test/Vitest";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
-import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { makeDummyFlinkCodeZip } from "./dummy-zip.ts";
+import {
+  codeKey,
+  deleteCodeBucketIdempotent,
+  provisionCodeBucket,
+} from "./code-bucket.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const codeKey = "code/app.zip";
+// Deterministic out-of-band code bucket (see code-bucket.ts) — an in-stack
+// bucket orphans on a crashed run because its generated name is lost with
+// the state.
+const loggingCodeBucket = "alchemy-test-kav2-logging-code";
 
 class ApplicationStillExists extends Data.TaggedError(
   "ApplicationStillExists",
@@ -44,34 +50,20 @@ describe.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           yield* stack.destroy();
 
-          const staged = yield* stack.deploy(
-            Effect.gen(function* () {
-              const bucket = yield* AWS.S3.Bucket("FlinkLoggingBucket", {
-                forceDestroy: true,
-              });
-              return { bucket };
-            }),
-          );
-          const zip = yield* Effect.sync(() => makeDummyFlinkCodeZip());
-          yield* s3.putObject({
-            Bucket: staged.bucket.bucketName,
-            Key: codeKey,
-            Body: zip,
-          });
+          // Stage the code object BEFORE the application exists — the service
+          // reads (and hashes) the object at create/update time.
+          const codeBucketArn = yield* provisionCodeBucket(loggingCodeBucket);
 
           const makeBase = Effect.gen(function* () {
-            const bucket = yield* AWS.S3.Bucket("FlinkLoggingBucket", {
-              forceDestroy: true,
-            });
             const logGroup = yield* AWS.Logs.LogGroup("FlinkLogGroup", {});
             const logStream = yield* AWS.Logs.LogStream("FlinkLogStream", {
               logGroupName: logGroup.logGroupName,
             });
             const app = yield* Application("LoggedFlinkApp", {
               runtimeEnvironment: "FLINK-1_20",
-              code: { bucketArn: bucket.bucketArn, fileKey: codeKey },
+              code: { bucketArn: codeBucketArn, fileKey: codeKey },
             });
-            return { bucket, logGroup, logStream, app };
+            return { logGroup, logStream, app };
           });
 
           const deployed = yield* stack.deploy(
@@ -124,7 +116,7 @@ describe.skipIf(!!process.env.FAST)(
           yield* stack.destroy();
 
           yield* assertApplicationDeleted(deployed.app.applicationName);
-        }),
+        }).pipe(Effect.ensuring(deleteCodeBucketIdempotent(loggingCodeBucket))),
       { timeout: 300_000 },
     );
   },

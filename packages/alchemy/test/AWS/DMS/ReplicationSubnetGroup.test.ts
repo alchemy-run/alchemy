@@ -7,6 +7,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { reapDmsOrphans } from "./reap.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -39,6 +40,9 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      // A previous hard-killed run (in-memory scratch state) may have
+      // orphaned the VPC fixture — reap it out-of-band before deploying.
+      yield* reapDmsOrphans;
 
       // Resolve three AZs so the update can swap the subnet set.
       const azResult = yield* ec2.describeAvailabilityZones({});
@@ -131,6 +135,12 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertGone(group.replicationSubnetGroupIdentifier);
-    }),
+    }).pipe(
+      // Converge to zero leftovers even when the body (or the engine's own
+      // scratch destroy) fails: the reaper deletes the VPC fixture out-of-band
+      // with idempotent typed calls. `orDie` — a finalizer must not swallow
+      // its own failure silently.
+      Effect.ensuring(reapDmsOrphans.pipe(Effect.orDie)),
+    ),
   { timeout: 300_000 },
 );
