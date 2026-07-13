@@ -14,9 +14,8 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-// Ungated typed-error probe: prove the distilled error union carries the
-// not-found tag this provider's read/delete paths depend on. Runs in every
-// CI pass at near-zero cost, unlike the gated lifecycle below.
+// Typed-error probe: prove the distilled error union carries the not-found
+// tag this provider's read/delete paths depend on, at near-zero cost.
 test.provider(
   "getWorkflow on a nonexistent workflow fails with ResourceNotFoundException",
   () =>
@@ -131,9 +130,7 @@ const assertWorkflowDeleted = (workflowArn: string) =>
     }),
   );
 
-// The full lifecycle needs the account to have access to the (new) MWAA
-// Serverless service — gated behind AWS_TEST_MWAA_SERVERLESS=1.
-test.provider.skipIf(!process.env.AWS_TEST_MWAA_SERVERLESS)(
+test.provider(
   "create, update, and delete a workflow",
   (stack) =>
     Effect.gen(function* () {

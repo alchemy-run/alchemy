@@ -12,7 +12,7 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { retryOnConflict } from "./internal.ts";
+import { retryOnConflict, waitUntilStable } from "./internal.ts";
 
 export interface ServiceNetworkVpcAssociationProps {
   /**
@@ -267,6 +267,11 @@ export const ServiceNetworkVpcAssociationProvider = () =>
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
+          // Deletion is asynchronous (the association sits in
+          // DELETE_IN_PROGRESS while hyperplane ENIs are torn down). Wait
+          // until it is actually gone so a dependent ServiceNetwork delete
+          // doesn't hit `ConflictException: has VPC(s) associated`.
+          yield* waitUntilStable(observe(output.associationId));
         }),
       };
     }),

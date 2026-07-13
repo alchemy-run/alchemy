@@ -1,8 +1,36 @@
 import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { deepEqual, isResolved } from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
+import * as Output from "../../Output.ts";
 import { diffTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
+
+/**
+ * Plan-time replacement check for immutable Image Builder versions
+ * (components, image recipes). `news` may still carry unresolved Outputs
+ * at plan time — e.g. the build-version ARN of a component being replaced
+ * in the same deploy — so compare per key and skip only the keys that are
+ * unresolved. A resolved change on an immutable key (like a
+ * `semanticVersion` bump) must still plan a replacement; drift hidden
+ * behind an unresolved key is caught by the provider's reconcile
+ * immutability guard.
+ */
+export const immutableVersionKeysChanged = <Props extends object>(
+  olds: Props,
+  news: Input<Props>,
+  keys: readonly (keyof Props)[],
+): boolean => {
+  // The whole props object itself may be an unresolved expression — no
+  // per-key comparison is possible; defer to the reconcile guard.
+  if (Output.isExpr(news) || Effect.isEffect(news)) return false;
+  const desired = news as { [K in keyof Props]: Input<Props[K]> };
+  return keys.some((key) => {
+    const value = desired[key];
+    return isResolved(value) && !deepEqual(olds[key], value);
+  });
+};
 
 /**
  * Image Builder rejects deletion of a resource that another resource still

@@ -11,6 +11,7 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { reclaimTaskDefinitionFamily } from "../ECS/reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -32,6 +33,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      // Pre-clean: reclaim revisions a previously killed run may have left,
+      // then register this run's revision.
+      yield* reclaimTaskDefinitionFamily(clusterName);
+
       const registered = yield* ecs.registerTaskDefinition({
         family: "alchemy-test-aas-ecs",
         networkMode: "awsvpc",
@@ -48,12 +53,11 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
-      // Safety net: deregister the out-of-band task definition on scope close
-      // even if the body fails — leaves it INACTIVE rather than orphaned.
+      // Safety net: fully reclaim the out-of-band family on scope close even
+      // if the body fails — deregister + hard-delete so no INACTIVE revision
+      // survives the run.
       yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(Effect.ignore),
+        reclaimTaskDefinitionFamily(clusterName).pipe(Effect.ignore),
       );
 
       const deploy = (targetValue: number) =>
@@ -197,9 +201,7 @@ test.provider(
       });
       expect(policiesAfterDestroy.ScalingPolicies ?? []).toHaveLength(0);
 
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(clusterName);
     }),
   { timeout: 240_000 },
 );

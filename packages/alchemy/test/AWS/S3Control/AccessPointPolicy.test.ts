@@ -5,7 +5,9 @@ import * as Output from "@/Output";
 import * as Test from "@/Test/Vitest";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,6 +19,24 @@ const findPolicy = (name: string) =>
     Effect.catchTag(["NoSuchAccessPointPolicy", "NoSuchAccessPoint"], () =>
       Effect.succeed(undefined),
     ),
+  );
+
+class AccessPointStillExists extends Data.TaggedError(
+  "AccessPointStillExists",
+)<{ readonly name: string }> {}
+
+// The policy's access point (and transitively its bucket) must be destroyed
+// too — a destroy that only removes the policy would orphan them.
+const assertAccessPointDeleted = (name: string) =>
+  s3control.getAccessPoint({ AccountId: ACCOUNT_ID, Name: name }).pipe(
+    Effect.flatMap(() => Effect.fail(new AccessPointStillExists({ name }))),
+    Effect.catchTag("NoSuchAccessPoint", () => Effect.void),
+    Effect.retry({
+      while: (e) => e._tag === "AccessPointStillExists",
+      schedule: Schedule.exponential(500).pipe(
+        Schedule.both(Schedule.recurs(8)),
+      ),
+    }),
   );
 
 test.provider(
@@ -117,6 +137,7 @@ test.provider(
         deployed.accessPoint.accessPointName,
       );
       expect(afterDestroy).toBeUndefined();
+      yield* assertAccessPointDeleted(deployed.accessPoint.accessPointName);
     }),
   { timeout: 120_000 },
 );

@@ -55,10 +55,13 @@ export const syncEntityResolutionTags = Effect.fn(function* (
 
 /**
  * Retry the IAM-propagation race on workflow create/update: a freshly created
- * role is transiently rejected with `AccessDeniedException: Exception in
- * assuming the passed role ...` until IAM propagates. Bounded; explicitly
- * typed as a pipeable helper so declaration emit stays clean (inlining
- * `Effect.retry` erases `E`/`R` to `unknown` for every consumer).
+ * role is transiently rejected until IAM propagates. The race surfaces as
+ * `AccessDeniedException` with either `Exception in assuming the passed
+ * role ...` (the role itself hasn't propagated) or `The service does not
+ * have access to read your data in Glue/S3 ...` (the role resolved but its
+ * just-attached policy hasn't). Bounded; explicitly typed as a pipeable
+ * helper so declaration emit stays clean (inlining `Effect.retry` erases
+ * `E`/`R` to `unknown` for every consumer).
  */
 export const retryRolePropagation = <A, E, R>(
   self: Effect.Effect<A, E, R>,
@@ -67,7 +70,8 @@ export const retryRolePropagation = <A, E, R>(
     while: (e) =>
       e instanceof entityresolution.AccessDeniedException &&
       typeof e.message === "string" &&
-      e.message.includes("assuming the passed role"),
+      (e.message.includes("assuming the passed role") ||
+        e.message.includes("does not have access")),
     schedule: Schedule.fixed("2 seconds").pipe(
       Schedule.both(Schedule.recurs(20)),
     ),

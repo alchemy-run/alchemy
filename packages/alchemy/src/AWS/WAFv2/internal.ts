@@ -62,9 +62,11 @@ export const retryOptimisticLock = <A, E extends { _tag: string }, R>(
 
 /**
  * WAF changes take "a few seconds to a number of minutes" to propagate.
- * A freshly created web ACL (or rule group) referenced by another call can
- * surface `WAFUnavailableEntityException` until propagation completes —
- * retry it on a bounded schedule (~40s total).
+ * A freshly created web ACL (or rule group) referenced by another call —
+ * or a freshly created protected resource (e.g. a Cognito user pool) that
+ * WAF cannot "retrieve" yet — surfaces `WAFUnavailableEntityException`
+ * until propagation completes. Retry it on a bounded schedule (~90s
+ * total); fresh Cognito user pools routinely need more than 40s.
  *
  * @internal
  */
@@ -73,8 +75,27 @@ export const retryUnavailableEntity = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "WAFUnavailableEntityException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
+    schedule: Schedule.fixed("3 seconds").pipe(
+      Schedule.both(Schedule.recurs(30)),
+    ),
+  });
+
+/**
+ * Like {@link retryUnavailableEntity} but with a ~150s budget. Associating
+ * a web ACL with a freshly created protected resource (Cognito user pool,
+ * ALB, …) surfaces `WAFUnavailableEntityException` until the resource
+ * propagates to WAF — observed to routinely exceed 90s for new Cognito
+ * user pools (Terraform retries this for 5 minutes).
+ *
+ * @internal
+ */
+export const retryUnavailableEntityLong = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "WAFUnavailableEntityException",
+    schedule: Schedule.fixed("3 seconds").pipe(
+      Schedule.both(Schedule.recurs(50)),
     ),
   });
 

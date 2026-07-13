@@ -6,6 +6,7 @@ import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,12 +14,23 @@ const { test } = Test.make({ providers: AWS.providers() });
 // service-linked role EVERY operation fails with AccessDeniedException
 // ("Service role not found..."). Creating the SLR is idempotent — an
 // already-onboarded account returns the typed InvalidInputException
-// ("has been taken in this account").
-const ensureOnboarded = iam
-  .createServiceLinkedRole({
-    AWSServiceName: "license-manager.amazonaws.com",
-  })
-  .pipe(Effect.catchTag("InvalidInputException", () => Effect.void));
+// ("has been taken in this account"). A freshly created SLR takes a few
+// seconds of IAM propagation before License Manager sees it, so probe
+// with a bounded typed retry on AccessDeniedException.
+const ensureOnboarded = Effect.gen(function* () {
+  yield* iam
+    .createServiceLinkedRole({
+      AWSServiceName: "license-manager.amazonaws.com",
+    })
+    .pipe(Effect.catchTag("InvalidInputException", () => Effect.void));
+  yield* licensemanager.listLicenseConfigurations({ MaxResults: 1 }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "AccessDeniedException",
+      schedule: Schedule.exponential("1 second"),
+      times: 8,
+    }),
+  );
+});
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.

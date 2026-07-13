@@ -1,4 +1,5 @@
 import * as aas from "@distilled.cloud/aws/application-auto-scaling";
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -364,6 +365,18 @@ export const ScalingPolicyProvider = () =>
             .pipe(
               Effect.catchTag("ObjectNotFoundException", () => Effect.void),
             );
+          // Reap the managed CloudWatch alarms of a target tracking policy.
+          // Application Auto Scaling deletes them asynchronously (and not at
+          // all when the policy went away via target deregistration), so an
+          // explicit delete keeps teardown deterministic. DeleteAlarms
+          // ignores names that no longer exist.
+          if (output.alarms.length > 0) {
+            yield* cloudwatch
+              .deleteAlarms({
+                AlarmNames: output.alarms.map((alarm) => alarm.alarmName),
+              })
+              .pipe(Effect.catchTag("ResourceNotFound", () => Effect.void));
+          }
         }),
       };
     }),

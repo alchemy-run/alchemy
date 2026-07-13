@@ -40,8 +40,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
+      // Bounded well under the 180s test timeout (~31s of sleeps) so a
+      // persistent 500 surfaces its body instead of an opaque timeout.
       schedule: Schedule.exponential("1 second").pipe(
-        Schedule.both(Schedule.recurs(8)),
+        Schedule.both(Schedule.recurs(5)),
       ),
     }),
   );
@@ -82,6 +84,8 @@ describe("Athena Query", () => {
     }),
     { timeout: 300_000 },
   );
+  // No NO_DESTROY escape hatch here: scratch-stack state is in-memory per
+  // process, so a skipped destroy would orphan the whole stack forever.
   afterAll(sharedStack.destroy(), { timeout: 300_000 });
 
   test.provider(

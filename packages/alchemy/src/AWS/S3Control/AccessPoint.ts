@@ -1,4 +1,5 @@
 import * as s3control from "@distilled.cloud/aws/s3-control";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -209,6 +210,32 @@ const retryWhileAccessPointPropagates = <A, E extends { _tag: string }, R>(
     ),
   });
 
+/**
+ * Marker error for the delete verification loop: the access point is still
+ * observable after `DeleteAccessPoint` reported success (or a spurious
+ * `NoSuchAccessPoint`). The same control-plane propagation lag that makes
+ * `GetAccessPoint`/`TagResource` 404 for a few seconds after create can make
+ * `DeleteAccessPoint` 404 for a freshly-created access point WITHOUT deleting
+ * it — swallowing that 404 as "already gone" orphans the access point (and
+ * poisons the owning bucket's delete with `BucketHasAccessPointsAttached`).
+ */
+class AccessPointNotYetDeleted extends Data.TaggedError(
+  "AccessPointNotYetDeleted",
+)<{ readonly name: string }> {}
+
+/**
+ * Retry while the access point is still observable after a delete attempt.
+ * Explicitly typed at module scope for the same declaration-emit reason as
+ * {@link retryWhileAccessPointPropagates}.
+ */
+const retryWhileAccessPointNotYetDeleted = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "AccessPointNotYetDeleted",
+    schedule: Schedule.exponential(500).pipe(Schedule.both(Schedule.recurs(6))),
+  });
+
 export const AccessPointProvider = () =>
   Provider.effect(
     AccessPoint,
@@ -411,15 +438,33 @@ export const AccessPointProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           const { accountId } = yield* AWSEnvironment.current;
-          yield* s3control
-            .deleteAccessPoint({
-              AccountId: accountId,
-              Name: output.accessPointName,
-            })
+          const name = output.accessPointName;
+          const deleteOnce = s3control
+            .deleteAccessPoint({ AccountId: accountId, Name: name })
             .pipe(
               // Idempotent delete — already gone is success.
               Effect.catchTag("NoSuchAccessPoint", () => Effect.void),
             );
+          yield* deleteOnce;
+          // Verify the access point is actually gone. `DeleteAccessPoint`
+          // can spuriously return `NoSuchAccessPoint` for a freshly-created
+          // access point (control-plane propagation lag) without deleting
+          // it; treating that as success orphans the access point. While
+          // the access point is still observable, delete again — bounded,
+          // then fail loudly rather than silently leak.
+          yield* retryWhileAccessPointNotYetDeleted(
+            observeAccessPoint(accountId, name).pipe(
+              Effect.flatMap((live) =>
+                live === undefined
+                  ? Effect.void
+                  : deleteOnce.pipe(
+                      Effect.flatMap(() =>
+                        Effect.fail(new AccessPointNotYetDeleted({ name })),
+                      ),
+                    ),
+              ),
+            ),
+          );
         }),
       });
     }),

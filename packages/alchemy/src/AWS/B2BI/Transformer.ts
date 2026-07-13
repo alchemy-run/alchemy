@@ -271,6 +271,14 @@ export const TransformerProvider = () =>
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+          // NOTE: transformer creation auto-creates the shared account-level
+          // /aws/vendedlogs/b2bi/transformers log group. That group is a
+          // service-managed singleton (like a service-linked role) and MUST
+          // NOT be reaped here: B2BI's internal log-delivery bookkeeping
+          // references it, and deleting it opens a ~60-90s window where every
+          // subsequent createTransformer in the account fails with
+          // "Unable to perform CreateLogDelivery. Log destination resource
+          // /aws/vendedlogs/b2bi/transformers was not found" (verified live).
         }),
 
         list: () =>

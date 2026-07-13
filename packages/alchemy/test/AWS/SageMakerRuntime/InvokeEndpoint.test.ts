@@ -12,7 +12,8 @@ const { test } = Test.make({ providers: AWS.providers() });
 // proves both the SDK's typed error mapping and that the binding's callable is
 // wired against the real data-plane API, at near-zero cost (no endpoint is
 // provisioned — a real endpoint costs $$ per hour). The full live invocation
-// is gated behind AWS_TEST_SAGEMAKER=1 (see the skipped test below).
+// (with a real deployed endpoint) is gated behind AWS_TEST_SAGEMAKER_ENDPOINT=1
+// in test/AWS/SageMaker/Endpoint.test.ts.
 test.provider(
   "invoking a nonexistent endpoint returns a typed ValidationError",
   (_stack) =>

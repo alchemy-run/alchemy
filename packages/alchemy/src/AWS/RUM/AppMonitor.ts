@@ -1,3 +1,4 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as rum from "@distilled.cloud/aws/rum";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -416,6 +417,36 @@ export const AppMonitorProvider = () =>
           yield* rum.deleteAppMonitor({ Name: output.appMonitorName }).pipe(
             // idempotent — the monitor may already be gone
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+
+          // When cwLogEnabled is (or was ever) on, RUM vends telemetry into
+          // a log group named
+          //   /aws/vendedlogs/RUMService_{appMonitorName}{first 8 hex chars of Id}
+          // and deleteAppMonitor does NOT remove it — without this reap every
+          // deleted log-enabled monitor leaks an orphaned log group. Match
+          // the observed groups against the monitor's Id so a sibling
+          // monitor whose name extends ours is never reaped by accident.
+          const logGroupPrefix = `/aws/vendedlogs/RUMService_${output.appMonitorName}`;
+          const idHex = output.appMonitorId.replaceAll("-", "");
+          const groups = yield* logs
+            .describeLogGroups({ logGroupNamePrefix: logGroupPrefix })
+            .pipe(Effect.map((r) => r.logGroups ?? []));
+          yield* Effect.forEach(
+            groups.flatMap((g) =>
+              g.logGroupName !== undefined &&
+              idHex.startsWith(g.logGroupName.slice(logGroupPrefix.length))
+                ? [g.logGroupName]
+                : [],
+            ),
+            (logGroupName) =>
+              logs
+                .deleteLogGroup({ logGroupName })
+                .pipe(
+                  Effect.catchTag(
+                    "ResourceNotFoundException",
+                    () => Effect.void,
+                  ),
+                ),
           );
         }),
       });

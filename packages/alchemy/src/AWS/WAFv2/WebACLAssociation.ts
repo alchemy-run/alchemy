@@ -4,7 +4,10 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { retryUnavailableEntity } from "./internal.ts";
+import {
+  retryUnavailableEntity,
+  retryUnavailableEntityLong,
+} from "./internal.ts";
 
 export interface WebACLAssociationProps {
   /**
@@ -78,15 +81,18 @@ export const WebACLAssociationProvider = () =>
     WebACLAssociation,
     Effect.gen(function* () {
       // Read the ARN of the web ACL currently protecting a resource
-      // (undefined when the resource has no association or is gone).
+      // (undefined when the resource has no association or is gone). A
+      // freshly created protected resource (e.g. a Cognito user pool) can
+      // surface WAFUnavailableEntityException until WAF can "retrieve" it —
+      // retry through propagation.
       const observeAssociation = Effect.fn(function* (resourceArn: string) {
-        const response = yield* wafv2
-          .getWebACLForResource({ ResourceArn: resourceArn })
-          .pipe(
-            Effect.catchTag("WAFNonexistentItemException", () =>
-              Effect.succeed({ WebACL: undefined }),
-            ),
-          );
+        const response = yield* retryUnavailableEntity(
+          wafv2.getWebACLForResource({ ResourceArn: resourceArn }),
+        ).pipe(
+          Effect.catchTag("WAFNonexistentItemException", () =>
+            Effect.succeed({ WebACL: undefined }),
+          ),
+        );
         return response.WebACL?.ARN;
       });
 
@@ -125,10 +131,11 @@ export const WebACLAssociationProvider = () =>
           const observed = yield* observeAssociation(news.resourceArn);
 
           // 2. Ensure — associate when missing or pointing elsewhere.
-          //    associateWebACL is an upsert; a freshly created web ACL can
-          //    be briefly unavailable, so retry through propagation.
+          //    associateWebACL is an upsert; a freshly created web ACL or
+          //    protected resource (e.g. a new Cognito user pool) can be
+          //    unavailable well past 90s, so retry on the long budget.
           if (observed !== news.webAclArn) {
-            yield* retryUnavailableEntity(
+            yield* retryUnavailableEntityLong(
               wafv2.associateWebACL({
                 WebACLArn: news.webAclArn,
                 ResourceArn: news.resourceArn,
@@ -147,11 +154,16 @@ export const WebACLAssociationProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: a missing resource or absent association is fine.
-          yield* wafv2
-            .disassociateWebACL({ ResourceArn: output.resourceArn })
-            .pipe(
-              Effect.catchTag("WAFNonexistentItemException", () => Effect.void),
-            );
+          // Retry transient unavailability so the web ACL can be deleted
+          // right after (deleteWebACL fails while still associated).
+          yield* retryUnavailableEntity(
+            wafv2.disassociateWebACL({ ResourceArn: output.resourceArn }),
+          ).pipe(
+            Effect.catchTag(
+              ["WAFNonexistentItemException", "WAFUnavailableEntityException"],
+              () => Effect.void,
+            ),
+          );
         }),
       };
     }),

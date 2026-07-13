@@ -1,5 +1,7 @@
 import * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -123,6 +125,38 @@ export const ReplicationSubnetGroupProvider = () =>
         return response?.ReplicationSubnetGroups?.[0];
       });
 
+      // DMS requires the account-wide `dms-vpc-role` (trusting
+      // dms.amazonaws.com with the AmazonDMSVPCManagementRole managed policy)
+      // before any VPC-touching operation. The console creates it implicitly;
+      // API callers must ensure it. Like a service-linked role it is shared
+      // account infrastructure with a fixed name, so it is created if missing
+      // and never deleted.
+      const ensureDmsVpcRole = Effect.gen(function* () {
+        yield* iam
+          .createRole({
+            RoleName: "dms-vpc-role",
+            AssumeRolePolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "dms.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            }),
+          })
+          .pipe(
+            Effect.catchTag("EntityAlreadyExistsException", () => Effect.void),
+          );
+        // Idempotent — attaching an already-attached managed policy is a no-op.
+        yield* iam.attachRolePolicy({
+          RoleName: "dms-vpc-role",
+          PolicyArn:
+            "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole",
+        });
+      });
+
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* dms
           .listTagsForResource({ ResourceArn: arn })
@@ -196,6 +230,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
+            yield* ensureDmsVpcRole;
             yield* dms
               .createReplicationSubnetGroup({
                 ReplicationSubnetGroupIdentifier: name,
@@ -207,6 +242,14 @@ export const ReplicationSubnetGroupProvider = () =>
                 })),
               })
               .pipe(
+                // A freshly-created dms-vpc-role takes a few seconds to
+                // propagate to DMS, which surfaces as AccessDeniedFault
+                // ("The IAM Role ... is not configured properly").
+                Effect.retry({
+                  while: (e) => e._tag === "AccessDeniedFault",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 10,
+                }),
                 Effect.catchTag(
                   "ResourceAlreadyExistsFault",
                   () => Effect.void,

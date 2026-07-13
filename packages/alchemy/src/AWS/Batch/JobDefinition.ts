@@ -1,4 +1,5 @@
 import * as batch from "@distilled.cloud/aws/batch";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -381,6 +382,46 @@ export const JobDefinitionProvider = () =>
               batch.deregisterJobDefinition({
                 jobDefinition: `${d.jobDefinitionName}:${d.revision}`,
               }),
+            { concurrency: 4 },
+          );
+
+          // Reap this family's log streams from the shared, service-managed
+          // `/aws/batch/job` group. The awslogs driver names streams
+          // `{jobDefinitionName}/default/{taskId}`, so the family prefix is
+          // exact; the group itself is account-level AWS infrastructure
+          // (recreated by the Batch service on the next job) and is left
+          // alone.
+          const logGroupName = "/aws/batch/job";
+          const streams = yield* logs.describeLogStreams
+            .pages({
+              logGroupName,
+              logStreamNamePrefix: `${output.jobDefinitionName}/`,
+            })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((pages) =>
+                Array.from(pages).flatMap((p) => p.logStreams ?? []),
+              ),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed([]),
+              ),
+            );
+          yield* Effect.forEach(
+            streams,
+            (s) =>
+              s.logStreamName === undefined
+                ? Effect.void
+                : logs
+                    .deleteLogStream({
+                      logGroupName,
+                      logStreamName: s.logStreamName,
+                    })
+                    .pipe(
+                      Effect.catchTag(
+                        "ResourceNotFoundException",
+                        () => Effect.void,
+                      ),
+                    ),
             { concurrency: 4 },
           );
         }),

@@ -1549,9 +1549,16 @@ export const BucketProvider = () =>
               .pipe(
                 Effect.catchTag("NoSuchBucket", () => Effect.void),
                 Effect.retry({
-                  while: (e) => e._tag === "BucketNotEmpty",
-                  schedule: Schedule.exponential(100).pipe(
-                    Schedule.both(Schedule.recurs(5)),
+                  // BucketHasAccessPointsAttached: S3's access-point
+                  // attachment view is eventually consistent — deleting a
+                  // bucket immediately after its access points were deleted
+                  // can transiently report attachments. Retry until the view
+                  // converges (bounded).
+                  while: (e) =>
+                    e._tag === "BucketNotEmpty" ||
+                    e._tag === "BucketHasAccessPointsAttached",
+                  schedule: Schedule.exponential(250).pipe(
+                    Schedule.both(Schedule.recurs(7)),
                   ),
                 }),
               );

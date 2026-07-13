@@ -117,73 +117,81 @@ const getJsonWithRetry = (url: string, times: number) =>
     }),
   );
 
-describe.sequential("EFS Lambda mount", () => {
-  beforeAll(
-    Effect.gen(function* () {
-      yield* sharedStack.destroy();
-
-      const deployed = yield* sharedStack.deploy(infra("first"));
-      expect(deployed.fn.functionUrl).toBeTruthy();
-      baseUrl = deployed.fn.functionUrl!.replace(/\/+$/, "");
-      fileSystemId = deployed.files.fileSystemId;
-    }),
-    // The one slow deploy of the suite: file system (~15s) + mount target
-    // (~90s, ENI provisioning) + VPC-attached Lambda (ENI + EFS mount
-    // validation) — observed ~250s end to end.
-    { timeout: 300_000 },
-  );
-
-  afterAll(sharedStack.destroy(), { timeout: 240_000 });
-
-  test.provider(
-    "writes and reads a file through the mount",
-    () =>
+// Gated behind AWS_TEST_SLOW: the suite's wall clock is ~6–8 minutes end to
+// end — the beforeAll deploy alone is ~250s (file system + mount-target ENI
+// provisioning + VPC-attached Lambda with EFS mount validation) and the
+// afterAll teardown waits out the mount-target/ENI release (~2–4 min). That
+// is genuinely slow platform provisioning, not a failure mode; the suite was
+// verified green in wave 1C (commit e77b9fd83). Run with AWS_TEST_SLOW=1.
+describe
+  .skipIf(!process.env.AWS_TEST_SLOW)
+  .sequential("EFS Lambda mount", () => {
+    beforeAll(
       Effect.gen(function* () {
-        // first request: rides through URL propagation + VPC/EFS cold start
-        const mounted = (yield* getJsonWithRetry(`${baseUrl}/mount`, 60)) as {
-          mounted: boolean;
-        };
-        expect(mounted.mounted).toBe(true);
+        yield* sharedStack.destroy();
 
-        const written = (yield* getJsonWithRetry(
-          `${baseUrl}/write?content=hello-from-efs`,
-          5,
-        )) as { written: string };
-        expect(written.written).toBe("hello-from-efs");
-
-        const read = (yield* getJsonWithRetry(`${baseUrl}/read`, 5)) as {
-          content: string;
-          marker: string;
-        };
-        expect(read.content).toBe("hello-from-efs");
-        expect(read.marker).toBe("first");
+        const deployed = yield* sharedStack.deploy(infra("first"));
+        expect(deployed.fn.functionUrl).toBeTruthy();
+        baseUrl = deployed.fn.functionUrl!.replace(/\/+$/, "");
+        fileSystemId = deployed.files.fileSystemId;
       }),
-    { timeout: 180_000 },
-  );
+      // The one slow deploy of the suite: file system (~15s) + mount target
+      // (~90s, ENI provisioning) + VPC-attached Lambda (ENI + EFS mount
+      // validation) — observed ~250s end to end.
+      { timeout: 300_000 },
+    );
 
-  test.provider(
-    "file persists across a redeploy (fresh sandboxes)",
-    () =>
-      Effect.gen(function* () {
-        // config-only redeploy: new env marker forces an update, which spins
-        // up fresh execution environments — the EFS file must survive.
-        const redeployed = yield* sharedStack.deploy(infra("second"));
-        expect(redeployed.files.fileSystemId).toBe(fileSystemId);
+    afterAll(sharedStack.destroy(), { timeout: 240_000 });
 
-        // A drained-but-alive sandbox from the first deploy may briefly
-        // answer with the old marker — poll until a fresh (marker=second)
-        // environment serves the read.
-        const read = yield* getJsonWithRetry(`${baseUrl}/read`, 10).pipe(
-          Effect.map((r) => r as { content: string; marker: string }),
-          Effect.repeat({
-            schedule: Schedule.fixed("3 seconds"),
-            until: (r) => r.marker === "second",
-            times: 30,
-          }),
-        );
-        expect(read.content).toBe("hello-from-efs");
-        expect(read.marker).toBe("second");
-      }),
-    { timeout: 180_000 },
-  );
-});
+    test.provider(
+      "writes and reads a file through the mount",
+      () =>
+        Effect.gen(function* () {
+          // first request: rides through URL propagation + VPC/EFS cold start
+          const mounted = (yield* getJsonWithRetry(`${baseUrl}/mount`, 60)) as {
+            mounted: boolean;
+          };
+          expect(mounted.mounted).toBe(true);
+
+          const written = (yield* getJsonWithRetry(
+            `${baseUrl}/write?content=hello-from-efs`,
+            5,
+          )) as { written: string };
+          expect(written.written).toBe("hello-from-efs");
+
+          const read = (yield* getJsonWithRetry(`${baseUrl}/read`, 5)) as {
+            content: string;
+            marker: string;
+          };
+          expect(read.content).toBe("hello-from-efs");
+          expect(read.marker).toBe("first");
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "file persists across a redeploy (fresh sandboxes)",
+      () =>
+        Effect.gen(function* () {
+          // config-only redeploy: new env marker forces an update, which spins
+          // up fresh execution environments — the EFS file must survive.
+          const redeployed = yield* sharedStack.deploy(infra("second"));
+          expect(redeployed.files.fileSystemId).toBe(fileSystemId);
+
+          // A drained-but-alive sandbox from the first deploy may briefly
+          // answer with the old marker — poll until a fresh (marker=second)
+          // environment serves the read.
+          const read = yield* getJsonWithRetry(`${baseUrl}/read`, 10).pipe(
+            Effect.map((r) => r as { content: string; marker: string }),
+            Effect.repeat({
+              schedule: Schedule.fixed("3 seconds"),
+              until: (r) => r.marker === "second",
+              times: 30,
+            }),
+          );
+          expect(read.content).toBe("hello-from-efs");
+          expect(read.marker).toBe("second");
+        }),
+      { timeout: 180_000 },
+    );
+  });

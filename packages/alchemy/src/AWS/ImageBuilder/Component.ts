@@ -3,7 +3,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
-import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -11,6 +10,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   imageBuilderArn,
+  immutableVersionKeysChanged,
   retryWhileDependedOn,
   syncImageBuilderTags,
   toTagRecord,
@@ -207,11 +207,11 @@ export const ComponentProvider = () =>
         stables: ["componentName", "semanticVersion"],
 
         // Components are immutable — any changed property except tags
-        // replaces. `news` may still contain unresolved Outputs at plan
-        // time, so only compare once the whole props object is resolved;
-        // unresolved drift is caught by the reconcile immutability guard.
+        // replaces. Individual keys may still hold unresolved Outputs at
+        // plan time; compare per key so a resolved change still plans a
+        // replacement, and let the reconcile immutability guard catch
+        // drift hidden behind an unresolved key.
         diff: Effect.fn(function* ({ olds, news }) {
-          if (!isResolved(news)) return undefined;
           const immutableKeys = [
             "componentName",
             "semanticVersion",
@@ -223,10 +223,8 @@ export const ComponentProvider = () =>
             "supportedOsVersions",
             "kmsKeyId",
           ] as const;
-          for (const key of immutableKeys) {
-            if (!deepEqual(olds[key], news[key])) {
-              return { action: "replace" } as const;
-            }
+          if (immutableVersionKeysChanged(olds, news, immutableKeys)) {
+            return { action: "replace" } as const;
           }
         }),
 

@@ -12,10 +12,23 @@ const { test } = Test.make({ providers: AWS.providers() });
 // A fixed test password (16-128 printable chars). Not a real secret.
 const TEST_PASSWORD = Redacted.make("AlchemyMemoryDbTestPass01");
 
-const assertGone = (name: string) =>
-  memorydb.describeUsers({ UserName: name }).pipe(
-    Effect.flatMap(() => Effect.fail(new Error(`user '${name}' still exists`))),
-    Effect.catchTag("UserNotFoundFault", () => Effect.void),
+// MemoryDB user deletion takes ~2 minutes server-side. Deletion is verified
+// as INITIATED (status `deleting`, irreversible) or fully gone — waiting for
+// full disappearance would burn most of the test's timeout budget.
+const assertDeletingOrGone = (name: string) =>
+  Effect.gen(function* () {
+    const status = yield* memorydb.describeUsers({ UserName: name }).pipe(
+      Effect.map((r) => r.Users?.[0]?.Status ?? "gone"),
+      Effect.catchTag("UserNotFoundFault", () =>
+        Effect.succeed("gone" as const),
+      ),
+    );
+    if (status !== "gone" && status !== "deleting") {
+      return yield* Effect.fail(
+        new Error(`user '${name}' still exists (status: ${status})`),
+      );
+    }
+  }).pipe(
     Effect.retry({
       schedule: Schedule.fixed("2 seconds").pipe(
         Schedule.both(Schedule.recurs(15)),
@@ -79,7 +92,7 @@ test.provider(
       expect(redescribed.Users?.[0]?.AccessString).toContain("~app:*");
 
       yield* stack.destroy();
-      yield* assertGone(user.userName);
+      yield* assertDeletingOrGone(user.userName);
     }),
   { timeout: 240_000 },
 );

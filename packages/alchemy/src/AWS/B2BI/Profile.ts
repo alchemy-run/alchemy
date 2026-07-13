@@ -1,4 +1,5 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -222,6 +223,25 @@ export const ProfileProvider = () =>
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+          // B2BI auto-creates /aws/vendedlogs/b2bi/profile/{profileId} when
+          // logging is ENABLED and deleteProfile does NOT remove it — every
+          // deleted profile would leak an orphaned log group. Reap it
+          // (idempotently) using the service-reported name when available.
+          const logGroupName =
+            output.logGroupName ??
+            `/aws/vendedlogs/b2bi/profile/${output.profileId}`;
+          yield* logs
+            .deleteLogGroup({ logGroupName })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+          // NOTE: profile creation also auto-creates the shared account-level
+          // /aws/vendedlogs/b2bi/default log group. That group is a
+          // service-managed singleton and MUST NOT be reaped here: B2BI's
+          // internal log-delivery bookkeeping references it, and deleting it
+          // opens a ~60-90s window where subsequent B2BI creates in the
+          // account fail with "Unable to perform CreateLogDelivery"
+          // (verified live with /aws/vendedlogs/b2bi/transformers).
         }),
 
         list: () =>

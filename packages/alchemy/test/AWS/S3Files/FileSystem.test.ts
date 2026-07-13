@@ -63,10 +63,7 @@ const waitUntilFileSystemGone = (fileSystemId: string) =>
     }),
   );
 
-// S3 Files is a newer service (2025) with limited region/account
-// availability, and a file system needs an S3 bucket plus a service role.
-// The full lifecycle is gated behind AWS_TEST_S3FILES=1.
-test.provider.skipIf(!process.env.AWS_TEST_S3FILES)(
+test.provider(
   "create file system + access point, verify, destroy",
   (stack) =>
     Effect.gen(function* () {
