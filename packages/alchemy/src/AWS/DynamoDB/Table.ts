@@ -3,6 +3,7 @@ import type {
   PointInTimeRecoverySpecification,
   TimeToLiveSpecification,
 } from "@distilled.cloud/aws/dynamodb";
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import type * as lambda from "aws-lambda";
 import * as Data from "effect/Data";
@@ -700,6 +701,70 @@ export const TableProvider = () =>
               ),
             ),
           }),
+        );
+
+      // Enabling Contributor Insights makes DynamoDB create CloudWatch rules
+      // named `DynamoDBContributorInsights-{PKC|PKT}-<tableName>-<timestamp>`
+      // in the customer's account. Those rules can ONLY be removed by
+      // DynamoDB's own asynchronous cleanup, which runs when an
+      // UpdateContributorInsights DISABLE completes — CloudWatch's
+      // DeleteInsightRules/PutInsightRule reject them with AccessDenied even
+      // for account admins, and deleting the table aborts the cleanup and
+      // strands the rules forever (recoverable only via AWS support). The
+      // delete lifecycle therefore observes the rules and holds off
+      // deleteTable until DynamoDB's cleanup has actually removed them.
+      const listContributorInsightsRules = (tableName: string) =>
+        cloudwatch.describeInsightRules.pages({}).pipe(
+          Stream.runFold(
+            () => [] as string[],
+            (acc, page) => [
+              ...acc,
+              ...(page.InsightRules ?? [])
+                .map((rule) => rule.Name)
+                .filter(
+                  (name): name is string =>
+                    name !== undefined &&
+                    name.startsWith("DynamoDBContributorInsights-") &&
+                    name.includes(`-${tableName}-`),
+                ),
+            ],
+          ),
+        );
+
+      const waitForContributorInsightsRulesDeleted = (
+        session: {
+          note: (message: string) => Effect.Effect<void, never, never>;
+        },
+        tableName: string,
+      ) =>
+        Effect.gen(function* () {
+          const remaining = yield* listContributorInsightsRules(tableName);
+          if (remaining.length > 0) {
+            return yield* Effect.fail(new ContributorInsightsNotSettled());
+          }
+        }).pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "ContributorInsightsNotSettled" ||
+              isRetryableControlPlaneError(error),
+            schedule: Schedule.fixed("2 seconds").pipe(
+              Schedule.both(Schedule.recurs(20)),
+              Schedule.tapOutput(([, attempt]) =>
+                session.note(
+                  `DynamoDB Table provider: waiting for Contributor Insights rules of ${tableName} to be cleaned up (${formatPollingElapsed((attempt + 1) * 2)})`,
+                ),
+              ),
+            ),
+          }),
+          // Rules from a PREVIOUS enable session whose cleanup was already
+          // aborted (e.g. by an out-of-band table deletion) can never be
+          // removed by anyone but AWS support — don't wedge the delete on
+          // them; surface a note and move on.
+          Effect.catchTag("ContributorInsightsNotSettled", () =>
+            session.note(
+              `DynamoDB Table provider: Contributor Insights rules for ${tableName} were not cleaned up by DynamoDB; they may be stranded from an earlier enable session (deletable only via AWS support)`,
+            ),
+          ),
         );
 
       const updateTableContributorInsights = (
@@ -1762,6 +1827,13 @@ export const TableProvider = () =>
               tableName,
               desiredInsightsEnabled,
             );
+            if (!desiredInsightsEnabled) {
+              // Wait for the DISABLE to settle so DynamoDB's rule cleanup
+              // (which fires on the DISABLING→DISABLED transition) runs
+              // while the table still exists — a deleteTable racing this
+              // window strands the CloudWatch rules forever.
+              yield* waitForContributorInsightsSettled(session, tableName);
+            }
           }
 
           // Sync tags — diff observed cloud tags against desired.
@@ -1801,6 +1873,37 @@ export const TableProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output, session }) {
+          // Contributor Insights must be fully torn down BEFORE the table is
+          // deleted: DynamoDB removes its CloudWatch insight rules only when
+          // a DISABLE completes while the table exists. Deleting the table
+          // while insights are ENABLED (or mid-transition) aborts that
+          // cleanup and strands the rules — CloudWatch rejects direct
+          // deletion of DynamoDB-managed rules with AccessDenied, so only
+          // AWS support can remove them afterwards.
+          yield* Effect.gen(function* () {
+            const insightsStatus = yield* waitForContributorInsightsSettled(
+              session,
+              output.tableName,
+            );
+            if (insightsStatus !== "DISABLED") {
+              yield* session.note(
+                `Table ${output.tableName}: disabling Contributor Insights before delete`,
+              );
+              yield* updateTableContributorInsights(output.tableName, false);
+              yield* waitForContributorInsightsSettled(
+                session,
+                output.tableName,
+              );
+            }
+            yield* waitForContributorInsightsRulesDeleted(
+              session,
+              output.tableName,
+            );
+          }).pipe(
+            // Table already gone — nothing to tear down.
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+
           let deleteAttempt = 0;
 
           while (true) {

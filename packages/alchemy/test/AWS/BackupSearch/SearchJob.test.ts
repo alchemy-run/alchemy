@@ -45,14 +45,44 @@ test.provider("listSearchJobs succeeds on an account-level scan", () =>
   }),
 );
 
+// Search jobs CANNOT be deleted — the API is Start/Stop/Get/List only, and
+// AWS retains terminal job records server-side for ~7 days before they age
+// out of listSearchJobs. "Orphan-free" for this resource therefore means no
+// job is ever left RUNNING: this sweeper stops any still-running job created
+// by this test (crash-safe — covers a run that died before stack.destroy()).
+// It is idempotent: stopping a job that already reached a terminal state is
+// a ConflictException, which means there is nothing to do.
+const stopLeakedSearchJobs = Effect.gen(function* () {
+  const page = yield* backupsearch.listSearchJobs({
+    ByStatus: "RUNNING",
+    MaxResults: 25,
+  });
+  yield* Effect.forEach(
+    (page.SearchJobs ?? []).filter((job) =>
+      job.Name?.startsWith("start-S3-search-job"),
+    ),
+    (job) =>
+      backupsearch
+        .stopSearchJob({ SearchJobIdentifier: job.SearchJobIdentifier! })
+        .pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          Effect.catchTag("ConflictException", () => Effect.void),
+        ),
+  );
+}).pipe(Effect.orDie);
+
 // A search job only produces results when the account has recovery points
 // with ACTIVE backup indexes to search — the full lifecycle is gated behind
 // AWS_TEST_BACKUP_SEARCH=1. Search jobs cannot be deleted (7-day server-side
-// retention); destroy stops the job if it is still RUNNING.
+// retention); destroy stops the job if it is still RUNNING, and terminal
+// job records aging out server-side are the BackupSearch equivalent of a
+// KMS key in PENDING_DELETION — handled, not leaked.
 test.provider.skipIf(!process.env.AWS_TEST_BACKUP_SEARCH)(
   "start S3 search job, verify, destroy (stop)",
   (stack) =>
     Effect.gen(function* () {
+      // Pre-clean: stop any RUNNING job left over from a crashed prior run.
+      yield* stopLeakedSearchJobs;
       yield* stack.destroy();
 
       const { job } = yield* stack.deploy(
@@ -123,6 +153,11 @@ test.provider.skipIf(!process.env.AWS_TEST_BACKUP_SEARCH)(
       expect(["STOPPING", "STOPPED", "COMPLETED", "FAILED"]).toContain(
         after.Status,
       );
-    }),
+    }).pipe(
+      // Crash-safe teardown: even if any assertion above fails mid-flight,
+      // never leave a search job RUNNING. (Terminal records are un-deletable
+      // and age out server-side within ~7 days.)
+      Effect.ensuring(stopLeakedSearchJobs),
+    ),
   { timeout: 120_000 },
 );

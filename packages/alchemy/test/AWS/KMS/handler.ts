@@ -8,10 +8,12 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Standing test key alias — see the header comment in `Bindings.test.ts`.
- * The key behind this alias is created once (out-of-band, by the test's
- * `beforeAll`) and is NEVER scheduled for deletion: KMS keys cost $1/mo each
- * and carry a 7-day minimum pending-deletion window, so create-and-delete
- * per run is forbidden.
+ * The key behind this alias is acquired out-of-band by the test's `beforeAll`
+ * (reclaiming the previous run's pending-deletion key when possible) and
+ * released in `afterAll` by deleting the alias and scheduling the key for
+ * deletion (7-day minimum window — KMS's terminal "deleted" state; pending-
+ * deletion keys are not billed). A passing run therefore leaves no alias and
+ * no enabled key behind.
  */
 export const STANDING_KEY_ALIAS = "alias/alchemy-test-bindings" as const;
 

@@ -14,8 +14,15 @@ bun alchemy unsafe nuke ./stacks/nuke.ts  \
   --exclude 'AWS.IAM.LoginProfile' \
   --exclude 'AWS.IdentityCenter*' \
   --exclude 'AWS.Organizations.*'  \
+  --exclude 'AWS.IAM.ServiceLinkedRole' \
+  --exclude 'AWS.LakeFormation.*' \
+  --exclude 'AWS.Notifications.*' \
+  --exclude 'AWS.NotificationsContacts.*' \
+  --exclude 'AWS.ApiGateway.Account' \
   --profile testing  \
   --concurrency 32 \
   --filter 'resource.Type === "Cloudflare.Worker" && resource.workerName?.startsWith("alchemy-state") || resource.workerName === "Api"' \
   --filter 'resource.Type === "AWS.IAM.Role" && (["alchemy-github-actions", "distilled-github-oidc-role"].includes(resource.roleName) || resource.roleName?.startsWith("AWSReservedSSO"))' \
+  --filter 'resource.Type === "AWS.S3.Bucket" && (String(resource.bucketName).startsWith("alchemy-state") || String(resource.bucketName).startsWith("alchemy-assets"))' \
+  --filter 'typeof resource.name === "string" && (resource.name.startsWith("DO-NOT-DELETE") || resource.name.startsWith("AppConfig.") || resource.name.startsWith("system_") || ["primary","AwsDataCatalog","DefaultConfiguration","Default","default","open-access","default.dax1.0"].includes(resource.name))' \
   "$@"

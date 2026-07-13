@@ -1139,6 +1139,16 @@ await Effect.runPromise(program).catch((err) => {
             })
             .pipe(Effect.catchTag("ClientException", () => Effect.void));
 
+          // Deregistering only flips the revision to INACTIVE — it still
+          // exists (and shows up in `listTaskDefinitions --status INACTIVE`)
+          // forever. Hard-delete it so destroying a Task leaves zero
+          // task-definition leftovers.
+          yield* ecs
+            .deleteTaskDefinitions({
+              taskDefinitions: [output.taskDefinitionArn],
+            })
+            .pipe(Effect.catchTag("ClientException", () => Effect.void));
+
           yield* ecr
             .deleteRepository({
               repositoryName: output.repositoryName,

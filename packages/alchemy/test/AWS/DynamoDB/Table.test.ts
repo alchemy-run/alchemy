@@ -5,6 +5,7 @@ import { Stream as KinesisStream } from "@/AWS/Kinesis";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
+import * as CloudWatch from "@distilled.cloud/aws/cloudwatch";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -445,6 +446,46 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         yield* logTestStep("destroying Contributor Insights test table");
         yield* stack.destroy();
         yield* assertTableIsDeleted(table.tableName);
+        yield* assertNoContributorInsightsRules(table.tableName);
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider(
+    "destroying a table with Contributor Insights still enabled leaves no CloudWatch rules",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep(
+          "starting Contributor Insights destroy-while-enabled test",
+        );
+        yield* stack.destroy();
+
+        yield* logTestStep("deploying table with Contributor Insights");
+        const table = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("InsightsDestroyTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+              contributorInsightsEnabled: true,
+            });
+          }),
+        );
+
+        const enabled = yield* waitForContributorInsights(
+          table.tableName,
+          true,
+        );
+        expect(["ENABLING", "ENABLED"]).toContain(enabled);
+
+        // Destroy WITHOUT disabling insights first. DynamoDB's CloudWatch
+        // insight rules can only be removed by DynamoDB's own DISABLE
+        // cleanup while the table exists, so the provider's delete must
+        // tear insights down before deleteTable — otherwise the rules are
+        // stranded forever (CloudWatch rejects direct deletion).
+        yield* logTestStep("destroying table while insights are enabled");
+        yield* stack.destroy();
+        yield* assertTableIsDeleted(table.tableName);
+        yield* assertNoContributorInsightsRules(table.tableName);
       }),
     { timeout: 240_000 },
   );
@@ -1437,6 +1478,22 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         ),
       }),
     );
+  });
+
+  // Out-of-band proof that DynamoDB's Contributor Insights cleanup ran:
+  // no `DynamoDBContributorInsights-*-<tableName>-*` CloudWatch rules may
+  // survive the destroy — stranded rules can only be removed by AWS support.
+  const assertNoContributorInsightsRules = Effect.fn(function* (
+    tableName: string,
+  ) {
+    const rules = yield* CloudWatch.describeInsightRules({});
+    const leftover = (rules.InsightRules ?? [])
+      .map((rule) => rule.Name)
+      .filter(
+        (name): name is string =>
+          name !== undefined && name.includes(`-${tableName}-`),
+      );
+    expect(leftover).toEqual([]);
   });
 
   const logTestStep = (message: string) =>

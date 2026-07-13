@@ -4,8 +4,21 @@ import * as Test from "@/Test/Vitest";
 import * as paymentcryptography from "@distilled.cloud/aws/payment-cryptography";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { reapLeakedKeys } from "./reapKeys.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// Keys cannot be hard-deleted (DeleteKey only schedules deletion after a
+// mandatory >=3 day window) and the scratch stacks keep state in memory, so
+// a crashed gated run leaves ACTIVE keys nothing can reclaim. This ungated
+// sweep runs in every CI pass and schedules deletion for any alchemy-tagged
+// test key that is not already DELETE_PENDING. It is skipped when the gate
+// is ON so it can never race an actively-running gated suite (which reaps
+// its own keys via `Effect.ensuring` instead).
+test.provider.skipIf(!!process.env.AWS_TEST_PAYMENTCRYPTO)(
+  "reap: schedule deletion for keys leaked by crashed gated runs",
+  () => reapLeakedKeys(),
+);
 
 // Ungated typed-error probes: prove the distilled error unions carry the
 // not-found tag the provider's read/delete paths depend on. These run in
@@ -130,6 +143,13 @@ test.provider.skipIf(!process.env.AWS_TEST_PAYMENTCRYPTO)(
         }),
       );
       expect(aliasError._tag).toBe("ResourceNotFoundException");
-    }),
+    }).pipe(
+      // Belt-and-braces teardown: even if the body fails before its trailing
+      // destroy (or the engine's destroy fails), schedule deletion for any
+      // key this stack created so a failed run still leaves the key at
+      // worst DELETE_PENDING (the best achievable state — the deletion
+      // window is mandatory). Idempotent: a no-op when destroy already ran.
+      Effect.ensuring(reapLeakedKeys([stack.name])),
+    ),
   { timeout: 120_000 },
 );

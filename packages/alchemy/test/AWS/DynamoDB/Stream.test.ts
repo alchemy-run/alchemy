@@ -83,7 +83,13 @@ describe.skipIf(!!process.env.FAST).sequential("AWS.DynamoDB.Stream", () => {
         yield* Effect.logInfo("DynamoDB Stream test: destroying fixture");
         yield* stack.destroy();
       }),
-    { timeout: 600_000 },
+    // Must stay UNDER the factory's 300s hard-kill wall: a vitest timeout
+    // interrupts the fiber and the `test.provider` ensuring-destroy reclaims
+    // every deployed resource, whereas an external SIGKILL leaks the whole
+    // fixture stack (Table + Queue + Function + Permission + ESM) with no
+    // way to reclaim it (scratch state is in-memory). Typical green run is
+    // ~105s, so 230s leaves interruption + destroy comfortably inside 300s.
+    { timeout: 230_000 },
   );
 });
 

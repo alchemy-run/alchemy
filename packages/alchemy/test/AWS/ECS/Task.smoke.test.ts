@@ -18,6 +18,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import TestTask from "./fixtures/task.ts";
+import {
+  E2E_CLUSTER_NAME,
+  E2E_TEST_TITLE,
+  reclaimTaskE2EOrphans,
+  scanTaskE2EOrphans,
+} from "./reclaimTaskE2EOrphans.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -29,10 +35,21 @@ const { test } = Test.make({ providers: AWS.providers() });
 // This is the real-deploy regression for #706. It is heavy (Docker build + ECR
 // push + Fargate placement + ALB health), so it is skipped under `FAST=1`.
 test.provider.skipIf(!!process.env.FAST)(
-  "deploys a real Fargate task that serves HTTP and runs a background loop",
+  // The title doubles as the scratch stack name, which prefixes every
+  // physical name — the orphan sweep prefix-matches on it.
+  E2E_TEST_TITLE,
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+
+      // The scratch stack's state is in-memory, so a hard-killed prior run
+      // (vitest hard timeout / OOM) orphans everything it deployed — the
+      // engine can never see it again. Reclaim those leftovers up front, and
+      // guarantee the same sweep runs on success, failure, AND interruption.
+      yield* reclaimTaskE2EOrphans;
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskE2EOrphans.pipe(Effect.orDie),
+      );
 
       const azResult = yield* ec2.describeAvailabilityZones({});
       const available = (azResult.AvailabilityZones ?? []).filter(
@@ -111,7 +128,7 @@ test.provider.skipIf(!!process.env.FAST)(
           });
 
           const cluster = yield* Cluster("EcsE2ECluster", {
-            clusterName: "alchemy-test-ecs-task-e2e",
+            clusterName: E2E_CLUSTER_NAME,
           });
 
           // The bundled long-running Task (builds + pushes the image).
@@ -195,6 +212,15 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(second).toBeGreaterThan(first);
 
       yield* stack.destroy();
+
+      // Sweep the stragglers `stack.destroy()` cannot reach: the INACTIVE
+      // task-definition revisions left by `deregisterTaskDefinition`, plus
+      // anything a partial destroy failure abandoned. This is what makes a
+      // PASSING run leave zero cloud resources behind.
+      yield* reclaimTaskE2EOrphans;
+
+      // Clean-slate proof: a passing run leaves ZERO cloud resources.
+      expect(yield* scanTaskE2EOrphans).toEqual([]);
     }),
   { timeout: 1_200_000 },
 );

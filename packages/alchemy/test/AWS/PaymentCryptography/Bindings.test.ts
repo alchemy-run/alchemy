@@ -12,6 +12,7 @@ import { describe } from "vitest";
 import PaymentCryptographyTestFunctionLive, {
   PaymentCryptographyTestFunction,
 } from "./handler.ts";
+import { reapLeakedKeys } from "./reapKeys.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -58,6 +59,14 @@ describe.skipIf(gated)("PaymentCryptography Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* sharedStack.destroy();
+      // Pre-clean: schedule deletion for any ACTIVE keys a previously
+      // crashed run leaked under this stack's tags (the scratch state is
+      // in-memory, so the destroy above cannot see them).
+      yield* Core.withProviders(
+        reapLeakedKeys([sharedStack.name]),
+        testOptions,
+        sharedStack.name,
+      );
 
       const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
@@ -76,11 +85,29 @@ describe.skipIf(gated)("PaymentCryptography Bindings", () => {
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
-    }),
+    }).pipe(Effect.orDie),
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  // Destroy schedules key deletion (mandatory >=3 day window — keys cannot
+  // be hard-deleted, DELETE_PENDING is the terminal state a test can reach);
+  // the trailing reap catches any key the destroy missed so even a partial
+  // failure leaves nothing ACTIVE.
+  afterAll(
+    sharedStack
+      .destroy()
+      .pipe(
+        Effect.ensuring(
+          Core.withProviders(
+            reapLeakedKeys([sharedStack.name]),
+            testOptions,
+            sharedStack.name,
+          ),
+        ),
+        Effect.orDie,
+      ),
+    { timeout: 120_000 },
+  );
 
   describe("EncryptData", () => {
     test.provider("encrypts hex-encoded plaintext under the key", (_stack) =>
