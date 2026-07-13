@@ -23,9 +23,10 @@ const logLevel = Effect.provideService(
 const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 240_000;
 
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 /**
  * Remote container (`image`) under `alchemy dev`: the local provider must
