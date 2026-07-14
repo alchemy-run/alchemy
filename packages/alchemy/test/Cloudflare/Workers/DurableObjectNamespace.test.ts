@@ -554,15 +554,16 @@ test.provider(
 // Reproduces #811: one script tag per DO binding blew Cloudflare's 10-tag
 // limit at 7+ Durable Objects (3 ownership tags + 1 migration tag + N DO
 // tags). The logical-id→class mapping is now packed into `alchemy:dos:`
-// tags, so a worker with 8 DOs deploys fine and the whole tag set stays
-// within the limit. The second deploy renames a class and drops another to
-// prove migrations are still driven by the packed mapping.
+// tags, so a worker with 20 DOs — double the count that used to consume the
+// entire tag budget — deploys fine and the whole tag set stays within the
+// limit. The second deploy renames a class and drops another to prove
+// migrations are still driven by the packed mapping.
 test.provider(
-  "worker with 8 durable objects deploys within the 10-tag limit",
+  "worker with 20 durable objects deploys within the 10-tag limit",
   (scratch) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const ids = Array.from({ length: 8 }, (_, i) => `DO_${i}`);
+      const ids = Array.from({ length: 20 }, (_, i) => `DO_${i}`);
       const makeScript = (classes: string[], version: string) =>
         `import { DurableObject } from "cloudflare:workers";
 ${classes.map((c) => `export class ${c} extends DurableObject {}`).join("\n")}
@@ -594,18 +595,21 @@ export default { async fetch() { return new Response("${version}"); } };
       expect(tags.filter((t) => t.startsWith("alchemy:dos:"))).toHaveLength(1);
       expect(tags.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
 
-      // Rename Class0 → Class0V2 (same binding id) and delete DO_7 — both
+      // Rename Class0 → Class0V2 (same binding id) and delete DO_19 — both
       // migrations resolve their previous class through the packed tag.
       const v2 = yield* scratch.deploy(
         Effect.gen(function* () {
           return {
             worker: yield* Cloudflare.Worker("worker", {
               script: makeScript(
-                ["Class0V2", ...ids.slice(1, 7).map((_, i) => `Class${i + 1}`)],
+                [
+                  "Class0V2",
+                  ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`),
+                ],
                 "v2",
               ),
               env: Object.fromEntries(
-                ids.slice(0, 7).map((id, i) => [
+                ids.slice(0, 19).map((id, i) => [
                   id,
                   Cloudflare.DurableObject(id, {
                     className: i === 0 ? "Class0V2" : `Class${i}`,
