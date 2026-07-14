@@ -34,55 +34,11 @@ driver adapter. Generated migrations land under `out` (default
 `snapshot.prisma`, plus a `migration_lock.toml` at the root so
 `prisma migrate deploy` can also apply them.
 
-## Client generation
-
-Every deploy also runs `prisma generate`, and the schema file needs
-no `generator` block for it: when one is missing, the resource
-injects a `prisma-client` generator with its output next to the
-schema (`./generated`). A block declared in the schema always wins
-over the injected default. Shape the injected block through the
-prop — for Cloudflare Workers, set the `workerd` runtime:
-
-```typescript
-const schema = yield* Prisma.Schema("app-schema", {
-  schema: "./prisma/schema.prisma",
-  generateClient: { runtime: "workerd" },
-});
-```
-
-Pass `generateClient: false` when the client is generated some
-other way (or checked in) — migrations still regenerate, and the
-schema's own `prisma-client` block is skipped.
-
-## Effect schemas
-
-Alongside the client, the built-in `alchemy-prisma-effect` Prisma
-generator emits an `effect/Schema` definition for every model and
-enum — `Schema.Struct` per model, `Schema.Literals` per enum,
-`Schema.NullOr` for optionals — into `./effect.ts` next to the
-schema file:
-
-```typescript
-import * as Schema from "effect/Schema";
-import { Widget } from "./prisma/effect.ts";
-
-const rows = yield* prisma.widget.findMany();
-const widgets = yield* Schema.decodeUnknownEffect(Schema.Array(Widget))(rows);
-```
-
-Use the structs to decode rows read outside the Prisma client (raw
-SQL, queues, sync engines) or reuse the shapes in RPC and HTTP
-contracts. Opt out with `effectSchemas: false`, move the file with
-`effectSchemas: { output: "./src/schemas.ts" }`, or declare the
-generator yourself in `schema.prisma` so plain `prisma generate`
-runs it too:
-
-```prisma
-generator effect {
-  provider = "alchemy-prisma-effect"
-  output   = "./effect.ts"
-}
-```
+Every deploy also runs `prisma generate` —
+[Client generation](/prisma/generate) covers the injected generator
+block, target runtimes, and checked-in clients, and
+[Effect schemas](/prisma/effect-schemas) the `effect/Schema` module
+emitted alongside the client.
 
 ## Wire it into the graph
 
@@ -153,16 +109,15 @@ so state stays portable across machines, and `snapshotHash` /
 `migrations` let a `migrationsDir` consumer detect drift and
 reapply.
 
-## Adopt an existing Prisma project
+## Adopting existing migrations
 
 A project whose migrations were created by `prisma migrate dev` has
-`migration.sql` files but no snapshots. `Prisma.Schema` treats the
-current schema as the baseline on its first deploy: existing
-migrations are assumed to already express it, so a
-`snapshot.prisma` is recorded inside the latest migration directory
-and no SQL is emitted. The next schema change then diffs against
-that baseline and produces a normal delta migration — your existing
-migration history carries over untouched.
+`migration.sql` files but no snapshots — `Prisma.Schema` records the
+current schema as a baseline snapshot on its first deploy instead of
+re-emitting SQL your history already expresses.
+[Adopt an existing project](/prisma/adopt) walks through the whole
+move, including Prisma CLI compatibility and how each database
+tracks applied files.
 
 ## Destroy never deletes migrations
 
@@ -190,19 +145,23 @@ directory belongs to.
 
 ## Where next
 
-Application mechanics:
+Guides:
+
+- [Client generation](/prisma/generate) — the `prisma generate` half
+  of the same deploy.
+- [Adopt an existing project](/prisma/adopt) — bring a
+  `prisma migrate dev` history onto this pipeline.
+- [Add Prisma ORM](/cloudflare/data/prisma) — the runtime side:
+  querying from a Worker with the driver-adapter clients.
+
+Related:
 
 - [Neon migrations](/neon/data/migrations) — how `migrationsDir`
   files are ordered, hashed, and tracked on Neon.
 - [PlanetScale migrations](/planetscale/data/migrations) — the same
   contract on PlanetScale branches.
-
-Related:
-
 - [D1](/cloudflare/data/d1) — `migrationsDir` and `migrationsTable`
   on Cloudflare's serverless SQLite.
-- [Add Prisma ORM](/cloudflare/data/prisma) — the runtime side:
-  querying from a Worker with the driver-adapter clients.
 
 Reference:
 

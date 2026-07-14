@@ -1,0 +1,101 @@
+---
+title: Adopt an existing project
+description: Point Prisma.Schema at the migrations prisma migrate dev already created — the first deploy records a baseline snapshot, and your history carries over untouched.
+---
+
+A project with a migration history from `prisma migrate dev` moves
+onto deploy-driven migrations without rewriting anything: point
+`Prisma.Schema` at the existing directory, wire it into your
+database resource, and deploy. Existing migration files stay exactly
+as they are.
+
+## Point the resource at your migrations
+
+```typescript
+const schema = yield* Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+});
+
+const branch = yield* Neon.Branch("app-branch", {
+  project,
+  migrationsDir: schema.out,
+});
+```
+
+`out` defaults to `./prisma/migrations` — the directory
+`prisma migrate dev` writes — so most projects need only the schema
+path. The `schema.out` → `migrationsDir` edge is the same wiring a
+greenfield project uses, and it works identically on
+`Cloudflare.D1.Database` and `Planetscale.PostgresBranch` /
+`Planetscale.MySQLBranch`.
+
+## The first deploy records a baseline
+
+```
+prisma/migrations/
+├── 20240101120000_init/
+│   └── migration.sql
+├── 20240301093000_add_widgets/
+│   ├── migration.sql
+│   └── snapshot.prisma   ← recorded on the first deploy
+└── migration_lock.toml
+```
+
+Migrations created by `prisma migrate dev` carry no
+`snapshot.prisma`, so on the first deploy the resource treats the
+current schema as the baseline: your existing migrations are assumed
+to already express it, a snapshot of the schema is written into the
+latest migration directory, and no SQL is emitted — the deploy never
+duplicates tables your history already creates. The next schema
+change diffs against that baseline and produces a normal delta
+migration.
+
+## Deploys replace `prisma migrate dev`
+
+From here, editing `schema.prisma` and running `alchemy deploy` is
+the whole workflow: the resource diffs the schema against the latest
+snapshot with `prisma migrate diff` — an offline
+datamodel-to-datamodel comparison, so there is no shadow database
+and no interactive step — and writes a new
+`{timestamp}_migration/` directory only when the diff emits SQL. An
+unchanged schema is a noop that never touches the database resource.
+
+## Staying compatible with the Prisma CLI
+
+The resource maintains the exact layout `prisma migrate dev`
+produces — `{timestamp}_migration/migration.sql` directories plus a
+`migration_lock.toml` at the root, which it writes when missing and
+keeps in place — so `prisma migrate deploy` continues to apply the
+same directory. Environments that migrate through the Prisma CLI
+keep working against the files alchemy generates.
+
+## How applied migrations are tracked
+
+Each `migrationsDir` consumer records applied files in its own
+tracking table — `d1_migrations` on `Cloudflare.D1.Database`,
+`neon_migrations` on Neon, `__alchemy_migrations` on PlanetScale —
+one row per file, so every migration runs exactly once per database.
+[Neon migrations](/neon/data/migrations) and
+[PlanetScale migrations](/planetscale/data/migrations) detail the
+ordering and hashing on each platform.
+
+## Where next
+
+Guides:
+
+- [Prisma on Workers](/cloudflare/data/prisma) — the full deploy
+  pipeline this directory now feeds.
+- [Prisma with Neon](/neon/guides/prisma) and
+  [Prisma with PlanetScale](/planetscale/guides/prisma) — the
+  database side of the wiring.
+
+Related:
+
+- [Migrations as resources](/prisma/migrations) — snapshot mechanics
+  and the never-delete guarantee.
+- [Client generation](/prisma/generate) — generation keeps running
+  on the adopted schema, including any generator blocks it declares.
+
+Reference:
+
+- [Schema API reference](/providers/prisma/schema)

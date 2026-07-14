@@ -1,0 +1,162 @@
+---
+title: Query with Effect
+description: Adapter entry points that turn your generated PrismaClient into an Effect-native client — typed PrismaError, per-execution lifecycle, and a raw-client escape hatch for transactions.
+---
+
+Each Prisma driver adapter has an entry point that takes your
+generated `PrismaClient` class and returns a client whose queries
+are Effects — you `yield*` them directly inside a Worker or Lambda,
+with a typed error channel and a connection lifecycle managed by the
+runtime.
+
+## Pick your adapter
+
+Each entry point is a subpath import, so you install only the driver
+adapter your database actually uses (all are optional peers of
+`alchemy`):
+
+- `postgres` from `alchemy/Prisma/Postgres` — any Postgres
+  connection string over `@prisma/adapter-pg`: Hyperdrive's
+  `connectionString`, Neon's `connectionUri`, or PlanetScale
+  Postgres's `connectionUrl`.
+- `d1` from `alchemy/Prisma/D1` — Cloudflare D1 over
+  `@prisma/adapter-d1`; takes the `raw` field of the
+  `Cloudflare.D1.QueryDatabase` binding client.
+- `planetscale` from `alchemy/Prisma/PlanetScale` — PlanetScale
+  MySQL over `@prisma/adapter-planetscale`'s fetch-based protocol;
+  takes `{ host, username, password }` credentials.
+- `neon` from `alchemy/Prisma/Neon` — Neon's serverless WebSocket
+  driver over `@prisma/adapter-neon`, for reaching Neon directly
+  without Hyperdrive in front.
+- `Prisma.client(make)` from `alchemy/Prisma` — the generic escape
+  hatch: `make` is an Effect constructing
+  `new PrismaClient({ adapter })` with any driver adapter, and every
+  entry point above composes it.
+
+## A full Worker
+
+The D1 path end to end — the database comes from a `Db` effect that
+wires [`Prisma.Schema`](/prisma/migrations) into
+`Cloudflare.D1.Database`:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import { d1 } from "alchemy/Prisma/D1";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Db } from "./Db.ts";
+import { PrismaClient } from "../prisma/generated/client.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const database = yield* Db;
+    const db = yield* Cloudflare.D1.QueryDatabase(database);
+    const prisma = yield* d1(PrismaClient, db.raw);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+
+        if (request.method === "POST") {
+          const body = (yield* request.json) as { name: string };
+          const widget = yield* prisma.widget.create({
+            data: { name: body.name },
+          });
+          return yield* HttpServerResponse.json({ widget });
+        }
+
+        const widgets = yield* prisma.widget.findMany({
+          orderBy: { id: "asc" },
+        });
+        return yield* HttpServerResponse.json({ widgets });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding)),
+) {}
+```
+
+The other adapters swap only the first three lines of the init
+effect — `postgres(PrismaClient, hd.connectionString)` behind
+Hyperdrive, `neon(PrismaClient, connectionString)` direct to Neon,
+`planetscale(PrismaClient, config)` for PlanetScale MySQL. The cloud
+guides ([Workers](/cloudflare/data/prisma),
+[Neon](/neon/guides/prisma),
+[PlanetScale](/planetscale/guides/prisma)) show each wiring in full.
+
+## Queries are Effects
+
+```typescript
+fetch: Effect.gen(function* () {
+  const widgets = yield* prisma.widget.findMany();
+  return yield* HttpServerResponse.json({ widgets });
+}).pipe(
+  Effect.catchTag("PrismaError", (e) =>
+    HttpServerResponse.json({ error: e.message }, { status: 500 }),
+  ),
+),
+```
+
+`prisma.widget.findMany()` is an
+`Effect<Widget[], PrismaError>` — the whole generated surface is
+lifted, so every model delegate and `$queryRaw` work the same way.
+Failures arrive as the tagged `PrismaError` with the original Prisma
+error preserved in `.cause`, so `Effect.catchTag` handles them
+wherever in the pipeline you choose.
+
+## The execution-scope lifecycle
+
+The client — and the connection pool its adapter owns — is built
+lazily on the first query and memoized per execution scope: a Worker
+`fetch`/`queue`/`scheduled` event, a Durable Object call, a Workflow
+run, or a Lambda invocation. Every query in the same execution
+reuses that one client, and `$disconnect` runs as a finalizer when
+the execution's scope closes, so no I/O object outlives its request.
+Plan- and deploy-time evaluation never opens a connection — the
+`yield* d1(...)` in the Worker's init effect only assembles the
+lazy client.
+
+## The raw client
+
+```typescript
+const raw = yield* prisma;
+
+yield* Effect.tryPromise(() =>
+  raw.$transaction(async (tx) => {
+    await tx.widget.create({ data: { name: "a" } });
+    await tx.widget.create({ data: { name: "b" } });
+  }),
+);
+```
+
+Yielding the client itself (rather than a query) resolves the
+underlying promise-based `PrismaClient` — the same memoized instance
+the Effect surface uses. Reach for it when an API wants the raw
+client, like `$transaction` callbacks.
+
+## Where next
+
+Guides:
+
+- [Prisma on Workers](/cloudflare/data/prisma) — the full Worker
+  wiring for D1, Hyperdrive/Postgres, and PlanetScale MySQL.
+- [Async Workers](/prisma/async) — the same generated client from a
+  plain async handler.
+
+Related:
+
+- [Effect schemas](/prisma/effect-schemas) — decode rows and reuse
+  model shapes in contracts.
+- [Client generation](/prisma/generate) — where `PrismaClient` comes
+  from and how to target workerd.
+
+Reference:
+
+- [client](/providers/prisma/client) ·
+  [postgres](/providers/prisma/postgres) ·
+  [d1](/providers/prisma/d1) ·
+  [planetscale](/providers/prisma/planetscale) ·
+  [neon](/providers/prisma/neon)

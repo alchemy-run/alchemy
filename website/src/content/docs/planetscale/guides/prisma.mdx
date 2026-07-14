@@ -136,95 +136,109 @@ the full Worker file, the `nodejs_compat` flag, and the
 
 The MySQL (Vitess) engine uses the identical `Prisma.Schema` →
 `migrationsDir` wiring — set the datasource to `mysql` and target
-`Planetscale.MySQLBranch`. Declare the resources at module level so
-the Worker can reference the credential outputs:
+`Planetscale.MySQLBranch`:
 
 ```typescript
 // src/Db.ts
 import * as Planetscale from "alchemy/Planetscale";
 import * as Prisma from "alchemy/Prisma";
+import * as Effect from "effect/Effect";
 
-export const Schema = Prisma.Schema("app-schema", {
-  schema: "./prisma/schema.prisma",
-});
+export const PlanetscaleDb = Effect.gen(function* () {
+  const schema = yield* Prisma.Schema("app-schema", {
+    schema: "./prisma/schema.prisma",
+  });
 
-export const Database = Planetscale.MySQLDatabase("app-db", {
-  region: { slug: "us-east" },
-  clusterSize: "PS_10",
-});
+  const database = yield* Planetscale.MySQLDatabase("app-db", {
+    region: { slug: "us-east" },
+    clusterSize: "PS_10",
+  });
 
-export const Branch = Planetscale.MySQLBranch("app-branch", {
-  database: Database,
-  isProduction: false,
-  migrationsDir: Schema.out,
-});
+  const branch = yield* Planetscale.MySQLBranch("app-branch", {
+    database,
+    isProduction: false,
+    migrationsDir: schema.out,
+  });
 
-export const Password = Planetscale.MySQLPassword("app-password", {
-  database: Database,
-  branch: Branch,
-  role: "readwriter",
+  const password = yield* Planetscale.MySQLPassword("app-password", {
+    database,
+    branch,
+    role: "readwriter",
+  });
+
+  return { database, branch, password };
 });
 ```
 
-## MySQL: connect with `planetscale`
+## MySQL: connect with the fetch driver
 
-`planetscale` from `alchemy/Prisma/PlanetScale` drives
-`@prisma/adapter-planetscale`, which speaks PlanetScale's
-fetch-based protocol — each query is an HTTPS call, so this path
-needs no Hyperdrive and no compatibility flags. Bind the password's
-outputs onto the Worker's `env` and read them back with `Config` in
-the Worker's init phase:
+`@prisma/adapter-planetscale` speaks PlanetScale's fetch-based
+protocol — each query is an HTTPS call, so this path needs no
+Hyperdrive and no compatibility flags. Declare the Worker in your
+stack, binding the credential outputs on `env`:
 
 ```typescript
-// src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import { planetscale } from "alchemy/Prisma/PlanetScale";
-import * as Config from "effect/Config";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Password } from "./Db.ts";
-import { PrismaClient } from "./generated/client.ts";
+// alchemy.run.ts
+Effect.gen(function* () {
+  const { password } = yield* PlanetscaleDb;
 
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  {
-    main: import.meta.url,
+  const worker = yield* Cloudflare.Worker("Api", {
+    main: "./src/worker.ts",
     env: {
-      PS_HOST: Password.host,
-      PS_USERNAME: Password.username,
-      PS_PASSWORD: Password.password,
+      PS_HOST: password.host,
+      PS_USERNAME: password.username,
+      PS_PASSWORD: password.password,
     },
-  },
-  Effect.gen(function* () {
-    const prisma = yield* planetscale(
-      PrismaClient,
-      Effect.all({
-        host: Config.string("PS_HOST"),
-        username: Config.string("PS_USERNAME"),
-        password: Config.redacted("PS_PASSWORD"),
-      }),
-    );
+  });
 
-    return {
-      fetch: Effect.gen(function* () {
-        const users = yield* prisma.user.findMany();
-        return yield* HttpServerResponse.json(users);
-      }),
-    };
-  }),
-) {}
+  return { url: worker.url.as<string>() };
+});
 ```
 
-Resolve the `Config` values in the init `Effect.gen`, never only
-inside `fetch` — init runs at deploy time, so that's where the
-engine discovers which env vars to bind (see
-[Secrets](/environments/secrets)). `Config.redacted` yields the
-`Redacted<string>` the adapter's `password` field expects.
+The handler constructs the client from `env`:
+
+```typescript
+// src/worker.ts
+import { PrismaPlanetScale } from "@prisma/adapter-planetscale";
+import { PrismaClient } from "./generated/client.ts";
+
+interface Env {
+  PS_HOST: string;
+  PS_USERNAME: string;
+  PS_PASSWORD: string;
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const prisma = new PrismaClient({
+      adapter: new PrismaPlanetScale({
+        host: env.PS_HOST,
+        username: env.PS_USERNAME,
+        password: env.PS_PASSWORD,
+      }),
+    });
+    const users = await prisma.user.findMany();
+    return Response.json(users);
+  },
+};
+```
+
+For Effect Workers, the `planetscale` entry point from
+`alchemy/Prisma/PlanetScale` wraps the same adapter behind the
+Effect client — it accepts any Effect yielding
+`{ host, username, password }` (with `password` as a
+`Redacted<string>`), such as `Config` values bound from your deploy
+environment; see [Query with Effect](/prisma/effect) and
+[Async Workers](/prisma/async) for both invocation styles.
 
 ## Where next
 
 - [Add Prisma ORM](/cloudflare/data/prisma) — the full Worker
   walkthrough for every database path.
+- [Query with Effect](/prisma/effect) — the Effect-native client,
+  its error channel, and the execution-scope lifecycle.
+- [Adopt an existing project](/prisma/adopt) — move a
+  `prisma migrate dev` history onto this pipeline.
 - [Preview branches per PR](/planetscale/guides/preview-branches) —
   fork a migrated branch per pull request off a shared database.
 - [Migrations](/planetscale/data/migrations) — ordering, hashing, the

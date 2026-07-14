@@ -334,88 +334,100 @@ datasource db {
 bun add @prisma/adapter-planetscale
 ```
 
-Declare the database resources at module level so the Worker can
-reference the credential outputs (register
+Provision the MySQL branch and credential (register
 `Planetscale.providers()` in `alchemy.run.ts`):
 
 ```typescript
 // src/Db.ts
 import * as Planetscale from "alchemy/Planetscale";
 import * as Prisma from "alchemy/Prisma";
+import * as Effect from "effect/Effect";
 
-export const Schema = Prisma.Schema("app-schema", {
-  schema: "./prisma/schema.prisma",
-});
+export const PlanetscaleDb = Effect.gen(function* () {
+  const schema = yield* Prisma.Schema("app-schema", {
+    schema: "./prisma/schema.prisma",
+  });
 
-export const Database = Planetscale.MySQLDatabase("app-db", {
-  region: { slug: "us-east" },
-  clusterSize: "PS_10",
-});
+  const database = yield* Planetscale.MySQLDatabase("app-db", {
+    region: { slug: "us-east" },
+    clusterSize: "PS_10",
+  });
 
-export const Branch = Planetscale.MySQLBranch("app-branch", {
-  database: Database,
-  isProduction: false,
-  migrationsDir: Schema.out,
-});
+  const branch = yield* Planetscale.MySQLBranch("app-branch", {
+    database,
+    isProduction: false,
+    migrationsDir: schema.out,
+  });
 
-export const Password = Planetscale.MySQLPassword("app-password", {
-  database: Database,
-  branch: Branch,
-  role: "readwriter",
+  const password = yield* Planetscale.MySQLPassword("app-password", {
+    database,
+    branch,
+    role: "readwriter",
+  });
+
+  return { database, branch, password };
 });
 ```
 
-Bind the password's outputs onto the Worker's `env` and read them
-back with `Config` in the Worker's init phase — the adapter wants
-`{ host, username, password }`, and `Config.redacted` yields the
-`Redacted<string>` the `password` field expects:
+Declare the Worker in your stack, binding the credential outputs on
+`env` — the fetch driver needs `host`, `username`, and `password`
+at runtime:
 
 ```typescript
-// src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import { planetscale } from "alchemy/Prisma/PlanetScale";
-import * as Config from "effect/Config";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Password } from "./Db.ts";
-import { PrismaClient } from "./generated/client.ts";
+// alchemy.run.ts
+Effect.gen(function* () {
+  const { password } = yield* PlanetscaleDb;
 
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  {
-    main: import.meta.url,
+  const worker = yield* Cloudflare.Worker("Api", {
+    main: "./src/worker.ts",
     env: {
-      PS_HOST: Password.host,
-      PS_USERNAME: Password.username,
-      PS_PASSWORD: Password.password,
+      PS_HOST: password.host,
+      PS_USERNAME: password.username,
+      PS_PASSWORD: password.password,
     },
-  },
-  Effect.gen(function* () {
-    const prisma = yield* planetscale(
-      PrismaClient,
-      Effect.all({
-        host: Config.string("PS_HOST"),
-        username: Config.string("PS_USERNAME"),
-        password: Config.redacted("PS_PASSWORD"),
-      }),
-    );
+  });
 
-    return {
-      fetch: Effect.gen(function* () {
-        const users = yield* prisma.user.findMany();
-        return yield* HttpServerResponse.json(users);
-      }),
-    };
-  }),
-) {}
+  return { url: worker.url.as<string>() };
+});
 ```
 
-Resolve the `Config` values in the init `Effect.gen` (as above),
-never only inside `fetch` — init is what runs at deploy time, so
-that's where the engine discovers which env vars to bind (see
-[Secrets](/environments/secrets)). The fetch driver opens no TCP
-socket: each query is an HTTPS call to PlanetScale, which is why
-this path skips Hyperdrive entirely.
+The handler constructs the client from `env`, exactly as Prisma's
+own PlanetScale docs show:
+
+```typescript
+// src/worker.ts
+import { PrismaPlanetScale } from "@prisma/adapter-planetscale";
+import { PrismaClient } from "./generated/client.ts";
+
+interface Env {
+  PS_HOST: string;
+  PS_USERNAME: string;
+  PS_PASSWORD: string;
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const prisma = new PrismaClient({
+      adapter: new PrismaPlanetScale({
+        host: env.PS_HOST,
+        username: env.PS_USERNAME,
+        password: env.PS_PASSWORD,
+      }),
+    });
+    const users = await prisma.user.findMany();
+    return Response.json(users);
+  },
+};
+```
+
+The fetch driver opens no TCP socket: each query is an HTTPS call
+to PlanetScale, which is why this path skips Hyperdrive entirely.
+For Effect Workers, the `planetscale` entry point from
+`alchemy/Prisma/PlanetScale` wraps the same adapter behind the
+Effect client — it accepts any Effect yielding
+`{ host, username, password }` (with `password` as a
+`Redacted<string>`), such as `Config` values bound from your deploy
+environment; see [Query with Effect](/prisma/effect).
 
 </TabItem>
 </Tabs>
@@ -471,7 +483,9 @@ Migrations still apply on deploy through the same
 client is constructed at runtime. For the Hyperdrive path, bind the
 Hyperdrive connection on `env` instead and pass
 `env.HYPERDRIVE.connectionString` to `new PrismaPg(...)` from
-`@prisma/adapter-pg`.
+`@prisma/adapter-pg`. [Async Workers](/prisma/async) covers the
+pattern in depth, including running both Worker styles against one
+database.
 
 ## Deploy
 
@@ -511,9 +525,14 @@ Guides:
 
 Related:
 
-- [Migrations as resources](/prisma/migrations) — snapshot
-  mechanics, adoption of existing projects, and never-delete
-  semantics.
+- [Migrations as resources](/prisma/migrations) — snapshot mechanics
+  and never-delete semantics.
+- [Query with Effect](/prisma/effect) — the adapter entry points,
+  `PrismaError`, and the execution-scope lifecycle.
+- [Effect schemas](/prisma/effect-schemas) — decode rows with the
+  generated `effect/Schema` structs.
+- [Adopt an existing project](/prisma/adopt) — move a
+  `prisma migrate dev` history onto this pipeline.
 - [D1](/cloudflare/data/d1) and
   [Hyperdrive](/cloudflare/data/hyperdrive) — the database
   primitives underneath.

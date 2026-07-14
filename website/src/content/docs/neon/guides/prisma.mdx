@@ -53,7 +53,7 @@ when the diff would emit SQL — writes a new
 `{timestamp}_migration/` directory containing `migration.sql` and
 `snapshot.prisma`, then reruns `prisma generate` (injecting the
 client generator when the schema has none, and an
-[effect/Schema generator](/prisma/migrations#effect-schemas) for
+[effect/Schema generator](/prisma/effect-schemas) for
 your models alongside it). Migration files are meant to be checked
 in, and removing the resource from the stack never deletes them.
 
@@ -138,6 +138,10 @@ Guides:
 
 - [Add Prisma ORM](/cloudflare/data/prisma) — the full Cloudflare
   Worker walkthrough on top of this pipeline.
+- [Query with Effect](/prisma/effect) — the Effect-native client,
+  its error channel, and the execution-scope lifecycle.
+- [Adopt an existing project](/prisma/adopt) — move a
+  `prisma migrate dev` history onto this pipeline.
 - [Preview branches per PR](/neon/guides/preview-branches) — fork a
   migrated branch per PR stage off a shared project.
 

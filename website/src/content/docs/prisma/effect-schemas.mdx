@@ -1,0 +1,135 @@
+---
+title: Effect schemas
+description: The built-in alchemy-prisma-effect generator emits an effect/Schema module for every Prisma model and enum — decode rows from anywhere and reuse the shapes in contracts.
+---
+
+Alongside the client, every deploy emits an `effect/Schema` module
+for your data model via the built-in `alchemy-prisma-effect` Prisma
+generator: one `Schema.Struct` per model, one `Schema.Literals` per
+enum, each with a matching type export. The structs validate rows
+read outside the Prisma client — raw SQL, queues, sync engines — and
+slot directly into RPC and HTTP contracts.
+
+## What's generated
+
+For a model like this:
+
+```prisma
+model Widget {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+}
+```
+
+the generator writes `effect.ts` next to the schema file:
+
+```typescript
+// prisma/effect.ts (generated)
+import * as Schema from "effect/Schema";
+
+export const Widget = Schema.Struct({
+  id: Schema.Int,
+  name: Schema.String,
+  createdAt: Schema.Date,
+});
+export type Widget = typeof Widget.Type;
+```
+
+Every model and enum gets a value export plus a
+`export type X = typeof X.Type` alias, so the same import serves
+runtime decoding and type positions.
+
+## The type mapping
+
+| Prisma           | effect/Schema                 |
+| ---------------- | ----------------------------- |
+| `String`         | `Schema.String`               |
+| `Int`            | `Schema.Int`                  |
+| `Float`          | `Schema.Number`               |
+| `Boolean`        | `Schema.Boolean`              |
+| `BigInt`         | `Schema.BigInt`               |
+| `DateTime`       | `Schema.Date`                 |
+| `Bytes`          | `Schema.Uint8Array`           |
+| `Decimal`        | `Schema.String`               |
+| `Json`           | `Schema.Unknown`              |
+| enum             | `Schema.Literals([...])`      |
+| optional (`?`)   | `Schema.NullOr(...)`          |
+| list (`[]`)      | `Schema.Array(...)`           |
+
+`DateTime` decodes to a `Date` instance, `Decimal` stays a string
+because driver adapters surface Decimal columns as strings and a
+string is precision-safe, and optionals map to `Schema.NullOr`
+because Prisma clients surface missing values as `null`. Relation
+fields are skipped — the structs describe rows, and relations are a
+query-shape concern.
+
+## Decoding rows
+
+```typescript
+import * as Schema from "effect/Schema";
+import { Widget } from "../prisma/effect.ts";
+
+const rows = yield* prisma.widget.findMany({ orderBy: { id: "asc" } });
+const widgets = yield* Schema.decodeUnknownEffect(Schema.Array(Widget))(rows);
+```
+
+`Schema.decodeUnknownEffect` validates the rows against the
+generated struct; failures are tagged `SchemaError`, so a handler
+catches them alongside query failures with
+`Effect.catchTag(["PrismaError", "SchemaError"], ...)`.
+
+## Reusing the shapes
+
+The generated structs are ordinary `effect/Schema` values, so they
+compose anywhere a schema does: request and response types in HTTP
+routes, RPC contract payloads, queue message shapes,
+`Schema.pick`/`Schema.omit` derivations for partial views. Your
+Prisma schema stays the single definition of the data model, and
+everything downstream derives from its generated structs.
+
+## Configuration
+
+```typescript
+const schema = yield* Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+  effectSchemas: { output: "./src/schemas.ts" },
+});
+```
+
+`effectSchemas` defaults to `true`, emitting `./effect.ts` next to
+the schema file. Pass `{ output }` to move the module (resolved
+relative to the schema; a directory output writes `index.ts` inside
+it), or `false` to opt out.
+
+## Plain `prisma generate`
+
+```prisma
+generator effect {
+  provider = "alchemy-prisma-effect"
+  output   = "./effect.ts"
+}
+```
+
+Declaring the generator in `schema.prisma` makes plain
+`prisma generate` emit the module too, outside any deploy. A
+declared block takes precedence over the injected default, exactly
+like the [client generator](/prisma/generate).
+
+## Where next
+
+Guides:
+
+- [Query with Effect](/prisma/effect) — the Effect client whose rows
+  these structs decode.
+
+Related:
+
+- [Client generation](/prisma/generate) — the sibling generator and
+  the shared injection rules.
+- [Migrations as resources](/prisma/migrations) — the deploy that
+  runs both generators.
+
+Reference:
+
+- [Schema API reference](/providers/prisma/schema)
