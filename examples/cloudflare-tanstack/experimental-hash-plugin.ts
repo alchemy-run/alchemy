@@ -264,10 +264,22 @@ export function hashPlugin(): Plugin {
       }
       envs.set(this.environment.name, true);
       if (isDone()) {
+        const t0 = performance.now();
         const { hash, workspaces } = await done();
-        console.log({ hash, workspaces });
+        const t1 = performance.now();
         const redoHash = await redo(workspaces);
-        console.log({ redoHash });
+        const t2 = performance.now();
+        console.log(
+          `BENCH ${JSON.stringify({
+            impl: "node",
+            doneMs: +(t1 - t0).toFixed(2),
+            redoMs: +(t2 - t1).toFixed(2),
+            totalMs: +(t2 - t0).toFixed(2),
+            hash,
+            redoHash,
+            workspaces,
+          })}`,
+        );
       }
     },
   };
