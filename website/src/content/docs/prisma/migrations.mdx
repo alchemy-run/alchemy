@@ -1,0 +1,161 @@
+---
+title: Migrations as resources
+description: Prisma.Schema regenerates migration SQL as part of every deploy, and wiring its out output into a database's migrationsDir input orders generation before application.
+---
+
+`Prisma.Schema` makes schema generation part of the deploy graph:
+`prisma migrate diff` runs as a resource, and the migration SQL it
+emits is a resource output. Passing that output — the `out`
+directory — to a database resource's `migrationsDir` input creates a
+dependency edge, so every deploy regenerates pending migrations
+first and applies them second, in one `alchemy deploy`.
+
+This guide assumes the provider is registered — see the
+[Prisma overview](/prisma). `prisma` and `@prisma/client` are
+optional peer dependencies of alchemy, so install both in your
+project.
+
+## Declare the schema
+
+```typescript
+const schema = yield* Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+});
+```
+
+`schema` points at your `schema.prisma` file. The datasource
+`provider` declared in it selects the SQL dialect — `postgresql`,
+`sqlite` for D1, or `mysql` for PlanetScale — and on Prisma 7 the
+datasource block carries no `url`, because the diff never connects
+to a database and the runtime client gets its connection from a
+driver adapter. Generated migrations land under `out` (default
+`./prisma/migrations`), each written as
+`{out}/{timestamp}_migration/` containing `migration.sql` and
+`snapshot.prisma`, plus a `migration_lock.toml` at the root so
+`prisma migrate deploy` can also apply them. When the schema has a
+`generator` block, the resource also runs `prisma generate` so the
+client stays in sync (disable with `generateClient: false`).
+
+## Wire it into the graph
+
+```typescript
+/**
+ * A Prisma schema + Neon project + feature branch. The branch's
+ * `migrationsDir` is wired to the schema resource's `out` output, so the
+ * provider order becomes:
+ *
+ *   1. `Prisma.Schema` regenerates pending migration SQL files.
+ *   2. `Neon.Branch` scans the directory and applies any new migrations
+ *      transactionally.
+ */
+export const NeonDb = Effect.gen(function* () {
+  const schema = yield* Prisma.Schema("app-schema", {
+    schema: "./prisma/schema.prisma",
+  });
+
+  const project = yield* Neon.Project("app-db", {
+    region: "aws-us-east-1",
+  });
+
+  const branch = yield* Neon.Branch("app-branch", {
+    project,
+    migrationsDir: schema.out,
+  });
+
+  return { project, branch, schema };
+});
+```
+
+`schema.out` is an `Output`, not a plain string — passing it to
+`migrationsDir` is what creates the dependency edge that forces the
+engine to run `Prisma.Schema` before `Neon.Branch`, even though both
+values happen to spell `./prisma/migrations`. The same edge works on
+`Cloudflare.D1.Database` (with a `sqlite` datasource) and
+`Planetscale.PostgresBranch` / `Planetscale.MySQLBranch`.
+
+## How the diff works
+
+Each migration directory stores a `snapshot.prisma` — a verbatim
+copy of the schema at the moment that migration was generated. On
+the next deploy the resource runs `prisma migrate diff` from the
+latest snapshot to the current schema, entirely offline: the diff is
+datamodel-to-datamodel, so it needs no shadow database and never
+opens a connection. When the diff emits SQL, a new
+`{timestamp}_migration/` directory is written with the delta
+`migration.sql` and a fresh snapshot; the delta contains only what
+changed, never a re-create of the whole schema.
+
+## What a deploy does
+
+```typescript
+{
+  out: string;          // migrations directory, cwd-relative
+  snapshotHash: string; // sha256 of the latest snapshot.prisma
+  migrations: string[]; // migration directory names, in order
+}
+```
+
+On each deploy the resource diffs the schema against the latest
+snapshot and regenerates only when prisma would emit new SQL — an
+unchanged schema is a noop, not an update (a regression test in
+`Schema.test.ts` guards this: an unconditional update would cascade
+into spurious `Neon.Branch` updates downstream). The attributes
+above are what downstream consumers read: `out` is kept cwd-relative
+so state stays portable across machines, and `snapshotHash` /
+`migrations` let a `migrationsDir` consumer detect drift and
+reapply.
+
+## Adopt an existing Prisma project
+
+A project whose migrations were created by `prisma migrate dev` has
+`migration.sql` files but no snapshots. `Prisma.Schema` treats the
+current schema as the baseline on its first deploy: existing
+migrations are assumed to already express it, so a
+`snapshot.prisma` is recorded inside the latest migration directory
+and no SQL is emitted. The next schema change then diffs against
+that baseline and produces a normal delta migration — your existing
+migration history carries over untouched.
+
+## Destroy never deletes migrations
+
+```typescript
+delete: Effect.fn(function* () {
+  // Migrations are typically checked in; do not delete on resource
+  // teardown.
+}),
+```
+
+That is the provider's entire `delete` operation — a deliberate
+no-op. Removing the resource (or destroying the stack) never wipes
+the migrations directory, because migration files are source code
+you commit, not cloud state to tear down.
+
+## Dialects
+
+The datasource `provider` in `schema.prisma` is the only dialect
+switch. `postgresql` targets `Neon.Branch`, `Neon.Project`, and
+`Planetscale.PostgresBranch`; `sqlite` emits D1-compatible SQL for
+`Cloudflare.D1.Database`; `mysql` targets
+`Planetscale.MySQLBranch`. The generated layout is identical in all
+three cases — the `migration_lock.toml` records which provider the
+directory belongs to.
+
+## Where next
+
+Application mechanics:
+
+- [Neon migrations](/neon/data/migrations) — how `migrationsDir`
+  files are ordered, hashed, and tracked on Neon.
+- [PlanetScale migrations](/planetscale/data/migrations) — the same
+  contract on PlanetScale branches.
+
+Related:
+
+- [D1](/cloudflare/data/d1) — `migrationsDir` and `migrationsTable`
+  on Cloudflare's serverless SQLite.
+- [Add Prisma ORM](/cloudflare/data/prisma) — the runtime side:
+  querying from a Worker with the driver-adapter clients.
+
+Reference:
+
+- [Schema API reference](/providers/prisma/schema)

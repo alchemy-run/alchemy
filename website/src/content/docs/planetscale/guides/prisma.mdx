@@ -1,0 +1,235 @@
+---
+title: Prisma ORM with PlanetScale
+description: Manage your PlanetScale schema with Prisma — migrations regenerated on deploy and applied through the branch's migrationsDir, queried over Hyperdrive (Postgres) or the fetch driver (MySQL).
+---
+
+Prisma pairs with PlanetScale in one deploy-driven flow: your data
+model lives in `schema.prisma`, the `Prisma.Schema` resource
+regenerates migration SQL on deploy, and the database branch applies
+whatever is pending as part of `alchemy deploy`. Both engines use the
+same `migrationsDir` contract — Postgres branches connect through
+Hyperdrive, MySQL branches through Prisma's fetch-based PlanetScale
+adapter.
+
+## Register the Prisma provider
+
+`Prisma.Schema` ships in its own `providers()` layer, merged
+alongside PlanetScale's:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Planetscale from "alchemy/Planetscale";
+import * as Prisma from "alchemy/Prisma";
+import * as Layer from "effect/Layer";
+
+providers: Layer.mergeAll(
+  Cloudflare.providers(),
+  Prisma.providers(),
+  Planetscale.providers(),
+),
+```
+
+The provider needs no credentials — just `prisma` and
+`@prisma/client` installed (optional peers of `alchemy`).
+
+## Define the schema
+
+A Prisma schema is a plain `schema.prisma` file. For a Postgres
+branch, use the `postgresql` datasource:
+
+```prisma
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id    Int    @id @default(autoincrement())
+  email String @unique
+  name  String
+}
+```
+
+On Prisma 7 the datasource block carries no `url` — migration
+generation diffs schemas offline, and the runtime connection comes
+from a driver adapter. For a MySQL branch, set
+`provider = "mysql"` instead; everything else stays the same.
+
+## Generate migrations on deploy
+
+`Prisma.Schema` diffs the schema against the latest
+`snapshot.prisma` under `out` (default `./prisma/migrations`) and,
+when anything changed, writes a new
+`{timestamp}_migration/{migration.sql, snapshot.prisma}` directory:
+
+```typescript
+const schema = yield* Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+});
+```
+
+The deploy owns migration generation end to end — it also reruns
+`prisma generate` so the client stays in sync. Removing the
+resource never deletes the migrations directory; the files are
+meant to be checked in.
+
+## Apply them on the branch
+
+Wire the branch's `migrationsDir` to the schema resource's `out`
+output:
+
+```typescript
+const branch = yield* Planetscale.PostgresBranch("app-branch", {
+  database,
+  migrationsDir: schema.out,
+});
+```
+
+Because the branch depends on `schema.out`, alchemy orders
+`Prisma.Schema` first: it regenerates pending SQL, then the branch
+scans the directory and applies new files transactionally,
+recording each in the `__alchemy_migrations` tracking table.
+Details in [Migrations](/planetscale/data/migrations).
+
+## Connect via Hyperdrive
+
+A `PostgresRole` mints the branch credential, and Hyperdrive fronts
+its direct origin:
+
+```typescript
+const role = yield* Planetscale.PostgresRole("app-role", {
+  database,
+  branch,
+  inheritedRoles: ["postgres"],
+});
+
+const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+  origin: role.origin,
+  caching: { disabled: true },
+});
+```
+
+Inside the Worker, `postgres` from `alchemy/Prisma/Postgres` opens
+the client over `@prisma/adapter-pg` with Hyperdrive's connection
+string:
+
+```typescript
+import { postgres } from "alchemy/Prisma/Postgres";
+import { PrismaClient } from "./generated/client.ts";
+
+const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+const prisma = yield* postgres(PrismaClient, hd.connectionString);
+```
+
+The [Add Prisma ORM](/cloudflare/data/prisma) walkthrough covers
+the full Worker file, the `nodejs_compat` flag, and the
+`ConnectBinding` layer.
+
+## MySQL: the same pipeline, a fetch driver
+
+The MySQL (Vitess) engine uses the identical `Prisma.Schema` →
+`migrationsDir` wiring — set the datasource to `mysql` and target
+`Planetscale.MySQLBranch`. Declare the resources at module level so
+the Worker can reference the credential outputs:
+
+```typescript
+// src/Db.ts
+import * as Planetscale from "alchemy/Planetscale";
+import * as Prisma from "alchemy/Prisma";
+
+export const Schema = Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+});
+
+export const Database = Planetscale.MySQLDatabase("app-db", {
+  region: { slug: "us-east" },
+  clusterSize: "PS_10",
+});
+
+export const Branch = Planetscale.MySQLBranch("app-branch", {
+  database: Database,
+  isProduction: false,
+  migrationsDir: Schema.out,
+});
+
+export const Password = Planetscale.MySQLPassword("app-password", {
+  database: Database,
+  branch: Branch,
+  role: "readwriter",
+});
+```
+
+## MySQL: connect with `planetscale`
+
+`planetscale` from `alchemy/Prisma/PlanetScale` drives
+`@prisma/adapter-planetscale`, which speaks PlanetScale's
+fetch-based protocol — each query is an HTTPS call, so this path
+needs no Hyperdrive and no compatibility flags. Bind the password's
+outputs onto the Worker's `env` and read them back with `Config` in
+the Worker's init phase:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import { planetscale } from "alchemy/Prisma/PlanetScale";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Password } from "./Db.ts";
+import { PrismaClient } from "./generated/client.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    env: {
+      PS_HOST: Password.host,
+      PS_USERNAME: Password.username,
+      PS_PASSWORD: Password.password,
+    },
+  },
+  Effect.gen(function* () {
+    const prisma = yield* planetscale(
+      PrismaClient,
+      Effect.all({
+        host: Config.string("PS_HOST"),
+        username: Config.string("PS_USERNAME"),
+        password: Config.redacted("PS_PASSWORD"),
+      }),
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* prisma.user.findMany();
+        return yield* HttpServerResponse.json(users);
+      }),
+    };
+  }),
+) {}
+```
+
+Resolve the `Config` values in the init `Effect.gen`, never only
+inside `fetch` — init runs at deploy time, so that's where the
+engine discovers which env vars to bind (see
+[Secrets](/environments/secrets)). `Config.redacted` yields the
+`Redacted<string>` the adapter's `password` field expects.
+
+## Where next
+
+- [Add Prisma ORM](/cloudflare/data/prisma) — the full Worker
+  walkthrough for every database path.
+- [Preview branches per PR](/planetscale/guides/preview-branches) —
+  fork a migrated branch per pull request off a shared database.
+- [Migrations](/planetscale/data/migrations) — ordering, hashing, the
+  tracking table, and seed data.
+- [Migrations as resources](/prisma/migrations) — how `Prisma.Schema`
+  generates and snapshots migration SQL; the PlanetScale-side
+  application mechanics stay here.
+- [Postgres](/planetscale/data/postgres) and [MySQL](/planetscale/data/mysql)
+  — the resource families behind these snippets.

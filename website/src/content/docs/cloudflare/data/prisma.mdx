@@ -1,0 +1,453 @@
+---
+title: Add Prisma ORM
+description: Manage your Prisma schema as a resource, have alchemy generate and apply migrations on every deploy, and query from a Worker through a driver adapter — on D1, Neon, or PlanetScale.
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const prismaDeps = `@prisma/client`;
+export const prismaDevDeps = `prisma`;
+
+Prisma on alchemy is two pieces: a `Prisma.Schema` resource that
+regenerates migration SQL on every deploy and feeds it to your
+database's `migrationsDir`, and an Effect-native runtime client for
+each Prisma driver adapter. This guide wires both, on each of the
+three database paths: D1, Postgres through Hyperdrive (Neon or
+PlanetScale), and PlanetScale MySQL over the fetch driver.
+
+## Define the schema
+
+Prisma schemas live in `schema.prisma`. Create
+`prisma/schema.prisma`:
+
+```prisma
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id    Int    @id @default(autoincrement())
+  email String @unique
+  name  String
+  posts Post[]
+}
+
+model Post {
+  id     Int    @id @default(autoincrement())
+  userId Int
+  title  String
+  body   String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+```
+
+Two Prisma 7 specifics: the datasource block has **no `url`** — the
+connection comes from a driver adapter at runtime, and migration
+generation diffs schemas offline — and the generator is
+`prisma-client`, which emits a plain TypeScript client into
+`output`. That generated client imports its query compiler as
+base64-encoded JS, so it bundles into a Worker with no special
+config. The datasource `provider` selects the SQL dialect: keep
+`postgresql` for the Hyperdrive path, switch to `sqlite` for D1 or
+`mysql` for PlanetScale MySQL.
+
+## Add the Prisma provider
+
+`Prisma.Schema` is registered through its own `providers()` layer —
+a build-time provider that owns your migrations directory:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Prisma from "alchemy/Prisma";
+import * as Neon from "alchemy/Neon";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyStack",
+  {
+-    providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
++    providers: Layer.mergeAll(
++      Cloudflare.providers(),
++      Prisma.providers(),
++      Neon.providers(),
++    ),
+    state: Alchemy.localState(),
+  },
+  // ...
+);
+```
+
+The provider has no credentials — it just needs `prisma` and
+`@prisma/client` installed (both are optional peers of `alchemy`).
+Each database path below adds exactly one driver adapter on top:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${prismaDeps}\nbun add -d ${prismaDevDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${prismaDeps}\nnpm install -D ${prismaDevDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${prismaDeps}\npnpm add -D ${prismaDevDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${prismaDeps}\nyarn add -D ${prismaDevDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Declare `Prisma.Schema`
+
+```typescript
+const schema = yield* Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+});
+```
+
+On every `alchemy deploy` the resource diffs `schema.prisma`
+against the last `snapshot.prisma` via `prisma migrate diff` —
+entirely offline, no shadow database — and, only when the diff
+emits SQL, writes a new
+`prisma/migrations/{timestamp}_migration/{migration.sql, snapshot.prisma}`
+directory. It also runs `prisma generate` so the client under
+`src/generated` stays in sync. Its `out` output is the input to the
+database's `migrationsDir` below — that edge is what orders schema
+generation before migration apply.
+[Migrations as resources](/prisma/migrations) covers the full
+lifecycle.
+
+## Wire the database and query it
+
+<Tabs syncKey="prismaTarget">
+<TabItem label="D1">
+
+Set the datasource to `sqlite` so the generated SQL is
+D1-compatible:
+
+```diff lang="prisma"
+// prisma/schema.prisma
+datasource db {
+-  provider = "postgresql"
++  provider = "sqlite"
+}
+```
+
+Add the D1 driver adapter:
+
+```sh
+bun add @prisma/adapter-d1
+```
+
+Feed the schema's `out` into the database's `migrationsDir` — D1
+applies pending `.sql` files in order on every deploy:
+
+```typescript
+// src/Db.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Prisma from "alchemy/Prisma";
+import * as Effect from "effect/Effect";
+
+export const Db = Effect.gen(function* () {
+  const schema = yield* Prisma.Schema("app-schema", {
+    schema: "./prisma/schema.prisma",
+  });
+
+  return yield* Cloudflare.D1.Database("app-db", {
+    migrationsDir: schema.out,
+  });
+});
+```
+
+In the Worker, `Cloudflare.D1.QueryDatabase` binds the database and
+its `raw` field is the native `D1Database` object the adapter
+wraps:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import { d1 } from "alchemy/Prisma/D1";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Db } from "./Db.ts";
+import { PrismaClient } from "./generated/client.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const database = yield* Db;
+    const db = yield* Cloudflare.D1.QueryDatabase(database);
+    const prisma = yield* d1(PrismaClient, db.raw);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* prisma.user.findMany();
+        return yield* HttpServerResponse.json(users);
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding)),
+) {}
+```
+
+`yield* prisma.user.findMany()` is an Effect with a typed
+`PrismaError` channel — the whole generated client surface works
+this way. The client is built lazily on the first query, memoized
+for the rest of the execution, and `$disconnect`ed when the request
+settles. D1's binding speaks Cloudflare's native protocol, so this
+path needs no compatibility flags.
+
+</TabItem>
+<TabItem label="Postgres (Hyperdrive)">
+
+Keep the `postgresql` datasource and add the pg driver adapter:
+
+```sh
+bun add @prisma/adapter-pg
+```
+
+Provision the database — a Neon project and branch here — and
+front the branch's direct origin with Hyperdrive:
+
+```typescript
+// src/Db.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Neon from "alchemy/Neon";
+import * as Prisma from "alchemy/Prisma";
+import * as Effect from "effect/Effect";
+
+export const NeonDb = Effect.gen(function* () {
+  const schema = yield* Prisma.Schema("app-schema", {
+    schema: "./prisma/schema.prisma",
+  });
+
+  const project = yield* Neon.Project("app-db", { region: "aws-us-east-1" });
+
+  const branch = yield* Neon.Branch("app-branch", {
+    project,
+    migrationsDir: schema.out,
+  });
+
+  return { project, branch, schema };
+});
+
+export const Hyperdrive: Effect.Effect<
+  Cloudflare.Hyperdrive.Connection,
+  never,
+  any
+> = Effect.gen(function* () {
+  const { branch } = yield* NeonDb;
+  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+    origin: branch.origin,
+  });
+});
+```
+
+In the Worker, `Cloudflare.Hyperdrive.Connect` hands you the
+connection string and `postgres` opens the client over
+`@prisma/adapter-pg`:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import { postgres } from "alchemy/Prisma/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Hyperdrive } from "./Db.ts";
+import { PrismaClient } from "./generated/client.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    compatibility: {
+      // @prisma/adapter-pg drives node-postgres, which needs Node.js APIs.
+      flags: ["nodejs_compat"],
+    },
+  },
+  Effect.gen(function* () {
+    const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const prisma = yield* postgres(PrismaClient, hd.connectionString);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* prisma.user.findMany({
+          include: { posts: true },
+        });
+        return yield* HttpServerResponse.json(users);
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
+) {}
+```
+
+The `pg` pool is created lazily on the first query, reused by every
+query in the same execution, and closed when the request settles —
+Hyperdrive does the cross-request pooling at the edge. The same
+Worker code runs unchanged against **PlanetScale Postgres**: swap
+the Neon resources for `Planetscale.PostgresDatabase` /
+`PostgresBranch` / `PostgresRole` and point Hyperdrive at
+`role.origin` — [Prisma with PlanetScale](/planetscale/guides/prisma)
+shows that wiring. Direct-to-Neon over WebSockets (without
+Hyperdrive) is also available via `alchemy/Prisma/Neon` — see
+[Prisma with Neon](/neon/guides/prisma).
+
+</TabItem>
+<TabItem label="PlanetScale MySQL">
+
+Set the datasource to `mysql` and add the PlanetScale driver
+adapter — it speaks PlanetScale's fetch-based protocol, so this
+path uses no Hyperdrive and no compatibility flags:
+
+```diff lang="prisma"
+// prisma/schema.prisma
+datasource db {
+-  provider = "postgresql"
++  provider = "mysql"
+}
+```
+
+```sh
+bun add @prisma/adapter-planetscale
+```
+
+Declare the database resources at module level so the Worker can
+reference the credential outputs (register
+`Planetscale.providers()` in `alchemy.run.ts`):
+
+```typescript
+// src/Db.ts
+import * as Planetscale from "alchemy/Planetscale";
+import * as Prisma from "alchemy/Prisma";
+
+export const Schema = Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+});
+
+export const Database = Planetscale.MySQLDatabase("app-db", {
+  region: { slug: "us-east" },
+  clusterSize: "PS_10",
+});
+
+export const Branch = Planetscale.MySQLBranch("app-branch", {
+  database: Database,
+  isProduction: false,
+  migrationsDir: Schema.out,
+});
+
+export const Password = Planetscale.MySQLPassword("app-password", {
+  database: Database,
+  branch: Branch,
+  role: "readwriter",
+});
+```
+
+Bind the password's outputs onto the Worker's `env` and read them
+back with `Config` in the Worker's init phase — the adapter wants
+`{ host, username, password }`, and `Config.redacted` yields the
+`Redacted<string>` the `password` field expects:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import { planetscale } from "alchemy/Prisma/PlanetScale";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Password } from "./Db.ts";
+import { PrismaClient } from "./generated/client.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    env: {
+      PS_HOST: Password.host,
+      PS_USERNAME: Password.username,
+      PS_PASSWORD: Password.password,
+    },
+  },
+  Effect.gen(function* () {
+    const prisma = yield* planetscale(
+      PrismaClient,
+      Effect.all({
+        host: Config.string("PS_HOST"),
+        username: Config.string("PS_USERNAME"),
+        password: Config.redacted("PS_PASSWORD"),
+      }),
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* prisma.user.findMany();
+        return yield* HttpServerResponse.json(users);
+      }),
+    };
+  }),
+) {}
+```
+
+Resolve the `Config` values in the init `Effect.gen` (as above),
+never only inside `fetch` — init is what runs at deploy time, so
+that's where the engine discovers which env vars to bind (see
+[Secrets](/environments/secrets)). The fetch driver opens no TCP
+socket: each query is an HTTPS call to PlanetScale, which is why
+this path skips Hyperdrive entirely.
+
+</TabItem>
+</Tabs>
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+The first deploy generates `prisma/migrations` from your schema
+(since no snapshot exists yet), applies the resulting
+`CREATE TABLE` statements to the database, and generates the client
+under `src/generated`. Hit your Worker URL and you should see:
+
+```json
+[]
+```
+
+## Iterate on the schema
+
+Add a model or a field to `prisma/schema.prisma` and run
+`bun alchemy deploy` again. The provider diffs the schema against
+the latest `snapshot.prisma`, writes a new migration directory with
+just the delta SQL, reruns `prisma generate`, and the database
+resource applies the pending file and records it in its tracking
+table so it runs exactly once. When nothing changed, the deploy is
+a noop that never touches the database resource.
+
+## Where next
+
+Guides:
+
+- [Prisma with Neon](/neon/guides/prisma) — the Neon side of the
+  pipeline, including the direct WebSocket driver.
+- [Prisma with PlanetScale](/planetscale/guides/prisma) — Postgres
+  branches over Hyperdrive and MySQL over the fetch driver.
+- [Branch from a shared database](/cloudflare/data/branch-from-shared-database)
+  — per-stage database tiering on the same schema resource.
+
+Related:
+
+- [Migrations as resources](/prisma/migrations) — snapshot
+  mechanics, adoption of existing projects, and never-delete
+  semantics.
+- [D1](/cloudflare/data/d1) and
+  [Hyperdrive](/cloudflare/data/hyperdrive) — the database
+  primitives underneath.
+
+Reference:
+
+- [Schema API reference](/providers/prisma/schema)

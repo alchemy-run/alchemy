@@ -54,6 +54,7 @@ function providersSidebarEntry() {
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
       { label: "Drizzle", link: "/drizzle" },
+      { label: "Prisma", link: "/prisma" },
       { label: "Command", link: "/command" },
     ],
   };
@@ -594,6 +595,7 @@ export default defineConfig({
                 { label: "R2", link: "/cloudflare/data/r2" },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
+                { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 {
                   label: "Shared database",
                   link: "/cloudflare/data/shared-database",
@@ -807,6 +809,10 @@ export default defineConfig({
                   label: "Drizzle ORM",
                   link: "/planetscale/guides/drizzle",
                 },
+                {
+                  label: "Prisma ORM",
+                  link: "/planetscale/guides/prisma",
+                },
               ],
             },
             providerResourcesEntry("Planetscale"),
@@ -833,6 +839,7 @@ export default defineConfig({
                   link: "/neon/guides/preview-branches",
                 },
                 { label: "Drizzle ORM", link: "/neon/guides/drizzle" },
+                { label: "Prisma ORM", link: "/neon/guides/prisma" },
               ],
             },
             providerResourcesEntry("Neon"),
@@ -905,6 +912,17 @@ export default defineConfig({
               link: "/drizzle/migrations",
             },
             providerResourcesEntry("Drizzle"),
+          ],
+        },
+        {
+          label: "Prisma",
+          items: [
+            { label: "Overview", link: "/prisma" },
+            {
+              label: "Migrations as resources",
+              link: "/prisma/migrations",
+            },
+            providerResourcesEntry("Prisma"),
           ],
         },
         {

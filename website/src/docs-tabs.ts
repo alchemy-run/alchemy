@@ -95,6 +95,14 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "schema · migrations · orm",
   },
   {
+    label: "Prisma",
+    href: "/prisma",
+    prefixes: ["/prisma", "/providers/prisma"],
+    slot: "more",
+    category: "Data",
+    hint: "schema · migrations · orm",
+  },
+  {
     label: "Command",
     href: "/command",
     prefixes: ["/command", "/providers/command"],
