@@ -47,10 +47,21 @@ export interface FileSemaphoreOptions {
 
 export const make = (options: FileSemaphoreOptions): FileSemaphore => {
   const stale = options.stale ?? 30_000;
-  // Same-process waiters queue here instead of busy-retrying the lockfile
-  // (the lockfile library tracks in-process holders by path and would
-  // otherwise fail acquisition with "already being held" until released).
-  const inProcess = PartitionedSemaphore.makeUnsafe<string>({ permits: 1 });
+  // One mutex per key so same-process waiters queue fairly instead of
+  // busy-retrying the lockfile (the lockfile library tracks in-process
+  // holders by path and would otherwise fail acquisition with "already
+  // being held" until released). Keys are few (e.g. account ids), so the
+  // map is never evicted. Note: `PartitionedSemaphore` is NOT suitable
+  // here — its permits are a pool shared across all keys.
+  const mutexes = new Map<string, Semaphore.Semaphore>();
+  const mutexFor = (key: string): Semaphore.Semaphore => {
+    let mutex = mutexes.get(key);
+    if (mutex === undefined) {
+      mutex = Semaphore.makeUnsafe(1);
+      mutexes.set(key, mutex);
+    }
+    return mutex;
+  };
 
   const acquireFileLock = (key: string) => {
     const lockPath = path.join(options.directory, `${sanitizeKey(key)}.lock`);
@@ -100,7 +111,10 @@ export const make = (options: FileSemaphoreOptions): FileSemaphore => {
 
   return {
     withPermit: (key) => (effect) =>
-      inProcess.withPermit(key)(
+      Semaphore.withPermits(
+        mutexFor(key),
+        1,
+      )(
         Effect.acquireUseRelease(
           acquireFileLock(key),
           () => effect,
