@@ -81,7 +81,7 @@ export const WorkerBundle = Effect.gen(function* () {
               ),
             ]
           : options.enableTestLogger
-            ? [virtualEntryPlugin(makeAsyncWorkerVirtualEntry)]
+            ? [virtualEntryPlugin(makeExternalTestLoggerVirtualEntry)]
             : undefined,
       ],
       checks: {
@@ -146,7 +146,12 @@ export const WorkerBundle = Effect.gen(function* () {
   };
 });
 
-const makeAsyncWorkerVirtualEntry = (importPath: string) => `
+/**
+ * Virtual entry wrapping an external (non-effect) worker module when test
+ * logging is enabled: patch `console.*` before the user module loads, then
+ * re-export the module untouched.
+ */
+const makeExternalTestLoggerVirtualEntry = (importPath: string) => `
 import { patchConsole } from "alchemy/Cloudflare/Workers/TestLoggerRuntime";
 patchConsole();
 import entrypoint from ${JSON.stringify(importPath)};
@@ -159,7 +164,6 @@ export const makeEffectVirtualEntry = (
   stack: { name: string; stage: string },
   enableTestLogger: boolean,
 ) => {
-  console.log("[test logger] MAKING EFFECT VIRTUAL ENTRY", enableTestLogger);
   const doClasses: string[] = [];
   const wfClasses: string[] = [];
   for (const [className, entry] of Object.entries(exports)) {
@@ -176,12 +180,14 @@ import * as Effect from "effect/Effect";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""} } from "alchemy/Cloudflare";
-import { patchConsole } from "alchemy/Cloudflare/Workers/TestLoggerRuntime";
 import { makeEntrypointLayer } from "alchemy/Runtime";
-
+${
+  enableTestLogger
+    ? `import { patchConsole } from "alchemy/Cloudflare/Workers/TestLoggerRuntime";
+patchConsole();`
+    : ""
+}
 import entrypoint from ${JSON.stringify(importPath)};
-
-${enableTestLogger ? "patchConsole();" : ""}
 
 const meta = {
   entrypoint,

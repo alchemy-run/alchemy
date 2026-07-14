@@ -1036,7 +1036,7 @@ export const LiveWorkerProvider = () =>
                   },
               stack: { name: stack.name, stage: stack.stage },
               extraOptions: props.build,
-              enableTestLogger,
+              enableTestLogger: usesTestLogger(props),
             })
         ).pipe(Artifacts.cached("build"));
 
@@ -1317,17 +1317,12 @@ export const LiveWorkerProvider = () =>
             text: accountId,
           },
         );
-        if (enableTestLogger) {
-          console.log(
-            "[test logger] CREATING WORKER WITH TEST LOGGER BINDINGS",
-            name,
-          );
+        const testLogger = usesTestLogger(news);
+        if (testLogger) {
+          // The cross-script DO binding below requires the account-level
+          // logger singleton to exist before this script is uploaded.
+          yield* ensureTestLoggerWorker(accountId);
           metadataBindings.push(...testLoggerBindings(name));
-        } else {
-          console.log(
-            "[test logger] CREATING WORKER WITHOUT TEST LOGGER BINDINGS",
-            name,
-          );
         }
         // Add environment variables as metadata bindings
         if (news.env) {
@@ -1625,6 +1620,7 @@ export const LiveWorkerProvider = () =>
             routes: [],
             crons: [],
             hash,
+            testLogger: undefined,
           } satisfies Worker["Attributes"];
         }
         // Reconcile workers.dev subdomain against observed cloud state.
@@ -1721,6 +1717,7 @@ export const LiveWorkerProvider = () =>
           routes,
           crons,
           hash,
+          testLogger: testLogger ? true : undefined,
         } satisfies Worker["Attributes"];
       });
 
@@ -2246,6 +2243,9 @@ export const LiveWorkerProvider = () =>
                 domains: [],
                 routes: [],
                 crons: [],
+                testLogger: hasTestLoggerBinding(settings.bindings)
+                  ? true
+                  : undefined,
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -2321,6 +2321,9 @@ export const LiveWorkerProvider = () =>
               domains,
               routes: routesList,
               crons,
+              testLogger: hasTestLoggerBinding(settings.bindings)
+                ? true
+                : undefined,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
@@ -2508,11 +2511,20 @@ export const LiveWorkerProvider = () =>
             undefined,
           ).pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
         }),
+        // Workers deployed with test logging stream their buffered console
+        // logs from the test-logger DO (sub-second latency); everything else
+        // uses Cloudflare's tail API.
         tail: ({ output }) =>
-          telemetry.tailScript({
-            accountId: output.accountId,
-            scriptName: output.workerName,
-          }),
+          output.testLogger
+            ? testLoggerTail({
+                accountId: output.accountId,
+                workerName: output.workerName,
+                stack: { name: stack.name, stage: stack.stage },
+              })
+            : telemetry.tailScript({
+                accountId: output.accountId,
+                scriptName: output.workerName,
+              }),
         logs: ({ output, options }) =>
           telemetry.queryLogs({
             accountId: output.accountId,

@@ -59,8 +59,14 @@ export interface MakeOptions<ROut = any> {
    */
   dev?: boolean;
   /**
-   * Enable test logging. When `true`, logs are written to the test logger
-   * worker and can be viewed in the test harness's console.
+   * Enable test logging. When `true`:
+   *
+   * - deployed Cloudflare Workers get `console.*` patched to mirror logs
+   *   into the account's test-logger Durable Object (see
+   *   `Cloudflare/Workers/TestLoggerWorker.ts`), and
+   * - `deploy(Stack)` forks a background tail of every tailable resource in
+   *   the stack, printing logs to the test console until `destroy(Stack)`
+   *   (or the file's `afterAll`) closes the shared scope.
    */
   log?: boolean;
 }
@@ -189,6 +195,7 @@ export const deploy = <A>(
     stage: callOptions?.stage ?? options.stage ?? "test",
     dev: resolveDev(options),
     scope: callOptions?.scope,
+    tail: options.log ?? false,
   }).pipe(Effect.provide(TelemetryLive));
 
 export const destroy = (

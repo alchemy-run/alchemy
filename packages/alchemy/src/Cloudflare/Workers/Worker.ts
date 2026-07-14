@@ -639,6 +639,15 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
       // the first diff after upgrading (the apply backfills it).
       metadata?: string | undefined;
     };
+    /**
+     * `true` when this Worker was deployed with test logging enabled
+     * (`Test.make({ log: true })`): its `console.*` is patched to mirror
+     * logs into the account's test-logger Durable Object, and the
+     * provider's `tail` streams from that DO instead of Cloudflare's
+     * (slower) tail API. `read` reconstructs it from the observed
+     * `ALCHEMY_TEST_LOGGER` binding.
+     */
+    testLogger?: boolean | undefined;
   },
   {
     bindings?: WorkerBinding[];
