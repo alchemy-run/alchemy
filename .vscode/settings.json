@@ -18,15 +18,14 @@
   "json.schemaDownload.enable": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.codeLens": false,
-  "editor.formatOnSave": true,
-  "editor.formatOnSaveMode": "file",
+  "editor.formatOnSave": false,
   "editor.inlayHints.enabled": "offUnlessPressed",
   "editor.tabSize": 2,
   "editor.indentSize": 2,
   "editor.insertSpaces": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit"
+    "source.fixAll.oxc": "explicit",
+    "source.format.oxc": "explicit"
   },
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml"

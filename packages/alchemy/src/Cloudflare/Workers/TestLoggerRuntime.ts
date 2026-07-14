@@ -1,13 +1,18 @@
-import { type DurableObject, env, waitUntil } from "cloudflare:workers";
+import { DurableObject, env, waitUntil } from "cloudflare:workers";
+import { Constants } from "./TestLoggerWorker.ts";
 
 interface Env {
-  ALCHEMY_TEST_WORKER_NAME: string;
-  ALCHEMY_TEST_LOGGER: DurableObjectNamespace<
+  ALCHEMY_STACK_NAME: string;
+  ALCHEMY_STAGE: string;
+  [Constants.TEST_LOGGER_WORKER_NAME_BINDING]: string;
+  [Constants.TEST_LOGGER_DO_BINDING]: DurableObjectNamespace<
     DurableObject & {
       log(item: {
+        stack: string;
+        stage: string;
+        worker: string;
         message: string;
         method: string;
-        workerName: string;
       }): Promise<void>;
     }
   >;
@@ -24,21 +29,42 @@ const PATCHED_METHODS = [
 ] as const;
 type PatchedMethod = (typeof PATCHED_METHODS)[number];
 
-const hasTestLoggerEnv = (env: Cloudflare.Env): env is Env => {
-  return "ALCHEMY_TEST_WORKER_NAME" in env && "ALCHEMY_TEST_LOGGER" in env;
-};
+const hasTestLoggerEnv = (env: Cloudflare.Env): env is Env =>
+  "ALCHEMY_STACK_NAME" in env &&
+  "ALCHEMY_STAGE" in env &&
+  Constants.TEST_LOGGER_DO_BINDING in env &&
+  Constants.TEST_LOGGER_WORKER_NAME_BINDING in env;
 
 const patchConsoleMethod = (method: PatchedMethod) => {
   const originalMethod = console[method];
   console[method] = (...args: any[]) => {
     originalMethod(...args);
-    if (!hasTestLoggerEnv(env)) return;
-    const stub = env.ALCHEMY_TEST_LOGGER.getByName("global");
+    if (!hasTestLoggerEnv(env)) {
+      originalMethod(
+        "[test logger] TEST LOGGER NOT ENABLED",
+        JSON.stringify(env),
+      );
+      return;
+    }
+    originalMethod(
+      "[test logger] TEST LOGGER ENABLED",
+      JSON.stringify(env),
+      JSON.stringify({
+        message: renderItem(args),
+        method,
+        stack: env.ALCHEMY_STACK_NAME,
+        stage: env.ALCHEMY_STAGE,
+        worker: env[Constants.TEST_LOGGER_WORKER_NAME_BINDING],
+      }),
+    );
+    const stub = env[Constants.TEST_LOGGER_DO_BINDING].getByName("global");
     waitUntil(
       stub.log({
         message: renderItem(args),
         method,
-        workerName: env.ALCHEMY_TEST_WORKER_NAME,
+        stack: env.ALCHEMY_STACK_NAME,
+        stage: env.ALCHEMY_STAGE,
+        worker: env[Constants.TEST_LOGGER_WORKER_NAME_BINDING],
       }),
     );
   };

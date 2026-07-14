@@ -26,6 +26,7 @@ import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { testLoggerBindings, TestLoggingPolicy } from "./TestLoggerWorker.ts";
 import { Worker, type WorkerProps, type WorkerRouteConfig } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
@@ -373,6 +374,7 @@ export const LiveWorkerProvider = () =>
 
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
+      const enableTestLogger = yield* TestLoggingPolicy;
 
       // const createScriptSubdomain = yield* workers.createScriptSubdomain;
       // const deleteScript = yield* workers.deleteScript;
@@ -1017,6 +1019,7 @@ export const LiveWorkerProvider = () =>
                   },
               stack: { name: stack.name, stage: stack.stage },
               extraOptions: props.build,
+              enableTestLogger,
             })
         ).pipe(Artifacts.cached("build"));
 
@@ -1297,6 +1300,18 @@ export const LiveWorkerProvider = () =>
             text: accountId,
           },
         );
+        if (enableTestLogger) {
+          console.log(
+            "[test logger] CREATING WORKER WITH TEST LOGGER BINDINGS",
+            name,
+          );
+          metadataBindings.push(...testLoggerBindings(name));
+        } else {
+          console.log(
+            "[test logger] CREATING WORKER WITHOUT TEST LOGGER BINDINGS",
+            name,
+          );
+        }
         // Add environment variables as metadata bindings
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {

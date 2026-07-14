@@ -147,7 +147,7 @@ export const WorkerBundle = Effect.gen(function* () {
 });
 
 const makeAsyncWorkerVirtualEntry = (importPath: string) => `
-import { patchConsole } from "alchemy/Cloudflare";
+import { patchConsole } from "alchemy/Cloudflare/Workers/TestLoggerRuntime";
 patchConsole();
 import entrypoint from ${JSON.stringify(importPath)};
 export * from ${JSON.stringify(importPath)};
@@ -159,6 +159,7 @@ export const makeEffectVirtualEntry = (
   stack: { name: string; stage: string },
   enableTestLogger: boolean,
 ) => {
+  console.log("[test logger] MAKING EFFECT VIRTUAL ENTRY", enableTestLogger);
   const doClasses: string[] = [];
   const wfClasses: string[] = [];
   for (const [className, entry] of Object.entries(exports)) {
@@ -174,7 +175,8 @@ export const makeEffectVirtualEntry = (
 import * as Effect from "effect/Effect";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
-import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ${enableTestLogger ? "patchConsole" : ""} } from "alchemy/Cloudflare";
+import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""} } from "alchemy/Cloudflare";
+import { patchConsole } from "alchemy/Cloudflare/Workers/TestLoggerRuntime";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
 import entrypoint from ${JSON.stringify(importPath)};

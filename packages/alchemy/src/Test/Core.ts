@@ -15,6 +15,7 @@ import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
+import { TestLoggingPolicy } from "../Cloudflare/Workers/TestLoggerWorker.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
@@ -57,6 +58,11 @@ export interface MakeOptions<ROut = any> {
    * `ALCHEMY_DEV` environment variable (`"1"` / `"true"` enable it).
    */
   dev?: boolean;
+  /**
+   * Enable test logging. When `true`, logs are written to the test logger
+   * worker and can be viewed in the test harness's console.
+   */
+  log?: boolean;
 }
 
 /** Resolve the effective `dev` flag from explicit options or `ALCHEMY_DEV`. */
@@ -112,6 +118,7 @@ export const toEffect = <A>(
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
   }).pipe(
+    Effect.provideService(TestLoggingPolicy, options.log ?? false),
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
     Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires

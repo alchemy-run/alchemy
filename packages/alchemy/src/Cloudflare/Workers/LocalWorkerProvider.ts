@@ -345,6 +345,7 @@ export const LocalWorkerProvider = () =>
               : { kind: "effect", exports: props.exports ?? {} },
             stack: { name: stack.name, stage: stack.stage },
             extraOptions: props.build,
+            enableTestLogger: false,
           } satisfies WorkerBundleOptions,
           assets: props.assets,
           dev: {

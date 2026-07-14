@@ -152,6 +152,12 @@
       "worker": "./src/Cloudflare/Bridge.ts",
       "import": "./lib/Cloudflare/Bridge.js"
     },
+    "./Cloudflare/Workers/TestLoggerRuntime": {
+      "types": "./lib/Cloudflare/Workers/TestLoggerRuntime.d.ts",
+      "bun": "./src/Cloudflare/Workers/TestLoggerRuntime.ts",
+      "worker": "./src/Cloudflare/Workers/TestLoggerRuntime.ts",
+      "import": "./lib/Cloudflare/Workers/TestLoggerRuntime.js"
+    },
     "./Cloudflare/Live": {
       "types": "./lib/Cloudflare/Live.d.ts",
       "bun": "./src/Cloudflare/Live.ts",
