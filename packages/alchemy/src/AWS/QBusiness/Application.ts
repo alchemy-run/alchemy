@@ -271,9 +271,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     while: (e) => e._tag === "ApplicationNotReady",
     // Application provisioning normally completes within a couple minutes;
     // poll every 5s up to ~10 min.
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("5 seconds"),
+      Schedule.recurs(120),
+    ]),
   });
 
 // Deleting an application while dependent resources are still tearing down
@@ -283,9 +284,10 @@ const retryThroughConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.spaced("10 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("10 seconds"),
+      Schedule.recurs(10),
+    ]),
   });
 
 const waitForApplicationStatus = (

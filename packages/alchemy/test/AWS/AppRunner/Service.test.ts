@@ -43,9 +43,10 @@ const assertServiceGone = (arn: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(12)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(12),
+      ]),
     }),
   );
 
@@ -68,9 +69,10 @@ const assertConfigGone = (name: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(12)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(12),
+      ]),
     }),
   );
 
@@ -145,9 +147,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             : Effect.fail(new Error(`service returned ${res.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(20),
+          ]),
         }),
       );
       expect(response.status).toBe(200);

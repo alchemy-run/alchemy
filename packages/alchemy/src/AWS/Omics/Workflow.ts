@@ -164,9 +164,10 @@ export const WorkflowProvider = () =>
       const waitUntilReady = Effect.fn(function* (workflowId: string) {
         const final = yield* omics.getWorkflow({ id: workflowId }).pipe(
           Effect.repeat({
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(11)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(11),
+            ]),
             until: (w) => w.status === "ACTIVE" || w.status === "FAILED",
           }),
         );

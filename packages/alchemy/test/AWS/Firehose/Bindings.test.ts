@@ -46,9 +46,10 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 120_000 });
 // (eventual consistency) can both take a while on the first hit. Retrying on
 // any non-200 lets the first request wait through that window; warm calls
 // return on the first try and never retry.
-const readinessSchedule = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
-);
+const readinessSchedule = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
 
 const urlOf = (baseUrl: string, path: string) =>
   `${baseUrl.replace(/\/+$/, "")}${path}`;
@@ -188,9 +189,10 @@ describe("Firehose Bindings", () => {
             ),
             Effect.retry({
               while: (e: { _tag: string }) => e._tag === "NoObjectsYet",
-              schedule: Schedule.fixed("10 seconds").pipe(
-                Schedule.both(Schedule.recurs(12)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("10 seconds"),
+                Schedule.recurs(12),
+              ]),
             }),
           );
           expect(listing.KeyCount ?? 0).toBeGreaterThan(0);
@@ -246,9 +248,10 @@ describe("Firehose Bindings", () => {
           const key = yield* findMarker.pipe(
             Effect.retry({
               while: (e) => e._tag === "MarkerNotDeliveredYet",
-              schedule: Schedule.fixed("10 seconds").pipe(
-                Schedule.both(Schedule.recurs(12)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("10 seconds"),
+                Schedule.recurs(12),
+              ]),
             }),
           );
           expect(key).toBeTruthy();

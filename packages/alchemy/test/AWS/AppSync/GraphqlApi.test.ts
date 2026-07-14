@@ -24,9 +24,10 @@ const assertApiDeleted = (apiId: string) =>
     Effect.flatMap(() => Effect.fail(new ApiStillExists({ apiId }))),
     Effect.retry({
       while: (e) => e._tag === "ApiStillExists",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
   );

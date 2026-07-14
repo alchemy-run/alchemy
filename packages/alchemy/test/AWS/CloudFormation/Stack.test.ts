@@ -24,9 +24,7 @@ const assertDeleted = Effect.fn(function* (stackName: string) {
     Effect.flatMap(() => Effect.fail(new StackStillExists())),
     Effect.retry({
       while: (e) => e._tag === "StackStillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(20)]),
     }),
     Effect.catchTag("StackNotFound", () => Effect.void),
   );

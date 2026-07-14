@@ -55,9 +55,7 @@ export const retryOptimisticLock = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "WAFOptimisticLockException",
-    schedule: Schedule.fixed("1 second").pipe(
-      Schedule.both(Schedule.recurs(8)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(8)]),
   });
 
 /**
@@ -75,9 +73,7 @@ export const retryUnavailableEntity = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "WAFUnavailableEntityException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
   });
 
 /**
@@ -94,9 +90,7 @@ export const retryUnavailableEntityLong = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "WAFUnavailableEntityException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(50)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(50)]),
   });
 
 /**
@@ -113,9 +107,7 @@ export const retryAssociatedItem = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "WAFAssociatedItemException" ||
       e._tag === "WAFUnavailableEntityException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(15)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
   });
 
 /**

@@ -29,9 +29,7 @@ export const retryGaTransaction = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "TransactionInProgressException" ||
       e._tag === "ConflictException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 /**
@@ -52,9 +50,7 @@ export const retryUntilAcceleratorDeletable = <
       e._tag === "AcceleratorNotDisabledException" ||
       e._tag === "AssociatedListenerFoundException" ||
       e._tag === "TransactionInProgressException",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(36)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
   });
 
 /**
@@ -66,7 +62,5 @@ export const retryUntilListenerDeletable = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "AssociatedEndpointGroupFoundException",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(24)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
   });

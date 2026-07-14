@@ -207,9 +207,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "WebExperienceNotReady",
     // Web experience provisioning is fast; poll every 5s up to ~5 min.
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(60)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(60)]),
   });
 
 // A web experience without identity-provider auth settles in

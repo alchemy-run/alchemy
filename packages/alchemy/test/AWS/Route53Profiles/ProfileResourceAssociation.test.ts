@@ -36,9 +36,10 @@ const deleteFirewallRuleGroup = (id: string) =>
   resolver.deleteFirewallRuleGroup({ FirewallRuleGroupId: id }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConflictException",
-      schedule: Schedule.fixed("4 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("4 seconds"),
+        Schedule.recurs(15),
+      ]),
     }),
     Effect.asVoid,
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -63,9 +64,10 @@ const assertAssociationGone = (profileResourceAssociationId: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       Effect.retry({
         while: (e) => e instanceof Error,
-        schedule: Schedule.fixed("3 seconds").pipe(
-          Schedule.both(Schedule.recurs(10)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("3 seconds"),
+          Schedule.recurs(10),
+        ]),
       }),
     );
 

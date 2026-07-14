@@ -296,9 +296,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     while: (e) => e._tag === "KxClusterNotReady",
     // Cluster provisioning is slow (tens of minutes); poll every 20s up to
     // ~40 min.
-    schedule: Schedule.spaced("20 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("20 seconds"),
+      Schedule.recurs(120),
+    ]),
   });
 
 const waitForClusterStatus = (

@@ -85,9 +85,10 @@ describe("AWS.Keyspaces.TableStreams", () => {
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.exponential("1 second").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("1 second"),
+              Schedule.recurs(8),
+            ]),
           }),
         );
         const traverse = body as {

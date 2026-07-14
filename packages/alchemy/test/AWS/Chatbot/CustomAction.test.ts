@@ -30,9 +30,7 @@ const assertActionDeleted = (arn: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "CustomActionStillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
   );
 

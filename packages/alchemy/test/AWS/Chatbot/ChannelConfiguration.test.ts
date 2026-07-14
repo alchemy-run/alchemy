@@ -133,9 +133,7 @@ const assertSlackConfigurationDeleted = (arn: string) =>
       ),
       Effect.retry({
         while: (e) => e._tag === "ConfigurationStillExists",
-        schedule: Schedule.exponential(500).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
       }),
     );
 
@@ -221,9 +219,7 @@ const assertTeamsConfigurationDeleted = (arn: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "ConfigurationStillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
   );
 

@@ -373,9 +373,10 @@ export const BrokerProvider = () =>
           }),
           Effect.retry({
             while: (e) => e instanceof BrokerNotSettled,
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(72)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(72),
+            ]),
           }),
         );
       });
@@ -395,9 +396,10 @@ export const BrokerProvider = () =>
           }),
           Effect.retry({
             while: (e) => e instanceof BrokerNotSettled,
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(72)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(72),
+            ]),
           }),
         );
       });

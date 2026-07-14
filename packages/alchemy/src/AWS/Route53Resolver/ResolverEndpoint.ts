@@ -172,9 +172,7 @@ const retryEndpointExists = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ResourceExistsException",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(24)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
   });
 
 /**
@@ -189,9 +187,7 @@ const retryEndpointInUse = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "InvalidRequestException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(15)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
   });
 
 /**

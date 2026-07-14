@@ -195,8 +195,9 @@ const assertApplicationGone = (applicationId: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(12)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(12),
+      ]),
     }),
   );

@@ -16,9 +16,10 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "CloudMapBindings");
 
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
 
 let baseUrl: string;
 let serviceId: string;
@@ -45,9 +46,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(6),
+      ]),
     }),
   );
 
@@ -137,9 +139,10 @@ const expectDiscovered = (prefix: string, expected: string[]) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "UnexpectedInstances",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 
@@ -158,9 +161,10 @@ const expectInstanceState = (instanceId: string, present: boolean) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "InstanceNotVisible",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 

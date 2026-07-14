@@ -137,9 +137,10 @@ export const UserProvider = () =>
             return Effect.succeed(user);
           }),
           Effect.retry({
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(24)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(24),
+            ]),
           }),
         );
       });
@@ -271,9 +272,10 @@ export const UserProvider = () =>
             Effect.catchTag("UserNotFoundFault", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "InvalidUserStateFault",
-              schedule: Schedule.fixed("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(12)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("5 seconds"),
+                Schedule.recurs(12),
+              ]),
             }),
           );
         }),

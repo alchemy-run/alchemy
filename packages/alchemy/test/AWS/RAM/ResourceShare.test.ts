@@ -62,9 +62,7 @@ const assertDeleted = Effect.fn(function* (arn: string) {
     ),
     Effect.retry({
       while: (e) => e instanceof ShareStillLive,
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(15)]),
     }),
   );
 });
@@ -116,9 +114,10 @@ test.provider(
         expect(principals).toContain(EXTERNAL_PRINCIPAL);
       }).pipe(
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
 
@@ -145,9 +144,10 @@ test.provider(
         ),
         Effect.retry({
           while: (e) => e instanceof PrincipalStillAssociated,
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(12)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(12),
+          ]),
         }),
       );
 

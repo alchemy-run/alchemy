@@ -17,9 +17,7 @@ export const retryOnConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(effect, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.spaced("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
   });
 
 /**
@@ -36,8 +34,6 @@ export const waitUntilStable = <
   observe: Effect.Effect<A | undefined, E, R>,
 ): Effect.Effect<A | undefined, E, R> =>
   Effect.repeat(observe, {
-    schedule: Schedule.spaced("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     until: (s) => s === undefined || !(s.status ?? "").endsWith("IN_PROGRESS"),
   });

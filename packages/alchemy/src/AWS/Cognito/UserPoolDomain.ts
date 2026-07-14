@@ -126,9 +126,7 @@ const retryWhileNotActive = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "DomainNotActive",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
 /** Bounded wait for the domain to reach ACTIVE (up to ~60s). */
@@ -285,7 +283,5 @@ const retryWhileTransitioning = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "InvalidParameterException" ||
       e._tag === "ConcurrentModificationException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
   });

@@ -38,9 +38,10 @@ const assertWorkspaceDeleted = (workspaceId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "WorkspaceStillExists",
-      schedule: Schedule.spaced("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );
 

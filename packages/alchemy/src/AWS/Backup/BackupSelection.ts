@@ -143,9 +143,10 @@ const retryRolePropagation = <A, E extends { _tag: string }, R>(
   eff.pipe(
     Effect.retry({
       while: (e: E) => e._tag === "InvalidParameterValueException",
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

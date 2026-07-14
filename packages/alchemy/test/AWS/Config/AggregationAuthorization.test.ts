@@ -38,9 +38,7 @@ const assertAuthorizationDeleted = (accountId: string, region: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "AuthorizationStillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
   );
 

@@ -40,9 +40,7 @@ const assertStageGone = (arn: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
     }),
   );
 

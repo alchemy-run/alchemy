@@ -41,9 +41,10 @@ const sharedStack = Core.scratchStack(testOptions, "ServerlessSmoke");
 
 // Lambda cold start + API Gateway route/permission propagation can take
 // well over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(90)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(90),
+]);
 
 interface StackOutputs {
   url: string;
@@ -99,9 +100,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(6),
+      ]),
     }),
   );
 
@@ -122,9 +124,10 @@ const awaitStatus = (
     ),
     Effect.retry({
       while: (e) => e._tag === "UnexpectedStatus",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(times)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(times),
+      ]),
     }),
   );
 
@@ -141,9 +144,10 @@ const waitUntilGone = <E, R>(
       // `instanceof`, not `_tag`: the probe's error type `E` is generic and
       // carries no tag constraint.
       while: (e) => e instanceof StillExists,
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 
@@ -400,9 +404,10 @@ describe.sequential("Serverless smoke", () => {
             }),
             Effect.retry({
               while: (e) => e._tag === "EventSourceMappingNotReady",
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(30)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(30),
+              ]),
             }),
           );
 
@@ -438,9 +443,10 @@ describe.sequential("Serverless smoke", () => {
         }).pipe(
           Effect.retry({
             while: (e) => e._tag === "MessageNotDelivered",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(30),
+            ]),
           }),
         );
         expect(received).toBe(`processed:${message}`);

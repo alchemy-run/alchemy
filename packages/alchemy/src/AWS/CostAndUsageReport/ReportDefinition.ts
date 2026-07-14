@@ -33,9 +33,7 @@ const retryBucketVerification = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ReportBucketNotVerified",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(8)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
   });
 
 export interface ReportDefinitionProps {

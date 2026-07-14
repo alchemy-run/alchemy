@@ -118,9 +118,10 @@ export const VariantStoreProvider = () =>
       const waitUntilActive = Effect.fn(function* (name: string) {
         const final = yield* omics.getVariantStore({ name }).pipe(
           Effect.repeat({
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(23)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(23),
+            ]),
             until: (s) => s.status === "ACTIVE" || s.status === "FAILED",
           }),
         );

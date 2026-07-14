@@ -46,9 +46,10 @@ const waitForReady = (url: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(75)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(75),
+      ]),
     }),
   );
 
@@ -67,9 +68,10 @@ const postJson = (url: string, body: unknown) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.exponential("1 second").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("1 second"),
+        Schedule.recurs(6),
+      ]),
     }),
   );
 
@@ -102,9 +104,10 @@ const waitForEvents = (
       // the stream is not yet describable.
       while: (e) =>
         e._tag === "EventsNotVisible" || e._tag === "ResourceNotFoundException",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 

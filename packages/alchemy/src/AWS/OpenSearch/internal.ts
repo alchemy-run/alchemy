@@ -71,9 +71,10 @@ export const repeatUntilDomainState = <E extends { readonly _tag: string }, R>(
   done: (domain: opensearch.DomainStatus | undefined) => boolean,
 ): Effect.Effect<opensearch.DomainStatus | undefined, E, R> =>
   Effect.repeat(read, {
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([
+      Schedule.fixed("15 seconds"),
+      Schedule.recurs(120),
+    ]),
     until: done,
   });
 

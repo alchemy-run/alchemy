@@ -111,9 +111,10 @@ export const RuleGroupsNamespaceProvider = () =>
           .pipe(
             Effect.map((r) => r.ruleGroupsNamespace),
             Effect.repeat({
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(30)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(30),
+              ]),
               until: (n) => n.status.statusCode === "ACTIVE",
             }),
           );
@@ -205,9 +206,10 @@ export const RuleGroupsNamespaceProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.fixed("3 seconds").pipe(
-                  Schedule.both(Schedule.recurs(20)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("3 seconds"),
+                  Schedule.recurs(20),
+                ]),
               }),
             );
         }),

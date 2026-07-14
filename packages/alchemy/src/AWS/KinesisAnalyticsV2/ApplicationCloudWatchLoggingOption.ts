@@ -100,9 +100,7 @@ const retryWhileInUse = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "ResourceInUseException" ||
       e._tag === "ConcurrentModificationException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
 const describeApplicationDetail = Effect.fn(function* (

@@ -141,9 +141,7 @@ const assertLogGroupDeleted = (workflowArn: string) =>
   }).pipe(
     Effect.retry({
       while: (e): boolean => e._tag === "LogGroupStillExists",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(5)),
-      ),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(5)]),
     }),
   );
 
@@ -185,9 +183,10 @@ const assertWorkflowDeleted = (workflowArn: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "WorkflowStillExists",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

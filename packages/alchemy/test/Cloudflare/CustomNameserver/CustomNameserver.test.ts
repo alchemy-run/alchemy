@@ -53,9 +53,10 @@ const expectGone = (accountId: string, nsName: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "CustomNameserverNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

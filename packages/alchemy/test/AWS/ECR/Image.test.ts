@@ -125,9 +125,7 @@ const assertRepositoryDeleted = Effect.fn(function* (repositoryName: string) {
     Effect.flatMap(() => Effect.fail(new RepositoryStillExists())),
     Effect.retry({
       while: (e) => e._tag === "RepositoryStillExists",
-      schedule: Schedule.exponential(250).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(8)]),
     }),
     Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
   );

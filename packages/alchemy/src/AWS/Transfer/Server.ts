@@ -227,9 +227,10 @@ export const ServerProvider = () =>
       // Servers transition through STARTING before ONLINE; updateServer and
       // deleteServer require a settled state. Budget ~7 minutes (10s x 42).
       const waitUntilSettled = Effect.fn(function* (serverId: string) {
-        const settlePolicy = Schedule.fixed("10 seconds").pipe(
-          Schedule.both(Schedule.recurs(42)),
-        );
+        const settlePolicy = Schedule.max([
+          Schedule.fixed("10 seconds"),
+          Schedule.recurs(42),
+        ]);
         return yield* describe(serverId).pipe(
           Effect.flatMap((server) => {
             if (

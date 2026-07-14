@@ -107,9 +107,10 @@ export default LogsTestFunction.make(
             ),
             Effect.retry({
               while: (error) => error._tag === "QueryNotComplete",
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(10)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(10),
+              ]),
             }),
           );
           return yield* HttpServerResponse.json({

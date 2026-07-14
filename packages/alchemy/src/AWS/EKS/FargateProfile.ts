@@ -131,15 +131,17 @@ const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
   );
 
 // ~10 min at 5s spacing — Fargate profile transitions complete in 1–2 min.
-const waitSchedule = Schedule.spaced("5 seconds").pipe(
-  Schedule.both(Schedule.recurs(120)),
-);
+const waitSchedule = Schedule.max([
+  Schedule.spaced("5 seconds"),
+  Schedule.recurs(120),
+]);
 
 // One profile per cluster may be creating/deleting at a time; back off on the
 // ResourceInUseException that peer operations raise (bounded).
-const busySchedule = Schedule.spaced("10 seconds").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
+const busySchedule = Schedule.max([
+  Schedule.spaced("10 seconds"),
+  Schedule.recurs(30),
+]);
 
 const mapFargateProfile = (
   profile: eks.FargateProfile,

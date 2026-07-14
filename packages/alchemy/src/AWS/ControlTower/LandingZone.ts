@@ -161,9 +161,10 @@ const retryWhileLandingZoneOperationPending = <
     while: (e) => e._tag === "LandingZoneOperationPending",
     // Landing zone operations routinely take ~60 minutes; poll every 30s
     // up to 90 minutes (bounded).
-    schedule: Schedule.spaced("30 seconds").pipe(
-      Schedule.both(Schedule.recurs(180)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("30 seconds"),
+      Schedule.recurs(180),
+    ]),
   });
 
 const waitForLandingZoneOperation = (operationIdentifier: string) =>

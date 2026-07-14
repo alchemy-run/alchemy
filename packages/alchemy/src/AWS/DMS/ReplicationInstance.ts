@@ -176,9 +176,10 @@ export const ReplicationInstanceProvider = () =>
       // Provisioning and modifications both surface as a transitional status;
       // budget ~15 minutes (15s x 60) for the instance to become available.
       const waitForInstance = Effect.fn(function* (identifier: string) {
-        const readinessPolicy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const readinessPolicy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* findInstance(identifier).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.ReplicationInstanceArn) {

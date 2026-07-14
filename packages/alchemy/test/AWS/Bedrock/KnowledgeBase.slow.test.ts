@@ -55,9 +55,7 @@ const assertKbGone = (knowledgeBaseId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.exponential(2000).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(2000), Schedule.recurs(10)]),
     }),
   );
 

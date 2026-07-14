@@ -38,9 +38,10 @@ const assertServerGone = (serverId: string) =>
         : Effect.fail(new Error(`server '${serverId}' still exists`)),
     ),
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );
 

@@ -63,9 +63,7 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(8)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
   });
 
 /**
@@ -78,7 +76,8 @@ export const retryWhileThrottled = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.exponential("1 second").pipe(
-      Schedule.both(Schedule.recurs(6)),
-    ),
+    schedule: Schedule.max([
+      Schedule.exponential("1 second"),
+      Schedule.recurs(6),
+    ]),
   });

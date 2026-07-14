@@ -199,9 +199,10 @@ export const KvRoutesUpdateProvider = () =>
             while: (error) =>
               error._tag === "ValidationException" &&
               isKvsPreconditionFailed(error),
-            schedule: Schedule.exponential("100 millis").pipe(
-              Schedule.both(Schedule.recurs(24)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("100 millis"),
+              Schedule.recurs(24),
+            ]),
           }),
         );
 
@@ -231,9 +232,10 @@ export const KvRoutesUpdateProvider = () =>
             while: (error) =>
               error._tag === "ValidationException" &&
               isKvsPreconditionFailed(error),
-            schedule: Schedule.exponential("100 millis").pipe(
-              Schedule.both(Schedule.recurs(24)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("100 millis"),
+              Schedule.recurs(24),
+            ]),
           }),
         );
 

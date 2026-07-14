@@ -104,9 +104,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       ).pipe(
         Effect.map((i) => i?.ReplicationInstanceStatus ?? "gone"),
         Effect.retry({
-          schedule: Schedule.fixed("10 seconds").pipe(
-            Schedule.both(Schedule.recurs(12)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("10 seconds"),
+            Schedule.recurs(12),
+          ]),
         }),
       );
       expect(["gone", "deleting"]).toContain(status);

@@ -41,9 +41,10 @@ const assertSpaceDeleting = (spaceId: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(18)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(18),
+      ]),
     }),
   );
 

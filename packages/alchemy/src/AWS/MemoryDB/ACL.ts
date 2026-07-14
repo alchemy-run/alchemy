@@ -112,9 +112,10 @@ export const ACLProvider = () =>
             return Effect.succeed(acl);
           }),
           Effect.retry({
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(24)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(24),
+            ]),
           }),
         );
       });
@@ -233,9 +234,10 @@ export const ACLProvider = () =>
             Effect.catchTag("ACLNotFoundFault", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "InvalidACLStateFault",
-              schedule: Schedule.fixed("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(12)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("5 seconds"),
+                Schedule.recurs(12),
+              ]),
             }),
           );
         }),

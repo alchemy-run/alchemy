@@ -251,9 +251,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "EnvironmentNotReady",
     // Environment provisioning is slow (~20 min); poll every 20s up to ~40 min.
-    schedule: Schedule.spaced("20 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("20 seconds"),
+      Schedule.recurs(120),
+    ]),
   });
 
 const waitForEnvironmentStatus = (

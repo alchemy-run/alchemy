@@ -212,9 +212,10 @@ export const FlowProvider = () =>
       // Flow creation and in-place updates are async; wait (bounded, ~3 min)
       // for the flow to settle into a steady state before mutating further.
       const waitUntilSettled = Effect.fn(function* (flowArn: string) {
-        const policy = Schedule.fixed("5 seconds").pipe(
-          Schedule.both(Schedule.recurs(36)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("5 seconds"),
+          Schedule.recurs(36),
+        ]);
         return yield* readFlow(flowArn).pipe(
           Effect.flatMap((flow) => {
             if (flow === undefined) {
@@ -242,9 +243,10 @@ export const FlowProvider = () =>
       // Deletion is verified as fully gone (bounded, ~3 min) so dependents
       // (and re-creates of the same name) never race a half-deleted flow.
       const waitUntilGone = Effect.fn(function* (flowArn: string) {
-        const policy = Schedule.fixed("5 seconds").pipe(
-          Schedule.both(Schedule.recurs(36)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("5 seconds"),
+          Schedule.recurs(36),
+        ]);
         yield* readFlow(flowArn).pipe(
           Effect.flatMap((flow) =>
             flow === undefined
@@ -615,9 +617,10 @@ export const FlowProvider = () =>
               // A STARTING flow rejects StopFlow until the start completes.
               Effect.retry({
                 while: (e) => e._tag === "BadRequestException",
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(12)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(12),
+                ]),
               }),
               Effect.catchTag("NotFoundException", () => Effect.void),
             );
@@ -633,9 +636,10 @@ export const FlowProvider = () =>
               // surface as BadRequestException — bounded retry through it.
               Effect.retry({
                 while: (e) => e._tag === "BadRequestException",
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(12)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(12),
+                ]),
               }),
               Effect.catchTag("NotFoundException", () => Effect.void),
             );

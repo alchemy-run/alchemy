@@ -15,9 +15,7 @@ const retryUntilStackSettled = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "StackNotSettled",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(120)]),
   });
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";

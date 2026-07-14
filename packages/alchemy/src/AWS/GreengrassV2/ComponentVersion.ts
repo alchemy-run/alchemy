@@ -118,7 +118,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "GreengrassComponentNotReady",
-    schedule: Schedule.fixed(2000).pipe(Schedule.both(Schedule.recurs(15))),
+    schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]),
   });
 
 /**

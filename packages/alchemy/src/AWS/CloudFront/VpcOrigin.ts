@@ -201,9 +201,10 @@ export const VpcOriginProvider = () =>
             // CloudFront VPC-origin deployment is slow (global propagation) and
             // routinely exceeds 10 min; budget ~20 min (120 * 10s) so a real
             // deploy doesn't fail spuriously.
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(120)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(120),
+            ]),
           }),
         );
       });
@@ -414,9 +415,10 @@ export const VpcOriginProvider = () =>
               ),
               Effect.retry({
                 while: (error) => error._tag === "VpcOriginStillInUse",
-                schedule: Schedule.fixed("10 seconds").pipe(
-                  Schedule.both(Schedule.recurs(30)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("10 seconds"),
+                  Schedule.recurs(30),
+                ]),
               }),
             );
           // Block until the origin record is fully gone so dependents (the
@@ -426,9 +428,10 @@ export const VpcOriginProvider = () =>
               Effect.map((o) => o !== undefined),
             ),
             {
-              schedule: Schedule.fixed("10 seconds").pipe(
-                Schedule.both(Schedule.recurs(30)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("10 seconds"),
+                Schedule.recurs(30),
+              ]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

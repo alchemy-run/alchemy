@@ -37,9 +37,7 @@ const assertDeleted = Effect.fn(function* (name: string) {
     Effect.flatMap(() => Effect.fail(new ResourceStillExists())),
     Effect.retry({
       while: (e) => e._tag === "ResourceStillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(20)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );

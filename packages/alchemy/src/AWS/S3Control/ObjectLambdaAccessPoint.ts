@@ -138,9 +138,7 @@ const retryWhileObjectLambdaPropagates = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "NoSuchAccessPoint",
-    schedule: Schedule.fixed("1 second").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(10)]),
   });
 
 export const ObjectLambdaAccessPointProvider = () =>

@@ -65,9 +65,7 @@ export const retryWhileConflict = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
 /**
@@ -88,9 +86,7 @@ export const retryWhileRoleNotAssumable = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "DataBrewRoleNotAssumable" ||
       e._tag === "AccessDeniedException",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(12)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
   });
 
 /** DataBrew free-form maps arrive with `undefined` values erased. */

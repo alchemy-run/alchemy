@@ -23,9 +23,10 @@ const SCHEDULE_PREFIX = "alch-schedtest-";
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
 
 let baseUrl: string;
 let sinkQueueUrl: string;
@@ -58,9 +59,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(6),
+      ]),
     }),
   );
 
@@ -129,9 +131,10 @@ const receiveMatching = (
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "MessageNotDelivered",
-      schedule: Schedule.fixed("1 seconds").pipe(
-        Schedule.both(Schedule.recurs(options?.times ?? 12)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("1 seconds"),
+        Schedule.recurs(options?.times ?? 12),
+      ]),
     }),
   );
 
@@ -151,9 +154,10 @@ const waitUntilScheduleGone = (name: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "ScheduleStillExists",
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(15),
+      ]),
     }),
   );
 

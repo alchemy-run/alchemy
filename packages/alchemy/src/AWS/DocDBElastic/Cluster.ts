@@ -251,9 +251,10 @@ export const ClusterProvider = () =>
         name: string,
         arn: string | undefined,
       ) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(80)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(80),
+        ]);
         return yield* readCluster(name, arn).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
@@ -510,9 +511,10 @@ export const ClusterProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.fixed("15 seconds").pipe(
-                  Schedule.both(Schedule.recurs(60)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("15 seconds"),
+                  Schedule.recurs(60),
+                ]),
               }),
             );
         }),

@@ -11,9 +11,7 @@ export const retryIdentityCenter = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         error?._tag === "ConflictException" ||
         error?._tag === "ThrottlingException" ||
         error?._tag === "InternalServerException",
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
     }),
   );
 

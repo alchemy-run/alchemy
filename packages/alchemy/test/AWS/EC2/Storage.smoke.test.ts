@@ -147,9 +147,7 @@ const assertVolumeGone = Effect.fn(function* (volumeId: string) {
     }),
     Effect.retry({
       while: (e) => e instanceof StillExists,
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(20)]),
     }),
     Effect.catchTag("InvalidVolume.NotFound", () => Effect.void),
   );
@@ -162,9 +160,7 @@ const assertEniGone = Effect.fn(function* (eniId: string) {
     Effect.flatMap(() => Effect.fail(new StillExists())),
     Effect.retry({
       while: (e) => e instanceof StillExists,
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(20)]),
     }),
     Effect.catchTag("InvalidNetworkInterfaceID.NotFound", () => Effect.void),
   );

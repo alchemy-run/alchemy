@@ -51,9 +51,7 @@ const assertFarmDeleted = Effect.fn(function* (farmId: string) {
     Effect.flatMap(() => Effect.fail(new FarmStillExists())),
     Effect.retry({
       while: (e) => e._tag === "FarmStillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );

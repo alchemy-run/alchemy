@@ -29,9 +29,7 @@ export const retryWhileNfwInUse = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "InvalidOperationException",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(12)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
   });
 
 /**
@@ -48,7 +46,5 @@ export const retryWhileNfwNotFound = <
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ResourceNotFoundException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
   });

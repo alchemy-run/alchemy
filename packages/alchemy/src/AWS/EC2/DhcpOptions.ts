@@ -360,9 +360,10 @@ export const DhcpOptionsProvider = () =>
             // A VPC association may still be clearing.
             Effect.retry({
               while: (e: { _tag: string }) => e._tag === "DependencyViolation",
-              schedule: Schedule.fixed(3000).pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed(3000),
+                Schedule.recurs(20),
+              ]),
             }),
           );
         }),

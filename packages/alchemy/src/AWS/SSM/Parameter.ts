@@ -471,9 +471,10 @@ export const ParameterProvider = () =>
                   while: (e) =>
                     e._tag === "TooManyUpdates" ||
                     e._tag === "InvalidResourceId",
-                  schedule: Schedule.fixed(1000).pipe(
-                    Schedule.both(Schedule.recurs(5)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed(1000),
+                    Schedule.recurs(5),
+                  ]),
                 }),
               );
           }
@@ -487,9 +488,10 @@ export const ParameterProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "TooManyUpdates",
-                  schedule: Schedule.fixed(1000).pipe(
-                    Schedule.both(Schedule.recurs(5)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed(1000),
+                    Schedule.recurs(5),
+                  ]),
                 }),
               );
           }

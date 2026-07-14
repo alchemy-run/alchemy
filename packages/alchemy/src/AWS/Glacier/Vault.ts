@@ -176,7 +176,7 @@ const retryWhileVaultNotFound = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ResourceNotFoundException",
-    schedule: Schedule.fixed(1000).pipe(Schedule.both(Schedule.recurs(10))),
+    schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(10)]),
   });
 
 const toPolicyString = (

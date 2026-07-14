@@ -213,9 +213,10 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
       Effect.flatMap(() => Effect.fail(new DeliveryStreamStillExists())),
       Effect.retry({
         while: (e: { _tag: string }) => e._tag === "DeliveryStreamStillExists",
-        schedule: Schedule.fixed("3 seconds").pipe(
-          Schedule.both(Schedule.recurs(40)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("3 seconds"),
+          Schedule.recurs(40),
+        ]),
       }),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     );

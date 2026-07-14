@@ -57,16 +57,18 @@ schema { query: Query }
 const edgePropagationRetry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.modifyDelay((d: Duration.Duration) =>
-          Effect.succeed(
-            Duration.isGreaterThan(d, Duration.seconds(5))
-              ? Duration.seconds(5)
-              : d,
+      schedule: Schedule.max([
+        Schedule.exponential(500).pipe(
+          Schedule.modifyDelay(({ duration }) =>
+            Effect.succeed(
+              Duration.isGreaterThan(duration, Duration.seconds(5))
+                ? Duration.seconds(5)
+                : duration,
+            ),
           ),
         ),
-        Schedule.both(Schedule.recurs(20)),
-      ),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 

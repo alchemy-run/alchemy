@@ -191,9 +191,7 @@ const retryThroughBucketPropagation = <A, E extends { _tag: string }, R>(
       e._tag === "InsufficientS3BucketPolicyException" ||
       e._tag === "S3BucketDoesNotExistException" ||
       e._tag === "ConflictException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
 /**
@@ -205,9 +203,7 @@ const retryWhileConflict = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
 export const TrailProvider = () =>

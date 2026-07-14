@@ -167,9 +167,7 @@ const retryThroughIamPropagation = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ValidationException",
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
   });
 
 export const ModelProvider = () =>

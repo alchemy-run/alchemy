@@ -213,9 +213,7 @@ const retryWhileRolePropagates = <A, R>(
       (e._tag === "ValidationException" ||
         e._tag === "AccessDeniedException") &&
       /role/i.test(e.message ?? ""),
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(8)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
   });
 
 export const WorkflowProvider = () =>

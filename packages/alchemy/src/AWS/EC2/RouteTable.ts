@@ -458,11 +458,13 @@ export const RouteTableProvider = () =>
                 while: (e) => {
                   return e._tag === "DependencyViolation";
                 },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.both(Schedule.recurs(10)), // Try up to 10 times
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.exponential(1000, 1.5),
+                  Schedule.recurs(10),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                      `Waiting for dependencies to clear... (attempt ${attempt})`,
                     ),
                   ),
                 ),
@@ -530,12 +532,13 @@ const waitForRouteTableDeleted = (
         return yield* Effect.fail(new Error("Route table still exists"));
       }),
       {
-        schedule: Schedule.fixed(2000).pipe(
-          // Check every 2 seconds
-          Schedule.both(Schedule.recurs(15)), // Max 30 seconds
-          Schedule.tapOutput(([, attempt]) =>
+        schedule: Schedule.max([
+          Schedule.fixed(2000),
+          Schedule.recurs(15),
+        ]).pipe(
+          Schedule.tap(({ attempt }) =>
             session.note(
-              `Waiting for route table deletion... (${(attempt + 1) * 2}s)`,
+              `Waiting for route table deletion... (${attempt * 2}s)`,
             ),
           ),
         ),

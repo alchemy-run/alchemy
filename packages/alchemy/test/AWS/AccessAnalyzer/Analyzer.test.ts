@@ -38,9 +38,10 @@ const assertAnalyzerDeleted = (name: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "AnalyzerStillExists",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(15),
+      ]),
     }),
   );
 

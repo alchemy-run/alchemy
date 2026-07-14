@@ -185,9 +185,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "DirectoryNotReady",
-    schedule: Schedule.fixed("30 seconds").pipe(
-      Schedule.both(Schedule.recurs(100)),
-    ),
+    schedule: Schedule.max([
+      Schedule.fixed("30 seconds"),
+      Schedule.recurs(100),
+    ]),
   });
 
 export const DirectoryProvider = () =>

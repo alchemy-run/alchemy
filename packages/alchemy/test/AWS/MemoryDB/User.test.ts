@@ -30,9 +30,10 @@ const assertDeletingOrGone = (name: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(15),
+      ]),
     }),
   );
 

@@ -107,9 +107,10 @@ export const WorkspaceProvider = () =>
         const workspace = yield* amp.describeWorkspace({ workspaceId }).pipe(
           Effect.map((r) => r.workspace),
           Effect.repeat({
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(30),
+            ]),
             until: (w) => w.status.statusCode === "ACTIVE",
           }),
         );
@@ -192,9 +193,10 @@ export const WorkspaceProvider = () =>
             // A workspace mid-transition rejects deletion; retry briefly.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.fixed("3 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
           );
         }),

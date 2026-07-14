@@ -213,6 +213,7 @@ const isKmsEventuallyConsistent = (error: { _tag: string }) =>
   error._tag === "KMSInvalidStateException" ||
   error._tag === "NotFoundException";
 
-const kmsRetrySchedule = Schedule.exponential(250).pipe(
-  Schedule.both(Schedule.recurs(7)),
-);
+const kmsRetrySchedule = Schedule.max([
+  Schedule.exponential(250),
+  Schedule.recurs(7),
+]);

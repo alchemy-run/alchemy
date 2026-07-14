@@ -114,10 +114,13 @@ const desiredValue = (props: RegionalTieredCacheProps): "on" | "off" =>
 // Cloudflare can transiently fail to authenticate a valid token, surfacing as
 // `Unauthorized`/`Forbidden`. Retry with exponential backoff capped at 5s,
 // bounded to ~8 attempts so a persistently-failing call still fails fast.
-const transientAuthRetrySchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("5 seconds")),
-  Schedule.both(Schedule.recurs(8)),
-);
+const transientAuthRetrySchedule = Schedule.max([
+  Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("5 seconds"),
+  ]),
+  Schedule.recurs(8),
+]);
 
 export const RegionalTieredCacheProvider = () =>
   Provider.succeed(RegionalTieredCache, {

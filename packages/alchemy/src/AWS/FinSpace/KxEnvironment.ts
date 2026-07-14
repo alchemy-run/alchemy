@@ -207,9 +207,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "KxEnvironmentNotReady",
     // kdb environment provisioning is slow; poll every 20s up to ~40 min.
-    schedule: Schedule.spaced("20 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("20 seconds"),
+      Schedule.recurs(120),
+    ]),
   });
 
 // Deleting an environment that is still creating/updating surfaces as a
@@ -220,9 +221,7 @@ const retryThroughConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.spaced("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(8)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(8)]),
   });
 
 const waitForKxEnvironmentStatus = (

@@ -202,9 +202,10 @@ export const NetworkInterfaceAttachmentProvider = () =>
               // The interface can still be in-use momentarily — retry.
               Effect.retry({
                 while: (e) => e._tag === "DependencyViolation",
-                schedule: Schedule.fixed(3000).pipe(
-                  Schedule.both(Schedule.recurs(15)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(3000),
+                  Schedule.recurs(15),
+                ]),
               }),
             );
 
@@ -251,9 +252,11 @@ const waitForEniAttachmentState = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof EniAttachmentPending,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(20)), // max ~40s
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(2000),
+        Schedule.recurs(20), // max ~40s
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
                 `Waiting for interface attachment... (${(attempt + 1) * 2}s)`,
@@ -292,9 +295,11 @@ const waitForEniDetached = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof EniStillAttached,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(20)), // max ~40s
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(2000),
+        Schedule.recurs(20), // max ~40s
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
                 `Waiting for interface to detach... (${(attempt + 1) * 2}s)`,

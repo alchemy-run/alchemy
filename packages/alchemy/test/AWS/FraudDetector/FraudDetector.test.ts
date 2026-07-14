@@ -72,9 +72,10 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(60)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("2 seconds"),
+            Schedule.recurs(60),
+          ]),
         }),
       );
     }),
@@ -105,9 +106,10 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
               : Effect.fail(new Error(`predict failed: ${res.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.exponential("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("2 seconds"),
+              Schedule.recurs(8),
+            ]),
           }),
         );
         const body = (yield* response.json) as { outcomes: string[] };
@@ -131,9 +133,10 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
               : Effect.fail(new Error(`predict failed: ${res.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.exponential("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("2 seconds"),
+              Schedule.recurs(8),
+            ]),
           }),
         );
         const body = (yield* response.json) as { outcomes: string[] };

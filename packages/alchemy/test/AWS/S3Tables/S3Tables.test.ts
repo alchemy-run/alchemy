@@ -65,9 +65,10 @@ const purgeOrphanedTableBuckets = Effect.gen(function* () {
           // Child deletes are eventually consistent; ride out the window.
           Effect.retry({
             while: (e) => e._tag === "ConflictException",
-            schedule: Schedule.exponential(500).pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential(500),
+              Schedule.recurs(8),
+            ]),
           }),
           Effect.catchTag("NotFoundException", () => Effect.void),
         );
@@ -86,9 +87,7 @@ const waitUntilGone = <A, E extends { _tag: string }, R>(
     ),
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "StillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
     Effect.catchIf(
       (e): e is E & { _tag: "NotFoundException" } =>

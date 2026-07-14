@@ -153,7 +153,5 @@ export const retryWhileConflict = <A, E extends { _tag: string }, R>(
     // ~3 min budget: a security policy cannot be deleted until every
     // collection it covers is FULLY deleted (not merely DELETING), which can
     // take a couple of minutes after deleteCollection returns.
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(36)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
   });

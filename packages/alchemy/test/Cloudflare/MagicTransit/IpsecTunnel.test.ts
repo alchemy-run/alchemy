@@ -38,9 +38,10 @@ const expectGone = (accountId: string, ipsecTunnelId: string) =>
     Effect.catchTag("IpsecTunnelNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "TunnelNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

@@ -172,9 +172,7 @@ const retryWhileRoleAssumeFails = <A, E extends { _tag: string }, R>(
       typeof e.message === "string" &&
       (e.message.toLowerCase().includes("role") ||
         e.message.toLowerCase().includes("assume")),
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
 export const EnvironmentBlueprintConfigurationProvider = () =>

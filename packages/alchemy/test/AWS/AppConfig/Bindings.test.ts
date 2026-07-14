@@ -42,9 +42,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.exponential("1 second").pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("1 second"),
+        Schedule.recurs(8),
+      ]),
     }),
   );
 
@@ -76,9 +77,10 @@ describe("AppConfig Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(75)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("2 seconds"),
+            Schedule.recurs(75),
+          ]),
         }),
       );
     }),
@@ -106,9 +108,10 @@ describe("AppConfig Bindings", () => {
               () => new Error("configuration not yet available"),
             ),
             Effect.retry({
-              schedule: Schedule.spaced("3 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.spaced("3 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
           );
 

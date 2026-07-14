@@ -277,9 +277,10 @@ class ServiceNotReady extends Data.TaggedError("EKS.ServiceNotReady")<{}> {}
 
 // Bounded ~3 min wait for the cloud load balancer to publish its hostname
 // (an Auto Mode NLB typically appears within 2–3 min of the Service apply).
-const loadBalancerRetrySchedule = Schedule.spaced("5 seconds").pipe(
-  Schedule.both(Schedule.recurs(36)),
-);
+const loadBalancerRetrySchedule = Schedule.max([
+  Schedule.spaced("5 seconds"),
+  Schedule.recurs(36),
+]);
 
 /**
  * Explicitly-typed pipeable retry for the LB-hostname wait. An inline

@@ -147,9 +147,7 @@ const retryWhileMrapTransitions = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "MultiRegionAccessPointNotReady" ||
       e._tag === "MultiRegionAccessPointNotDeleted",
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(80)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(80)]),
   });
 
 /**

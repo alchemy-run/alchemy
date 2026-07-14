@@ -728,9 +728,10 @@ test.provider(
               ),
         ),
         Effect.retry({
-          schedule: Schedule.exponential(1000).pipe(
-            Schedule.both(Schedule.recurs(8)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(1000),
+            Schedule.recurs(8),
+          ]),
         }),
       );
       expect(body).toContain(marker);
@@ -1097,9 +1098,7 @@ const deleteBucketIfExists = Effect.fn(function* (bucketName: string) {
   yield* S3.deleteBucket({ Bucket: bucketName }).pipe(
     Effect.catchTag("NoSuchBucket", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(5)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(5)]),
     }),
   );
 });
@@ -1111,9 +1110,7 @@ const assertBucketDeleted = Effect.fn(function* (bucketName: string) {
     Effect.flatMap(() => Effect.fail(new BucketStillExists())),
     Effect.retry({
       while: (e) => e._tag === "BucketStillExists",
-      schedule: Schedule.exponential(100).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
     }),
     Effect.catchTag("NotFound", () => Effect.void),
     Effect.catch(() => Effect.void),

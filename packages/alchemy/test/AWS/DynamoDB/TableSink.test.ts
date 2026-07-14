@@ -35,9 +35,10 @@ const waitForFunctionReady = (url: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(75)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(75),
+      ]),
     }),
   );
 
@@ -70,9 +71,10 @@ const waitForSortKeys = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ItemCountMismatch",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(15),
+      ]),
     }),
   );
 });
@@ -106,9 +108,10 @@ test.provider(
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "FunctionNotReady",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(30),
+            ]),
           }),
         );
 

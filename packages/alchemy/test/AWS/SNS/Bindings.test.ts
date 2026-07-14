@@ -15,9 +15,10 @@ import {
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
 
 describe.sequential("SNS Bindings", () => {
   test.provider(
@@ -227,9 +228,10 @@ describe.sequential("SNS Bindings", () => {
           }).pipe(
             Effect.retry({
               while: (e) => e._tag === "TopicAttributeNotPropagated",
-              schedule: Schedule.fixed("1 second").pipe(
-                Schedule.both(Schedule.recurs(15)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("1 second"),
+                Schedule.recurs(15),
+              ]),
             }),
           );
         });
@@ -311,9 +313,10 @@ describe.sequential("SNS Bindings", () => {
           }).pipe(
             Effect.retry({
               while: (e) => e._tag === "SubscriptionNotListed",
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(15)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(15),
+              ]),
             }),
           );
           expect(arns).toContain(subscriptionArn);

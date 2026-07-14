@@ -45,9 +45,7 @@ const assertAgentGone = (agentId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.exponential(1000).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(1000), Schedule.recurs(8)]),
     }),
   );
 

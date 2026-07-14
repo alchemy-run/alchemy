@@ -311,9 +311,10 @@ export const TableProvider = () =>
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(12)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(12),
+            ]),
           }),
           Effect.catch(() => Effect.succeed(undefined)),
         );
@@ -329,9 +330,10 @@ export const TableProvider = () =>
         tableName: string,
         requiredColumns?: readonly string[],
       ) {
-        const policy = Schedule.fixed("5 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("5 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readTable(keyspaceName, tableName).pipe(
           Effect.flatMap((table) => {
             if (table === undefined) {
@@ -603,9 +605,10 @@ export const TableProvider = () =>
             // ConflictException; retry until it settles.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.fixed("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(24)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("5 seconds"),
+                Schedule.recurs(24),
+              ]),
             }),
           );
           // Wait (bounded) until the table is gone so the parent keyspace can
@@ -617,9 +620,10 @@ export const TableProvider = () =>
                 : Effect.fail(new Error(`Table '${tableName}' still deleting`)),
             ),
             Effect.retry({
-              schedule: Schedule.fixed("3 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
             Effect.catch(() => Effect.void),
           );

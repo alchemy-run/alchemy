@@ -155,9 +155,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "EndpointNotReady",
     // Endpoint provisioning takes ~3-10 min; poll every 15s up to ~20 min.
-    schedule: Schedule.spaced("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(80)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("15 seconds"),
+      Schedule.recurs(80),
+    ]),
   });
 
 const waitForEndpoint = (name: string, target: "InService" | "Gone") =>

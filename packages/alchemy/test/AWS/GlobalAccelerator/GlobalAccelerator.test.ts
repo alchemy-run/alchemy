@@ -20,9 +20,10 @@ const assertAcceleratorGone = (acceleratorArn: string) =>
     Effect.catchTag("AcceleratorNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

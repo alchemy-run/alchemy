@@ -227,9 +227,7 @@ const retryWhileRuleInUse = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ResourceInUseException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
   });
 
 /**
@@ -242,9 +240,7 @@ const retryWhileNotVisible = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConfigRuleNotVisible",
-    schedule: Schedule.fixed("1 second").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(10)]),
   });
 
 /**

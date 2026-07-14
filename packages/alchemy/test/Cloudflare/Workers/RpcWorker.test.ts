@@ -25,9 +25,10 @@ const logLevel = Effect.provideService(
 
 // Cap exponential backoff at 3s so retries stay bounded when the CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 // The caller worker forwards to the target via the service binding and wraps
 // the call in `Effect.orDie` (see fixtures/caller-worker.ts). On a freshly

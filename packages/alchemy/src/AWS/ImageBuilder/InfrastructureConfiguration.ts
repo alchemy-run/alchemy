@@ -156,9 +156,7 @@ const retryThroughIamPropagation = <
     while: (e) =>
       e._tag === "InvalidParameterValueException" &&
       (e.message?.includes("instance profile does not exist") ?? false),
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
 export const InfrastructureConfigurationProvider = () =>

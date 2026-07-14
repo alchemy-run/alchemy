@@ -90,9 +90,10 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       yield* incidents.getReplicationSet({ arn: onboarded.success.arn }).pipe(
         Effect.map((r) => r.replicationSet.status),
         Effect.repeat({
-          schedule: Schedule.fixed("5 seconds").pipe(
-            Schedule.both(Schedule.recurs(60)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("5 seconds"),
+            Schedule.recurs(60),
+          ]),
           until: (status) => status !== "CREATING" && status !== "UPDATING",
         }),
       );
@@ -103,9 +104,10 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
           Effect.succeed("GONE" as const),
         ),
         Effect.repeat({
-          schedule: Schedule.fixed("5 seconds").pipe(
-            Schedule.both(Schedule.recurs(60)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("5 seconds"),
+            Schedule.recurs(60),
+          ]),
           until: (status) => status === "GONE",
         }),
       );

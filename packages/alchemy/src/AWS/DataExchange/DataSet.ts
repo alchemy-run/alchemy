@@ -244,9 +244,10 @@ export const DataSetProvider = () =>
               // the engine deletes revisions first, so retry briefly.
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.fixed("2 seconds").pipe(
-                  Schedule.both(Schedule.recurs(10)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("2 seconds"),
+                  Schedule.recurs(10),
+                ]),
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );

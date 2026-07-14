@@ -32,9 +32,10 @@ const waitForFunctionReady = (url: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(75)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(75),
+      ]),
     }),
   );
 
@@ -70,9 +71,10 @@ const waitForMetricSum = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "MetricsNotVisible",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(36)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(36),
+      ]),
     }),
   );
 });
@@ -108,9 +110,10 @@ test.provider(
         // DNS propagate — retry only that window.
         Effect.retry({
           while: (error) => error === "not ready",
-          schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(30)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("2 seconds"),
+            Schedule.recurs(30),
+          ]),
         }),
         Effect.flatMap((result) => result.json),
       );

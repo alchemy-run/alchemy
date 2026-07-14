@@ -292,9 +292,7 @@ const retryWhileClusterTransitioning = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "InvalidClusterStateFault",
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
   });
 
 /**
@@ -306,9 +304,7 @@ const retryUntilSettled = <A, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(80)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(80)]),
   });
 
 export const ClusterProvider = () =>

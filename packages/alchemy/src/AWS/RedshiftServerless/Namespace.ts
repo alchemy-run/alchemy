@@ -204,9 +204,10 @@ export const NamespaceProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof NamespaceNotSettled,
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(36)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(36),
+            ]),
           }),
         );
       });
@@ -225,9 +226,10 @@ export const NamespaceProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof NamespaceNotSettled,
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -367,9 +369,10 @@ export const NamespaceProvider = () =>
               // A workgroup may still be detaching — retry briefly.
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(24)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(24),
+                ]),
               }),
               Effect.catchTag("ConflictException", () => Effect.void),
             );

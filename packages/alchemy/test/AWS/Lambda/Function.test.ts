@@ -39,9 +39,10 @@ test.provider(
         ),
         Effect.tapError((error) => Effect.logError(error)),
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
 
@@ -101,9 +102,10 @@ test.provider(
           () => new Error("Timeout update has not propagated yet"),
         ),
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
       expect(updatedConfig.Configuration?.Timeout).toBe(45);
@@ -139,9 +141,10 @@ test.provider(
               ),
         ),
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
 
@@ -352,9 +355,10 @@ test.provider(
               ),
         ),
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
       expect(response.status).toBe(403);
@@ -376,9 +380,7 @@ const getPolicyStatement = Effect.fn(function* (
         : Effect.fail(new Error(`Policy statement ${statementId} not found`)),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -394,9 +396,7 @@ const waitForPolicyStatementAbsent = Effect.fn(function* (
         : Effect.void,
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -441,9 +441,7 @@ const getFunctionUrlConfigWithAuth = Effect.fn(function* (
       () => new Error("Function URL auth has not propagated yet"),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -464,9 +462,7 @@ const waitForReservedConcurrency = Effect.fn(function* (
       () => new Error("Reserved concurrency update has not propagated yet"),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -482,9 +478,7 @@ const waitForArchitecture = Effect.fn(function* (
       () => new Error("Lambda architecture update has not propagated yet"),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });

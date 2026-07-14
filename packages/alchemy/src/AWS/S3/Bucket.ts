@@ -549,7 +549,7 @@ export const BucketProvider = () =>
         // Wait for bucket to exist (eventual consistency)
         yield* Effect.retry(
           s3.headBucket({ Bucket: bucketName }),
-          Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(10))),
+          Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
         );
         yield* Effect.logInfo(
           `S3 Bucket create: bucket is available ${bucketName}`,
@@ -1554,12 +1554,13 @@ export const BucketProvider = () =>
                   // bucket immediately after its access points were deleted
                   // can transiently report attachments. Retry until the view
                   // converges (bounded).
-                  while: (e) =>
+                  while: (e): boolean =>
                     e._tag === "BucketNotEmpty" ||
                     e._tag === "BucketHasAccessPointsAttached",
-                  schedule: Schedule.exponential(250).pipe(
-                    Schedule.both(Schedule.recurs(7)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential(250),
+                    Schedule.recurs(7),
+                  ]),
                 }),
               );
           });

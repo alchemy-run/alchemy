@@ -226,9 +226,10 @@ const retryUntilFileSystemAvailable = <E extends { _tag: string }, R>(
     ),
     {
       while: (e) => e._tag === "FileSystemNotAvailable",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(30),
+      ]),
     },
   );
 
@@ -242,9 +243,7 @@ const retryWhileFileSystemInUse = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "FileSystemInUse",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 /**
@@ -257,9 +256,7 @@ const retryWhileFileSystemUpdating = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "IncorrectFileSystemLifeCycleState",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 /**

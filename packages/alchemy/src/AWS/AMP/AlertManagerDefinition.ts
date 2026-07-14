@@ -84,9 +84,10 @@ export const AlertManagerDefinitionProvider = () =>
         return yield* amp.describeAlertManagerDefinition({ workspaceId }).pipe(
           Effect.map((r) => r.alertManagerDefinition),
           Effect.repeat({
-            schedule: Schedule.fixed("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(20)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(20),
+            ]),
             until: (d) => d.status.statusCode === "ACTIVE",
           }),
         );
@@ -153,9 +154,10 @@ export const AlertManagerDefinitionProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.fixed("3 seconds").pipe(
-                  Schedule.both(Schedule.recurs(20)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("3 seconds"),
+                  Schedule.recurs(20),
+                ]),
               }),
             );
         }),

@@ -15,9 +15,10 @@ import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: AWS.providers() });
 
 describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
-  const longGlobalSecondaryIndexStabilization = Schedule.fixed(
-    "10 seconds",
-  ).pipe(Schedule.both(Schedule.recurs(180)));
+  const longGlobalSecondaryIndexStabilization = Schedule.max([
+    Schedule.fixed("10 seconds"),
+    Schedule.recurs(180),
+  ]);
 
   test.provider("create, update, delete table", (stack) =>
     Effect.gen(function* () {
@@ -548,9 +549,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "GlobalSecondaryIndexNotActive",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(30),
+            ]),
           }),
         );
 
@@ -1159,9 +1161,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         yield* DynamoDB.deleteTable({ TableName: created.tableName }).pipe(
           Effect.retry({
             while: (e) => e._tag === "ResourceInUseException",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
           Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         );
@@ -1193,9 +1196,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
     yield* DynamoDB.deleteTable({ TableName: tableName }).pipe(
       Effect.retry({
         while: (e) => e._tag === "ResourceInUseException",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(8),
+        ]),
       }),
       Effect.flatMap(() => assertTableIsDeleted(tableName)),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -1212,9 +1216,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       Effect.flatMap(() => Effect.fail(new TableStillExists())),
       Effect.retry({
         while: (e) => e._tag === "TableStillExists",
-        schedule: Schedule.fixed("1 second").pipe(
-          Schedule.both(Schedule.recurs(30)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("1 second"),
+          Schedule.recurs(30),
+        ]),
       }),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     );
@@ -1251,9 +1256,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "TableTagsNotUpdated",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(15),
+        ]),
       }),
     );
   });
@@ -1293,9 +1299,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "PointInTimeRecoveryNotUpdated",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(15),
+        ]),
       }),
     );
   });
@@ -1325,9 +1332,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "StreamSpecNotUpdated",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(20)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(20),
+        ]),
       }),
     );
   });
@@ -1409,9 +1417,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "ResourcePolicyNotUpdated",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(15),
+        ]),
       }),
     );
   });
@@ -1442,9 +1451,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "KinesisDestinationNotUpdated",
-        schedule: Schedule.fixed("5 seconds").pipe(
-          Schedule.both(Schedule.recurs(18)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("5 seconds"),
+          Schedule.recurs(18),
+        ]),
       }),
     );
   });
@@ -1473,9 +1483,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
       }),
       Effect.retry({
         while: (error) => error._tag === "ContributorInsightsNotUpdated",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(15),
+        ]),
       }),
     );
   });

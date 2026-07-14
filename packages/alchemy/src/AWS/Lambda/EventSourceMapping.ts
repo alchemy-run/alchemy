@@ -716,9 +716,10 @@ export const EventSourceMappingProvider = () =>
                 while: (e: any) =>
                   e._tag === "ResourceInUseException" ||
                   e._tag === "ResourceConflictException",
-                schedule: Schedule.exponential(100).pipe(
-                  Schedule.both(Schedule.recurs(20)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.exponential(100),
+                  Schedule.recurs(20),
+                ]),
               }),
               retryPermissionsPropagation,
               retryTransient,
@@ -762,9 +763,10 @@ export const EventSourceMappingProvider = () =>
               while: (e: any) =>
                 e._tag === "ResourceInUseException" ||
                 e._tag === "ResourceConflictException",
-              schedule: Schedule.exponential(100).pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential(100),
+                Schedule.recurs(20),
+              ]),
             }),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
@@ -818,7 +820,7 @@ const retryTransient: <A, R, Err>(
     e._tag === "TooManyRequestsException" ||
     e._tag === "RequestLimitExceeded" ||
     e._tag === "ResourceInUseException",
-  schedule: Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(30))),
+  schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
 });
 
 const retryPermissionsPropagation = Effect.retry({
@@ -831,7 +833,7 @@ const retryPermissionsPropagation = Effect.retry({
       e.message?.includes("Please add Lambda as a Trusted Entity") ||
       e.message?.includes("Cannot access stream") ||
       e.message?.includes("Please ensure the role can perform the GetRecords")),
-  schedule: Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(30))),
+  schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
 }) as <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effect<A, Err, R>;
 
 const sanitizeAwsTagValue = (value: string) =>

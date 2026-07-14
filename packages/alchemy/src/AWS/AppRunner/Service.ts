@@ -563,9 +563,10 @@ export const ServiceProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof AppRunnerServiceNotSettled,
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -593,9 +594,10 @@ export const ServiceProvider = () =>
           }),
           Effect.retry({
             while: (e) => e instanceof AppRunnerServiceNotSettled,
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });

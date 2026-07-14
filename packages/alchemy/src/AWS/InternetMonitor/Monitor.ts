@@ -181,9 +181,10 @@ export const MonitorProvider = () =>
       // Bounded wait for the monitor to leave PENDING (create and updates
       // both transition PENDING -> ACTIVE/INACTIVE, typically in seconds).
       const waitUntilSettled = Effect.fn(function* (name: string) {
-        const policy = Schedule.fixed("10 seconds").pipe(
-          Schedule.both(Schedule.recurs(8)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("10 seconds"),
+          Schedule.recurs(8),
+        ]);
         return yield* readMonitor(name).pipe(
           Effect.flatMap((monitor) => {
             if (monitor === undefined) {
@@ -405,9 +406,10 @@ export const MonitorProvider = () =>
                   : Effect.succeed(monitor),
               ),
               Effect.retry({
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(10)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(10),
+                ]),
               }),
             );
           }

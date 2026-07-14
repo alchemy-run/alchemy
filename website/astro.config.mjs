@@ -520,6 +520,15 @@ export default defineConfig({
                   link: "/cloudflare/compute/hibernatable-websockets",
                 },
                 {
+                  label: "Rate limiting",
+                  link: "/cloudflare/compute/rate-limiting",
+                },
+                { label: "Workers Cache", link: "/cloudflare/compute/cache" },
+                {
+                  label: "Worker Loader",
+                  link: "/cloudflare/compute/worker-loader",
+                },
+                {
                   label: "Workers for Platforms",
                   link: "/cloudflare/compute/workers-for-platforms",
                 },

@@ -208,9 +208,10 @@ export const ProviderLive = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "QueueInUseByEventNotification",
-            schedule: Schedule.exponential("1 second").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("1 second"),
+              Schedule.recurs(8),
+            ]),
           }),
           Effect.catchTag("QueueNotFound", () => Effect.void),
         );

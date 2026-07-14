@@ -149,9 +149,10 @@ const retryWhileBaselineOperationPending = <
     while: (e) => e._tag === "BaselineOperationPending",
     // Baseline enablement provisions accounts and typically takes several
     // minutes; poll every 10s up to ~20 minutes.
-    schedule: Schedule.spaced("10 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("10 seconds"),
+      Schedule.recurs(120),
+    ]),
   });
 
 // Control Tower serializes baseline operations per target — a concurrent
@@ -162,9 +163,10 @@ const retryWhileBaselineConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.spaced("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(40)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("15 seconds"),
+      Schedule.recurs(40),
+    ]),
   });
 
 const waitForBaselineOperation = (operationIdentifier: string) =>

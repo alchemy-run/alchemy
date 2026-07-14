@@ -442,9 +442,7 @@ const retryThroughRolePropagation = <A, E extends { _tag: string }, R>(
       /role|assume|trust|principal/i.test(
         (e as { Message?: string }).Message ?? "",
       ),
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(15)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
   });
 
 /**
@@ -460,9 +458,7 @@ const retryWhileInUse = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "ResourceInUseException" ||
       e._tag === "ConcurrentModificationException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
 const toTagRecord = (
@@ -576,9 +572,10 @@ const waitForApplicationStable = (applicationName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStatusPending",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(45)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(45),
+      ]),
     }),
     Effect.catchTag("ApplicationStatusPending", (e) =>
       Effect.fail(
@@ -606,9 +603,10 @@ const waitForApplicationRunning = (applicationName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStatusPending",
-      schedule: Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(57)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(57),
+      ]),
     }),
     Effect.catchTag("ApplicationStatusPending", (e) =>
       Effect.fail(
@@ -634,9 +632,10 @@ const waitForApplicationStopped = (applicationName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStatusPending",
-      schedule: Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
     Effect.catchTag("ApplicationStatusPending", (e) =>
       Effect.fail(
@@ -656,9 +655,10 @@ const waitForApplicationDeleted = (applicationName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStillExists",
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(50)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(50),
+      ]),
     }),
   );
 

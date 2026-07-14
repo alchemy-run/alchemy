@@ -56,9 +56,10 @@ const getInfo = (path: string) =>
         : Effect.fail(new Error(`${path} returned ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("1 second").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("1 second"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.flatMap((res) => res.json),
     Effect.map(

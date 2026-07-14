@@ -42,9 +42,10 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
               : Effect.fail(new FunctionNotReady("no result queue")),
           ),
           Effect.retry({
-            schedule: Schedule.fixed("1 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("1 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
 
@@ -63,9 +64,10 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
           ),
           Effect.retry({
             while: (e) => e._tag === "FunctionNotReady",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(15)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(15),
+            ]),
           }),
         );
 
@@ -100,9 +102,10 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(45)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(45),
+            ]),
           }),
         );
 

@@ -401,9 +401,11 @@ export const VolumeProvider = () =>
             // until the detach completes.
             Effect.retry({
               while: (e) => e._tag === "VolumeInUse",
-              schedule: Schedule.fixed(3000).pipe(
-                Schedule.both(Schedule.recurs(20)),
-                Schedule.tapOutput(([, attempt]) =>
+              schedule: Schedule.max([
+                Schedule.fixed(3000),
+                Schedule.recurs(20),
+              ]).pipe(
+                Schedule.tap(({ attempt }) =>
                   session.note(
                     `Waiting for volume to detach... (attempt ${attempt + 1})`,
                   ),
@@ -479,9 +481,11 @@ const waitForVolumeAvailable = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof VolumeNotReady,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(30)), // max ~60s
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(2000),
+        Schedule.recurs(30), // max ~60s
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
                 `Waiting for volume to be available... (${(attempt + 1) * 2}s)`,
@@ -515,9 +519,11 @@ const waitForVolumeDeleted = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof VolumeStillExists,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(15)), // max ~30s
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(2000),
+        Schedule.recurs(15), // max ~30s
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
             `Waiting for volume deletion... (${(attempt + 1) * 2}s)`,
           ),

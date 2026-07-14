@@ -187,9 +187,10 @@ export const CloudControlResourceProvider = () =>
             }),
             Effect.retry({
               while: (e) => e._tag === "ResourceRequestNotSettled",
-              schedule: Schedule.fixed("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(60)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("5 seconds"),
+                Schedule.recurs(60),
+              ]),
             }),
           );
         if (event?.OperationStatus !== "SUCCESS") {

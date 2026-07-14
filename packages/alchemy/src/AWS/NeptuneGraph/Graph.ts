@@ -255,9 +255,10 @@ export const GraphProvider = () =>
       ): Effect.Effect<A, E, R> =>
         Effect.retry(self, {
           while: (e) => e._tag === "GraphNotReady",
-          schedule: Schedule.fixed("10 seconds").pipe(
-            Schedule.both(Schedule.recurs(90)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("10 seconds"),
+            Schedule.recurs(90),
+          ]),
         });
 
       // Bounded readiness wait: graph creation/modification takes several
@@ -486,9 +487,10 @@ export const GraphProvider = () =>
               ),
             ),
             {
-              schedule: Schedule.fixed("10 seconds").pipe(
-                Schedule.both(Schedule.recurs(60)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("10 seconds"),
+                Schedule.recurs(60),
+              ]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

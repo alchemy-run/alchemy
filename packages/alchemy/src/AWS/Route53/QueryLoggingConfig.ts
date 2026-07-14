@@ -114,9 +114,7 @@ const retryQueryLoggingCreate = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "InsufficientCloudWatchLogsResourcePolicy" ||
       e._tag === "ConcurrentModification",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
   });
 
 export const QueryLoggingConfigProvider = () =>

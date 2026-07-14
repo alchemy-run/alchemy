@@ -20,9 +20,10 @@ const sharedStack = Core.scratchStack(
   "VerifiedPermissionsBindings",
 );
 
-const readinessPolicy = Schedule.exponential("500 millis").pipe(
-  Schedule.both(Schedule.recurs(10)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.exponential("500 millis"),
+  Schedule.recurs(10),
+]);
 
 let baseUrl: string;
 
@@ -46,9 +47,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(6),
+      ]),
     }),
   );
 
@@ -79,9 +81,10 @@ describe("VerifiedPermissions Bindings", () => {
           HttpClientRequest.get(`${baseUrl}/authorize?user=alice`),
         ).pipe(
           Effect.retry({
-            schedule: Schedule.spaced("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("3 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
         const body = (yield* response.json) as { decision: string };
@@ -107,9 +110,10 @@ describe("VerifiedPermissions Bindings", () => {
           HttpClientRequest.get(`${baseUrl}/batch`),
         ).pipe(
           Effect.retry({
-            schedule: Schedule.spaced("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("3 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
         const body = (yield* response.json) as { decisions: string[] };

@@ -58,9 +58,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.spaced("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(8),
+      ]),
     }),
   );
 
@@ -112,9 +113,10 @@ describe("DSQL.Connect", () => {
             : Effect.fail(new Error(`Fixture not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.spaced("5 seconds").pipe(
-            Schedule.both(Schedule.recurs(24)),
-          ),
+          schedule: Schedule.max([
+            Schedule.spaced("5 seconds"),
+            Schedule.recurs(24),
+          ]),
         }),
       );
       yield* Effect.logInfo(
@@ -143,9 +145,10 @@ describe("DSQL.Connect", () => {
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "ClusterStillPresent",
-              schedule: Schedule.spaced("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(12)),
-              ),
+              schedule: Schedule.max([
+                Schedule.spaced("5 seconds"),
+                Schedule.recurs(12),
+              ]),
             }),
           ),
           testOptions,

@@ -154,9 +154,7 @@ const assertVolumeDeleted = Effect.fn(function* (volumeId: string) {
     }),
     Effect.retry({
       while: (e) => e instanceof VolumeStillExists,
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
     }),
     Effect.catchTag("InvalidVolume.NotFound", () => Effect.void),
   );

@@ -29,7 +29,8 @@ export const retryBatch = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: while_,
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(times)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("5 seconds"),
+      Schedule.recurs(times),
+    ]),
   });

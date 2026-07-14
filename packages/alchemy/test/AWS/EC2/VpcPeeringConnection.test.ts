@@ -32,9 +32,7 @@ const assertDeleted = Effect.fn(function* (pcxId: string) {
     }),
     Effect.retry({
       while: (e) => e instanceof PeeringStillLive,
-      schedule: Schedule.exponential(300).pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(20)]),
     }),
     Effect.catchTag(
       "InvalidVpcPeeringConnectionID.NotFound",

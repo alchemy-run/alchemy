@@ -29,9 +29,7 @@ const assertDeleted = Effect.fn(function* (dhcpOptionsId: string) {
     ),
     Effect.retry({
       while: (e) => e instanceof DhcpOptionsStillExists,
-      schedule: Schedule.exponential(300).pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(20)]),
     }),
     Effect.catchTag("InvalidDhcpOptionID.NotFound", () => Effect.void),
     Effect.catchTag("InvalidDhcpOptionsID.NotFound", () => Effect.void),

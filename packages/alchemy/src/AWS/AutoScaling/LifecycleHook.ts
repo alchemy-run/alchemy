@@ -318,9 +318,10 @@ export const LifecycleHookProvider = () =>
             .pipe(
               Effect.retry({
                 while: (error) => error._tag === "ResourceContentionFault",
-                schedule: Schedule.recurs(5).pipe(
-                  Schedule.both(Schedule.exponential("250 millis")),
-                ),
+                schedule: Schedule.max([
+                  Schedule.recurs(5),
+                  Schedule.exponential("250 millis"),
+                ]),
               }),
             );
         }),

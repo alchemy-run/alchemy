@@ -20,9 +20,7 @@ export const retryWhileRoleNotAssumable = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "LocationRoleNotAssumable" ||
       e._tag === "LocationAccessTestFailed",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 /** Convert a DataSync tag list to a plain record. */

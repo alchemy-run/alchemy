@@ -210,9 +210,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     while: (e) => e._tag === "FeatureGroupNotReady",
     // Online-store creation typically converges in well under 2 minutes;
     // offline-store (Glue) creation can take a few. Poll 5s up to ~5 min.
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(60)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(60)]),
   });
 
 const waitForFeatureGroup = (name: string, target: "Created" | "Gone") =>

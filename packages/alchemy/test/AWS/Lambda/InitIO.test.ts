@@ -48,9 +48,10 @@ test.provider(
           ),
           Effect.retry({
             while: (e): e is FunctionNotReady => e instanceof FunctionNotReady,
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
         return (yield* res.json) as unknown as InitIOBody;

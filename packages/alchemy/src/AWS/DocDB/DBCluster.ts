@@ -353,9 +353,10 @@ export const DBClusterProvider = () =>
       // follow-on `modifyDBCluster` doesn't hit `InvalidDBClusterStateFault`.
       // Budgets ~10 min (60 * 10s) for slow provisioning.
       const waitForCluster = Effect.fn(function* (clusterId: string) {
-        const readinessPolicy = Schedule.fixed("10 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const readinessPolicy = Schedule.max([
+          Schedule.fixed("10 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readCluster(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.DBClusterArn) {
@@ -596,9 +597,10 @@ export const DBClusterProvider = () =>
                 ),
               ),
             {
-              schedule: Schedule.fixed("15 seconds").pipe(
-                Schedule.both(Schedule.recurs(40)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("15 seconds"),
+                Schedule.recurs(40),
+              ]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

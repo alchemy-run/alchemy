@@ -224,9 +224,10 @@ export const ClusterProvider = () =>
       // Bounded readiness wait. MemoryDB cluster provisioning/modification
       // typically completes in 10-15 minutes; budget ~20 min (80 * 15s).
       const waitForAvailable = Effect.fn(function* (name: string) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(80)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(80),
+        ]);
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.ARN) {
@@ -248,9 +249,10 @@ export const ClusterProvider = () =>
       // Wait for a cluster to leave a transitional state before delete. Ends
       // when the cluster is available, deleting, or gone.
       const waitUntilSettled = Effect.fn(function* (name: string) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(80)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(80),
+        ]);
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (
@@ -517,9 +519,10 @@ export const ClusterProvider = () =>
             Effect.catchTag("ClusterNotFoundFault", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "InvalidClusterStateFault",
-              schedule: Schedule.fixed("15 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("15 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
             Effect.catchTag("InvalidClusterStateFault", () => Effect.void),
           );

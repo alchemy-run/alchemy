@@ -51,9 +51,10 @@ const assertSecretDeleted = (secretArn: string) =>
     Effect.flatMap(() => Effect.fail(new SecretStillExists())),
     Effect.retry({
       while: (e) => e._tag === "SecretStillExists",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -210,9 +211,10 @@ test.provider("resource policy deploys and re-deploys clean", (stack) =>
         ),
         Effect.retry({
           while: (e) => e._tag === "ResourcePolicyNotAttached",
-          schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(5)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("2 seconds"),
+            Schedule.recurs(5),
+          ]),
         }),
       );
     expect(normalizePolicyDocument(attached)).toBe(
@@ -293,9 +295,7 @@ test.provider("list enumerates the deployed secret", (stack) =>
     }).pipe(
       Effect.retry({
         while: (e) => e._tag === "SecretNotListed",
-        schedule: Schedule.exponential(500).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
       }),
     );
 

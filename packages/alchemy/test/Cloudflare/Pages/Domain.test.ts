@@ -62,9 +62,10 @@ const waitForDomain = (
   pages.getProjectDomain({ accountId, projectName, domainName }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden" || e._tag === "PagesDomainNotFound",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -82,9 +83,10 @@ const expectDomainGone = (
     Effect.catchTag("ProjectNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "DomainNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

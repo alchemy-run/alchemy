@@ -55,9 +55,7 @@ const assertRuleDeleting = (ruleName: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "RuleStillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
   );
 
@@ -103,9 +101,10 @@ const ensureRecorder = Effect.gen(function* () {
     .pipe(
       Effect.retry({
         while: (e) => e._tag === "InvalidRoleException",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(15),
+        ]),
       }),
     );
   return true;

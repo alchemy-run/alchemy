@@ -57,9 +57,10 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("RedshiftData Bindings", () => {
                 : Effect.fail(new Error(`query returned ${res.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.exponential("1 second").pipe(
-                Schedule.both(Schedule.recurs(10)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("1 second"),
+                Schedule.recurs(10),
+              ]),
             }),
             Effect.flatMap((res) => res.json),
           );

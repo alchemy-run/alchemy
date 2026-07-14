@@ -39,9 +39,10 @@ const waitForFunctionReady = (url: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(75)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(75),
+      ]),
     }),
   );
 
@@ -104,9 +105,10 @@ const waitForMarkers = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "EventsNotDelivered",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
   return received;
@@ -145,9 +147,10 @@ const probeUntilRouted = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "EventsNotDelivered",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(17)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(17),
+      ]),
     }),
   );
 });

@@ -213,8 +213,9 @@ const assertEnvironmentDeleted = (name: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("15 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("15 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );

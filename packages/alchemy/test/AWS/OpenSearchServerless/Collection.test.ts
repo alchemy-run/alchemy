@@ -279,9 +279,7 @@ const assertPolicyGone = (type: "encryption" | "network", name: string) =>
     Effect.flip,
     Effect.map((e) => expect(e._tag).toBe("ResourceNotFoundException")),
     Effect.retry({
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(5)),
-      ),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
     }),
   );
 
@@ -290,9 +288,7 @@ const assertAccessPolicyGone = (name: string) =>
     Effect.flip,
     Effect.map((e) => expect(e._tag).toBe("ResourceNotFoundException")),
     Effect.retry({
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(5)),
-      ),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
     }),
   );
 
@@ -310,8 +306,9 @@ const assertCollectionGone = (id: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );

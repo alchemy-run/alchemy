@@ -128,9 +128,10 @@ export const DeploymentProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof DeploymentNotSettled,
-            schedule: Schedule.fixed("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(40)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(40),
+            ]),
           }),
         );
       });
@@ -202,9 +203,10 @@ export const DeploymentProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "ConflictException",
-                  schedule: Schedule.fixed("3 seconds").pipe(
-                    Schedule.both(Schedule.recurs(20)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed("3 seconds"),
+                    Schedule.recurs(20),
+                  ]),
                 }),
               );
           }

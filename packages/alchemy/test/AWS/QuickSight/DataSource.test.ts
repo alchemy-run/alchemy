@@ -132,9 +132,10 @@ test.provider.skipIf(!SUBSCRIBED)(
         ),
         Effect.retry({
           while: (e) => e._tag === "DataSourceStillExists",
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(8)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(8),
+          ]),
         }),
       );
     }),

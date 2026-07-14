@@ -118,9 +118,10 @@ export const DatasetGroupProvider = () =>
       const waitActive = Effect.fn(function* (datasetGroupArn: string) {
         const group = yield* describe(datasetGroupArn).pipe(
           Effect.repeat({
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(40)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(40),
+            ]),
             until: (g) =>
               g?.status === "ACTIVE" || (g?.status ?? "").includes("FAILED"),
           }),
@@ -211,9 +212,10 @@ export const DatasetGroupProvider = () =>
               // race.
               Effect.retry({
                 while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.fixed("3 seconds").pipe(
-                  Schedule.both(Schedule.recurs(20)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("3 seconds"),
+                  Schedule.recurs(20),
+                ]),
               }),
             );
         }),

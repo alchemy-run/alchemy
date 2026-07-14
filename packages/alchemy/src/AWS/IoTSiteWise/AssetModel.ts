@@ -231,9 +231,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     while: (e) => e._tag === "AssetModelNotReady",
     // Asset model provisioning usually converges in seconds; poll every
     // 3s up to ~90s total.
-    schedule: Schedule.spaced("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(30)]),
   });
 
 // A delete/update racing an in-flight CREATING/UPDATING transition
@@ -247,9 +245,7 @@ const retryThroughConflictingOperation = <
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictingOperationException",
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
   });
 
 const waitForAssetModelState = (

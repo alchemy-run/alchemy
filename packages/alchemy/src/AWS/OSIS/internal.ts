@@ -74,9 +74,10 @@ export const waitForPipelineSettled = <E extends { readonly _tag: string }, R>(
 ): Effect.Effect<osis.Pipeline | undefined, E | PipelineOperationFailed, R> =>
   Effect.flatMap(
     Effect.repeat(read, {
-      schedule: Schedule.fixed("15 seconds").pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("15 seconds"),
+        Schedule.recurs(60),
+      ]),
       until: (pipeline) =>
         pipeline === undefined || !isTransitional(pipeline.Status),
     }),
@@ -107,9 +108,7 @@ export const retryWhilePipelineConflict = <
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
   });
 
 /** Structural deep equality over JSON-shaped values (order-insensitive keys). */

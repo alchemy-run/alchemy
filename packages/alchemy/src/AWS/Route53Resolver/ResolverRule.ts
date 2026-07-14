@@ -153,9 +153,7 @@ const retryRuleCreateRaces = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "ResourceUnavailableException" ||
       e._tag === "ResourceExistsException",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(24)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
   });
 
 /**
@@ -172,9 +170,7 @@ const retryRuleInUse = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "ResourceInUseException" ||
       e._tag === "InvalidRequestException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
 /**

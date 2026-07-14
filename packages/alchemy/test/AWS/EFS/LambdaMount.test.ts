@@ -111,9 +111,10 @@ const getJsonWithRetry = (url: string, times: number) =>
           ),
     ),
     Effect.retry({
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(times)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(times),
+      ]),
     }),
   );
 

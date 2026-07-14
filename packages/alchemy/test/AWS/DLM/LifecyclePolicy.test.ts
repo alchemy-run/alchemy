@@ -21,9 +21,10 @@ const assertPolicyDeleted = (policyId: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PolicyStillExists",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -37,9 +38,10 @@ const assertRoleDeleted = (roleName: string) =>
     Effect.catchTag("NoSuchEntityException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RoleStillExists",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

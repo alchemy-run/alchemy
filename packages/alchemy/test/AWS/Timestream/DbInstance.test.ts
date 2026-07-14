@@ -86,9 +86,10 @@ describe("AWS.Timestream.DbInstance", () => {
         }).pipe(
           Effect.retry({
             while: (e: { _tag: string }) => e._tag === "StillExists",
-            schedule: Schedule.spaced("20 seconds").pipe(
-              Schedule.both(Schedule.recurs(90)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("20 seconds"),
+              Schedule.recurs(90),
+            ]),
           }),
         );
       }),

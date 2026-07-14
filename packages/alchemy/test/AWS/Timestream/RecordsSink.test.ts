@@ -25,9 +25,10 @@ const postJson = (baseUrl: string, pathname: string, body: unknown) =>
     ),
     // Retry through function-URL cold start / IAM propagation.
     Effect.retry({
-      schedule: Schedule.exponential("1 second").pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("1 second"),
+        Schedule.recurs(8),
+      ]),
     }),
   );
 
@@ -78,9 +79,10 @@ describe("AWS.Timestream.RecordsSink", () => {
               : Effect.fail(new Error(`only ${count} rows counted yet`)),
           ),
           Effect.retry({
-            schedule: Schedule.spaced("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("2 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
         expect(bulkCount).toBe(150);
@@ -97,9 +99,10 @@ describe("AWS.Timestream.RecordsSink", () => {
               : Effect.fail(new Error(`only ${count} rows counted yet`)),
           ),
           Effect.retry({
-            schedule: Schedule.spaced("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("2 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
         expect(rejectsCount).toBe(2);

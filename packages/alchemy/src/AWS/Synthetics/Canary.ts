@@ -290,9 +290,7 @@ const retryWhileConflict = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 const parseArtifactLocation = (location: string) => {
@@ -429,9 +427,10 @@ export const CanaryProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof CanaryNotSettled,
-            schedule: Schedule.fixed("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -469,9 +468,10 @@ export const CanaryProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof CanaryNotSettled,
-            schedule: Schedule.fixed("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(40)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(40),
+            ]),
           }),
         );
       });
@@ -634,9 +634,10 @@ export const CanaryProvider = () =>
           Effect.catchTag("NoSuchEntityException", () => Effect.void),
           Effect.retry({
             while: (e) => e._tag === "DeleteConflictException",
-            schedule: Schedule.fixed("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
       });

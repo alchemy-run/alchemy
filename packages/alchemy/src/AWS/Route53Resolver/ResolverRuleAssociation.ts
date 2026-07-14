@@ -87,9 +87,7 @@ const retryAssociateRaces = <A, E extends { _tag: string }, R>(
       e._tag === "InvalidRequestException" ||
       e._tag === "ResourceExistsException" ||
       e._tag === "ResourceUnavailableException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 /**
@@ -143,9 +141,7 @@ const retryDisassociateRaces = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "InvalidRequestException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 export const ResolverRuleAssociationProvider = () =>

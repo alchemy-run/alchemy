@@ -69,9 +69,10 @@ const assertReferenceStoreGone = (id: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -125,9 +126,10 @@ const assertSequenceStoreGone = (id: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -174,9 +176,10 @@ const assertRunGroupGone = (id: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -343,9 +346,10 @@ const assertWorkflowGone = (id: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(12)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(12),
+      ]),
     }),
   );
 
@@ -394,9 +398,10 @@ const assertAnnotationStoreGone = (name: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );
 
@@ -445,9 +450,10 @@ const assertVariantStoreGone = (name: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );
 

@@ -280,9 +280,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "IndexNotReady",
     // Index provisioning is slow (~20–30 min); poll every 20s up to ~40 min.
-    schedule: Schedule.spaced("20 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("20 seconds"),
+      Schedule.recurs(120),
+    ]),
   });
 
 // CreateIndex validates the IAM role up front; a freshly-created role may
@@ -294,9 +295,7 @@ const retryThroughIamPropagation = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ValidationException",
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(12)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
   });
 
 const waitForIndexStatus = (id: string, target: "ACTIVE" | "DELETED") =>

@@ -210,8 +210,9 @@ const waitForSilenceDeleted = (accountId: string, silenceId: string) =>
     Effect.catchTag("SilenceNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SilenceNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );

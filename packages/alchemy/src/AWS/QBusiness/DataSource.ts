@@ -274,9 +274,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "QBusinessDataSourceNotReady",
     // Data source provisioning is usually well under a minute; budget ~5 min.
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(60)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(60)]),
   });
 
 // CreateDataSource validates the IAM role up front; a freshly-created role
@@ -287,9 +285,7 @@ const retryThroughIamPropagation = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ValidationException",
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(12)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
   });
 
 const waitForDataSourceStatus = (

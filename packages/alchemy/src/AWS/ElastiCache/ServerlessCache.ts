@@ -307,9 +307,10 @@ export const ServerlessCacheProvider = () =>
       // typically completes in 1-3 minutes; budget ~10 min (60 * 10s) like
       // the RDS cluster wait so slow regions still converge.
       const waitForCache = Effect.fn(function* (name: string) {
-        const readinessPolicy = Schedule.fixed("10 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const readinessPolicy = Schedule.max([
+          Schedule.fixed("10 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readCache(name).pipe(
           Effect.flatMap((cache) => {
             if (!cache?.ARN) {
@@ -333,9 +334,10 @@ export const ServerlessCacheProvider = () =>
       // Wait for a cache to leave a transitional state before delete. Ends
       // when the cache is available, deleting, or gone.
       const waitUntilSettled = Effect.fn(function* (name: string) {
-        const settlePolicy = Schedule.fixed("10 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const settlePolicy = Schedule.max([
+          Schedule.fixed("10 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readCache(name).pipe(
           Effect.flatMap((cache) => {
             if (

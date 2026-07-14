@@ -74,7 +74,7 @@ export const makeBatchedSink = <In, Out, Err>(
 ): Sink.Sink<void, In, never, Err | BatchRetryExhaustedError<In>> => {
   const schedule =
     options.retrySchedule ??
-    Schedule.recurs(5).pipe(Schedule.both(Schedule.exponential("200 millis")));
+    Schedule.max([Schedule.recurs(5), Schedule.exponential("200 millis")]);
 
   const onRejected =
     options.onRejected ??

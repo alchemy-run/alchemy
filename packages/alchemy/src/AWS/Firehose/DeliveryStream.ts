@@ -345,9 +345,7 @@ const retryThroughRolePropagation = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "InvalidArgumentException" &&
       /role|assume|trust/i.test((e as { message?: string }).message ?? ""),
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(15)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
   });
 
 /**
@@ -360,9 +358,7 @@ const retryWhileInUse = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ResourceInUseException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
 /**
@@ -376,9 +372,7 @@ const retryConcurrentModification = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConcurrentModificationException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(5)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
   });
 
 const toTagRecord = (
@@ -500,9 +494,10 @@ const waitForDeliveryStreamActive = (deliveryStreamName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "DeliveryStreamNotActive",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(45)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(45),
+      ]),
     }),
   );
 
@@ -517,9 +512,10 @@ const waitForDeliveryStreamDeleted = (deliveryStreamName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "DeliveryStreamStillExists",
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(50)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(50),
+      ]),
     }),
   );
 

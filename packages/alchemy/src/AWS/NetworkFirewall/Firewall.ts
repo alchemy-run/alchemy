@@ -139,9 +139,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "FirewallNotReady",
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(60)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
   });
 
 const retryWhileNotDeleted = <A, E extends { readonly _tag: string }, R>(
@@ -149,9 +147,7 @@ const retryWhileNotDeleted = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "FirewallNotDeleted",
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(80)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(80)]),
   });
 
 const retryWhileFirewallBusy = <A, E extends { readonly _tag: string }, R>(
@@ -159,9 +155,7 @@ const retryWhileFirewallBusy = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "InvalidOperationException",
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
   });
 
 export const FirewallProvider = () =>

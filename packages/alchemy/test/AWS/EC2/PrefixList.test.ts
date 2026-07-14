@@ -37,9 +37,7 @@ const assertDeleted = Effect.fn(function* (prefixListId: string) {
     }),
     Effect.retry({
       while: (e) => e instanceof PrefixListStillExists,
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(20)]),
     }),
     Effect.catchTag("InvalidPrefixListID.NotFound", () => Effect.void),
   );

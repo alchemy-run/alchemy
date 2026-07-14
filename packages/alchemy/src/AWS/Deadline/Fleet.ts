@@ -259,9 +259,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "FleetNotReady",
     // Fleet activation is usually well under a minute; budget ~3 min.
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(36)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(36)]),
   });
 
 const waitForFleetActive = (

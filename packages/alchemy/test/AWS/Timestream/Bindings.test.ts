@@ -42,9 +42,10 @@ describe("AWS.Timestream Bindings", () => {
               : Effect.fail(new Error(`write not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.exponential("1 second").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("1 second"),
+              Schedule.recurs(8),
+            ]),
           }),
         );
         const written = (yield* writeResponse.json) as {
@@ -74,9 +75,10 @@ describe("AWS.Timestream Bindings", () => {
               : Effect.fail(new Error("no rows counted yet")),
           ),
           Effect.retry({
-            schedule: Schedule.spaced("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("2 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
         expect(Number(rows[0]!.Data[0]!.ScalarValue)).toBeGreaterThanOrEqual(1);

@@ -156,9 +156,10 @@ export const KeyspaceProvider = () =>
                   : Effect.succeed(k),
               ),
               Effect.retry({
-                schedule: Schedule.fixed("2 seconds").pipe(
-                  Schedule.both(Schedule.recurs(10)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("2 seconds"),
+                  Schedule.recurs(10),
+                ]),
               }),
             );
           }
@@ -195,9 +196,10 @@ export const KeyspaceProvider = () =>
             // ConflictException; retry briefly.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.fixed("3 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
           );
           // Deletion is asynchronous — wait (bounded) until the keyspace is
@@ -210,9 +212,10 @@ export const KeyspaceProvider = () =>
                 : Effect.fail(new Error(`Keyspace '${name}' still deleting`)),
             ),
             Effect.retry({
-              schedule: Schedule.fixed("3 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
             Effect.catch(() => Effect.void),
           );

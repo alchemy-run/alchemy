@@ -304,9 +304,7 @@ const retryWhileRulePending = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E | RuleStillPending, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "RuleStillPending",
-    schedule: Schedule.fixed("1 second").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(30)]),
   });
 
 /** Poll a rule until it leaves the transient `pending` status. */
@@ -327,9 +325,7 @@ const retryWhileRuleExists = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E | RuleStillExists, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "RuleStillExists",
-    schedule: Schedule.fixed("1 second").pipe(
-      Schedule.both(Schedule.recurs(15)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(15)]),
   });
 
 export const RuleProvider = () =>

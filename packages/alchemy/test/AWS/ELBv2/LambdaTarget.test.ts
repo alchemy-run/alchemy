@@ -192,9 +192,10 @@ test.provider(
 
       // Drive both paths through the ALB DNS. A fresh ALB takes ~2 minutes to
       // provision, so bound the first-request retry generously (5s * 60).
-      const albRetry = Schedule.spaced("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(60)),
-      );
+      const albRetry = Schedule.max([
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(60),
+      ]);
       const getJson = (url: string) =>
         HttpClient.get(url).pipe(
           Effect.flatMap((response) =>

@@ -69,9 +69,10 @@ describe.sequential("AWS.Logs.LogGroupEventSource", () => {
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.fixed("1 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("1 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
 
@@ -132,9 +133,10 @@ describe.sequential("AWS.Logs.LogGroupEventSource", () => {
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
-            schedule: Schedule.fixed("1 seconds").pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("1 seconds"),
+              Schedule.recurs(30),
+            ]),
           }),
         );
 

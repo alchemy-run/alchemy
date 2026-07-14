@@ -201,9 +201,10 @@ const normalizeLabels = (
   );
 
 // Wait budget: ~10 min at 5s spacing — node groups reach ACTIVE in 2–5 min.
-const waitSchedule = Schedule.spaced("5 seconds").pipe(
-  Schedule.both(Schedule.recurs(120)),
-);
+const waitSchedule = Schedule.max([
+  Schedule.spaced("5 seconds"),
+  Schedule.recurs(120),
+]);
 
 const taintKey = (taint: eks.Taint) =>
   `${taint.key ?? ""}::${taint.effect ?? ""}`;

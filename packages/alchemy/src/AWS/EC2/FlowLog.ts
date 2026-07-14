@@ -352,9 +352,10 @@ export const FlowLogProvider = () =>
                   while: (e) =>
                     e._tag === "FlowLogOperationFailed" &&
                     e.code !== "FlowLogAlreadyExists",
-                  schedule: Schedule.fixed(3000).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed(3000),
+                    Schedule.recurs(15),
+                  ]),
                 }),
               );
             const flowLogId = result.FlowLogIds![0]!;

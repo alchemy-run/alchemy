@@ -92,9 +92,7 @@ const retryThroughRolePropagation = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "InvalidParameterException" ||
       e._tag === "OperationAbortedException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(9)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(9)]),
   });
 
 export const DestinationProvider = () =>

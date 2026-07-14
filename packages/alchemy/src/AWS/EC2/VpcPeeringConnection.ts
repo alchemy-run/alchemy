@@ -216,9 +216,7 @@ export const VpcPeeringConnectionProvider = () =>
           }),
           Effect.retry({
             while: (e) => e instanceof PeeringNotSettled,
-            schedule: Schedule.fixed(2000).pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(30)]),
           }),
         );
 

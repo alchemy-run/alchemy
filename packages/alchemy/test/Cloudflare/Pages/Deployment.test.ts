@@ -58,9 +58,10 @@ const expectDeploymentGone = (
     Effect.catchTag("ProjectNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "DeploymentNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -70,9 +71,10 @@ const expectProjectGone = (accountId: string, projectName: string) =>
     Effect.catchTag("ProjectNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ProjectNotDeleted" || e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -221,9 +223,10 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
           ),
           Effect.retry({
             while: (e) => e._tag === "DeploymentNotListedYet",
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(8),
+            ]),
           }),
         );
 

@@ -259,9 +259,10 @@ describe("AWS.QBusiness.Application", () => {
         }).pipe(
           Effect.retry({
             while: (e: { _tag: string }) => e._tag === "StillExists",
-            schedule: Schedule.spaced("15 seconds").pipe(
-              Schedule.both(Schedule.recurs(40)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("15 seconds"),
+              Schedule.recurs(40),
+            ]),
           }),
         );
       }),

@@ -51,9 +51,10 @@ const assertSchemaGone = (registryName: string, schemaName: string) =>
       Effect.catchTag("NotFoundException", () => Effect.void),
       Effect.retry({
         while: (e) => e instanceof Error,
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(10)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(10),
+        ]),
       }),
     );
 

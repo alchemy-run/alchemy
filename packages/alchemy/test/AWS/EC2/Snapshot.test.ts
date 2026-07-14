@@ -62,9 +62,7 @@ const assertSnapshotDeleted = Effect.fn(function* (snapshotId: string) {
     Effect.flatMap(() => Effect.fail(new SnapshotStillExists())),
     Effect.retry({
       while: (e) => e instanceof SnapshotStillExists,
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
     }),
     Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
   );

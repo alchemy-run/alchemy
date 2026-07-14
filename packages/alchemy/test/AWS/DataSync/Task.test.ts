@@ -169,9 +169,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "LocationAccessTestFailed",
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(12)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(12),
+            ]),
           }),
         );
       const finished = yield* datasync

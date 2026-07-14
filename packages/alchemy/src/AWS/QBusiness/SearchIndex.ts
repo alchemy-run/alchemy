@@ -231,9 +231,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "QBusinessIndexNotReady",
     // Index provisioning takes several minutes; poll every 15s up to ~30 min.
-    schedule: Schedule.spaced("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(120)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("15 seconds"),
+      Schedule.recurs(120),
+    ]),
   });
 
 const waitForIndexStatus = (

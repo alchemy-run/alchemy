@@ -58,9 +58,10 @@ export const waitForSettled = <
 ): Effect.Effect<A | undefined, E | QuickSightOperationFailed, R> =>
   Effect.flatMap(
     Effect.repeat(read, {
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(30),
+      ]),
       until: (observed) =>
         observed === undefined || !isInProgress(observed.status),
     }),

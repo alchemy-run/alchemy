@@ -72,7 +72,5 @@ export const retryRolePropagation = <A, E, R>(
       typeof e.message === "string" &&
       (e.message.includes("assuming the passed role") ||
         e.message.includes("does not have access")),
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
   });

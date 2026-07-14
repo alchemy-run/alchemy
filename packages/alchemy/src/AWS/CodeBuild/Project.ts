@@ -391,9 +391,10 @@ const retryIamPropagation = <
       while: (e) =>
         e._tag === "InvalidInputException" &&
         (e.message ?? "").toLowerCase().includes("not authorized"),
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

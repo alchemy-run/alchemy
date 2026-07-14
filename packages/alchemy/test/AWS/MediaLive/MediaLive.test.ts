@@ -434,9 +434,10 @@ const assertInputDeleted = (inputId: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -450,9 +451,10 @@ const assertInputSecurityGroupDeleted = (id: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -466,8 +468,9 @@ const assertChannelDeleted = (channelId: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.spaced("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(12)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(12),
+      ]),
     }),
   );

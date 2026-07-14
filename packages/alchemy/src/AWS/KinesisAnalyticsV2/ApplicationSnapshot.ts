@@ -115,9 +115,7 @@ const retryWhileInUse = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ResourceInUseException",
-    schedule: Schedule.fixed("2 seconds").pipe(
-      Schedule.both(Schedule.recurs(30)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
 const describeSnapshot = Effect.fn(function* ({
@@ -164,9 +162,10 @@ const waitForSnapshotReady = ({
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "SnapshotPending",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(36)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(36),
+      ]),
     }),
     Effect.catchTag("SnapshotPending", (e) =>
       Effect.fail(
@@ -190,9 +189,10 @@ const waitForSnapshotDeleted = ({
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "SnapshotStillExists",
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 

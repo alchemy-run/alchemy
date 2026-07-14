@@ -362,9 +362,10 @@ export const ClusterProvider = () =>
       // WAITING in 10-15 minutes; budget ~30 min (90 * 20s). A terminal
       // state stops the wait immediately (non-retryable).
       const waitForReady = Effect.fn(function* (clusterId: string) {
-        const policy = Schedule.fixed("20 seconds").pipe(
-          Schedule.both(Schedule.recurs(90)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("20 seconds"),
+          Schedule.recurs(90),
+        ]);
         return yield* emr.describeCluster({ ClusterId: clusterId }).pipe(
           Effect.flatMap((response) => {
             const cluster = response.Cluster;
@@ -723,9 +724,10 @@ export const ClusterProvider = () =>
             }),
             Effect.catchTag("ClusterNotFound", () => Effect.void),
             Effect.retry({
-              schedule: Schedule.fixed("10 seconds").pipe(
-                Schedule.both(Schedule.recurs(30)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("10 seconds"),
+                Schedule.recurs(30),
+              ]),
             }),
           );
         }),

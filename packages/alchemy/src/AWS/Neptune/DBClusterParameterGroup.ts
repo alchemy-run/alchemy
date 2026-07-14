@@ -110,9 +110,7 @@ const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "InvalidDBParameterGroupStateFault",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
   });
 
 export const DBClusterParameterGroupProvider = () =>

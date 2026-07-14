@@ -202,9 +202,7 @@ const retryIamRolePropagation = <A, E extends { _tag: string }, R>(
         "No permission to assume role",
       ) ??
         false),
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
   });
 
 export const ClusterProvider = () =>
@@ -230,9 +228,10 @@ export const ClusterProvider = () =>
       // Bounded readiness wait. DAX cluster provisioning/modification
       // typically completes in 5-10 minutes; budget ~15 min (60 * 15s).
       const waitForAvailable = Effect.fn(function* (name: string) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.ClusterArn) {
@@ -254,9 +253,10 @@ export const ClusterProvider = () =>
       // Wait for a cluster to leave a transitional state before delete. Ends
       // when the cluster is available, deleting, or gone.
       const waitUntilSettled = Effect.fn(function* (name: string) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (
@@ -513,9 +513,10 @@ export const ClusterProvider = () =>
             Effect.catchTag("ClusterNotFoundFault", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "InvalidClusterStateFault",
-              schedule: Schedule.fixed("15 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("15 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
             // Exhausted retries: the cluster is in a state (e.g. an
             // out-of-band delete already in flight) where deletion is

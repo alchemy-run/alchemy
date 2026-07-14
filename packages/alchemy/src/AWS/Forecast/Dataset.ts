@@ -224,9 +224,10 @@ export const DatasetProvider = () =>
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "ResourceInUseException",
-              schedule: Schedule.fixed("3 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
           );
         }),

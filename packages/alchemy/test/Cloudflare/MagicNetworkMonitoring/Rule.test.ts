@@ -80,9 +80,10 @@ describe.sequential("MagicNetworkMonitoring.Rule", () => {
         ),
         Effect.retry({
           while: (e) => e._tag === "MnmRuleNotListed",
-          schedule: Schedule.exponential("500 millis").pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential("500 millis"),
+            Schedule.recurs(10),
+          ]),
         }),
       );
 

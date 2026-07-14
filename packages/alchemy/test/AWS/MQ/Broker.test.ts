@@ -39,9 +39,10 @@ const assertBrokerGone = (brokerId: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 

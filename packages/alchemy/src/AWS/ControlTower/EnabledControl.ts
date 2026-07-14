@@ -146,9 +146,10 @@ const retryWhileControlOperationPending = <
     while: (e) => e._tag === "ControlOperationPending",
     // Control operations deploy SCPs/Config rules across an OU's accounts
     // and typically take a few minutes; poll every 10s up to ~15 minutes.
-    schedule: Schedule.spaced("10 seconds").pipe(
-      Schedule.both(Schedule.recurs(90)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("10 seconds"),
+      Schedule.recurs(90),
+    ]),
   });
 
 // Control Tower serializes control operations per OU — a concurrent
@@ -159,9 +160,10 @@ const retryWhileControlConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.spaced("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(40)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("15 seconds"),
+      Schedule.recurs(40),
+    ]),
   });
 
 const waitForControlOperation = (operationIdentifier: string) =>

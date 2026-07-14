@@ -124,9 +124,7 @@ const retryWhileSubnetGroupInUse = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "InvalidClusterSubnetGroupStateFault",
-    schedule: Schedule.fixed("15 seconds").pipe(
-      Schedule.both(Schedule.recurs(40)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
   });
 
 export const ClusterSubnetGroupProvider = () =>

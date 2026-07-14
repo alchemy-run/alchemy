@@ -228,9 +228,10 @@ export const DBInstanceProvider = () =>
       // follow-on `modifyDBInstance` doesn't hit `InvalidDBInstanceStateFault`.
       // Budgets ~10 min (60 * 10s) for slow provisioning.
       const waitForInstance = Effect.fn(function* (instanceId: string) {
-        const readinessPolicy = Schedule.fixed("10 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const readinessPolicy = Schedule.max([
+          Schedule.fixed("10 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readInstance(instanceId).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.DBInstanceArn) {
@@ -438,9 +439,10 @@ export const DBInstanceProvider = () =>
                 ),
               ),
             {
-              schedule: Schedule.fixed("15 seconds").pipe(
-                Schedule.both(Schedule.recurs(40)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("15 seconds"),
+                Schedule.recurs(40),
+              ]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

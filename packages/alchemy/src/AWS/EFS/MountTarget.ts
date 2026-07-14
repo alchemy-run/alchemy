@@ -130,9 +130,10 @@ const retryUntilMountTargetAvailable = <E extends { _tag: string }, R>(
     ),
     {
       while: (e) => e._tag === "MountTargetNotAvailable",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(36)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(36),
+      ]),
     },
   );
 
@@ -146,9 +147,7 @@ const retryUntilMountTargetGone = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "MountTargetStillDeleting",
-    schedule: Schedule.fixed("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(36)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
   });
 
 /**
@@ -162,9 +161,7 @@ const retryWhileMountTargetSettling = <A, E extends { _tag: string }, R>(
   Effect.retry(self, {
     while: (e) =>
       e._tag === "IncorrectMountTargetState" || e._tag === "DependencyTimeout",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 export const MountTargetProvider = () =>

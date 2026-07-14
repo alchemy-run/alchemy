@@ -208,9 +208,7 @@ export const PrefixListProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof PrefixListNotStable,
-            schedule: Schedule.fixed(2000).pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(30)]),
           }),
         );
 
@@ -439,9 +437,10 @@ export const PrefixListProvider = () =>
               Effect.retry({
                 while: (e: { _tag: string }) =>
                   e._tag === "DependencyViolation",
-                schedule: Schedule.fixed(5000).pipe(
-                  Schedule.both(Schedule.recurs(20)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(5000),
+                  Schedule.recurs(20),
+                ]),
               }),
             );
         }),

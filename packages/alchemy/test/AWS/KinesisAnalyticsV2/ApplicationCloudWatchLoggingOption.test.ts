@@ -33,9 +33,10 @@ const assertApplicationDeleted = Effect.fn(function* (applicationName: string) {
       Effect.flatMap(() => Effect.fail(new ApplicationStillExists())),
       Effect.retry({
         while: (e: { _tag: string }) => e._tag === "ApplicationStillExists",
-        schedule: Schedule.fixed("3 seconds").pipe(
-          Schedule.both(Schedule.recurs(40)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("3 seconds"),
+          Schedule.recurs(40),
+        ]),
       }),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     );

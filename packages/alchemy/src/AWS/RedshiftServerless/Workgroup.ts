@@ -213,9 +213,10 @@ export const WorkgroupProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof WorkgroupNotSettled,
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(96)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(96),
+            ]),
           }),
         );
       });
@@ -234,9 +235,10 @@ export const WorkgroupProvider = () =>
           ),
           Effect.retry({
             while: (e) => e instanceof WorkgroupNotSettled,
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(96)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(96),
+            ]),
           }),
         );
       });
@@ -399,9 +401,10 @@ export const WorkgroupProvider = () =>
               // A concurrent modification may still be settling — retry.
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(24)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(24),
+                ]),
               }),
               Effect.catchTag("ConflictException", () => Effect.void),
             );

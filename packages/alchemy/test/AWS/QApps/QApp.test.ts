@@ -153,9 +153,10 @@ describe("AWS.QApps.QApp", () => {
         }).pipe(
           Effect.retry({
             while: (e: { _tag: string }) => e._tag === "StillExists",
-            schedule: Schedule.spaced("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("5 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
       }),

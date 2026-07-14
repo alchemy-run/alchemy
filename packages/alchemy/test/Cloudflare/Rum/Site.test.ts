@@ -39,9 +39,10 @@ const expectGone = (accountId: string, siteTag: string) =>
     Effect.catchTag("SiteNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SiteNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

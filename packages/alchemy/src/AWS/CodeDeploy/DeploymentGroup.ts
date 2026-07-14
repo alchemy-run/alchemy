@@ -148,7 +148,7 @@ const retryThroughRolePropagation = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e: E) => e._tag === "InvalidRoleException",
-      schedule: Schedule.fixed(2000).pipe(Schedule.both(Schedule.recurs(15))),
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]),
     }),
   );
 

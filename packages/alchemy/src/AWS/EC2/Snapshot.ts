@@ -307,9 +307,11 @@ const waitForSnapshotCompleted = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof SnapshotPending,
-      schedule: Schedule.fixed(3000).pipe(
-        Schedule.both(Schedule.recurs(30)), // max ~90s
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(3000),
+        Schedule.recurs(30), // max ~90s
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
                 `Waiting for snapshot to complete... (${(attempt + 1) * 3}s)`,

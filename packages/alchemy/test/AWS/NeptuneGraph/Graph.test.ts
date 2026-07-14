@@ -37,9 +37,10 @@ const assertGraphGone = (graphId: string) =>
     ),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 
@@ -89,9 +90,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             : Effect.fail(new Error(`/graph returned ${res.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(40)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(40),
+          ]),
         }),
       );
       expect((graphInfo as { graphId: string }).graphId).toBe(graph.graphId);
@@ -119,9 +121,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.fixed("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
 

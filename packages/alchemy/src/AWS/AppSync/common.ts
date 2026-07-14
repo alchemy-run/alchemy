@@ -19,17 +19,19 @@ export const retryConcurrentModification = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(effect, {
     while: (error: E) => error._tag === "ConcurrentModificationException",
-    schedule: pipe(
-      Schedule.exponential(Duration.seconds(1), 2),
-      Schedule.modifyDelay((d: Duration.Duration) =>
-        Effect.succeed(
-          Duration.isGreaterThan(d, Duration.seconds(8))
-            ? Duration.seconds(8)
-            : d,
+    schedule: Schedule.max([
+      pipe(
+        Schedule.exponential(Duration.seconds(1), 2),
+        Schedule.modifyDelay(({ duration }) =>
+          Effect.succeed(
+            Duration.isGreaterThan(duration, Duration.seconds(8))
+              ? Duration.seconds(8)
+              : duration,
+          ),
         ),
       ),
-      Schedule.both(Schedule.recurs(8)),
-    ),
+      Schedule.recurs(8),
+    ]),
   }) as Effect.Effect<A, E, R>;
 
 /**
@@ -50,9 +52,10 @@ export const retryWhileRolePropagates = <
     while: (error: E) =>
       error._tag === "BadRequestException" &&
       /assume|role|authorized/i.test(error.message ?? ""),
-    schedule: Schedule.fixed(Duration.seconds(2)).pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([
+      Schedule.fixed(Duration.seconds(2)),
+      Schedule.recurs(10),
+    ]),
   }) as Effect.Effect<A, E, R>;
 
 /**

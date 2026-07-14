@@ -58,9 +58,7 @@ const untilGone = <A, E, R>(
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
     }),
   );
 

@@ -556,9 +556,10 @@ export const DistributionProvider = () =>
           ),
           Effect.retry({
             while: (error) => error._tag === "DistributionPendingDeployment",
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -701,9 +702,10 @@ export const DistributionProvider = () =>
           Effect.retry({
             while: (error) =>
               error._tag === "DistributionPendingDeletionReadiness",
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -768,10 +770,10 @@ export const DistributionProvider = () =>
                     // resets quickly, so a fixed cadence drains far faster
                     // than an exponential whose tail delay can balloon past
                     // the test budget on a busy account.
-                    schedule: Schedule.spaced("1 second").pipe(
-                      Schedule.jittered,
-                      Schedule.both(Schedule.recurs(30)),
-                    ),
+                    schedule: Schedule.max([
+                      Schedule.spaced("1 second").pipe(Schedule.jittered),
+                      Schedule.recurs(30),
+                    ]),
                   }),
                   Effect.map((current) =>
                     current
@@ -924,9 +926,10 @@ export const DistributionProvider = () =>
                 Effect.retry({
                   while: (error) =>
                     error instanceof DistributionFunctionAssociationPending,
-                  schedule: Schedule.fixed("5 seconds").pipe(
-                    Schedule.both(Schedule.recurs(24)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed("5 seconds"),
+                    Schedule.recurs(24),
+                  ]),
                 }),
               );
 
@@ -992,9 +995,10 @@ export const DistributionProvider = () =>
               Effect.retry({
                 while: (error) =>
                   error instanceof DistributionFunctionAssociationPending,
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(24)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(24),
+                ]),
               }),
             );
 

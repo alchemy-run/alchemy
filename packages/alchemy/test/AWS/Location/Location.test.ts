@@ -16,9 +16,10 @@ const assertGone = <R>(probe: Effect.Effect<unknown, { _tag: string }, R>) =>
     Effect.flatMap(() => Effect.fail({ _tag: "StillExists" as const })),
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "StillExists",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );

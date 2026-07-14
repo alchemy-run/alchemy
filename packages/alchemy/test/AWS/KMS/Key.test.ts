@@ -361,9 +361,7 @@ describe("AWS.KMS.Key", () => {
     }).pipe(
       Effect.retry({
         while: (error) => error._tag === "KeyMetadataNotConverged",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
       }),
     );
   });
@@ -385,9 +383,7 @@ describe("AWS.KMS.Key", () => {
     }).pipe(
       Effect.retry({
         while: (error) => error._tag === "KeyTagsNotConverged",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
       }),
     );
   });
@@ -407,9 +403,7 @@ describe("AWS.KMS.Key", () => {
     }).pipe(
       Effect.retry({
         while: (error) => error._tag === "AliasTargetNotConverged",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
       }),
     );
   });
@@ -439,9 +433,7 @@ describe("AWS.KMS.Key", () => {
     }).pipe(
       Effect.retry({
         while: (error) => error._tag === "ProviderListNotConverged",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
       }),
     );
   });
@@ -455,9 +447,7 @@ describe("AWS.KMS.Key", () => {
     }).pipe(
       Effect.retry({
         while: (error) => error._tag === "AliasStillExists",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
       }),
     );
   });
@@ -471,9 +461,7 @@ describe("AWS.KMS.Key", () => {
       ),
       Effect.retry({
         while: (error) => error._tag === "KeyNotPendingDeletion",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
       }),
     );
     // Every key in this suite uses `deletionWindowInDays: "7 days"`

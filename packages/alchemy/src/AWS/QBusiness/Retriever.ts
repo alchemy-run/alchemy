@@ -231,9 +231,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "RetrieverNotReady",
     // Retriever provisioning is fast; poll every 5s up to ~5 min.
-    schedule: Schedule.spaced("5 seconds").pipe(
-      Schedule.both(Schedule.recurs(60)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(60)]),
   });
 
 const waitForRetrieverActive = (applicationId: string, retrieverId: string) =>

@@ -341,9 +341,10 @@ export const EnvironmentProvider = () =>
       // typically completes in 20-30 minutes; budget ~45 min (90 * 30s). A
       // FAILED terminal state stops the wait immediately (non-retryable).
       const waitForAvailable = Effect.fn(function* (name: string) {
-        const policy = Schedule.fixed("30 seconds").pipe(
-          Schedule.both(Schedule.recurs(90)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("30 seconds"),
+          Schedule.recurs(90),
+        ]);
         return yield* readEnvironment(name).pipe(
           Effect.flatMap((env) => {
             if (!env?.Arn) {

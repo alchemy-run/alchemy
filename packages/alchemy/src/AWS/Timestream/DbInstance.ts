@@ -279,9 +279,10 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     // while fields are still being populated — treat it as not-ready.
     while: (e) => e._tag === "DbInstanceNotReady" || e._tag === "ParseError",
     // Provisioning is slow (~15–20 min); poll every 20s up to ~30 min.
-    schedule: Schedule.spaced("20 seconds").pipe(
-      Schedule.both(Schedule.recurs(90)),
-    ),
+    schedule: Schedule.max([
+      Schedule.spaced("20 seconds"),
+      Schedule.recurs(90),
+    ]),
   });
 
 const waitForStatus = (identifier: string, target: "AVAILABLE" | "DELETED") =>

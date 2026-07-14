@@ -179,9 +179,7 @@ const retryWhileSettling = <A, E extends { _tag: string }, R>(
       e._tag === "ConflictException" ||
       e._tag === "InvalidEventDataStoreStatusException" ||
       e._tag === "InactiveEventDataStoreException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
 /**
@@ -194,9 +192,7 @@ const retryWhileDeleteConflict = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
 const toWireSelectors = (

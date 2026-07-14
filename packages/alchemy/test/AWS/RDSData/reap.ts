@@ -44,13 +44,15 @@ class OrphanStillPresent extends Data.TaggedError("OrphanStillPresent")<{
 }> {}
 
 /** ~10 minute ceiling for slow asynchronous releases (RDS deletes, Lambda ENIs). */
-const slowRelease = Schedule.spaced("15 seconds").pipe(
-  Schedule.both(Schedule.recurs(40)),
-);
+const slowRelease = Schedule.max([
+  Schedule.spaced("15 seconds"),
+  Schedule.recurs(40),
+]);
 /** ~2 minute ceiling for ordinary dependency-violation races. */
-const dependencyRelease = Schedule.spaced("10 seconds").pipe(
-  Schedule.both(Schedule.recurs(12)),
-);
+const dependencyRelease = Schedule.max([
+  Schedule.spaced("10 seconds"),
+  Schedule.recurs(12),
+]);
 
 const reapFunctions = Effect.gen(function* () {
   const pages = yield* lambda.listFunctions.pages({}).pipe(Stream.runCollect);

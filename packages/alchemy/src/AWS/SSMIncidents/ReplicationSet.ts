@@ -120,7 +120,7 @@ const waitForReplicationSetActive = (
   incidents.getReplicationSet({ arn }).pipe(
     Effect.map((r) => r.replicationSet),
     Effect.repeat({
-      schedule: Schedule.fixed(5000).pipe(Schedule.both(Schedule.recurs(60))),
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]),
       until: (rs) => rs.status !== "CREATING" && rs.status !== "UPDATING",
     }),
     Effect.flatMap((rs) =>
@@ -149,7 +149,7 @@ const waitForReplicationSetGone = (
       Effect.succeed("GONE" as const),
     ),
     Effect.repeat({
-      schedule: Schedule.fixed(5000).pipe(Schedule.both(Schedule.recurs(60))),
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]),
       until: (status) => status === "GONE",
     }),
     Effect.asVoid,

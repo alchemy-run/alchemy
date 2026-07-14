@@ -835,9 +835,10 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
       // sparsely and detects a settled token tens of seconds late. Capped
       // polling detects within 6s of propagation completing while still
       // covering a long total window.
-      schedule: Schedule.exponential("1 second", 1.5).pipe(
-        Schedule.either(Schedule.spaced("6 seconds")),
-      ),
+      schedule: Schedule.min([
+        Schedule.exponential("1 second", 1.5),
+        Schedule.spaced("6 seconds"),
+      ]),
       times: 22,
     }),
   );

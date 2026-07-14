@@ -103,16 +103,18 @@ test.provider(
             : Effect.fail(new FixtureNotConsistent()),
         ),
         Effect.retry({
-          schedule: Schedule.exponential("500 millis").pipe(
-            Schedule.modifyDelay((d: Duration.Duration) =>
-              Effect.succeed(
-                Duration.isGreaterThan(d, Duration.seconds(3))
-                  ? Duration.seconds(3)
-                  : d,
+          schedule: Schedule.max([
+            Schedule.exponential("500 millis").pipe(
+              Schedule.modifyDelay(({ duration }) =>
+                Effect.succeed(
+                  Duration.isGreaterThan(duration, Duration.seconds(3))
+                    ? Duration.seconds(3)
+                    : duration,
+                ),
               ),
             ),
-            Schedule.both(Schedule.recurs(30)),
-          ),
+            Schedule.recurs(30),
+          ]),
         }),
       );
       const { wsUrl, callbackUrl } = info;
@@ -126,16 +128,18 @@ test.provider(
       const echoed = yield* wsSendAndReceive(wsUrl, "hello-websocket").pipe(
         Effect.timeout(Duration.seconds(15)),
         Effect.retry({
-          schedule: Schedule.exponential("1 second").pipe(
-            Schedule.modifyDelay((d: Duration.Duration) =>
-              Effect.succeed(
-                Duration.isGreaterThan(d, Duration.seconds(5))
-                  ? Duration.seconds(5)
-                  : d,
+          schedule: Schedule.max([
+            Schedule.exponential("1 second").pipe(
+              Schedule.modifyDelay(({ duration }) =>
+                Effect.succeed(
+                  Duration.isGreaterThan(duration, Duration.seconds(5))
+                    ? Duration.seconds(5)
+                    : duration,
+                ),
               ),
             ),
-            Schedule.both(Schedule.recurs(10)),
-          ),
+            Schedule.recurs(10),
+          ]),
         }),
       );
       expect(echoed).toBe("echo:hello-websocket");
@@ -145,9 +149,10 @@ test.provider(
       const second = yield* wsSendAndReceive(wsUrl, "again").pipe(
         Effect.timeout(Duration.seconds(15)),
         Effect.retry({
-          schedule: Schedule.exponential("1 second").pipe(
-            Schedule.both(Schedule.recurs(3)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential("1 second"),
+            Schedule.recurs(3),
+          ]),
         }),
       );
       expect(second).toBe("echo:again");

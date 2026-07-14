@@ -60,9 +60,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.spaced("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(8),
+      ]),
     }),
   );
 
@@ -143,9 +144,10 @@ describe("RDSData Bindings", () => {
               ),
             ),
             Effect.retry({
-              schedule: Schedule.spaced("10 seconds").pipe(
-                Schedule.both(Schedule.recurs(42)),
-              ),
+              schedule: Schedule.max([
+                Schedule.spaced("10 seconds"),
+                Schedule.recurs(42),
+              ]),
             }),
           );
 
@@ -195,9 +197,10 @@ describe("RDSData Bindings", () => {
                   ),
                   Effect.catchTag("DBClusterNotFoundFault", () => Effect.void),
                   Effect.retry({
-                    schedule: Schedule.spaced("15 seconds").pipe(
-                      Schedule.both(Schedule.recurs(8)),
-                    ),
+                    schedule: Schedule.max([
+                      Schedule.spaced("15 seconds"),
+                      Schedule.recurs(8),
+                    ]),
                   }),
                 ),
               testOptions,

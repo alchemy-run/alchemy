@@ -259,9 +259,10 @@ describe.sequential("ResourceExplorer", () => {
                   : Effect.fail(new Error(`status ${res.status}`)),
               ),
               Effect.retry({
-                schedule: Schedule.fixed("3 seconds").pipe(
-                  Schedule.both(Schedule.recurs(40)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("3 seconds"),
+                  Schedule.recurs(40),
+                ]),
               }),
             );
           const body = (yield* response.json) as {

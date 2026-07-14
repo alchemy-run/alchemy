@@ -197,9 +197,7 @@ const retryWhileRolePropagates = <A, E extends { _tag: string }, R>(
     while: (e) =>
       e._tag === "StudioServiceRoleNotAssumable" ||
       e._tag === "StudioServiceRoleMissingS3Access",
-    schedule: Schedule.fixed("4 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(10)]),
   });
 
 export const StudioProvider = () =>

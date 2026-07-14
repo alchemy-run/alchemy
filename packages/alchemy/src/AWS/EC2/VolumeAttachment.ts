@@ -15,7 +15,7 @@ const retryWhileVolumeInUse = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "VolumeInUse",
-    schedule: Schedule.fixed(2000).pipe(Schedule.both(Schedule.recurs(15))),
+    schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]),
   });
 
 const retryWhileIncorrectState = <A, E extends { readonly _tag: string }, R>(
@@ -23,7 +23,7 @@ const retryWhileIncorrectState = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "IncorrectState",
-    schedule: Schedule.fixed(2000).pipe(Schedule.both(Schedule.recurs(10))),
+    schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]),
   });
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
@@ -319,9 +319,11 @@ const waitForAttachmentState = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof AttachmentNotReady,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(20)), // max ~40s
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(2000),
+        Schedule.recurs(20), // max ~40s
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
                 `Waiting for volume attachment... (${(attempt + 1) * 2}s)`,
@@ -358,9 +360,11 @@ const waitForVolumeDetached = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof VolumeStillAttached,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(20)), // max ~40s
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(2000),
+        Schedule.recurs(20), // max ~40s
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
                 `Waiting for volume to detach... (${(attempt + 1) * 2}s)`,

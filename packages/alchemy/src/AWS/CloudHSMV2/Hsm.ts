@@ -112,9 +112,10 @@ export const HsmProvider = () =>
         clusterId: string,
         hsmId: string,
       ) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(100)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(100),
+        ]);
         return yield* findHsm(clusterId, hsmId).pipe(
           Effect.flatMap((hsm) => {
             if (hsm === undefined) {
@@ -139,9 +140,10 @@ export const HsmProvider = () =>
         clusterId: string,
         hsmId: string,
       ) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(60),
+        ]);
         yield* findHsm(clusterId, hsmId).pipe(
           Effect.flatMap((hsm) =>
             hsm === undefined

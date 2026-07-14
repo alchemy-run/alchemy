@@ -205,9 +205,7 @@ const expectConfig = Effect.fn(function* (
       () => new Error("Event invoke config update has not propagated yet"),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -222,9 +220,7 @@ const expectNoConfig = Effect.fn(function* (
       () => new Error("Event invoke config removal has not propagated yet"),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -239,9 +235,7 @@ const publishVersion = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ResourceConflictException",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
     Effect.filterOrFail(
       (config) => config.Version !== undefined,

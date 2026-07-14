@@ -112,9 +112,7 @@ const retryThroughPermissionPropagation = <A, E extends { _tag: string }, R>(
   Effect.retry(self, {
     while: (e) =>
       e._tag === "InvalidTargetException" || e._tag === "AccessDeniedException",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(15)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(15)]),
   });
 
 const wireTarget = (props: {

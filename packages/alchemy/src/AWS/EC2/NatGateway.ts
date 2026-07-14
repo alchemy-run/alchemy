@@ -533,11 +533,10 @@ const waitForNatGatewayAvailable = (
     Effect.tapError(Effect.logDebug),
     Effect.retry({
       while: (e) => e._tag === "NatGatewayPending",
-      schedule: Schedule.fixed(5000).pipe(
-        Schedule.both(Schedule.recurs(60)), // Max 5 minutes
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
-            `Waiting for NAT Gateway to be available... (${(attempt + 1) * 5}s)`,
+            `Waiting for NAT Gateway to be available... (${attempt * 5}s)`,
           ),
         ),
       ),
@@ -580,12 +579,9 @@ const waitForNatGatewayDeleted = (
     Effect.tapError(Effect.logDebug),
     Effect.retry({
       while: (e) => e._tag === "NatGatewayDeleting",
-      schedule: Schedule.fixed(5000).pipe(
-        Schedule.both(Schedule.recurs(60)), // Max 5 minutes
-        Schedule.tapOutput(([, attempt]) =>
-          session.note(
-            `Waiting for NAT Gateway deletion... (${(attempt + 1) * 5}s)`,
-          ),
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for NAT Gateway deletion... (${attempt * 5}s)`),
         ),
       ),
     }),

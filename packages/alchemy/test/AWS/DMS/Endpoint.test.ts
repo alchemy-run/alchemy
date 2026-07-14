@@ -31,9 +31,10 @@ const assertGone = (identifier: string) =>
         : Effect.fail(new Error(`endpoint '${identifier}' status: ${status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );
 

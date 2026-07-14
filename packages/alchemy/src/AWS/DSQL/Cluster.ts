@@ -119,9 +119,10 @@ export const ClusterProvider = () =>
       // minute; budget ~5 min (60 * 5s) so slow provisioning still converges
       // without risking the test wall.
       const waitForActive = Effect.fn(function* (identifier: string) {
-        const policy = Schedule.fixed("5 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("5 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* readCluster(identifier).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
@@ -260,9 +261,10 @@ export const ClusterProvider = () =>
             // retry briefly until it settles into a deletable state.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.fixed("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(24)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("5 seconds"),
+                Schedule.recurs(24),
+              ]),
             }),
           );
         }),

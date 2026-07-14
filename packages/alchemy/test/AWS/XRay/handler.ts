@@ -52,9 +52,10 @@ export default XRayTestFunction.make(
             // while sibling suites run, so absorb throttling in the fixture.
             Effect.retry({
               while: (error) => error._tag === "ThrottledException",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.both(Schedule.recurs(5)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("500 millis"),
+                Schedule.recurs(5),
+              ]),
             }),
           );
           return yield* HttpServerResponse.json({
@@ -71,9 +72,10 @@ export default XRayTestFunction.make(
           }).pipe(
             Effect.retry({
               while: (error) => error._tag === "ThrottledException",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.both(Schedule.recurs(5)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("500 millis"),
+                Schedule.recurs(5),
+              ]),
             }),
           );
           return yield* HttpServerResponse.json({

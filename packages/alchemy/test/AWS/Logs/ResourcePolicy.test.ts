@@ -36,9 +36,7 @@ const assertPolicyDeleted = (policyName: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "ResourcePolicyStillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
   );
 

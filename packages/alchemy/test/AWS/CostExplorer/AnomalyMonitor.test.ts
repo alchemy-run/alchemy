@@ -37,9 +37,7 @@ const assertMonitorGone = (monitorArn: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(5)),
-      ),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
     }),
   );
 

@@ -140,9 +140,10 @@ export const WorkspaceProvider = () =>
         const ws = yield* grafana.describeWorkspace({ workspaceId: id }).pipe(
           Effect.map((r) => r.workspace),
           Effect.repeat({
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(36)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(36),
+            ]),
             until: (w) => w.status === "ACTIVE" || w.status.endsWith("FAILED"),
           }),
         );
@@ -245,9 +246,10 @@ export const WorkspaceProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(24)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(24),
+                ]),
               }),
             );
         }),

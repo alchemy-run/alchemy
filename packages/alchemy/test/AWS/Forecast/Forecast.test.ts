@@ -22,9 +22,10 @@ const assertDatasetGroupDeleted = (arn: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "DatasetGroupStillExists",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 

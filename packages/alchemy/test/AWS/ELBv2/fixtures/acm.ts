@@ -57,9 +57,10 @@ export const deleteCertBestEffort = Effect.fn(function* (
   yield* acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ResourceInUseException",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag("ResourceInUseException", () =>
       Effect.logWarning(

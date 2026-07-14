@@ -497,9 +497,10 @@ export const LoadBalancerProvider = () =>
               ),
               Effect.retry({
                 while: (e) => e._tag === "LoadBalancerStillDeleting",
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(48)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(48),
+                ]),
               }),
               // Best-effort: if it is somehow still visible after ~4 min, let
               // the downstream deletes retry rather than fail the teardown.

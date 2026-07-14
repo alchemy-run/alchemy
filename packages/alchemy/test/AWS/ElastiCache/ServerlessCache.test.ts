@@ -102,9 +102,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.fixed("3 seconds").pipe(
-              Schedule.both(Schedule.recurs(times)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(times),
+            ]),
           }),
         );
       const response = yield* getJson("/connection", 60);
@@ -151,8 +152,9 @@ const assertCacheDeleted = (name: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );

@@ -164,9 +164,10 @@ export const ServerlessClusterProvider = () =>
       // Bounded readiness wait. MSK Serverless create typically completes in
       // 5-10 minutes; budget ~15 min (60 * 15s).
       const waitForActive = Effect.fn(function* (arn: string) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(60),
+        ]);
         return yield* describeByArn(arn).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster) {
@@ -336,9 +337,10 @@ export const ServerlessClusterProvider = () =>
             // be deleted (or is gone). Bounded.
             Effect.retry({
               while: (e) => e._tag === "BadRequestException",
-              schedule: Schedule.fixed("15 seconds").pipe(
-                Schedule.both(Schedule.recurs(40)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("15 seconds"),
+                Schedule.recurs(40),
+              ]),
             }),
             Effect.catchTag("BadRequestException", () => Effect.void),
           );

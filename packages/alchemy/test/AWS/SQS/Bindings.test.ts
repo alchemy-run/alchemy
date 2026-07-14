@@ -19,9 +19,10 @@ const sharedStack = Core.scratchStack(testOptions, "SQSBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling so we don't fail the whole suite on a slow init.
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
 
 let baseUrl: string;
 let queueUrl: string;
@@ -50,9 +51,10 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(6),
+      ]),
     }),
   );
 
@@ -100,9 +102,10 @@ const receiveViaBindingUntil = (
     }).pipe(
       Effect.retry({
         while: (e) => e._tag === "MessageNotReceived",
-        schedule: Schedule.fixed("1 second").pipe(
-          Schedule.both(Schedule.recurs(20)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("1 second"),
+          Schedule.recurs(20),
+        ]),
       }),
     );
     return found;
@@ -138,9 +141,10 @@ const receiveAndDeleteViaDistilled = (bodies: string[]) =>
     }).pipe(
       Effect.retry({
         while: (e) => e._tag === "MessageNotReceived",
-        schedule: Schedule.fixed("1 second").pipe(
-          Schedule.both(Schedule.recurs(20)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("1 second"),
+          Schedule.recurs(20),
+        ]),
       }),
     );
   });
@@ -312,9 +316,10 @@ describe.sequential("SQS Bindings", () => {
             expect(bodies).not.toContain(messageBody);
           }).pipe(
             Effect.repeat({
-              schedule: Schedule.fixed("1 second").pipe(
-                Schedule.both(Schedule.recurs(5)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("1 second"),
+                Schedule.recurs(5),
+              ]),
             }),
           );
         }),

@@ -223,9 +223,10 @@ export const FHIRDatastoreProvider = () =>
       const waitForActive = Effect.fn(function* (datastoreId: string) {
         const properties = yield* readDatastore(datastoreId).pipe(
           Effect.repeat({
-            schedule: Schedule.fixed("30 seconds").pipe(
-              Schedule.both(Schedule.recurs(70)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("30 seconds"),
+              Schedule.recurs(70),
+            ]),
             until: (p) =>
               p === undefined ||
               p.DatastoreStatus === "ACTIVE" ||
@@ -255,9 +256,10 @@ export const FHIRDatastoreProvider = () =>
       const waitUntilSettled = Effect.fn(function* (datastoreId: string) {
         return yield* readDatastore(datastoreId).pipe(
           Effect.repeat({
-            schedule: Schedule.fixed("30 seconds").pipe(
-              Schedule.both(Schedule.recurs(70)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("30 seconds"),
+              Schedule.recurs(70),
+            ]),
             until: (p) =>
               p === undefined ||
               (p.DatastoreStatus !== "CREATING" &&
@@ -271,9 +273,10 @@ export const FHIRDatastoreProvider = () =>
       const waitUntilGone = Effect.fn(function* (datastoreId: string) {
         const properties = yield* readDatastore(datastoreId).pipe(
           Effect.repeat({
-            schedule: Schedule.fixed("30 seconds").pipe(
-              Schedule.both(Schedule.recurs(70)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("30 seconds"),
+              Schedule.recurs(70),
+            ]),
             until: (p) => p === undefined || p.DatastoreStatus === "DELETED",
           }),
         );
@@ -451,9 +454,10 @@ export const FHIRDatastoreProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "ConflictException",
-                  schedule: Schedule.fixed("15 seconds").pipe(
-                    Schedule.both(Schedule.recurs(10)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed("15 seconds"),
+                    Schedule.recurs(10),
+                  ]),
                 }),
                 Effect.catchTag("ResourceNotFoundException", () =>
                   Effect.succeed(undefined),

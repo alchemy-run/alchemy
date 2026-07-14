@@ -161,9 +161,7 @@ const untilNotPending = <E, R>(
 ): Effect.Effect<smsvoice.PhoneNumberInformation | undefined, E, R> =>
   Effect.repeat(self, {
     until: (p) => p === undefined || p.Status !== "PENDING",
-    schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(20)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
 const toAttrs = (info: smsvoice.PhoneNumberInformation) =>

@@ -30,9 +30,10 @@ let baseUrl: string;
 // Fresh workers/Lambda URLs take a few seconds to start serving 200s; a
 // sandbox that OOMs at init keeps returning 5xx until the readiness budget is
 // exhausted, which fails the suite loudly.
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(60)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(60),
+]);
 
 describe.sequential("ECS Nested Platform Init", () => {
   beforeAll(

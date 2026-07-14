@@ -36,9 +36,10 @@ const expectGone = (accountId: string, identityProviderId: string) =>
     Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "IdpNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

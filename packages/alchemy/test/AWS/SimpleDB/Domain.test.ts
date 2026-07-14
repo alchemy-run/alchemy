@@ -27,9 +27,10 @@ const assertDomainDeleted = (domainName: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "DomainStillExists",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

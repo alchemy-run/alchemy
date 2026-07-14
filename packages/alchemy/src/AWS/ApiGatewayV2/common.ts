@@ -51,17 +51,19 @@ export const retryOnTooManyRequests = <A, E extends { _tag: string }, R>(
     while: (error: E) =>
       error._tag === "TooManyRequestsException" ||
       error._tag === "ConflictException",
-    schedule: pipe(
-      Schedule.exponential(Duration.seconds(1), 2),
-      Schedule.modifyDelay((d: Duration.Duration) =>
-        Effect.succeed(
-          Duration.isGreaterThan(d, Duration.seconds(20))
-            ? Duration.seconds(20)
-            : d,
+    schedule: Schedule.max([
+      pipe(
+        Schedule.exponential(Duration.seconds(1), 2),
+        Schedule.modifyDelay(({ duration }) =>
+          Effect.succeed(
+            Duration.isGreaterThan(duration, Duration.seconds(20))
+              ? Duration.seconds(20)
+              : duration,
+          ),
         ),
       ),
-      Schedule.both(Schedule.recurs(10)),
-    ),
+      Schedule.recurs(10),
+    ]),
   }) as Effect.Effect<A, E, R>;
 
 /**

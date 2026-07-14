@@ -369,9 +369,11 @@ export const NetworkInterfaceProvider = () =>
               // until the attachment fully clears.
               Effect.retry({
                 while: (e) => e._tag === "InvalidNetworkInterface.InUse",
-                schedule: Schedule.fixed(3000).pipe(
-                  Schedule.both(Schedule.recurs(20)),
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.fixed(3000),
+                  Schedule.recurs(20),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
                       `Waiting for interface to detach... (attempt ${attempt + 1})`,
                     ),
@@ -446,9 +448,11 @@ const waitForNetworkInterface = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof NetworkInterfacePending,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(20)), // max ~40s
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(2000),
+        Schedule.recurs(20), // max ~40s
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
                 `Waiting for network interface... (${(attempt + 1) * 2}s)`,

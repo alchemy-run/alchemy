@@ -201,9 +201,10 @@ export const ClusterProvider = () =>
       // *_IN_PROGRESS state; the cluster itself settles in a few minutes
       // (budget 10 min = 40 * 15s).
       const waitUntilSettled = Effect.fn(function* (clusterId: string) {
-        const policy = Schedule.fixed("15 seconds").pipe(
-          Schedule.both(Schedule.recurs(40)),
-        );
+        const policy = Schedule.max([
+          Schedule.fixed("15 seconds"),
+          Schedule.recurs(40),
+        ]);
         return yield* findClusterById(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
@@ -378,9 +379,10 @@ export const ClusterProvider = () =>
           yield* cloudhsm.deleteCluster({ ClusterId: clusterId }).pipe(
             Effect.retry({
               while: (e) => e._tag === "CloudHsmInvalidRequestException",
-              schedule: Schedule.fixed("15 seconds").pipe(
-                Schedule.both(Schedule.recurs(40)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("15 seconds"),
+                Schedule.recurs(40),
+              ]),
             }),
             Effect.catchTag(
               "CloudHsmResourceNotFoundException",

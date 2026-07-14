@@ -382,9 +382,10 @@ const assertQueueDeleted = (name: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -394,9 +395,10 @@ const assertPresetDeleted = (name: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -406,8 +408,9 @@ const assertJobTemplateDeleted = (name: string) =>
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );

@@ -290,9 +290,10 @@ export const SpaceProvider = () =>
       ): Effect.Effect<A, E, R> =>
         Effect.retry(self, {
           while: (e) => e._tag === "RePostSpaceNotReady",
-          schedule: Schedule.fixed("30 seconds").pipe(
-            Schedule.both(Schedule.recurs(80)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("30 seconds"),
+            Schedule.recurs(80),
+          ]),
         });
 
       // Bounded readiness wait. Space provisioning is asynchronous and can
