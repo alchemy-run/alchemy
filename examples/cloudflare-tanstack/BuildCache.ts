@@ -8,6 +8,17 @@ import * as Path from "effect/Path";
 import { PlatformError } from "effect/PlatformError";
 import * as NodeCrypto from "node:crypto";
 
+// Lockfiles are hashed in addition to the tracked files so that a dependency
+// change (which mutates the lockfile but not the source) still busts the cache.
+// Ordered by preference — the first one found walking up from the dir wins.
+const LOCKFILES = [
+  "bun.lockb",
+  "bun.lock",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "package-lock.json",
+];
+
 export class BuildCache extends Context.Service<
   BuildCache,
   {
@@ -165,25 +176,39 @@ export const BuildCacheLive = Layer.effect(
         ),
       );
 
+    const hashLockfile = (dir: string) =>
+      findUp(dir, LOCKFILES).pipe(
+        Effect.flatMap((name) =>
+          name === undefined
+            ? Effect.succeed(undefined)
+            : hashFile(name).pipe(Effect.map((hash) => ({ name, hash }))),
+        ),
+      );
+
     return BuildCache.of({
       hashDirectory: (dir) =>
-        Effect.all(
-          [
-            fs.readDirectory(dir),
-            findWorkspaceRoot(dir).pipe(
-              Effect.flatMap((root) =>
-                buildIgnoreMatcher(root, dir).pipe(
-                  Effect.map(
-                    (ignore): DirectoryMetadata => ({ root, dir, ignore }),
-                  ),
-                ),
-              ),
+        findWorkspaceRoot(dir).pipe(
+          Effect.flatMap((root) =>
+            Effect.all(
+              [
+                fs.readDirectory(dir),
+                buildIgnoreMatcher(root, dir),
+                hashLockfile(dir),
+              ],
+              { concurrency: "unbounded" },
+            ).pipe(
+              Effect.flatMap(([files, ignore, lockfile]) => {
+                const acc = new Map<string, string>();
+                return hashFiles(acc, files, { root, dir, ignore }).pipe(
+                  Effect.map(() => {
+                    if (lockfile) {
+                      acc.set(path.relative(root, lockfile.name), lockfile.hash);
+                    }
+                    return acc;
+                  }),
+                );
+              }),
             ),
-          ],
-          { concurrency: "unbounded" },
-        ).pipe(
-          Effect.flatMap(([files, metadata]) =>
-            hashFiles(new Map(), files, metadata),
           ),
         ),
     });
