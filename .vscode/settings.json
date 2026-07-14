@@ -12,20 +12,20 @@
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.preferences.importModuleSpecifier": "relative",
   "typescript.preferences.importModuleSpecifierEnding": "ts",
-  "js/ts.experimental.useTsgo": true,
   "oxc.enable": true,
   "oxc.lint.run": "onSave",
   "json.schemaDownload.enable": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.codeLens": false,
-  "editor.formatOnSave": false,
+  "editor.formatOnSave": true,
+  "editor.formatOnSaveMode": "file",
   "editor.inlayHints.enabled": "offUnlessPressed",
   "editor.tabSize": 2,
   "editor.indentSize": 2,
   "editor.insertSpaces": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll.oxc": "explicit",
-    "source.format.oxc": "explicit"
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
   },
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml"
