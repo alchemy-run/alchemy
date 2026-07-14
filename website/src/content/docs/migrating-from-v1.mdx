@@ -120,25 +120,48 @@ no destroy, no downtime.
 
 Adoption works by physical name: when a resource has no prior state,
 the engine looks it up in the cloud by name and takes ownership of
-what it finds. v2 derives physical names from the stack, stage, and
-logical ID — which will not match what v1 deployed. So set the `name`
-prop on each resource to the **exact** name of the live v1 resource:
+what it finds. But v1 and v2 derive default names differently, so
+without pinning, v2 would look for names that don't exist.
+
+When you didn't set `name` explicitly, v1 derived it as:
+
+```
+{app}-{id}-{stage}
+```
+
+- `{app}` — the name you passed to `await alchemy("my-app")`
+- `{id}` — the resource's logical ID, e.g. `await Bucket("bucket")`
+- `{stage}` — the `--stage` value; defaults to `$ALCHEMY_STAGE`, then
+  your OS username (`$USER`), then `dev`
+
+So the v1 example at the top of this page, deployed with
+`--stage prod`, created a bucket named `my-app-bucket-prod` and a
+worker named `my-app-worker-prod`. (Resources created inside a nested
+scope get the scope names between `{app}` and `{id}`, and Worker names
+are lowercased.)
+
+Set the `name` prop on each v2 resource to that **exact** name:
 
 ```typescript
 export const Bucket = Cloudflare.R2.Bucket("Bucket", {
-  name: "my-app-bucket", // exact name of the bucket v1 created
+  name: "my-app-bucket-prod", // v1's {app}-{id}-{stage}
 });
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
-  name: "my-app-worker", // exact name of the worker v1 created
+  name: "my-app-worker-prod", // v1's {app}-{id}-{stage}
   env: { Bucket },
 });
 ```
 
-Find the deployed names in your v1 config (if you set `name`
-explicitly), your v1 state (`.alchemy/` by default), or the Cloudflare
-dashboard.
+If you did set `name` in v1, carry that value over unchanged. When in
+doubt, confirm the live names in your v1 state (`.alchemy/` by
+default) or the Cloudflare dashboard.
+
+Because v1 baked the stage into the name, each stage has different
+physical names. If you deploy several stages from the same config,
+compute the name from the stage (e.g. an environment variable your CI
+sets) instead of hardcoding one stage's suffix.
 
 ## Step 4: Deploy with `--adopt`
 
