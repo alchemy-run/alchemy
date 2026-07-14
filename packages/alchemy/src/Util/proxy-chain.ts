@@ -56,23 +56,37 @@ const replay = (root: unknown, ops: ReadonlyArray<Op>): unknown => {
 export const proxyChain = <T>(cached: Effect.Effect<T, any, any>): T =>
   chain(cached) as T;
 
+/**
+ * Like {@link proxyChain}, but the replayed chain value is passed through
+ * `lift` instead of being yielded as an Effect directly. Use this when the
+ * wrapped API's terminal values aren't Effects — e.g. Prisma's
+ * `PrismaPromise`s, which `lift` wraps in `Effect.tryPromise`.
+ */
+export const proxyChainWith = <T, U>(
+  cached: Effect.Effect<unknown, any, any>,
+  lift: (value: unknown) => Effect.Effect<U, any, any>,
+): T => chain(cached, [], lift) as T;
+
 const chain = (
   cached: Effect.Effect<unknown, any, any>,
   ops: ReadonlyArray<Op> = [],
+  lift?: (value: unknown) => Effect.Effect<unknown, any, any>,
 ): unknown => {
-  const effect = Effect.flatMap(
-    cached,
-    (root) => replay(root, ops) as Effect.Effect<unknown, unknown, unknown>,
-  );
+  const effect = Effect.flatMap(cached, (root) => {
+    const value = replay(root, ops);
+    return lift
+      ? lift(value)
+      : (value as Effect.Effect<unknown, unknown, unknown>);
+  });
   return new Proxy(function () {}, {
     get(_, prop) {
       if (Reflect.has(effect, prop)) {
         return Reflect.get(effect, prop);
       }
-      return chain(cached, [...ops, { kind: "get", prop }]);
+      return chain(cached, [...ops, { kind: "get", prop }], lift);
     },
     apply(_, __, args) {
-      return chain(cached, [...ops, { kind: "call", args }]);
+      return chain(cached, [...ops, { kind: "call", args }], lift);
     },
   });
 };

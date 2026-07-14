@@ -170,6 +170,18 @@
       "worker": "./src/Drizzle/index.ts",
       "import": "./lib/Drizzle/index.js"
     },
+    "./Prisma": {
+      "types": "./lib/Prisma/index.d.ts",
+      "bun": "./src/Prisma/index.ts",
+      "worker": "./src/Prisma/index.ts",
+      "import": "./lib/Prisma/index.js"
+    },
+    "./Prisma/*": {
+      "types": "./lib/Prisma/*.d.ts",
+      "bun": "./src/Prisma/*.ts",
+      "worker": "./src/Prisma/*.ts",
+      "import": "./lib/Prisma/*.js"
+    },
     "./Axiom": {
       "types": "./lib/Axiom/index.d.ts",
       "bun": "./src/Axiom/index.ts",
@@ -366,10 +378,16 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@types/ws": "^8.18.1",
+    "@prisma/adapter-d1": "catalog:",
+    "@prisma/adapter-neon": "catalog:",
+    "@prisma/adapter-pg": "catalog:",
+    "@prisma/adapter-planetscale": "catalog:",
+    "@prisma/client": "catalog:",
     "@vitejs/plugin-react": "catalog:fixtures",
     "@vitejs/plugin-rsc": "catalog:fixtures",
     "better-auth": "catalog:",
     "effect": "catalog:",
+    "prisma": "catalog:",
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:fixtures",
     "react-router": "catalog:fixtures",
@@ -387,9 +405,15 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
+    "@prisma/adapter-d1": "catalog:",
+    "@prisma/adapter-neon": "catalog:",
+    "@prisma/adapter-pg": "catalog:",
+    "@prisma/adapter-planetscale": "catalog:",
+    "@prisma/client": "catalog:",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "prisma": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -403,10 +427,28 @@
     "@effect/sql-pg": {
       "optional": true
     },
+    "@prisma/adapter-d1": {
+      "optional": true
+    },
+    "@prisma/adapter-neon": {
+      "optional": true
+    },
+    "@prisma/adapter-pg": {
+      "optional": true
+    },
+    "@prisma/adapter-planetscale": {
+      "optional": true
+    },
+    "@prisma/client": {
+      "optional": true
+    },
     "drizzle-kit": {
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "prisma": {
       "optional": true
     },
     "vite": {
