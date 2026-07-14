@@ -142,22 +142,10 @@ export function hashPlugin(): Plugin {
       }
       envs.set(this.environment.name, true);
       if (isDone()) {
-        const t0 = performance.now();
         const { hash, workspaces } = await done();
-        const t1 = performance.now();
+        console.log({ hash, workspaces });
         const redoHash = await redo(workspaces);
-        const t2 = performance.now();
-        console.log(
-          `BENCH ${JSON.stringify({
-            impl: "effect",
-            doneMs: +(t1 - t0).toFixed(2),
-            redoMs: +(t2 - t1).toFixed(2),
-            totalMs: +(t2 - t0).toFixed(2),
-            hash,
-            redoHash,
-            workspaces,
-          })}`,
-        );
+        console.log({ redoHash });
       }
     },
   };

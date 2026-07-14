@@ -159,7 +159,7 @@ export const BuildCacheLive = Layer.effect(
         Effect.flatMap(([files, ignore]) =>
           hashFiles(acc, files, {
             root: metadata.root,
-            dir: metadata.dir,
+            dir,
             ignore,
           }),
         ),
