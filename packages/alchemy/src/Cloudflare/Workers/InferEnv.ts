@@ -21,6 +21,8 @@ import type * as ImagesNs from "../Images/index.ts";
 import type * as KV from "../KV/index.ts";
 import type * as Queues from "../Queues/index.ts";
 import type * as R2 from "../R2/index.ts";
+import type { VpcService } from "../VpcService/VpcService.ts";
+import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { Assets } from "./Assets.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
@@ -94,11 +96,15 @@ export type GetBindingType<T> =
                                                       undefined
                                                     >
                                                   >
-                                                : T extends Redacted<any>
-                                                  ? // redacteds are always stored as secret_text, so are always string
-                                                    // we JSON.stringify when not a Redacted<string>
-                                                    string
-                                                  : T;
+                                                : T extends VpcService
+                                                  ? Fetcher
+                                                  : T extends VpcServiceLookup
+                                                    ? Fetcher
+                                                    : T extends Redacted<any>
+                                                      ? // redacteds are always stored as secret_text, so are always string
+                                                        // we JSON.stringify when not a Redacted<string>
+                                                        string
+                                                      : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

@@ -21,6 +21,8 @@ import { isQueue } from "../Queues/Queue.ts";
 import { isBucket } from "../R2/Bucket.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
+import { isVpcService } from "../VpcService/VpcService.ts";
+import { isVpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { isAssets } from "./Assets.ts";
@@ -178,6 +180,12 @@ const toBinding = (
       workflowName: binding.workflowName ?? binding.name,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
+    };
+  } else if (isVpcService(binding) || isVpcServiceLookup(binding)) {
+    return {
+      type: "vpc_service",
+      name: bindingName,
+      serviceId: binding.serviceId,
     };
   } else if (isDatabase(binding)) {
     return {

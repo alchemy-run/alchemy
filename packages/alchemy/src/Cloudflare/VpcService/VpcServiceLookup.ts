@@ -6,7 +6,7 @@ import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { formatVpcService, type Attributes } from "./VpcService.ts";
 
-export type VpcServiceRefProps =
+export type VpcServiceLookupProps =
   | {
       /**
        * The Cloudflare-assigned ID for the VPC service.
@@ -21,30 +21,49 @@ export type VpcServiceRefProps =
     };
 
 /**
- * Reference to an existing VPC service. Same shape as the resource's outputs.
+ * A reference to an existing VPC service — its {@link Attributes} plus a
+ * `type: "vpc_service"` marker so it can be bound to a Worker's `env`.
  */
-export type VpcServiceRef = Attributes;
+export type VpcServiceLookup = Attributes & { readonly type: "vpc_service" };
+
+const toLookup = (attrs: Attributes): VpcServiceLookup => ({
+  ...attrs,
+  type: "vpc_service",
+});
 
 /**
- * Reference an existing Cloudflare VPC service without managing its lifecycle.
+ * Reference an existing Cloudflare VPC service (managed outside this stack)
+ * without managing its lifecycle. Reads the service by `serviceId` or `name`
+ * and returns its {@link Attributes}, which can be placed in a Worker's `env`
+ * to attach a `vpc_service` binding.
  * @resource
  * @product Workers VPC
  * @category Network
  * @example Reference by ID
  * ```typescript
- * const service = yield* Cloudflare.VpcService.VpcServiceRef({
+ * const service = yield* Cloudflare.Lookup.VpcService({
  *   serviceId: "123e4567-e89b-12d3-a456-426614174000",
  * });
  * ```
  *
  * @example Reference by name
  * ```typescript
- * const service = yield* Cloudflare.VpcService.VpcServiceRef({
+ * const service = yield* Cloudflare.Lookup.VpcService({
  *   name: "my-vpc-service",
  * });
  * ```
+ *
+ * @example Bind to a Worker
+ * ```typescript
+ * const vpc = yield* Cloudflare.Lookup.VpcService({ name: "my-vpc-service" });
+ *
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { VPC: vpc },
+ * });
+ * ```
  */
-export const VpcServiceRef = (props: VpcServiceRefProps) =>
+export const VpcServiceLookup = (props: VpcServiceLookupProps) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     if ("name" in props) {
@@ -58,11 +77,16 @@ export const VpcServiceRef = (props: VpcServiceRefProps) =>
       if (!match) {
         return yield* Effect.die(`VPC service "${props.name}" not found`);
       }
-      return formatVpcService(match, accountId);
+      return toLookup(formatVpcService(match, accountId));
     }
     const result = yield* connectivity.getDirectoryService({
       accountId,
       serviceId: props.serviceId,
     });
-    return formatVpcService(result, accountId);
+    return toLookup(formatVpcService(result, accountId));
   });
+
+export const isVpcServiceLookup = (value: unknown): value is VpcServiceLookup =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { type?: unknown }).type === "vpc_service";

@@ -725,6 +725,8 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
       return Vectorize.remote(b.name, b.indexName);
     case "version_metadata":
       return VersionMetadata.local(b.name);
+    case "vpc_service":
+      return yield* unsupported();
     case "wasm_module":
       return WasmModule.local(b.name, Buffer.from(b.part));
     case "worker_loader":

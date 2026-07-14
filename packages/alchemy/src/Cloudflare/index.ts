@@ -55,6 +55,7 @@ export * as LeakedCredentialCheck from "./LeakedCredentialCheck/index.ts";
 export * as LoadBalancer from "./LoadBalancer/index.ts";
 export * as Logpush from "./Logpush/index.ts";
 export * as LogsControl from "./LogsControl/index.ts";
+export * as Lookup from "./Lookup/index.ts";
 export * as MagicCloudNetworking from "./MagicCloudNetworking/index.ts";
 export * as MagicNetworkMonitoring from "./MagicNetworkMonitoring/index.ts";
 export * as MagicTransit from "./MagicTransit/index.ts";
