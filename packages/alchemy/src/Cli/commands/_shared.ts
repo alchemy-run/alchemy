@@ -169,34 +169,9 @@ export const resourceFilter = Flag.string("filter").pipe(
   Flag.map(Option.getOrUndefined),
 );
 
-export const TAIL_COLORS = [
-  "\x1b[36m", // cyan
-  "\x1b[35m", // magenta
-  "\x1b[33m", // yellow
-  "\x1b[32m", // green
-  "\x1b[34m", // blue
-  "\x1b[91m", // bright red
-  "\x1b[96m", // bright cyan
-  "\x1b[95m", // bright magenta
-  "\x1b[93m", // bright yellow
-  "\x1b[92m", // bright green
-];
-export const TAIL_RESET = "\x1b[0m";
-
-export const formatLocalTimestamp = (date: Date): string => {
-  const y = date.getFullYear();
-  const mo = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const h = String(date.getHours()).padStart(2, "0");
-  const mi = String(date.getMinutes()).padStart(2, "0");
-  const s = String(date.getSeconds()).padStart(2, "0");
-  const ms = String(date.getMilliseconds()).padStart(3, "0");
-  const tz =
-    new Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
-      .formatToParts(date)
-      .find((p) => p.type === "timeZoneName")?.value ?? "";
-  return `${y}-${mo}-${d} ${h}:${mi}:${s}.${ms} ${tz}`;
-};
+// Moved to `Tail.ts` so the shared tail orchestration (CLI + test harness)
+// owns the formatting; re-exported here for the CLI commands that use them.
+export { formatLocalTimestamp, TAIL_COLORS, TAIL_RESET } from "../../Tail.ts";
 
 export const parseResourceFilter = (
   filter: string | undefined,

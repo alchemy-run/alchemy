@@ -1,15 +1,21 @@
 import { DurableObject, env, waitUntil } from "cloudflare:workers";
-import { Constants } from "./TestLoggerWorker.ts";
+import { Constants, testLoggerInstanceName } from "./TestLoggerConstants.ts";
 
-interface Env {
+/**
+ * Runtime half of the test-logging pipeline. Bundled into Workers deployed
+ * with test logging enabled (see `WorkerBundle.ts`): the virtual entry calls
+ * {@link patchConsole} before the user module loads, so every `console.*`
+ * call is mirrored to the account's `alchemy-test-logger` Durable Object,
+ * which buffers rows and pushes them to any connected tail websocket.
+ */
+
+interface TestLoggerEnv {
   ALCHEMY_STACK_NAME: string;
   ALCHEMY_STAGE: string;
   [Constants.TEST_LOGGER_WORKER_NAME_BINDING]: string;
   [Constants.TEST_LOGGER_DO_BINDING]: DurableObjectNamespace<
     DurableObject & {
-      log(item: {
-        stack: string;
-        stage: string;
+      log(entry: {
         worker: string;
         message: string;
         method: string;
@@ -29,48 +35,15 @@ const PATCHED_METHODS = [
 ] as const;
 type PatchedMethod = (typeof PATCHED_METHODS)[number];
 
-const hasTestLoggerEnv = (env: Cloudflare.Env): env is Env =>
+const hasTestLoggerEnv = (env: unknown): env is TestLoggerEnv =>
+  typeof env === "object" &&
+  env !== null &&
   "ALCHEMY_STACK_NAME" in env &&
   "ALCHEMY_STAGE" in env &&
   Constants.TEST_LOGGER_DO_BINDING in env &&
   Constants.TEST_LOGGER_WORKER_NAME_BINDING in env;
 
-const patchConsoleMethod = (method: PatchedMethod) => {
-  const originalMethod = console[method];
-  console[method] = (...args: any[]) => {
-    originalMethod(...args);
-    if (!hasTestLoggerEnv(env)) {
-      originalMethod(
-        "[test logger] TEST LOGGER NOT ENABLED",
-        JSON.stringify(env),
-      );
-      return;
-    }
-    originalMethod(
-      "[test logger] TEST LOGGER ENABLED",
-      JSON.stringify(env),
-      JSON.stringify({
-        message: renderItem(args),
-        method,
-        stack: env.ALCHEMY_STACK_NAME,
-        stage: env.ALCHEMY_STAGE,
-        worker: env[Constants.TEST_LOGGER_WORKER_NAME_BINDING],
-      }),
-    );
-    const stub = env[Constants.TEST_LOGGER_DO_BINDING].getByName("global");
-    waitUntil(
-      stub.log({
-        message: renderItem(args),
-        method,
-        stack: env.ALCHEMY_STACK_NAME,
-        stage: env.ALCHEMY_STAGE,
-        worker: env[Constants.TEST_LOGGER_WORKER_NAME_BINDING],
-      }),
-    );
-  };
-};
-
-const renderItem = (item: unknown): string => {
+const render = (item: unknown): string => {
   if (typeof item === "string") return item;
   if (item instanceof Error) return item.stack ?? String(item);
   try {
@@ -82,7 +55,40 @@ const renderItem = (item: unknown): string => {
   }
 };
 
+const patchConsoleMethod = (method: PatchedMethod) => {
+  const original = console[method];
+  console[method] = (...args: unknown[]) => {
+    original(...args);
+    if (!hasTestLoggerEnv(env)) return;
+    const stub = env[Constants.TEST_LOGGER_DO_BINDING].getByName(
+      testLoggerInstanceName({
+        name: env.ALCHEMY_STACK_NAME,
+        stage: env.ALCHEMY_STAGE,
+      }),
+    );
+    try {
+      waitUntil(
+        stub
+          .log({
+            worker: env[Constants.TEST_LOGGER_WORKER_NAME_BINDING],
+            message: args.map(render).join(" "),
+            method,
+          })
+          .catch(() => {}),
+      );
+    } catch {
+      // `waitUntil` throws outside a request context (e.g. logs during
+      // isolate startup) — the original console output already happened.
+    }
+  };
+};
+
+let patched = false;
+
+/** Patch `console.*` to mirror log lines to the test-logger Durable Object. */
 export const patchConsole = () => {
+  if (patched) return;
+  patched = true;
   for (const method of PATCHED_METHODS) {
     patchConsoleMethod(method);
   }

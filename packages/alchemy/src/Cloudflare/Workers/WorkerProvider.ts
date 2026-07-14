@@ -26,7 +26,13 @@ import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
-import { testLoggerBindings, TestLoggingPolicy } from "./TestLoggerWorker.ts";
+import {
+  ensureTestLoggerWorker,
+  hasTestLoggerBinding,
+  testLoggerBindings,
+  testLoggerTail,
+  TestLoggingPolicy,
+} from "./TestLoggerWorker.ts";
 import { Worker, type WorkerProps, type WorkerRouteConfig } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
@@ -374,7 +380,18 @@ export const LiveWorkerProvider = () =>
 
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
-      const enableTestLogger = yield* TestLoggingPolicy;
+      const testLoggingEnabled = yield* TestLoggingPolicy;
+
+      // Test logging only works where we control the bundle (so `console.*`
+      // can be patched at the virtual entry) and where a cross-script DO
+      // binding to the account-level logger singleton is possible — i.e. not
+      // for raw `script` workers, prebuilt (`bundle: false`) workers, or
+      // Workers for Platforms user workers in a dispatch namespace.
+      const usesTestLogger = (props: WorkerProps): boolean =>
+        testLoggingEnabled &&
+        resolveNamespaceName(props.namespace) === undefined &&
+        props.script === undefined &&
+        props.bundle !== false;
 
       // const createScriptSubdomain = yield* workers.createScriptSubdomain;
       // const deleteScript = yield* workers.deleteScript;
