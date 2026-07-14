@@ -1,0 +1,13 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+model Widget {
+  id   Int    @id @default(autoincrement())
+  name String
+}
