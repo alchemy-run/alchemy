@@ -32,9 +32,57 @@ driver adapter. Generated migrations land under `out` (default
 `./prisma/migrations`), each written as
 `{out}/{timestamp}_migration/` containing `migration.sql` and
 `snapshot.prisma`, plus a `migration_lock.toml` at the root so
-`prisma migrate deploy` can also apply them. When the schema has a
-`generator` block, the resource also runs `prisma generate` so the
-client stays in sync (disable with `generateClient: false`).
+`prisma migrate deploy` can also apply them.
+
+## Client generation
+
+Every deploy also runs `prisma generate`, and the schema file needs
+no `generator` block for it: when one is missing, the resource
+injects a `prisma-client` generator with its output next to the
+schema (`./generated`). A block declared in the schema always wins
+over the injected default. Shape the injected block through the
+prop — for Cloudflare Workers, set the `workerd` runtime:
+
+```typescript
+const schema = yield* Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+  generateClient: { runtime: "workerd" },
+});
+```
+
+Pass `generateClient: false` when the client is generated some
+other way (or checked in) — migrations still regenerate, and the
+schema's own `prisma-client` block is skipped.
+
+## Effect schemas
+
+Alongside the client, the built-in `alchemy-prisma-effect` Prisma
+generator emits an `effect/Schema` definition for every model and
+enum — `Schema.Struct` per model, `Schema.Literals` per enum,
+`Schema.NullOr` for optionals — into `./effect.ts` next to the
+schema file:
+
+```typescript
+import * as Schema from "effect/Schema";
+import { Widget } from "./prisma/effect.ts";
+
+const rows = yield* prisma.widget.findMany();
+const widgets = yield* Schema.decodeUnknownEffect(Schema.Array(Widget))(rows);
+```
+
+Use the structs to decode rows read outside the Prisma client (raw
+SQL, queues, sync engines) or reuse the shapes in RPC and HTTP
+contracts. Opt out with `effectSchemas: false`, move the file with
+`effectSchemas: { output: "./src/schemas.ts" }`, or declare the
+generator yourself in `schema.prisma` so plain `prisma generate`
+runs it too:
+
+```prisma
+generator effect {
+  provider = "alchemy-prisma-effect"
+  output   = "./effect.ts"
+}
+```
 
 ## Wire it into the graph
 

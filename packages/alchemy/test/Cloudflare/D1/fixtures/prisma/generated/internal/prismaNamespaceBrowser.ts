@@ -73,6 +73,7 @@ export type TransactionIsolationLevel =
 export const WidgetScalarFieldEnum = {
   id: "id",
   name: "name",
+  createdAt: "createdAt",
 } as const;
 
 export type WidgetScalarFieldEnum =

@@ -25,6 +25,7 @@ Prisma schemas live in `schema.prisma`. Create
 generator client {
   provider = "prisma-client"
   output   = "../src/generated"
+  runtime  = "workerd"
 }
 
 datasource db {
@@ -47,15 +48,31 @@ model Post {
 }
 ```
 
-Two Prisma 7 specifics: the datasource block has **no `url`** — the
-connection comes from a driver adapter at runtime, and migration
-generation diffs schemas offline — and the generator is
+Three Prisma 7 specifics. The datasource block has **no `url`** —
+the connection comes from a driver adapter at runtime, and
+migration generation diffs schemas offline. The generator is
 `prisma-client`, which emits a plain TypeScript client into
-`output`. That generated client imports its query compiler as
-base64-encoded JS, so it bundles into a Worker with no special
-config. The datasource `provider` selects the SQL dialect: keep
-`postgresql` for the Hyperdrive path, switch to `sqlite` for D1 or
-`mysql` for PlanetScale MySQL.
+`output`. And **`runtime = "workerd"` is required on Workers**: it
+makes the client load its query compiler as a real WebAssembly
+module (which alchemy's bundler uploads natively); the default node
+runtime cannot start inside workerd. The datasource `provider`
+selects the SQL dialect: keep `postgresql` for the Hyperdrive path,
+switch to `sqlite` for D1 or `mysql` for PlanetScale MySQL.
+
+The generator block is optional: with none declared,
+`Prisma.Schema` injects one on deploy — pass the Workers runtime
+through the prop instead:
+
+```typescript
+const schema = yield* Prisma.Schema("app-schema", {
+  schema: "./prisma/schema.prisma",
+  generateClient: { runtime: "workerd" },
+});
+```
+
+Declaring the block in `schema.prisma` (as above) also covers plain
+`prisma generate` runs outside alchemy, which is why this guide
+keeps it explicit.
 
 ## Add the Prisma provider
 

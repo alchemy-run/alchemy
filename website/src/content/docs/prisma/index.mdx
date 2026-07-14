@@ -58,6 +58,15 @@ cascades into the database resource, and `delete` is a deliberate
 no-op, because migration files are typically checked in and removing
 the resource should never wipe them.
 
+Client generation is zero-config: the deploy runs `prisma generate`
+and injects a `prisma-client` generator block when the schema
+declares none (for Workers, pass
+`generateClient: { runtime: "workerd" }`). It also emits an
+[effect/Schema definition for every model and enum](/prisma/migrations#effect-schemas)
+via the built-in `alchemy-prisma-effect` generator — decode rows
+with `Schema.decodeUnknownEffect`, or reuse the shapes in RPC and
+HTTP contracts.
+
 ## The runtime clients
 
 Each driver adapter has an entry point that takes your generated

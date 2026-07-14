@@ -22,8 +22,10 @@ export const Schema = Effect.gen(function* () {
     schema: path.join(fixtureDir, "schema.prisma"),
     out: path.join(fixtureDir, "migrations"),
     // The generated client is checked in (see ./generated); regenerating it
-    // on deploy would churn the checked-in fixture.
+    // on deploy would churn the checked-in fixture. Effect-schema emission
+    // is exercised by the D1 fixture; keep this one client-only.
     generateClient: false,
+    effectSchemas: false,
   });
 });
 

@@ -48,6 +48,26 @@ generator client {
 }
 ${SQLITE_SCHEMA_SOURCE}`;
 
+// Postgres so the schema can carry an enum (sqlite doesn't support them) —
+// exercises the Literals mapping in the effect-schema generator.
+const ENUM_SCHEMA_SOURCE = `
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id    Int     @id @default(autoincrement())
+  email String  @unique
+  name  String?
+  role  Role    @default(USER)
+}
+`;
+
 const stageWorkspace = (initialSource: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -95,6 +115,8 @@ test.provider(
         Prisma.Schema("app-schema", {
           schema: ws.schemaPath,
           out: ws.out,
+          generateClient: false,
+          effectSchemas: false,
         }),
       );
 
@@ -127,6 +149,8 @@ test.provider(
         Prisma.Schema("app-schema", {
           schema: ws.schemaPath,
           out: ws.out,
+          generateClient: false,
+          effectSchemas: false,
         }),
       );
       expect(yield* getStatus("app-schema")).toEqual("created");
@@ -140,6 +164,8 @@ test.provider(
         Prisma.Schema("app-schema", {
           schema: ws.schemaPath,
           out: ws.out,
+          generateClient: false,
+          effectSchemas: false,
         }),
       );
       expect(yield* getStatus("app-schema")).toEqual("created");
@@ -158,6 +184,8 @@ test.provider(
         Prisma.Schema("app-schema", {
           schema: ws.schemaPath,
           out: ws.out,
+          generateClient: false,
+          effectSchemas: false,
         }),
       );
 
@@ -170,6 +198,8 @@ test.provider(
         Prisma.Schema("app-schema", {
           schema: ws.schemaPath,
           out: ws.out,
+          generateClient: false,
+          effectSchemas: false,
         }),
       );
 
@@ -208,6 +238,8 @@ test.provider(
         Prisma.Schema("app-schema", {
           schema: ws.schemaPath,
           out: ws.out,
+          generateClient: false,
+          effectSchemas: false,
         }),
       );
 
@@ -228,6 +260,8 @@ test.provider(
         Prisma.Schema("app-schema", {
           schema: ws.schemaPath,
           out: ws.out,
+          generateClient: false,
+          effectSchemas: false,
         }),
       );
 
@@ -252,6 +286,8 @@ test.provider("sqlite schemas generate D1-compatible migrations", (stack) =>
       Prisma.Schema("sqlite-schema", {
         schema: ws.schemaPath,
         out: ws.out,
+        generateClient: false,
+        effectSchemas: false,
       }),
     );
 
@@ -268,7 +304,44 @@ test.provider("sqlite schemas generate D1-compatible migrations", (stack) =>
 );
 
 test.provider(
-  "generateClient runs prisma generate when the schema has a generator",
+  "zero-config generation injects the client and effect schemas",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      // No generator block at all — both the prisma-client and the
+      // effect-schema generator are injected with defaults.
+      const ws = yield* stageWorkspace(ENUM_SCHEMA_SOURCE);
+
+      yield* stack.deploy(
+        Prisma.Schema("gen-schema", {
+          schema: ws.schemaPath,
+          out: ws.out,
+        }),
+      );
+
+      // Injected prisma-client output, resolved relative to the schema file.
+      const client = yield* fs.exists(path.join(ws.root, "generated"));
+      expect(client).toBe(true);
+
+      // Injected effect-schema output: Struct per model, Literals per enum.
+      const effect = yield* fs.readFileString(path.join(ws.root, "effect.ts"));
+      expect(effect).toContain(`import * as Schema from "effect/Schema"`);
+      expect(effect).toContain("export const User = Schema.Struct({");
+      expect(effect).toContain(`Schema.Literals(["ADMIN", "USER"])`);
+      expect(effect).toContain("Schema.NullOr(Schema.String)");
+      expect(effect).toContain("id: Schema.Int,");
+
+      // The temporary augmented schema is cleaned up.
+      const temp = yield* fs.exists(
+        path.join(ws.root, ".alchemy.schema.prisma"),
+      );
+      expect(temp).toBe(false);
+    }),
+);
+
+test.provider(
+  "a generator block declared in the schema wins over injection",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -282,9 +355,38 @@ test.provider(
         }),
       );
 
-      // Output is resolved relative to the schema file.
-      const generated = yield* fs.exists(path.join(ws.root, "generated"));
-      expect(generated).toBe(true);
+      // The schema's own block generated the client; the effect module was
+      // still injected alongside it.
+      const client = yield* fs.exists(path.join(ws.root, "generated"));
+      expect(client).toBe(true);
+      const effect = yield* fs.exists(path.join(ws.root, "effect.ts"));
+      expect(effect).toBe(true);
+    }),
+);
+
+test.provider(
+  "generateClient: false skips the schema's client block but still emits effect schemas",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(GENERATOR_SCHEMA_SOURCE);
+
+      yield* stack.deploy(
+        Prisma.Schema("gen-schema", {
+          schema: ws.schemaPath,
+          out: ws.out,
+          generateClient: false,
+        }),
+      );
+
+      // The checked-in-client case: the schema's prisma-client block is
+      // stripped from the temporary copy, so nothing regenerates it...
+      const client = yield* fs.exists(path.join(ws.root, "generated"));
+      expect(client).toBe(false);
+      // ...while the effect module still generates.
+      const effect = yield* fs.readFileString(path.join(ws.root, "effect.ts"));
+      expect(effect).toContain("export const User = Schema.Struct({");
     }),
 );
 

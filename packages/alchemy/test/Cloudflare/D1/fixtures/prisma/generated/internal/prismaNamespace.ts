@@ -553,6 +553,7 @@ export type TransactionIsolationLevel =
 export const WidgetScalarFieldEnum = {
   id: "id",
   name: "name",
+  createdAt: "createdAt",
 } as const;
 
 export type WidgetScalarFieldEnum =
@@ -583,6 +584,14 @@ export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<
 export type StringFieldRefInput<$PrismaModel> = FieldRefInputType<
   $PrismaModel,
   "String"
+>;
+
+/**
+ * Reference to a field of type 'DateTime'
+ */
+export type DateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<
+  $PrismaModel,
+  "DateTime"
 >;
 
 /**

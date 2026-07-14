@@ -1,9 +1,11 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { d1 } from "@/Prisma/D1.ts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Db } from "./db.ts";
+import { Widget } from "./effect.ts";
 import { PrismaClient } from "./generated/client.ts";
 
 /**
@@ -13,7 +15,9 @@ import { PrismaClient } from "./generated/client.ts";
  * by `Cloudflare.D1.QueryDatabase`.
  *
  *   POST /widgets — prisma.widget.create
- *   GET  /widgets — prisma.widget.findMany
+ *   GET  /widgets — prisma.widget.findMany, decoded through the generated
+ *                   effect/Schema `Widget` (from ./effect.ts) to prove the
+ *                   alchemy-prisma-effect output validates live D1 rows
  */
 export default class PrismaD1Worker extends Cloudflare.Worker<PrismaD1Worker>()(
   "PrismaD1Worker",
@@ -39,18 +43,22 @@ export default class PrismaD1Worker extends Cloudflare.Worker<PrismaD1Worker>()(
         }
 
         if (request.method === "GET" && url.pathname === "/widgets") {
-          const widgets = yield* prisma.widget.findMany({
+          const rows = yield* prisma.widget.findMany({
             orderBy: { id: "asc" },
           });
+          const widgets = yield* Schema.decodeUnknownEffect(
+            Schema.Array(Widget),
+          )(rows);
           return yield* HttpServerResponse.json({ widgets });
         }
 
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
-        // Surface Prisma failures as a JSON 500 so the live test can read
-        // the actual error instead of an opaque workerd exception page.
-        Effect.catchTag("PrismaError", (e) =>
-          HttpServerResponse.json({ error: e.message }, { status: 500 }),
+        // Surface Prisma / schema-decode failures as a JSON 500 so the live
+        // test can read the actual error instead of an opaque workerd
+        // exception page.
+        Effect.catchTag(["PrismaError", "SchemaError"], (e) =>
+          HttpServerResponse.json({ error: String(e) }, { status: 500 }),
         ),
       ),
     };

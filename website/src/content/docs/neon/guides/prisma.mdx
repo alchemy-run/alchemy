@@ -37,6 +37,9 @@ import * as Prisma from "alchemy/Prisma";
 
 const schema = yield* Prisma.Schema("app-schema", {
   schema: "./prisma/schema.prisma",
+  // Workers need the workerd client runtime; the resource injects the
+  // generator when the schema declares none.
+  generateClient: { runtime: "workerd" },
 });
 ```
 
@@ -48,9 +51,11 @@ comes from a driver adapter. On deploy the provider runs
 (default `./prisma/migrations`) to the current schema and — only
 when the diff would emit SQL — writes a new
 `{timestamp}_migration/` directory containing `migration.sql` and
-`snapshot.prisma`, then reruns `prisma generate`. Migration files
-are meant to be checked in, and removing the resource from the
-stack never deletes them.
+`snapshot.prisma`, then reruns `prisma generate` (injecting the
+client generator when the schema has none, and an
+[effect/Schema generator](/prisma/migrations#effect-schemas) for
+your models alongside it). Migration files are meant to be checked
+in, and removing the resource from the stack never deletes them.
 
 ## Feed `migrationsDir` from the schema
 

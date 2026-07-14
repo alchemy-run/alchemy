@@ -43,6 +43,7 @@ branch, use the `postgresql` datasource:
 generator client {
   provider = "prisma-client"
   output   = "../src/generated"
+  runtime  = "workerd"
 }
 
 datasource db {

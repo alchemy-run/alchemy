@@ -32,12 +32,57 @@ export type SchemaProps = {
   out?: string;
   /**
    * Run `prisma generate` after regenerating migrations so the Prisma Client
-   * stays in sync with the schema. Skipped automatically when the schema has
-   * no `generator` block.
+   * stays in sync with the schema. When the schema file declares no
+   * `prisma-client` generator block, one is injected automatically — no
+   * generator configuration required. Pass an object to shape the injected
+   * block (a generator block declared in the schema always wins), or `false`
+   * to skip client generation entirely (e.g. when the client is checked in).
    *
    * @default true
    */
-  generateClient?: boolean;
+  generateClient?: boolean | GenerateClientOptions;
+  /**
+   * Emit effect/Schema definitions for every model and enum alongside the
+   * client, via the built-in `alchemy-prisma-effect` Prisma generator —
+   * decode rows read outside the Prisma client, or reuse the shapes in RPC
+   * and HTTP contracts. Injected automatically unless the schema already
+   * declares the generator; pass `false` to opt out.
+   *
+   * @default true
+   */
+  effectSchemas?: boolean | EffectSchemasOptions;
+};
+
+export type GenerateClientOptions = {
+  /**
+   * Output directory for the injected `prisma-client` generator, relative
+   * to the schema file (matching Prisma's own convention).
+   *
+   * @default "./generated"
+   */
+  output?: string;
+  /**
+   * Target runtime for the generated client. Use `"workerd"` for Cloudflare
+   * Workers — the default node runtime cannot start on workerd.
+   */
+  runtime?:
+    | "nodejs"
+    | "workerd"
+    | "bun"
+    | "deno"
+    | "edge-light"
+    | "react-native"
+    | (string & {});
+};
+
+export type EffectSchemasOptions = {
+  /**
+   * Output file (or directory) for the generated effect/Schema module,
+   * relative to the schema file.
+   *
+   * @default "./effect.ts"
+   */
+  output?: string;
 };
 
 export type Schema = Resource<
@@ -300,24 +345,95 @@ export const SchemaProvider = () =>
           );
         });
 
+      // The effect-schema generator ships as a bin next to this package's
+      // src/ and lib/ (both are two levels below the package root).
+      const effectGeneratorBin = Effect.gen(function* () {
+        const url = yield* Effect.sync(
+          () => new URL("../../bin/prisma-effect.mjs", import.meta.url),
+        );
+        return yield* path.fromFileUrl(url);
+      });
+
+      const forwardSlash = (p: string) => p.replaceAll("\\", "/");
+
+      // A generator block never nests braces, so this match is exact.
+      const GENERATOR_BLOCK = /generator\s+\w+\s*\{[^}]*\}[^\S\n]*\n?/g;
+      const isClientBlock = (block: string) =>
+        /provider\s*=\s*"prisma-client[^"]*"/.test(block);
+      const isEffectBlock = (block: string) =>
+        block.includes("alchemy-prisma-effect") ||
+        block.includes("prisma-effect.mjs");
+
+      /**
+       * Run `prisma generate` with zero-config defaults: when the schema
+       * declares no `prisma-client` (or effect) generator block, one is
+       * injected into a temporary sibling copy of the schema — declared
+       * blocks always win over the injected defaults. `generateClient:
+       * false` strips client blocks from the copy (the client is checked
+       * in), while the effect-schema generator still runs unless
+       * `effectSchemas: false`.
+       */
       const generateClient = (props: SchemaProps, schemaText: string) =>
         Effect.gen(function* () {
-          if (props.generateClient === false) return;
-          // `prisma generate` errors on a schema with no generator block;
-          // treat that as "nothing to generate" rather than a deploy failure.
-          if (!/generator\s+\w+\s*\{/.test(schemaText)) return;
-          const result = yield* runPrisma([
-            "generate",
-            "--schema",
-            resolveSchema(props),
-          ]);
-          if (result.exitCode !== 0) {
-            return yield* Effect.fail(
-              new Error(
-                `prisma generate failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
-              ),
+          const clientOpt = props.generateClient ?? true;
+          const effectOpt = props.effectSchemas ?? true;
+          if (clientOpt === false && effectOpt === false) return;
+
+          const schemaPath = resolveSchema(props);
+          const schemaDir = path.dirname(schemaPath);
+          const blocks = schemaText.match(GENERATOR_BLOCK) ?? [];
+
+          let text = schemaText;
+          if (clientOpt === false && blocks.some(isClientBlock)) {
+            text = text.replace(GENERATOR_BLOCK, (block) =>
+              isClientBlock(block) ? "" : block,
             );
+          } else if (clientOpt !== false && !blocks.some(isClientBlock)) {
+            const opts = typeof clientOpt === "object" ? clientOpt : {};
+            const output = path.resolve(
+              schemaDir,
+              opts.output ?? "./generated",
+            );
+            const runtime = opts.runtime
+              ? `  runtime  = "${opts.runtime}"\n`
+              : "";
+            text += `\ngenerator alchemyClient {\n  provider = "prisma-client"\n  output   = "${forwardSlash(output)}"\n${runtime}}\n`;
           }
+
+          if (effectOpt !== false && !blocks.some(isEffectBlock)) {
+            const opts = typeof effectOpt === "object" ? effectOpt : {};
+            const output = path.resolve(
+              schemaDir,
+              opts.output ?? "./effect.ts",
+            );
+            const bin = yield* effectGeneratorBin;
+            text += `\ngenerator alchemyEffect {\n  provider = "node ${forwardSlash(bin)}"\n  output   = "${forwardSlash(output)}"\n}\n`;
+          }
+
+          // Nothing left to generate (e.g. client generation disabled and
+          // no other generator declared or injected).
+          if (!/generator\s+\w+\s*\{/.test(text)) return;
+
+          const augmented = text !== schemaText;
+          const target = augmented
+            ? path.join(schemaDir, ".alchemy.schema.prisma")
+            : schemaPath;
+
+          if (augmented) yield* fs.writeFileString(target, text);
+          return yield* Effect.gen(function* () {
+            const result = yield* runPrisma(["generate", "--schema", target]);
+            if (result.exitCode !== 0) {
+              return yield* Effect.fail(
+                new Error(
+                  `prisma generate failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
+                ),
+              );
+            }
+          }).pipe(
+            Effect.ensuring(
+              augmented ? fs.remove(target).pipe(Effect.ignore) : Effect.void,
+            ),
+          );
         });
 
       /**

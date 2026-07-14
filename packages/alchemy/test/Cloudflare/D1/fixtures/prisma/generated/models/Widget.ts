@@ -37,16 +37,19 @@ export type WidgetSumAggregateOutputType = {
 export type WidgetMinAggregateOutputType = {
   id: number | null;
   name: string | null;
+  createdAt: Date | null;
 };
 
 export type WidgetMaxAggregateOutputType = {
   id: number | null;
   name: string | null;
+  createdAt: Date | null;
 };
 
 export type WidgetCountAggregateOutputType = {
   id: number;
   name: number;
+  createdAt: number;
   _all: number;
 };
 
@@ -61,16 +64,19 @@ export type WidgetSumAggregateInputType = {
 export type WidgetMinAggregateInputType = {
   id?: true;
   name?: true;
+  createdAt?: true;
 };
 
 export type WidgetMaxAggregateInputType = {
   id?: true;
   name?: true;
+  createdAt?: true;
 };
 
 export type WidgetCountAggregateInputType = {
   id?: true;
   name?: true;
+  createdAt?: true;
   _all?: true;
 };
 
@@ -170,6 +176,7 @@ export type WidgetGroupByArgs<
 export type WidgetGroupByOutputType = {
   id: number;
   name: string;
+  createdAt: Date;
   _count: WidgetCountAggregateOutputType | null;
   _avg: WidgetAvgAggregateOutputType | null;
   _sum: WidgetSumAggregateOutputType | null;
@@ -196,11 +203,13 @@ export type WidgetWhereInput = {
   NOT?: Prisma.WidgetWhereInput | Prisma.WidgetWhereInput[];
   id?: Prisma.IntFilter<"Widget"> | number;
   name?: Prisma.StringFilter<"Widget"> | string;
+  createdAt?: Prisma.DateTimeFilter<"Widget"> | Date | string;
 };
 
 export type WidgetOrderByWithRelationInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  createdAt?: Prisma.SortOrder;
 };
 
 export type WidgetWhereUniqueInput = Prisma.AtLeast<
@@ -210,6 +219,7 @@ export type WidgetWhereUniqueInput = Prisma.AtLeast<
     OR?: Prisma.WidgetWhereInput[];
     NOT?: Prisma.WidgetWhereInput | Prisma.WidgetWhereInput[];
     name?: Prisma.StringFilter<"Widget"> | string;
+    createdAt?: Prisma.DateTimeFilter<"Widget"> | Date | string;
   },
   "id"
 >;
@@ -217,6 +227,7 @@ export type WidgetWhereUniqueInput = Prisma.AtLeast<
 export type WidgetOrderByWithAggregationInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  createdAt?: Prisma.SortOrder;
   _count?: Prisma.WidgetCountOrderByAggregateInput;
   _avg?: Prisma.WidgetAvgOrderByAggregateInput;
   _max?: Prisma.WidgetMaxOrderByAggregateInput;
@@ -234,43 +245,52 @@ export type WidgetScalarWhereWithAggregatesInput = {
     | Prisma.WidgetScalarWhereWithAggregatesInput[];
   id?: Prisma.IntWithAggregatesFilter<"Widget"> | number;
   name?: Prisma.StringWithAggregatesFilter<"Widget"> | string;
+  createdAt?: Prisma.DateTimeWithAggregatesFilter<"Widget"> | Date | string;
 };
 
 export type WidgetCreateInput = {
   name: string;
+  createdAt?: Date | string;
 };
 
 export type WidgetUncheckedCreateInput = {
   id?: number;
   name: string;
+  createdAt?: Date | string;
 };
 
 export type WidgetUpdateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 
 export type WidgetUncheckedUpdateInput = {
   id?: Prisma.IntFieldUpdateOperationsInput | number;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 
 export type WidgetCreateManyInput = {
   id?: number;
   name: string;
+  createdAt?: Date | string;
 };
 
 export type WidgetUpdateManyMutationInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 
 export type WidgetUncheckedUpdateManyInput = {
   id?: Prisma.IntFieldUpdateOperationsInput | number;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 
 export type WidgetCountOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  createdAt?: Prisma.SortOrder;
 };
 
 export type WidgetAvgOrderByAggregateInput = {
@@ -280,11 +300,13 @@ export type WidgetAvgOrderByAggregateInput = {
 export type WidgetMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  createdAt?: Prisma.SortOrder;
 };
 
 export type WidgetMinOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  createdAt?: Prisma.SortOrder;
 };
 
 export type WidgetSumOrderByAggregateInput = {
@@ -293,6 +315,10 @@ export type WidgetSumOrderByAggregateInput = {
 
 export type StringFieldUpdateOperationsInput = {
   set?: string;
+};
+
+export type DateTimeFieldUpdateOperationsInput = {
+  set?: Date | string;
 };
 
 export type IntFieldUpdateOperationsInput = {
@@ -310,6 +336,7 @@ export type WidgetSelect<
   {
     id?: boolean;
     name?: boolean;
+    createdAt?: boolean;
   },
   ExtArgs["result"]["widget"]
 >;
@@ -321,6 +348,7 @@ export type WidgetSelectCreateManyAndReturn<
   {
     id?: boolean;
     name?: boolean;
+    createdAt?: boolean;
   },
   ExtArgs["result"]["widget"]
 >;
@@ -332,6 +360,7 @@ export type WidgetSelectUpdateManyAndReturn<
   {
     id?: boolean;
     name?: boolean;
+    createdAt?: boolean;
   },
   ExtArgs["result"]["widget"]
 >;
@@ -339,13 +368,14 @@ export type WidgetSelectUpdateManyAndReturn<
 export type WidgetSelectScalar = {
   id?: boolean;
   name?: boolean;
+  createdAt?: boolean;
 };
 
 export type WidgetOmit<
   ExtArgs extends runtime.Types.Extensions.InternalArgs =
     runtime.Types.Extensions.DefaultArgs,
 > = runtime.Types.Extensions.GetOmit<
-  "id" | "name",
+  "id" | "name" | "createdAt",
   ExtArgs["result"]["widget"]
 >;
 
@@ -359,6 +389,7 @@ export type $WidgetPayload<
     {
       id: number;
       name: string;
+      createdAt: Date;
     },
     ExtArgs["result"]["widget"]
   >;
@@ -953,6 +984,7 @@ export interface Prisma__WidgetClient<
 export interface WidgetFieldRefs {
   readonly id: Prisma.FieldRef<"Widget", "Int">;
   readonly name: Prisma.FieldRef<"Widget", "String">;
+  readonly createdAt: Prisma.FieldRef<"Widget", "DateTime">;
 }
 
 // Custom InputTypes
