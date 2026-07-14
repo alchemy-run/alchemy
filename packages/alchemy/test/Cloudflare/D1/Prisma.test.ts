@@ -136,3 +136,22 @@ test(
   }).pipe(logLevel),
   { timeout: TEST_TIMEOUT },
 );
+
+test(
+  "async worker constructs the client directly from env.DB (new PrismaD1(env.DB))",
+  Effect.gen(function* () {
+    const { asyncUrl } = yield* stack;
+
+    // The async worker binds the stack's root database on `env` and builds
+    // the client with the official adapter — proving migrations were applied
+    // to that database and the generated client runs outside the Effect
+    // runtime wrapper too.
+    const created = yield* createWidget(asyncUrl, "async-gizmo");
+    expect(created.name).toBe("async-gizmo");
+    expect(typeof created.id).toBe("number");
+
+    const widgets = yield* listUntilContains(asyncUrl, created);
+    expect(widgets.map((w) => w.name)).toContain("async-gizmo");
+  }).pipe(logLevel),
+  { timeout: TEST_TIMEOUT },
+);

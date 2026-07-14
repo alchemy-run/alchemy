@@ -99,8 +99,12 @@ PlanetScale Postgres), `alchemy/Prisma/D1`,
 `alchemy/Prisma/PlanetScale` (fetch-based MySQL), and
 `alchemy/Prisma/Neon` (Neon's serverless WebSocket driver); the
 generic `Prisma.client(make)` from `alchemy/Prisma` wraps any other
-adapter. For the Worker wiring itself — Hyperdrive, `ConnectBinding`,
-`nodejs_compat`, and the exact install commands — follow
+adapter. Async (non-Effect) Workers skip the wrapper entirely: bind
+the database on `env` and construct the generated client with the
+official adapter (`new PrismaClient({ adapter: new PrismaD1(env.DB) })`)
+— see [Async Workers](/cloudflare/data/prisma#async-workers). For the
+Worker wiring itself — Hyperdrive, `ConnectBinding`, `nodejs_compat`,
+and the exact install commands — follow
 [Prisma on Workers](/cloudflare/data/prisma).
 
 ## Compose with your cloud
