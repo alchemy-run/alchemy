@@ -13,19 +13,48 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import Stack from "./fixtures/test-logger/stack.ts";
 import LogTestWorker from "./fixtures/test-logger/worker.ts";
 
 // `log: true` is the surface under test: the Worker provider must patch the
 // fixture's console, ensure the account-level logger singleton, and attach
 // the DO binding — and `testLoggerTail` must stream the resulting rows.
-const { test } = Test.make({
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
   log: true,
 });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
+);
+
+// Exercises the harness integration: `log: true` makes `deploy(Stack)` fork
+// an auto-tail of the stack into the shared scope. The fiber must stream
+// logs while tests run and be interrupted cleanly when `destroy(Stack)`
+// closes the scope (a hang here would time out `afterAll`).
+const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+test(
+  "harness auto-tail streams logs from a deployed stack",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    const res = yield* client.get(`${url}/log?msg=harness-probe`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+    expect(res.status).toBe(200);
+    // The mirrored `harness-probe` line prints to the vitest console via the
+    // forked auto-tail; the assertable half of the pipeline (DO buffering +
+    // websocket delivery) is covered by the test below.
+  }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider(
