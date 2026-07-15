@@ -189,23 +189,17 @@ describe.sequential("DataSync Bindings", () => {
             expect(cancelled.tag).toBe("InvalidRequestException");
           }
 
-          // Wait for the run to reach a terminal state so stack.destroy()
-          // never races an active execution (a cancelled run lands in
-          // ERROR; an uncancellable one was already terminal or finishes
-          // the empty transfer quickly).
-          const finished = (yield* getJson(`/execution${query}`).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("10 seconds"),
-              until: (r): boolean => {
-                const status = (r as { status: string }).status;
-                return status === "SUCCESS" || status === "ERROR";
-              },
-              times: 24,
-            }),
-          )) as { status: string };
-          expect(["SUCCESS", "ERROR"]).toContain(finished.status);
+          // Observe the run after the cancel: a cancelled queued run parks
+          // in CANCELLING (sometimes for minutes) before landing in ERROR —
+          // any of the three proves the round-trip. `stack.destroy()`
+          // deletes the task cleanly even with a CANCELLING execution, so
+          // there is no need to wait for a terminal state.
+          const observed = (yield* getJson(`/execution${query}`)) as {
+            status: string;
+          };
+          expect(["CANCELLING", "ERROR", "SUCCESS"]).toContain(observed.status);
         }),
-      { timeout: 420_000 },
+      { timeout: 240_000 },
     );
   });
 

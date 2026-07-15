@@ -268,8 +268,12 @@ export default CostExplorerTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/approximate-usage") {
+          // SERVICE-dimension estimates only support HOURLY granularity —
+          // DAILY is resource-level only and fails with ValidationException
+          // ("The estimation data cannot be generated for your input
+          // combination", verified by probe).
           const result = yield* getApproximateUsageRecords({
-            Granularity: "DAILY",
+            Granularity: "HOURLY",
             ApproximationDimension: "SERVICE",
           }).pipe(
             Effect.map((r) => ({ tag: "Ok", total: r.TotalRecords ?? 0 })),
@@ -281,6 +285,13 @@ export default CostExplorerTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/rightsizing") {
+          // Rightsizing recommendations are an opt-in Cost Explorer
+          // preference on the payer account. An account without the opt-in
+          // rejects with RightsizingRecommendationNotEnabled — the
+          // AccessDeniedException "opt-in only feature" rejection (verified
+          // by probe) patched into distilled as a specific typed tag. A
+          // genuine IAM gap still surfaces as AccessDeniedException and
+          // fails the route.
           const result = yield* getRightsizingRecommendation({
             Service: "AmazonEC2",
           }).pipe(
@@ -288,6 +299,9 @@ export default CostExplorerTestFunction.make(
               tag: "Ok",
               count: (r.RightsizingRecommendations ?? []).length,
             })),
+            Effect.catchTag("RightsizingRecommendationNotEnabled", (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
+            ),
           );
           return yield* HttpServerResponse.json(result);
         }

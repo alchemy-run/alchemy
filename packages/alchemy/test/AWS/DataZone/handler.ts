@@ -1,0 +1,188 @@
+import * as DataZone from "@/AWS/DataZone";
+import * as Lambda from "@/AWS/Lambda";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import path from "pathe";
+
+const main = path.resolve(import.meta.dirname, "handler.ts");
+
+/**
+ * Deterministic domain name so the test can find the domain id out-of-band
+ * (needed to create a DataZone user profile for the function's role).
+ */
+export const BINDINGS_DOMAIN_NAME = "alchemy-datazone-bindings-test";
+
+export class DataZoneTestFunction extends Lambda.Function<Lambda.Function>()(
+  "DataZoneTestFunction",
+) {}
+
+export default DataZoneTestFunction.make(
+  {
+    main,
+    url: true,
+    timeout: Duration.seconds(30),
+  },
+  Effect.gen(function* () {
+    // The domain every domain-scoped binding is bound to.
+    const domain = yield* DataZone.Domain("BindingsDomain", {
+      name: BINDINGS_DOMAIN_NAME,
+      description: "alchemy datazone bindings fixture domain",
+    });
+
+    // Event source: subscribe the host to DataZone workflow events. The
+    // deploy proves the EventBridge rule + invoke permission wiring.
+    yield* DataZone.consumeDataZoneEvents(
+      { detailTypes: ["Subscription Request Created"] },
+      (events) =>
+        Stream.runForEach(events, (event) =>
+          Effect.log(`datazone event: ${event.detail.metadata?.id}`),
+        ),
+    );
+
+    const bound = {
+      search: yield* DataZone.Search(domain),
+      searchListings: yield* DataZone.SearchListings(domain),
+      searchTypes: yield* DataZone.SearchTypes(domain),
+      getListing: yield* DataZone.GetListing(domain),
+      getAsset: yield* DataZone.GetAsset(domain),
+      createAsset: yield* DataZone.CreateAsset(domain),
+      createAssetRevision: yield* DataZone.CreateAssetRevision(domain),
+      acceptPredictions: yield* DataZone.AcceptPredictions(domain),
+      rejectPredictions: yield* DataZone.RejectPredictions(domain),
+      postLineageEvent: yield* DataZone.PostLineageEvent(domain),
+      getLineageNode: yield* DataZone.GetLineageNode(domain),
+      postTimeSeriesDataPoints:
+        yield* DataZone.PostTimeSeriesDataPoints(domain),
+      listTimeSeriesDataPoints:
+        yield* DataZone.ListTimeSeriesDataPoints(domain),
+      getTimeSeriesDataPoint: yield* DataZone.GetTimeSeriesDataPoint(domain),
+      createSubscriptionRequest:
+        yield* DataZone.CreateSubscriptionRequest(domain),
+      acceptSubscriptionRequest:
+        yield* DataZone.AcceptSubscriptionRequest(domain),
+      rejectSubscriptionRequest:
+        yield* DataZone.RejectSubscriptionRequest(domain),
+      getSubscription: yield* DataZone.GetSubscription(domain),
+      listSubscriptions: yield* DataZone.ListSubscriptions(domain),
+      listSubscriptionRequests:
+        yield* DataZone.ListSubscriptionRequests(domain),
+      cancelSubscription: yield* DataZone.CancelSubscription(domain),
+      revokeSubscription: yield* DataZone.RevokeSubscription(domain),
+      startDataSourceRun: yield* DataZone.StartDataSourceRun(domain),
+      getDataSourceRun: yield* DataZone.GetDataSourceRun(domain),
+      listDataSourceRuns: yield* DataZone.ListDataSourceRuns(domain),
+      startMetadataGenerationRun:
+        yield* DataZone.StartMetadataGenerationRun(domain),
+      getMetadataGenerationRun:
+        yield* DataZone.GetMetadataGenerationRun(domain),
+      getIamPortalLoginUrl: yield* DataZone.GetIamPortalLoginUrl(domain),
+      listNotifications: yield* DataZone.ListNotifications(domain),
+      getUserProfile: yield* DataZone.GetUserProfile(domain),
+    };
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.originalUrl);
+        const pathname = url.pathname;
+
+        if (request.method === "GET" && pathname === "/bindings") {
+          return yield* HttpServerResponse.json({
+            bound: Object.keys(bound),
+          });
+        }
+
+        // Inventory search: the domain id is injected from the binding.
+        if (request.method === "GET" && pathname === "/search") {
+          const result = yield* bound.search({ searchScope: "ASSET" });
+          return yield* HttpServerResponse.json({
+            totalMatchCount: result.totalMatchCount ?? 0,
+            items: (result.items ?? []).length,
+          });
+        }
+
+        // Listing search over the published catalog.
+        if (request.method === "GET" && pathname === "/listings") {
+          const result = yield* bound.searchListings({});
+          return yield* HttpServerResponse.json({
+            items: (result.items ?? []).length,
+          });
+        }
+
+        // Approved subscriptions (empty in a fresh domain).
+        if (request.method === "GET" && pathname === "/subscriptions") {
+          const result = yield* bound.listSubscriptions({
+            status: "APPROVED",
+          });
+          return yield* HttpServerResponse.json({
+            items: (result.items ?? []).length,
+          });
+        }
+
+        // Pending subscription requests (empty in a fresh domain).
+        if (request.method === "GET" && pathname === "/requests") {
+          const result = yield* bound.listSubscriptionRequests({
+            status: "PENDING",
+          });
+          return yield* HttpServerResponse.json({
+            items: (result.items ?? []).length,
+          });
+        }
+
+        // Single-use data portal sign-in URL.
+        if (request.method === "GET" && pathname === "/portal") {
+          const result = yield* bound.getIamPortalLoginUrl();
+          return yield* HttpServerResponse.json({
+            authCodeUrl: result.authCodeUrl,
+            userProfileId: result.userProfileId,
+          });
+        }
+
+        return yield* HttpServerResponse.json(
+          { error: "Not found", method: request.method, pathname },
+          { status: 404 },
+        );
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Lambda.EventSource,
+        DataZone.SearchHttp,
+        DataZone.SearchListingsHttp,
+        DataZone.SearchTypesHttp,
+        DataZone.GetListingHttp,
+        DataZone.GetAssetHttp,
+        DataZone.CreateAssetHttp,
+        DataZone.CreateAssetRevisionHttp,
+        DataZone.AcceptPredictionsHttp,
+        DataZone.RejectPredictionsHttp,
+        DataZone.PostLineageEventHttp,
+        DataZone.GetLineageNodeHttp,
+        DataZone.PostTimeSeriesDataPointsHttp,
+        DataZone.ListTimeSeriesDataPointsHttp,
+        DataZone.GetTimeSeriesDataPointHttp,
+        DataZone.CreateSubscriptionRequestHttp,
+        DataZone.AcceptSubscriptionRequestHttp,
+        DataZone.RejectSubscriptionRequestHttp,
+        DataZone.GetSubscriptionHttp,
+        DataZone.ListSubscriptionsHttp,
+        DataZone.ListSubscriptionRequestsHttp,
+        DataZone.CancelSubscriptionHttp,
+        DataZone.RevokeSubscriptionHttp,
+        DataZone.StartDataSourceRunHttp,
+        DataZone.GetDataSourceRunHttp,
+        DataZone.ListDataSourceRunsHttp,
+        DataZone.StartMetadataGenerationRunHttp,
+        DataZone.GetMetadataGenerationRunHttp,
+        DataZone.GetIamPortalLoginUrlHttp,
+        DataZone.ListNotificationsHttp,
+        DataZone.GetUserProfileHttp,
+      ),
+    ),
+  ),
+);

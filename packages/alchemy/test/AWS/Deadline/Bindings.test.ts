@@ -1,0 +1,367 @@
+import * as AWS from "@/AWS";
+import * as Core from "@/Test/Core";
+import * as Test from "@/Test/Vitest";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
+import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { describe } from "vitest";
+
+import DeadlineTestFunctionLive, { DeadlineTestFunction } from "./handler";
+
+const testOptions = { providers: AWS.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "DeadlineBindings");
+
+// Lambda function URL cold-start (DNS, IAM propagation, init) can take well
+// over 60s on a fresh deploy.
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
+
+let baseUrl: string;
+let functionArn: string;
+
+class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
+  readonly status: number;
+  readonly body: string;
+}> {}
+
+// The shared Lambda fixture occasionally answers a transient 5xx (cold
+// re-init, IAM propagation on the freshly attached policy that the handler's
+// `Effect.orDie` surfaces as a 500). Retry only 5xx; a genuine 4xx/assertion
+// failure surfaces immediately.
+const send = (request: HttpClientRequest.HttpClientRequest) =>
+  HttpClient.execute(request).pipe(
+    Effect.flatMap((response) =>
+      response.status >= 500
+        ? response.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(
+                new TransientUpstream({ status: response.status, body }),
+              ),
+            ),
+          )
+        : Effect.succeed(response),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "TransientUpstream",
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(8),
+      ]),
+    }),
+  );
+
+const getJson = (path: string) =>
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
+    Effect.flatMap((r) => r.json),
+  );
+
+const postJson = (path: string) =>
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
+    Effect.flatMap((r) => r.json),
+  );
+
+describe.sequential("Deadline Bindings", () => {
+  beforeAll(
+    Effect.gen(function* () {
+      yield* Effect.logInfo(
+        "Deadline test setup: destroying previous resources",
+      );
+      yield* sharedStack.destroy();
+
+      yield* Effect.logInfo("Deadline test setup: deploying fixture");
+      const attrs = yield* sharedStack.deploy(
+        Effect.gen(function* () {
+          return yield* DeadlineTestFunction;
+        }).pipe(Effect.provide(DeadlineTestFunctionLive)),
+      );
+
+      expect(attrs.functionUrl).toBeTruthy();
+      baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
+      functionArn = attrs.functionArn;
+
+      const readinessUrl = `${baseUrl}/bindings`;
+      yield* Effect.logInfo(
+        `Deadline test setup: probing readiness at ${readinessUrl}`,
+      );
+      yield* HttpClient.get(readinessUrl).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        ),
+        Effect.tapError((error) =>
+          Effect.logWarning(
+            `Deadline test setup: fixture not ready yet (${String(error)})`,
+          ),
+        ),
+        Effect.retry({ schedule: readinessPolicy }),
+      );
+    }),
+    { timeout: 300_000 },
+  );
+
+  afterAll(sharedStack.destroy(), { timeout: 240_000 });
+
+  describe("binding registration", () => {
+    test.provider("all capabilities initialize in the runtime", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/bindings")) as { bound: string[] };
+        expect(response.bound).toHaveLength(20);
+      }),
+    );
+  });
+
+  let jobId: string;
+  let queueId: string;
+  let stepId: string;
+
+  describe("CreateJob / GetJob / ListJobs / SearchJobs / UpdateJob", () => {
+    test.provider(
+      "submits a job, reads it back, finds it, and reprioritizes it",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Submit — the binding injects the farm/queue ids.
+          const created = (yield* postJson("/jobs")) as { jobId: string };
+          expect(created.jobId).toMatch(/^job-/);
+          jobId = created.jobId;
+
+          // Read back; the job settles to CREATE_COMPLETE within seconds.
+          const job = (yield* getJson(`/job?jobId=${jobId}`).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (j): boolean =>
+                (j as { lifecycleStatus: string }).lifecycleStatus ===
+                "CREATE_COMPLETE",
+              times: 10,
+            }),
+          )) as { jobId: string; priority: number; lifecycleStatus: string };
+          expect(job.jobId).toBe(jobId);
+          expect(job.priority).toBe(50);
+          expect(job.lifecycleStatus).toBe("CREATE_COMPLETE");
+
+          // Enumerate + search — summaries carry the queueId back out.
+          const listed = (yield* getJson("/jobs")) as { ids: string[] };
+          expect(listed.ids).toContain(jobId);
+          // The search index can lag job creation by a few seconds.
+          const searched = (yield* postJson("/search").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (s): boolean =>
+                (s as { ids: string[] }).ids.includes(jobId),
+              times: 10,
+            }),
+          )) as {
+            ids: string[];
+            queueIds: (string | undefined)[];
+          };
+          expect(searched.ids).toContain(jobId);
+          queueId = searched.queueIds.find(
+            (id): id is string => id !== undefined,
+          )!;
+          expect(queueId).toMatch(/^queue-/);
+
+          // Reprioritize and verify the mutation landed. GetJob is
+          // eventually consistent, so poll the read (bounded).
+          yield* postJson(`/priority?jobId=${jobId}&priority=75`);
+          const updated = (yield* getJson(`/job?jobId=${jobId}`).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (j): boolean =>
+                (j as { priority: number }).priority === 75,
+              times: 10,
+            }),
+          )) as { priority: number };
+          expect(updated.priority).toBe(75);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListSteps / GetStep / ListTasks / GetTask", () => {
+    test.provider(
+      "walks the job's steps and tasks",
+      (_stack) =>
+        Effect.gen(function* () {
+          const steps = (yield* getJson(`/steps?jobId=${jobId}`).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (s): boolean => (s as { ids: string[] }).ids.length > 0,
+              times: 10,
+            }),
+          )) as { ids: string[]; names: string[] };
+          expect(steps.ids.length).toBeGreaterThanOrEqual(1);
+          expect(steps.names).toContain("Echo");
+          stepId = steps.ids[0]!;
+
+          const step = (yield* getJson(
+            `/step?jobId=${jobId}&stepId=${stepId}`,
+          )) as { stepId: string; name: string };
+          expect(step.stepId).toBe(stepId);
+          expect(step.name).toBe("Echo");
+
+          const tasks = (yield* getJson(
+            `/tasks?jobId=${jobId}&stepId=${stepId}`,
+          )) as { ids: string[] };
+          expect(tasks.ids.length).toBeGreaterThanOrEqual(1);
+
+          const task = (yield* getJson(
+            `/task?jobId=${jobId}&stepId=${stepId}&taskId=${tasks.ids[0]}`,
+          )) as { taskId: string; runStatus: string };
+          expect(task.taskId).toBe(tasks.ids[0]);
+          // No fleet is associated with the fixture queue, so the task can
+          // never be scheduled — Deadline reports it READY or, once queue
+          // compatibility is evaluated, NOT_COMPATIBLE.
+          expect(["READY", "NOT_COMPATIBLE"]).toContain(task.runStatus);
+        }),
+      { timeout: 90_000 },
+    );
+  });
+
+  describe("SearchSteps / SearchTasks / ListJobParameterDefinitions", () => {
+    test.provider(
+      "searches the job's steps and tasks and reads parameter definitions",
+      (_stack) =>
+        Effect.gen(function* () {
+          // The search index can lag job creation by a few seconds.
+          const steps = (yield* postJson(`/search/steps?jobId=${jobId}`).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (s): boolean => (s as { ids: string[] }).ids.length > 0,
+              times: 10,
+            }),
+          )) as { ids: string[] };
+          expect(steps.ids).toContain(stepId);
+
+          const tasks = (yield* postJson(`/search/tasks?jobId=${jobId}`)) as {
+            ids: string[];
+          };
+          expect(tasks.ids.length).toBeGreaterThanOrEqual(1);
+
+          // The fixture template declares no parameters.
+          const params = (yield* getJson(`/params?jobId=${jobId}`)) as {
+            count: number;
+          };
+          expect(params.count).toBe(0);
+        }),
+      { timeout: 90_000 },
+    );
+  });
+
+  describe("UpdateTask / UpdateStep", () => {
+    test.provider(
+      "cancels a READY task, then requeues the step",
+      (_stack) =>
+        Effect.gen(function* () {
+          const tasks = (yield* getJson(
+            `/tasks?jobId=${jobId}&stepId=${stepId}`,
+          )) as { ids: string[] };
+          const taskId = tasks.ids[0]!;
+
+          // Cancel the single task and watch it converge to CANCELED. (The
+          // fixture queue has no fleet, so the pending state is READY or
+          // NOT_COMPATIBLE — never RUNNING.)
+          yield* postJson(
+            `/task/cancel?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`,
+          );
+          const canceled = (yield* getJson(
+            `/task?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`,
+          ).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (t): boolean =>
+                (t as { runStatus: string }).runStatus === "CANCELED" ||
+                (t as { runStatus: string }).runStatus === "CANCELING",
+              times: 10,
+            }),
+          )) as { runStatus: string };
+          expect(["CANCELED", "CANCELING"]).toContain(canceled.runStatus);
+
+          // Requeue the whole step; the task converges back to a pending
+          // status (READY, or NOT_COMPATIBLE while no fleet is associated).
+          yield* postJson(`/step/requeue?jobId=${jobId}&stepId=${stepId}`);
+          const requeued = (yield* getJson(
+            `/task?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`,
+          ).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (t): boolean =>
+                (t as { runStatus: string }).runStatus === "READY" ||
+                (t as { runStatus: string }).runStatus === "NOT_COMPATIBLE",
+              times: 10,
+            }),
+          )) as { runStatus: string };
+          expect(["READY", "NOT_COMPATIBLE"]).toContain(requeued.runStatus);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListSessions / ListSessionActions", () => {
+    test.provider(
+      "a job with no workers has no sessions and no session actions",
+      (_stack) =>
+        Effect.gen(function* () {
+          const sessions = (yield* getJson(`/sessions?jobId=${jobId}`)) as {
+            ids: string[];
+          };
+          expect(sessions.ids).toEqual([]);
+
+          const actions = (yield* getJson(
+            `/session-actions?jobId=${jobId}`,
+          )) as { ids: string[] };
+          expect(actions.ids).toEqual([]);
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("SessionsStatisticsAggregation", () => {
+    test.provider(
+      "starts an aggregation on the farm and polls it to completion",
+      (_stack) =>
+        Effect.gen(function* () {
+          const started = (yield* postJson(`/stats?queueId=${queueId}`)) as {
+            aggregationId: string;
+          };
+          expect(started.aggregationId).toBeTruthy();
+
+          const result = (yield* getJson(
+            `/stats?aggregationId=${started.aggregationId}`,
+          ).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (r): boolean =>
+                (r as { status: string }).status !== "IN_PROGRESS",
+              times: 20,
+            }),
+          )) as { status: string; count: number };
+          // An empty farm aggregates to COMPLETED with zero statistics.
+          expect(result.status).toBe("COMPLETED");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("consumeFarmEvents", () => {
+    test.provider(
+      "the deploy created an EventBridge rule targeting the function",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeFarmEvents must
+          // have materialized as a rule on the default bus with the Lambda
+          // as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+    );
+  });
+});

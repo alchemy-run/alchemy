@@ -9,6 +9,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readDirectoryTags, sameStringSet } from "./internal.ts";
 
@@ -82,6 +83,8 @@ export interface Directory extends Resource<
   {
     /** The ID of the directory, e.g. `d-1234567890`. */
     directoryId: string;
+    /** The ARN of the directory, e.g. `arn:aws:ds:us-east-1:123456789012:directory/d-1234567890`. */
+    directoryArn: string;
     /** The fully qualified name of the directory. */
     directoryName: string;
     /** The directory type, e.g. `SimpleAD` or `MicrosoftAD`. */
@@ -284,8 +287,10 @@ export const DirectoryProvider = () =>
             ),
           );
         }
+        const { accountId, region } = yield* AWSEnvironment.current;
         return {
           directoryId: directory.DirectoryId,
+          directoryArn: `arn:aws:ds:${region}:${accountId}:directory/${directory.DirectoryId}`,
           directoryName: directory.Name,
           type: directory.Type ?? "SimpleAD",
           stage: directory.Stage ?? "Active",

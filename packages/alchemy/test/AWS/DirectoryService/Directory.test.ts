@@ -1,5 +1,10 @@
 import * as AWS from "@/AWS";
-import { ConditionalForwarder, Directory } from "@/AWS/DirectoryService";
+import {
+  ConditionalForwarder,
+  Directory,
+  EventTopic,
+} from "@/AWS/DirectoryService";
+import { Topic } from "@/AWS/SNS";
 import * as Test from "@/Test/Vitest";
 import * as ds from "@distilled.cloud/aws/directory-service";
 import * as EC2 from "@distilled.cloud/aws/ec2";
@@ -33,6 +38,31 @@ test.provider(
         ds.describeConditionalForwarders({
           DirectoryId: "d-1234567890",
           RemoteDomainNames: ["partner.alchemy-test.internal"],
+        }),
+      );
+      expect(error._tag).toBe("EntityDoesNotExistException");
+    }),
+);
+
+test.provider(
+  "describeEventTopics on a nonexistent directory fails with EntityDoesNotExistException",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        ds.describeEventTopics({ DirectoryId: "d-1234567890" }),
+      );
+      expect(error._tag).toBe("EntityDoesNotExistException");
+    }),
+);
+
+test.provider(
+  "registerEventTopic on a nonexistent directory fails with EntityDoesNotExistException",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        ds.registerEventTopic({
+          DirectoryId: "d-1234567890",
+          TopicName: "alchemy-directory-service-missing",
         }),
       );
       expect(error._tag).toBe("EntityDoesNotExistException");
@@ -122,14 +152,21 @@ test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY)(
         subnetIds: network.subnetIds,
       };
 
-      const { directory } = yield* stack.deploy(
+      const buildStack = (tags: Record<string, string>) =>
         Effect.gen(function* () {
-          const directory = yield* Directory("Corp", {
-            ...props,
-            tags: { fixture: "directory-service" },
+          const directory = yield* Directory("Corp", { ...props, tags });
+          // Directory Service's native event mechanism: publish status
+          // changes to an SNS topic.
+          const topic = yield* Topic("Status", {});
+          const eventTopic = yield* EventTopic("StatusTopic", {
+            directoryId: directory.directoryId,
+            topicName: topic.topicName,
           });
-          return { directory };
-        }),
+          return { directory, eventTopic };
+        });
+
+      const { directory, eventTopic } = yield* stack.deploy(
+        buildStack({ fixture: "directory-service" }),
       );
 
       expect(directory.directoryId).toMatch(/^d-/);
@@ -154,16 +191,22 @@ test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY)(
       expect(observed?.Type).toBe("SimpleAD");
       expect(observed?.Name).toBe("corp.alchemy-test.internal");
 
+      // The EventTopic association registered the directory as a publisher
+      // to the SNS topic — verify out-of-band via distilled.
+      expect(eventTopic.directoryId).toBe(directory.directoryId);
+      expect(eventTopic.topicArn).toBeDefined();
+      expect(eventTopic.status).toBe("Registered");
+      const topics = yield* ds.describeEventTopics({
+        DirectoryId: directory.directoryId,
+      });
+      expect(topics.EventTopics?.map((topic) => topic.TopicName)).toContain(
+        eventTopic.topicName,
+      );
+
       // Tags mutate in place — a second deploy must keep the SAME directory
       // id (no replacement) and converge the tag set.
       const { directory: updated } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const directory = yield* Directory("Corp", {
-            ...props,
-            tags: { fixture: "directory-service", wave: "2" },
-          });
-          return { directory };
-        }),
+        buildStack({ fixture: "directory-service", wave: "2" }),
       );
       expect(updated.directoryId).toBe(directory.directoryId);
       expect(updated.tags.wave).toBe("2");

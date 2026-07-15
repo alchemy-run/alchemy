@@ -30,6 +30,21 @@ export const dataSetAssetArns = (dataSet: DataSet): OutputType<string>[] => [
   dataSet.dataSetArn.pipe(Output.map((arn) => `${arn}/revisions/*/assets/*`)),
 ];
 
+/**
+ * The bound data set's ARN plus a wildcard over every sub-resource
+ * (`arn:…:data-sets/{id}` and `arn:…:data-sets/{id}/star`) — IAM wildcards
+ * match across `/`, so one pattern covers revisions and assets alike. Used
+ * by the revision/asset data-plane bindings that receive `RevisionId` and
+ * `AssetId` at runtime (e.g. a Lambda that publishes a fresh revision on a
+ * schedule needs the grant to cover revisions that do not exist yet).
+ */
+export const dataSetAndSubresourceArns = (
+  dataSet: DataSet,
+): OutputType<string>[] => [
+  dataSet.dataSetArn,
+  Output.interpolate`${dataSet.dataSetArn}/*`,
+];
+
 /** The bound revision's own ARN (revision-level actions). */
 export const revisionArns = (revision: Revision): OutputType<string>[] => [
   revision.revisionArn,

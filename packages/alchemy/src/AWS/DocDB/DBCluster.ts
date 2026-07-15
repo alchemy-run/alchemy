@@ -1,13 +1,14 @@
 import * as docdb from "@distilled.cloud/aws/docdb";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 
@@ -232,12 +233,6 @@ export interface DBCluster extends Resource<
  */
 export const DBCluster = Resource<DBCluster>("AWS.DocDB.DBCluster");
 
-/** Normalize a {@link DBClusterProps.backupRetentionPeriod} to the whole days the API expects. */
-const toRetentionDays = (
-  period: Duration.Input | undefined,
-): number | undefined =>
-  period === undefined ? undefined : Math.round(Duration.toDays(period));
-
 const toTagRecord = (
   tags: Array<{ Key?: string; Value?: string }> | undefined,
 ): Record<string, string> =>
@@ -434,9 +429,10 @@ export const DBClusterProvider = () =>
             output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          const masterUserPassword = news.masterUserPassword
-            ? Redacted.value(news.masterUserPassword)
-            : undefined;
+          // Redacted end-to-end: distilled's `MasterUserPassword` is
+          // SensitiveString, so the Redacted value is passed through without
+          // unwrapping and never appears in traces.
+          const masterUserPassword = news.masterUserPassword;
 
           // Observe — fetch live cluster state.
           let observed = yield* readCluster(identifier);
@@ -454,9 +450,7 @@ export const DBClusterProvider = () =>
                 VpcSecurityGroupIds: news.vpcSecurityGroupIds,
                 Port: news.port,
                 AvailabilityZones: news.availabilityZones,
-                BackupRetentionPeriod: toRetentionDays(
-                  news.backupRetentionPeriod,
-                ),
+                BackupRetentionPeriod: toWireDays(news.backupRetentionPeriod),
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
@@ -508,7 +502,7 @@ export const DBClusterProvider = () =>
             };
             setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
             setIf("Port", news.port, observed.Port);
-            setIf("BackupRetentionPeriod", toRetentionDays(news.backupRetentionPeriod), observed.BackupRetentionPeriod); // prettier-ignore
+            setIf("BackupRetentionPeriod", toWireDays(news.backupRetentionPeriod), observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
             setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore

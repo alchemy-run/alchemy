@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { DBCluster } from "./DBCluster.ts";
@@ -58,9 +59,11 @@ export interface ClusterEventSourceProps {
    */
   batchSize?: number;
   /**
-   * Maximum time in seconds Lambda spends gathering records before invoking.
+   * Maximum time Lambda spends gathering records before invoking, e.g.
+   * `"5 seconds"` or `Duration.seconds(5)`. Rounded to whole seconds on the
+   * wire.
    */
-  maximumBatchingWindowInSeconds?: number;
+  maximumBatchingWindow?: Duration.Input;
   /**
    * Where in the change stream to begin reading.
    * @default "LATEST"

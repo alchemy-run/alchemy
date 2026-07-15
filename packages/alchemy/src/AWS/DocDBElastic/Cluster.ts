@@ -1,5 +1,5 @@
 import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -10,6 +10,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ClusterProps {
@@ -168,12 +169,6 @@ export const Cluster = Resource<Cluster>("AWS.DocDBElastic.Cluster");
 const DEFAULT_AUTH_TYPE = "PLAIN_TEXT";
 const DEFAULT_SHARD_CAPACITY = 2;
 const DEFAULT_SHARD_COUNT = 1;
-
-/** Normalize a {@link ClusterProps.backupRetentionPeriod} to the whole days the API expects. */
-const toRetentionDays = (
-  period: Duration.Input | undefined,
-): number | undefined =>
-  period === undefined ? undefined : Math.round(Duration.toDays(period));
 
 /** True when two string sets are equal ignoring order and duplicates. */
 const sameStringSet = (
@@ -361,9 +356,7 @@ export const ClusterProvider = () =>
                 subnetIds: props.subnetIds,
                 kmsKeyId: props.kmsKeyId,
                 preferredMaintenanceWindow: props.preferredMaintenanceWindow,
-                backupRetentionPeriod: toRetentionDays(
-                  props.backupRetentionPeriod,
-                ),
+                backupRetentionPeriod: toWireDays(props.backupRetentionPeriod),
                 preferredBackupWindow: props.preferredBackupWindow,
                 tags: desiredTags,
               })
@@ -437,9 +430,7 @@ export const ClusterProvider = () =>
               props.preferredMaintenanceWindow;
             mutated = true;
           }
-          const desiredRetentionDays = toRetentionDays(
-            props.backupRetentionPeriod,
-          );
+          const desiredRetentionDays = toWireDays(props.backupRetentionPeriod);
           if (
             desiredRetentionDays !== undefined &&
             desiredRetentionDays !== observed.backupRetentionPeriod

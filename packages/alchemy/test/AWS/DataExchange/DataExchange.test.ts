@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { DataSet, Revision } from "@/AWS/DataExchange";
+import { DataSet, EventAction, Revision } from "@/AWS/DataExchange";
 import { toTagRecord } from "@/AWS/DataExchange/internal.ts";
 import * as Test from "@/Test/Vitest";
 import * as dataexchange from "@distilled.cloud/aws/dataexchange";
@@ -165,6 +165,95 @@ test.provider(
         dataexchange.getDataSet({ DataSetId: replaced.dataSetId }),
       );
       expect(newError._tag).toBe("ResourceNotFoundException");
+    }),
+  { timeout: 300_000 },
+);
+
+// Event actions only attach to ENTITLED data sets (subscriptions / accepted
+// data grants), which cannot be provisioned self-contained. This ungated
+// probe proves the rejection against an OWNED data set is a typed tag.
+test.provider(
+  "createEventAction against an owned data set fails with a typed error",
+  () =>
+    Effect.gen(function* () {
+      const dataSet = yield* dataexchange.createDataSet({
+        AssetType: "S3_SNAPSHOT",
+        Name: "alchemy-test-dataexchange-eventaction-probe",
+        Description: "event action entitlement probe",
+      });
+      const error = yield* Effect.flip(
+        dataexchange.createEventAction({
+          Action: {
+            ExportRevisionToS3: {
+              RevisionDestination: { Bucket: "alchemy-nonexistent-bucket" },
+            },
+          },
+          Event: { RevisionPublished: { DataSetId: dataSet.Id! } },
+        }),
+      ).pipe(
+        Effect.ensuring(
+          dataexchange
+            .deleteDataSet({ DataSetId: dataSet.Id! })
+            .pipe(Effect.ignore),
+        ),
+      );
+      expect(error._tag).toBe("ValidationException");
+    }),
+  { timeout: 60_000 },
+);
+
+// Full event-action lifecycle needs an entitled data set — run it from an
+// account with an active subscription/data grant by setting
+// AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID (and an export bucket whose
+// policy admits dataexchange.amazonaws.com via
+// AWS_TEST_DATAEXCHANGE_EXPORT_BUCKET).
+test.provider.skipIf(!process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID)(
+  "create, update, destroy an event action on an entitled data set",
+  (stack) =>
+    Effect.gen(function* () {
+      const entitledDataSetId =
+        process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID!;
+      const exportBucket = process.env.AWS_TEST_DATAEXCHANGE_EXPORT_BUCKET!;
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* EventAction("AutoExport", {
+            dataSetId: entitledDataSetId,
+            exportRevisionToS3: { bucket: exportBucket },
+          });
+        }),
+      );
+      expect(created.eventActionArn).toContain(":event-actions/");
+
+      // Update the key pattern in place.
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* EventAction("AutoExport", {
+            dataSetId: entitledDataSetId,
+            exportRevisionToS3: {
+              bucket: exportBucket,
+              keyPattern: "exports/${Revision.CreatedAt}/${Asset.Name}",
+            },
+          });
+        }),
+      );
+      expect(updated.eventActionId).toBe(created.eventActionId);
+
+      const observed = yield* dataexchange.getEventAction({
+        EventActionId: created.eventActionId,
+      });
+      expect(
+        observed.Action?.ExportRevisionToS3?.RevisionDestination.KeyPattern,
+      ).toBe("exports/${Revision.CreatedAt}/${Asset.Name}");
+
+      yield* stack.destroy();
+      const gone = yield* Effect.flip(
+        dataexchange.getEventAction({
+          EventActionId: created.eventActionId,
+        }),
+      );
+      expect(gone._tag).toBe("ResourceNotFoundException");
     }),
   { timeout: 300_000 },
 );

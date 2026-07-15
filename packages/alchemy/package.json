@@ -338,6 +338,7 @@
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "magic-string": "^0.30.21",
+    "mongodb": "^6.10.0",
     "mysql2": "^3.15.3",
     "pathe": "^2.0.3",
     "pg": "^8.13.0",

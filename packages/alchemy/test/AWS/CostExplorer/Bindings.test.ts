@@ -198,11 +198,18 @@ describe.sequential("CostExplorer Bindings", () => {
 
   describe("GetRightsizingRecommendation", () => {
     test.provider(
-      "returns EC2 rightsizing recommendations",
+      "returns EC2 rightsizing recommendations (or the typed opt-in rejection)",
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* getJson("/rightsizing")) as any;
-          expect(response.tag).toBe("Ok");
+          // Rightsizing is an opt-in Cost Explorer preference on the payer
+          // account; without the opt-in the API rejects with
+          // RightsizingRecommendationNotEnabled — the AccessDeniedException
+          // "opt-in only feature" rejection patched into distilled as a
+          // specific typed tag. Either outcome proves the binding + grant.
+          expect(["Ok", "RightsizingRecommendationNotEnabled"]).toContain(
+            response.tag,
+          );
           expect(response.count).toBeGreaterThanOrEqual(0);
         }),
       { timeout: 60_000 },

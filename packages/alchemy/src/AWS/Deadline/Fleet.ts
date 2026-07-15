@@ -11,6 +11,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
+import { toWireHours, toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   asPlain,
@@ -23,6 +24,156 @@ import {
 } from "./internal.ts";
 
 export type FleetStatus = deadline.FleetStatus;
+
+/**
+ * Worker auto-scaling settings for a fleet, with idle time expressed as a
+ * `Duration.Input` (converted to whole seconds on the wire).
+ */
+export interface FleetAutoScalingConfiguration {
+  /**
+   * Number of idle workers kept on standby to absorb bursts.
+   * @default 0
+   */
+  standbyWorkerCount?: number;
+  /**
+   * How long a worker may sit idle before it is scaled in
+   * (wire: `workerIdleDurationSeconds`).
+   * @default "5 minutes"
+   */
+  workerIdleDuration?: Duration.Input;
+  /**
+   * Maximum number of workers added per minute when scaling out.
+   */
+  scaleOutWorkersPerMinute?: number;
+}
+
+/**
+ * Customer-managed fleet configuration (you run the worker hosts).
+ */
+export interface CustomerManagedFleetConfiguration extends Omit<
+  deadline.CustomerManagedFleetConfiguration,
+  "autoScalingConfiguration"
+> {
+  /**
+   * Auto-scaling behavior for `EVENT_BASED_AUTO_SCALING` mode.
+   */
+  autoScalingConfiguration?: FleetAutoScalingConfiguration;
+}
+
+/**
+ * Persistent EBS volume settings for service-managed EC2 workers, with the
+ * reuse TTL expressed as a `Duration.Input` (converted to whole hours on the
+ * wire).
+ */
+export interface FleetPersistentVolumeConfiguration extends Omit<
+  deadline.PersistentVolumeConfiguration,
+  "lastUsedTtlHours"
+> {
+  /**
+   * How long an unused persistent volume is retained for reuse before it is
+   * deleted (wire: `lastUsedTtlHours`).
+   */
+  lastUsedTtl?: Duration.Input;
+}
+
+/**
+ * Service-managed EC2 fleet configuration (Deadline provisions instances).
+ */
+export interface ServiceManagedEc2FleetConfiguration extends Omit<
+  deadline.ServiceManagedEc2FleetConfiguration,
+  "autoScalingConfiguration" | "persistentVolumeConfiguration"
+> {
+  /**
+   * Auto-scaling behavior for the EC2 workers.
+   */
+  autoScalingConfiguration?: FleetAutoScalingConfiguration;
+  /**
+   * Persistent EBS volume reused across workers.
+   */
+  persistentVolumeConfiguration?: FleetPersistentVolumeConfiguration;
+}
+
+/**
+ * Fleet configuration — either `customerManaged` (you run the workers) or
+ * `serviceManagedEc2` (Deadline provisions EC2 instances).
+ */
+export type FleetConfiguration =
+  | {
+      customerManaged: CustomerManagedFleetConfiguration;
+      serviceManagedEc2?: never;
+    }
+  | {
+      customerManaged?: never;
+      serviceManagedEc2: ServiceManagedEc2FleetConfiguration;
+    };
+
+/**
+ * Startup script run on each worker host, with the timeout expressed as a
+ * `Duration.Input` (converted to whole seconds on the wire).
+ */
+export interface FleetHostConfiguration {
+  /**
+   * The script body executed when a worker host starts.
+   */
+  scriptBody: string | Redacted.Redacted<string>;
+  /**
+   * Maximum time the startup script may run before the worker is marked
+   * unhealthy (wire: `scriptTimeoutSeconds`).
+   * @default "5 minutes"
+   */
+  scriptTimeout?: Duration.Input;
+}
+
+const toWireAutoScaling = (
+  config: FleetAutoScalingConfiguration | undefined,
+): deadline.CustomerManagedAutoScalingConfiguration | undefined => {
+  if (config === undefined) return undefined;
+  const { workerIdleDuration, ...rest } = config;
+  return {
+    ...rest,
+    workerIdleDurationSeconds: toWireSeconds(workerIdleDuration),
+  };
+};
+
+const toWirePersistentVolume = (
+  config: FleetPersistentVolumeConfiguration | undefined,
+): deadline.PersistentVolumeConfiguration | undefined => {
+  if (config === undefined) return undefined;
+  const { lastUsedTtl, ...rest } = config;
+  return { ...rest, lastUsedTtlHours: toWireHours(lastUsedTtl) };
+};
+
+const toWireConfiguration = (
+  config: FleetConfiguration,
+): deadline.FleetConfiguration =>
+  config.customerManaged !== undefined
+    ? {
+        customerManaged: {
+          ...config.customerManaged,
+          autoScalingConfiguration: toWireAutoScaling(
+            config.customerManaged.autoScalingConfiguration,
+          ),
+        },
+      }
+    : {
+        serviceManagedEc2: {
+          ...config.serviceManagedEc2,
+          autoScalingConfiguration: toWireAutoScaling(
+            config.serviceManagedEc2.autoScalingConfiguration,
+          ),
+          persistentVolumeConfiguration: toWirePersistentVolume(
+            config.serviceManagedEc2.persistentVolumeConfiguration,
+          ),
+        },
+      };
+
+const toWireHostConfiguration = (
+  config: FleetHostConfiguration | undefined,
+): deadline.HostConfiguration | undefined => {
+  if (config === undefined) return undefined;
+  const { scriptTimeout, ...rest } = config;
+  return { ...rest, scriptTimeoutSeconds: toWireSeconds(scriptTimeout) };
+};
 
 export interface FleetProps {
   /**
@@ -57,11 +208,11 @@ export interface FleetProps {
    * Fleet configuration — either `customerManaged` (you run the workers) or
    * `serviceManagedEc2` (Deadline provisions EC2 instances).
    */
-  configuration: deadline.FleetConfiguration;
+  configuration: FleetConfiguration;
   /**
    * Script run on each worker host when it starts.
    */
-  hostConfiguration?: deadline.HostConfiguration;
+  hostConfiguration?: FleetHostConfiguration;
   /**
    * Tags to associate with the fleet.
    */
@@ -382,8 +533,10 @@ export const FleetProvider = () =>
                   roleArn: news.roleArn,
                   minWorkerCount: news.minWorkerCount,
                   maxWorkerCount: news.maxWorkerCount,
-                  configuration: news.configuration,
-                  hostConfiguration: news.hostConfiguration,
+                  configuration: toWireConfiguration(news.configuration),
+                  hostConfiguration: toWireHostConfiguration(
+                    news.hostConfiguration,
+                  ),
                   tags: desiredTags,
                 }),
               ),
@@ -415,8 +568,10 @@ export const FleetProvider = () =>
                 roleArn: news.roleArn,
                 minWorkerCount: news.minWorkerCount,
                 maxWorkerCount: news.maxWorkerCount,
-                configuration: news.configuration,
-                hostConfiguration: news.hostConfiguration,
+                configuration: toWireConfiguration(news.configuration),
+                hostConfiguration: toWireHostConfiguration(
+                  news.hostConfiguration,
+                ),
               }),
             );
             state = yield* waitForFleetActive(

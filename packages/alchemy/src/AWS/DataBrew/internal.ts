@@ -55,17 +55,20 @@ export const syncTags = Effect.fn("AWS.DataBrew.syncTags")(function* (
 /**
  * Bounded retry through `ConflictException` — DataBrew rejects mutations
  * while a conflicting operation is in flight (e.g. deleting a job whose run
- * is still starting, or racing reconciles on the same name). Explicitly
- * typed so the conditional `Retry.Return` type does not leak into the
- * provider's declaration emit and widen `AWS.providers()` for downstream
- * consumers.
+ * is still starting, or racing reconciles on the same name). The budget is
+ * ~2 minutes because deletes run in parallel: a dataset/recipe delete can
+ * legitimately conflict ("is used in job …") for the whole window in which
+ * the associated job is still waiting for its last run to wind down before
+ * deleting itself. Explicitly typed so the conditional `Retry.Return` type
+ * does not leak into the provider's declaration emit and widen
+ * `AWS.providers()` for downstream consumers.
  */
 export const retryWhileConflict = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
   });
 
 /**

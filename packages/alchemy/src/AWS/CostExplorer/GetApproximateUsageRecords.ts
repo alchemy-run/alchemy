@@ -24,7 +24,7 @@ export interface GetApproximateUsageRecordsRequest
  *
  * // runtime
  * const result = yield* getApproximateUsageRecords({
- *   Granularity: "DAILY",
+ *   Granularity: "HOURLY",
  *   ApproximationDimension: "SERVICE",
  * });
  * const total = result.TotalRecords;
