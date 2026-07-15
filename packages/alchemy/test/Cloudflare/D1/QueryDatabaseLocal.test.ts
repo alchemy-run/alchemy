@@ -143,7 +143,20 @@ test.provider(
                   .prepare("SELECT id, qty, note FROM items ORDER BY id")
                   .all<{ id: number; qty: number; note: string | null }>();
 
-                return { num, nul, boolTrue, boolFalse, rows: rows.results };
+                // Binary (BLOB): bind a Uint8Array, read the byte length back.
+                const blobLen = yield* db
+                  .prepare("SELECT length(?) AS len")
+                  .bind(new Uint8Array([1, 2, 3, 4]))
+                  .first<number>("len");
+
+                return {
+                  num,
+                  nul,
+                  boolTrue,
+                  boolFalse,
+                  rows: rows.results,
+                  blobLen,
+                };
               });
             }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseLocal)),
           );
@@ -160,6 +173,7 @@ test.provider(
         { id: 1, qty: 10, note: null },
         { id: 2, qty: 20, note: "second" },
       ]);
+      expect(out.blobLen).toBe(4);
 
       yield* stack.destroy();
     }).pipe(logLevel),
