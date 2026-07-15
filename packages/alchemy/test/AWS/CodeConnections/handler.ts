@@ -31,10 +31,17 @@ export default CodeConnectionsTestFunction.make(
     // --- connection-scoped binding ---
     const getConnection = yield* CodeConnections.GetConnection(connection);
 
-    // --- account-level binding ---
+    // --- account-level bindings ---
     const listConnections = yield* CodeConnections.ListConnections();
+    const listHosts = yield* CodeConnections.ListHosts();
+    const listRepositoryLinks = yield* CodeConnections.ListRepositoryLinks();
 
-    const bound = { getConnection, listConnections };
+    const bound = {
+      getConnection,
+      listConnections,
+      listHosts,
+      listRepositoryLinks,
+    };
 
     return {
       fetch: Effect.gen(function* () {
@@ -71,6 +78,22 @@ export default CodeConnectionsTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/hosts") {
+          const result = yield* listHosts();
+          return yield* HttpServerResponse.json({
+            names: (result.Hosts ?? []).map((h) => h.Name ?? null),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/repository-links") {
+          const result = yield* listRepositoryLinks();
+          return yield* HttpServerResponse.json({
+            repositories: (result.RepositoryLinks ?? []).map(
+              (l) => l.RepositoryName ?? null,
+            ),
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -82,6 +105,8 @@ export default CodeConnectionsTestFunction.make(
       Layer.mergeAll(
         CodeConnections.GetConnectionHttp,
         CodeConnections.ListConnectionsHttp,
+        CodeConnections.ListHostsHttp,
+        CodeConnections.ListRepositoryLinksHttp,
       ),
     ),
   ),

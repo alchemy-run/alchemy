@@ -8,6 +8,8 @@ export * from "./GenerateQuery.ts";
 export * from "./GenerateQueryHttp.ts";
 export * from "./GetQueryResults.ts";
 export * from "./GetQueryResultsHttp.ts";
+export * from "./ListInsightsData.ts";
+export * from "./ListInsightsDataHttp.ts";
 export * from "./ListInsightsMetricData.ts";
 export * from "./ListInsightsMetricDataHttp.ts";
 export * from "./ListPublicKeys.ts";

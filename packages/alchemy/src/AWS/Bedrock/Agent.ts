@@ -10,7 +10,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { bedrockModelArns } from "./ModelArns.ts";
 
@@ -23,6 +23,33 @@ export interface AgentGuardrailConfiguration {
   guardrailIdentifier?: string;
   /** The version of the guardrail. */
   guardrailVersion?: string;
+}
+
+/**
+ * Long-term memory configuration for an agent — lets the agent retain
+ * conversational context across sessions as asynchronously generated
+ * session summaries, readable at runtime via the `GetAgentMemory` binding.
+ */
+export interface AgentMemoryConfiguration {
+  /**
+   * The types of memory to enable. `"SESSION_SUMMARY"` is currently the
+   * only supported type.
+   */
+  enabledMemoryTypes: bedrock.MemoryType[];
+  /**
+   * How long the agent retains memory (e.g. `"30 days"` or
+   * `Duration.days(30)`; a bare number is milliseconds). Between 1 and
+   * 365 days. Sent to the API as whole days (`storageDays`).
+   * @default 30 days
+   */
+  storage?: Duration.Input;
+  /**
+   * Configuration for `SESSION_SUMMARY` memory.
+   */
+  sessionSummaryConfiguration?: {
+    /** The maximum number of recent session summaries to include. */
+    maxRecentSessions?: number;
+  };
 }
 
 export interface AgentProps {
@@ -73,6 +100,14 @@ export interface AgentProps {
    * A guardrail to apply to the agent's model interactions.
    */
   guardrailConfiguration?: AgentGuardrailConfiguration;
+  /**
+   * Long-term memory configuration. When enabled the agent summarizes each
+   * session after it ends and retains the summaries for
+   * {@link AgentMemoryConfiguration.storage}, making them available to
+   * later sessions that share the same memory id (and to the
+   * `GetAgentMemory` / `DeleteAgentMemory` runtime bindings).
+   */
+  memoryConfiguration?: AgentMemoryConfiguration;
   /**
    * Whether to prepare the agent (compile the DRAFT version) after every
    * create and update so it is invocable and can back an
@@ -150,8 +185,34 @@ export interface Agent extends Resource<
  *   },
  * });
  * ```
+ *
+ * @example Agent with Long-Term Memory
+ * ```typescript
+ * // Session summaries are retained for 30 days and readable at runtime
+ * // through the GetAgentMemory binding.
+ * const agent = yield* Bedrock.Agent("assistant", {
+ *   foundationModel: "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+ *   instruction: "You are a helpful assistant that remembers past sessions.",
+ *   memoryConfiguration: {
+ *     enabledMemoryTypes: ["SESSION_SUMMARY"],
+ *     storage: "30 days",
+ *   },
+ * });
+ * ```
  */
 export const Agent = Resource<Agent>("AWS.Bedrock.Agent");
+
+/** Map the declared memory props onto the wire `MemoryConfiguration`. */
+const toWireMemoryConfiguration = (
+  memory: AgentMemoryConfiguration | undefined,
+): bedrock.MemoryConfiguration | undefined =>
+  memory === undefined
+    ? undefined
+    : {
+        enabledMemoryTypes: [...memory.enabledMemoryTypes],
+        storageDays: toWireDays(memory.storage),
+        sessionSummaryConfiguration: memory.sessionSummaryConfiguration,
+      };
 
 /** Agent status values from which no further transition is pending. */
 const AGENT_SETTLED = new Set(["NOT_PREPARED", "PREPARED", "FAILED"]);
@@ -410,6 +471,9 @@ export const AgentProvider = () =>
                 idleSessionTTLInSeconds: toWireSeconds(news.idleSessionTTL),
                 customerEncryptionKeyArn: news.customerEncryptionKeyArn,
                 guardrailConfiguration: news.guardrailConfiguration,
+                memoryConfiguration: toWireMemoryConfiguration(
+                  news.memoryConfiguration,
+                ),
                 tags: desiredTags,
               }),
             );
@@ -428,6 +492,9 @@ export const AgentProvider = () =>
               idleSessionTTLInSeconds: toWireSeconds(news.idleSessionTTL),
               customerEncryptionKeyArn: news.customerEncryptionKeyArn,
               guardrailConfiguration: news.guardrailConfiguration,
+              memoryConfiguration: toWireMemoryConfiguration(
+                news.memoryConfiguration,
+              ),
             });
             agent = (yield* waitForSettled(agent.agentId)) ?? agent;
           }

@@ -185,6 +185,23 @@ describe.sequential("CloudTrail Bindings", () => {
     );
   });
 
+  describe("ListInsightsData", () => {
+    test.provider("reads raw Insights events (empty is fine)", () =>
+      Effect.gen(function* () {
+        const body = (yield* getJson(`${baseUrl}/insights-data`)) as any;
+
+        // No Insights are enabled in the test account, so the list is
+        // empty — success proves the wiring; a rejection must be TYPED.
+        if (body.errorTag !== undefined) {
+          expect(typeof body.errorTag).toBe("string");
+          expect(body.errorTag.length).toBeGreaterThan(0);
+        } else {
+          expect(body.events).toBeGreaterThanOrEqual(0);
+        }
+      }),
+    );
+  });
+
   describe("ApiCallEventSource", () => {
     test.provider(
       "delivers a mutating management API call to the handler",

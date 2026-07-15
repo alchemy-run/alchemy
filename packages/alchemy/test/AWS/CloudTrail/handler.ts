@@ -55,6 +55,7 @@ export default CloudTrailTestFunction.make(
     const lookupEvents = yield* CloudTrail.LookupEvents();
     const listPublicKeys = yield* CloudTrail.ListPublicKeys();
     const listInsightsMetricData = yield* CloudTrail.ListInsightsMetricData();
+    const listInsightsData = yield* CloudTrail.ListInsightsData();
 
     // --- event source ---
     // EventBridge receives every mutating management API call CloudTrail
@@ -132,6 +133,22 @@ export default CloudTrailTestFunction.make(
           );
         }
 
+        // Raw Insights events read; empty when Insights has recorded no
+        // anomalies (none are enabled in the test account). A rejection must
+        // surface as a TYPED tag.
+        if (request.method === "GET" && pathname === "/insights-data") {
+          return yield* HttpServerResponse.json(
+            yield* tagOr(
+              listInsightsData({
+                InsightSource: "s3.amazonaws.com",
+                DataType: "InsightsEvents",
+                MaxResults: 5,
+              }),
+              (result) => ({ events: (result.Events ?? []).length }),
+            ),
+          );
+        }
+
         // Has the API-call event for this bucket been delivered yet?
         if (request.method === "GET" && pathname === "/events/check") {
           const seen = yield* getObject({
@@ -156,6 +173,7 @@ export default CloudTrailTestFunction.make(
         CloudTrail.LookupEventsHttp,
         CloudTrail.ListPublicKeysHttp,
         CloudTrail.ListInsightsMetricDataHttp,
+        CloudTrail.ListInsightsDataHttp,
         S3.PutObjectHttp,
         S3.GetObjectHttp,
       ),

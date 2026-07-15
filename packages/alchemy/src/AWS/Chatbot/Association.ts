@@ -89,8 +89,9 @@ export const AssociationProvider = () =>
     Association,
     Effect.gen(function* () {
       // listAssociations is a filter over a single configuration; an unknown
-      // or malformed configuration ARN surfaces the typed
-      // InvalidRequestException, which observation treats as "no association".
+      // configuration ARN yields an empty list (verified live), while a
+      // malformed ARN surfaces the typed InvalidRequestException — both are
+      // treated as "no association".
       const observeAssociation = Effect.fn(function* (
         chatConfiguration: string,
         resource: string,
@@ -202,8 +203,14 @@ export const AssociationProvider = () =>
             })
             .pipe(
               // Idempotent delete — a concurrently removed association or
-              // configuration is not an error.
-              Effect.catchTag("InvalidRequestException", () => Effect.void),
+              // configuration is not an error. A configuration deleted out
+              // from under the association surfaces the typed
+              // ResourceNotFoundException ("Channel Arn ... does not
+              // exist!", patched in distilled).
+              Effect.catchTag(
+                ["InvalidRequestException", "ResourceNotFoundException"],
+                () => Effect.void,
+              ),
             );
         }),
         list: () =>

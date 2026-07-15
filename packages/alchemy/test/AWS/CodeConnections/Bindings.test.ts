@@ -100,12 +100,12 @@ describe.sequential("CodeConnections Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
 
   describe("binding registration", () => {
-    test.provider("both capabilities initialize in the runtime", (_stack) =>
+    test.provider("all capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = yield* send(
           HttpClientRequest.get(`${baseUrl}/bindings`),
         ).pipe(Effect.flatMap((r) => r.json));
-        expect((response as any).bound).toHaveLength(2);
+        expect((response as any).bound).toHaveLength(4);
       }),
     );
   });
@@ -134,6 +134,32 @@ describe.sequential("CodeConnections Bindings", () => {
             HttpClientRequest.get(`${baseUrl}/connections`),
           ).pipe(Effect.flatMap((r) => r.json));
           expect((response as any).names).toContain(fixtureConnectionName);
+        }),
+    );
+  });
+
+  describe("ListHosts", () => {
+    test.provider(
+      "enumerates the account's hosts (empty unless a self-managed provider is registered)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/hosts`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect(Array.isArray((response as any).names)).toBe(true);
+        }),
+    );
+  });
+
+  describe("ListRepositoryLinks", () => {
+    test.provider(
+      "enumerates the account's repository links (empty unless Git sync is configured)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/repository-links`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect(Array.isArray((response as any).repositories)).toBe(true);
         }),
     );
   });

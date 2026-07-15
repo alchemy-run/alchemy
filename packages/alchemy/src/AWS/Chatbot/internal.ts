@@ -1,12 +1,4 @@
 import type * as chatbot from "@distilled.cloud/aws/chatbot";
-import * as Redacted from "effect/Redacted";
-
-/**
- * Unwrap a Chatbot `SensitiveString` (decoded as `Redacted`) to its plain
- * string value.
- */
-export const unredact = (value: string | Redacted.Redacted<string>): string =>
-  Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
  * Convert a plain tag map to the Chatbot wire `Tag` list

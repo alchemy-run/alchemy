@@ -98,6 +98,8 @@ export default BudgetsTestFunction.make(
     const performanceHistory =
       yield* Budgets.DescribeBudgetPerformanceHistory(budget);
     const notifications = yield* Budgets.DescribeNotificationsForBudget(budget);
+    const subscribers =
+      yield* Budgets.DescribeSubscribersForNotification(budget);
     const listActions = yield* Budgets.DescribeBudgetActionsForBudget(budget);
 
     // --- action-scoped bindings ---
@@ -109,6 +111,7 @@ export default BudgetsTestFunction.make(
       describeBudget,
       performanceHistory,
       notifications,
+      subscribers,
       listActions,
       executeAction,
       actionHistories,
@@ -151,6 +154,26 @@ export default BudgetsTestFunction.make(
           const result = yield* notifications();
           return yield* HttpServerResponse.json({
             thresholds: (result.Notifications ?? []).map((n) => n.Threshold),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/subscribers") {
+          // Enumerate notifications, then list each one's subscribers — the
+          // round trip proves the ViewBudget grant and identifier injection.
+          const notifs = yield* notifications();
+          const first = (notifs.Notifications ?? [])[0];
+          if (!first) {
+            return yield* HttpServerResponse.json({
+              count: 0,
+              subscriptionTypes: [],
+            });
+          }
+          const result = yield* subscribers({ Notification: first });
+          return yield* HttpServerResponse.json({
+            count: (result.Subscribers ?? []).length,
+            subscriptionTypes: (result.Subscribers ?? []).map(
+              (s) => s.SubscriptionType,
+            ),
           });
         }
 
@@ -206,6 +229,7 @@ export default BudgetsTestFunction.make(
         Budgets.DescribeBudgetHttp,
         Budgets.DescribeBudgetPerformanceHistoryHttp,
         Budgets.DescribeNotificationsForBudgetHttp,
+        Budgets.DescribeSubscribersForNotificationHttp,
         Budgets.DescribeBudgetActionsForBudgetHttp,
         Budgets.ExecuteBudgetActionHttp,
         Budgets.DescribeBudgetActionHistoriesHttp,

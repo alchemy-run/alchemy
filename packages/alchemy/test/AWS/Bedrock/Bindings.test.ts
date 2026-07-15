@@ -158,6 +158,28 @@ describe("Bedrock Bindings", () => {
     );
   });
 
+  describe("GetAgentMemory + DeleteAgentMemory", () => {
+    test.provider(
+      "reads and clears the agent's long-term memory for a memory id",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/agent-memory`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            memoryContents: number;
+            deleted: boolean;
+          };
+
+          // Session summaries generate asynchronously long after a session
+          // ends, so a fresh agent has none — the route proves the IAM
+          // grants and the read+delete round-trip, not summary generation.
+          expect(response.memoryContents).toBeGreaterThanOrEqual(0);
+          expect(response.deleted).toBe(true);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   describe("Converse", () => {
     test.provider(
       "converses with the bound model and returns a completion",

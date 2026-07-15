@@ -43,6 +43,11 @@ export default BedrockTestFunction.make(
       foundationModel: MODEL,
       instruction:
         "You are a helpful assistant. Answer every question with one short sentence.",
+      // Long-term memory so GetAgentMemory / DeleteAgentMemory are callable.
+      memoryConfiguration: {
+        enabledMemoryTypes: ["SESSION_SUMMARY"],
+        storage: "30 days",
+      },
     });
     const alias = yield* Bedrock.AgentAlias("BindingsTestAlias", {
       agentId: agent.agentId,
@@ -52,6 +57,8 @@ export default BedrockTestFunction.make(
     const converseStream = yield* Bedrock.ConverseStream(MODEL);
     const countTokens = yield* Bedrock.CountTokens(COUNT_TOKENS_MODEL);
     const invokeAgent = yield* Bedrock.InvokeAgent(alias);
+    const getAgentMemory = yield* Bedrock.GetAgentMemory(alias);
+    const deleteAgentMemory = yield* Bedrock.DeleteAgentMemory(alias);
     const invokeModel = yield* Bedrock.InvokeModel(MODEL);
     const rerank = yield* Bedrock.Rerank(RERANK_MODEL);
     const invokeModelStream =
@@ -138,6 +145,24 @@ export default BedrockTestFunction.make(
             sessionId: result.sessionId,
             chunkEvents,
             text,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/agent-memory") {
+          // Read then clear memory for a fixed memory id. Summaries are
+          // generated asynchronously after a session ends, so on a fresh
+          // agent the read returns no contents — the route validates the
+          // IAM grants and wiring, not summary generation.
+          const memoryId = "alchemy-bindings-test-memory";
+          const memory = yield* getAgentMemory({
+            memoryType: "SESSION_SUMMARY",
+            memoryId,
+            maxItems: 10,
+          });
+          yield* deleteAgentMemory({ memoryId });
+          return yield* HttpServerResponse.json({
+            memoryContents: memory.memoryContents?.length ?? 0,
+            deleted: true,
           });
         }
 
@@ -263,6 +288,8 @@ export default BedrockTestFunction.make(
         Bedrock.ConverseHttp,
         Bedrock.ConverseStreamHttp,
         Bedrock.CountTokensHttp,
+        Bedrock.DeleteAgentMemoryHttp,
+        Bedrock.GetAgentMemoryHttp,
         Bedrock.InvokeAgentHttp,
         Bedrock.InvokeModelHttp,
         Bedrock.InvokeModelWithResponseStreamHttp,

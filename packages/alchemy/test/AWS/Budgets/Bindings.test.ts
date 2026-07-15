@@ -100,12 +100,12 @@ describe.sequential("Budgets Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 180_000 });
 
   describe("binding registration", () => {
-    test.provider("all 6 capabilities initialize in the runtime", (_stack) =>
+    test.provider("all 7 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = yield* send(
           HttpClientRequest.get(`${baseUrl}/bindings`),
         ).pipe(Effect.flatMap((r) => r.json));
-        expect((response as any).bound).toHaveLength(6);
+        expect((response as any).bound).toHaveLength(7);
       }),
     );
   });
@@ -145,6 +145,18 @@ describe.sequential("Budgets Bindings", () => {
           HttpClientRequest.get(`${baseUrl}/notifications`),
         ).pipe(Effect.flatMap((r) => r.json));
         expect((response as any).thresholds).toContain(80);
+      }),
+    );
+  });
+
+  describe("DescribeSubscribersForNotification", () => {
+    test.provider("lists the fixture notification's subscriber", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.get(`${baseUrl}/subscribers`),
+        ).pipe(Effect.flatMap((r) => r.json));
+        expect((response as any).count).toBe(1);
+        expect((response as any).subscriptionTypes).toContain("EMAIL");
       }),
     );
   });

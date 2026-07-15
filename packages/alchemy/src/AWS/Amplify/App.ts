@@ -215,7 +215,8 @@ export const AppProvider = () =>
           if (!app) {
             // Amplify throttles CreateApp aggressively (surfaced as a
             // BadRequestException with a "Rate exceeded" message rather than
-            // a throttling error class) — retry with bounded backoff.
+            // a throttling error class) and the quota is roughly per-minute
+            // account-wide — retry with bounded backoff spanning ~1 minute.
             const created = yield* amplify
               .createApp({
                 name,

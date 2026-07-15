@@ -2,6 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
+import type { Blueprint } from "./Blueprint.ts";
+import type { DataAutomationLibrary } from "./DataAutomationLibrary.ts";
 import type { DataAutomationProject } from "./DataAutomationProject.ts";
 
 /**
@@ -75,6 +77,161 @@ export const makeBdaProjectHttpBinding = <
             dataAutomationProjectArn: yield* projectArn,
             stage: yield* projectStage,
           },
+        } as I);
+      });
+    });
+  });
+
+/**
+ * Build the impl Effect for a library-scoped runtime operation (entity reads
+ * and ingestion-job APIs). The runtime callable injects the bound
+ * {@link DataAutomationLibrary}'s ARN as `libraryArn` and the deploy-time
+ * half grants `actions` on the library ARN.
+ */
+export const makeBdaLibraryHttpBinding = <
+  I extends { libraryArn: string },
+  A,
+  E,
+  R,
+>(options: {
+  /** Fully-qualified binding tag, e.g. `AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities`. */
+  tag: string;
+  /** The distilled operation; `libraryArn` is injected from the library. */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /** IAM actions granted on the library ARN. */
+  actions: readonly string[];
+}) =>
+  Effect.gen(function* () {
+    const op = yield* options.operation;
+
+    return Effect.fn(function* (library: DataAutomationLibrary) {
+      const libraryArn = yield* library.libraryArn;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isBindingHost(host)) {
+          yield* host.bind`Allow(${host}, ${options.tag}(${library}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [Output.interpolate`${library.libraryArn}`],
+              },
+            ],
+          });
+        }
+      }
+      return Effect.fn(`${options.tag}(${library.LogicalId})`)(function* (
+        request: Omit<I, "libraryArn">,
+      ) {
+        return yield* op({
+          ...request,
+          libraryArn: yield* libraryArn,
+        } as I);
+      });
+    });
+  });
+
+/**
+ * Build the impl Effect for a blueprint-scoped runtime operation (blueprint
+ * optimization). The runtime callable injects the bound {@link Blueprint}'s
+ * ARN + stage as `blueprint` and the deploy-time half grants `actions` on the
+ * blueprint ARN plus the account's data automation profiles in every region
+ * (cross-region inference profiles fan out to sibling regions).
+ */
+export const makeBdaBlueprintOptimizationHttpBinding = <
+  I extends { blueprint?: { blueprintArn: string; stage?: string } },
+  A,
+  E,
+  R,
+>(options: {
+  /** Fully-qualified binding tag, e.g. `AWS.BedrockDataAutomation.InvokeBlueprintOptimizationAsync`. */
+  tag: string;
+  /** The distilled operation; `blueprint` is injected from the blueprint. */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /** IAM actions granted on the blueprint ARN + the account's profiles. */
+  actions: readonly string[];
+}) =>
+  Effect.gen(function* () {
+    const op = yield* options.operation;
+
+    return Effect.fn(function* (blueprint: Blueprint) {
+      const blueprintArn = yield* blueprint.blueprintArn;
+      const blueprintStage = yield* blueprint.blueprintStage;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isBindingHost(host)) {
+          yield* host.bind`Allow(${host}, ${options.tag}(${blueprint}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [
+                  Output.interpolate`${blueprint.blueprintArn}`,
+                  "arn:aws:bedrock:*:*:data-automation-profile/*",
+                ],
+              },
+            ],
+          });
+        }
+      }
+      return Effect.fn(`${options.tag}(${blueprint.LogicalId})`)(function* (
+        request: Omit<I, "blueprint">,
+      ) {
+        return yield* op({
+          ...request,
+          blueprint: {
+            blueprintArn: yield* blueprintArn,
+            stage: yield* blueprintStage,
+          },
+        } as I);
+      });
+    });
+  });
+
+/**
+ * Build the impl Effect for a blueprint-scoped management operation (version
+ * snapshots and stage copies). The runtime callable injects the bound
+ * {@link Blueprint}'s ARN as `blueprintArn` and the deploy-time half grants
+ * `actions` on the blueprint ARN.
+ */
+export const makeBdaBlueprintHttpBinding = <
+  I extends { blueprintArn: string },
+  A,
+  E,
+  R,
+>(options: {
+  /** Fully-qualified binding tag, e.g. `AWS.BedrockDataAutomation.CreateBlueprintVersion`. */
+  tag: string;
+  /** The distilled operation; `blueprintArn` is injected from the blueprint. */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /** IAM actions granted on the blueprint ARN. */
+  actions: readonly string[];
+}) =>
+  Effect.gen(function* () {
+    const op = yield* options.operation;
+
+    return Effect.fn(function* (blueprint: Blueprint) {
+      const blueprintArn = yield* blueprint.blueprintArn;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isBindingHost(host)) {
+          yield* host.bind`Allow(${host}, ${options.tag}(${blueprint}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [Output.interpolate`${blueprint.blueprintArn}`],
+              },
+            ],
+          });
+        }
+      }
+      return Effect.fn(`${options.tag}(${blueprint.LogicalId})`)(function* (
+        request: Omit<I, "blueprintArn">,
+      ) {
+        return yield* op({
+          ...request,
+          blueprintArn: yield* blueprintArn,
         } as I);
       });
     });

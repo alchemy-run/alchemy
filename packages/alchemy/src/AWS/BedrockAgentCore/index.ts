@@ -24,6 +24,8 @@ export * from "./GetEventHttp.ts";
 export * from "./GetMemoryRecord.ts";
 export * from "./GetMemoryRecordHttp.ts";
 export * from "./InvokeAgentRuntime.ts";
+export * from "./InvokeAgentRuntimeCommand.ts";
+export * from "./InvokeAgentRuntimeCommandHttp.ts";
 export * from "./InvokeAgentRuntimeHttp.ts";
 export * from "./InvokeBrowser.ts";
 export * from "./InvokeBrowserHttp.ts";

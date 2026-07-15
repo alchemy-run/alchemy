@@ -154,7 +154,7 @@ export const RuleGroupsNamespaceProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const workspaceId = news!.workspaceId;
           const name = news!.name;
           const internalTags = yield* createInternalTags(id);
