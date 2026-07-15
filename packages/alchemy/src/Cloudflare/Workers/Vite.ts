@@ -9,6 +9,41 @@ import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
 import { viteBuildOutputPlugin } from "../../Bundle/Vite.ts";
 
+/**
+ * Signals to the app's own Vite config that Alchemy is injecting its
+ * resource-aware Cloudflare plugin into this build/dev run.
+ *
+ * Apps that also build standalone (plain `vite build` in CI, no Alchemy)
+ * need the Cloudflare plugin in their `vite.config.ts`. Without a guard,
+ * an Alchemy-orchestrated run instantiates that config-file instance
+ * *alongside* the injected one: two same-named plugin stacks whose
+ * cross-plugin API lookups resolve by name, and — in dev — two workerd
+ * runtimes, only one of which carries the Worker's bindings. Guarding on
+ * this variable lets the config-file instance stand down:
+ *
+ * ```ts
+ * // vite.config.ts
+ * process.env.ALCHEMY_CLOUDFLARE_VITE_INJECTED === "1"
+ *   ? null
+ *   : cloudflare({ ... })
+ * ```
+ *
+ * The variable is set process-locally by `viteDev`/`viteBuild`, so it is
+ * correct regardless of which process hosts Vite (`alchemy dev` runs the
+ * dev server in the spawned local-provider host, not in the process that
+ * evaluates the user's alchemy.run.ts — an env variable set there never
+ * reaches the config).
+ *
+ * Contract: the value is `"1"` while the process is Alchemy-orchestrated;
+ * absence means not injected. It is deliberately never unset — Vite
+ * re-evaluates the app config on dev-server restarts long after
+ * `viteDev` returned, and concurrent `viteBuild`s in one process would
+ * race a save/restore. A process that ran an Alchemy build never also
+ * runs a standalone (non-Alchemy) Vite build, so the flag staying set is
+ * correct for the process lifetime.
+ */
+const ALCHEMY_CLOUDFLARE_VITE_INJECTED = "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
+
 export const viteDev = (
   rootDir: string = process.cwd(),
   env: Record<string, unknown>,
@@ -17,6 +52,7 @@ export const viteDev = (
 ) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
+      process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
       const devServer = await vite.createServer({
         root: rootDir,
@@ -43,6 +79,7 @@ export const viteBuild = (
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
     yield* Effect.promise(async () => {
+      process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
       const builder = await vite.createBuilder(
         {
