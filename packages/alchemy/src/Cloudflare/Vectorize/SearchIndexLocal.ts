@@ -150,8 +150,8 @@ export const SearchIndexLocal = Layer.effect(
 );
 
 /**
- * Serialize vectors to an ndjson Blob for the `vectors` multipart part of the
- * Vectorize v2 insert/upsert endpoints.
+ * Serialize vectors to an ndjson Blob — the raw `application/x-ndjson` request
+ * body of the Vectorize v2 insert/upsert endpoints.
  */
 const toNdjsonBlob = (vectors: runtime.VectorizeVector[]): Blob =>
   new Blob([toNdjson(vectors)]);
