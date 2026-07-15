@@ -40,12 +40,16 @@ export const FixtureGraphLive = Layer.effect(
 );
 
 /**
- * Lambda fixture hosting the Neptune Analytics ExecuteQuery binding.
+ * Lambda fixture hosting the Neptune Analytics runtime bindings.
  *
  * Routes:
  * - `GET /graph` — the graph id/endpoint the fixture is bound to.
  * - `POST /query` — runs the openCypher query in the JSON body
- *   (`{ query, parameters? }`) and returns the parsed result document.
+ *   (`{ query, parameters? }`) and returns the parsed result document
+ *   (ExecuteQuery binding).
+ * - `GET /summary` — the graph's data summary (GetGraphSummary binding).
+ * - `GET /queries` — the graph's active queries (ListQueries binding).
+ * - `GET /snapshots` — the graph's snapshots (ListGraphSnapshots binding).
  */
 export const NeptuneGraphTestFunctionLive = NeptuneGraphTestFunction.make(
   {
@@ -56,6 +60,9 @@ export const NeptuneGraphTestFunctionLive = NeptuneGraphTestFunction.make(
   Effect.gen(function* () {
     const { graph } = yield* FixtureGraph;
     const executeQuery = yield* NeptuneGraph.ExecuteQuery(graph);
+    const getGraphSummary = yield* NeptuneGraph.GetGraphSummary(graph);
+    const listQueries = yield* NeptuneGraph.ListQueries(graph);
+    const listGraphSnapshots = yield* NeptuneGraph.ListGraphSnapshots(graph);
     const GraphId = yield* graph.graphId;
     const GraphEndpoint = yield* graph.endpoint;
 
@@ -69,6 +76,21 @@ export const NeptuneGraphTestFunctionLive = NeptuneGraphTestFunction.make(
           const graphId = yield* GraphId;
           const endpoint = yield* GraphEndpoint;
           return yield* HttpServerResponse.json({ graphId, endpoint });
+        }
+
+        if (request.method === "GET" && pathname === "/summary") {
+          const summary = yield* getGraphSummary({ mode: "BASIC" });
+          return yield* HttpServerResponse.json(summary);
+        }
+
+        if (request.method === "GET" && pathname === "/queries") {
+          const queries = yield* listQueries({ maxResults: 100 });
+          return yield* HttpServerResponse.json(queries);
+        }
+
+        if (request.method === "GET" && pathname === "/snapshots") {
+          const snapshots = yield* listGraphSnapshots();
+          return yield* HttpServerResponse.json(snapshots);
         }
 
         if (request.method === "POST" && pathname === "/query") {
@@ -96,7 +118,13 @@ export const NeptuneGraphTestFunctionLive = NeptuneGraphTestFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(NeptuneGraph.ExecuteQueryHttp, FixtureGraphLive),
+      Layer.mergeAll(
+        NeptuneGraph.ExecuteQueryHttp,
+        NeptuneGraph.GetGraphSummaryHttp,
+        NeptuneGraph.ListQueriesHttp,
+        NeptuneGraph.ListGraphSnapshotsHttp,
+        FixtureGraphLive,
+      ),
     ),
   ),
   // Re-merge so the deploying Stack can `yield* FixtureGraph` and expose the

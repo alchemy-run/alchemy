@@ -94,7 +94,15 @@ const skipForeign = () =>
 describe.sequential("Macie2 Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      // Never take over a Macie session this fixture did not create.
+      // Destroy OUR previous resources first — a crashed prior run leaves the
+      // fixture's own session enabled, which must not be mistaken for a
+      // foreign one. Destroying the scratch stack disables Macie only if the
+      // session is tracked in our state.
+      yield* Effect.logInfo("Macie2 test setup: destroying previous resources");
+      yield* sharedStack.destroy();
+
+      // Never take over a Macie session this fixture did not create — any
+      // session that remains after our own destroy is foreign.
       const preexisting = yield* aws(getSession);
       if (preexisting) {
         foreignSession = true;
@@ -103,9 +111,6 @@ describe.sequential("Macie2 Bindings", () => {
         );
         return;
       }
-
-      yield* Effect.logInfo("Macie2 test setup: destroying previous resources");
-      yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Macie2 test setup: deploying fixture");
       const attrs = yield* sharedStack.deploy(
@@ -294,9 +299,16 @@ describe.sequential("Macie2 Bindings", () => {
         expect(scopes.count).toBeGreaterThanOrEqual(0);
 
         const reveal = (yield* getJson("/reveal")) as {
-          status: string | null;
+          status?: string | null;
+          errorTag?: string;
         };
-        expect(["ENABLED", "DISABLED", null]).toContain(reveal.status);
+        if (reveal.errorTag) {
+          // A fresh session rejects the read until sample retrieval is
+          // configured — the typed tag proves the binding + IAM wiring.
+          expect(reveal.errorTag).toBe("AccessDeniedException");
+        } else {
+          expect(["ENABLED", "DISABLED", null]).toContain(reveal.status);
+        }
       }),
     );
   });

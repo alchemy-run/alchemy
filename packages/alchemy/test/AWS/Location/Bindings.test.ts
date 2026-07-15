@@ -69,7 +69,10 @@ const sendUntil = <T>(route: string, until: (response: T) => boolean) =>
     }),
   );
 
-describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
+// Sequential: the tracker tests are write-then-read (BatchUpdateDevicePosition
+// must land before GetDevicePosition/List/BatchGet observe it), and the global
+// vitest config runs tests concurrently by default.
+describe.sequential.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* Effect.logInfo(
@@ -103,6 +106,39 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
           ),
         ),
         Effect.retry({ schedule: readinessPolicy }),
+      );
+
+      // AWS canary: the fresh role's inline policy can take minutes to
+      // propagate — every geo:* call 500s until it does. Poll a cheap
+      // Location-backed route until it succeeds so tests start only once
+      // IAM is live.
+      yield* Effect.logInfo("Location test setup: waiting for IAM propagation");
+      yield* HttpClient.get(`${baseUrl}/geofence/list`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? response.json
+            : Effect.fail(new Error(`IAM not propagated: ${response.status}`)),
+        ),
+        Effect.flatMap((body) =>
+          (body as { ok?: boolean }).ok === true
+            ? Effect.void
+            : Effect.fail(
+                new Error(`geo:* not ready: ${JSON.stringify(body)}`),
+              ),
+        ),
+        Effect.tapError((error) =>
+          Effect.logWarning(
+            `Location test setup: geo:* not authorized yet (${String(error)})`,
+          ),
+        ),
+        // IAM propagation of the fresh execution-role policy to geo:* has
+        // been observed to take >150s — give it up to ~5 minutes.
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.fixed("2 seconds"),
+            Schedule.recurs(150),
+          ]),
+        }),
       );
     }),
     { timeout: 600_000 },
@@ -244,10 +280,11 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
       "lists the collection's geofences",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* sendUntil<{ count: number }>(
+          const response = yield* sendUntil<{ ok: boolean; count?: number }>(
             "/geofence/list",
-            (r) => r.count > 0,
+            (r) => r.ok && (r.count ?? 0) > 0,
           );
+          expect(response).toMatchObject({ ok: true });
           expect(response.count).toBeGreaterThan(0);
         }),
       { timeout: 120_000 },

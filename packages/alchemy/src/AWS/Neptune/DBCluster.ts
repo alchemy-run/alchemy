@@ -1,5 +1,5 @@
 import * as neptune from "@distilled.cloud/aws/neptune";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ServerlessV2ScalingConfiguration {
@@ -117,6 +118,19 @@ export interface DBClusterProps {
    */
   allowMajorVersionUpgrade?: boolean;
   /**
+   * IAM roles to associate with the cluster — e.g. an S3 read role for the
+   * Neptune bulk loader, or a SageMaker role for Neptune ML (set
+   * `featureName` where the feature requires it). Reconciled in place by
+   * diffing the observed cloud associations against this list via
+   * `addRoleToDBCluster`/`removeRoleFromDBCluster`.
+   */
+  associatedRoles?: Array<{
+    /** ARN of the IAM role to associate. */
+    roleArn: string;
+    /** Neptune feature the role is scoped to (omit for the default). */
+    featureName?: string;
+  }>;
+  /**
    * User-defined tags.
    */
   tags?: Record<string, string>;
@@ -162,6 +176,15 @@ export interface DBCluster extends Resource<
     deletionProtection: boolean | undefined;
     /** Whether IAM database authentication is enabled. */
     iamDatabaseAuthenticationEnabled: boolean | undefined;
+    /** IAM roles associated with the cluster (bulk loader, Neptune ML). */
+    associatedRoles: Array<{
+      /** ARN of the associated IAM role. */
+      roleArn: string | undefined;
+      /** Neptune feature the role is scoped to. */
+      featureName: string | undefined;
+      /** Association status (`ACTIVE`, `PENDING`, `INVALID`). */
+      status: string | undefined;
+    }>;
     /** Serverless v2 (NCU) scaling range, if configured. */
     serverlessV2ScalingConfiguration:
       | { minCapacity: number | undefined; maxCapacity: number | undefined }
@@ -275,6 +298,11 @@ const toAttrs = ({
   kmsKeyId: cluster.KmsKeyId,
   deletionProtection: cluster.DeletionProtection,
   iamDatabaseAuthenticationEnabled: cluster.IAMDatabaseAuthenticationEnabled,
+  associatedRoles: (cluster.AssociatedRoles ?? []).map((role) => ({
+    roleArn: role.RoleArn,
+    featureName: role.FeatureName,
+    status: role.Status,
+  })),
   serverlessV2ScalingConfiguration: cluster.ServerlessV2ScalingConfiguration
     ? {
         minCapacity: cluster.ServerlessV2ScalingConfiguration.MinCapacity,
@@ -440,10 +468,7 @@ export const DBClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // The wire field is whole days.
-          const backupRetentionDays =
-            news.backupRetentionPeriod !== undefined
-              ? Math.round(Duration.toDays(news.backupRetentionPeriod))
-              : undefined;
+          const backupRetentionDays = toWireDays(news.backupRetentionPeriod);
 
           // Observe — fetch live cluster state.
           let observed = yield* readCluster(identifier);
@@ -580,6 +605,65 @@ export const DBClusterProvider = () =>
               });
               observed = yield* waitForCluster(identifier);
             }
+          }
+
+          // Sync associated IAM roles — diff observed cloud associations
+          // against desired. Only runs when the prop is set, so clusters
+          // that don't manage roles through Alchemy are left untouched.
+          if (news.associatedRoles !== undefined) {
+            const roleKey = (
+              roleArn: string | undefined,
+              featureName: string | undefined,
+            ) => `${roleArn ?? ""}|${featureName ?? ""}`;
+            const observedRoles = observed.AssociatedRoles ?? [];
+            const observedKeys = new Set(
+              observedRoles.map((role) =>
+                roleKey(role.RoleArn, role.FeatureName),
+              ),
+            );
+            const desiredKeys = new Set(
+              news.associatedRoles.map((role) =>
+                roleKey(role.roleArn, role.featureName),
+              ),
+            );
+            for (const role of news.associatedRoles) {
+              if (!observedKeys.has(roleKey(role.roleArn, role.featureName))) {
+                yield* neptune
+                  .addRoleToDBCluster({
+                    DBClusterIdentifier: identifier,
+                    RoleArn: role.roleArn,
+                    FeatureName: role.featureName,
+                  })
+                  .pipe(
+                    Effect.catchTag(
+                      "DBClusterRoleAlreadyExistsFault",
+                      () => Effect.void,
+                    ),
+                  );
+              }
+            }
+            for (const role of observedRoles) {
+              if (
+                role.RoleArn !== undefined &&
+                !desiredKeys.has(roleKey(role.RoleArn, role.FeatureName))
+              ) {
+                yield* neptune
+                  .removeRoleFromDBCluster({
+                    DBClusterIdentifier: identifier,
+                    RoleArn: role.RoleArn,
+                    FeatureName: role.FeatureName,
+                  })
+                  .pipe(
+                    Effect.catchTag(
+                      "DBClusterRoleNotFoundFault",
+                      () => Effect.void,
+                    ),
+                  );
+              }
+            }
+            // Re-observe so the returned attributes carry the fresh
+            // associations.
+            observed = (yield* readCluster(identifier)) ?? observed;
           }
 
           const dbClusterArn = observed.DBClusterArn ?? "";

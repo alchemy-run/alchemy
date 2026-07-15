@@ -265,6 +265,16 @@ export interface PlaybackConfiguration extends Resource<
  *   availSuppression: { mode: "BEHIND_LIVE_EDGE", value: "00:00:30" },
  * });
  * ```
+ *
+ * @section Session Logging
+ * @example Send 10% of session logs to CloudWatch
+ * ```typescript
+ * const config = yield* MediaTailor.PlaybackConfiguration("Logged", {
+ *   adDecisionServerUrl: "https://ads.example.com/vast",
+ *   videoContentSourceUrl: "https://origin.example.com/live",
+ *   logConfiguration: { percentEnabled: 10 },
+ * });
+ * ```
  */
 export const PlaybackConfiguration = Resource<PlaybackConfiguration>(
   "AWS.MediaTailor.PlaybackConfiguration",
@@ -449,7 +459,39 @@ export const PlaybackConfigurationProvider = () =>
           });
           const attrs = yield* toAttributes(put);
 
-          // 2. SYNC TAGS — diff against the OBSERVED post-put tags so
+          // 2. SYNC LOGS — ConfigureLogsForPlaybackConfiguration is a
+          //    separate API; diff the OBSERVED post-put log configuration
+          //    against the desired one and only call the API on a delta.
+          //    A removed `logConfiguration` prop converges to percent 0
+          //    (session logging disabled).
+          const desiredLogs = news.logConfiguration;
+          const observedLogs = put.LogConfiguration;
+          const observedPercent = observedLogs?.PercentEnabled ?? 0;
+          const desiredPercent = desiredLogs?.percentEnabled ?? 0;
+          const observedStrategies = [
+            ...(observedLogs?.EnabledLoggingStrategies ?? []),
+          ].sort();
+          const desiredStrategies =
+            desiredLogs === undefined
+              ? observedStrategies // nothing desired: only percent converges
+              : [...(desiredLogs.enabledLoggingStrategies ?? [])].sort();
+          if (
+            observedPercent !== desiredPercent ||
+            observedStrategies.join(",") !== desiredStrategies.join(",")
+          ) {
+            yield* mediatailor.configureLogsForPlaybackConfiguration({
+              PlaybackConfigurationName: name,
+              PercentEnabled: desiredPercent,
+              ...(desiredLogs?.enabledLoggingStrategies
+                ? {
+                    EnabledLoggingStrategies:
+                      desiredLogs.enabledLoggingStrategies,
+                  }
+                : {}),
+            });
+          }
+
+          // 3. SYNC TAGS — diff against the OBSERVED post-put tags so
           //    adoption (which can bring foreign tags the put may not
           //    remove) converges.
           const currentTags = tagRecord(put.Tags);

@@ -38,8 +38,10 @@ export default LocationTestFunction.make(
       "BindingsCollection",
       {},
     );
+    // HERE (not Esri): SearchPlaceIndexForText only returns PlaceId — needed
+    // by the /places/get-place route — for HERE and Grab data providers.
     const index = yield* Location.PlaceIndex("BindingsIndex", {
-      dataSource: "Esri",
+      dataSource: "Here",
     });
     const calculator = yield* Location.RouteCalculator("BindingsCalculator", {
       dataSource: "Esri",
@@ -227,10 +229,19 @@ export default LocationTestFunction.make(
         }
 
         if (pathname === "/geofence/list") {
-          const page = yield* listGeofences();
-          return yield* HttpServerResponse.json({
-            count: page.Entries.length,
-          });
+          // Also serves as the test setup's IAM canary — always responds 200
+          // and surfaces the typed failure tag so setup can wait for geo:*
+          // authorization (or diagnose schema gaps) without blind 500s.
+          const page = yield* Effect.result(listGeofences());
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(page)
+              ? { ok: true, count: (page.success.Entries ?? []).length }
+              : {
+                  ok: false,
+                  tag: page.failure._tag,
+                  message: String(page.failure),
+                },
+          );
         }
 
         if (pathname === "/geofence/batch-put") {
@@ -262,7 +273,9 @@ export default LocationTestFunction.make(
           );
           return yield* HttpServerResponse.json(
             Result.isSuccess(result)
-              ? { ok: true, errors: result.success.Errors.length }
+              ? // Errors is omitted from the wire response when every update
+                // evaluated cleanly (patched optional in distilled).
+                { ok: true, errors: (result.success.Errors ?? []).length }
               : {
                   ok: false,
                   tag: result.failure._tag,

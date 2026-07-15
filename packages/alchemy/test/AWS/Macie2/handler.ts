@@ -177,7 +177,23 @@ export default Macie2TestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/search") {
-          const { matchingResources } = yield* searchResources({});
+          // SearchResources requires bucket criteria — exclude a bucket that
+          // cannot exist, i.e. match everything.
+          const { matchingResources } = yield* searchResources({
+            bucketCriteria: {
+              excludes: {
+                and: [
+                  {
+                    simpleCriterion: {
+                      comparator: "EQ",
+                      key: "S3_BUCKET_NAME",
+                      values: ["macie2-bindings-nonexistent-bucket"],
+                    },
+                  },
+                ],
+              },
+            },
+          });
           return yield* HttpServerResponse.json({
             matches: (matchingResources ?? []).length,
           });
@@ -248,11 +264,17 @@ export default Macie2TestFunction.make(
           });
         }
 
+        // A fresh session rejects the reveal-configuration read with a typed
+        // AccessDeniedException until sample retrieval is set up.
         if (request.method === "GET" && pathname === "/reveal") {
-          const { configuration } = yield* getRevealConfiguration();
-          return yield* HttpServerResponse.json({
-            status: configuration?.status ?? null,
-          });
+          const result = yield* errorTagged(
+            getRevealConfiguration().pipe(
+              Effect.map((r) => ({
+                status: r.configuration?.status ?? null,
+              })),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         // A standalone account has no administrator — Macie answers with an
@@ -314,7 +336,23 @@ export default Macie2TestFunction.make(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
         );
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Surface typed operation errors as JSON so live-test failures carry
+        // the tag + message instead of an opaque 500 (routes that expect a
+        // typed error use `errorTagged` above and never reach this).
+        Effect.catch((e) =>
+          HttpServerResponse.json(
+            {
+              errorTag: (e as { _tag?: string })._tag ?? "UnknownError",
+              errorMessage:
+                (e as { message?: string }).message ??
+                (e as { Message?: string }).Message,
+            },
+            { status: 500 },
+          ),
+        ),
+        Effect.orDie,
+      ),
     };
   }).pipe(
     Effect.provide(

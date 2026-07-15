@@ -129,10 +129,12 @@ export const makeMediaPackageV2ChannelHttpBinding = <
  * Build the impl Effect for a MediaPackage v2 operation scoped to an
  * {@link OriginEndpoint}: the runtime callable injects the endpoint's
  * `ChannelGroupName` + `ChannelName` + `OriginEndpointName` and the
- * deploy-time half grants `actions` on the endpoint ARN — or, when
+ * deploy-time half grants `actions` on the endpoint ARN — plus, when
  * `harvestJobScoped` is set, on the endpoint's harvest-job ARN pattern
- * (`{endpointArn}/harvestJob/*`), which is what MediaPackage authorizes
- * harvest-job operations against.
+ * (`{endpointArn}/harvestJob/*`) and the parent channel-group ARN:
+ * MediaPackage authorizes `CreateHarvestJob` against the bare channel
+ * group (observed live: "not authorized to perform
+ * mediapackagev2:CreateHarvestJob on resource: arn:…:channelGroup/{g}").
  */
 export const makeMediaPackageV2OriginEndpointHttpBinding = <
   I extends {
@@ -150,7 +152,7 @@ export const makeMediaPackageV2OriginEndpointHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the endpoint (or harvest-job pattern) ARN. */
   actions: readonly string[];
-  /** Grant on `{endpointArn}/harvestJob/*` instead of the endpoint ARN. */
+  /** Additionally grant on `{endpointArn}/harvestJob/*` (harvest-job ops). */
   harvestJobScoped?: boolean;
 }) =>
   Effect.gen(function* () {
@@ -169,9 +171,19 @@ export const makeMediaPackageV2OriginEndpointHttpBinding = <
                 Effect: "Allow",
                 Action: [...options.actions],
                 Resource: [
-                  options.harvestJobScoped
-                    ? Output.interpolate`${endpoint.originEndpointArn}/harvestJob/*`
-                    : Output.interpolate`${endpoint.originEndpointArn}`,
+                  Output.interpolate`${endpoint.originEndpointArn}`,
+                  ...(options.harvestJobScoped
+                    ? [
+                        Output.interpolate`${endpoint.originEndpointArn}/harvestJob/*`,
+                        // The endpoint ARN is `…:channelGroup/{g}/channel/{c}/originEndpoint/{e}`;
+                        // harvest-job actions authorize against the bare
+                        // channel-group ARN prefix.
+                        Output.map(
+                          endpoint.originEndpointArn,
+                          (arn): string => arn.split("/channel/")[0]!,
+                        ),
+                      ]
+                    : []),
                 ],
               },
             ],

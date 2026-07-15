@@ -109,7 +109,9 @@ describe.sequential("MediaPackageV2 Bindings", () => {
     { timeout: 300_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 240_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 240_000,
+  });
 
   describe("binding registration", () => {
     test.provider("all six capabilities initialize in the runtime", () =>

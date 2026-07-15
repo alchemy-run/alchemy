@@ -98,9 +98,10 @@ test.provider(
           return yield* PlaybackConfiguration("TestConfig", {
             adDecisionServerUrl: "https://ads.example.com/vast/v2",
             videoContentSourceUrl: "https://origin.example.com/live",
-            personalizationThresholdSeconds: "2 seconds",
+            personalizationThreshold: "2 seconds",
             manifestProcessingRules: { adMarkerPassthroughEnabled: true },
             availSuppression: { mode: "BEHIND_LIVE_EDGE", value: "00:00:30" },
+            logConfiguration: { percentEnabled: 10 },
             tags: { Purpose: "alchemy-live-test" },
           });
         }),
@@ -122,6 +123,8 @@ test.provider(
       ).toBe(true);
       expect(afterUpdate?.AvailSuppression?.Mode).toBe("BEHIND_LIVE_EDGE");
       expect(afterUpdate?.AvailSuppression?.Value).toBe("00:00:30");
+      // log sync: ConfigureLogsForPlaybackConfiguration applied the percent
+      expect(afterUpdate?.LogConfiguration?.PercentEnabled).toBe(10);
       // tag sync: new tag present, old user tag removed, branding intact
       expect(afterUpdate?.Tags?.Purpose).toBe("alchemy-live-test");
       expect(afterUpdate?.Tags?.Environment ?? undefined).toBeUndefined();

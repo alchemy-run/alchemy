@@ -28,6 +28,44 @@ test.provider(
     }),
 );
 
+// The snapshot / import-task / export-task bindings address resources by
+// server-generated ids that only exist at runtime — probe their typed
+// not-found tags so the account-level grants and error unions stay proven
+// without provisioning a graph.
+test.provider(
+  "getGraphSnapshot on a nonexistent snapshot fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        // Well-formed but nonexistent snapshot id (gs-<10 alphanumerics>).
+        neptunegraph.getGraphSnapshot({ snapshotIdentifier: "gs-0123456789" }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
+test.provider(
+  "getImportTask on a nonexistent task fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        neptunegraph.getImportTask({ taskIdentifier: "t-0123456789" }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
+test.provider(
+  "getExportTask on a nonexistent task fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        neptunegraph.getExportTask({ taskIdentifier: "t-0123456789" }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
 const assertGraphGone = (graphId: string) =>
   neptunegraph.getGraph({ graphIdentifier: graphId }).pipe(
     Effect.flatMap((graph) =>
@@ -136,6 +174,45 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         query: "MATCH (n:Person) RETURN n.name AS name",
       })) as { results: Array<{ name: string }> };
       expect(read.results).toEqual([{ name: "Ada" }]);
+
+      const getJson = (path: string) =>
+        HttpClient.get(`${baseUrl}${path}`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : res.text.pipe(
+                  Effect.flatMap((text) =>
+                    Effect.fail(
+                      new Error(`${path} returned ${res.status}: ${text}`),
+                    ),
+                  ),
+                ),
+          ),
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(10),
+            ]),
+          }),
+        );
+
+      // GetGraphSummary binding: the summary document reflects the graph.
+      const summary = (yield* getJson("/summary")) as {
+        graphSummary?: { numNodes?: number };
+      };
+      expect(summary.graphSummary).toBeDefined();
+
+      // ListQueries binding: returns a well-formed (usually empty) list.
+      const queries = (yield* getJson("/queries")) as {
+        queries: unknown[];
+      };
+      expect(Array.isArray(queries.queries)).toBe(true);
+
+      // ListGraphSnapshots binding: fresh graph has no snapshots.
+      const snapshots = (yield* getJson("/snapshots")) as {
+        graphSnapshots: unknown[];
+      };
+      expect(Array.isArray(snapshots.graphSnapshots)).toBe(true);
 
       // Destroy immediately — the graph bills while it exists — and verify
       // it is fully gone out-of-band.
