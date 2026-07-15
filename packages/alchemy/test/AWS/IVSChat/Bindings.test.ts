@@ -8,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
+import WebSocket from "ws";
 
 import IVSChatTestFunctionLive, {
   IVSChatTestFunction,
@@ -27,6 +28,10 @@ let baseUrl: string;
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
+}> {}
+
+class WsFailure extends Data.TaggedError("WsFailure")<{
+  readonly reason: string;
 }> {}
 
 const post = (path: string) =>
@@ -151,6 +156,171 @@ describe("IVSChat Bindings", () => {
 
           expect(typeof response.deleted).toBe("string");
           expect(response.deleted!.length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("IVSChat.RoomMessageReviewEventSource", () => {
+    /**
+     * Connect to the room's WebSocket messaging endpoint with a chat token,
+     * send one message, and resolve with the first frame the room sends
+     * back for it (`MESSAGE` when the review handler allows, `ERROR` when
+     * it denies). Encapsulated in `Effect.callback` so fiber interruption
+     * closes the socket.
+     */
+    const wsSendMessage = (endpoint: string, token: string, content: string) =>
+      Effect.callback<
+        {
+          type: string;
+          content?: string;
+          errorCode?: number;
+          errorMessage?: string;
+        },
+        WsFailure
+      >((resume, signal) => {
+        const socket = new WebSocket(endpoint, token);
+        let settled = false;
+        const settle = (
+          effect: Effect.Effect<
+            {
+              type: string;
+              content?: string;
+              errorCode?: number;
+              errorMessage?: string;
+            },
+            WsFailure
+          >,
+        ) => {
+          if (settled) return;
+          settled = true;
+          try {
+            socket.close();
+          } catch {
+            // already closed
+          }
+          resume(effect);
+        };
+        signal.addEventListener("abort", () =>
+          settle(Effect.fail(new WsFailure({ reason: "interrupted" }))),
+        );
+        socket.on("open", () =>
+          socket.send(
+            JSON.stringify({
+              action: "SEND_MESSAGE",
+              requestId: "alchemy-review-test",
+              content,
+            }),
+          ),
+        );
+        socket.on("message", (data) => {
+          let frame: {
+            type: string;
+            content?: string;
+            errorCode?: number;
+            errorMessage?: string;
+          };
+          try {
+            frame = JSON.parse(String(data));
+          } catch {
+            return; // ignore unparsable frames
+          }
+          // MESSAGE (delivered) and ERROR (denied) both settle the probe;
+          // ignore unrelated frames (e.g. other EVENTs).
+          if (frame.type === "MESSAGE" || frame.type === "ERROR") {
+            settle(Effect.succeed(frame));
+          }
+        });
+        socket.on("error", (error) =>
+          settle(Effect.fail(new WsFailure({ reason: String(error) }))),
+        );
+        socket.on("close", (code) =>
+          settle(
+            Effect.fail(new WsFailure({ reason: `closed early (${code})` })),
+          ),
+        );
+      }).pipe(Effect.timeout("15 seconds"));
+
+    const wsInfo = Effect.gen(function* () {
+      const info = (yield* post("/ws-info").pipe(
+        Effect.flatMap((r) => r.json),
+      )) as { token?: string; endpoint?: string };
+      expect(info.token).toBeTruthy();
+      expect(info.endpoint).toContain("wss://edge.ivschat.");
+      return info as { token: string; endpoint: string };
+    });
+
+    test.provider(
+      "review handler modifies allowed messages",
+      (_stack) =>
+        Effect.gen(function* () {
+          // The handler association + invoke Permission propagate shortly
+          // after deploy; until then IVS Chat's fallbackResult (ALLOW)
+          // delivers the ORIGINAL content — treat that as retryable.
+          const frame = yield* Effect.gen(function* () {
+            const { token, endpoint } = yield* wsInfo;
+            const received = yield* wsSendMessage(
+              endpoint,
+              token,
+              "hello moderators",
+            );
+            if (
+              received.type !== "MESSAGE" ||
+              !received.content?.includes("[reviewed]")
+            ) {
+              return yield* Effect.fail(
+                new WsFailure({
+                  reason: `not yet reviewed: ${JSON.stringify(received)}`,
+                }),
+              );
+            }
+            return received;
+          }).pipe(
+            Effect.retry({
+              schedule: Schedule.max([
+                Schedule.exponential("2 seconds"),
+                Schedule.recurs(8),
+              ]),
+            }),
+          );
+
+          expect(frame.type).toBe("MESSAGE");
+          expect(frame.content).toBe("hello moderators [reviewed]");
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "review handler denies flagged messages with a 406",
+      (_stack) =>
+        Effect.gen(function* () {
+          const frame = yield* Effect.gen(function* () {
+            const { token, endpoint } = yield* wsInfo;
+            const received = yield* wsSendMessage(
+              endpoint,
+              token,
+              "please deny-me now",
+            );
+            if (received.type !== "ERROR") {
+              return yield* Effect.fail(
+                new WsFailure({
+                  reason: `not yet denied: ${JSON.stringify(received)}`,
+                }),
+              );
+            }
+            return received;
+          }).pipe(
+            Effect.retry({
+              schedule: Schedule.max([
+                Schedule.exponential("2 seconds"),
+                Schedule.recurs(8),
+              ]),
+            }),
+          );
+
+          expect(frame.type).toBe("ERROR");
+          expect(frame.errorCode).toBe(406);
+          expect(frame.errorMessage).toContain("alchemy-moderated");
         }),
       { timeout: 120_000 },
     );

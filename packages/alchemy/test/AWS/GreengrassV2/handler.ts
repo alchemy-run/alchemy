@@ -42,7 +42,7 @@ const probe = <A, E extends { readonly _tag: string }>(
 ) =>
   self.pipe(
     Effect.map(() => ({ ok: true as const })),
-    Effect.catchAll((error) =>
+    Effect.catch((error) =>
       Effect.succeed({ ok: false as const, tag: error._tag }),
     ),
   );
@@ -303,7 +303,7 @@ export default GreengrassTestFunction.make(
                 v.componentName === undefined ? [] : [v.componentName],
               ),
             })),
-            Effect.catchAll((error) =>
+            Effect.catch((error) =>
               Effect.succeed({
                 ok: false as const,
                 names: [] as string[],

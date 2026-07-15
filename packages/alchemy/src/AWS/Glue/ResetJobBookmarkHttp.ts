@@ -9,5 +9,8 @@ export const ResetJobBookmarkHttp = Layer.effect(
     tag: "AWS.Glue.ResetJobBookmark",
     operation: glue.resetJobBookmark,
     actions: ["glue:ResetJobBookmark"],
+    // Glue evaluates bookmark actions without a resource — an ARN-scoped
+    // grant never matches (verified live via the IAM policy simulator).
+    anyResource: true,
   }),
 );

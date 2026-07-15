@@ -238,7 +238,18 @@ describe.sequential("IAM Bindings", () => {
       "echoes the owning user for the bound access key (proving AccessKeyId injection)",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/access-key-last-used")) as any;
+          // GetAccessKeyLastUsed on a just-created key is eventually
+          // consistent: IAM answers 200 with UserName absent until the key
+          // propagates (its error union is CommonErrors only — there is no
+          // typed NotFound to observe). Poll, bounded, until the owning user
+          // is echoed.
+          const response = (yield* getJson("/access-key-last-used").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (r): boolean => Boolean((r as any).userName),
+              times: 10,
+            }),
+          )) as any;
           expect(response.userName).toBeTruthy();
           expect(response.userName).toBe(response.expectedUserName);
         }),

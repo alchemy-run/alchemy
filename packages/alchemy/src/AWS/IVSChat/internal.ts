@@ -67,6 +67,24 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
   });
 
 /**
+ * Retries the `ValidationException` IVS Chat raises while a freshly-added
+ * `lambda:InvokeFunction` permission for `ivschat.amazonaws.com` is still
+ * propagating — associating a `messageReviewHandler` validates the
+ * permission, and Create/UpdateRoom can race the IAM propagation window
+ * ("Request member: uri failed to satisfy the constraints: invalid lambda
+ * permission"). Bounded (~30s).
+ */
+export const retryWhileHandlerPermissionPropagating = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e): boolean =>
+      e instanceof ivschat.ValidationException &&
+      e.message.includes("invalid lambda permission"),
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+  });
+
+/**
  * Retries `ThrottlingException` on a bounded exponential schedule. IVS
  * APIs have very low TPS limits (e.g. ListPlaybackKeyPairs is 1 TPS), so
  * back-to-back reconciles routinely trip 429s.

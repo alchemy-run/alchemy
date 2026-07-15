@@ -45,6 +45,9 @@ test.provider(
           .getSignalCatalog({ name: "alchemy-nonexistent-catalog-probe" })
           .pipe(inHomeRegion),
       );
+      yield* Effect.sync(() =>
+        console.log(`FLEETWISE PROBE TAG: ${error._tag}`),
+      );
       expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
         error._tag,
       );

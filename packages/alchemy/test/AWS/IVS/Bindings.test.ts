@@ -108,10 +108,10 @@ describe.sequential("IVS Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
 
   describe("binding registration", () => {
-    test.provider("all eight capabilities initialize in the runtime", () =>
+    test.provider("all nine capabilities initialize in the runtime", () =>
       Effect.gen(function* () {
         const response = (yield* getJson("/bindings")) as { bound: string[] };
-        expect(response.bound).toHaveLength(8);
+        expect(response.bound).toHaveLength(9);
       }),
     );
   });
@@ -215,6 +215,19 @@ describe.sequential("IVS Bindings", () => {
             "ValidationException",
             "ConflictException",
           ]).toContain(response.tag);
+        }),
+    );
+  });
+
+  describe("BatchStartViewerSessionRevocation", () => {
+    test.provider(
+      "batch-revoking a viewer session reports no per-pair errors",
+      () =>
+        Effect.gen(function* () {
+          const response = (yield* postJson("/revoke-batch")) as {
+            errorCount: number;
+          };
+          expect(response.errorCount).toBe(0);
         }),
     );
   });

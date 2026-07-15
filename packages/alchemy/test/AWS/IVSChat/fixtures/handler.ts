@@ -34,6 +34,22 @@ export default IVSChatTestFunction.make(
     const deleteMessage = yield* IVSChat.DeleteMessage(room);
     const disconnectUser = yield* IVSChat.DisconnectUser(room);
 
+    // Message review handler: deny messages containing "deny-me"; stamp
+    // everything else with a marker so the test can observe the review.
+    yield* IVSChat.onReviewMessage(room, (event) =>
+      Effect.succeed(
+        event.Content.includes("deny-me")
+          ? {
+              ReviewResult: "DENY" as const,
+              Attributes: { Reason: "alchemy-moderated" },
+            }
+          : {
+              ReviewResult: "ALLOW" as const,
+              Content: `${event.Content} [reviewed]`,
+            },
+      ),
+    );
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -65,6 +81,30 @@ export default IVSChatTestFunction.make(
             tokenIsRedacted: token !== undefined && Redacted.isRedacted(token),
             tokenExpirationTime: result.tokenExpirationTime,
             sessionExpirationTime: result.sessionExpirationTime,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/ws-info") {
+          // The test drives the room's WebSocket messaging API directly to
+          // exercise the message review handler; it needs the raw token
+          // (scoped to this test room, 30-minute session) and the regional
+          // edge endpoint.
+          const result = yield* createChatToken({
+            userId: TEST_USER_ID,
+            capabilities: ["SEND_MESSAGE"],
+            sessionDuration: "30 minutes",
+          });
+          const token = result.token;
+          const raw =
+            token === undefined
+              ? undefined
+              : Redacted.isRedacted(token)
+                ? Redacted.value(token)
+                : token;
+          const region = yield* Effect.sync(() => process.env.AWS_REGION);
+          return yield* HttpServerResponse.json({
+            token: raw,
+            endpoint: `wss://edge.ivschat.${region}.amazonaws.com`,
           });
         }
 
@@ -109,6 +149,7 @@ export default IVSChatTestFunction.make(
         IVSChat.SendEventHttp,
         IVSChat.DeleteMessageHttp,
         IVSChat.DisconnectUserHttp,
+        Lambda.RoomMessageReviewEventSource,
       ),
     ),
   ),

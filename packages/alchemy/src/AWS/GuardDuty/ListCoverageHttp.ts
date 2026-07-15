@@ -9,5 +9,8 @@ export const ListCoverageHttp = Layer.effect(
     tag: "AWS.GuardDuty.ListCoverage",
     operation: guardduty.listCoverage,
     actions: ["guardduty:ListCoverage"],
+    // One of the two GuardDuty actions that supports resource-level
+    // permissions on the detector ARN.
+    resourceLevel: true,
   }),
 );

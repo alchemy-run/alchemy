@@ -14,9 +14,10 @@ import type { Detector } from "./Detector.ts";
 
 /**
  * Build the impl Effect for a GuardDuty operation scoped to a
- * {@link Detector}: the deploy-time half grants `actions` on the bound
- * detector's ARN, and the runtime half injects the detector's `DetectorId`
- * into every request.
+ * {@link Detector}: the deploy-time half grants `actions` (on the bound
+ * detector's ARN where the action supports resource-level permissions,
+ * otherwise on `*`), and the runtime half injects the detector's
+ * `DetectorId` into every request.
  */
 export const makeGuardDutyDetectorHttpBinding = <
   I extends { DetectorId: string },
@@ -28,8 +29,18 @@ export const makeGuardDutyDetectorHttpBinding = <
   tag: string;
   /** The distilled operation. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
-  /** IAM actions granted on the detector ARN. */
+  /** IAM actions granted. */
   actions: readonly string[];
+  /**
+   * Whether the IAM action supports resource-level permissions on the
+   * detector ARN. Most GuardDuty detector-scoped actions do NOT — IAM only
+   * evaluates them against `Resource: "*"` (verified empirically: an
+   * ARN-scoped Allow is an implicit deny for e.g. `ListFindings`,
+   * `ListMembers`, `CreateSampleFindings`). Only the coverage actions
+   * (`ListCoverage`, `GetCoverageStatistics`) opt in.
+   * @default false
+   */
+  resourceLevel?: boolean;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -44,7 +55,9 @@ export const makeGuardDutyDetectorHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [detector.detectorArn],
+                Resource: options.resourceLevel
+                  ? [detector.detectorArn]
+                  : ["*"],
               },
             ],
           });

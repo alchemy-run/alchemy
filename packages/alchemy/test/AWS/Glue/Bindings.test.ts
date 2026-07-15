@@ -101,11 +101,37 @@ describe.sequential("Glue Bindings", () => {
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
+
+      // Glue's authorization layer caches IAM evaluations: a freshly created
+      // role + inline policy is denied (`AccessDeniedException`) by the Glue
+      // endpoint for ~3–5 minutes after `PutRolePolicy`, even though the
+      // policy is attached (verified via CloudTrail: policy attached
+      // 17:10:47Z, every glue:* call denied until exactly 17:15:50Z). Gate
+      // the suite on the first job-scoped call succeeding so the tests
+      // measure binding behavior, not IAM propagation.
+      yield* Effect.logInfo("Glue test setup: waiting for IAM propagation");
+      yield* HttpClient.get(`${baseUrl}/job-runs`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(
+                new Error(`Glue IAM not propagated: ${response.status}`),
+              ),
+        ),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.fixed("5 seconds"),
+            Schedule.recurs(84),
+          ]),
+        }),
+      );
     }),
-    { timeout: 300_000 },
+    { timeout: 900_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 300_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 300_000,
+  });
 
   describe("binding registration", () => {
     test.provider("all twenty capabilities initialize in the runtime", () =>

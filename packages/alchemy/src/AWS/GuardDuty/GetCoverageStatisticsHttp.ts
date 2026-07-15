@@ -9,5 +9,8 @@ export const GetCoverageStatisticsHttp = Layer.effect(
     tag: "AWS.GuardDuty.GetCoverageStatistics",
     operation: guardduty.getCoverageStatistics,
     actions: ["guardduty:GetCoverageStatistics"],
+    // One of the two GuardDuty actions that supports resource-level
+    // permissions on the detector ARN.
+    resourceLevel: true,
   }),
 );

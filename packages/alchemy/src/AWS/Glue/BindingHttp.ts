@@ -23,7 +23,11 @@ import type { Table } from "./Table.ts";
 /**
  * Build the impl Effect for a Glue operation addressed to a {@link Job} by
  * `JobName`: the runtime callable injects the bound job's name and the
- * deploy-time half grants `actions` on the job ARN.
+ * deploy-time half grants `actions` on the job ARN — or on `*` when
+ * `anyResource` is set, for the handful of Glue actions that do not support
+ * resource-level permissions (verified live: `glue:GetJobBookmark` /
+ * `glue:ResetJobBookmark` are evaluated with no resource — an ARN-scoped
+ * Allow never matches and IAM implicit-denies).
  */
 export const makeGlueJobHttpBinding = <
   I extends { JobName: string },
@@ -37,6 +41,11 @@ export const makeGlueJobHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the job ARN. */
   actions: readonly string[];
+  /**
+   * Grant on `Resource: "*"` instead of the job ARN — required for actions
+   * Glue evaluates without a resource (job bookmarks).
+   */
+  anyResource?: boolean;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -52,7 +61,7 @@ export const makeGlueJobHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [job.jobArn],
+                Resource: options.anyResource ? ["*"] : [job.jobArn],
               },
             ],
           });

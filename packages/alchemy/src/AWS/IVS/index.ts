@@ -1,3 +1,5 @@
+export * from "./BatchStartViewerSessionRevocation.ts";
+export * from "./BatchStartViewerSessionRevocationHttp.ts";
 export * from "./Channel.ts";
 export * from "./GetStream.ts";
 export * from "./GetStreamHttp.ts";

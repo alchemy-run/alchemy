@@ -63,6 +63,8 @@ export default IamTestFunction.make(
       userName: user.userName,
     });
 
+    // Output accessors: yielding at init returns an *accessor* effect that
+    // must be yielded again inside the runtime route to get the value.
     const userArn = yield* user.userArn;
     const userName = yield* user.userName;
 

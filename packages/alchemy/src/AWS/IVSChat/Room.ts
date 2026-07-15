@@ -9,6 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  retryWhileHandlerPermissionPropagating,
   retryWhileThrottled,
   syncIvsChatTags,
   toTagRecord,
@@ -26,6 +27,17 @@ export interface RoomMessageReviewHandler {
    * @default "ALLOW"
    */
   fallbackResult?: "ALLOW" | "DENY";
+}
+
+/**
+ * The binding contract of a room: the message review event source
+ * (`IVSChat.onReviewMessage`) contributes the reviewing Lambda's ARN as the
+ * room's `messageReviewHandler`, which the provider merges with
+ * `props.messageReviewHandler` and syncs onto the room.
+ */
+export interface RoomBinding {
+  /** Review handler injected by `IVSChat.onReviewMessage`. */
+  messageReviewHandler?: RoomMessageReviewHandler;
 }
 
 export interface RoomProps {
@@ -48,7 +60,9 @@ export interface RoomProps {
   maximumMessageLength?: number;
   /**
    * A Lambda-backed handler that reviews (and can modify or deny)
-   * messages before delivery.
+   * messages before delivery. Prefer wiring it through
+   * `IVSChat.onReviewMessage` — the event source also creates the invoke
+   * Permission and registers the runtime handler.
    * @default no review handler
    */
   messageReviewHandler?: RoomMessageReviewHandler;
@@ -80,7 +94,7 @@ export interface Room extends Resource<
      */
     roomId: string;
   },
-  never,
+  RoomBinding,
   Providers
 > {}
 
@@ -120,6 +134,23 @@ export interface Room extends Resource<
  *   loggingConfigurationIdentifiers: [logging.loggingConfigurationArn],
  * });
  * ```
+ *
+ * @section Message Review
+ * @example Review Messages with a Lambda Handler
+ * ```typescript
+ * // inside a Lambda Function's effect — the handler reviews every message
+ * // sent to the room before delivery (allow / modify / deny)
+ * const room = yield* IVSChat.Room("LiveChat");
+ * yield* IVSChat.onReviewMessage(room, (event) =>
+ *   Effect.succeed(
+ *     event.Content.includes("banned-word")
+ *       ? { ReviewResult: "DENY", Attributes: { Reason: "moderated" } }
+ *       : undefined,
+ *   ),
+ * );
+ * // on the Function effect:
+ * // .pipe(Effect.provide(Lambda.RoomMessageReviewEventSource))
+ * ```
  */
 export const Room = Resource<Room>("AWS.IVSChat.Room");
 
@@ -130,6 +161,51 @@ export const Room = Resource<Room>("AWS.IVSChat.Room");
 export class IvsChatRoomIncomplete extends Data.TaggedError(
   "IvsChatRoomIncomplete",
 )<{ message: string }> {}
+
+/**
+ * Two different Lambda functions were registered as the same room's message
+ * review handler — IVS Chat supports exactly one handler per room.
+ */
+export class ConflictingRoomMessageReviewHandler extends Data.TaggedError(
+  "ConflictingRoomMessageReviewHandler",
+)<{ readonly uris: readonly string[] }> {}
+
+/**
+ * The room's desired `messageReviewHandler`: `props.messageReviewHandler`
+ * merged with the handler contributed through the binding contract
+ * (`IVSChat.onReviewMessage`). Fails when two different handler URIs are
+ * declared. Returns `undefined` when no handler is desired (which clears
+ * any associated handler on update).
+ */
+const resolveMessageReviewHandler = Effect.fn(function* (
+  news: RoomProps,
+  bindings: ReadonlyArray<RoomBinding | { data?: RoomBinding }>,
+) {
+  const contributions = [
+    news.messageReviewHandler,
+    ...bindings.map(
+      (binding) =>
+        (binding as { data?: RoomBinding }).data?.messageReviewHandler ??
+        (binding as RoomBinding).messageReviewHandler,
+    ),
+  ].filter((handler) => handler !== undefined);
+  let resolved: RoomMessageReviewHandler | undefined;
+  for (const handler of contributions) {
+    if (
+      resolved?.uri !== undefined &&
+      handler.uri !== undefined &&
+      resolved.uri !== handler.uri
+    ) {
+      return yield* Effect.fail(
+        new ConflictingRoomMessageReviewHandler({
+          uris: [resolved.uri, handler.uri],
+        }),
+      );
+    }
+    resolved = { ...resolved, ...handler };
+  }
+  return resolved;
+});
 
 type RoomState = {
   arn?: string | undefined;
@@ -202,10 +278,20 @@ export const RoomProvider = () =>
             : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          news,
+          output,
+          session,
+          bindings,
+        }) {
           const name = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          const messageReviewHandler = yield* resolveMessageReviewHandler(
+            news,
+            bindings,
+          );
 
           // 1. Observe.
           let observed: RoomState | undefined = output?.roomArn
@@ -219,12 +305,15 @@ export const RoomProvider = () =>
                 name,
                 maximumMessageRatePerSecond: news.maximumMessageRatePerSecond,
                 maximumMessageLength: news.maximumMessageLength,
-                messageReviewHandler: news.messageReviewHandler,
+                messageReviewHandler,
                 loggingConfigurationIdentifiers:
                   news.loggingConfigurationIdentifiers,
                 tags: desiredTags,
               })
-              .pipe(retryWhileThrottled);
+              .pipe(
+                retryWhileThrottled,
+                retryWhileHandlerPermissionPropagating,
+              );
           }
           const arn = observed.arn;
           if (arn === undefined) {
@@ -253,12 +342,20 @@ export const RoomProvider = () =>
           ) {
             patch.maximumMessageLength = news.maximumMessageLength;
           }
+          // Handler sync: `uri: ""` disassociates, and the API defaults
+          // fallbackResult to ALLOW — compare normalized values so a
+          // no-handler desire converges from either direction.
+          const observedHandlerUri = observed.messageReviewHandler?.uri ?? "";
+          const desiredHandlerUri = messageReviewHandler?.uri ?? "";
+          const observedFallback =
+            observed.messageReviewHandler?.fallbackResult ?? "ALLOW";
+          const desiredFallback =
+            messageReviewHandler?.fallbackResult ?? "ALLOW";
           if (
-            news.messageReviewHandler !== undefined &&
-            JSON.stringify(observed.messageReviewHandler ?? {}) !==
-              JSON.stringify(news.messageReviewHandler)
+            observedHandlerUri !== desiredHandlerUri ||
+            (desiredHandlerUri !== "" && observedFallback !== desiredFallback)
           ) {
-            patch.messageReviewHandler = news.messageReviewHandler;
+            patch.messageReviewHandler = messageReviewHandler ?? { uri: "" };
           }
           if (
             news.loggingConfigurationIdentifiers !== undefined &&
@@ -271,7 +368,10 @@ export const RoomProvider = () =>
           if (Object.keys(patch).length > 0) {
             yield* ivschat
               .updateRoom({ identifier: arn, ...patch })
-              .pipe(retryWhileThrottled);
+              .pipe(
+                retryWhileThrottled,
+                retryWhileHandlerPermissionPropagating,
+              );
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

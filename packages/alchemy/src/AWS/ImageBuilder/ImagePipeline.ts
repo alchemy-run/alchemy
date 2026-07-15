@@ -1,4 +1,5 @@
 import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -7,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   driftedFrom,
@@ -15,6 +17,37 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+/**
+ * Image test settings applied to builds of the pipeline. Mirrors the wire
+ * `ImageTestsConfiguration`, with the timeout expressed as a
+ * {@link Duration.Input} instead of raw minutes.
+ */
+export interface ImageTestsConfiguration {
+  /**
+   * Whether to run tests on the output image.
+   * @default true
+   */
+  imageTestsEnabled?: boolean;
+  /**
+   * Maximum time tests may run before they are considered failed
+   * (e.g. `"90 minutes"`). AWS accepts 1 hour to 24 hours, in whole
+   * minutes on the wire.
+   * @default "12 hours"
+   */
+  timeout?: Duration.Input;
+}
+
+/** Convert the duration-typed test settings to the wire shape. */
+const toWireImageTests = (
+  config: ImageTestsConfiguration | undefined,
+): imagebuilder.ImageTestsConfiguration | undefined =>
+  config === undefined
+    ? undefined
+    : {
+        imageTestsEnabled: config.imageTestsEnabled,
+        timeoutMinutes: toWireMinutes(config.timeout),
+      };
 
 export interface ImagePipelineProps {
   /**
@@ -46,7 +79,7 @@ export interface ImagePipelineProps {
   /**
    * Image test settings (enable/disable tests, timeout).
    */
-  imageTestsConfiguration?: imagebuilder.ImageTestsConfiguration;
+  imageTestsConfiguration?: ImageTestsConfiguration;
   /**
    * Collect additional information about the image being created,
    * including the operating system and packages.
@@ -220,6 +253,14 @@ export const ImagePipelineProvider = () =>
           const name = output?.imagePipelineName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          // Desired state in wire shape (Duration timeout → whole minutes)
+          // so create/update/drift all compare like against like.
+          const desired = {
+            ...news,
+            imageTestsConfiguration: toWireImageTests(
+              news.imageTestsConfiguration,
+            ),
+          };
 
           // 1. Observe.
           const arn = output?.imagePipelineArn ?? (yield* toArn(name));
@@ -236,7 +277,7 @@ export const ImagePipelineProvider = () =>
                 infrastructureConfigurationArn:
                   news.infrastructureConfigurationArn,
                 distributionConfigurationArn: news.distributionConfigurationArn,
-                imageTestsConfiguration: news.imageTestsConfiguration,
+                imageTestsConfiguration: desired.imageTestsConfiguration,
                 enhancedImageMetadataEnabled: news.enhancedImageMetadataEnabled,
                 schedule: news.schedule,
                 status: news.status,
@@ -266,8 +307,8 @@ export const ImagePipelineProvider = () =>
           //    a hint for removed props).
           const drifted = mutableKeys.some(
             (key) =>
-              driftedFrom(observed?.[key], news[key]) ||
-              (news[key] === undefined && olds?.[key] !== undefined),
+              driftedFrom(observed?.[key], desired[key]) ||
+              (desired[key] === undefined && olds?.[key] !== undefined),
           );
           if (drifted && observed.arn) {
             yield* imagebuilder.updateImagePipeline({
@@ -278,7 +319,7 @@ export const ImagePipelineProvider = () =>
               infrastructureConfigurationArn:
                 news.infrastructureConfigurationArn,
               distributionConfigurationArn: news.distributionConfigurationArn,
-              imageTestsConfiguration: news.imageTestsConfiguration,
+              imageTestsConfiguration: desired.imageTestsConfiguration,
               enhancedImageMetadataEnabled: news.enhancedImageMetadataEnabled,
               schedule: news.schedule,
               status: news.status,

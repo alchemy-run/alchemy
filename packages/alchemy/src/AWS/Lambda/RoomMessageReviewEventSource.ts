@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import {
   RoomMessageReviewEventSource as IVSChatRoomMessageReviewEventSource,
   type RoomMessageEvent,
@@ -69,18 +70,37 @@ export const RoomMessageReviewEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
+            // IVS Chat VALIDATES the invoke permission when the handler is
+            // associated (CreateRoom/UpdateRoom fails with "invalid lambda
+            // permission" otherwise), so the Permission must exist BEFORE
+            // the room and cannot reference the room's ARN (that would be
+            // circular). Scope it to this account's rooms instead — the
+            // pattern the IVS Chat resource-policy docs recommend.
+            const { accountId, region } =
+              yield* AWSEnvironment.current as unknown as Effect.Effect<{
+                accountId: string;
+                region: string;
+              }>;
+            const permission = yield* Permission(
+              `${room.LogicalId}-MessageReview-Permission`,
+              {
+                action: "lambda:InvokeFunction",
+                functionName: host.functionArn,
+                principal: "ivschat.amazonaws.com",
+                sourceAccount: accountId,
+                sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,
+              },
+            );
+
+            // The Permission echoes the `functionName` prop (the function
+            // ARN) as an attribute — threading it as the handler `uri`
+            // makes the room reconcile only AFTER the invoke permission
+            // exists.
             yield* room.bind`AWS.IVSChat.RoomMessageReview(${host}, ${room})`({
               messageReviewHandler: {
-                uri: host.functionArn,
+                uri: permission.functionName,
                 fallbackResult: props?.fallbackResult,
               },
-            });
-
-            yield* Permission(`${room.LogicalId}-MessageReview-Permission`, {
-              action: "lambda:InvokeFunction",
-              functionName: host.functionName,
-              principal: "ivschat.amazonaws.com",
-              sourceArn: room.roomArn,
             });
           }),
         );

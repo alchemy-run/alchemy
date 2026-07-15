@@ -42,6 +42,11 @@ export default IvsTestFunction.make(
         ),
     );
 
+    // Accessor for the channel's ARN, resolvable inside the runtime fetch
+    // handler (the batch revocation request shape carries explicit
+    // channel ARNs rather than binding to a single channel).
+    const ChannelArn = yield* channel.channelArn;
+
     const getStream = yield* IVS.GetStream(channel);
     const getStreamSession = yield* IVS.GetStreamSession(channel);
     const listStreamSessions = yield* IVS.ListStreamSessions(channel);
@@ -51,6 +56,8 @@ export default IvsTestFunction.make(
       yield* IVS.StartViewerSessionRevocation(channel);
     const insertAdBreak = yield* IVS.InsertAdBreak(channel);
     const listStreams = yield* IVS.ListStreams();
+    const batchRevokeViewerSessions =
+      yield* IVS.BatchStartViewerSessionRevocation();
 
     const bound = {
       getStream,
@@ -61,6 +68,7 @@ export default IvsTestFunction.make(
       revokeViewerSession,
       insertAdBreak,
       listStreams,
+      batchRevokeViewerSessions,
     };
 
     return {
@@ -197,6 +205,18 @@ export default IvsTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
+        // Batch revocation across channels — per-pair failures surface in
+        // the response's `errors` array rather than failing the call.
+        if (request.method === "POST" && pathname === "/revoke-batch") {
+          const channelArn = yield* ChannelArn;
+          const { errors } = yield* batchRevokeViewerSessions({
+            viewerSessions: [{ channelArn, viewerId: "alchemy-test-viewer" }],
+          });
+          return yield* HttpServerResponse.json({
+            errorCount: (errors ?? []).length,
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -215,6 +235,7 @@ export default IvsTestFunction.make(
         IVS.StartViewerSessionRevocationHttp,
         IVS.InsertAdBreakHttp,
         IVS.ListStreamsHttp,
+        IVS.BatchStartViewerSessionRevocationHttp,
       ),
     ),
   ),

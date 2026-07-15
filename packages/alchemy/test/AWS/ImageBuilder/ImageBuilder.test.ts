@@ -146,6 +146,11 @@ test.provider(
               distribution.distributionConfigurationArn,
             description: options.pipelineDescription,
             status: "DISABLED",
+            // Duration-typed test timeout — converted to wire minutes.
+            imageTestsConfiguration: {
+              imageTestsEnabled: false,
+              timeout: "2 hours",
+            },
             tags: { fixture: "imagebuilder" },
           });
           return { component, recipe, infra, distribution, pipeline };
@@ -186,6 +191,10 @@ test.provider(
         observedPipeline.imagePipeline?.infrastructureConfigurationArn,
       ).toBe(created.infra.infrastructureConfigurationArn);
       expect(observedPipeline.imagePipeline?.status).toBe("DISABLED");
+      // The Duration-typed test timeout landed as wire minutes.
+      expect(
+        observedPipeline.imagePipeline?.imageTestsConfiguration?.timeoutMinutes,
+      ).toBe(120);
       expect(observedPipeline.imagePipeline?.tags?.["alchemy::id"]).toBe(
         "Pipeline",
       );

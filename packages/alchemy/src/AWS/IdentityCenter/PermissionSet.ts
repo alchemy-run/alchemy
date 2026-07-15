@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { normalizeDurationInput } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveInstance, retryIdentityCenter } from "./common.ts";
 
@@ -247,34 +248,14 @@ export const PermissionSetProvider = () =>
   );
 
 /**
- * Reconstruct a valid `Duration.Input` from a value that may have
- * round-tripped through persisted state JSON, which flattens a `Duration`
- * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
- * shape `Duration.toSeconds` silently decodes as zero.
- */
-const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return typeof input === "object" && input !== null && json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/**
  * Format a {@link Duration.Input} as the canonical ISO-8601 duration string
- * (`PT8H`, `PT1H30M`, …) the `SessionDuration` wire field expects.
+ * (`PT8H`, `PT1H30M`, …) the `SessionDuration` wire field expects. ISO-8601
+ * is semantically part of the AWS field, so only the normalization (state
+ * round-trip re-hydration) comes from the central Duration util.
  */
 const toIsoSessionDuration = (input: Duration.Input): string => {
   const totalSeconds = Math.round(
-    Duration.toSeconds(fromStateDurationInput(input)),
+    Duration.toSeconds(normalizeDurationInput(input)),
   );
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);

@@ -9,5 +9,8 @@ export const GetJobBookmarkHttp = Layer.effect(
     tag: "AWS.Glue.GetJobBookmark",
     operation: glue.getJobBookmark,
     actions: ["glue:GetJobBookmark"],
+    // Glue evaluates bookmark actions without a resource — an ARN-scoped
+    // grant never matches (verified live via the IAM policy simulator).
+    anyResource: true,
   }),
 );

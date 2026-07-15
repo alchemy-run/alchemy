@@ -46,6 +46,7 @@ export * from "./Permission.ts";
 export * from "./QueueEventSource.ts";
 export * from "./RestApiEventSource.ts";
 export * from "./ResumeMicrovm.ts";
+export * from "./RoomMessageReviewEventSource.ts";
 export * from "./ResumeMicrovmHttp.ts";
 export * from "./RunMicrovm.ts";
 export * from "./RunMicrovmHttp.ts";
