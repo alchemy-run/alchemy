@@ -71,10 +71,10 @@ export const SAMLProvider = Resource<SAMLProvider>("AWS.IAM.SAMLProvider");
 // until the prior delete settles. A bounded retry rides out that window; a
 // well-formed metadata document never fails persistently, so this never masks a
 // genuine bad-input error for longer than the small budget.
-const transientWriteSchedule = Schedule.exponential(500).pipe(
-  Schedule.jittered,
-  Schedule.both(Schedule.recurs(6)),
-);
+const transientWriteSchedule = Schedule.max([
+  Schedule.exponential(500).pipe(Schedule.jittered),
+  Schedule.recurs(6),
+]);
 const isTransientWriteError = (error: {
   _tag: "ValidationError" | "ConcurrentModificationException" | (string & {});
 }) =>

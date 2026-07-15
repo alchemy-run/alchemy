@@ -250,9 +250,10 @@ export const SilenceProvider = () =>
           ),
           Effect.retry({
             while: (e) => e._tag === "SilencePending",
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(8),
+            ]),
           }),
         );
         return toSilenceAttributes(observed, accountId);

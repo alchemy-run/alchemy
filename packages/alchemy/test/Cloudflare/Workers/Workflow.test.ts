@@ -93,9 +93,10 @@ const runWorkflowToCompletion = (url: string) =>
       Effect.retry({
         // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
         // sleep after only six attempts and blow the test timeout.
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.either(Schedule.spaced("3 seconds")),
-        ),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
         times: 15,
       }),
     );
@@ -131,7 +132,9 @@ test(
     expect(lastStatus.status).toBe("complete");
     expect(lastStatus.error).toBeFalsy();
     expect(lastStatus.output?.greeting).toBe("Hello, world!");
-    expect(lastStatus.output?.workflowName).toBe("TestWorkflow");
+    // `event.workflowName` carries the account-global *physical* name, which
+    // is derived from the host Worker's unique name (stack-id-stage prefix).
+    expect(lastStatus.output?.workflowName).toMatch(/^workflowbindingstack-/);
     expect(lastStatus.output?.stepAttempt).toBe(1);
     expect(lastStatus.rollback).toBeNull();
     // The body yields `WorkerEnvironment` — if the regression from PR #71 ever
@@ -240,7 +243,11 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
       );
       const all = yield* provider.list();
 
-      expect(all.some((w) => w.workflowName === "TestWorkflow")).toBe(true);
+      // Physical names are derived from the host Worker name (which carries
+      // the stack-id-stage prefix), not the exported class name.
+      expect(
+        all.some((w) => w.workflowName.startsWith("workflowbindingstack-")),
+      ).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

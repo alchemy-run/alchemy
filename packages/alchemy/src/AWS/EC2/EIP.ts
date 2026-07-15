@@ -365,11 +365,13 @@ export const EIPProvider = () =>
                     e._tag === "InvalidIPAddress.InUse"
                   );
                 },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.both(Schedule.recurs(20)),
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.exponential(1000, 1.5),
+                  Schedule.recurs(20),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `EIP still in use, waiting for release... (attempt ${attempt + 1})`,
+                      `EIP still in use, waiting for release... (attempt ${attempt})`,
                     ),
                   ),
                 ),

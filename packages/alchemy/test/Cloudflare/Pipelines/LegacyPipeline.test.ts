@@ -73,9 +73,10 @@ const expectLegacyPipelineGone = (accountId: string, pipelineName: string) =>
     Effect.catchTag("PipelineNotExists", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PipelineNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

@@ -81,9 +81,10 @@ const expectStreamGone = (accountId: string, streamId: string) =>
     Effect.catchTag("StreamNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StreamNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -93,9 +94,10 @@ const expectSinkGone = (accountId: string, sinkId: string) =>
     Effect.catchTag("SinkNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SinkNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -105,9 +107,10 @@ const expectPipelineGone = (accountId: string, pipelineId: string) =>
     Effect.catchTag("PipelineNotExists", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PipelineNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

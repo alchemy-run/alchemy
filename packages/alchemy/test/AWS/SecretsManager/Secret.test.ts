@@ -47,9 +47,7 @@ test.provider("list enumerates the deployed secret", (stack) =>
     }).pipe(
       Effect.retry({
         while: (e) => e._tag === "SecretNotListed",
-        schedule: Schedule.exponential(500).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
       }),
     );
 

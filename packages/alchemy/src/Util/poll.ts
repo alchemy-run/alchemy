@@ -41,7 +41,7 @@ export const poll = Effect.fn("poll")(
         while: isPredicateFailed,
         schedule:
           input.schedule ??
-          Schedule.both(Schedule.spaced("5 seconds"), Schedule.recurs(50)),
+          Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(50)]),
       }),
     ),
 );

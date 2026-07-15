@@ -1136,16 +1136,18 @@ export const BucketProvider = () =>
 // sub-resource endpoints (custom domains, lifecycle) accept it. Retry only
 // that narrow `NoSuchBucket` lag here; not-found sub-resources are still
 // treated as terminal for idempotent deletes.
-const r2BucketEndpointConsistencySchedule = Schedule.exponential(100).pipe(
-  Schedule.both(Schedule.recurs(5)),
-);
+const r2BucketEndpointConsistencySchedule = Schedule.max([
+  Schedule.exponential(100),
+  Schedule.recurs(5),
+]);
 
 // R2 sub-resource reads (notably the custom-domain endpoint, which touches the
 // bucket's public-access policy) can return a transient 500 ("Failed to access
 // or modify the bucket policy"). Ride out the blip with a short bounded retry.
-const r2TransientServerErrorSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.both(Schedule.recurs(6)),
-);
+const r2TransientServerErrorSchedule = Schedule.max([
+  Schedule.exponential("500 millis"),
+  Schedule.recurs(6),
+]);
 
 // Distilled widened generated string enums to open unions (`string & {}`); the
 // API only ever returns the known variants, narrowed in `toCustomDomainAttributes`.
@@ -1266,6 +1268,7 @@ const toLifecyclePutPayload = (
 // consistency and retry it on create. Releasing a custom domain after delete
 // can lag a few seconds, so give the conflict a longer, bounded budget than
 // the bucket-endpoint lag above.
-const r2CustomDomainConflictSchedule = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(8)),
-);
+const r2CustomDomainConflictSchedule = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(8),
+]);

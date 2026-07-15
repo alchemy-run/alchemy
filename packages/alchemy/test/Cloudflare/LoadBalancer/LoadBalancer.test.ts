@@ -65,9 +65,10 @@ const expectGone = (zoneId: string, loadBalancerId: string) =>
     Effect.catchTag("LoadBalancerNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "LoadBalancerNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

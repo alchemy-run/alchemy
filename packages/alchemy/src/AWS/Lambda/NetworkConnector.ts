@@ -272,9 +272,7 @@ const retryRolePropagation =
       ),
       Effect.retry({
         while: (e) => isOperatorRolePropagationError(e),
-        schedule: Schedule.fixed(1_000).pipe(
-          Schedule.both(Schedule.recurs(50)), // up to ~50 seconds
-        ),
+        schedule: Schedule.max([Schedule.fixed(1_000), Schedule.recurs(50)]),
       }),
     );
 
@@ -444,11 +442,13 @@ const waitForActive = (identifier: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConnectorPending",
-      schedule: Schedule.fixed(10_000).pipe(
-        Schedule.both(Schedule.recurs(72)), // up to ~12 minutes
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(10_000),
+        Schedule.recurs(72),
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
-            `Waiting for network connector to become ACTIVE... (${(attempt + 1) * 10}s)`,
+            `Waiting for network connector to become ACTIVE... (${attempt * 10}s)`,
           ),
         ),
       ),
@@ -481,11 +481,13 @@ const waitForUpdate = (identifier: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConnectorPending",
-      schedule: Schedule.fixed(10_000).pipe(
-        Schedule.both(Schedule.recurs(72)),
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(10_000),
+        Schedule.recurs(72),
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
-            `Waiting for network connector update... (${(attempt + 1) * 10}s)`,
+            `Waiting for network connector update... (${attempt * 10}s)`,
           ),
         ),
       ),
@@ -517,11 +519,13 @@ const waitForDeleted = (identifier: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConnectorPending",
-      schedule: Schedule.fixed(10_000).pipe(
-        Schedule.both(Schedule.recurs(72)),
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(10_000),
+        Schedule.recurs(72),
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
-            `Waiting for network connector deletion... (${(attempt + 1) * 10}s)`,
+            `Waiting for network connector deletion... (${attempt * 10}s)`,
           ),
         ),
       ),

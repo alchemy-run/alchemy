@@ -134,8 +134,9 @@ const waitForWebhookDeleted = (accountId: string, webhookId: string) =>
     Effect.catchTag("WebhookNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WebhookNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );

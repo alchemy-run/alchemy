@@ -48,9 +48,10 @@ const expectGone = (accountId: string, memberId: string) =>
     Effect.catchTag("MemberNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "MemberNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

@@ -40,9 +40,10 @@ const expectGone = (accountId: string, networkId: string) =>
     Effect.catchTag("DeviceNetworkNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "NetworkNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

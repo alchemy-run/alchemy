@@ -220,9 +220,10 @@ export const MonitorGroupProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "MonitorGroupInUse",
-            schedule: Schedule.exponential("1 second").pipe(
-              Schedule.both(Schedule.recurs(6)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("1 second"),
+              Schedule.recurs(6),
+            ]),
           }),
           Effect.catchTag("MonitorGroupNotFound", () => Effect.void),
         );

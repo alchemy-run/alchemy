@@ -256,9 +256,10 @@ export const SnippetProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "SnippetInUse",
-            schedule: Schedule.exponential("1 second").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("1 second"),
+              Schedule.recurs(8),
+            ]),
           }),
           Effect.catchTag("SnippetNotFound", () => Effect.void),
         );

@@ -211,9 +211,10 @@ export const NotificationWebhookProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
-              schedule: Schedule.exponential("1 second").pipe(
-                Schedule.both(Schedule.recurs(5)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("1 second"),
+                Schedule.recurs(5),
+              ]),
             }),
           );
         if (!created.id) {
@@ -247,9 +248,10 @@ export const NotificationWebhookProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
-              schedule: Schedule.exponential("1 second").pipe(
-                Schedule.both(Schedule.recurs(5)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("1 second"),
+                Schedule.recurs(5),
+              ]),
             }),
           );
         const fresh = yield* observeWebhook(accountId, observed.id);

@@ -67,7 +67,7 @@ export const checkHttpStateStoreAuth = ({
             error.response.status >= 500),
         // Bounded: a store that 404s/500s forever is a hard failure, not
         // something to spin on until the process is killed.
-        schedule: Schedule.fixed(200).pipe(Schedule.both(Schedule.recurs(75))),
+        schedule: Schedule.max([Schedule.fixed(200), Schedule.recurs(75)]),
       }),
     );
   });
@@ -225,10 +225,10 @@ const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
     // Exponential backoff capped at 2s, max 5 attempts. Beyond that
     // the issue isn't transient and we'd rather surface a hard
     // failure than block the deploy indefinitely.
-    schedule: Schedule.exponential(100).pipe(
-      Schedule.either(Schedule.spaced("2 seconds")),
-      Schedule.both(Schedule.recurs(5)),
-    ),
+    schedule: Schedule.max([
+      Schedule.min([Schedule.exponential(100), Schedule.spaced("2 seconds")]),
+      Schedule.recurs(5),
+    ]),
   });
 
 /**

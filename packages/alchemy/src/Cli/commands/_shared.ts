@@ -20,6 +20,7 @@ import {
 } from "../../Auth/AuthProvider.ts";
 import {
   type AlchemyProfileProviders,
+  ALCHEMY_PROFILE,
   withProfileOverride,
 } from "../../Auth/Profile.ts";
 import * as Stack from "../../Stack.ts";
@@ -155,10 +156,22 @@ export const script = Argument.file("main", {
 
 export const profile = Flag.string("profile").pipe(
   Flag.withDescription(
-    "Auth profile to use (~/.alchemy/profiles.json). Defaults to 'default' or $ALCHEMY_PROFILE.",
+    "Auth profile to use (~/.alchemy/profiles.json). Defaults to $ALCHEMY_PROFILE or 'default'.",
   ),
   Flag.optional,
-  Flag.map(Option.getOrElse(() => "default")),
+  Flag.mapEffect(
+    Effect.fn(function* (profile) {
+      // --profile wins; otherwise fall back to $ALCHEMY_PROFILE (which
+      // itself defaults to "default"). Without this, the flag's default
+      // would shadow the env var via withProfileOverride.
+      if (Option.isSome(profile)) {
+        return profile.value;
+      }
+      return yield* ALCHEMY_PROFILE.pipe(
+        Effect.catch(() => Effect.succeed("default")),
+      );
+    }),
+  ),
 );
 
 export const resourceFilter = Flag.string("filter").pipe(

@@ -80,7 +80,7 @@ for (const runtime of runtimes()) {
             // surface is Promise-based, so we wrap exactly at the boundary
             // and let everything above and below stay in Effect.
 
-            // TODO(sam): tsgo vomits here, so we cast to any.
+            // TODO(sam): tsc (typescript 7) vomits here, so we cast to any.
             const stub = (newWebSocketRpcSession as any)(
               url,
             ) as RpcStub<RpcProxyApi>;

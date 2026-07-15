@@ -5,7 +5,7 @@
     "dist"
   ],
   "references": [
-    // distilled (dependencies first so `tsgo -b` emits their `lib/` before the
+    // distilled (dependencies first so `tsc -b` emits their `lib/` before the
     // packages that consume them — otherwise a clean build races the not-yet-emitted
     // declarations and fails to resolve `@distilled.cloud/*`).
     {
@@ -126,7 +126,7 @@
   ],
   "compilerOptions": {
     // NOTE: this is a solution config (`files: []`) and governs NO source, so a
-    // plugin here is inert for the editor and `tsgo -b`. The real Effect LS
+    // plugin here is inert for the editor and `tsc -b`. The real Effect LS
     // config (and its on/off toggle) lives in `packages/alchemy/tsconfig.json`.
     "plugins": [
       {

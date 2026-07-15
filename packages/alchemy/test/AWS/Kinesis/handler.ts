@@ -328,8 +328,6 @@ const waitForRecords = (
     ),
     Effect.retry({
       while: (error) => error._tag === "RecordsNotReady",
-      schedule: Schedule.fixed("1 second").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(10)]),
     }),
   );

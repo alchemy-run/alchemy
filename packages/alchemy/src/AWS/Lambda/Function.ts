@@ -1136,9 +1136,10 @@ export default handler;
         while: (e: any) =>
           e._tag === "ResourceConflictException" ||
           e._tag === "TooManyRequestsException",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(30)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential(100),
+          Schedule.recurs(30),
+        ]),
       }) as <A, R, Err>(
         self: Effect.Effect<A, Err, R>,
       ) => Effect.Effect<A, Err, R>;
@@ -1374,7 +1375,7 @@ export default handler;
           Effect.retry({
             while: (e) => isRolePropagationError(e),
             schedule: Schedule.fixed(1000).pipe(
-              Schedule.tapOutput(() => noteRolePropagationWait()),
+              Schedule.tap(() => noteRolePropagationWait()),
             ),
           }),
           Effect.catchTags({

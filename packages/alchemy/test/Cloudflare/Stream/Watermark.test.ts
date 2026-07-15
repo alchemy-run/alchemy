@@ -41,9 +41,10 @@ const expectGone = (accountId: string, watermarkId: string) =>
     Effect.catchTag("WatermarkNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WatermarkNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

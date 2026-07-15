@@ -23,9 +23,10 @@ const logLevel = Effect.provideService(
 // attempts, polling so sparsely that a settled token is detected tens
 // of seconds late — under full-suite parallel load (when propagation
 // windows stretch) that alone can blow the test timeout.
-const propagationSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const propagationSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 const getToken = (accountId: string, id: string) =>
   aisearch.readToken({ accountId, id }).pipe(

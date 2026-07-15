@@ -49,16 +49,19 @@ const isThrottlingError = (error: unknown): boolean =>
  * first few iterations; throttle waits ride the cap until a token is
  * available.
  */
-const apiGatewayMutationSchedule = pipe(
-  Schedule.exponential(Duration.seconds(2), 2),
-  Schedule.modifyDelay((d: Duration.Duration) =>
-    Effect.succeed(
-      Duration.isGreaterThan(d, Duration.seconds(35))
-        ? Duration.seconds(35)
-        : d,
+const apiGatewayMutationSchedule = Schedule.max([
+  pipe(
+    Schedule.exponential(Duration.seconds(2), 2),
+    Schedule.modifyDelay(({ duration: d }) =>
+      Effect.succeed(
+        Duration.isGreaterThan(d, Duration.seconds(35))
+          ? Duration.seconds(35)
+          : d,
+      ),
     ),
   ),
-  Schedule.both(Schedule.recurs(12)),
+  Schedule.recurs(12),
+]).pipe(
   Schedule.addDelay(() =>
     Effect.succeed(Duration.millis(Math.random() * 1000)),
   ),

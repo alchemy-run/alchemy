@@ -869,10 +869,13 @@ const expectBundleContains = (
       Effect.retry({
         // ~2 minutes total: capped exponential sampling through edge
         // propagation of both the fresh index.html and the new asset.
-        schedule: Schedule.exponential("500 millis", 1.5).pipe(
-          Schedule.either(Schedule.spaced("5 seconds")),
-          Schedule.both(Schedule.recurs(30)),
-        ),
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential("500 millis", 1.5),
+            Schedule.spaced("5 seconds"),
+          ]),
+          Schedule.recurs(30),
+        ]),
       }),
       Effect.tapError((error) =>
         Effect.logError(
@@ -936,10 +939,13 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
       Effect.retry({
         while: (error): error is BucketStillExists =>
           error instanceof BucketStillExists,
-        schedule: Schedule.exponential("200 millis").pipe(
-          Schedule.either(Schedule.spaced("2 seconds")),
-          Schedule.both(Schedule.recurs(20)),
-        ),
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential("200 millis"),
+            Schedule.spaced("2 seconds"),
+          ]),
+          Schedule.recurs(20),
+        ]),
       }),
       Effect.catchTag("NoSuchBucket", () => Effect.void),
     );

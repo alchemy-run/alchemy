@@ -484,9 +484,10 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           // rejected with an UnprocessableEntity. Retry until it clears.
           const retryWhileResizing = Effect.retry({
             while: isResizeInProgress,
-            schedule: Schedule.spaced("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(120)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("5 seconds"),
+              Schedule.recurs(120),
+            ]),
           });
           current = desiredProduction
             ? yield* planetscale

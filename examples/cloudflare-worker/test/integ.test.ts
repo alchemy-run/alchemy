@@ -175,41 +175,65 @@ test(
   Effect.gen(function* () {
     const { url } = yield* stack;
     const text = `hello-${Date.now()}`;
+    type Message = { id: string; text: string; sentAt: number };
 
-    const sendResponse = yield* executeWhenReady(
-      HttpClientRequest.post(`${url}/queue/send`).pipe(
-        HttpClientRequest.setBody(HttpBody.text(text)),
-      ),
-    );
-    expect(sendResponse.status).toBe(202);
-    const { sent } = (yield* sendResponse.json) as {
-      sent: { id: string; text: string; sentAt: number };
-    };
-    expect(sent.id).toBeTypeOf("string");
-
-    const deadline = Date.now() + 60_000;
-    let consumed: { id: string; text: string; sentAt: number } | undefined;
-    while (Date.now() < deadline) {
-      const resultResponse = yield* HttpClient.get(
-        `${url}/queue/result/${sent.id}`,
+    const send = Effect.gen(function* () {
+      const sendResponse = yield* executeWhenReady(
+        HttpClientRequest.post(`${url}/queue/send`).pipe(
+          HttpClientRequest.setBody(HttpBody.text(text)),
+        ),
       );
-      if (resultResponse.status === 200) {
-        consumed = (yield* resultResponse.json) as typeof consumed;
-        break;
+      expect(sendResponse.status).toBe(202);
+      const { sent } = (yield* sendResponse.json) as { sent: Message };
+      expect(sent.id).toBeTypeOf("string");
+      return sent;
+    });
+
+    const sent: Message[] = [yield* send];
+
+    // First delivery on a freshly created queue+consumer can lag well past
+    // the settled steady state (consumer attachment propagates through
+    // Cloudflare's queue subsystem asynchronously). Poll for ANY of the
+    // messages we sent, re-sending every ~20s in case an early message was
+    // published into the propagation window; the consumer persists each
+    // message to R2 keyed by its id, so the first one to land wins.
+    let polls = 0;
+    const findConsumed = Effect.gen(function* () {
+      polls++;
+      if (polls % 10 === 0 && sent.length < 5) {
+        sent.push(yield* send);
       }
-      yield* Effect.sleep("2 seconds");
-    }
+      for (const message of sent) {
+        const resultResponse = yield* HttpClient.get(
+          `${url}/queue/result/${message.id}`,
+        );
+        if (resultResponse.status === 200) {
+          return (yield* resultResponse.json) as Message;
+        }
+      }
+      return undefined;
+    });
+
+    const consumed = yield* findConsumed.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (message) => message !== undefined,
+        times: 75,
+      }),
+    );
 
     expect(consumed).toBeDefined();
-    expect(consumed!.id).toBe(sent.id);
+    expect(sent.map((message) => message.id)).toContain(consumed!.id);
     expect(consumed!.text).toBe(text);
 
-    // Clean up the consumed R2 entry so afterAll's stack.destroy()
+    // Clean up the consumed R2 entries so afterAll's stack.destroy()
     // can delete the bucket — otherwise Cloudflare rejects the
     // bucket delete with "bucket is not empty".
-    yield* HttpClient.execute(
-      HttpClientRequest.make("DELETE")(`${url}/queue/result/${sent.id}`),
+    yield* Effect.forEach(sent, (message) =>
+      HttpClient.execute(
+        HttpClientRequest.make("DELETE")(`${url}/queue/result/${message.id}`),
+      ),
     );
   }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

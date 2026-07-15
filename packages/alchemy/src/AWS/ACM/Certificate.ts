@@ -218,9 +218,10 @@ export const CertificateProvider = () =>
             while: (error) =>
               error instanceof Error &&
               error.message === "CertificateValidationRecordPending",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -247,9 +248,10 @@ export const CertificateProvider = () =>
             while: (error) =>
               error instanceof Error &&
               error.message === "CertificatePendingValidation",
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -498,9 +500,10 @@ export const CertificateProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "ConflictException",
-                  schedule: Schedule.fixed("2 seconds").pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed("2 seconds"),
+                    Schedule.recurs(15),
+                  ]),
                 }),
                 Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               ),
@@ -526,9 +529,10 @@ export const waitForRoute53Change = Effect.fn(function* (changeId: string) {
       Effect.retry({
         while: (error) =>
           error instanceof Error && error.message === "Route53ChangePending",
-        schedule: Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(60)),
-        ),
+        schedule: Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(60),
+        ]),
       }),
     );
 });

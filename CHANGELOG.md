@@ -1,3 +1,50 @@
+## v2.0.0-beta.62
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- **cloudflare**:
+  - **workers**: Build layers once per isolate, scope resources per event &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/774 [<samp>(25ed5)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/25ed5171)
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Add alchemy action and gh env helper &nbsp;-&nbsp; by **Harry Solovay** in https://github.com/alchemy-run/alchemy-effect/issues/699 [<samp>(80753)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/807535ba)
+- **cloudflare**:
+  - **website**: Forward a custom worker entry (main) to the Vite plugin &nbsp;-&nbsp; by **Daniel Gangl** in https://github.com/alchemy-run/alchemy-effect/issues/779 [<samp>(c7de7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c7de74c5)
+- **engine**:
+  - Thread resource fqn into provider handler inputs &nbsp;-&nbsp; by **Daniel Gangl** in https://github.com/alchemy-run/alchemy-effect/issues/783 [<samp>(20ed8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/20ed8d24)
+- **planetscale**:
+  - OAuth login + shared landing pages &nbsp;-&nbsp; by **Michael (Pear)** in https://github.com/alchemy-run/alchemy-effect/issues/467 [<samp>(5a0be)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5a0beb1d)
+- **website**:
+  - OAuth landing pages &nbsp;-&nbsp; by **Michael (Pear)** in https://github.com/alchemy-run/alchemy-effect/issues/780 [<samp>(1e9d0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1e9d0c11)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Upgrade effect to 4.0.0-beta.97 and migrate removed Schedule APIs &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/801 [<samp>(89f2d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/89f2dff1)
+- Update dependencies to support effect 4.0.0-beta.97 &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/813 [<samp>(a644c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a644c854)
+- **bundle**:
+  - Read vite build output after buildApp resolves &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/795 [<samp>(87244)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/87244a57)
+- **cli**:
+  - Respect ALCHEMY_PROFILE in alchemy state clear &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(ba705)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ba70585f)
+- **cloudflare**:
+  - Support container environment variables in alchemy dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/785 [<samp>(ae68c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ae68cff7)
+  - Persist dev image for containers &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/727 [<samp>(d92af)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d92af2a8)
+  - Preserve dev worker registration on reload &nbsp;-&nbsp; by **utopy** in https://github.com/alchemy-run/alchemy-effect/issues/812 [<samp>(9864c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/9864c8de)
+  - Support remote images and external Dockerfiles in LocalContainerProvider &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/790 [<samp>(c9996)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c999680e)
+  - **state**: Bind cached state-store credentials to the account &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/760 [<samp>(726cf)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/726cf9f0)
+  - **workers**: Preserve cron handler requirements &nbsp;-&nbsp; by **Jack Bisceglia** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/791 [<samp>(68b35)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/68b359b6)
+- **command**:
+  - **dev**: Favor localhost/IP URLs in dev-URL detection &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/787 [<samp>(788f4)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/788f4a41)
+- **docker**:
+  - Unit-suffix Container healthcheck durations &nbsp;-&nbsp; by **Matthew Aylward** in https://github.com/alchemy-run/alchemy-effect/issues/778 [<samp>(fa2c2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fa2c206d)
+- **engine**:
+  - Stop persisting adopted state during plan construction &nbsp;-&nbsp; by **Daniel Gangl** in https://github.com/alchemy-run/alchemy-effect/issues/794 [<samp>(011d5)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/011d526e)
+- **local**:
+  - Reuse cached provider RPC session in alchemy dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/789 [<samp>(819a8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/819a831a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.61...HEAD)
+
+---
+
 ## v2.0.0-beta.61
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

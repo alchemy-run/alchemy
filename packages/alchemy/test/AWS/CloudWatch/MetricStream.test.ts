@@ -165,9 +165,10 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
             ),
             Effect.retry({
               while: (e) => e._tag === "InvalidArgumentException",
-              schedule: Schedule.spaced("5 seconds").pipe(
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.spaced("5 seconds"),
+                Schedule.recurs(8),
+              ]),
             }),
           );
 
@@ -185,9 +186,10 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
             ),
             Effect.retry({
               while: (e) => e === "not-active",
-              schedule: Schedule.spaced("10 seconds").pipe(
-                Schedule.both(Schedule.recurs(10)),
-              ),
+              schedule: Schedule.max([
+                Schedule.spaced("10 seconds"),
+                Schedule.recurs(10),
+              ]),
             }),
             Effect.catch(() => Effect.void),
           );

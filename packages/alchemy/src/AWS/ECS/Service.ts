@@ -819,9 +819,10 @@ export const ServiceProvider = () =>
               // bounded.
               Effect.retry({
                 while: (e) => e._tag === "ServiceNotActiveException",
-                schedule: Schedule.spaced("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(8)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.spaced("5 seconds"),
+                  Schedule.recurs(8),
+                ]),
               }),
             );
           const service = updated.service;

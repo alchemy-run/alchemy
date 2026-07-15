@@ -62,9 +62,10 @@ const expectGone = (accountId: string, id: string, namespace = "default") =>
     ),
     Effect.retry({
       while: (e) => e._tag === "InstanceNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

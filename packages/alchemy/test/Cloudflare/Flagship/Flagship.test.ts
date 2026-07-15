@@ -41,10 +41,13 @@ const getJson = (url: string) =>
           ),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.either(Schedule.spaced("5 seconds")),
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("5 seconds"),
+        ]),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 

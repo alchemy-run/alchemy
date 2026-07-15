@@ -46,10 +46,10 @@ test.provider("list enumerates the deployed email address", (stack) =>
       description: "list() includes the deployed email address",
       effect: provider.list(),
       predicate: (all) => all.some((a) => a.email === testEmail),
-      schedule: Schedule.both(
+      schedule: Schedule.max([
         Schedule.spaced("3 seconds"),
         Schedule.recurs(20),
-      ),
+      ]),
     });
 
     expect(all.some((a) => a.addressId === address.addressId)).toBe(true);

@@ -99,19 +99,17 @@ test.provider(
 
       yield* stack.destroy();
 
-      const bucketName = `alchemy-test-r2-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-
-      // Phase 1: deploy normally so a real R2 bucket exists.
+      // Phase 1: deploy normally so a real R2 bucket exists. No explicit
+      // `name` — the engine generates a random-suffixed physical name
+      // (collision-free across concurrent runs); the deploy output hands
+      // back the real name, which pins the bucket's identity for the
+      // adoption phase below.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
-            name: bucketName,
-          });
+          return yield* Cloudflare.R2.Bucket("AdoptableBucket");
         }),
       );
-      expect(initial.bucketName).toEqual(bucketName);
+      const bucketName = initial.bucketName;
 
       // Phase 2: wipe local state — the bucket stays on Cloudflare.
       yield* Effect.gen(function* () {
@@ -192,9 +190,10 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
         }),
         Effect.retry({
           while: (e): e is ListLagError => e instanceof ListLagError,
-          schedule: Schedule.exponential(200).pipe(
-            Schedule.both(Schedule.recurs(8)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(200),
+            Schedule.recurs(8),
+          ]),
         }),
       );
     expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
@@ -570,10 +569,13 @@ const getBucketWhenReady = Effect.fn(function* (
       while: (e) => e._tag === "NoSuchBucket",
       // Cap the backoff at 2s so we keep sampling instead of sleeping
       // through the budget on the geometric tail.
-      schedule: Schedule.exponential("200 millis").pipe(
-        Schedule.either(Schedule.spaced("2 seconds")),
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.min([
+          Schedule.exponential("200 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 });

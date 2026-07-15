@@ -26,9 +26,10 @@ const getHealthcheckLive = (accountId: string, id: string) =>
   getHealthcheck(accountId, id).pipe(
     Effect.retry({
       while: (e) => e._tag === "EndpointHealthcheckNotFound",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -43,9 +44,10 @@ const expectGone = (accountId: string, id: string) =>
     Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "HealthcheckNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

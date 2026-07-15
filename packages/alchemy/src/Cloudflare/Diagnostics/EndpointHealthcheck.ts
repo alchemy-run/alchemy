@@ -260,9 +260,10 @@ const observeExisting = (accountId: string, id: string) =>
     Effect.map((hc): ObservedHealthcheck => ({ ...hc, accountId })),
     Effect.retry({
       while: (e) => e._tag === "EndpointHealthcheckNotFound",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(6),
+      ]),
     }),
     Effect.catchTag("EndpointHealthcheckNotFound", () =>
       Effect.succeed(undefined),
