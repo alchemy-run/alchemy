@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -161,66 +162,82 @@ export default S3ControlBindingsFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/job-lifecycle") {
-          // 1. CREATE — a suspended (ConfirmationRequired) tagging job over a
-          //    generated manifest; nothing executes because it is cancelled
-          //    below. Cancelled jobs are inert metadata that S3 expires
-          //    automatically after 90 days.
-          const token = yield* Effect.sync(() => crypto.randomUUID());
-          const created = yield* createJob({
-            ClientRequestToken: token,
-            ConfirmationRequired: true,
-            Priority: 1,
-            RoleArn: yield* batchRoleArn,
-            Operation: {
-              S3PutObjectTagging: {
-                TagSet: [{ Key: "alchemy-sweep", Value: "true" }],
-              },
-            },
-            Report: { Enabled: false },
-            ManifestGenerator: {
-              S3JobManifestGenerator: {
-                SourceBucket: yield* bucketArn,
-                EnableManifestOutput: false,
-              },
-            },
-          });
-          const jobId = created.JobId!;
+          // Wrapped in Effect.result so a failing step surfaces its typed
+          // tag in the JSON body instead of an opaque 500.
+          const outcome = yield* Effect.result(
+            Effect.gen(function* () {
+              // 1. CREATE — a suspended (ConfirmationRequired) tagging job over a
+              //    generated manifest; nothing executes because it is cancelled
+              //    below. Cancelled jobs are inert metadata that S3 expires
+              //    automatically after 90 days.
+              const token = yield* Effect.sync(() => crypto.randomUUID());
+              const created = yield* createJob({
+                ClientRequestToken: token,
+                ConfirmationRequired: true,
+                Priority: 1,
+                RoleArn: yield* batchRoleArn,
+                Operation: {
+                  S3PutObjectTagging: {
+                    TagSet: [{ Key: "alchemy-sweep", Value: "true" }],
+                  },
+                },
+                Report: { Enabled: false },
+                ManifestGenerator: {
+                  S3JobManifestGenerator: {
+                    SourceBucket: yield* bucketArn,
+                    EnableManifestOutput: false,
+                  },
+                },
+              });
+              const jobId = created.JobId!;
 
-          // 2. DESCRIBE — poll (bounded) until the job settles out of
-          //    New/Preparing into Suspended (awaiting confirmation).
-          const settled = yield* describeJob({ JobId: jobId }).pipe(
-            Effect.map((r) => ({ status: r.Job?.Status as string })),
-            Effect.repeat({
-              schedule: Schedule.spaced("2 seconds"),
-              until: (r): boolean =>
-                r.status === "Suspended" || r.status === "Failed",
-              times: 25,
+              // 2. DESCRIBE — poll (bounded) until the job settles out of
+              //    New/Preparing into Suspended (awaiting confirmation).
+              const settled = yield* describeJob({ JobId: jobId }).pipe(
+                Effect.map((r) => ({ status: r.Job?.Status as string })),
+                Effect.repeat({
+                  schedule: Schedule.spaced("2 seconds"),
+                  until: (r): boolean =>
+                    r.status === "Suspended" || r.status === "Failed",
+                  times: 25,
+                }),
+              );
+
+              // 3. PRIORITY — bump the suspended job's priority.
+              const reprioritized = yield* updateJobPriority({
+                JobId: jobId,
+                Priority: 5,
+              });
+
+              // 4. CANCEL — terminal state; the job never runs.
+              const cancelled = yield* updateJobStatus({
+                JobId: jobId,
+                RequestedJobStatus: "Cancelled",
+                StatusUpdateReason: "alchemy sweep test",
+              });
+
+              // 5. LIST — the cancelled job is observable in the account listing.
+              const listed = yield* listJobs({ JobStatuses: ["Cancelled"] });
+
+              return {
+                ok: true as const,
+                jobId,
+                settledStatus: settled.status,
+                updatedPriority: reprioritized.Priority,
+                cancelledStatus: cancelled.Status,
+                listedJobIds: (listed.Jobs ?? []).map((j) => j.JobId),
+              };
             }),
           );
 
-          // 3. PRIORITY — bump the suspended job's priority.
-          const reprioritized = yield* updateJobPriority({
-            JobId: jobId,
-            Priority: 5,
-          });
-
-          // 4. CANCEL — terminal state; the job never runs.
-          const cancelled = yield* updateJobStatus({
-            JobId: jobId,
-            RequestedJobStatus: "Cancelled",
-            StatusUpdateReason: "alchemy sweep test",
-          });
-
-          // 5. LIST — the cancelled job is observable in the account listing.
-          const listed = yield* listJobs({ JobStatuses: ["Cancelled"] });
-
-          return yield* HttpServerResponse.json({
-            jobId,
-            settledStatus: settled.status,
-            updatedPriority: reprioritized.Priority,
-            cancelledStatus: cancelled.Status,
-            listedJobIds: (listed.Jobs ?? []).map((j) => j.JobId),
-          });
+          if (Result.isFailure(outcome)) {
+            return yield* HttpServerResponse.json({
+              ok: false as const,
+              tag: outcome.failure._tag,
+              message: String(outcome.failure),
+            });
+          }
+          return yield* HttpServerResponse.json(outcome.success);
         }
 
         return yield* HttpServerResponse.json(

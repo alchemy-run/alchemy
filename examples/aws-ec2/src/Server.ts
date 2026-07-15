@@ -25,7 +25,7 @@ export default class Server extends AWS.EC2.Instance<Server>()(
   }),
   Effect.gen(function* () {
     const queue = yield* AWS.SQS.Queue("JobsQueue", {
-      receiveMessageWaitTimeSeconds: "20 seconds",
+      receiveMessageWaitTime: "20 seconds",
       visibilityTimeout: "60 seconds",
     });
 

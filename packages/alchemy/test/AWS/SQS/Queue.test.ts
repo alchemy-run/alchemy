@@ -58,10 +58,10 @@ provider("create, update, delete standard queue", (stack) =>
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
           visibilityTimeout: "30 seconds",
-          delaySeconds: "0 seconds",
+          delay: "0 seconds",
           // exercise the non-string Duration.Input forms end-to-end
           messageRetentionPeriod: Duration.days(4),
-          receiveMessageWaitTimeSeconds: 10_000, // bare number = millis
+          receiveMessageWaitTime: 10_000, // bare number = millis
         });
       }),
     );
@@ -85,9 +85,9 @@ provider("create, update, delete standard queue", (stack) =>
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
           visibilityTimeout: "60 seconds",
-          delaySeconds: "5 seconds",
+          delay: "5 seconds",
           messageRetentionPeriod: "5 days",
-          receiveMessageWaitTimeSeconds: "20 seconds",
+          receiveMessageWaitTime: "20 seconds",
         });
       }),
     );
@@ -473,7 +473,7 @@ provider("SSE-KMS encryption with AWS-managed key", (stack) =>
       Effect.gen(function* () {
         return yield* Queue("KmsQueue", {
           kmsMasterKeyId: "alias/aws/sqs",
-          kmsDataKeyReusePeriodSeconds: "300 seconds",
+          kmsDataKeyReusePeriod: "300 seconds",
         });
       }),
     );

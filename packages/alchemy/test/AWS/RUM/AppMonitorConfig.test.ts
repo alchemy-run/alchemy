@@ -73,7 +73,7 @@ test.provider(
           const policy = yield* ResourcePolicy("Policy", {
             appMonitorName: monitor.appMonitorName,
             policyDocument: monitor.appMonitorArn.map((arn) =>
-              policyFor(arn, policyAction),
+              policyFor(arn, policySid),
             ),
           });
           return { monitor, metrics, policy };

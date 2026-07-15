@@ -161,9 +161,10 @@ export const makeS3ControlAccountHttpBinding = <
   /** IAM actions granted on `*`. */
   actions: readonly string[];
   /**
-   * Grant `iam:PassRole` (conditioned to `batchoperations.s3.amazonaws.com`)
-   * so the function can hand S3 Batch Operations the execution role named in
-   * the job. Set on `CreateJob`.
+   * Grant `iam:PassRole` so the function can hand S3 Batch Operations the
+   * execution role named in the job. Set on `CreateJob`. Matches the AWS
+   * Batch Operations permission model (an `iam:PassedToService` condition is
+   * NOT populated for `s3:CreateJob` — IAM denies a conditioned grant).
    */
   passRole?: boolean;
 }) =>
@@ -183,15 +184,14 @@ export const makeS3ControlAccountHttpBinding = <
             },
           ];
           if (options.passRole) {
+            // No `iam:PassedToService` condition — IAM does not populate the
+            // key for `s3:CreateJob`, so a conditioned grant is always
+            // denied. This matches the policy AWS documents for Batch
+            // Operations job creators.
             policyStatements.push({
               Effect: "Allow",
               Action: ["iam:PassRole"],
               Resource: ["*"],
-              Condition: {
-                StringEquals: {
-                  "iam:PassedToService": "batchoperations.s3.amazonaws.com",
-                },
-              },
             });
           }
           yield* host.bind`Allow(${host}, ${options.tag}())`({

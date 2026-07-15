@@ -46,6 +46,11 @@ export default RekognitionTestFunction.make(
     // The image-analysis route runs seven sequential inferences and the
     // collection route ~15 sequential data-plane calls.
     timeout: Duration.seconds(120),
+    // The video routes decode eight large Rekognition Video request/response
+    // schema graphs in a single invocation — the 128 MB default OOM-kills the
+    // sandbox (observed Max Memory Used: 118 MB on the cheap routes alone),
+    // which surfaces as an uncatchable 500.
+    memorySize: 512,
   },
   Effect.gen(function* () {
     // --- image analysis ---
@@ -346,19 +351,40 @@ export default RekognitionTestFunction.make(
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "InvalidS3ObjectException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             contentModeration: yield* startContentModeration({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "InvalidS3ObjectException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             faceDetection: yield* startFaceDetection({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "InvalidS3ObjectException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             // FaceSearch also validates the collection — it may surface
             // ResourceNotFoundException before the S3 check.
@@ -367,32 +393,67 @@ export default RekognitionTestFunction.make(
               CollectionId: "alchemy-nonexistent-collection",
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "InvalidS3ObjectException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             labelDetection: yield* startLabelDetection({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "InvalidS3ObjectException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             personTracking: yield* startPersonTracking({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "InvalidS3ObjectException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             segmentDetection: yield* startSegmentDetection({
               Video: BOGUS_VIDEO,
               SegmentTypes: ["SHOT"],
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "InvalidS3ObjectException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             textDetection: yield* startTextDetection({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "InvalidS3ObjectException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
           };
           return yield* HttpServerResponse.json(tags);
@@ -405,35 +466,91 @@ export default RekognitionTestFunction.make(
           const tags = {
             celebrityRecognition: yield* getCelebrityRecognition(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "ResourceNotFoundException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             contentModeration: yield* getContentModeration(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "ResourceNotFoundException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             faceDetection: yield* getFaceDetection(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "ResourceNotFoundException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             faceSearch: yield* getFaceSearch(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "ResourceNotFoundException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             labelDetection: yield* getLabelDetection(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "ResourceNotFoundException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             personTracking: yield* getPersonTracking(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "ResourceNotFoundException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             segmentDetection: yield* getSegmentDetection(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "ResourceNotFoundException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
             textDetection: yield* getTextDetection(probe).pipe(
               Effect.map(() => "Found"),
-              Effect.catchAll((e) => Effect.succeed(e._tag)),
+              Effect.catchTag(
+                [
+                  "ResourceNotFoundException",
+                  "InvalidParameterException",
+                  "AccessDeniedException",
+                ],
+                (e) => Effect.succeed(e._tag),
+              ),
             ),
           };
           return yield* HttpServerResponse.json(tags);

@@ -21,6 +21,14 @@ const findIndex = (vectorBucketName: string, indexName: string) =>
     Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
   );
 
+const findPolicy = (vectorBucketName: string) =>
+  s3vectors.getVectorBucketPolicy({ vectorBucketName }).pipe(
+    Effect.map((r) => r.policy),
+    Effect.catchTag("NotFoundException", () =>
+      Effect.succeed(undefined as string | undefined),
+    ),
+  );
+
 class BucketStillExists extends Data.TaggedError("BucketStillExists")<{
   readonly vectorBucketName: string;
 }> {}
@@ -136,4 +144,67 @@ test.provider(
       yield* assertBucketDeleted("alchemy-test-vectors-a");
     }),
   { timeout: 180_000 },
+);
+
+test.provider(
+  "bucket policy lifecycle: attach, verify, remove",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucketName = "alchemy-test-vectors-policy";
+
+      // 1. deploy without a policy
+      const first = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* VectorBucket("PolicyVectors", {
+            vectorBucketName: bucketName,
+          });
+          return { bucket };
+        }),
+      );
+      expect(yield* findPolicy(bucketName)).toBeUndefined();
+
+      // 2. attach a policy — principal derived from the bucket ARN's account
+      const accountId = first.bucket.vectorBucketArn.split(":")[4];
+      const deployWithPolicy = stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* VectorBucket("PolicyVectors", {
+            vectorBucketName: bucketName,
+            policy: [
+              {
+                Effect: "Allow",
+                Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                Action: ["s3vectors:GetVectors", "s3vectors:QueryVectors"],
+                Resource: `${first.bucket.vectorBucketArn}/index/*`,
+              },
+            ],
+          });
+          return { bucket };
+        }),
+      );
+      yield* deployWithPolicy;
+
+      const attached = yield* findPolicy(bucketName);
+      expect(attached).toBeDefined();
+      expect(attached).toContain("s3vectors:GetVectors");
+
+      // re-deploying the same policy is a no-op (idempotent sync)
+      yield* deployWithPolicy;
+      expect(yield* findPolicy(bucketName)).toContain("s3vectors:GetVectors");
+
+      // 3. remove the policy prop — reconcile deletes the bucket policy
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* VectorBucket("PolicyVectors", {
+            vectorBucketName: bucketName,
+          });
+          return { bucket };
+        }),
+      );
+      expect(yield* findPolicy(bucketName)).toBeUndefined();
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucketName);
+    }),
+  { timeout: 240_000 },
 );

@@ -1,6 +1,6 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -10,6 +10,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -32,7 +33,7 @@ export type QueueProps = {
    * is whole seconds.
    * @default 0
    */
-  delaySeconds?: Duration.Input;
+  delay?: Duration.Input;
   /**
    * Maximum message size in bytes (`1,024` - `1,048,576`).
    * @default 1048576
@@ -52,7 +53,7 @@ export type QueueProps = {
    * is whole seconds.
    * @default 0
    */
-  receiveMessageWaitTimeSeconds?: Duration.Input;
+  receiveMessageWaitTime?: Duration.Input;
   /**
    * Visibility timeout (`0` - `43,200` seconds). Accepts any
    * `Duration.Input` (e.g. `"30 seconds"`, `Duration.seconds(30)`; a bare
@@ -113,7 +114,7 @@ export type QueueProps = {
    * is whole seconds. Only meaningful with `kmsMasterKeyId`.
    * @default 5 minutes
    */
-  kmsDataKeyReusePeriodSeconds?: Duration.Input;
+  kmsDataKeyReusePeriod?: Duration.Input;
   /**
    * Enables server-side encryption using SQS-owned keys (SSE-SQS).
    * Mutually exclusive with `kmsMasterKeyId`.
@@ -193,7 +194,7 @@ export interface Queue extends Resource<
  * const queue = yield* SQS.Queue("ProcessingQueue", {
  *   visibilityTimeout: "2 minutes",
  *   messageRetentionPeriod: "1 day",
- *   receiveMessageWaitTimeSeconds: "20 seconds",
+ *   receiveMessageWaitTime: "20 seconds",
  * });
  * ```
  *
@@ -231,7 +232,7 @@ export interface Queue extends Resource<
  * ```typescript
  * const queue = yield* SQS.Queue("KmsQueue", {
  *   kmsMasterKeyId: "alias/aws/sqs",
- *   kmsDataKeyReusePeriodSeconds: "5 minutes",
+ *   kmsDataKeyReusePeriod: "5 minutes",
  * });
  * ```
  *
@@ -279,34 +280,6 @@ export const Queue = Resource<Queue>("AWS.SQS.Queue");
 export class SqsEncryptionConflict extends Data.TaggedError(
   "SqsEncryptionConflict",
 )<{ message: string }> {}
-
-/**
- * Reconstruct a valid `Duration.Input` from a value that may have
- * round-tripped through persisted state JSON, which flattens a `Duration`
- * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
- * shape `Duration.toSeconds` silently decodes as zero.
- */
-const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return typeof input === "object" && input !== null && json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional {@link Duration.Input} prop to whole wire seconds. */
-const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toSeconds(fromStateDurationInput(input)));
 
 const validateEncryption = (props: QueueProps) =>
   props.kmsMasterKeyId !== undefined && props.sqsManagedSseEnabled
@@ -389,13 +362,13 @@ export const QueueProvider = () =>
         const policy = buildPolicy(props, bindings) ?? "";
 
         const baseAttributes: Record<string, string | undefined> = {
-          DelaySeconds: toWireSeconds(props.delaySeconds)?.toString(),
+          DelaySeconds: toWireSeconds(props.delay)?.toString(),
           MaximumMessageSize: props.maximumMessageSize?.toString(),
           MessageRetentionPeriod: toWireSeconds(
             props.messageRetentionPeriod,
           )?.toString(),
           ReceiveMessageWaitTimeSeconds: toWireSeconds(
-            props.receiveMessageWaitTimeSeconds,
+            props.receiveMessageWaitTime,
           )?.toString(),
           VisibilityTimeout: toWireSeconds(props.visibilityTimeout)?.toString(),
           RedrivePolicy: redrivePolicy,
@@ -403,7 +376,7 @@ export const QueueProvider = () =>
           Policy: policy,
           KmsMasterKeyId: props.kmsMasterKeyId,
           KmsDataKeyReusePeriodSeconds: toWireSeconds(
-            props.kmsDataKeyReusePeriodSeconds,
+            props.kmsDataKeyReusePeriod,
           )?.toString(),
           SqsManagedSseEnabled:
             props.sqsManagedSseEnabled === undefined

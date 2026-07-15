@@ -174,6 +174,17 @@ export const NamespaceProvider = () =>
           tableBucketARN: output.tableBucketArn,
           namespace: output.namespace,
         })
-        .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+        .pipe(
+          // Table deletes are eventually consistent; a namespace delete that
+          // races them reports ConflictException — ride out the window.
+          Effect.retry({
+            while: (e) => e._tag === "ConflictException",
+            schedule: Schedule.max([
+              Schedule.exponential(500),
+              Schedule.recurs(8),
+            ]),
+          }),
+          Effect.catchTag("NotFoundException", () => Effect.void),
+        );
     }),
   });

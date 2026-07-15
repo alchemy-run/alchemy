@@ -1,5 +1,5 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -13,6 +13,7 @@ import {
   diffTags,
   hasAlchemyTags,
 } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -55,12 +56,12 @@ export interface ConfigurationSetProps {
    */
   tlsPolicy?: TlsPolicy;
   /**
-   * The maximum amount of time (300-50400 seconds) that SES will attempt
+   * The maximum amount of time (5 minutes to 14 hours) that SES will attempt
    * delivery of email through this configuration set. Accepts any
    * `Duration.Input` (e.g. `"1 hour"`, `Duration.hours(1)`; a bare number
    * is milliseconds); the wire unit is whole seconds.
    */
-  maxDeliverySeconds?: Duration.Input;
+  maxDelivery?: Duration.Input;
   /**
    * Which events cause SES to add a recipient to the account suppression
    * list when sending through this configuration set. Overrides the
@@ -142,34 +143,6 @@ const configurationSetArnOf = (
   accountId: string,
   name: string,
 ) => `arn:aws:ses:${region}:${accountId}:configuration-set/${name}`;
-
-/**
- * Reconstruct a valid `Duration.Input` from a value that may have
- * round-tripped through persisted state JSON, which flattens a `Duration`
- * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
- * shape `Duration.toSeconds` silently decodes as zero.
- */
-const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return typeof input === "object" && input !== null && json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional {@link Duration.Input} prop to whole wire seconds. */
-const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toSeconds(fromStateDurationInput(input)));
 
 const sameReasons = (
   a: ReadonlyArray<string> | undefined,
@@ -259,7 +232,7 @@ export const ConfigurationSetProvider = () =>
           );
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const desiredMaxDelivery = toWireSeconds(news.maxDeliverySeconds);
+          const desiredMaxDelivery = toWireSeconds(news.maxDelivery);
 
           // 1. OBSERVE — cloud state is authoritative.
           let observed = yield* getConfigurationSet(name);

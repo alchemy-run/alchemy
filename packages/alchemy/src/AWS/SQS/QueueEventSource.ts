@@ -9,10 +9,12 @@ export type SQSRecord = lambda.SQSRecord;
 
 export interface MessagesProps extends QueueEventSourceProps {
   /**
-   * Time in seconds for long polling when using the process (run) path.
-   * @default 20
+   * How long each `ReceiveMessage` long-polls for messages when using the
+   * process (run) path (e.g. `"20 seconds"`). Rounded to whole seconds on
+   * the wire.
+   * @default 20 seconds
    */
-  waitTimeSeconds?: number;
+  waitTime?: Duration.Input;
   /**
    * Maximum number of messages to receive per poll when using the process (run) path.
    * @default 10

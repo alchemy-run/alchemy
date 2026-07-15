@@ -210,6 +210,18 @@ export const TableBucketProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* s3tables
         .deleteTableBucket({ tableBucketARN: output.tableBucketArn })
-        .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+        .pipe(
+          // Child namespace/table deletes are eventually consistent; a bucket
+          // delete that races them reports ConflictException — ride out the
+          // window.
+          Effect.retry({
+            while: (e) => e._tag === "ConflictException",
+            schedule: Schedule.max([
+              Schedule.exponential(500),
+              Schedule.recurs(8),
+            ]),
+          }),
+          Effect.catchTag("NotFoundException", () => Effect.void),
+        );
     }),
   });

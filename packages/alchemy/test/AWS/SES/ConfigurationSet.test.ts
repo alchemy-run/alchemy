@@ -37,6 +37,7 @@ test.provider(
           return yield* ConfigurationSet("LifecycleConfigSet", {
             reputationMetricsEnabled: true,
             tlsPolicy: "REQUIRE",
+            maxDelivery: "1 hour",
             suppressedReasons: ["BOUNCE"],
             tags: { Environment: "test" },
           });
@@ -52,6 +53,8 @@ test.provider(
       });
       expect(observed.ReputationOptions?.ReputationMetricsEnabled).toBe(true);
       expect(observed.DeliveryOptions?.TlsPolicy).toBe("REQUIRE");
+      // Duration.Input prop converted to whole wire seconds
+      expect(observed.DeliveryOptions?.MaxDeliverySeconds).toBe(3600);
       expect(observed.SuppressionOptions?.SuppressedReasons).toEqual([
         "BOUNCE",
       ]);
@@ -68,6 +71,7 @@ test.provider(
             sendingEnabled: false,
             reputationMetricsEnabled: false,
             tlsPolicy: "OPTIONAL",
+            maxDelivery: "30 minutes",
             suppressedReasons: ["BOUNCE", "COMPLAINT"],
             tags: { Environment: "test", Extra: "1" },
           });
@@ -79,6 +83,7 @@ test.provider(
       expect(updated.SendingOptions?.SendingEnabled).toBe(false);
       expect(updated.ReputationOptions?.ReputationMetricsEnabled).toBe(false);
       expect(updated.DeliveryOptions?.TlsPolicy ?? "OPTIONAL").toBe("OPTIONAL");
+      expect(updated.DeliveryOptions?.MaxDeliverySeconds).toBe(1800);
       expect(
         [...(updated.SuppressionOptions?.SuppressedReasons ?? [])].sort(),
       ).toEqual(["BOUNCE", "COMPLAINT"]);

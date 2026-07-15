@@ -9,7 +9,11 @@ import type { ResolverRule } from "./ResolverRule.ts";
 /**
  * Bespoke (not via `BindingHttp.ts`): the operation is filter-based rather
  * than ID-keyed, so the rule is injected as a `ResolverRuleId` filter instead
- * of a request field.
+ * of a request field. The IAM grant is `Resource: "*"` — verified live:
+ * `route53resolver:ListResolverRuleAssociations` does not support
+ * resource-level permissions (a rule-ARN-scoped grant is AccessDenied), the
+ * runtime callable's injected filter is what scopes results to the bound
+ * rule.
  */
 export const ListResolverRuleAssociationsHttp = Layer.effect(
   ListResolverRuleAssociations,
@@ -27,7 +31,7 @@ export const ListResolverRuleAssociationsHttp = Layer.effect(
                 {
                   Effect: "Allow",
                   Action: ["route53resolver:ListResolverRuleAssociations"],
-                  Resource: [rule.resolverRuleArn],
+                  Resource: ["*"],
                 },
               ],
             },

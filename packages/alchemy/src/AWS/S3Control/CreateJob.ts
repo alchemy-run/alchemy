@@ -8,11 +8,10 @@ import * as Binding from "../../Binding.ts";
  *
  * Submits a large-scale batch job — copy, tag, ACL, restore, or
  * Lambda-invoke — over a manifest of S3 objects, e.g. an ingest Lambda that
- * kicks off a bulk re-tagging run. The binding also grants `iam:PassRole`
- * (conditioned to `batchoperations.s3.amazonaws.com`) so the function can
- * hand the service the job's execution role. The account id is resolved
- * once via `sts:GetCallerIdentity`. Provide the implementation with
- * `Effect.provide(AWS.S3Control.CreateJobHttp)`.
+ * kicks off a bulk re-tagging run. The binding also grants `iam:PassRole` so
+ * the function can hand the service the job's execution role. The account id
+ * is resolved once via `sts:GetCallerIdentity`. Provide the implementation
+ * with `Effect.provide(AWS.S3Control.CreateJobHttp)`.
  * @binding
  * @section Running Batch Operations Jobs
  * @example Submit a Suspended Tagging Job

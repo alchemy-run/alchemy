@@ -117,17 +117,29 @@ describe("S3Vectors Bindings", () => {
           expect(queryBody.keys).toContain("a");
           expect(queryBody.keys.length).toBe(2);
 
-          // get by key
+          // get by key (read-only client)
           const getBody = (yield* send(
             HttpClientRequest.get(`${baseUrl}/get`),
           ).pipe(Effect.flatMap((r) => r.json))) as { keys: string[] };
           expect(getBody.keys).toContain("a");
 
-          // delete a key
+          // list keys (read-only client)
+          const listBody = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/list`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { keys: string[] };
+          expect(listBody.keys).toContain("a");
+
+          // delete a key (write-only client)
           const delBody = (yield* send(
             HttpClientRequest.get(`${baseUrl}/delete`),
           ).pipe(Effect.flatMap((r) => r.json))) as { deleted: string };
           expect(delBody.deleted).toBe("b");
+
+          // put + get through the composed ReadWrite client
+          const rwBody = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/rw`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { keys: string[] };
+          expect(rwBody.keys).toContain("rw");
         }),
       { timeout: 120_000 },
     );

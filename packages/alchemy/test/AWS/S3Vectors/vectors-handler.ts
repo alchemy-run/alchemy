@@ -2,6 +2,7 @@ import * as Lambda from "@/AWS/Lambda";
 import * as S3Vectors from "@/AWS/S3Vectors";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -25,6 +26,10 @@ export default VectorsTestFunction.make(
       dimension: 4,
       distanceMetric: "cosine",
     });
+    // Least-privilege split bindings for writes and reads, plus the
+    // ReadWrite client to prove the composed level end-to-end.
+    const writer = yield* S3Vectors.VectorsWrite(index);
+    const reader = yield* S3Vectors.VectorsRead(index);
     const vectors = yield* S3Vectors.Vectors(index);
 
     return {
@@ -38,7 +43,7 @@ export default VectorsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/put") {
-          yield* vectors.put({
+          yield* writer.put({
             vectors: [
               { key: "a", data: { float32: [1, 0, 0, 0] } },
               { key: "b", data: { float32: [0, 1, 0, 0] } },
@@ -49,7 +54,7 @@ export default VectorsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/query") {
-          const result = yield* vectors.query({
+          const result = yield* reader.query({
             topK: 2,
             queryVector: { float32: [1, 0, 0, 0] },
             returnDistance: true,
@@ -61,7 +66,7 @@ export default VectorsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/get") {
-          const result = yield* vectors.get({
+          const result = yield* reader.get({
             keys: ["a"],
             returnData: true,
           });
@@ -70,9 +75,27 @@ export default VectorsTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/list") {
+          const result = yield* reader.list({});
+          return yield* HttpServerResponse.json({
+            keys: result.vectors.map((v) => v.key),
+          });
+        }
+
         if (request.method === "GET" && pathname === "/delete") {
-          yield* vectors.delete({ keys: ["b"] });
+          yield* writer.delete({ keys: ["b"] });
           return yield* HttpServerResponse.json({ deleted: "b" });
+        }
+
+        if (request.method === "GET" && pathname === "/rw") {
+          // Round-trip through the ReadWrite client.
+          yield* vectors.put({
+            vectors: [{ key: "rw", data: { float32: [0, 0, 1, 0] } }],
+          });
+          const result = yield* vectors.get({ keys: ["rw"] });
+          return yield* HttpServerResponse.json({
+            keys: result.vectors.map((v) => v.key),
+          });
         }
 
         return yield* HttpServerResponse.json(
@@ -81,5 +104,13 @@ export default VectorsTestFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(S3Vectors.VectorsHttp)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        S3Vectors.VectorsHttp,
+        S3Vectors.VectorsReadHttp,
+        S3Vectors.VectorsWriteHttp,
+      ),
+    ),
+  ),
 );

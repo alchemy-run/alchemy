@@ -7,6 +7,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -40,6 +41,14 @@ export interface VectorBucketProps {
    * the bucket.
    */
   encryption?: VectorBucketEncryption;
+  /**
+   * Resource policy statements for the vector bucket, granting or denying
+   * cross-account/principal access to it and the indexes inside it
+   * (`arn:…:bucket/<name>/index/*`). Rendered as a standard
+   * `2012-10-17` policy document via `PutVectorBucketPolicy`; omitting the
+   * prop removes any existing policy.
+   */
+  policy?: PolicyStatement[];
   /**
    * Tags to apply to the bucket. Merged with internal Alchemy tags.
    */
@@ -85,6 +94,23 @@ export interface VectorBucket extends Resource<
  *   encryption: { sseType: "aws:kms", kmsKeyArn: key.keyArn },
  * });
  * ```
+ *
+ * @section Bucket Policy
+ * @example Grant Another Account Read Access
+ * ```typescript
+ * const bucket = yield* S3Vectors.VectorBucket("Embeddings", {
+ *   vectorBucketName: "shared-embeddings",
+ *   policy: [
+ *     {
+ *       Effect: "Allow",
+ *       Principal: { AWS: "arn:aws:iam::123456789012:root" },
+ *       Action: ["s3vectors:GetVectors", "s3vectors:QueryVectors"],
+ *       Resource:
+ *         "arn:aws:s3vectors:us-east-1:999999999999:bucket/shared-embeddings/index/*",
+ *     },
+ *   ],
+ * });
+ * ```
  */
 export const VectorBucket = Resource<VectorBucket>(
   "AWS.S3Vectors.VectorBucket",
@@ -123,6 +149,14 @@ export const VectorBucketProvider = () =>
           ),
           Effect.catchTag("NotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
+          ),
+        );
+
+      const observedPolicy = (vectorBucketName: string) =>
+        s3vectors.getVectorBucketPolicy({ vectorBucketName }).pipe(
+          Effect.map((r) => r.policy),
+          Effect.catchTag("NotFoundException", () =>
+            Effect.succeed(undefined as string | undefined),
           ),
         );
 
@@ -213,6 +247,31 @@ export const VectorBucketProvider = () =>
                 tagKeys: removed,
               });
             }
+          }
+
+          // 4. SYNC POLICY — diff desired against the OBSERVED bucket policy
+          //    so adoption and drift converge (delete when the prop is gone).
+          const desiredPolicy =
+            news.policy !== undefined && news.policy.length > 0
+              ? JSON.stringify({
+                  Version: "2012-10-17",
+                  Statement: news.policy,
+                })
+              : undefined;
+          const existingPolicy = yield* observedPolicy(name);
+          if (desiredPolicy !== undefined) {
+            if (existingPolicy !== desiredPolicy) {
+              yield* s3vectors.putVectorBucketPolicy({
+                vectorBucketName: name,
+                policy: desiredPolicy,
+              });
+              yield* session.note(`Updated bucket policy: ${name}`);
+            }
+          } else if (existingPolicy !== undefined) {
+            yield* s3vectors
+              .deleteVectorBucketPolicy({ vectorBucketName: name })
+              .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+            yield* session.note(`Removed bucket policy: ${name}`);
           }
 
           yield* session.note(name);

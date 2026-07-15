@@ -25,6 +25,10 @@ const VERIFIED_FROM = process.env.AWS_TEST_SES_FROM;
 // identity — SES rejects it with the typed MessageRejected tag in sandbox.
 const UNVERIFIED_FROM = "noreply@ses-bindings.alchemy-test.example.com";
 
+// Deterministic address the suppression-list tests add and remove. The test
+// ends by deleting it, so repeated runs leave no residue.
+const SUPPRESSED_ADDRESS = "suppressed@ses-bindings.alchemy-test.example.com";
+
 const readinessPolicy = Schedule.max([
   Schedule.fixed("2 seconds"),
   Schedule.recurs(75),
@@ -196,6 +200,138 @@ describe("SES Bindings", () => {
           expect(response.error).toBeUndefined();
           expect(response.messageId).toBeTruthy();
         }),
+    );
+  });
+
+  describe("SendBulkEmail", () => {
+    test.provider(
+      "sandbox: bulk templated send from an unverified sender is rejected with the typed tag",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/send-bulk?from=${encodeURIComponent(UNVERIFIED_FROM)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            error?: string;
+            results?: { status?: string; messageId?: string }[];
+          };
+
+          // Sandbox + unverified FROM: SES rejects either the whole request
+          // (typed MessageRejected) or the individual entry
+          // (Status MESSAGE_REJECTED) — both prove the binding wires IAM and
+          // request marshalling into the deployed Lambda.
+          if (response.error !== undefined) {
+            expect(response.error).toBe("MessageRejected");
+          } else {
+            expect(response.results?.[0]?.status).toBe("MESSAGE_REJECTED");
+          }
+        }),
+    );
+  });
+
+  describe("RenderEmailTemplate", () => {
+    test.provider(
+      "renders the bound template server-side with personalization data",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/render-template`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            rendered?: string;
+            error?: string;
+          };
+          expect(response.error).toBeUndefined();
+          expect(response.rendered).toContain("Hello, Ada!");
+        }),
+    );
+  });
+
+  describe("GetAccount", () => {
+    test.provider("reads the account's sending status and quota", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.get(`${baseUrl}/account`),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          sendingEnabled?: boolean;
+          productionAccess?: boolean;
+          max24HourSend?: number;
+          error?: string;
+        };
+        expect(response.error).toBeUndefined();
+        expect(typeof response.sendingEnabled).toBe("boolean");
+        expect(typeof response.productionAccess).toBe("boolean");
+      }),
+    );
+  });
+
+  describe("Suppression List", () => {
+    test.provider(
+      "put, get, list, and delete a suppressed destination",
+      (_stack) =>
+        Effect.gen(function* () {
+          const email = encodeURIComponent(SUPPRESSED_ADDRESS);
+
+          // put
+          const put = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/suppress?email=${email}`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { error?: string };
+          expect(put.error).toBeUndefined();
+
+          // get — the suppression list is eventually consistent; poll until
+          // the entry materializes.
+          const got = yield* send(
+            HttpClientRequest.get(`${baseUrl}/suppressed?email=${email}`),
+          ).pipe(
+            Effect.flatMap((r) => r.json),
+            Effect.map(
+              (body) =>
+                body as { email?: string; reason?: string; error?: string },
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (body): boolean => body.reason === "BOUNCE",
+              times: 10,
+            }),
+          );
+          expect(got.email).toBe(SUPPRESSED_ADDRESS);
+          expect(got.reason).toBe("BOUNCE");
+
+          // list — filtered by reason, contains the address.
+          const list = yield* send(
+            HttpClientRequest.get(`${baseUrl}/suppressed-list`),
+          ).pipe(
+            Effect.flatMap((r) => r.json),
+            Effect.map((body) => body as { emails?: string[]; error?: string }),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (body): boolean =>
+                (body.emails ?? []).includes(SUPPRESSED_ADDRESS),
+              times: 10,
+            }),
+          );
+          expect(list.emails).toContain(SUPPRESSED_ADDRESS);
+
+          // delete — then the get surfaces the typed NotFoundException.
+          const del = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/unsuppress?email=${email}`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { error?: string };
+          expect(del.error).toBeUndefined();
+
+          const gone = yield* send(
+            HttpClientRequest.get(`${baseUrl}/suppressed?email=${email}`),
+          ).pipe(
+            Effect.flatMap((r) => r.json),
+            Effect.map((body) => body as { error?: string }),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (body): boolean => body.error === "NotFoundException",
+              times: 10,
+            }),
+          );
+          expect(gone.error).toBe("NotFoundException");
+        }),
+      { timeout: 120_000 },
     );
   });
 });
