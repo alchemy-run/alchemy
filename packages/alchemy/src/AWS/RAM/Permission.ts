@@ -22,7 +22,7 @@ export interface PermissionPolicyTemplate {
   /**
    * Actions granted to principals the resource share is shared with. Must be
    * a subset of the actions RAM supports for the permission's `resourceType`
-   * (for example `ec2:RunInstances` for `ec2:Subnet`).
+   * (for example `appsync:SourceGraphQL` for `appsync:Apis`).
    */
   actions: string[];
 
@@ -43,7 +43,9 @@ export interface PermissionProps {
 
   /**
    * The resource type this permission applies to, in `service:Type` format —
-   * for example `ec2:Subnet` or `appsync:Apis`.
+   * for example `appsync:Apis`. Only some resource types support customer
+   * managed permissions (others, like `ec2:Subnet`, only allow the AWS
+   * managed default permission).
    * Changing the resource type replaces the permission.
    */
   resourceType: string;
@@ -92,20 +94,20 @@ export interface Permission extends Resource<
  *
  * @resource
  * @section Creating a Permission
- * @example Least-privilege subnet sharing
+ * @example Least-privilege AppSync API sharing
  * ```typescript
- * const permission = yield* Permission("RunInstancesOnly", {
- *   resourceType: "ec2:Subnet",
+ * const permission = yield* Permission("SourceGraphQLOnly", {
+ *   resourceType: "appsync:Apis",
  *   policyTemplate: {
- *     actions: ["ec2:RunInstances"],
+ *     actions: ["appsync:SourceGraphQL"],
  *   },
  * });
  * ```
  *
  * @example Attach a permission to a resource share
  * ```typescript
- * const share = yield* ResourceShare("SubnetShare", {
- *   resourceArns: [subnet.subnetArn],
+ * const share = yield* ResourceShare("ApiShare", {
+ *   resourceArns: [api.apiArn],
  *   principals: ["123456789012"],
  *   permissionArns: [permission.permissionArn],
  * });
@@ -114,10 +116,10 @@ export interface Permission extends Resource<
  * @section Updating the Policy
  * @example Add an action (creates a new default version)
  * ```typescript
- * const permission = yield* Permission("RunInstancesOnly", {
- *   resourceType: "ec2:Subnet",
+ * const permission = yield* Permission("SourceGraphQLOnly", {
+ *   resourceType: "appsync:Apis",
  *   policyTemplate: {
- *     actions: ["ec2:RunInstances", "ec2:CreateNetworkInterface"],
+ *     actions: ["appsync:SourceGraphQL", "appsync:GraphQL"],
  *   },
  * });
  * ```

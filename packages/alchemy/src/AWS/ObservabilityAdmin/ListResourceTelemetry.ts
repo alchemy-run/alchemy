@@ -11,6 +11,12 @@ import * as Binding from "../../Binding.ts";
  *
  * Provide `AWS.ObservabilityAdmin.ListResourceTelemetryHttp` on the hosting
  * Lambda Function to satisfy the requirement.
+ *
+ * Known platform quirk (observed 2026-07): the service's authorization for
+ * this action can reject callers whose grant comes from an inline role
+ * policy (even `observabilityadmin:*` on `Resource: "*"`) with a typed
+ * `AccessDeniedException`, while principals with managed policies succeed.
+ * Handle the typed tag until AWS fixes the action's auth integration.
  * @binding
  * @section Auditing Resource Telemetry
  * @example Find VPCs without flow logs

@@ -12,6 +12,13 @@ import * as Binding from "../../Binding.ts";
  * `polly:StartSpeechSynthesisStream`. Provide the implementation with
  * `Effect.provide(AWS.Polly.StartSpeechSynthesisStreamHttp)`.
  *
+ * NOTE: the distilled HTTP transport does not yet support bidirectional
+ * (input) event-stream request bodies — a live call currently hangs waiting
+ * for response headers (probed 2026-07; same transport gap leaves
+ * transcribe-streaming and lex StartConversation unbound). Prefer
+ * `SynthesizeSpeech` (request-response) until distilled core ships
+ * event-stream request support.
+ *
  * @binding
  * @section Streaming Synthesis
  * @example Stream text in, collect audio out

@@ -195,7 +195,7 @@ describe.skipIf(gated)("PaymentCryptography Bindings", () => {
 
   describe("ReEncryptData", () => {
     test.provider(
-      "migrates ciphertext to the outgoing key and round-trips",
+      "translates DUKPT ciphertext to the working key and round-trips",
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* send(

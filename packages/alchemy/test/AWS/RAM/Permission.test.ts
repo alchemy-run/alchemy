@@ -48,7 +48,7 @@ const permissionStack = (props: {
 }) =>
   Effect.gen(function* () {
     const permission = yield* Permission("TestPermission", {
-      resourceType: "ec2:Subnet",
+      resourceType: "appsync:Apis",
       policyTemplate: { actions: props.actions },
       tags: props.tags,
     });
@@ -61,16 +61,17 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // 1. Create a least-privilege subnet permission.
+      // 1. Create a least-privilege AppSync API permission (appsync:Apis is
+      //    one of the resource types supporting customer managed permissions).
       const { permission } = yield* stack.deploy(
         permissionStack({
-          actions: ["ec2:RunInstances"],
+          actions: ["appsync:SourceGraphQL"],
           tags: { team: "platform" },
         }),
       );
 
       expect(permission.permissionArn).toMatch(/^arn:aws:ram:/);
-      expect(permission.resourceType).toBe("ec2:Subnet");
+      expect(permission.resourceType).toBe("appsync:Apis");
       const arn = permission.permissionArn;
       const initialVersion = permission.version;
 
@@ -80,7 +81,7 @@ test.provider(
       const policy = JSON.parse(live?.permission ?? "{}") as {
         Action?: string | string[];
       };
-      expect(policy.Action).toContain("ec2:RunInstances");
+      expect(policy.Action).toContain("appsync:SourceGraphQL");
       expect(
         live?.tags?.some((t) => t.key === "team" && t.value === "platform"),
       ).toBe(true);
@@ -90,7 +91,7 @@ test.provider(
       //    tag. ARN is stable; the default version advances.
       const { permission: updated } = yield* stack.deploy(
         permissionStack({
-          actions: ["ec2:RunInstances", "ec2:CreateNetworkInterface"],
+          actions: ["appsync:SourceGraphQL", "appsync:GraphQL"],
           tags: { team: "platform", env: "prod" },
         }),
       );
@@ -103,20 +104,26 @@ test.provider(
       const policy2 = JSON.parse(live2?.permission ?? "{}") as {
         Action?: string | string[];
       };
-      expect(policy2.Action).toContain("ec2:CreateNetworkInterface");
+      expect(policy2.Action).toContain("appsync:GraphQL");
       expect(
         live2?.tags?.some((t) => t.key === "env" && t.value === "prod"),
       ).toBe(true);
 
+      // listPermissionVersions keeps DELETED versions in the listing — only
+      // the new default remains live.
       const versions = yield* ram
         .listPermissionVersions({ permissionArn: arn })
         .pipe(Effect.map((r) => r.permissions ?? []));
-      expect(versions).toHaveLength(1);
+      const liveVersions = versions.filter(
+        (v) => v.status !== "DELETED" && v.status !== "DELETING",
+      );
+      expect(liveVersions).toHaveLength(1);
+      expect(liveVersions[0]?.version).toEqual(updated.version);
 
       // 5. Re-deploy with identical props: a no-op — no new version.
       const { permission: same } = yield* stack.deploy(
         permissionStack({
-          actions: ["ec2:RunInstances", "ec2:CreateNetworkInterface"],
+          actions: ["appsync:SourceGraphQL", "appsync:GraphQL"],
           tags: { team: "platform", env: "prod" },
         }),
       );
@@ -136,7 +143,7 @@ test.provider(
       yield* stack.destroy();
 
       const { permission } = yield* stack.deploy(
-        permissionStack({ actions: ["ec2:RunInstances"] }),
+        permissionStack({ actions: ["appsync:SourceGraphQL"] }),
       );
 
       const provider = yield* Provider.findProvider(Permission);

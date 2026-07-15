@@ -1,4 +1,5 @@
 export * from "./Analysis.ts";
+export * from "./AssetEventSource.ts";
 export * from "./CancelIngestion.ts";
 export * from "./CancelIngestionHttp.ts";
 export * from "./CreateIngestion.ts";

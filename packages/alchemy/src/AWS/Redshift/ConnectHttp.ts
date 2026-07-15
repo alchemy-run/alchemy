@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Cluster } from "./Cluster.ts";
@@ -120,12 +121,12 @@ export const ConnectHttp = Layer.effect(
                 DbName: database,
                 AutoCreate: options.autoCreate,
                 DbGroups: options.dbGroups,
-                DurationSeconds: options.durationSeconds,
+                DurationSeconds: toWireSeconds(options.duration),
               })
             : yield* getClusterCredentialsWithIAM({
                 ClusterIdentifier: clusterIdentifier,
                 DbName: database,
-                DurationSeconds: options.durationSeconds,
+                DurationSeconds: toWireSeconds(options.duration),
               });
         const username = unwrap(credentials.DbUser);
         const rawPassword = unwrap(credentials.DbPassword);

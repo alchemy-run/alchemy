@@ -317,12 +317,14 @@ describe("QBusiness binding operations (typed-error probes)", () => {
     }),
   );
 
-  test.provider("listSubscriptions yields a typed not-found error", () =>
+  // listSubscriptions does NOT 404 a nonexistent application — the live API
+  // answers with an empty page, which the probe pins down.
+  test.provider("listSubscriptions answers an empty page", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        qbusiness.listSubscriptions({ applicationId: NONEXISTENT }),
-      );
-      expectTag(error, NOT_FOUND);
+      const response = yield* qbusiness.listSubscriptions({
+        applicationId: NONEXISTENT,
+      });
+      expect(response.subscriptions ?? []).toHaveLength(0);
     }),
   );
 

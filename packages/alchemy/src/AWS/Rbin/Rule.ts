@@ -1,6 +1,6 @@
 import * as rbin from "@distilled.cloud/aws/rbin";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -15,6 +15,7 @@ import {
   hasAlchemyTags,
   tagRecord,
 } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -218,7 +219,7 @@ const RULE_RESOURCE_TYPES = [
 
 const toRetentionPeriod = (p: Duration.Input): rbin.RetentionPeriod => ({
   // The wire unit is whole days (`DAYS` is the only supported unit).
-  RetentionPeriodValue: Math.round(Duration.toDays(p)),
+  RetentionPeriodValue: toWireDays(p)!,
   RetentionPeriodUnit: "DAYS",
 });
 
@@ -235,7 +236,7 @@ const toLockConfiguration = (
 ): rbin.LockConfiguration => ({
   UnlockDelay: {
     // The wire unit is whole days (`DAYS` is the only supported unit).
-    UnlockDelayValue: Math.round(Duration.toDays(lock.unlockDelay)),
+    UnlockDelayValue: toWireDays(lock.unlockDelay)!,
     UnlockDelayUnit: "DAYS",
   },
 });

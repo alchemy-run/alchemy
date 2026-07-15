@@ -41,18 +41,15 @@ export default PaymentCryptographyTestFunction.make(
         },
       },
     });
-    // Second data key — the ReEncryptData migration target.
-    const dataKey2 = yield* PaymentCryptography.Key("DataKey2", {
+    // DUKPT Base Derivation Key — the ReEncryptData incoming side (the
+    // service rejects symmetric->symmetric re-encryption; the operation
+    // translates DUKPT terminal ciphertext to a working key).
+    const bdk = yield* PaymentCryptography.Key("Bdk", {
       keyAttributes: {
-        keyAlgorithm: "AES_128",
+        keyAlgorithm: "TDES_2KEY",
         keyClass: "SYMMETRIC_KEY",
-        keyUsage: "TR31_D0_SYMMETRIC_DATA_ENCRYPTION_KEY",
-        keyModesOfUse: {
-          encrypt: true,
-          decrypt: true,
-          wrap: true,
-          unwrap: true,
-        },
+        keyUsage: "TR31_B0_BASE_DERIVATION_KEY",
+        keyModesOfUse: { deriveKey: true },
       },
     });
     const macKey = yield* PaymentCryptography.Key("MacKey", {
@@ -121,13 +118,13 @@ export default PaymentCryptographyTestFunction.make(
     });
 
     const encryptData = yield* PaymentCryptography.EncryptData(dataKey);
+    const encryptDukpt = yield* PaymentCryptography.EncryptData(bdk);
     const decryptData = yield* PaymentCryptography.DecryptData(dataKey);
-    const decryptData2 = yield* PaymentCryptography.DecryptData(dataKey2);
     const generateMac = yield* PaymentCryptography.GenerateMac(macKey);
     const verifyMac = yield* PaymentCryptography.VerifyMac(macKey);
     const reEncryptData = yield* PaymentCryptography.ReEncryptData(
+      bdk,
       dataKey,
-      dataKey2,
     );
     const generateCardValidationData =
       yield* PaymentCryptography.GenerateCardValidationData(cvk);
@@ -182,24 +179,28 @@ export default PaymentCryptographyTestFunction.make(
           const body = (yield* request.json) as unknown as {
             plainTextHex: string;
           };
-          const encrypted = yield* encryptData({
+          // Simulate a DUKPT terminal: encrypt under a key derived from the
+          // BDK at a fixed Key Serial Number.
+          const KSN = "FFFF9876543210E00001";
+          const encrypted = yield* encryptDukpt({
             PlainText: body.plainTextHex,
             EncryptionAttributes: {
-              Symmetric: { Mode: "CBC", InitializationVector: IV },
+              Dukpt: { KeySerialNumber: KSN, Mode: "CBC" },
             },
           });
-          // Migrate the ciphertext from dataKey to dataKey2 inside the
-          // service — the plaintext never leaves Payment Cryptography.
+          // Translate the DUKPT ciphertext to the symmetric working key
+          // inside the service — the plaintext never leaves Payment
+          // Cryptography.
           const reEncrypted = yield* reEncryptData({
             CipherText: unwrap(encrypted.CipherText),
             IncomingEncryptionAttributes: {
-              Symmetric: { Mode: "CBC", InitializationVector: IV },
+              Dukpt: { KeySerialNumber: KSN, Mode: "CBC" },
             },
             OutgoingEncryptionAttributes: {
               Symmetric: { Mode: "CBC", InitializationVector: IV },
             },
           });
-          const decrypted = yield* decryptData2({
+          const decrypted = yield* decryptData({
             CipherText: unwrap(reEncrypted.CipherText),
             DecryptionAttributes: {
               Symmetric: { Mode: "CBC", InitializationVector: IV },

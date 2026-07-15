@@ -43,8 +43,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "index bindings roundtrip against a live collection (AWS_TEST_SLOW=1)",
   (stack) =>
     Effect.gen(function* () {
-      // Clean slate in case a previous run died mid-flight.
-      yield* stack.destroy();
+      // Clean slate in case a previous run died mid-flight. Set
+      // AOSS_KEEP_COLLECTION=1 to skip it and converge onto the surviving
+      // resources instead (collections take minutes to provision, so reusing
+      // one keeps the re-run inside the runner's wall clock).
+      if (!process.env.AOSS_KEEP_COLLECTION) {
+        yield* stack.destroy();
+      }
 
       const { fn } = yield* stack.deploy(
         Effect.gen(function* () {

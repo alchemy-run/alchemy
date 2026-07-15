@@ -163,7 +163,17 @@ describe.sequential("Polly Bindings", () => {
   });
 
   describe("StartSpeechSynthesisStream", () => {
-    test.provider(
+    // skipIf-gated: the distilled HTTP transport cannot send an input event
+    // stream (bidirectional streaming). A direct probe of
+    // `polly.startSpeechSynthesisStream` with a finite
+    // `Stream.make({ TextEvent }, { CloseStreamEvent })` ActionStream never
+    // receives response headers — it hangs until `Effect.timeout` fires
+    // (`TimeoutError` after 20s locally; the Lambda route hangs to the
+    // vitest timeout). Same transport gap leaves transcribe-streaming and
+    // lex StartConversation unbound fleet-wide. Re-enable with
+    // AWS_TEST_POLLY_STREAM=1 once distilled core supports bidirectional
+    // event-stream request bodies.
+    test.provider.skipIf(!process.env.AWS_TEST_POLLY_STREAM)(
       "streams text events in and collects audio events out",
       (_stack) =>
         Effect.gen(function* () {

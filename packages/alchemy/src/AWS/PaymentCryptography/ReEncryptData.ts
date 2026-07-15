@@ -12,20 +12,23 @@ export interface ReEncryptDataRequest extends Omit<
  * Runtime binding for `payment-cryptography:ReEncryptData` — decrypts
  * ciphertext under the incoming {@link Key} and re-encrypts it under the
  * outgoing {@link Key} entirely inside the service; the plaintext never
- * leaves AWS Payment Cryptography. Provide `ReEncryptDataHttp` on the
- * Function to satisfy this service.
+ * leaves AWS Payment Cryptography. At least one side must be a DUKPT Base
+ * Derivation Key or a dynamic (TR-31 wrapped) key — the service rejects
+ * plain symmetric-to-symmetric re-encryption with
+ * `ValidationException: KeyUsages not allowed for this operation`. Provide
+ * `ReEncryptDataHttp` on the Function to satisfy this service.
  * @binding
  * @section Re-Encrypting Data
- * @example Migrate ciphertext from one key to another
+ * @example Translate DUKPT terminal ciphertext to a working key
  * ```typescript
- * // init
- * const reEncrypt = yield* PaymentCryptography.ReEncryptData(oldKey, newKey);
+ * // init — incoming BDK, outgoing symmetric data key
+ * const reEncrypt = yield* PaymentCryptography.ReEncryptData(bdk, workingKey);
  *
  * // runtime
- * const migrated = yield* reEncrypt({
- *   CipherText: cipherTextHex,
+ * const translated = yield* reEncrypt({
+ *   CipherText: dukptCipherTextHex,
  *   IncomingEncryptionAttributes: {
- *     Symmetric: { Mode: "CBC", InitializationVector: iv },
+ *     Dukpt: { KeySerialNumber: ksn, Mode: "CBC" },
  *   },
  *   OutgoingEncryptionAttributes: {
  *     Symmetric: { Mode: "CBC", InitializationVector: iv },

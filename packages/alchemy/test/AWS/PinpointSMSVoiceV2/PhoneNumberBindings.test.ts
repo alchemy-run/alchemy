@@ -125,11 +125,18 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
           Effect.gen(function* () {
             const response = (yield* post("/send-voice").pipe(
               Effect.flatMap((r) => r.json),
-            )) as { ok: boolean; messageId?: string; tag?: string };
+            )) as {
+              ok: boolean;
+              messageId?: string;
+              tag?: string;
+              message?: string;
+            };
 
             // The SIMULATOR number is SMS-only; a typed capability
             // rejection still proves the binding + IAM grant.
-            expect(response.tag).not.toBe("AccessDeniedException");
+            expect(response.tag, JSON.stringify(response)).not.toBe(
+              "AccessDeniedException",
+            );
             if (response.ok) {
               expect(response.messageId).toBeTruthy();
             }
@@ -145,9 +152,16 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
           Effect.gen(function* () {
             const response = (yield* post("/send-media").pipe(
               Effect.flatMap((r) => r.json),
-            )) as { ok: boolean; messageId?: string; tag?: string };
+            )) as {
+              ok: boolean;
+              messageId?: string;
+              tag?: string;
+              message?: string;
+            };
 
-            expect(response.tag).not.toBe("AccessDeniedException");
+            expect(response.tag, JSON.stringify(response)).not.toBe(
+              "AccessDeniedException",
+            );
             if (response.ok) {
               expect(response.messageId).toBeTruthy();
             }

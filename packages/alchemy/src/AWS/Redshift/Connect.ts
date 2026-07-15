@@ -1,4 +1,5 @@
 import type * as redshift from "@distilled.cloud/aws/redshift";
+import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -18,7 +19,7 @@ import type { Cluster } from "./Cluster.ts";
 export interface ClusterConnectionInfo extends SqlConnectionInfo {
   /**
    * When the temporary database credentials expire (15-60 minutes from
-   * minting, per `durationSeconds`).
+   * minting, per {@link ConnectOptions.duration}).
    */
   expiration: Date | undefined;
 }
@@ -50,10 +51,12 @@ export interface ConnectOptions {
    */
   dbGroups?: string[];
   /**
-   * How long the temporary credentials remain valid, in seconds (900-3600).
-   * @default 900
+   * How long the temporary credentials remain valid, e.g. `"15 minutes"` or
+   * `Duration.minutes(30)` (a bare number is milliseconds). Rounded to whole
+   * seconds on the wire; must land between 900 and 3600 seconds.
+   * @default 900 seconds
    */
-  durationSeconds?: number;
+  duration?: Duration.Input;
   /**
    * Whether to require TLS on the connection.
    * @default true
