@@ -50,8 +50,8 @@ test.provider(
         }),
       );
       if (Result.isSuccess(start)) {
-        console.log("startQuery OK:", JSON.stringify(start.value));
-        const QueryId = start.value.QueryId;
+        console.log("startQuery OK:", JSON.stringify(start.success));
+        const QueryId = start.success.QueryId;
         const status = yield* Effect.result(
           im.getQueryStatus({ MonitorName: NAME, QueryId }).pipe(
             Effect.repeat({
@@ -65,17 +65,17 @@ test.provider(
         console.log(
           "getQueryStatus:",
           Result.isSuccess(status)
-            ? JSON.stringify(status.value)
+            ? JSON.stringify(status.success)
             : `ERROR ${JSON.stringify(status.failure)}`,
         );
-        if (Result.isSuccess(status) && status.value.Status === "SUCCEEDED") {
+        if (Result.isSuccess(status) && status.success.Status === "SUCCEEDED") {
           const results = yield* Effect.result(
             im.getQueryResults({ MonitorName: NAME, QueryId }),
           );
           console.log(
             "getQueryResults:",
             Result.isSuccess(results)
-              ? `fields=${results.value.Fields.length} rows=${results.value.Data.length}`
+              ? `fields=${results.success.Fields.length} rows=${results.success.Data.length}`
               : `ERROR ${JSON.stringify(results.failure)}`,
           );
         }

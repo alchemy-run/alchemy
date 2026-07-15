@@ -245,10 +245,19 @@ describe.sequential("GreengrassV2 Bindings", () => {
       "probes against a missing core device return typed errors (never AccessDenied)",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/core-device-probes")) as Record<
-            string,
-            Probe
-          >;
+          // Freshly attached IAM policy statements are eventually consistent —
+          // poll (bounded) until the grants have propagated before asserting
+          // the steady-state invariant below.
+          const response = (yield* getJson("/core-device-probes").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (r): boolean =>
+                Object.values(r as Record<string, Probe>).every(
+                  (probe) => probe.tag !== "AccessDeniedException",
+                ),
+              times: 10,
+            }),
+          )) as Record<string, Probe>;
           // Point reads/writes on a missing core device are typed not-found.
           expect(response.getCoreDevice!.tag).toBe("ResourceNotFoundException");
           expect(response.deleteCoreDevice!.tag).toBe(

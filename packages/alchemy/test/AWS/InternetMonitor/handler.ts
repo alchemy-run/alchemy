@@ -3,6 +3,7 @@ import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -117,25 +118,55 @@ export default InternetMonitorBindingsFunction.make(
         // Full query-interface loop: start a MEASUREMENTS query over the
         // trailing hour, poll (bounded) until terminal, read results when
         // it succeeds, and probe StopQuery's grant on the finished query.
+        // Each step reports its typed failure so a single grant gap is
+        // diagnosable from the JSON instead of a generic 500.
         if (request.method === "GET" && pathname === "/query") {
           const now = yield* Effect.sync(() => Date.now());
-          const { QueryId } = yield* bound.startQuery({
-            StartTime: new Date(now - 3_600_000),
-            EndTime: new Date(now),
-            QueryType: "MEASUREMENTS",
-          });
-          const { Status } = yield* bound.getQueryStatus({ QueryId }).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("2 seconds"),
-              until: (r): boolean =>
-                r.Status !== "QUEUED" && r.Status !== "RUNNING",
-              times: 20,
+          const started = yield* Effect.result(
+            bound.startQuery({
+              StartTime: new Date(now - 3_600_000),
+              EndTime: new Date(now),
+              QueryType: "MEASUREMENTS",
             }),
           );
-          const results =
+          if (Result.isFailure(started)) {
+            return yield* HttpServerResponse.json({
+              step: "startQuery",
+              tag: started.failure._tag,
+              error: String(started.failure),
+            });
+          }
+          const QueryId = started.success.QueryId;
+          const polled = yield* Effect.result(
+            bound.getQueryStatus({ QueryId }).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (r): boolean =>
+                  r.Status !== "QUEUED" && r.Status !== "RUNNING",
+                times: 20,
+              }),
+            ),
+          );
+          if (Result.isFailure(polled)) {
+            return yield* HttpServerResponse.json({
+              step: "getQueryStatus",
+              tag: polled.failure._tag,
+              error: String(polled.failure),
+            });
+          }
+          const Status = polled.success.Status;
+          const results = yield* Effect.result(
             Status === "SUCCEEDED"
-              ? yield* bound.getQueryResults({ QueryId })
-              : { Fields: [], Data: [] };
+              ? bound.getQueryResults({ QueryId })
+              : Effect.succeed({ Fields: [], Data: [] }),
+          );
+          if (Result.isFailure(results)) {
+            return yield* HttpServerResponse.json({
+              step: "getQueryResults",
+              tag: results.failure._tag,
+              error: String(results.failure),
+            });
+          }
           // Stopping an already-terminal query may be rejected — either the
           // success or the typed rejection proves internetmonitor:StopQuery.
           const stopTag = yield* bound.stopQuery({ QueryId }).pipe(
@@ -143,10 +174,11 @@ export default InternetMonitorBindingsFunction.make(
             Effect.catch((e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({
+            step: "ok",
             queryId: QueryId,
             status: Status,
-            fields: (results.Fields ?? []).length,
-            rows: (results.Data ?? []).length,
+            fields: (results.success.Fields ?? []).length,
+            rows: (results.success.Data ?? []).length,
             stopTag,
           });
         }

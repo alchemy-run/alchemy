@@ -53,7 +53,7 @@ export default HealthLakeTestFunction.make(
 
     const key = yield* KMS.Key("HealthLakeBindingsKey", {
       description: "healthlake bindings fixture output encryption key",
-      deletionWindowInDays: "7 days",
+      deletionWindow: "7 days",
     });
 
     // The data-access role HealthLake assumes to read the import NDJSON and

@@ -51,7 +51,7 @@ test.provider(
           const bucket = yield* Bucket("Content", { forceDestroy: true });
           const key = yield* Key("ContentKey", {
             description: "alchemy appintegrations test key",
-            deletionWindowInDays: "7 days",
+            deletionWindow: "7 days",
           });
           const integration = yield* DataIntegration("ContentIntegration", {
             kmsKey: key.keyArn,
@@ -83,7 +83,7 @@ test.provider(
           const bucket = yield* Bucket("Content", { forceDestroy: true });
           const key = yield* Key("ContentKey", {
             description: "alchemy appintegrations test key",
-            deletionWindowInDays: "7 days",
+            deletionWindow: "7 days",
           });
           const integration = yield* DataIntegration("ContentIntegration", {
             kmsKey: key.keyArn,

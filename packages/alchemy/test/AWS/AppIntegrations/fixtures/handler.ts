@@ -30,7 +30,7 @@ export default AppIntegrationsTestFunction.make(
     const bucket = yield* Bucket("BindingsContent", { forceDestroy: true });
     const key = yield* Key("BindingsKey", {
       description: "alchemy appintegrations bindings test key",
-      deletionWindowInDays: "7 days",
+      deletionWindow: "7 days",
     });
     const dataIntegration = yield* AppIntegrations.DataIntegration(
       "BindingsData",

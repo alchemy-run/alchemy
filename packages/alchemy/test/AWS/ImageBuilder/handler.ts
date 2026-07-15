@@ -204,7 +204,12 @@ export default ImageBuilderTestFunction.make(
               imageBuildVersionArn,
             })),
             Effect.catchTag(
-              ["ResourceInUseException", "InvalidRequestException"],
+              [
+                "ResourceInUseException",
+                "InvalidRequestException",
+                // The build version is not visible immediately after start.
+                "ResourceNotFoundException",
+              ],
               (error) => Effect.succeed({ reason: error._tag }),
             ),
           );
@@ -328,6 +333,10 @@ export default ImageBuilderTestFunction.make(
             imageBuildVersionArn: arn,
           }).pipe(
             Effect.map(() => ({ deleted: true as const })),
+            // Already gone — deletion is idempotent.
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({ deleted: true as const }),
+            ),
             Effect.catchTag(
               ["InvalidRequestException", "ResourceDependencyException"],
               (error) =>

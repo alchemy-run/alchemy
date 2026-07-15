@@ -1,5 +1,5 @@
 import * as kms from "@distilled.cloud/aws/kms";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -15,6 +15,7 @@ import {
 } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 
 export type KeyId = string;
 export type KeyArn = `arn:aws:kms:${RegionID}:${AccountID}:key/${KeyId}`;
@@ -63,7 +64,7 @@ export interface KeyProps {
    * `Duration.Input` (e.g. `"90 days"`, `Duration.days(90)`; a bare number
    * is milliseconds); the wire unit is whole days.
    */
-  rotationPeriodInDays?: Duration.Input;
+  rotationPeriod?: Duration.Input;
   /**
    * Whether to create a multi-region primary key.
    * @default false
@@ -76,7 +77,7 @@ export interface KeyProps {
    * whole days.
    * @default 30 days
    */
-  deletionWindowInDays?: Duration.Input;
+  deletionWindow?: Duration.Input;
   /**
    * User-defined tags to apply to the key.
    */
@@ -116,7 +117,7 @@ export interface Key extends Resource<
  * const key = yield* KMS.Key("AppKey", {
  *   description: "Application encryption key",
  *   enableKeyRotation: true,
- *   deletionWindowInDays: "7 days",
+ *   deletionWindow: "7 days",
  * });
  * ```
  *
@@ -172,10 +173,6 @@ const defaultKeyUsage = "ENCRYPT_DECRYPT" as const;
 const defaultKeySpec = "SYMMETRIC_DEFAULT" as const;
 const defaultDeletionWindowInDays = 30;
 
-/** Wire unit for KMS windows/periods is whole days. */
-const toWireDays = (input: Duration.Input | undefined): number | undefined =>
-  input !== undefined ? Math.round(Duration.toDays(input)) : undefined;
-
 export const KeyProvider = () =>
   Provider.succeed(Key, {
     stables: ["keyId", "keyArn"],
@@ -217,7 +214,7 @@ export const KeyProvider = () =>
         keyId: output.keyId,
         deletionWindowInDays:
           output.deletionWindowInDays ??
-          toWireDays(olds.deletionWindowInDays) ??
+          toWireDays(olds.deletionWindow) ??
           defaultDeletionWindowInDays,
       });
     }),
@@ -241,8 +238,8 @@ export const KeyProvider = () =>
       const enableKeyRotation = news.enableKeyRotation ?? false;
       const multiRegion = news.multiRegion ?? false;
       const deletionWindowInDays =
-        toWireDays(news.deletionWindowInDays) ?? defaultDeletionWindowInDays;
-      const rotationPeriodInDays = toWireDays(news.rotationPeriodInDays);
+        toWireDays(news.deletionWindow) ?? defaultDeletionWindowInDays;
+      const rotationPeriodInDays = toWireDays(news.rotationPeriod);
       const desiredPolicy =
         news.policy === undefined
           ? undefined

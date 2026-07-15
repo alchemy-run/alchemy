@@ -29,19 +29,19 @@ export type KeyLike = Key | AliasName;
  * @internal
  */
 export const keyPolicyStatement = (
-  action: `kms:${string}`,
+  action: `kms:${string}` | readonly `kms:${string}`[],
   key: KeyLike,
 ): Input<PolicyStatement> =>
   typeof key === "string"
     ? {
         Effect: "Allow",
-        Action: [action],
+        Action: typeof action === "string" ? [action] : [...action],
         Resource: ["*"],
         Condition: { StringEquals: { "kms:RequestAlias": key } },
       }
     : {
         Effect: "Allow",
-        Action: [action],
+        Action: typeof action === "string" ? [action] : [...action],
         Resource: [key.keyArn],
       };
 

@@ -177,12 +177,18 @@ describe.sequential("InternetMonitor Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* getJson("/query")) as {
-            queryId: string;
-            status: string;
-            fields: number;
-            rows: number;
-            stopTag: string;
+            step: string;
+            tag?: string;
+            error?: string;
+            queryId?: string;
+            status?: string;
+            fields?: number;
+            rows?: number;
+            stopTag?: string;
           };
+          // On a step failure the route reports { step, tag, error } — the
+          // assertion message then carries the exact typed failure.
+          expect(response).toMatchObject({ step: "ok" });
           expect(response.queryId).toBeTruthy();
           // An empty monitor's query still runs to a terminal state.
           expect(["SUCCEEDED", "FAILED", "CANCELED"]).toContain(

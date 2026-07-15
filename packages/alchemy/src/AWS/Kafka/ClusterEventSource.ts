@@ -1,4 +1,5 @@
 import type * as Lambda from "@distilled.cloud/aws/lambda";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
@@ -27,11 +28,12 @@ export interface KafkaEventSourceProps {
    */
   batchSize?: number;
   /**
-   * The maximum amount of time, in seconds, that Lambda spends gathering
-   * records before invoking the function.
+   * The maximum time Lambda spends gathering records before invoking the
+   * function, e.g. `"5 seconds"` or `Duration.seconds(5)`. Rounded to whole
+   * seconds on the wire.
    * @default 500ms (0)
    */
-  maximumBatchingWindowInSeconds?: number;
+  maximumBatchingWindow?: Duration.Input;
   /**
    * Whether the event source mapping actively polls.
    * @default true
