@@ -7,6 +7,14 @@ import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+const OUT = "/tmp/rg-probe.json";
+const results: Record<string, unknown> = {};
+const record = (key: string, value: unknown) =>
+  Effect.sync(() => {
+    results[key] = value;
+    require("node:fs").writeFileSync(OUT, JSON.stringify(results, null, 2));
+  });
+
 const cleanup = (name: string) =>
   resourcegroups
     .deleteGroup({ Group: name })
@@ -32,8 +40,9 @@ describe("RG probe", () => {
             ],
           }),
         );
-        yield* Effect.log(
-          `variant A: ${Result.isSuccess(a) ? "OK" : JSON.stringify(a.failure, null, 2)}`,
+        yield* record(
+          "variantA",
+          Result.isSuccess(a) ? { ok: a.success } : { err: a.failure },
         );
 
         if (Result.isSuccess(a)) {
@@ -45,8 +54,9 @@ describe("RG probe", () => {
               ],
             }),
           );
-          yield* Effect.log(
-            `groupResources: ${Result.isSuccess(gr) ? JSON.stringify(gr.success) : JSON.stringify(gr.failure, null, 2)}`,
+          yield* record(
+            "groupResources",
+            Result.isSuccess(gr) ? { ok: gr.success } : { err: gr.failure },
           );
         }
         yield* cleanup("alchemy-rg-probe-app");
@@ -55,8 +65,11 @@ describe("RG probe", () => {
         const settings = yield* Effect.result(
           resourcegroups.getAccountSettings({}),
         );
-        yield* Effect.log(
-          `accountSettings: ${Result.isSuccess(settings) ? JSON.stringify(settings.success) : JSON.stringify(settings.failure)}`,
+        yield* record(
+          "accountSettings",
+          Result.isSuccess(settings)
+            ? { ok: settings.success }
+            : { err: settings.failure },
         );
       }),
     { timeout: 60_000 },

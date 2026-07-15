@@ -106,15 +106,20 @@ test.provider(
       const policy = yield* rum.getResourcePolicy({ Name: MONITOR_NAME });
       expect(policy.PolicyDocument).toContain("rum:PutRumEvents");
 
-      // Update: modify SessionCount in place (dimension keys), add
-      // JsErrorCount (batch create). The policy document is unchanged — its
-      // revision must be stable (no-op skipped the put).
+      // Update: modify SessionCount in place (dimension keys — the pattern
+      // must also filter on the dimension's event field), add JsErrorCount
+      // (batch create). The policy document is unchanged — its revision must
+      // be stable (no-op skipped the put).
+      const sessionCountByBrowserPattern = JSON.stringify({
+        event_type: ["com.amazon.rum.session_start_event"],
+        metadata: { browserName: ["Chrome", "Firefox", "Safari"] },
+      });
       const updated = yield* stack.deploy(
         program(
           [
             {
               name: "SessionCount",
-              eventPattern: sessionCountPattern,
+              eventPattern: sessionCountByBrowserPattern,
               dimensionKeys: { "metadata.browserName": "BrowserName" },
             },
             { name: "JsErrorCount", eventPattern: jsErrorCountPattern },

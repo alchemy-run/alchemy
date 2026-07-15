@@ -288,4 +288,179 @@ describe("Route53Domains Bindings", () => {
       { timeout: 120_000 },
     );
   });
+
+  describe("CheckDomainTransferability", () => {
+    test.provider(
+      "returns a transferability verdict from inside the Lambda",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/transferability`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            transferable: string | undefined;
+          };
+
+          expect(response.transferable).toBeDefined();
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetDomainSuggestions", () => {
+    test.provider(
+      "returns suggestions from inside the Lambda",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/suggestions`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListPrices", () => {
+    test.provider(
+      "returns .com pricing from inside the Lambda",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/prices`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            count: number;
+            registrationPrice: number | undefined;
+          };
+
+          expect(response.count).toBeGreaterThan(0);
+          expect(response.registrationPrice).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListOperations", () => {
+    test.provider(
+      "lists the account's registration operations from inside the Lambda",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/operations`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetOperationDetail", () => {
+    test.provider(
+      "reaches the API from inside the Lambda and gets a typed error for an unknown operation",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/operation-detail`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            ok: boolean;
+            errorTag?: string;
+          };
+
+          expect(response.ok).toBe(false);
+          expect(response.errorTag).toBe("InvalidInput");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("RetrieveDomainAuthCode", () => {
+    test.provider(
+      "reaches the API from inside the Lambda and gets a typed domain error",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/auth-code`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            ok: boolean;
+            errorTag?: string;
+          };
+
+          // Same stale-lib caveat as GetDomainDetail: the strict
+          // DomainNotFound assertion is the out-of-band probe above.
+          expect(response.ok).toBe(false);
+          expect(["DomainNotFound", "InvalidInput"]).toContain(
+            response.errorTag,
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("UpdateDomainNameservers", () => {
+    test.provider(
+      "reaches the API from inside the Lambda and gets a typed domain error",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/nameservers`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            ok: boolean;
+            errorTag?: string;
+          };
+
+          expect(response.ok).toBe(false);
+          expect(["DomainNotFound", "InvalidInput"]).toContain(
+            response.errorTag,
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("RenewDomain", () => {
+    test.provider(
+      "reaches the API from inside the Lambda and gets a typed domain error",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/renew`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            ok: boolean;
+            errorTag?: string;
+          };
+
+          // example.com is not in the account — the renewal is rejected
+          // before any billing can occur.
+          expect(response.ok).toBe(false);
+          expect(["DomainNotFound", "InvalidInput"]).toContain(
+            response.errorTag,
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("RegisterDomain", () => {
+    test.provider(
+      "reaches the API from inside the Lambda and is rejected for an unsupported TLD",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/register`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            ok: boolean;
+            errorTag?: string;
+          };
+
+          // The deliberately invalid TLD guarantees rejection before any
+          // registration or billing — this suite NEVER registers a domain.
+          expect(response.ok).toBe(false);
+          expect(["UnsupportedTLD", "InvalidInput"]).toContain(
+            response.errorTag,
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
 });
