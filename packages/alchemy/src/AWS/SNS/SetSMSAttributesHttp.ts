@@ -8,6 +8,11 @@ export const SetSMSAttributesHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.SetSMSAttributes",
     operation: sns.setSMSAttributes,
-    actions: ["sns:SetSMSAttributes"],
+    // Spend-limit updates fan out to AWS End User Messaging.
+    actions: [
+      "sns:SetSMSAttributes",
+      "sms-voice:DescribeSpendLimits",
+      "sms-voice:SetTextMessageSpendLimitOverride",
+    ],
   }),
 );

@@ -9,5 +9,7 @@ export const StopDiscovererHttp = Layer.effect(
     tag: "AWS.Schemas.StopDiscoverer",
     operation: schemas.stopDiscoverer,
     actions: ["schemas:StopDiscoverer"],
+    // StopDiscoverer disables the discoverer's managed EventBridge rule.
+    ruleActions: ["events:DisableRule"],
   }),
 );

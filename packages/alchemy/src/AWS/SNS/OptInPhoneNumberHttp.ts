@@ -8,6 +8,8 @@ export const OptInPhoneNumberHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.OptInPhoneNumber",
     operation: sns.optInPhoneNumber,
-    actions: ["sns:OptInPhoneNumber"],
+    // Opting a number back in deletes it from the End User Messaging
+    // opted-out list (probe-verified).
+    actions: ["sns:OptInPhoneNumber", "sms-voice:DeleteOptedOutNumber"],
   }),
 );

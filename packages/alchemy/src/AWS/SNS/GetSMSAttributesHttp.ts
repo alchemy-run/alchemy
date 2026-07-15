@@ -8,6 +8,8 @@ export const GetSMSAttributesHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.GetSMSAttributes",
     operation: sns.getSMSAttributes,
-    actions: ["sns:GetSMSAttributes"],
+    // SNS SMS preferences are backed by AWS End User Messaging — the read
+    // fans out to `sms-voice:DescribeSpendLimits` (probe-verified).
+    actions: ["sns:GetSMSAttributes", "sms-voice:DescribeSpendLimits"],
   }),
 );

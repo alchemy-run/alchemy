@@ -60,8 +60,9 @@ export default SignerTestFunction.make(
       forceDestroy: true,
     });
     const dst = yield* S3.Bucket("SignerDst", { forceDestroy: true });
-    const srcName = yield* src.bucketName;
-    const dstName = yield* dst.bucketName;
+    // Outputs yield a DEFERRED effect — resolve again per invocation below.
+    const SrcName = yield* src.bucketName;
+    const DstName = yield* dst.bucketName;
 
     // Event source: subscribe the host to signing-job status changes. The
     // deploy proves the EventBridge rule + invoke permission wiring.
@@ -112,10 +113,20 @@ export default SignerTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/platforms") {
-          const { platforms } = yield* listSigningPlatforms();
-          return yield* HttpServerResponse.json({
-            ids: (platforms ?? []).map((p) => p.platformId),
-          });
+          // The catalog paginates with a small page size — walk it (bounded).
+          const ids: (string | undefined)[] = [];
+          let nextToken: string | undefined;
+          let pages = 0;
+          do {
+            const page = yield* listSigningPlatforms({
+              maxResults: 25,
+              nextToken,
+            });
+            ids.push(...(page.platforms ?? []).map((p) => p.platformId));
+            nextToken = page.nextToken;
+            pages += 1;
+          } while (nextToken !== undefined && pages < 10);
+          return yield* HttpServerResponse.json({ ids });
         }
 
         if (request.method === "GET" && pathname === "/platform") {
@@ -136,20 +147,33 @@ export default SignerTestFunction.make(
             Body: CODE_ZIP,
             ContentType: "application/zip",
           });
+          if (uploaded.VersionId === undefined) {
+            // Bucket versioning still propagating — the test re-polls.
+            return yield* HttpServerResponse.json({
+              ok: false,
+              tag: "NoVersionId",
+            });
+          }
           const started = yield* startSigningJob({
             source: {
               s3: {
-                bucketName: srcName,
+                bucketName: yield* SrcName,
                 key: SOURCE_KEY,
                 version: uploaded.VersionId!,
               },
             },
-            destination: { s3: { bucketName: dstName, prefix: "signed/" } },
+            destination: {
+              s3: { bucketName: yield* DstName, prefix: "signed/" },
+            },
           }).pipe(Effect.result);
           return yield* HttpServerResponse.json(
             started._tag === "Success"
               ? { ok: true, jobId: started.success.jobId }
-              : { ok: false, tag: started.failure._tag },
+              : {
+                  ok: false,
+                  tag: started.failure._tag,
+                  message: started.failure.message,
+                },
           );
         }
 

@@ -16,13 +16,17 @@ import { Permission as LambdaPermission } from "./Permission.ts";
 /**
  * Narrow an arbitrary Lambda invocation payload to a Secrets Manager
  * rotation event (`createSecret`/`setSecret`/`testSecret`/`finishSecret`).
+ *
+ * `ClientRequestToken` is deliberately NOT required: the validation
+ * invocation Secrets Manager performs when a rotation schedule is
+ * configured with `RotateImmediately: false` can arrive without one, and an
+ * unmatched event fails the whole invocation ("No event handler found"),
+ * which Secrets Manager records as a failed rotation attempt.
  */
 export const isSecretRotationEvent = (
   event: any,
 ): event is SecretRotationEvent =>
-  typeof event?.Step === "string" &&
-  typeof event?.SecretId === "string" &&
-  typeof event?.ClientRequestToken === "string";
+  typeof event?.Step === "string" && typeof event?.SecretId === "string";
 
 /**
  * Lambda runtime implementation for

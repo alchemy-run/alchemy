@@ -226,11 +226,11 @@ export interface Canary extends Resource<
  *   runtimeVersion: "syn-nodejs-puppeteer-16.1",
  *   artifactS3Location: "s3://my-artifacts/checkout",
  *   runConfig: {
- *     timeoutInSeconds: "60 seconds",
+ *     timeout: "60 seconds",
  *     environmentVariables: { TARGET_URL: "https://example.com" },
  *   },
- *   successRetentionPeriodInDays: "7 days",
- *   failureRetentionPeriodInDays: "31 days",
+ *   successRetentionPeriod: "7 days",
+ *   failureRetentionPeriod: "31 days",
  * });
  * ```
  *
@@ -340,40 +340,6 @@ const filterTags = (
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
-
-/**
- * Normalize a `Duration.Input` that may have round-tripped through state
- * JSON (which flattens a `Duration` to its `toJSON` shape
- * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
- * `Duration.Input`) back into an input `Duration.toSeconds` accepts.
- */
-const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional duration input to whole wire seconds. */
-const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toSeconds(normalizeDurationInput(input)));
-
-/** Convert an optional duration input to whole wire days. */
-const toWireDays = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toDays(normalizeDurationInput(input)));
 
 export const CanaryProvider = () =>
   Provider.effect(
@@ -658,23 +624,21 @@ export const CanaryProvider = () =>
           schedule: {
             expression:
               props.schedule?.expression ?? DEFAULT_SCHEDULE_EXPRESSION,
-            durationInSeconds:
-              toWireSeconds(props.schedule?.durationInSeconds) ?? 0,
+            durationInSeconds: toWireSeconds(props.schedule?.duration) ?? 0,
           },
           runConfig:
             props.runConfig === undefined
               ? {}
               : {
                   ...props.runConfig,
-                  timeoutInSeconds: toWireSeconds(
-                    props.runConfig.timeoutInSeconds,
-                  ),
+                  timeout: undefined,
+                  timeoutInSeconds: toWireSeconds(props.runConfig.timeout),
                 },
           successRetentionPeriodInDays: toWireDays(
-            props.successRetentionPeriodInDays,
+            props.successRetentionPeriod,
           ),
           failureRetentionPeriodInDays: toWireDays(
-            props.failureRetentionPeriodInDays,
+            props.failureRetentionPeriod,
           ),
           vpcConfig: props.vpcConfig,
           provisionedResourceCleanup:
@@ -687,7 +651,7 @@ export const CanaryProvider = () =>
         props.runConfig === undefined
           ? undefined
           : {
-              TimeoutInSeconds: toWireSeconds(props.runConfig.timeoutInSeconds),
+              TimeoutInSeconds: toWireSeconds(props.runConfig.timeout),
               MemoryInMB: props.runConfig.memoryInMB,
               ActiveTracing: props.runConfig.activeTracing,
               EnvironmentVariables: props.runConfig.environmentVariables,
@@ -697,7 +661,7 @@ export const CanaryProvider = () =>
         props: CanaryProps,
       ): synthetics.CanaryScheduleInput => ({
         Expression: props.schedule?.expression ?? DEFAULT_SCHEDULE_EXPRESSION,
-        DurationInSeconds: toWireSeconds(props.schedule?.durationInSeconds),
+        DurationInSeconds: toWireSeconds(props.schedule?.duration),
       });
 
       const toVpcConfigInput = (
@@ -844,10 +808,10 @@ export const CanaryProvider = () =>
                 RunConfig: toRunConfigInput(news),
                 RuntimeVersion: runtimeVersion,
                 SuccessRetentionPeriodInDays: toWireDays(
-                  news.successRetentionPeriodInDays,
+                  news.successRetentionPeriod,
                 ),
                 FailureRetentionPeriodInDays: toWireDays(
-                  news.failureRetentionPeriodInDays,
+                  news.failureRetentionPeriod,
                 ),
                 VpcConfig: toVpcConfigInput(news),
                 ProvisionedResourceCleanup:
@@ -905,10 +869,10 @@ export const CanaryProvider = () =>
                   Schedule: toScheduleInput(news),
                   RunConfig: toRunConfigInput(news),
                   SuccessRetentionPeriodInDays: toWireDays(
-                    news.successRetentionPeriodInDays,
+                    news.successRetentionPeriod,
                   ),
                   FailureRetentionPeriodInDays: toWireDays(
-                    news.failureRetentionPeriodInDays,
+                    news.failureRetentionPeriod,
                   ),
                   VpcConfig: toVpcConfigInput(news),
                   ArtifactS3Location: artifactS3Location,

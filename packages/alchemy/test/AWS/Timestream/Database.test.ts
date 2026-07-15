@@ -49,8 +49,8 @@ describe("AWS.Timestream.Database", () => {
             const table = yield* Table("Cpu", {
               databaseName: database.databaseName,
               retentionProperties: {
-                MemoryStoreRetentionPeriodInHours: 6,
-                MagneticStoreRetentionPeriodInDays: 30,
+                memoryStoreRetention: "6 hours",
+                magneticStoreRetention: "30 days",
               },
             });
             return { database, table };

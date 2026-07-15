@@ -8,6 +8,6 @@ export const ListOriginationNumbersHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.ListOriginationNumbers",
     operation: sns.listOriginationNumbers,
-    actions: ["sns:ListOriginationNumbers"],
+    actions: ["sns:ListOriginationNumbers", "sms-voice:DescribePhoneNumbers"],
   }),
 );

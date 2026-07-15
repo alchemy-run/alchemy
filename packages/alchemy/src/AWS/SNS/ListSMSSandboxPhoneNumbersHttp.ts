@@ -8,6 +8,9 @@ export const ListSMSSandboxPhoneNumbersHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.ListSMSSandboxPhoneNumbers",
     operation: sns.listSMSSandboxPhoneNumbers,
-    actions: ["sns:ListSMSSandboxPhoneNumbers"],
+    actions: [
+      "sns:ListSMSSandboxPhoneNumbers",
+      "sms-voice:DescribeVerifiedDestinationNumbers",
+    ],
   }),
 );

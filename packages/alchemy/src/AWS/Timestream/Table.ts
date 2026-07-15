@@ -1,4 +1,5 @@
 import * as TSW from "@distilled.cloud/aws/timestream-write";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -12,6 +13,7 @@ import {
   hasAlchemyTags,
   type Tags,
 } from "../../Tags.ts";
+import { toWireDays, toWireHours } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -21,6 +23,20 @@ export type TableArn =
   `arn:aws:timestream:${RegionID}:${AccountID}:database/${string}/table/${string}`;
 
 export type TableStatus = "ACTIVE" | "DELETING" | "RESTORING";
+
+export interface TableRetentionProperties {
+  /**
+   * How long data stays in the memory store before moving to the magnetic
+   * store. Rounded to whole hours on the wire
+   * (`MemoryStoreRetentionPeriodInHours`).
+   */
+  memoryStoreRetention: Duration.Input;
+  /**
+   * How long data stays in the magnetic store before deletion. Rounded to
+   * whole days on the wire (`MagneticStoreRetentionPeriodInDays`).
+   */
+  magneticStoreRetention: Duration.Input;
+}
 
 export interface TableProps {
   /**
@@ -36,9 +52,9 @@ export interface TableProps {
   tableName?: string;
   /**
    * Retention configuration for the table's memory and magnetic stores.
-   * @default { MemoryStoreRetentionPeriodInHours: 6, MagneticStoreRetentionPeriodInDays: 73000 }
+   * @default { memoryStoreRetention: "6 hours", magneticStoreRetention: "73000 days" }
    */
-  retentionProperties?: TSW.RetentionProperties;
+  retentionProperties?: TableRetentionProperties;
   /**
    * Magnetic store write configuration, including whether late-arriving data
    * is written to the magnetic store and where rejected records are logged.
@@ -122,8 +138,8 @@ export interface Table extends Resource<
  * const table = yield* Timestream.Table("Cpu", {
  *   databaseName: database.databaseName,
  *   retentionProperties: {
- *     MemoryStoreRetentionPeriodInHours: 24,
- *     MagneticStoreRetentionPeriodInDays: 365,
+ *     memoryStoreRetention: "24 hours",
+ *     magneticStoreRetention: "365 days",
  *   },
  * });
  * ```
@@ -171,6 +187,24 @@ const toTagRecord = (
   tags: Array<{ Key: string; Value: string }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+
+/**
+ * Convert the alchemy-shaped {@link TableRetentionProperties} (Duration
+ * inputs) to Timestream's wire shape (whole hours / whole days).
+ */
+const toWireRetention = (
+  retention: TableRetentionProperties | undefined,
+): TSW.RetentionProperties | undefined =>
+  retention === undefined
+    ? undefined
+    : {
+        MemoryStoreRetentionPeriodInHours: toWireHours(
+          retention.memoryStoreRetention,
+        )!,
+        MagneticStoreRetentionPeriodInDays: toWireDays(
+          retention.magneticStoreRetention,
+        )!,
+      };
 
 const readTable = Effect.fn(function* (
   databaseName: string,
@@ -282,6 +316,7 @@ export const TableProvider = () =>
             `arn:aws:timestream:${region}:${accountId}:database/${databaseName}/table/${tableName}` as TableArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          const desiredRetention = toWireRetention(news.retentionProperties);
 
           // Observe.
           let state = yield* readTable(databaseName, tableName);
@@ -292,7 +327,7 @@ export const TableProvider = () =>
               TSW.createTable({
                 DatabaseName: databaseName,
                 TableName: tableName,
-                RetentionProperties: news.retentionProperties,
+                RetentionProperties: desiredRetention,
                 MagneticStoreWriteProperties: news.magneticStoreWriteProperties,
                 Schema: news.schema,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
@@ -310,18 +345,24 @@ export const TableProvider = () =>
             }
           }
 
-          // Sync retention / magnetic-store-write config. UpdateTable is a
-          // partial upsert — send it whenever the user pinned either aspect;
-          // Timestream is a no-op when the values already match.
+          // Sync retention / magnetic-store-write config — diff the desired
+          // wire values against observed cloud state and skip the API call
+          // entirely on a no-op.
+          const retentionDrifted =
+            desiredRetention !== undefined &&
+            (state.retentionProperties?.MemoryStoreRetentionPeriodInHours !==
+              desiredRetention.MemoryStoreRetentionPeriodInHours ||
+              state.retentionProperties?.MagneticStoreRetentionPeriodInDays !==
+                desiredRetention.MagneticStoreRetentionPeriodInDays);
           if (
-            news.retentionProperties !== undefined ||
+            retentionDrifted ||
             news.magneticStoreWriteProperties !== undefined
           ) {
             yield* withWriteEndpoint(
               TSW.updateTable({
                 DatabaseName: databaseName,
                 TableName: tableName,
-                RetentionProperties: news.retentionProperties,
+                RetentionProperties: desiredRetention,
                 MagneticStoreWriteProperties: news.magneticStoreWriteProperties,
                 Schema: news.schema,
               }),

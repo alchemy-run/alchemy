@@ -8,6 +8,11 @@ export const CheckIfPhoneNumberIsOptedOutHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.CheckIfPhoneNumberIsOptedOut",
     operation: sns.checkIfPhoneNumberIsOptedOut,
-    actions: ["sns:CheckIfPhoneNumberIsOptedOut"],
+    // Opt-out reads are backed by `sms-voice:DescribeOptedOutNumbers`
+    // (probe-verified).
+    actions: [
+      "sns:CheckIfPhoneNumberIsOptedOut",
+      "sms-voice:DescribeOptedOutNumbers",
+    ],
   }),
 );

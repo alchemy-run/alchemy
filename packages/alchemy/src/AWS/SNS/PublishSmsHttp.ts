@@ -8,6 +8,8 @@ export const PublishSmsHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.PublishSms",
     operation: sns.publish,
-    actions: ["sns:Publish"],
+    // Direct SMS delivery is backed by `sms-voice:SendTextMessage`
+    // (probe-verified).
+    actions: ["sns:Publish", "sms-voice:SendTextMessage"],
   }),
 );

@@ -27,8 +27,8 @@ export default TimestreamSinkFunction.make(
     const table = yield* Timestream.Table("SinkCpu", {
       databaseName: database.databaseName,
       retentionProperties: {
-        MemoryStoreRetentionPeriodInHours: 6,
-        MagneticStoreRetentionPeriodInDays: 30,
+        memoryStoreRetention: "6 hours",
+        magneticStoreRetention: "30 days",
       },
     });
     const DatabaseName = yield* database.databaseName;

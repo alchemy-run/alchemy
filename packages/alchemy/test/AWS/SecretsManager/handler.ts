@@ -115,7 +115,7 @@ export default SecretsManagerTestFunction.make(
             }
           } else if (event.Step === "finishSecret") {
             const described = yield* describeRotationSecret();
-            const stages = described.SecretVersionsToStages ?? {};
+            const stages = described.VersionIdsToStages ?? {};
             const currentVersion = Object.entries(stages).find(([, labels]) =>
               (labels ?? []).includes("AWSCURRENT"),
             )?.[0];

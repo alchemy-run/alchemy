@@ -214,6 +214,7 @@ import * as SSMContacts from "./SSMContacts/index.ts";
 import * as SSMIncidents from "./SSMIncidents/index.ts";
 import * as StepFunctions from "./StepFunctions/index.ts";
 import * as Synthetics from "./Synthetics/index.ts";
+import * as Textract from "./Textract/index.ts";
 import * as Timestream from "./Timestream/index.ts";
 import * as Transfer from "./Transfer/index.ts";
 import * as VerifiedPermissions from "./VerifiedPermissions/index.ts";
@@ -889,6 +890,8 @@ export const providers = () =>
       StepFunctions.Activity,
       StepFunctions.StateMachine,
       Synthetics.Canary,
+      Synthetics.Group,
+      Textract.Adapter,
       Timestream.Database,
       Timestream.DbInstance,
       Timestream.Table,
@@ -1357,6 +1360,7 @@ export const providers = () =>
           BedrockAgentCore.RuntimeProvider(),
           AccessAnalyzer.AnalyzerProvider(),
           AccessAnalyzer.ArchiveRuleProvider(),
+          Textract.AdapterProvider(),
           Transfer.ServerProvider(),
           Transfer.UserProvider(),
           VerifiedPermissions.PolicyProvider(),
@@ -1502,6 +1506,7 @@ export const providers = () =>
           RolesAnywhere.ProfileProvider(),
           RolesAnywhere.TrustAnchorProvider(),
           Synthetics.CanaryProvider(),
+          Synthetics.GroupProvider(),
           SSMContacts.ContactProvider(),
           SSMContacts.ContactChannelProvider(),
           SSMContacts.PlanProvider(),

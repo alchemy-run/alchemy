@@ -127,8 +127,9 @@ export const makeSchemasRegistryHttpBinding = <
 /**
  * Build the impl Effect for a Schemas operation scoped to a
  * {@link Discoverer}: the deploy-time half grants `actions` on the bound
- * discoverer's ARN, and the runtime half injects the `DiscovererId` into
- * every request.
+ * discoverer's ARN (plus `ruleActions` on the discoverer's managed
+ * EventBridge rule, which Start/StopDiscoverer flip behind the scenes), and
+ * the runtime half injects the `DiscovererId` into every request.
  */
 export const makeSchemasDiscovererHttpBinding = <
   I extends { DiscovererId: string },
@@ -142,6 +143,13 @@ export const makeSchemasDiscovererHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the discoverer ARN. */
   actions: readonly string[];
+  /**
+   * EventBridge actions granted on the discoverer's managed rule
+   * (`rule/{busName}/Schemas-{discovererId}`). StartDiscoverer enables the
+   * rule and StopDiscoverer disables it, so they additionally require
+   * `events:EnableRule` / `events:DisableRule`.
+   */
+  ruleActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -151,6 +159,12 @@ export const makeSchemasDiscovererHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
+          const toRuleArn = (busSegment: string) =>
+            Output.map(discoverer.discovererArn, (arn) =>
+              arn
+                .replace(":schemas:", ":events:")
+                .replace(":discoverer/", `:rule/${busSegment}Schemas-`),
+            );
           yield* host.bind`Allow(${host}, ${options.tag}(${discoverer}))`({
             policyStatements: [
               {
@@ -158,6 +172,18 @@ export const makeSchemasDiscovererHttpBinding = <
                 Action: [...options.actions],
                 Resource: [discoverer.discovererArn],
               },
+              ...(options.ruleActions !== undefined
+                ? [
+                    {
+                      Effect: "Allow" as const,
+                      Action: [...options.ruleActions],
+                      // The managed rule lives on the discovered bus
+                      // (`rule/{busName}/Schemas-{id}`) or, for the default
+                      // bus, directly under `rule/Schemas-{id}`.
+                      Resource: [toRuleArn("*/"), toRuleArn("")],
+                    },
+                  ]
+                : []),
             ],
           });
         }

@@ -430,9 +430,7 @@ describe.sequential("SNS Bindings", () => {
         // ListPhoneNumbersOptedOut
         yield* Effect.gen(function* () {
           const response = yield* getJson("/sms/opted-out");
-          expect(Array.isArray((response as any).phoneNumbers ?? [])).toBe(
-            true,
-          );
+          expect(Array.isArray((response as any).phoneNumbers)).toBe(true);
         });
 
         // CheckIfPhoneNumberIsOptedOut — reserved fictional number; never
@@ -441,7 +439,7 @@ describe.sequential("SNS Bindings", () => {
           const response = yield* postJson("/sms/check-opt-out", {
             phoneNumber: "+15555550100",
           });
-          expect((response as any).isOptedOut ?? false).toBe(false);
+          expect((response as any).isOptedOut).toBe(false);
         });
 
         // OptInPhoneNumber — the fictional number was never opted out, so
@@ -457,9 +455,7 @@ describe.sequential("SNS Bindings", () => {
         // ListOriginationNumbers
         yield* Effect.gen(function* () {
           const response = yield* getJson("/sms/origination-numbers");
-          expect(Array.isArray((response as any).PhoneNumbers ?? [])).toBe(
-            true,
-          );
+          expect(Array.isArray((response as any).PhoneNumbers)).toBe(true);
         });
 
         // GetSMSSandboxAccountStatus
@@ -471,9 +467,7 @@ describe.sequential("SNS Bindings", () => {
         // ListSMSSandboxPhoneNumbers
         yield* Effect.gen(function* () {
           const response = yield* getJson("/sms/sandbox-numbers");
-          expect(Array.isArray((response as any).PhoneNumbers ?? [])).toBe(
-            true,
-          );
+          expect(Array.isArray((response as any).PhoneNumbers)).toBe(true);
         });
 
         // CreateSMSSandboxPhoneNumber — malformed number surfaces the typed
@@ -524,9 +518,9 @@ describe.sequential("SNS Bindings", () => {
         // ListPlatformApplications
         yield* Effect.gen(function* () {
           const response = yield* getJson("/platform/applications");
-          expect(
-            Array.isArray((response as any).PlatformApplications ?? []),
-          ).toBe(true);
+          expect(Array.isArray((response as any).PlatformApplications)).toBe(
+            true,
+          );
         });
 
         // TopicSink — 12 messages > the PublishBatch limit of 10, so the

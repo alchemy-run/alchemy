@@ -347,6 +347,12 @@ export default ServiceCatalogTestFunction.make(
         }
 
         if (pathname === "/execute-nonexistent") {
+          // Service Catalog misuses ValidationException for a missing
+          // provisioned product on this op — distilled remaps it to the
+          // synthetic ProvisionedProductNotFound tag
+          // (patches/service-catalog.json). ValidationException (a typed
+          // CommonErrors member) is also caught so the probe works against
+          // a distilled lib built before the patch.
           const result = yield* executeProvisionedProductServiceAction({
             ProvisionedProductId: FAKE_PROVISIONED_PRODUCT_ID,
             ServiceActionId: FAKE_SERVICE_ACTION_ID,
@@ -355,6 +361,8 @@ export default ServiceCatalogTestFunction.make(
             Effect.map(() => "Ok"),
             Effect.catchTag(
               [
+                "ProvisionedProductNotFound",
+                "ValidationException",
                 "ResourceNotFoundException",
                 "InvalidParametersException",
                 "InvalidStateException",

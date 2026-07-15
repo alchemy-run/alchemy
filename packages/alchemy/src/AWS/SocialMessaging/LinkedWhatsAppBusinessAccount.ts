@@ -132,6 +132,33 @@ export interface LinkedWhatsAppBusinessAccount extends Resource<
  *   },
  * );
  * ```
+ *
+ * @section Consuming WhatsApp Events
+ * @example Handle Inbound Messages in a Lambda
+ * WhatsApp events (inbound messages, message status updates) are delivered
+ * exclusively to the SNS topics listed in `eventDestinations` — there is no
+ * separate event source for this service. Compose the resource with
+ * `AWS.SNS.consumeTopicNotifications` on the destination topic:
+ * ```typescript
+ * const events = yield* AWS.SNS.Topic("WhatsAppEvents", {});
+ *
+ * const waba = yield* AWS.SocialMessaging.LinkedWhatsAppBusinessAccount(
+ *   "Business",
+ *   {
+ *     accountId: "waba-0123456789abcdef0123456789abcdef",
+ *     eventDestinations: [{ eventDestinationArn: events.topicArn }],
+ *   },
+ * );
+ *
+ * // inside a Lambda Function's init effect
+ * yield* AWS.SNS.consumeTopicNotifications(events, (stream) =>
+ *   stream.pipe(
+ *     Stream.runForEach((notification) =>
+ *       Effect.log("whatsapp event", notification.Message),
+ *     ),
+ *   ),
+ * );
+ * ```
  */
 export const LinkedWhatsAppBusinessAccount =
   Resource<LinkedWhatsAppBusinessAccount>(

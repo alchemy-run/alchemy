@@ -143,7 +143,8 @@ export const ProfilePermissionProvider = () =>
       ) {
         return (
           props.statementId ??
-          (yield* createPhysicalName({ id, delimiter: "-", maxLength: 100 }))
+          // Signer rejects statement ids of 64+ characters.
+          (yield* createPhysicalName({ id, delimiter: "-", maxLength: 63 }))
         );
       });
 

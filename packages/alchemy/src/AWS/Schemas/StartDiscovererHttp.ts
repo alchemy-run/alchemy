@@ -9,5 +9,7 @@ export const StartDiscovererHttp = Layer.effect(
     tag: "AWS.Schemas.StartDiscoverer",
     operation: schemas.startDiscoverer,
     actions: ["schemas:StartDiscoverer"],
+    // StartDiscoverer re-enables the discoverer's managed EventBridge rule.
+    ruleActions: ["events:EnableRule"],
   }),
 );

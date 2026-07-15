@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
 import { Bucket } from "@/AWS/S3";
-import { Canary } from "@/AWS/Synthetics";
+import { Canary, Group } from "@/AWS/Synthetics";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Vitest";
 import * as synthetics from "@distilled.cloud/aws/synthetics";
@@ -40,14 +40,29 @@ const assertCanaryGone = (canaryName: string) =>
     }),
   );
 
+const assertGroupGone = (groupName: string) =>
+  synthetics.getGroup({ GroupIdentifier: groupName }).pipe(
+    Effect.flatMap(() =>
+      Effect.fail(new Error(`group ${groupName} still exists`)),
+    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.retry({
+      while: (e) => e instanceof Error,
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(20),
+      ]),
+    }),
+  );
+
 describe.sequential("AWS.Synthetics.Canary", () => {
   test.provider(
-    "creates a stopped canary, updates the schedule, and deletes it",
+    "creates a stopped canary + group, updates the schedule, and deletes",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const deployCanary = (scheduleExpression: string) =>
+        const deployCanary = (scheduleExpression: string, groupTag: string) =>
           stack.deploy(
             Effect.gen(function* () {
               const bucket = yield* Bucket("CanaryArtifacts", {
@@ -58,15 +73,21 @@ describe.sequential("AWS.Synthetics.Canary", () => {
                 artifactS3Location: Output.interpolate`s3://${bucket.bucketName}/heartbeat`,
                 schedule: { expression: scheduleExpression },
               });
+              const group = yield* Group("HeartbeatGroup", {
+                members: [canary.canaryArn],
+                tags: { alchemyTest: groupTag },
+              });
               return {
                 canaryName: canary.canaryName,
                 canaryArn: canary.canaryArn,
                 executionRoleArn: canary.executionRoleArn,
+                groupName: group.groupName,
+                groupArn: group.groupArn,
               };
             }),
           );
 
-        const created = yield* deployCanary("rate(5 minutes)");
+        const created = yield* deployCanary("rate(5 minutes)", "one");
 
         // Out-of-band verification via distilled.
         const observed = yield* synthetics.getCanary({
@@ -83,18 +104,39 @@ describe.sequential("AWS.Synthetics.Canary", () => {
         );
         expect(observed.Canary?.Tags?.["alchemy::id"]).toBe("Heartbeat");
 
-        // Update the schedule in place (same physical name).
-        const updated = yield* deployCanary("rate(10 minutes)");
+        // The group exists, is tagged, and holds the canary as its member.
+        const observedGroup = yield* synthetics.getGroup({
+          GroupIdentifier: created.groupName,
+        });
+        expect(observedGroup.Group?.Name).toBe(created.groupName);
+        expect(observedGroup.Group?.Arn).toBe(created.groupArn);
+        expect(observedGroup.Group?.Tags?.["alchemy::id"]).toBe(
+          "HeartbeatGroup",
+        );
+        expect(observedGroup.Group?.Tags?.alchemyTest).toBe("one");
+        const members = yield* synthetics.listGroupResources({
+          GroupIdentifier: created.groupName,
+        });
+        expect(members.Resources).toContain(created.canaryArn);
+
+        // Update the schedule + group tags in place (same physical names).
+        const updated = yield* deployCanary("rate(10 minutes)", "two");
         expect(updated.canaryName).toBe(created.canaryName);
+        expect(updated.groupName).toBe(created.groupName);
         const observedUpdated = yield* synthetics.getCanary({
           Name: created.canaryName,
         });
         expect(observedUpdated.Canary?.Schedule?.Expression).toBe(
           "rate(10 minutes)",
         );
+        const updatedGroup = yield* synthetics.getGroup({
+          GroupIdentifier: created.groupName,
+        });
+        expect(updatedGroup.Group?.Tags?.alchemyTest).toBe("two");
 
         yield* stack.destroy();
         yield* assertCanaryGone(created.canaryName);
+        yield* assertGroupGone(created.groupName);
       }),
     { timeout: 420_000 },
   );

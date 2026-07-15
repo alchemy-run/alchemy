@@ -185,10 +185,13 @@ export const ActivityProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name = output?.activityName ?? (yield* createName(id, news));
+          // `news` is undefined when the resource is declared without a
+          // props argument (`Activity("id")`).
+          const props = news ?? {};
+          const name = output?.activityName ?? (yield* createName(id, props));
           const activityArn = activityArnOf(region, accountId, name);
           const internalTags = yield* createInternalTags(id);
-          const desiredTags = { ...news.tags, ...internalTags };
+          const desiredTags = { ...props.tags, ...internalTags };
 
           // 1. OBSERVE — cloud state is authoritative.
           const observed = yield* describeOrUndefined(activityArn);

@@ -148,9 +148,17 @@ describe.sequential("Signer Bindings", () => {
               until: (r): boolean => (r as { ok: boolean }).ok === true,
               times: 10,
             }),
-          )) as { ok: boolean; jobId?: string; tag?: string };
-          // On failure the received object shows the typed rejection tag.
-          expect(started).toMatchObject({ ok: true });
+          )) as {
+            ok: boolean;
+            jobId?: string;
+            tag?: string;
+            message?: string;
+          };
+          if (!started.ok) {
+            throw new Error(
+              `StartSigningJob failed: ${started.tag}: ${started.message}`,
+            );
+          }
           const jobId = started.jobId!;
           const query = `?id=${encodeURIComponent(jobId)}`;
 

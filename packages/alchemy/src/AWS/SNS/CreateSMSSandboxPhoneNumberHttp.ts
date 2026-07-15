@@ -8,6 +8,13 @@ export const CreateSMSSandboxPhoneNumberHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.CreateSMSSandboxPhoneNumber",
     operation: sns.createSMSSandboxPhoneNumber,
-    actions: ["sns:CreateSMSSandboxPhoneNumber"],
+    // Registering a sandbox number creates a verified destination number
+    // and sends the OTP text via End User Messaging (probe-verified).
+    actions: [
+      "sns:CreateSMSSandboxPhoneNumber",
+      "sms-voice:CreateVerifiedDestinationNumber",
+      "sms-voice:SendDestinationNumberVerificationCode",
+      "sms-voice:SendTextMessage",
+    ],
   }),
 );
