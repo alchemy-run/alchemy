@@ -84,14 +84,25 @@ export default ServiceCatalogTestFunction.make(
           return yield* HttpServerResponse.json({ bound: Object.keys(bound) });
         }
 
+        // IAM policy propagation on the freshly attached binding grants can
+        // lag the deploy — surface the typed AccessDeniedException as a tag
+        // so the test's bounded polls ride it out instead of exhausting the
+        // 5xx retry budget.
         if (pathname === "/search") {
-          const result = yield* searchProducts();
-          return yield* HttpServerResponse.json({
-            count: (result.ProductViewSummaries ?? []).length,
-            productIds: (result.ProductViewSummaries ?? []).map(
-              (p) => p.ProductId,
+          const result = yield* searchProducts().pipe(
+            Effect.map((r) => ({
+              tag: "Ok" as string,
+              count: (r.ProductViewSummaries ?? []).length,
+              productIds: (r.ProductViewSummaries ?? []).map(
+                (p) => p.ProductId,
+              ),
+            })),
+            Effect.catchTag(
+              ["InvalidParametersException", "AccessDeniedException"],
+              (e) => Effect.succeed({ tag: e._tag as string, count: -1 }),
             ),
-          });
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (pathname === "/product") {
@@ -101,7 +112,11 @@ export default ServiceCatalogTestFunction.make(
               name: r.ProductViewSummary?.Name,
             })),
             Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParametersException"],
+              [
+                "ResourceNotFoundException",
+                "InvalidParametersException",
+                "AccessDeniedException",
+              ],
               (e) => Effect.succeed({ tag: e._tag as string, name: undefined }),
             ),
           );
@@ -118,7 +133,11 @@ export default ServiceCatalogTestFunction.make(
               pathId: r.LaunchPathSummaries?.[0]?.Id,
             })),
             Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParametersException"],
+              [
+                "ResourceNotFoundException",
+                "InvalidParametersException",
+                "AccessDeniedException",
+              ],
               (e) =>
                 Effect.succeed({
                   tag: e._tag as string,
@@ -141,7 +160,11 @@ export default ServiceCatalogTestFunction.make(
               count: (r.ProvisioningArtifactParameters ?? []).length,
             })),
             Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParametersException"],
+              [
+                "ResourceNotFoundException",
+                "InvalidParametersException",
+                "AccessDeniedException",
+              ],
               (e) => Effect.succeed({ tag: e._tag as string, count: 0 }),
             ),
           );
@@ -167,6 +190,7 @@ export default ServiceCatalogTestFunction.make(
                 "ResourceNotFoundException",
                 "InvalidParametersException",
                 "DuplicateResourceException",
+                "AccessDeniedException",
               ],
               (e) => Effect.succeed({ tag: e._tag as string }),
             ),
@@ -183,8 +207,9 @@ export default ServiceCatalogTestFunction.make(
                 (e) => e.Description,
               ),
             })),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed({ tag: e._tag as string }),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "AccessDeniedException"],
+              (e) => Effect.succeed({ tag: e._tag as string }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -201,7 +226,11 @@ export default ServiceCatalogTestFunction.make(
               lastRecordId: r.ProvisionedProductDetail?.LastRecordId,
             })),
             Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParametersException"],
+              [
+                "ResourceNotFoundException",
+                "InvalidParametersException",
+                "AccessDeniedException",
+              ],
               (e) => Effect.succeed({ tag: e._tag as string }),
             ),
           );
@@ -209,17 +238,31 @@ export default ServiceCatalogTestFunction.make(
         }
 
         if (pathname === "/search-pp") {
-          const result = yield* searchProvisionedProducts();
-          return yield* HttpServerResponse.json({
-            count: (result.ProvisionedProducts ?? []).length,
-          });
+          const result = yield* searchProvisionedProducts().pipe(
+            Effect.map((r) => ({
+              tag: "Ok" as string,
+              count: (r.ProvisionedProducts ?? []).length,
+            })),
+            Effect.catchTag(
+              ["InvalidParametersException", "AccessDeniedException"],
+              (e) => Effect.succeed({ tag: e._tag as string, count: -1 }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (pathname === "/history") {
-          const result = yield* listRecordHistory();
-          return yield* HttpServerResponse.json({
-            count: (result.RecordDetails ?? []).length,
-          });
+          const result = yield* listRecordHistory().pipe(
+            Effect.map((r) => ({
+              tag: "Ok" as string,
+              count: (r.RecordDetails ?? []).length,
+            })),
+            Effect.catchTag(
+              ["InvalidParametersException", "AccessDeniedException"],
+              (e) => Effect.succeed({ tag: e._tag as string, count: -1 }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (pathname === "/outputs") {
@@ -231,7 +274,11 @@ export default ServiceCatalogTestFunction.make(
               count: (r.Outputs ?? []).length,
             })),
             Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParametersException"],
+              [
+                "ResourceNotFoundException",
+                "InvalidParametersException",
+                "AccessDeniedException",
+              ],
               (e) => Effect.succeed({ tag: e._tag as string, count: 0 }),
             ),
           );
@@ -247,8 +294,10 @@ export default ServiceCatalogTestFunction.make(
               tag: "Ok" as string,
               recordId: r.RecordDetail?.RecordId,
             })),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed({ tag: e._tag as string, recordId: undefined }),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "AccessDeniedException"],
+              (e) =>
+                Effect.succeed({ tag: e._tag as string, recordId: undefined }),
             ),
           );
           return yield* HttpServerResponse.json(result);

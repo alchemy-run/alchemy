@@ -128,9 +128,13 @@ const configFingerprint = (props: {
         endpoint: https.endpoint,
         targetRoleArn: https.targetRoleArn,
         authorizationApiKeyName: https.authorizationApiKeyName,
+        // `olds` may have round-tripped through persisted state, so the
+        // secret may no longer be a live Redacted — guard before unwrapping.
         authorizationApiKeyValue:
           https.authorizationApiKeyValue !== undefined
-            ? Redacted.value(https.authorizationApiKeyValue)
+            ? Redacted.isRedacted(https.authorizationApiKeyValue)
+              ? Redacted.value(https.authorizationApiKeyValue)
+              : String(https.authorizationApiKeyValue)
             : undefined,
         httpMethod: https.httpMethod ?? "POST",
       })

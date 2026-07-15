@@ -115,7 +115,7 @@ export default SchedulerTestFunction.make(
                 ),
               }),
             ),
-            Effect.catchAll((e) =>
+            Effect.catch((e) =>
               HttpServerResponse.json(
                 { error: e._tag, message: String(e) },
                 { status: 424 },

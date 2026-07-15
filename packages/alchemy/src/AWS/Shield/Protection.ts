@@ -111,6 +111,17 @@ export interface Protection extends Resource<
  *   tags: { team: "platform" },
  * });
  * ```
+ *
+ * @section Automatic Application-Layer Mitigation
+ * @example Block Layer-7 Attacks Automatically
+ * ```typescript
+ * // Requires an AWS WAF web ACL associated with the CloudFront distribution
+ * // or Application Load Balancer.
+ * const protection = yield* Shield.Protection("SiteProtection", {
+ *   resourceArn: distribution.distributionArn,
+ *   applicationLayerAutomaticResponse: "BLOCK",
+ * });
+ * ```
  */
 export const Protection = Resource<Protection>("AWS.Shield.Protection");
 
@@ -137,6 +148,18 @@ const readProtectionTags = (protectionArn: string) =>
     Effect.catch(() => Effect.succeed<Record<string, string>>({})),
   );
 
+/**
+ * Collapse the observed ALAR configuration to the prop shape: the action when
+ * enabled, `undefined` when disabled or never configured.
+ */
+const observedAlarAction = (
+  protection: shield.Protection,
+): ApplicationLayerAutomaticResponseAction | undefined => {
+  const config = protection.ApplicationLayerAutomaticResponseConfiguration;
+  if (config?.Status !== "ENABLED") return undefined;
+  return config.Action.Block !== undefined ? "BLOCK" : "COUNT";
+};
+
 const buildAttrs = (
   protection: shield.Protection,
   tags: Record<string, string>,
@@ -146,6 +169,7 @@ const buildAttrs = (
   name: protection.Name!,
   resourceArn: protection.ResourceArn!,
   healthCheckIds: [...(protection.HealthCheckIds ?? [])],
+  applicationLayerAutomaticResponse: observedAlarAction(protection),
   tags,
 });
 
@@ -174,6 +198,34 @@ export const ProtectionProvider = () =>
           yield* shield.untagResource({
             ResourceARN: protectionArn,
             TagKeys: removed,
+          });
+        }
+      });
+
+      // Automatic application-layer DDoS mitigation: enable, update, or
+      // disable based on the delta between OBSERVED and desired state.
+      const syncApplicationLayerAutomaticResponse = Effect.fn(function* (
+        resourceArn: string,
+        observed: ApplicationLayerAutomaticResponseAction | undefined,
+        desired: ApplicationLayerAutomaticResponseAction | undefined,
+      ) {
+        if (observed === desired) return;
+        if (desired === undefined) {
+          yield* shield.disableApplicationLayerAutomaticResponse({
+            ResourceArn: resourceArn,
+          });
+          return;
+        }
+        const Action = desired === "BLOCK" ? { Block: {} } : { Count: {} };
+        if (observed === undefined) {
+          yield* shield.enableApplicationLayerAutomaticResponse({
+            ResourceArn: resourceArn,
+            Action,
+          });
+        } else {
+          yield* shield.updateApplicationLayerAutomaticResponse({
+            ResourceArn: resourceArn,
+            Action,
           });
         }
       });
@@ -269,7 +321,14 @@ export const ProtectionProvider = () =>
             news.healthCheckArns ?? [],
           );
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC automatic application-layer DDoS mitigation.
+          yield* syncApplicationLayerAutomaticResponse(
+            news.resourceArn,
+            observedAlarAction(protection),
+            news.applicationLayerAutomaticResponse,
+          );
+
+          // 3c. SYNC tags — diff against OBSERVED cloud tags.
           yield* syncTags(protection.ProtectionArn!, desiredTags);
 
           // 4. RETURN fresh attributes.

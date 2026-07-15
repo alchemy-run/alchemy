@@ -3,6 +3,8 @@ import * as SecretsManager from "@/AWS/SecretsManager";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -127,7 +129,22 @@ export default SecretsManagerTestFunction.make(
           }
           // setSecret / testSecret: nothing to apply or verify — the secret
           // is self-contained.
-        }).pipe(Effect.asVoid, Effect.orDie),
+        }).pipe(
+          // Secrets Manager runs a validation invocation right after the
+          // rotation schedule is configured at deploy time — the freshly
+          // attached role policies may not have propagated yet. A failed
+          // validation wedges the rotation "in progress", so retry through
+          // the IAM-propagation window (bounded).
+          Effect.retry({
+            while: (e): boolean => e._tag === "AccessDeniedException",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(8),
+            ]),
+          }),
+          Effect.asVoid,
+          Effect.orDie,
+        ),
     );
 
     return {
@@ -237,17 +254,41 @@ export default SecretsManagerTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/rotate") {
-          const result = yield* rotateRotationSecret();
+          // Error-transparent: surface the typed failure to the test as a
+          // 409 body instead of an opaque 500 from `orDie`.
+          const result = yield* Effect.result(rotateRotationSecret());
+          if (Result.isFailure(result)) {
+            return yield* HttpServerResponse.json(
+              {
+                error: result.failure._tag,
+                message:
+                  (result.failure as { Message?: string }).Message ??
+                  (result.failure as { message?: string }).message,
+              },
+              { status: 409 },
+            );
+          }
           return yield* HttpServerResponse.json({
-            versionId: result.VersionId,
+            versionId: result.success.VersionId,
           });
         }
 
         if (request.method === "GET" && pathname === "/rotation-value") {
-          const result = yield* getRotationValue();
+          const result = yield* Effect.result(getRotationValue());
+          if (Result.isFailure(result)) {
+            return yield* HttpServerResponse.json(
+              {
+                error: result.failure._tag,
+                message:
+                  (result.failure as { Message?: string }).Message ??
+                  (result.failure as { message?: string }).message,
+              },
+              { status: 409 },
+            );
+          }
           return yield* HttpServerResponse.json({
-            versionId: result.VersionId,
-            secretString: unwrapString(result.SecretString),
+            versionId: result.success.VersionId,
+            secretString: unwrapString(result.success.SecretString),
           });
         }
 

@@ -215,6 +215,9 @@ describe("Scheduler Bindings", () => {
 
   afterAll(
     Effect.gen(function* () {
+      // NO_DESTROY=1 keeps the deployment (and its log group) around while
+      // iterating locally — standard escape hatch, default is full cleanup.
+      if (process.env.NO_DESTROY) return;
       // Leak guard: no runtime-minted schedules may outlive the suite.
       yield* purgeTestSchedules;
       yield* sharedStack.destroy();

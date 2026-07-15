@@ -1,6 +1,13 @@
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM/Role.ts";
-import { AwsLogSource, DataLake, Subscriber } from "@/AWS/SecurityLake";
+import {
+  AwsLogSource,
+  CustomLogSource,
+  DataLake,
+  ExceptionSubscription,
+  Subscriber,
+  SubscriberNotification,
+} from "@/AWS/SecurityLake";
 import * as Test from "@/Test/Vitest";
 import * as securitylake from "@distilled.cloud/aws/securitylake";
 import { expect } from "@effect/vitest";
@@ -50,6 +57,48 @@ test.provider(
     }),
 );
 
+test.provider(
+  "getDataLakeExceptionSubscription returns the subscription or a typed rejection",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        securitylake.getDataLakeExceptionSubscription({}),
+      );
+      if (Result.isSuccess(result)) {
+        // No subscription configured — every field is absent.
+        expect(typeof (result.success.notificationEndpoint ?? "")).toBe(
+          "string",
+        );
+      } else {
+        // Accounts that never onboarded Security Lake (or have no
+        // subscription) reject with one of the typed tags the
+        // ExceptionSubscription provider's read/delete paths depend on.
+        expect([
+          "AccessDeniedException",
+          "ResourceNotFoundException",
+          "UnauthorizedException",
+        ]).toContain(result.failure._tag);
+      }
+    }),
+);
+
+test.provider(
+  "deleteSubscriberNotification on a nonexistent subscriber fails with a typed tag",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        securitylake.deleteSubscriberNotification({
+          subscriberId: "00000000-0000-4000-8000-000000000000",
+        }),
+      );
+      expect([
+        "AccessDeniedException",
+        "ResourceNotFoundException",
+        "UnauthorizedException",
+      ]).toContain(error._tag);
+    }),
+);
+
 // ---------------------------------------------------------------------------
 // Gated live lifecycle. Enabling Security Lake onboards the whole account in
 // the Region: it creates S3 buckets, registers them with Lake Formation, and
@@ -86,7 +135,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
 
       yield* stack.destroy();
 
-      const deployOnce = (subscriberDescription: string) =>
+      const deployOnce = (subscriberDescription: string, withExtras: boolean) =>
         stack.deploy(
           Effect.gen(function* () {
             const metastoreRole = yield* Role("MetastoreRole", {
@@ -130,12 +179,57 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
               accessTypes: ["S3"],
               tags: { fixture: "securitylake" },
             });
-            return { lake, source, subscriber };
+            if (!withExtras) {
+              return { lake, source, subscriber, extras: undefined };
+            }
+
+            // Second wave (the data lake already exists by now): the
+            // exception subscription singleton, an SQS subscriber
+            // notification, and a custom log source with its crawler role.
+            const exceptions = yield* ExceptionSubscription("Exceptions", {
+              subscriptionProtocol: "email",
+              notificationEndpoint: "securitylake-test@example.com",
+              exceptionTimeToLive: "30 days",
+            });
+            const crawlerRole = yield* Role("CrawlerRole", {
+              assumeRolePolicyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { Service: "glue.amazonaws.com" },
+                    Action: ["sts:AssumeRole"],
+                  },
+                ],
+              },
+              managedPolicyArns: [
+                "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole",
+              ],
+            });
+            const custom = yield* CustomLogSource("CustomSource", {
+              sourceName: "alchemy-securitylake-test-custom",
+              eventClasses: ["FILE_ACTIVITY"],
+              crawlerConfiguration: { roleArn: crawlerRole.roleArn },
+              providerIdentity: {
+                principal: accountId,
+                externalId: "alchemy-securitylake-custom",
+              },
+            });
+            const notification = yield* SubscriberNotification("Notify", {
+              subscriberId: subscriber.subscriberId,
+              sqs: true,
+            });
+            return {
+              lake,
+              source,
+              subscriber,
+              extras: { exceptions, custom, notification },
+            };
           }),
         );
 
       // Create.
-      const { lake, source, subscriber } = yield* deployOnce("v1");
+      const { lake, source, subscriber } = yield* deployOnce("v1", false);
       expect(lake.dataLakeArn).toContain(":securitylake:");
       expect(lake.regions).toContain(region);
       expect(source.sourceName).toBe("ROUTE53");
@@ -153,13 +247,41 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
         subscriber.subscriberArn,
       );
 
-      // Update in place (subscriber description).
-      const second = yield* deployOnce("v2");
+      // Update in place (subscriber description) + add the second wave of
+      // resources (exception subscription, custom source, notification).
+      const second = yield* deployOnce("v2", true);
       expect(second.subscriber.subscriberId).toBe(subscriber.subscriberId);
       const updated = yield* securitylake.getSubscriber({
         subscriberId: subscriber.subscriberId,
       });
       expect(updated.subscriber?.subscriberDescription).toBe("v2");
+
+      const extras = second.extras!;
+      expect(extras.exceptions.subscriptionProtocol).toBe("email");
+      expect(extras.exceptions.exceptionTimeToLive).toBe(30);
+      expect(extras.custom.sourceName).toBe("alchemy-securitylake-test-custom");
+      expect(extras.notification.subscriberEndpoint).toBeDefined();
+
+      // Out-of-band verification via distilled.
+      const exceptionSubscription =
+        yield* securitylake.getDataLakeExceptionSubscription({});
+      expect(exceptionSubscription.notificationEndpoint).toBe(
+        "securitylake-test@example.com",
+      );
+      const logSources = yield* securitylake.listLogSources({});
+      expect(
+        (logSources.sources ?? []).some((entry) =>
+          (entry.sources ?? []).some(
+            (source) =>
+              source.customLogSource?.sourceName ===
+              "alchemy-securitylake-test-custom",
+          ),
+        ),
+      ).toBe(true);
+      const notified = yield* securitylake.getSubscriber({
+        subscriberId: subscriber.subscriberId,
+      });
+      expect(notified.subscriber?.subscriberEndpoint).toBeDefined();
 
       // Destroy — offboards the account; buckets are retained by AWS design.
       yield* stack.destroy();

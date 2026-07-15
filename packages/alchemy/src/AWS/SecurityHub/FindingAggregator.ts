@@ -143,8 +143,9 @@ export const FindingAggregatorProvider = () =>
             });
           } else if (
             live.RegionLinkingMode !== news.regionLinkingMode ||
-            JSON.stringify(live.Regions ?? []) !==
-              JSON.stringify(news.regions ?? [])
+            // The API returns Regions in normalized order — compare as sets.
+            JSON.stringify([...(live.Regions ?? [])].sort()) !==
+              JSON.stringify([...(news.regions ?? [])].sort())
           ) {
             // 3. SYNC — observed ↔ desired.
             final = yield* securityhub.updateFindingAggregator({

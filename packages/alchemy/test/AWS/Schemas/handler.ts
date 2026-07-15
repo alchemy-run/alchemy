@@ -53,6 +53,9 @@ export default SchemasTestFunction.make(
     main,
     url: true,
     timeout: Duration.seconds(30),
+    // The default 128 MB sits at ~114 MB used; the last routes in a test run
+    // OOM the instance (platform-level 500 with no handler log).
+    memorySize: 512,
   },
   Effect.gen(function* () {
     const registry = yield* Schemas.Registry("BindingsRegistry", {
@@ -184,11 +187,18 @@ export default SchemasTestFunction.make(
           });
         }
 
-        // Kick off async code-binding generation.
+        // Kick off async code-binding generation. Re-running against an
+        // already-generated binding returns the typed ConflictException —
+        // treat it as "generation already complete" so the route is
+        // idempotent across test re-runs.
         if (request.method === "POST" && pathname === "/codebinding") {
           const response = yield* putCodeBinding({
             Language: CODE_BINDING_LANGUAGE,
-          });
+          }).pipe(
+            Effect.catchTag("ConflictException", () =>
+              Effect.succeed({ Status: "CREATE_COMPLETE" as const }),
+            ),
+          );
           return yield* HttpServerResponse.json({ status: response.Status });
         }
 
@@ -214,7 +224,7 @@ export default SchemasTestFunction.make(
                 ? Effect.succeed(0)
                 : Stream.runFold(
                     response.Body,
-                    0,
+                    () => 0,
                     (n, chunk) => n + chunk.length,
                   ),
             ),

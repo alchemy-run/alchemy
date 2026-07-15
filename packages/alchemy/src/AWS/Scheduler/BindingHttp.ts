@@ -48,6 +48,20 @@ const scheduleArnPattern = Effect.fn(function* (
 });
 
 /**
+ * Account-wide schedule ARN pattern — the resource IAM evaluates
+ * `scheduler:ListSchedules` against, regardless of any `GroupName` filter in
+ * the request.
+ */
+const allSchedulesArnPattern = Effect.gen(function* () {
+  const { accountId, region } =
+    yield* AWSEnvironment.current as unknown as Effect.Effect<{
+      accountId: string;
+      region: string;
+    }>;
+  return `arn:aws:scheduler:${region}:${accountId}:schedule/*/*` as const;
+});
+
+/**
  * Build the impl Effect for a group-scoped Scheduler operation: the
  * deploy-time half grants `actions` on the group's schedule ARN pattern, and
  * the runtime half injects the group's name as the request's `GroupName`.
@@ -68,9 +82,17 @@ export const makeScheduleGroupScopedHttpBinding = <
    * `GroupName` injected when no group is bound. Get/Delete leave it
    * undefined (the API defaults to the `default` group); ListSchedules pins
    * `"default"` explicitly because an absent `GroupName` there means "all
-   * groups", which would escape the granted `schedule/default/*` scope.
+   * groups".
    */
   fallbackGroupName?: string;
+  /**
+   * IAM resource scope. `"group"` (default) grants on the bound group's
+   * `schedule/{group}/*` pattern. `"all"` grants on `schedule/*​/*` —
+   * required for `scheduler:ListSchedules`, which IAM evaluates against the
+   * account-wide schedule pattern regardless of the request's `GroupName`
+   * filter (AccessDenied cites `schedule/*​/*`).
+   */
+  resourceScope?: "group" | "all";
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -80,7 +102,10 @@ export const makeScheduleGroupScopedHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const pattern = yield* scheduleArnPattern(group);
+          const pattern =
+            options.resourceScope === "all"
+              ? yield* allSchedulesArnPattern
+              : yield* scheduleArnPattern(group);
           yield* host.bind`Allow(${host}, ${options.tag}(${group ?? "default"}))`(
             {
               policyStatements: [

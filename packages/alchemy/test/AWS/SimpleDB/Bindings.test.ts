@@ -317,6 +317,19 @@ describe("SimpleDB Bindings", () => {
     );
   });
 
+  describe("ListDomains", () => {
+    test.provider("lists the fixture's domain", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/domains")) as {
+          domainNames: string[];
+        };
+        expect(
+          response.domainNames.some((name) => name.includes("BindingsDomain")),
+        ).toBe(true);
+      }),
+    );
+  });
+
   describe("DomainMetadata", () => {
     test.provider("returns domain metadata", (_stack) =>
       Effect.gen(function* () {

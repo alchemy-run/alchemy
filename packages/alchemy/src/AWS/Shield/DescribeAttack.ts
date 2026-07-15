@@ -8,7 +8,8 @@ import * as Binding from "../../Binding.ts";
  * Hydrates the full detail document of a DDoS attack (vectors, counters,
  * mitigations, sub-resources) from an attack id surfaced by
  * {@link ListAttacks}. Requires an active Shield Advanced subscription; a
- * nonexistent attack id fails with the typed `AccessDeniedException`.
+ * nonexistent attack id answers with an empty document or the typed
+ * `AccessDeniedException`.
  * Provide the implementation with
  * `Effect.provide(AWS.Shield.DescribeAttackHttp)`.
  * @binding

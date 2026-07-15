@@ -1,6 +1,5 @@
 import * as securityhub from "@distilled.cloud/aws/securityhub";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -153,13 +152,23 @@ export const AutomationRuleProvider = () =>
             ),
           );
 
-      const listRules = securityhub.listAutomationRules.pages({}).pipe(
-        Stream.runCollect,
-        Effect.map((pages) =>
-          Array.from(pages).flatMap(
-            (page) => page.AutomationRulesMetadata ?? [],
-          ),
-        ),
+      // `ListAutomationRules` is not modeled as paginated in the Smithy spec
+      // (no `.pages` helper) — page manually, bounded (accounts are limited
+      // to 100 rules).
+      const listRules = Effect.gen(function* () {
+        const out: securityhub.AutomationRulesMetadata[] = [];
+        let nextToken: string | undefined;
+        for (let i = 0; i < 10; i++) {
+          const page = yield* securityhub.listAutomationRules({
+            MaxResults: 100,
+            NextToken: nextToken,
+          });
+          out.push(...(page.AutomationRulesMetadata ?? []));
+          nextToken = page.NextToken;
+          if (!nextToken) break;
+        }
+        return out;
+      }).pipe(
         Effect.catchTag("InvalidAccessException", () =>
           Effect.succeed([] as securityhub.AutomationRulesMetadata[]),
         ),

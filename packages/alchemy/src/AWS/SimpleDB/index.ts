@@ -9,6 +9,8 @@ export * from "./DomainMetadata.ts";
 export * from "./DomainMetadataHttp.ts";
 export * from "./GetAttributes.ts";
 export * from "./GetAttributesHttp.ts";
+export * from "./ListDomains.ts";
+export * from "./ListDomainsHttp.ts";
 export * from "./PutAttributes.ts";
 export * from "./PutAttributesHttp.ts";
 export * from "./Select.ts";

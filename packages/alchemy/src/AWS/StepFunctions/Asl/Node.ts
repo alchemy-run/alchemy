@@ -39,8 +39,12 @@ export interface IntegrationOptions {
    * (exact-ARN scoped by the caller).
    */
   policyStatements?: PolicyStatement[];
-  /** Task-level timeout in seconds (`TimeoutSeconds`). */
-  timeoutSeconds?: number;
+  /**
+   * Task-level timeout (ASL `TimeoutSeconds`). Accepts any
+   * `Duration.Input` (`"30 seconds"`, `Duration.minutes(5)`, millis);
+   * rounded up to whole seconds (ASL's granularity).
+   */
+  timeout?: Duration.Input;
 }
 
 /** Options for `Sfn.retry` — mirrors the `Schedule.exponential` vocabulary. */

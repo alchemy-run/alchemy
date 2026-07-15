@@ -1,7 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as synthetics from "@distilled.cloud/aws/synthetics";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -16,6 +16,7 @@ import {
   diffTags,
   hasAlchemyTags,
 } from "../../Tags.ts";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -75,7 +76,7 @@ export interface CanaryProps {
      * number is milliseconds). Rounded to whole seconds on the wire.
      * `"0 seconds"` (or omitted) runs the canary continuously.
      */
-    durationInSeconds?: Duration.Input;
+    duration?: Duration.Input;
   };
   /**
    * Whether the canary is started (scheduled to run) after deployment.
@@ -94,7 +95,7 @@ export interface CanaryProps {
      * whole seconds on the wire. Defaults to the schedule frequency
      * capped at 14 minutes.
      */
-    timeoutInSeconds?: Duration.Input;
+    timeout?: Duration.Input;
     /**
      * Memory in MB (multiple of 64, between 960 and 3008).
      */
@@ -116,14 +117,14 @@ export interface CanaryProps {
    * Rounded to whole days on the wire.
    * @default 31 days
    */
-  successRetentionPeriodInDays?: Duration.Input;
+  successRetentionPeriod?: Duration.Input;
   /**
    * How long to retain data on failed runs (1 - 455 days), e.g.
    * `"31 days"` or `Duration.days(31)` (a bare number is milliseconds).
    * Rounded to whole days on the wire.
    * @default 31 days
    */
-  failureRetentionPeriodInDays?: Duration.Input;
+  failureRetentionPeriod?: Duration.Input;
   /**
    * Run the canary inside a VPC. Both fields are required together.
    */

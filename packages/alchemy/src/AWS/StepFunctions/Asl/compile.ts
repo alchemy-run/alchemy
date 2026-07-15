@@ -9,8 +9,9 @@
  * unchanged program.
  */
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import type { Input } from "../../../Input.ts";
+import { toSeconds as toWholeSeconds } from "../../../Util/Duration.ts";
 import * as Output from "../../../Output.ts";
 import type { PolicyStatement } from "../../IAM/Policy.ts";
 import {
@@ -114,8 +115,14 @@ const renderValue = (value: unknown): unknown => {
   return value;
 };
 
-const toSeconds = (input: Duration.Input): number =>
-  Math.max(1, Math.ceil(Duration.toSeconds(input)));
+/**
+ * Convert a `Duration.Input` to ASL whole seconds (normalizing any
+ * persisted-state `Duration` JSON via the central util). ASL second fields
+ * (`TimeoutSeconds`, `IntervalSeconds`, `Seconds`) must be positive
+ * integers, so sub-second durations round up to 1.
+ */
+export const aslSeconds = (input: Duration.Input): number =>
+  Math.max(1, toWholeSeconds(input)!);
 
 const retryPolicy = (options: RetryOptions): Record<string, unknown> => ({
   ErrorEquals:
@@ -124,11 +131,11 @@ const retryPolicy = (options: RetryOptions): Record<string, unknown> => ({
       : typeof options.while === "string"
         ? [options.while]
         : [...options.while],
-  IntervalSeconds: toSeconds(options.initial ?? "1 second"),
+  IntervalSeconds: aslSeconds(options.initial ?? "1 second"),
   BackoffRate: options.backoff ?? 2,
   MaxAttempts: options.maxAttempts ?? 3,
   ...(options.maxDelay !== undefined
-    ? { MaxDelaySeconds: toSeconds(options.maxDelay) }
+    ? { MaxDelaySeconds: aslSeconds(options.maxDelay) }
     : {}),
   ...(options.jitter ? { JitterStrategy: "FULL" } : {}),
 });
@@ -195,8 +202,8 @@ export const compileNode = (ctx: Ctx, node: AslNode, v: string): Fragment => {
             ...(node.options.arguments !== undefined
               ? { Arguments: renderValue(node.options.arguments) }
               : {}),
-            ...(node.options.timeoutSeconds !== undefined
-              ? { TimeoutSeconds: node.options.timeoutSeconds }
+            ...(node.options.timeout !== undefined
+              ? { TimeoutSeconds: aslSeconds(node.options.timeout) }
               : {}),
             Assign: { [v]: "{% $states.result %}" },
           },

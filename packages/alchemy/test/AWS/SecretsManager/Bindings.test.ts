@@ -113,7 +113,9 @@ describe.sequential("SecretsManager Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 60_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 60_000,
+  });
 
   describe("GetSecretValue", () => {
     test.provider("reads the string secret value round-trip", (_stack) =>
@@ -319,6 +321,9 @@ describe.sequential("SecretsManager Bindings", () => {
           const rotate = yield* send(
             HttpClientRequest.post(`${baseUrl}/rotate`),
           ).pipe(Effect.flatMap((r) => r.json));
+          // The fixture surfaces typed RotateSecret failures as
+          // `{ error, message }` — assert none so failures are readable.
+          expect(rotate).not.toHaveProperty("error");
           expect((rotate as any).versionId).toBeTruthy();
 
           // Secrets Manager drives the protocol asynchronously — poll until

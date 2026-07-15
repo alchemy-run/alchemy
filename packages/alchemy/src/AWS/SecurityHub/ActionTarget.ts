@@ -85,16 +85,17 @@ export const ActionTargetProvider = () =>
   Provider.effect(
     ActionTargetResource,
     Effect.gen(function* () {
-      // Custom action ids are alphanumeric, max 20 characters.
+      // Custom action ids are strictly alphanumeric, max 20 characters —
+      // strip the physical name's delimiters and keep its trailing (random,
+      // instance-stable) suffix for uniqueness.
       const toId = (id: string, props: { id?: string }) =>
         props.id
           ? Effect.succeed(props.id)
-          : createPhysicalName({
-              id,
-              maxLength: 20,
-              suffixLength: 10,
-              delimiter: "",
-            });
+          : createPhysicalName({ id, maxLength: 64 }).pipe(
+              Effect.map((name) =>
+                name.replace(/[^a-zA-Z0-9]/g, "").slice(-20),
+              ),
+            );
 
       const getActionTarget = (arn: string) =>
         securityhub.describeActionTargets({ ActionTargetArns: [arn] }).pipe(

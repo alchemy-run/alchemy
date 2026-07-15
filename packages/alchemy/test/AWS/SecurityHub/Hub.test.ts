@@ -23,6 +23,10 @@ test.provider(
   "lifecycle: enable Security Hub, update config, disable",
   (stack) =>
     Effect.gen(function* () {
+      // Destroy OUR previous resources first — a crashed prior run leaves the
+      // test's own Hub enabled, which must not be mistaken for a foreign one.
+      yield* stack.destroy();
+
       const preexisting = yield* describeHub;
       if (preexisting) {
         yield* Effect.logInfo(
@@ -30,8 +34,6 @@ test.provider(
         );
         return;
       }
-
-      yield* stack.destroy();
 
       // Create — enable without default standards to keep the test cheap/fast.
       const created = yield* stack.deploy(

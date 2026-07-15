@@ -27,6 +27,7 @@ export default SimpleDBTestFunction.make(
     const batchDeleteAttributes = yield* SimpleDB.BatchDeleteAttributes(domain);
     const domainMetadata = yield* SimpleDB.DomainMetadata(domain);
     const select = yield* SimpleDB.Select(domain);
+    const listDomains = yield* SimpleDB.ListDomains();
 
     return {
       fetch: Effect.gen(function* () {
@@ -122,6 +123,13 @@ export default SimpleDBTestFunction.make(
           return yield* HttpServerResponse.json({ success: true });
         }
 
+        if (request.method === "GET" && pathname === "/domains") {
+          const result = yield* listDomains({ MaxNumberOfDomains: 100 });
+          return yield* HttpServerResponse.json({
+            domainNames: result.DomainNames ?? [],
+          });
+        }
+
         if (request.method === "GET" && pathname === "/metadata") {
           const result = yield* domainMetadata();
           return yield* HttpServerResponse.json({
@@ -145,6 +153,7 @@ export default SimpleDBTestFunction.make(
         SimpleDB.DeleteAttributesHttp,
         SimpleDB.DomainMetadataHttp,
         SimpleDB.GetAttributesHttp,
+        SimpleDB.ListDomainsHttp,
         SimpleDB.PutAttributesHttp,
         SimpleDB.SelectHttp,
       ),

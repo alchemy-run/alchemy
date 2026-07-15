@@ -45,6 +45,12 @@ class ProvisionedProductStillExists extends Data.TaggedError(
   "ScBindingsProvisionedProductStillExists",
 )<{ name: string }> {}
 
+// beforeAll/afterAll hooks run without the providers layer (unlike
+// `test.provider` bodies) — out-of-band distilled calls need it provided
+// explicitly.
+const outOfBand = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Core.withProviders(effect, testOptions, sharedStack.name);
+
 /**
  * Out-of-band cleanup: terminate any provisioned product a previous run
  * left behind (its terminate token derives from the instance's unique ID
@@ -136,7 +142,7 @@ describe.sequential("ServiceCatalog Bindings", () => {
       yield* Effect.logInfo(
         "ServiceCatalog test setup: destroying previous resources",
       );
-      yield* ensureProvisionedProductGone;
+      yield* outOfBand(ensureProvisionedProductGone);
       yield* sharedStack.destroy();
 
       // Phase 1: a bucket to host the CloudFormation template — it must
@@ -149,12 +155,14 @@ describe.sequential("ServiceCatalog Bindings", () => {
           return { bucketName: bucket.bucketName, region: bucket.region };
         }),
       );
-      yield* s3.putObject({
-        Bucket: phase1.bucketName,
-        Key: "bindings-template.json",
-        Body: new TextEncoder().encode(TEMPLATE),
-        ContentType: "application/json",
-      });
+      yield* outOfBand(
+        s3.putObject({
+          Bucket: phase1.bucketName,
+          Key: "bindings-template.json",
+          Body: new TextEncoder().encode(TEMPLATE),
+          ContentType: "application/json",
+        }),
+      );
       const templateUrl = `https://${phase1.bucketName}.s3.${phase1.region}.amazonaws.com/bindings-template.json`;
 
       // Phase 2: portfolio + product + the fixture Lambda, whose execution
@@ -219,7 +227,7 @@ describe.sequential("ServiceCatalog Bindings", () => {
     Effect.gen(function* () {
       // The provisioned product must be gone before the product/portfolio
       // can be deleted.
-      yield* ensureProvisionedProductGone;
+      yield* outOfBand(ensureProvisionedProductGone);
       yield* sharedStack.destroy();
     }),
     { timeout: 180_000 },
@@ -240,9 +248,16 @@ describe.sequential("ServiceCatalog Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           // Search indexing can lag well behind the principal association —
-          // assert the binding round-trips; catalog visibility is asserted
-          // via ListLaunchPaths below.
-          const response = (yield* getJson("/search")) as any;
+          // assert the binding round-trips (poll past IAM propagation);
+          // catalog visibility is asserted via ListLaunchPaths below.
+          const response = (yield* getJson("/search").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (r): boolean => (r as any).tag === "Ok",
+              times: 20,
+            }),
+          )) as any;
+          expect(response.tag).toBe("Ok");
           expect(response.count).toBeGreaterThanOrEqual(0);
         }),
       { timeout: 60_000 },
@@ -301,7 +316,7 @@ describe.sequential("ServiceCatalog Bindings", () => {
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
               until: (r): boolean => (r as any).tag === "Ok",
-              times: 10,
+              times: 20,
             }),
           )) as any;
           expect(provisioned.tag).toBe("Ok");
@@ -330,6 +345,7 @@ describe.sequential("ServiceCatalog Bindings", () => {
 
           // SearchProvisionedProducts sees it.
           const searched = (yield* getJson("/search-pp")) as any;
+          expect(searched.tag).toBe("Ok");
           expect(searched.count).toBeGreaterThan(0);
 
           // GetProvisionedProductOutputs — the no-op template has none.
@@ -339,6 +355,7 @@ describe.sequential("ServiceCatalog Bindings", () => {
 
           // ListRecordHistory includes the provision record.
           const history = (yield* getJson("/history")) as any;
+          expect(history.tag).toBe("Ok");
           expect(history.count).toBeGreaterThan(0);
 
           // Terminate and wait — bounded — until the provisioned product
