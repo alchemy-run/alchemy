@@ -435,6 +435,33 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ) {}
  * ```
  *
+ * @example Keeping the container warm between requests
+ * ```typescript
+ * // Without `keepWarm`, a container Cloudflare put to sleep during an idle
+ * // stretch pays a full restart on the next real request. `keepWarm`
+ * // proactively re-checks it on a schedule instead, off the request's
+ * // critical path. This keeps *this* container warm — it is not a pool of
+ * // spares; see `Cloudflare.Containers.warmPool` to warm several
+ * // Durable Objects' containers ahead of their first real request.
+ * export default class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agents",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
+ *     return Effect.gen(function* () {
+ *       return { exec: (cmd: string) => sandbox.exec(cmd) };
+ *     });
+ *   }).pipe(
+ *     Effect.provide(
+ *       Cloudflare.Containers.layer(Sandbox, {
+ *         keepWarm: Schedule.spaced(Duration.minutes(4)).pipe(
+ *           Schedule.upTo({ duration: Duration.hours(1) }),
+ *         ),
+ *       }),
+ *     ),
+ *   ),
+ * ) {}
+ * ```
+ *
  * @section HTTP Requests to Container Ports
  * Use `getTcpPort` on the running container instance to get a `fetch`
  * handle for a specific port. This lets you make HTTP requests to
