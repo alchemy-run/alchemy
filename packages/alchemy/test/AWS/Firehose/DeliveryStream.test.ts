@@ -41,6 +41,11 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
         expect(initial.stream.bufferingIntervalInSeconds).toEqual(300);
         expect(initial.stream.bufferingSizeInMBs).toEqual(5);
         expect(initial.stream.compressionFormat).toEqual("UNCOMPRESSED");
+        // No SSE configured — a never-encrypted stream reports DISABLED (or
+        // no encryption configuration at all).
+        expect(initial.stream.encryptionStatus ?? "DISABLED").toEqual(
+          "DISABLED",
+        );
 
         // Out-of-band verification via distilled.
         const described = yield* Firehose.describeDeliveryStream({
@@ -67,7 +72,8 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
           Value: "test",
         });
 
-        // Update destination settings in place (UpdateDestination path).
+        // Update destination settings in place (UpdateDestination path) and
+        // enable SSE (StartDeliveryStreamEncryption path) in the same step.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
             const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", {
@@ -78,10 +84,11 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
                 bucketArn: bucket.bucketArn,
                 prefix: "events/",
                 errorOutputPrefix: "errors/",
-                bufferingIntervalInSeconds: "60 seconds",
+                bufferingInterval: "60 seconds",
                 bufferingSizeInMBs: 1,
                 compressionFormat: "GZIP",
               },
+              encryption: { keyType: "AWS_OWNED_CMK" },
               tags: { Environment: "production", Team: "platform" },
             });
             return { bucket, stream };
@@ -97,6 +104,9 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
         expect(updated.stream.bufferingIntervalInSeconds).toEqual(60);
         expect(updated.stream.bufferingSizeInMBs).toEqual(1);
         expect(updated.stream.compressionFormat).toEqual("GZIP");
+        // SSE converged to ENABLED with the AWS-owned CMK.
+        expect(updated.stream.encryptionStatus).toEqual("ENABLED");
+        expect(updated.stream.encryptionKeyType).toEqual("AWS_OWNED_CMK");
 
         const updatedDescription = yield* Firehose.describeDeliveryStream({
           DeliveryStreamName: initial.stream.deliveryStreamName,
@@ -122,6 +132,41 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
           Value: "platform",
         });
 
+        // Out-of-band SSE verification via distilled.
+        expect(
+          updatedDescription.DeliveryStreamDescription
+            .DeliveryStreamEncryptionConfiguration?.Status,
+        ).toEqual("ENABLED");
+
+        // Remove encryption — the StopDeliveryStreamEncryption path.
+        const decrypted = yield* stack.deploy(
+          Effect.gen(function* () {
+            const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", {
+              forceDestroy: true,
+            });
+            const stream = yield* DeliveryStream("TestDeliveryStream", {
+              destination: {
+                bucketArn: bucket.bucketArn,
+                prefix: "events/",
+                errorOutputPrefix: "errors/",
+                bufferingInterval: "60 seconds",
+                bufferingSizeInMBs: 1,
+                compressionFormat: "GZIP",
+              },
+              tags: { Environment: "production", Team: "platform" },
+            });
+            return { bucket, stream };
+          }),
+        );
+        // Same physical stream — SSE disabled in place.
+        expect(decrypted.stream.deliveryStreamName).toEqual(
+          initial.stream.deliveryStreamName,
+        );
+        expect(decrypted.stream.encryptionStatus ?? "DISABLED").toEqual(
+          "DISABLED",
+        );
+        expect(decrypted.stream.encryptionKeyType).toBeUndefined();
+
         yield* stack.destroy();
 
         yield* assertDeliveryStreamDeleted(initial.stream.deliveryStreamName);
@@ -132,7 +177,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
           .pipe(Effect.result);
         expect(Result.isFailure(roleResult)).toBe(true);
       }),
-    { timeout: 300_000 },
+    { timeout: 420_000 },
   );
 
   test.provider(

@@ -120,6 +120,21 @@ export interface KxEnvironment extends Resource<
  *   description: "managed kdb environment",
  * });
  * ```
+ *
+ * @section Connecting to On-Prem Networks
+ * @example Attach a Transit Gateway
+ * ```typescript
+ * const env = yield* AWS.FinSpace.KxEnvironment("Kdb", {
+ *   kmsKeyId: key.keyArn,
+ *   transitGatewayConfiguration: {
+ *     transitGatewayID: "tgw-0123456789abcdef0",
+ *     routableCIDRSpace: "10.0.0.0/16",
+ *   },
+ *   customDNSConfiguration: [
+ *     { customDNSServerName: "dns.corp.example", customDNSServerIP: "10.0.0.2" },
+ *   ],
+ * });
+ * ```
  */
 export const KxEnvironment = Resource<KxEnvironment>(
   "AWS.FinSpace.KxEnvironment",
@@ -153,6 +168,9 @@ const isGone = (status: KxEnvironmentStatus | undefined) =>
   status === "DELETED" ||
   status === "DELETING" ||
   status === "DELETE_REQUESTED";
+
+const sameJson = (a: unknown, b: unknown) =>
+  JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 interface KxEnvironmentView {
   environmentId?: string;
@@ -324,6 +342,24 @@ export const KxEnvironmentProvider = () =>
           if (olds.kmsKeyId !== news.kmsKeyId) {
             return { action: "replace" } as const;
           }
+          // FinSpace does not support changing or detaching an attached
+          // network (UpdateKxEnvironmentNetwork is attach-once).
+          const hadNetwork =
+            olds.transitGatewayConfiguration !== undefined ||
+            olds.customDNSConfiguration !== undefined;
+          if (
+            hadNetwork &&
+            (!sameJson(
+              olds.transitGatewayConfiguration,
+              news.transitGatewayConfiguration,
+            ) ||
+              !sameJson(
+                olds.customDNSConfiguration,
+                news.customDNSConfiguration,
+              ))
+          ) {
+            return { action: "replace" } as const;
+          }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
@@ -370,6 +406,29 @@ export const KxEnvironmentProvider = () =>
             return yield* Effect.fail(
               new Error(`kdb environment '${name}' has no environmentId`),
             );
+          }
+
+          // Sync network — UpdateKxEnvironmentNetwork is attach-once: apply
+          // only when a network is desired and none is observed. (Changing
+          // an attached network is a replacement — see diff.)
+          const wantsNetwork =
+            news.transitGatewayConfiguration !== undefined ||
+            news.customDNSConfiguration !== undefined;
+          const hasNetwork =
+            env.transitGatewayConfiguration !== undefined ||
+            (env.customDNSConfiguration !== undefined &&
+              env.customDNSConfiguration.length > 0);
+          if (wantsNetwork && !hasNetwork) {
+            yield* finspace.updateKxEnvironmentNetwork({
+              environmentId,
+              transitGatewayConfiguration: news.transitGatewayConfiguration,
+              customDNSConfiguration: news.customDNSConfiguration,
+            });
+            yield* session.note(
+              `Attaching network to kdb environment ${name}...`,
+            );
+            yield* waitForKxEnvironmentStatus(environmentId, "CREATED");
+            env = (yield* readKxEnvironmentById(environmentId)) ?? env;
           }
 
           // Sync mutable settings — only call UpdateKxEnvironment on drift.

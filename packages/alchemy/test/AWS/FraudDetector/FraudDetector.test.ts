@@ -41,6 +41,27 @@ test.provider("getDetectors on a nonexistent id fails with a typed error", () =>
   }),
 );
 
+// Ungated typed-error probe for the event data plane: getEvent on a
+// nonexistent event type decodes to a typed tag (ResourceNotFoundException in
+// an entitled account, AccessDeniedException in an ungranted one).
+test.provider(
+  "getEvent on a nonexistent event type fails with a typed error",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        frauddetector.getEvent({
+          eventId: "does-not-exist",
+          eventTypeName: "does_not_exist_event_type",
+        }),
+      );
+      expect(
+        ["ResourceNotFoundException", "AccessDeniedException"].includes(
+          error._tag,
+        ),
+      ).toBe(true);
+    }),
+);
+
 const sharedStack = Core.scratchStack(testOptions, "FraudDetectorPrediction");
 
 let baseUrl: string;
@@ -141,6 +162,95 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
         );
         const body = (yield* response.json) as { outcomes: string[] };
         expect(body.outcomes).not.toContain(REVIEW_OUTCOME);
+      }),
+    { timeout: 180_000 },
+  );
+
+  test.provider.skipIf(!RUN_LIVE)(
+    "a stored event can be sent, read, labeled, and deleted",
+    () =>
+      Effect.gen(function* () {
+        const eventId = "alchemy-e2e-stored-event-1";
+        const client = yield* HttpClient.HttpClient;
+
+        const post = (path: string, body: unknown) =>
+          client
+            .execute(
+              HttpClientRequest.post(`${baseUrl}${path}`).pipe(
+                HttpClientRequest.bodyJsonUnsafe(body),
+              ),
+            )
+            .pipe(
+              Effect.flatMap((res) =>
+                res.status === 200
+                  ? Effect.succeed(res)
+                  : Effect.fail(new Error(`${path} failed: ${res.status}`)),
+              ),
+              Effect.retry({
+                schedule: Schedule.max([
+                  Schedule.exponential("2 seconds"),
+                  Schedule.recurs(6),
+                ]),
+              }),
+            );
+
+        const readEvent = client
+          .get(`${baseUrl}/event?id=${eventId}`)
+          .pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.flatMap(res.json, (body) =>
+                    Effect.succeed(
+                      body as { found: boolean; currentLabel?: string },
+                    ),
+                  )
+                : Effect.fail(new Error(`get event failed: ${res.status}`)),
+            ),
+          );
+
+        // Ingest, then poll until the stored event is readable (ingestion is
+        // eventually consistent).
+        yield* post("/event", { eventId, email: "legit@example.com" });
+        const stored = yield* readEvent.pipe(
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.spaced("3 seconds"),
+              Schedule.recurs(10),
+            ]),
+            while: (e): boolean => e instanceof Error,
+          }),
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (body): boolean => body.found,
+            times: 10,
+          }),
+        );
+        expect(stored.found).toBe(true);
+
+        // Label the stored event, then observe the label on read-back.
+        yield* post("/event/label", { eventId });
+        const labeled = yield* readEvent.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (body): boolean => body.currentLabel !== undefined,
+            times: 10,
+          }),
+        );
+        expect(labeled.currentLabel).toBeTruthy();
+
+        // Delete the stored event, then observe it gone.
+        const deleted = yield* client
+          .del(`${baseUrl}/event?id=${eventId}`)
+          .pipe(Effect.flatMap((res) => Effect.succeed(res.status)));
+        expect(deleted).toBe(200);
+        const gone = yield* readEvent.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (body): boolean => !body.found,
+            times: 10,
+          }),
+        );
+        expect(gone.found).toBe(false);
       }),
     { timeout: 180_000 },
   );

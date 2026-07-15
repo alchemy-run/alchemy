@@ -52,6 +52,36 @@ test.provider(
     }),
 );
 
+// Probes for the scaling-group / volume binding operations: prove the typed
+// not-found tag so runtime consumers can catch it without casts.
+test.provider(
+  "getKxScalingGroup on a nonexistent environment fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        finspace.getKxScalingGroup({
+          environmentId: "zzzzzzzzzzzzzzzzzzzzzzzzzz",
+          scalingGroupName: "nogroup",
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
+test.provider(
+  "getKxVolume on a nonexistent environment fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        finspace.getKxVolume({
+          environmentId: "zzzzzzzzzzzzzzzzzzzzzzzzzz",
+          volumeName: "novolume",
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
 // Deletion is verified as INITIATED (irreversible) or fully gone.
 const assertKxEnvironmentDeleting = (environmentId: string) =>
   Effect.gen(function* () {

@@ -194,25 +194,31 @@ describe.sequential("FSx Bindings", () => {
   });
 
   describe("CreateSnapshot", () => {
+    // FSx misclassifies this not-found as a wire `BadRequest`; the distilled
+    // patch (patches/fsx.json) carves the typed SnapshotVolumeNotFound out
+    // of it by message predicate.
     test.provider(
-      "returns the typed VolumeNotFound for a missing volume",
+      "returns the typed SnapshotVolumeNotFound for a missing volume",
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* postJson(
             "/snapshot/create-missing-volume",
           )) as any;
-          expect(response.tag).toBe("VolumeNotFound");
+          expect(response.tag).toBe("SnapshotVolumeNotFound");
         }),
     );
   });
 
   describe("RestoreVolumeFromSnapshot", () => {
+    // FSx misclassifies this not-found as a wire `BadRequest`; the distilled
+    // patch (patches/fsx.json) carves the typed RestoreSnapshotNotFound out
+    // of it by message predicate.
     test.provider(
-      "returns the typed VolumeNotFound for a missing volume",
+      "returns the typed RestoreSnapshotNotFound for a missing snapshot",
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* postJson("/volume/restore-missing")) as any;
-          expect(response.tag).toBe("VolumeNotFound");
+          expect(response.tag).toBe("RestoreSnapshotNotFound");
         }),
     );
   });

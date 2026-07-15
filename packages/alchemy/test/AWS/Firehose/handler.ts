@@ -34,7 +34,7 @@ export const BucketAndDeliveryStreamLive = Layer.effect(
           prefix: "records/",
           // Minimum buffering so AWS_TEST_SLOW=1 S3-arrival polling stays
           // bounded; ingest assertions never wait on delivery.
-          bufferingIntervalInSeconds: "60 seconds",
+          bufferingInterval: "60 seconds",
           bufferingSizeInMBs: 1,
         },
         tags: { fixture: "firehose-bindings" },
@@ -57,6 +57,7 @@ export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
     const putRecord = yield* AWS.Firehose.PutRecord(deliveryStream);
     const putRecordBatch = yield* AWS.Firehose.PutRecordBatch(deliveryStream);
     const sink = yield* AWS.Firehose.DeliveryStreamSink(deliveryStream);
+    const listDeliveryStreams = yield* AWS.Firehose.ListDeliveryStreams();
 
     return {
       fetch: Effect.gen(function* () {
@@ -85,6 +86,12 @@ export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
                 Data: new TextEncoder().encode(`${data}\n`),
               })),
             }),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/list-streams") {
+          return yield* HttpServerResponse.json(
+            yield* listDeliveryStreams({ Limit: 100 }),
           );
         }
 
@@ -124,6 +131,7 @@ export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
         Layer.mergeAll(
           AWS.Firehose.PutRecordHttp,
           AWS.Firehose.PutRecordBatchHttp,
+          AWS.Firehose.ListDeliveryStreamsHttp,
         ),
       ),
     ),

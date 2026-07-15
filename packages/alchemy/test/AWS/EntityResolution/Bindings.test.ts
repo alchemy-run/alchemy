@@ -153,9 +153,18 @@ describe.sequential("EntityResolution Bindings", () => {
     test.provider("an unprocessed record answers with no match id", (_stack) =>
       Effect.gen(function* () {
         const response = (yield* postJson("/match-id")) as {
+          result: string;
           matchId: string | null;
           matchRule: string | null;
+          message: string | null;
         };
+        // Either an empty lookup succeeds or the service rejects real-time
+        // lookups on a never-run workflow with a typed tag — both prove the
+        // grant + typed plumbing (an IAM gap would be a 500).
+        expect(
+          ["ok", "ValidationException", "ResourceNotFoundException"],
+          response.message ?? undefined,
+        ).toContain(response.result);
         expect(response.matchId).toBeNull();
       }),
     );
@@ -170,12 +179,16 @@ describe.sequential("EntityResolution Bindings", () => {
             result: string;
             matchGroups?: number;
             failedRecords?: number;
+            message?: string | null;
           };
           // Either the account supports real-time generation on this
           // workflow (both records land in one match group) or the service
-          // rejects it with the typed ValidationException — both prove the
-          // grant + plumbing (an IAM gap would be a 500).
-          expect(["ok", "ValidationException"]).toContain(response.result);
+          // rejects it with a typed tag — both prove the grant + plumbing
+          // (an IAM gap would be a 500).
+          expect(
+            ["ok", "ValidationException", "ResourceNotFoundException"],
+            response.message ?? undefined,
+          ).toContain(response.result);
           if (response.result === "ok") {
             expect(response.matchGroups).toBeGreaterThanOrEqual(1);
           }
@@ -193,8 +206,12 @@ describe.sequential("EntityResolution Bindings", () => {
             status?: string;
             deleted?: number;
             errors?: number;
+            message?: string | null;
           };
-          expect(["ok", "ValidationException"]).toContain(response.result);
+          expect(
+            ["ok", "ValidationException", "ResourceNotFoundException"],
+            response.message ?? undefined,
+          ).toContain(response.result);
         }),
     );
   });

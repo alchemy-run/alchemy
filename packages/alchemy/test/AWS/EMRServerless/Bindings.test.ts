@@ -230,18 +230,18 @@ describe.sequential("EMRServerless Bindings", () => {
 
   describe("GetResourceDashboard", () => {
     test.provider(
-      "the grant reaches the service (typed error, not AccessDenied)",
+      "answers with the typed service-gate tag (see probe.test.ts)",
       (_stack) =>
         Effect.gen(function* () {
+          // The service currently denies emr-serverless:GetResourceDashboard
+          // for every caller (even Action:"*" admins) — the operation backs
+          // the console dashboards and has not launched for API callers.
+          // probe.test.ts pins that platform gate; here we assert the
+          // binding surfaces the same typed tag end-to-end from the Lambda.
           const response = (yield* getJson("/resource-dashboard")) as {
             tag: string;
-            detail: string;
           };
-          expect(response.detail).not.toContain("not authorized");
-          expect([
-            "ValidationException",
-            "ResourceNotFoundException",
-          ]).toContain(response.tag);
+          expect(response.tag).toBe("AccessDeniedException");
         }),
     );
   });

@@ -18,7 +18,7 @@ import {
 } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { toSeconds } from "../../Util/Duration.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -83,7 +83,7 @@ export interface S3DestinationProps {
    * from 0 (zero buffering) to 900 seconds.
    * @default "300 seconds"
    */
-  bufferingIntervalInSeconds?: Duration.Input;
+  bufferingInterval?: Duration.Input;
   /**
    * Buffering size in MiB before flushing to S3.
    * Valid values range from 1 to 128.
@@ -95,6 +95,32 @@ export interface S3DestinationProps {
    * @default "UNCOMPRESSED"
    */
   compressionFormat?: CompressionFormat;
+}
+
+export type DeliveryStreamEncryptionKeyType =
+  | "AWS_OWNED_CMK"
+  | "CUSTOMER_MANAGED_CMK";
+
+export type DeliveryStreamEncryptionStatus =
+  | "ENABLED"
+  | "ENABLING"
+  | "ENABLING_FAILED"
+  | "DISABLED"
+  | "DISABLING"
+  | "DISABLING_FAILED";
+
+export interface DeliveryStreamEncryptionProps {
+  /**
+   * Which key to use for server-side encryption: the AWS-owned CMK that
+   * Firehose manages for you, or a customer-managed KMS key (`keyArn`
+   * required).
+   */
+  keyType: DeliveryStreamEncryptionKeyType;
+  /**
+   * ARN of the customer-managed KMS key. Required when `keyType` is
+   * `CUSTOMER_MANAGED_CMK`; must be omitted for `AWS_OWNED_CMK`.
+   */
+  keyArn?: string;
 }
 
 export interface DeliveryStreamProps {
@@ -114,6 +140,15 @@ export interface DeliveryStreamProps {
    * Destination settings update in place via `UpdateDestination`.
    */
   destination: S3DestinationProps;
+  /**
+   * Server-side encryption (SSE) for records at rest inside the delivery
+   * stream. Only supported for `DirectPut` streams — streams with a Kinesis
+   * source inherit encryption from the source stream. Adding, changing or
+   * removing encryption updates the stream in place via
+   * `StartDeliveryStreamEncryption` / `StopDeliveryStreamEncryption`.
+   * @default no server-side encryption
+   */
+  encryption?: DeliveryStreamEncryptionProps;
   /**
    * Tags to associate with the delivery stream.
    */
@@ -186,6 +221,20 @@ export interface DeliveryStream extends Resource<
      */
     compressionFormat: CompressionFormat | undefined;
     /**
+     * Server-side encryption status reported by the stream — `ENABLED` when
+     * SSE is active, `DISABLED` when it is not.
+     */
+    encryptionStatus: DeliveryStreamEncryptionStatus | undefined;
+    /**
+     * Key type used for server-side encryption, when enabled.
+     */
+    encryptionKeyType: DeliveryStreamEncryptionKeyType | undefined;
+    /**
+     * ARN of the customer-managed KMS key used for server-side encryption,
+     * when `encryptionKeyType` is `CUSTOMER_MANAGED_CMK`.
+     */
+    encryptionKeyArn: string | undefined;
+    /**
      * Current tags reported for the delivery stream.
      */
     tags: Record<string, string>;
@@ -226,10 +275,18 @@ export interface DeliveryStream extends Resource<
  *     bucketArn: bucket.bucketArn,
  *     prefix: "events/",
  *     errorOutputPrefix: "errors/",
- *     bufferingIntervalInSeconds: "1 minute",
+ *     bufferingInterval: "1 minute",
  *     bufferingSizeInMBs: 1,
  *     compressionFormat: "GZIP",
  *   },
+ * });
+ * ```
+ *
+ * @example Server-side encryption at rest
+ * ```typescript
+ * const stream = yield* AWS.Firehose.DeliveryStream("Events", {
+ *   destination: { bucketArn: bucket.bucketArn },
+ *   encryption: { keyType: "AWS_OWNED_CMK" },
  * });
  * ```
  *
@@ -300,11 +357,28 @@ export class DeliveryStreamValidationError extends Data.TaggedError(
   readonly message: string;
 }> {}
 
+/**
+ * Server-side encryption reached a terminal failure state
+ * (`ENABLING_FAILED` / `DISABLING_FAILED`) while converging to the desired
+ * encryption configuration.
+ */
+export class DeliveryStreamEncryptionFailed extends Data.TaggedError(
+  "DeliveryStreamEncryptionFailed",
+)<{
+  readonly deliveryStreamName: string;
+  readonly status: string;
+  readonly details: string | undefined;
+}> {}
+
 class DeliveryStreamNotActive extends Data.TaggedError(
   "DeliveryStreamNotActive",
 )<{
   readonly status: string;
 }> {}
+
+class DeliveryStreamEncryptionPending extends Data.TaggedError(
+  "DeliveryStreamEncryptionPending",
+) {}
 
 class DeliveryStreamStillExists extends Data.TaggedError(
   "DeliveryStreamStillExists",
@@ -398,6 +472,7 @@ const toAttrs = ({
 }): DeliveryStream["Attributes"] => {
   const destination = description.Destinations[0];
   const s3 = destination?.ExtendedS3DestinationDescription;
+  const encryption = description.DeliveryStreamEncryptionConfiguration;
   return {
     deliveryStreamName: description.DeliveryStreamName,
     deliveryStreamArn: description.DeliveryStreamARN as DeliveryStreamArn,
@@ -417,6 +492,15 @@ const toAttrs = ({
     bufferingIntervalInSeconds: s3?.BufferingHints?.IntervalInSeconds,
     bufferingSizeInMBs: s3?.BufferingHints?.SizeInMBs,
     compressionFormat: s3?.CompressionFormat as CompressionFormat | undefined,
+    encryptionStatus: encryption?.Status as
+      | DeliveryStreamEncryptionStatus
+      | undefined,
+    encryptionKeyType:
+      encryption?.Status === "ENABLED"
+        ? (encryption.KeyType as DeliveryStreamEncryptionKeyType | undefined)
+        : undefined,
+    encryptionKeyArn:
+      encryption?.Status === "ENABLED" ? encryption.KeyARN : undefined,
     tags,
   };
 };
@@ -494,6 +578,32 @@ const waitForDeliveryStreamActive = (deliveryStreamName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "DeliveryStreamNotActive",
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(45),
+      ]),
+    }),
+  );
+
+// SSE transitions (ENABLING → ENABLED, DISABLING → DISABLED) settle in
+// seconds for the AWS-owned CMK; 2s × 45 bounds the wait at 90s. Returns the
+// terminal encryption configuration (or `undefined` when the stream has
+// never been encrypted).
+const waitForEncryptionSettled = (deliveryStreamName: string) =>
+  Effect.gen(function* () {
+    const description = yield* describeDeliveryStream(deliveryStreamName);
+    const encryption = description?.DeliveryStreamEncryptionConfiguration;
+    if (
+      encryption?.Status === "ENABLING" ||
+      encryption?.Status === "DISABLING"
+    ) {
+      return yield* Effect.fail(new DeliveryStreamEncryptionPending());
+    }
+    return encryption;
+  }).pipe(
+    Effect.retry({
+      while: (e: { _tag: string }) =>
+        e._tag === "DeliveryStreamEncryptionPending",
       schedule: Schedule.max([
         Schedule.fixed("2 seconds"),
         Schedule.recurs(45),
@@ -696,6 +806,23 @@ export const DeliveryStreamProvider = () =>
               }),
             );
           }
+          if (news.encryption && news.source) {
+            return yield* Effect.fail(
+              new DeliveryStreamValidationError({
+                message: `DeliveryStream "${id}" cannot enable server-side encryption on a KinesisStreamAsSource stream — encryption is inherited from the source Kinesis stream`,
+              }),
+            );
+          }
+          if (
+            news.encryption?.keyType === "CUSTOMER_MANAGED_CMK" &&
+            !news.encryption.keyArn
+          ) {
+            return yield* Effect.fail(
+              new DeliveryStreamValidationError({
+                message: `DeliveryStream "${id}" requires encryption.keyArn when keyType is CUSTOMER_MANAGED_CMK`,
+              }),
+            );
+          }
 
           const deliveryStreamName =
             output?.deliveryStreamName ??
@@ -757,7 +884,7 @@ export const DeliveryStreamProvider = () =>
 
           const desiredBufferingHints = {
             IntervalInSeconds:
-              toSeconds(news.destination.bufferingIntervalInSeconds) ??
+              toWireSeconds(news.destination.bufferingInterval) ??
               defaultBufferingIntervalInSeconds,
             SizeInMBs:
               news.destination.bufferingSizeInMBs ?? defaultBufferingSizeInMBs,
@@ -780,6 +907,12 @@ export const DeliveryStreamProvider = () =>
                     ? {
                         KinesisStreamARN: news.source.kinesisStreamArn,
                         RoleARN: sourceRoleArn!,
+                      }
+                    : undefined,
+                  DeliveryStreamEncryptionConfigurationInput: news.encryption
+                    ? {
+                        KeyType: news.encryption.keyType,
+                        KeyARN: news.encryption.keyArn,
                       }
                     : undefined,
                   ExtendedS3DestinationConfiguration: {
@@ -846,6 +979,65 @@ export const DeliveryStreamProvider = () =>
             );
           });
           yield* retryConcurrentModification(syncDestination);
+
+          // Sync server-side encryption — settle any in-flight transition
+          // (a crashed prior run may have left ENABLING/DISABLING), diff the
+          // observed terminal state against the desired config, and apply
+          // Start/Stop only on a delta. Both operations are async; the
+          // bounded settle-wait converges them. A terminal *_FAILED status
+          // also mismatches the desired state, so the op is re-applied.
+          const observedEncryption =
+            yield* waitForEncryptionSettled(deliveryStreamName);
+          const encryptionEnabled = observedEncryption?.Status === "ENABLED";
+          if (news.encryption) {
+            const keyMatches =
+              encryptionEnabled &&
+              observedEncryption?.KeyType === news.encryption.keyType &&
+              (news.encryption.keyType === "AWS_OWNED_CMK" ||
+                observedEncryption?.KeyARN === news.encryption.keyArn);
+            if (!keyMatches) {
+              yield* retryWhileInUse(
+                firehose.startDeliveryStreamEncryption({
+                  DeliveryStreamName: deliveryStreamName,
+                  DeliveryStreamEncryptionConfigurationInput: {
+                    KeyType: news.encryption.keyType,
+                    KeyARN: news.encryption.keyArn,
+                  },
+                }),
+              );
+              const settled =
+                yield* waitForEncryptionSettled(deliveryStreamName);
+              if (settled?.Status !== "ENABLED") {
+                return yield* Effect.fail(
+                  new DeliveryStreamEncryptionFailed({
+                    deliveryStreamName,
+                    status: settled?.Status ?? "UNKNOWN",
+                    details: settled?.FailureDescription?.Details,
+                  }),
+                );
+              }
+              yield* session.note(
+                `Enabled SSE (${news.encryption.keyType}) on ${deliveryStreamName}`,
+              );
+            }
+          } else if (encryptionEnabled) {
+            yield* retryWhileInUse(
+              firehose.stopDeliveryStreamEncryption({
+                DeliveryStreamName: deliveryStreamName,
+              }),
+            );
+            const settled = yield* waitForEncryptionSettled(deliveryStreamName);
+            if (settled !== undefined && settled.Status !== "DISABLED") {
+              return yield* Effect.fail(
+                new DeliveryStreamEncryptionFailed({
+                  deliveryStreamName,
+                  status: settled.Status ?? "UNKNOWN",
+                  details: settled.FailureDescription?.Details,
+                }),
+              );
+            }
+            yield* session.note(`Disabled SSE on ${deliveryStreamName}`);
+          }
 
           // Sync tags — diff against OBSERVED cloud tags (adoption may bring
           // a stream with foreign tags), never olds/output.

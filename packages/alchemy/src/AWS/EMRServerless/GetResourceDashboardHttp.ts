@@ -9,9 +9,11 @@ export const GetResourceDashboardHttp = Layer.effect(
     tag: "AWS.EMRServerless.GetResourceDashboard",
     operation: emr.getResourceDashboard,
     actions: ["emr-serverless:GetResourceDashboard"],
-    // The dashboard is minted for a sub-resource (e.g. a worker) of the
-    // application — the service authorizes against the sub-resource ARN
-    // below the application, not the application ARN itself.
+    // The dashboard is minted for a sub-resource (e.g. a session) of the
+    // application — grant the sub-resource wildcard alongside the
+    // application ARN. NOTE: as of 2026-07 the service denies this action
+    // for every caller (even `Action:"*"` admins) — see
+    // test/AWS/EMRServerless/probe.test.ts, which pins that platform gate.
     subresources: ["/*"],
   }),
 );

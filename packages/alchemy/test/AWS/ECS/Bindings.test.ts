@@ -159,11 +159,11 @@ const describeUntilStopped = (taskArn: string) =>
 describe("ECS Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      // No upfront destroy: deploys are reconciling, so phase 1 converges
-      // whatever a previous (possibly interrupted) run left behind, and
-      // phase 2 redeploys the Lambda whenever its bundle hash changes.
-      // Rebuilding the VPC + cluster + Docker image from scratch on every
-      // run blew the hook budget for zero correctness gain.
+      // scratchStack state is in-memory, so this destroy is a tag-based
+      // cloud sweep — it is what reclaims resources any previous
+      // (possibly interrupted) run left behind. Do not remove it.
+      yield* Effect.logInfo("ECS bindings setup: destroying previous stack");
+      yield* sharedStack.destroy();
 
       // Phase 1: deploy the infra alone so its state exists before the
       // Lambda's `Resource.ref(...)`s resolve (refs read stack state, not

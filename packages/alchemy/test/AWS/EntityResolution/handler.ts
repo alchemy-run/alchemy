@@ -138,17 +138,31 @@ export default EntityResolutionTestFunction.make(
         inputSourceConfig: [
           { inputSourceARN: table.tableArn, schemaName: schema.schemaName },
         ],
-        idMappingWorkflowProperties: [{ idMappingType: "RULE_BASED" }],
+        // The workflow-create validation requires the SOURCE namespace to
+        // declare its rule-based capabilities (rules themselves live on the
+        // TARGET namespace).
+        idMappingWorkflowProperties: [
+          {
+            idMappingType: "RULE_BASED",
+            ruleBasedProperties: {
+              ruleDefinitionTypes: ["TARGET"],
+              attributeMatchingModel: "ONE_TO_ONE",
+              recordMatchingModels: ["ONE_SOURCE_TO_ONE_TARGET"],
+            },
+          },
+        ],
         roleArn: role.roleArn,
       },
     );
+    // The service requires TARGET namespace input sources to be matching
+    // workflow ARNs (the target ids are the workflow's match IDs):
+    // "Check that it follows the pattern:
+    //  arn:(aws|...):entityresolution:...:matchingworkflow/{resource_name}".
     const targetNamespace = yield* EntityResolution.IdNamespace(
       "ErBindingsTargetNs",
       {
         type: "TARGET",
-        inputSourceConfig: [
-          { inputSourceARN: table.tableArn, schemaName: schema.schemaName },
-        ],
+        inputSourceConfig: [{ inputSourceARN: matchingWorkflow.workflowArn }],
         idMappingWorkflowProperties: [
           {
             idMappingType: "RULE_BASED",
@@ -275,11 +289,28 @@ export default EntityResolutionTestFunction.make(
         if (request.method === "POST" && pathname === "/match-id") {
           const response = yield* getMatchId({
             record: { id: "1", email: "jane@example.com", name: "Jane Doe" },
-          });
-          return yield* HttpServerResponse.json({
-            matchId: response.matchId ?? null,
-            matchRule: response.matchRule ?? null,
-          });
+          }).pipe(
+            Effect.map((r) => ({
+              result: "ok" as const,
+              matchId: r.matchId ?? null,
+              matchRule: r.matchRule ?? null,
+              message: null as string | null,
+            })),
+            // A workflow that has never run a job may reject real-time
+            // lookups — surface the typed rejection so the test can assert
+            // on it (an IAM gap would still be a 500).
+            Effect.catchTag(
+              ["ValidationException", "ResourceNotFoundException"],
+              (e) =>
+                Effect.succeed({
+                  result: e._tag as string,
+                  matchId: null,
+                  matchRule: null,
+                  message: e.message ?? null,
+                }),
+            ),
+          );
+          return yield* HttpServerResponse.json(response);
         }
 
         // Real-time match-id generation for two records that match by email.
@@ -314,8 +345,13 @@ export default EntityResolutionTestFunction.make(
             // Real-time generation requires the workflow family to support
             // it — surface the typed rejection instead of a 500 so the test
             // can assert on it.
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed({ result: e._tag as string }),
+            Effect.catchTag(
+              ["ValidationException", "ResourceNotFoundException"],
+              (e) =>
+                Effect.succeed({
+                  result: e._tag as string,
+                  message: e.message ?? null,
+                }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -335,8 +371,13 @@ export default EntityResolutionTestFunction.make(
               errors: r.errors.length,
               disconnected: r.disconnectedUniqueIds.length,
             })),
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed({ result: e._tag as string }),
+            Effect.catchTag(
+              ["ValidationException", "ResourceNotFoundException"],
+              (e) =>
+                Effect.succeed({
+                  result: e._tag as string,
+                  message: e.message ?? null,
+                }),
             ),
           );
           return yield* HttpServerResponse.json(result);

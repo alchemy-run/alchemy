@@ -31,6 +31,8 @@ const readinessPolicy = Schedule.max([
 let baseUrl: string;
 let customQueueUrl: string;
 let defaultQueueUrl: string;
+let functionArn: string;
+let busArn: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -126,11 +128,11 @@ describe("EventBridge Bindings", () => {
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("EventBridge test setup: deploying fixture");
-      const { fn, custom, dflt } = yield* sharedStack.deploy(
+      const { fn, custom, dflt, bus } = yield* sharedStack.deploy(
         Effect.gen(function* () {
-          const { customQueue, defaultQueue } = yield* BusAndQueues;
+          const { customQueue, defaultQueue, bus } = yield* BusAndQueues;
           const fn = yield* EventBridgeTestFunction;
-          return { fn, custom: customQueue, dflt: defaultQueue };
+          return { fn, custom: customQueue, dflt: defaultQueue, bus };
         }).pipe(
           Effect.provide(
             Layer.mergeAll(EventBridgeTestFunctionLive, BusAndQueuesLive),
@@ -142,6 +144,8 @@ describe("EventBridge Bindings", () => {
       baseUrl = fn.functionUrl!.replace(/\/+$/, "");
       customQueueUrl = custom.queueUrl;
       defaultQueueUrl = dflt.queueUrl;
+      functionArn = fn.functionArn;
+      busArn = bus.eventBusArn;
 
       yield* Effect.logInfo(
         `EventBridge test setup: probing readiness at ${baseUrl}/health`,
@@ -201,6 +205,89 @@ describe("EventBridge Bindings", () => {
         expect(response.entries).toHaveLength(1);
         expect(response.entries[0].EventId).toBeTruthy();
       }),
+    );
+  });
+
+  describe("EnableRule / DisableRule / DescribeRule", () => {
+    test.provider(
+      "toggles the rule state and observes it via DescribeRule",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/rule-toggle`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            afterDisable: string;
+            afterEnable: string;
+          };
+
+          expect(response.afterDisable).toBe("DISABLED");
+          expect(response.afterEnable).toBe("ENABLED");
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("ListRuleNamesByTarget", () => {
+    test.provider(
+      "finds the consume-loop rule targeting the function",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/rule-names-by-target`),
+              { targetArn: functionArn },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            ruleNames: string[];
+          };
+
+          // The default-bus consume loop's rule targets the Lambda.
+          expect(Array.isArray(response.ruleNames)).toBe(true);
+          expect(response.ruleNames.length).toBeGreaterThanOrEqual(1);
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("Replays", () => {
+    test.provider("ListReplays enumerates account replays", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.get(`${baseUrl}/replays`),
+        ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+
+        expect(typeof response.count).toBe("number");
+        expect(response.count).toBeGreaterThanOrEqual(0);
+      }),
+    );
+
+    test.provider(
+      "StartReplay/DescribeReplay/CancelReplay drive a replay of the archive",
+      (_stack) =>
+        Effect.gen(function* () {
+          const res = yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/replay`),
+              { destinationArn: busArn },
+            ),
+          );
+          const bodyText = yield* res.text;
+          expect(res.status, bodyText).toBe(200);
+          const response = yield* Effect.sync(
+            () => JSON.parse(bodyText) as { state: string; cancel: string },
+          );
+
+          expect([
+            "STARTING",
+            "RUNNING",
+            "COMPLETED",
+            "CANCELLING",
+            "CANCELLED",
+            "FAILED",
+          ]).toContain(response.state);
+          expect(["cancelled", "not-cancellable"]).toContain(response.cancel);
+        }),
+      { timeout: 60_000 },
     );
   });
 

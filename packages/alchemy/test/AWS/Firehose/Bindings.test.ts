@@ -54,6 +54,16 @@ const readinessSchedule = Schedule.max([
 const urlOf = (baseUrl: string, path: string) =>
   `${baseUrl.replace(/\/+$/, "")}${path}`;
 
+const getJson = (baseUrl: string, path: string) =>
+  HttpClient.execute(HttpClientRequest.get(urlOf(baseUrl, path))).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? response.json
+        : Effect.fail(new Error(`Request failed: ${response.status}`)),
+    ),
+    Effect.retry({ schedule: readinessSchedule }),
+  );
+
 const postJson = (baseUrl: string, path: string, body: unknown) =>
   HttpClient.execute(
     HttpClientRequest.bodyJsonUnsafe(
@@ -113,6 +123,21 @@ describe("Firehose Bindings", () => {
           expect(entry.RecordId).toBeTruthy();
           expect(entry.ErrorCode).toBeUndefined();
         }
+      }),
+    );
+  });
+
+  describe("ListDeliveryStreams", () => {
+    test(
+      "lists delivery streams and includes the fixture stream",
+      Effect.gen(function* () {
+        const { url, deliveryStreamName } = yield* stack;
+        const response = (yield* getJson(url, "/list-streams")) as {
+          DeliveryStreamNames: string[];
+          HasMoreDeliveryStreams: boolean;
+        };
+        expect(Array.isArray(response.DeliveryStreamNames)).toBe(true);
+        expect(response.DeliveryStreamNames).toContain(deliveryStreamName);
       }),
     );
   });
