@@ -40,8 +40,13 @@ export const makeFleetWiseResourceHttpBinding = <
   actions: readonly string[];
   /** The request field the bound resource's identifier is injected as. */
   requestKey: K;
-  /** Resolve the injected identifier from the bound resource. */
-  identifier: (resource: Res) => OutputType<string>;
+  /**
+   * Resolve the injected identifier from the bound resource. `Req` is pinned
+   * to `never` (resource attributes are `Output<string, never>`): the default
+   * `Output<string>` widens `Req` to `any`, which leaks into the per-resource
+   * Effect's requirements and breaks the binding contract's `never`.
+   */
+  identifier: (resource: Res) => OutputType<string, never>;
   /** ARNs the actions are granted on. */
   resources: (resource: Res) => (OutputType<string> | string)[];
 }) =>

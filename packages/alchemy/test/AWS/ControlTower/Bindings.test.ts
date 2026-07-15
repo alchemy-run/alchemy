@@ -218,11 +218,9 @@ describe.sequential("ControlTower Bindings", () => {
           if (response.ok) {
             expect(response.count).toBeGreaterThanOrEqual(0);
           } else {
-            expect([
-              "AccessDeniedException",
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(response.tag);
+            expect(["AccessDeniedException", "ValidationException"]).toContain(
+              response.tag,
+            );
           }
         }),
     );

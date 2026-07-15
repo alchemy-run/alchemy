@@ -181,17 +181,14 @@ export default OrganizationsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/accounts-for-parent") {
-          const result = yield* rootId.pipe(
-            Effect.flatMap((parent) =>
-              parent === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoRoot" })
-                : listAccountsForParent({ ParentId: parent }).pipe(
-                    Effect.map((r) => ({
-                      ok: true as const,
-                      count: r.Accounts?.length ?? 0,
-                    })),
-                  ),
-            ),
+          const result = yield* Effect.gen(function* () {
+            const parent = yield* rootId;
+            if (parent === undefined) {
+              return { ok: false as const, tag: "NoRoot" };
+            }
+            const r = yield* listAccountsForParent({ ParentId: parent });
+            return { ok: true as const, count: r.Accounts?.length ?? 0 };
+          }).pipe(
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -205,17 +202,19 @@ export default OrganizationsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/ous-for-parent") {
-          const result = yield* rootId.pipe(
-            Effect.flatMap((parent) =>
-              parent === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoRoot" })
-                : listOrganizationalUnitsForParent({ ParentId: parent }).pipe(
-                    Effect.map((r) => ({
-                      ok: true as const,
-                      count: r.OrganizationalUnits?.length ?? 0,
-                    })),
-                  ),
-            ),
+          const result = yield* Effect.gen(function* () {
+            const parent = yield* rootId;
+            if (parent === undefined) {
+              return { ok: false as const, tag: "NoRoot" };
+            }
+            const r = yield* listOrganizationalUnitsForParent({
+              ParentId: parent,
+            });
+            return {
+              ok: true as const,
+              count: r.OrganizationalUnits?.length ?? 0,
+            };
+          }).pipe(
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -229,20 +228,17 @@ export default OrganizationsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/children") {
-          const result = yield* rootId.pipe(
-            Effect.flatMap((parent) =>
-              parent === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoRoot" })
-                : listChildren({
-                    ParentId: parent,
-                    ChildType: "ACCOUNT",
-                  }).pipe(
-                    Effect.map((r) => ({
-                      ok: true as const,
-                      count: r.Children?.length ?? 0,
-                    })),
-                  ),
-            ),
+          const result = yield* Effect.gen(function* () {
+            const parent = yield* rootId;
+            if (parent === undefined) {
+              return { ok: false as const, tag: "NoRoot" };
+            }
+            const r = yield* listChildren({
+              ParentId: parent,
+              ChildType: "ACCOUNT",
+            });
+            return { ok: true as const, count: r.Children?.length ?? 0 };
+          }).pipe(
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -256,17 +252,14 @@ export default OrganizationsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/parents") {
-          const result = yield* managementAccountId.pipe(
-            Effect.flatMap((accountId) =>
-              accountId === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoOrganization" })
-                : listParents({ ChildId: accountId }).pipe(
-                    Effect.map((r) => ({
-                      ok: true as const,
-                      count: r.Parents?.length ?? 0,
-                    })),
-                  ),
-            ),
+          const result = yield* Effect.gen(function* () {
+            const accountId = yield* managementAccountId;
+            if (accountId === undefined) {
+              return { ok: false as const, tag: "NoOrganization" };
+            }
+            const r = yield* listParents({ ChildId: accountId });
+            return { ok: true as const, count: r.Parents?.length ?? 0 };
+          }).pipe(
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -296,20 +289,17 @@ export default OrganizationsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/policies-for-target") {
-          const result = yield* rootId.pipe(
-            Effect.flatMap((target) =>
-              target === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoRoot" })
-                : listPoliciesForTarget({
-                    TargetId: target,
-                    Filter: "SERVICE_CONTROL_POLICY",
-                  }).pipe(
-                    Effect.map((r) => ({
-                      ok: true as const,
-                      count: r.Policies?.length ?? 0,
-                    })),
-                  ),
-            ),
+          const result = yield* Effect.gen(function* () {
+            const target = yield* rootId;
+            if (target === undefined) {
+              return { ok: false as const, tag: "NoRoot" };
+            }
+            const r = yield* listPoliciesForTarget({
+              TargetId: target,
+              Filter: "SERVICE_CONTROL_POLICY",
+            });
+            return { ok: true as const, count: r.Policies?.length ?? 0 };
+          }).pipe(
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -326,20 +316,17 @@ export default OrganizationsTestFunction.make(
           // Discover a policy id from the SCP list (p-FullAWSAccess exists in
           // every organization with SCPs available), then read its targets —
           // proves ListTargetsForPolicy's grant end-to-end.
-          const result = yield* listPolicies({
-            Filter: "SERVICE_CONTROL_POLICY",
+          const result = yield* Effect.gen(function* () {
+            const r = yield* listPolicies({
+              Filter: "SERVICE_CONTROL_POLICY",
+            });
+            const policyId = r.Policies?.[0]?.Id;
+            if (policyId === undefined) {
+              return { ok: false as const, tag: "NoPolicy" };
+            }
+            const t = yield* listTargetsForPolicy({ PolicyId: policyId });
+            return { ok: true as const, count: t.Targets?.length ?? 0 };
           }).pipe(
-            Effect.flatMap((r) => {
-              const policyId = r.Policies?.[0]?.Id;
-              return policyId === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoPolicy" })
-                : listTargetsForPolicy({ PolicyId: policyId }).pipe(
-                    Effect.map((t) => ({
-                      ok: true as const,
-                      count: t.Targets?.length ?? 0,
-                    })),
-                  );
-            }),
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -407,20 +394,20 @@ export default OrganizationsTestFunction.make(
           request.method === "GET" &&
           pathname === "/effective-policy-validation-errors"
         ) {
-          const result = yield* managementAccountId.pipe(
-            Effect.flatMap((accountId) =>
-              accountId === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoOrganization" })
-                : listEffectivePolicyValidationErrors({
-                    AccountId: accountId,
-                    PolicyType: "TAG_POLICY",
-                  }).pipe(
-                    Effect.map((r) => ({
-                      ok: true as const,
-                      count: r.EffectivePolicyValidationErrors?.length ?? 0,
-                    })),
-                  ),
-            ),
+          const result = yield* Effect.gen(function* () {
+            const accountId = yield* managementAccountId;
+            if (accountId === undefined) {
+              return { ok: false as const, tag: "NoOrganization" };
+            }
+            const r = yield* listEffectivePolicyValidationErrors({
+              AccountId: accountId,
+              PolicyType: "TAG_POLICY",
+            });
+            return {
+              ok: true as const,
+              count: r.EffectivePolicyValidationErrors?.length ?? 0,
+            };
+          }).pipe(
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -461,19 +448,19 @@ export default OrganizationsTestFunction.make(
         if (request.method === "GET" && pathname === "/delegated-services") {
           // The management account is never a delegated administrator, so
           // the typed AccountNotRegisteredException proves the grant.
-          const result = yield* managementAccountId.pipe(
-            Effect.flatMap((accountId) =>
-              accountId === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoOrganization" })
-                : listDelegatedServicesForAccount({
-                    AccountId: accountId,
-                  }).pipe(
-                    Effect.map((r) => ({
-                      ok: true as const,
-                      count: r.DelegatedServices?.length ?? 0,
-                    })),
-                  ),
-            ),
+          const result = yield* Effect.gen(function* () {
+            const accountId = yield* managementAccountId;
+            if (accountId === undefined) {
+              return { ok: false as const, tag: "NoOrganization" };
+            }
+            const r = yield* listDelegatedServicesForAccount({
+              AccountId: accountId,
+            });
+            return {
+              ok: true as const,
+              count: r.DelegatedServices?.length ?? 0,
+            };
+          }).pipe(
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -507,17 +494,14 @@ export default OrganizationsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/tags") {
-          const result = yield* managementAccountId.pipe(
-            Effect.flatMap((accountId) =>
-              accountId === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoOrganization" })
-                : listTagsForResource({ ResourceId: accountId }).pipe(
-                    Effect.map((r) => ({
-                      ok: true as const,
-                      count: r.Tags?.length ?? 0,
-                    })),
-                  ),
-            ),
+          const result = yield* Effect.gen(function* () {
+            const accountId = yield* managementAccountId;
+            if (accountId === undefined) {
+              return { ok: false as const, tag: "NoOrganization" };
+            }
+            const r = yield* listTagsForResource({ ResourceId: accountId });
+            return { ok: true as const, count: r.Tags?.length ?? 0 };
+          }).pipe(
             Effect.catchTag(
               [
                 "AccessDeniedException",

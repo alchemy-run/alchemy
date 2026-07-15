@@ -130,14 +130,16 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
         appendParams(url.searchParams, request.query ?? {});
 
         const headers: Record<string, string> = {};
-        let body: string | Uint8Array | undefined;
+        let body: string | Uint8Array<ArrayBuffer> | undefined;
         if (request.form !== undefined) {
           const form = new URLSearchParams();
           appendParams(form, request.form);
           body = form.toString();
           headers["content-type"] = "application/x-www-form-urlencoded";
         } else if (request.bytes !== undefined) {
-          body = request.bytes.data;
+          // Copy into a fresh ArrayBuffer-backed view — `fetch`'s `BodyInit`
+          // rejects `Uint8Array<ArrayBufferLike>` (SharedArrayBuffer-backed).
+          body = new Uint8Array(request.bytes.data);
           headers["content-type"] = request.bytes.contentType;
           Object.assign(headers, request.bytes.headers);
         }

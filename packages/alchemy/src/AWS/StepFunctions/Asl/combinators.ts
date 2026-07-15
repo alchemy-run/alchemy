@@ -10,7 +10,7 @@
  * ASL's `BackoffRate`), and branching goes through `when`/`match` because a
  * compiled program cannot branch on runtime JS.
  */
-import type * as Duration from "effect/Duration";
+import * as Duration from "effect/Duration";
 import { aslSeconds } from "./compile.ts";
 import type { Expr, UnwrapExpr } from "./Jsonata.ts";
 import type {

@@ -115,7 +115,7 @@ describe.sequential("NetworkFirewall Firewall Bindings", () => {
       "runs a flow capture end-to-end on the bound firewall",
       (_stack) =>
         Effect.gen(function* () {
-          interface FlowResponse {
+          type FlowResponse = {
             step: string;
             tag?: string;
             error?: string;
@@ -123,7 +123,7 @@ describe.sequential("NetworkFirewall Firewall Bindings", () => {
             status?: string;
             operations?: number;
             flows?: number;
-          }
+          };
           // The role policy is attached moments before this test — IAM
           // propagation can lag, surfacing as AccessDeniedException from a
           // step. Retry (bounded) until the grant lands.

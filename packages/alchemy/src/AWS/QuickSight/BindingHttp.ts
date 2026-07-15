@@ -118,7 +118,7 @@ export const makeQuickSightDataSetHttpBinding = <
         }
       }
       return Effect.fn(`${options.tag}(${dataSet.LogicalId})`)(function* (
-        request: Omit<I, "AwsAccountId" | "DataSetId">,
+        request?: Omit<I, "AwsAccountId" | "DataSetId">,
       ) {
         const arn = yield* Arn;
         return yield* op({

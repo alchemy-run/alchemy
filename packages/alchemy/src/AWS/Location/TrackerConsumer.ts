@@ -88,6 +88,40 @@ export const TrackerConsumerProvider = () =>
 
       return {
         stables: ["trackerName", "consumerArn"],
+        list: () =>
+          Effect.gen(function* () {
+            const trackerNames = yield* location.listTrackers.pages({}).pipe(
+              EffectStream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.Entries ?? []).map((entry) => entry.TrackerName),
+                ),
+              ),
+            );
+            const associations = yield* Effect.forEach(
+              trackerNames,
+              (trackerName) =>
+                location.listTrackerConsumers
+                  .pages({ TrackerName: trackerName })
+                  .pipe(
+                    EffectStream.runCollect,
+                    Effect.map((chunk) =>
+                      Array.from(chunk).flatMap((page) =>
+                        page.ConsumerArns.map((consumerArn) => ({
+                          trackerName,
+                          consumerArn,
+                        })),
+                      ),
+                    ),
+                    // Tracker deleted between the two list calls.
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed([]),
+                    ),
+                  ),
+              { concurrency: 5 },
+            );
+            return associations.flat();
+          }),
         read: Effect.fn(function* ({ olds, output }) {
           const trackerName = output?.trackerName ?? olds?.trackerName;
           const consumerArn = output?.consumerArn ?? olds?.consumerArn;

@@ -224,9 +224,10 @@ export default ApplicationSignalsTestFunction.make(
         if (request.method === "GET" && pathname === "/slos") {
           // The fixture SLO must be among the account's SLOs.
           const result = yield* listSlos({});
+          const summaries = result.SloSummaries ?? [];
           return yield* HttpServerResponse.json({
-            count: result.SloSummaries.length,
-            names: result.SloSummaries.map((summary) => summary.Name),
+            count: summaries.length,
+            names: summaries.map((summary) => summary.Name),
           });
         }
 

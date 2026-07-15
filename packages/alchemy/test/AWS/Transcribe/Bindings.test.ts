@@ -63,7 +63,9 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     }),
   );
 
-interface RouteResult {
+// A `type` (not `interface`) so it carries an implicit index signature and is
+// comparable to the `JsonObject` member of `response.json`'s union.
+type RouteResult = {
   ok: boolean;
   error?: string;
   count?: number;
@@ -72,7 +74,7 @@ interface RouteResult {
   name?: string;
   rules?: number;
   downloadUri?: string;
-}
+};
 
 const getJson = (path: string) =>
   send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(

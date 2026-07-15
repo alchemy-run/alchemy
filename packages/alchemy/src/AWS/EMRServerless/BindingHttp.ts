@@ -49,33 +49,35 @@ export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const policyStatements: PolicyStatement[] = [
-            {
-              Effect: "Allow",
-              Action: [...options.actions],
-              Resource: [
-                Output.interpolate`${application.applicationArn}`,
-                ...(options.subresources ?? []).map(
-                  (suffix) =>
-                    Output.interpolate`${application.applicationArn}${suffix}`,
-                ),
-              ],
-            },
-          ];
-          if (options.passRole) {
-            policyStatements.push({
-              Effect: "Allow",
-              Action: ["iam:PassRole"],
-              Resource: ["*"],
-              Condition: {
-                StringEquals: {
-                  "iam:PassedToService": "emr-serverless.amazonaws.com",
+          const passRoleStatements: PolicyStatement[] = options.passRole
+            ? [
+                {
+                  Effect: "Allow",
+                  Action: ["iam:PassRole"],
+                  Resource: ["*"],
+                  Condition: {
+                    StringEquals: {
+                      "iam:PassedToService": "emr-serverless.amazonaws.com",
+                    },
+                  },
                 },
-              },
-            });
-          }
+              ]
+            : [];
           yield* host.bind`Allow(${host}, ${options.tag}(${application}))`({
-            policyStatements,
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [
+                  Output.interpolate`${application.applicationArn}`,
+                  ...(options.subresources ?? []).map(
+                    (suffix) =>
+                      Output.interpolate`${application.applicationArn}${suffix}`,
+                  ),
+                ],
+              },
+              ...passRoleStatements,
+            ],
           });
         }
       }

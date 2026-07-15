@@ -248,7 +248,7 @@ export default Inspector2TestFunction.make(
 
         if (request.method === "GET" && pathname === "/config") {
           const result = yield* errorTagged(
-            getConfiguration().pipe(
+            getConfiguration({}).pipe(
               Effect.map((r) => ({
                 hasEcrConfiguration: r.ecrConfiguration !== undefined,
                 hasEc2Configuration: r.ec2Configuration !== undefined,
@@ -260,7 +260,7 @@ export default Inspector2TestFunction.make(
 
         if (request.method === "GET" && pathname === "/deep-inspection") {
           const result = yield* errorTagged(
-            getEc2DeepInspectionConfiguration().pipe(
+            getEc2DeepInspectionConfiguration({}).pipe(
               Effect.map((r) => ({ status: r.status ?? "UNSET" })),
             ),
           );
@@ -299,7 +299,7 @@ export default Inspector2TestFunction.make(
         // typed rejection, which still proves the binding + IAM wiring.
         if (request.method === "GET" && pathname === "/org-config") {
           const result = yield* errorTagged(
-            describeOrganizationConfiguration().pipe(
+            describeOrganizationConfiguration({}).pipe(
               Effect.map((r) => ({
                 maxAccountLimitReached: r.maxAccountLimitReached ?? false,
               })),
@@ -310,7 +310,7 @@ export default Inspector2TestFunction.make(
 
         if (request.method === "GET" && pathname === "/delegated-admin") {
           const result = yield* errorTagged(
-            getDelegatedAdminAccount().pipe(
+            getDelegatedAdminAccount({}).pipe(
               Effect.map((r) => ({
                 accountId: r.delegatedAdmin?.accountId,
               })),

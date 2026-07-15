@@ -23,8 +23,8 @@ import type { SigningProfile } from "./SigningProfile.ts";
 const profilePolicyStatement = (
   profile: SigningProfile,
   actions: readonly string[],
-): PolicyStatement => ({
-  Effect: "Allow",
+) => ({
+  Effect: "Allow" as const,
   Action: [...actions],
   Resource: [
     Output.interpolate`${profile.arn}`,

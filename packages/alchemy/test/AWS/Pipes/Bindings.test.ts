@@ -63,6 +63,9 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
 const getJson = (path: string) =>
   send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
     Effect.flatMap((r) => r.json),
+    // The response body has no compile-time shape; widen the distilled Json
+    // union to `unknown` so call sites can assert their expected shape.
+    Effect.map((json): unknown => json),
   );
 
 interface DescribeResponse {

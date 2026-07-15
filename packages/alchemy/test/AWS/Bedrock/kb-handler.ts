@@ -193,12 +193,15 @@ export default BedrockKbTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/rag-stream") {
+          // knowledgeBaseId is an Accessor<string> at init scope — yield it
+          // again at request time to resolve the concrete value.
+          const kbId = yield* knowledgeBaseId;
           const result = yield* ragStream({
             input: { text: "What is Alchemy?" },
             retrieveAndGenerateConfiguration: {
               type: "KNOWLEDGE_BASE",
               knowledgeBaseConfiguration: {
-                knowledgeBaseId,
+                knowledgeBaseId: kbId,
                 modelArn: MODEL,
               },
             },

@@ -92,19 +92,18 @@ export default ControlTowerTestFunction.make(
           // Discover a baseline ARN from the catalog, then read it back —
           // proves GetBaseline's grant end-to-end.
           const result = yield* listBaselines().pipe(
-            Effect.flatMap((r) => {
-              const arn = r.baselines.find(
-                (b) => b.name === "AWSControlTowerBaseline",
-              )?.arn;
-              return arn === undefined
-                ? Effect.succeed({ ok: false as const, tag: "NoCatalog" })
-                : getBaseline({ baselineIdentifier: arn }).pipe(
-                    Effect.map((b) => ({
-                      ok: true as const,
-                      name: b.name,
-                    })),
-                  );
-            }),
+            Effect.flatMap((r) =>
+              Effect.gen(function* () {
+                const arn = r.baselines.find(
+                  (b) => b.name === "AWSControlTowerBaseline",
+                )?.arn;
+                if (arn === undefined) {
+                  return { ok: false as const, tag: "NoCatalog" };
+                }
+                const b = yield* getBaseline({ baselineIdentifier: arn });
+                return { ok: true as const, name: b.name };
+              }),
+            ),
             Effect.catchTag(
               [
                 "AccessDeniedException",
@@ -161,12 +160,11 @@ export default ControlTowerTestFunction.make(
               ok: true as const,
               count: r.controlOperations.length,
             })),
+            // ListControlOperations never throws ResourceNotFoundException
+            // (per the distilled union + AWS docs) — only the access/validation
+            // family applies here.
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "ValidationException",
-              ],
+              ["AccessDeniedException", "ValidationException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );

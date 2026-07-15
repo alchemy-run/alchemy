@@ -7,11 +7,13 @@ import {
   Workspace,
 } from "@/AWS/AMP";
 import * as Logs from "@/AWS/Logs";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Vitest";
 import * as amp from "@distilled.cloud/aws/amp";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -74,7 +76,7 @@ test.provider(
           ],
         });
 
-      const program = (retention: string, qspThreshold: number) =>
+      const program = (retention: Duration.Input, qspThreshold: number) =>
         Effect.gen(function* () {
           const workspace = yield* Workspace("Metrics", {
             alias: "alchemy-test-amp-config",
@@ -105,7 +107,7 @@ test.provider(
           );
           const policy = yield* ResourcePolicy("Policy", {
             workspaceId: workspace.workspaceId,
-            policyDocument: workspace.workspaceArn.map((arn) =>
+            policyDocument: Output.map(workspace.workspaceArn, (arn) =>
               policyFor(arn, "aps:QueryMetrics"),
             ),
           });
@@ -186,7 +188,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const program = (interval: string) =>
+      const program = (interval: Duration.Input) =>
         Effect.gen(function* () {
           const workspace = yield* Workspace("DetectorWorkspace", {
             alias: "alchemy-test-amp-anomaly",

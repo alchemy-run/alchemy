@@ -72,7 +72,7 @@ const sendUntil = <T>(route: string, until: (response: T) => boolean) =>
 // Sequential: the tracker tests are write-then-read (BatchUpdateDevicePosition
 // must land before GetDevicePosition/List/BatchGet observe it), and the global
 // vitest config runs tests concurrently by default.
-describe.sequential.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
+describe.skipIf(!!process.env.FAST).sequential("AWS.Location Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* Effect.logInfo(

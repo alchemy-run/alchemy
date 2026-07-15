@@ -1,5 +1,6 @@
 import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -291,11 +292,18 @@ export const EventActionProvider = () =>
 
         list: () =>
           dataexchange.listEventActions.items({}).pipe(
-            Stream.map((entry) => ({
-              eventActionId: entry.Id,
-              eventActionArn: entry.Arn,
-              dataSetId: entry.Event?.RevisionPublished?.DataSetId,
-            })),
+            // RevisionPublished is the only event type Data Exchange supports;
+            // entries without it carry no data set identity, so skip them
+            // rather than fabricate a dataSetId.
+            Stream.filterMap((entry) =>
+              entry.Event.RevisionPublished !== undefined
+                ? Option.some({
+                    eventActionId: entry.Id,
+                    eventActionArn: entry.Arn,
+                    dataSetId: entry.Event.RevisionPublished.DataSetId,
+                  })
+                : Option.none(),
+            ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           ),

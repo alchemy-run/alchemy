@@ -112,6 +112,8 @@ export default ContactsBindingsFunction.make(
       listRotationOverrides,
     };
 
+    // Accessor for the contact's ARN — an Accessor<string> at init scope,
+    // resolved with a second yield inside the runtime fetch handler.
     const oncallArn = yield* oncall.contactArn;
 
     return {
@@ -133,7 +135,7 @@ export default ContactsBindingsFunction.make(
           });
           const preview = yield* listPreviewRotationShifts({
             EndTime: new Date(Date.now() + week),
-            Members: [oncallArn],
+            Members: [yield* oncallArn],
             TimeZoneId: "America/Los_Angeles",
             Recurrence: {
               NumberOfOnCalls: 1,
@@ -150,7 +152,7 @@ export default ContactsBindingsFunction.make(
         if (request.method === "GET" && pathname === "/override") {
           const hour = 60 * 60 * 1000;
           const { RotationOverrideId } = yield* createRotationOverride({
-            NewContactIds: [oncallArn],
+            NewContactIds: [yield* oncallArn],
             StartTime: new Date(Date.now() + hour),
             EndTime: new Date(Date.now() + 2 * hour),
           });

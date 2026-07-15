@@ -25,7 +25,7 @@ export interface GetInvitationsCount extends Binding.Service<
   "AWS.Macie2.GetInvitationsCount",
   () => Effect.Effect<
     (
-      request: macie2.GetInvitationsCountRequest,
+      request?: macie2.GetInvitationsCountRequest,
     ) => Effect.Effect<
       macie2.GetInvitationsCountResponse,
       macie2.GetInvitationsCountError

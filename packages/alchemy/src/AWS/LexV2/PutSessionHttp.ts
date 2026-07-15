@@ -10,7 +10,11 @@ import { PutSession, type PutSessionRequest } from "./PutSession.ts";
  */
 export const PutSessionHttp = Layer.effect(
   PutSession,
-  makeLexAliasHttpBinding({
+  makeLexAliasHttpBinding<
+    PutSessionRequest,
+    lexr.PutSessionResponse,
+    lexr.PutSessionError
+  >({
     capability: "PutSession",
     iamActions: ["lex:PutSession"],
     operation: lexr.putSession,

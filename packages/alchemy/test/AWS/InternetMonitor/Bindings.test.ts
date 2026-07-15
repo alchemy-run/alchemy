@@ -178,7 +178,7 @@ describe.sequential("InternetMonitor Bindings", () => {
       "runs a MEASUREMENTS query end-to-end on the bound monitor",
       (_stack) =>
         Effect.gen(function* () {
-          interface QueryResponse {
+          type QueryResponse = {
             step: string;
             tag?: string;
             error?: string;
@@ -187,7 +187,7 @@ describe.sequential("InternetMonitor Bindings", () => {
             fields?: number;
             rows?: number;
             stopTag?: string;
-          }
+          };
           // The role policy granting internetmonitor:* is attached moments
           // before this test — IAM propagation can lag ~10-30s, surfacing as
           // AccessDeniedException from a step. Retry (bounded) until the

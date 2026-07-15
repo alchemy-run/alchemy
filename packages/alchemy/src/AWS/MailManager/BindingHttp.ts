@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { AddressList } from "./AddressList.ts";
 import type { Archive } from "./Archive.ts";
@@ -16,7 +17,7 @@ import type { Archive } from "./Archive.ts";
 const registerHostPolicy = Effect.fn(function* (
   tag: string,
   resource: AddressList | Archive,
-  arn: unknown,
+  arn: Input<string>,
   actions: readonly string[],
 ) {
   if (!globalThis.__ALCHEMY_RUNTIME__) {

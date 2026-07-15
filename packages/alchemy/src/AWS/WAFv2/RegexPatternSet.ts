@@ -343,7 +343,9 @@ export const RegexPatternSetProvider = () =>
             observed = yield* findSet(scope, name, undefined);
           }
 
-          if (!observed?.RegexPatternSet?.ARN) {
+          const set = observed?.RegexPatternSet;
+          const arn = set?.ARN;
+          if (set === undefined || arn === undefined) {
             return yield* Effect.fail(
               new Error(
                 `Failed to observe RegexPatternSet '${name}' after create`,
@@ -351,8 +353,7 @@ export const RegexPatternSetProvider = () =>
             );
           }
 
-          const set = observed.RegexPatternSet;
-          yield* session.note(set.ARN);
+          yield* session.note(arn);
 
           // 3. Sync expressions + description against OBSERVED state. WAF
           //    may return the list in arbitrary order — compare as sets.
@@ -397,7 +398,7 @@ export const RegexPatternSetProvider = () =>
           }
 
           // 3b. Sync tags against OBSERVED cloud tags.
-          yield* syncWafTags(scope, set.ARN, desiredTags);
+          yield* syncWafTags(scope, arn, desiredTags);
 
           // 4. Return fresh attributes.
           return {

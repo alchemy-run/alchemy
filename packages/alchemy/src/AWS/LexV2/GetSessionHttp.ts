@@ -10,7 +10,11 @@ import { GetSession, type GetSessionRequest } from "./GetSession.ts";
  */
 export const GetSessionHttp = Layer.effect(
   GetSession,
-  makeLexAliasHttpBinding({
+  makeLexAliasHttpBinding<
+    GetSessionRequest,
+    lexr.GetSessionResponse,
+    lexr.GetSessionError
+  >({
     capability: "GetSession",
     iamActions: ["lex:GetSession"],
     operation: lexr.getSession,

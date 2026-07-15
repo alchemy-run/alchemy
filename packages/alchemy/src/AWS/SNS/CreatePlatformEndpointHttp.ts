@@ -9,6 +9,5 @@ export const CreatePlatformEndpointHttp = Layer.effect(
     tag: "AWS.SNS.CreatePlatformEndpoint",
     operation: sns.createPlatformEndpoint,
     actions: ["sns:CreatePlatformEndpoint"],
-    injectArn: true,
   }),
 );

@@ -2,6 +2,7 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -232,6 +233,37 @@ export const RotationScheduleProvider = () =>
               ),
             );
         }),
+        // A rotation schedule is configuration on a secret, not a separately
+        // enumerable object — `listSecrets` surfaces the rotation state
+        // (`RotationEnabled`, `RotationLambdaARN`) inline, so hydrate the
+        // exact `read` Attributes shape for every secret that has rotation
+        // enabled.
+        list: () =>
+          secretsmanager.listSecrets.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.SecretList ?? [])
+                  .filter(
+                    (
+                      entry,
+                    ): entry is secretsmanager.SecretListEntry & {
+                      ARN: string;
+                      Name: string;
+                    } =>
+                      entry.ARN != null &&
+                      entry.Name != null &&
+                      entry.RotationEnabled === true,
+                  )
+                  .map((entry) => ({
+                    secretArn: entry.ARN,
+                    secretName: entry.Name,
+                    rotationLambdaArn: entry.RotationLambdaARN,
+                    rotationEnabled: true,
+                  })),
+              ),
+            ),
+          ),
       };
     }),
   );

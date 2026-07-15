@@ -9,6 +9,7 @@ import {
   GetManagedEndpointSessionCredentials,
   type GetManagedEndpointSessionCredentialsRequest,
 } from "./GetManagedEndpointSessionCredentials.ts";
+import type { VirtualCluster } from "./VirtualCluster.ts";
 
 export const GetManagedEndpointSessionCredentialsHttp = Layer.effect(
   GetManagedEndpointSessionCredentials,

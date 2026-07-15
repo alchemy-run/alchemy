@@ -49,7 +49,7 @@ export const makeOsisPipelineHttpBinding = <
   /** The request field the resolved identifier is injected as. */
   requestKey: K;
   /** Resolve the injected identifier from the bound pipeline. */
-  identifier: (pipeline: Pipeline) => Output.Output<string>;
+  identifier: (pipeline: Pipeline) => Output.Output<string, never>;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;

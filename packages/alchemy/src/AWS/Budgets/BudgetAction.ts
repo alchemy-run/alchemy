@@ -351,7 +351,6 @@ export const BudgetActionProvider = () =>
                     .flatMap((page) => page.Actions ?? [])
                     .map((a) => attrs(accountId, a.BudgetName, a.ActionId)),
                 ),
-                Effect.catchTag("NotFoundException", () => Effect.succeed([])),
               );
           }),
         read: Effect.fn(function* ({ output }) {

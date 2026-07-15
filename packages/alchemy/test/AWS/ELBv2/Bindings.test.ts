@@ -54,7 +54,7 @@ const callRoute = (method: "GET" | "POST", path: string) =>
               new Error(`Route ${path} not ready: ${response.status}`),
             ),
       ),
-      Effect.map((json) => json as RouteResult),
+      Effect.map((json) => json as unknown as RouteResult),
       Effect.repeat({
         until: (body): boolean =>
           body.tag !== "AccessDenied" && body.tag !== "AccessDeniedException",

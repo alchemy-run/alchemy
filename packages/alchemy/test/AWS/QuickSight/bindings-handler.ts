@@ -172,7 +172,18 @@ export default QuickSightBindingsFunction.make(
             SnapshotJobId: jobId,
             UserConfiguration: { AnonymousUsers: [] },
             SnapshotConfiguration: {
-              FileGroups: [{ Files: [{ FormatType: "PDF" }] }],
+              FileGroups: [
+                {
+                  Files: [
+                    {
+                      FormatType: "PDF",
+                      SheetSelections: [
+                        { SheetId: "sheet1", SelectionScope: "ALL_VISUALS" },
+                      ],
+                    },
+                  ],
+                },
+              ],
             },
           }).pipe(
             Effect.map((r) => ({ started: true, jobId: r.SnapshotJobId })),

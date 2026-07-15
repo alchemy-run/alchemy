@@ -10,7 +10,11 @@ import { DeleteSession, type DeleteSessionRequest } from "./DeleteSession.ts";
  */
 export const DeleteSessionHttp = Layer.effect(
   DeleteSession,
-  makeLexAliasHttpBinding({
+  makeLexAliasHttpBinding<
+    DeleteSessionRequest,
+    lexr.DeleteSessionResponse,
+    lexr.DeleteSessionError
+  >({
     capability: "DeleteSession",
     iamActions: ["lex:DeleteSession"],
     operation: lexr.deleteSession,

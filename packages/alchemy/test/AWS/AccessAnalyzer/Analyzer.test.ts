@@ -4,6 +4,7 @@ import * as Test from "@/Test/Vitest";
 import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -116,11 +117,7 @@ test.provider(
 
 const observedUnusedAccessAge = (
   analyzer: aa.AnalyzerSummary | undefined,
-): number | undefined =>
-  analyzer?.configuration !== undefined &&
-  "unusedAccess" in analyzer.configuration
-    ? analyzer.configuration.unusedAccess.unusedAccessAge
-    : undefined;
+): number | undefined => analyzer?.configuration?.unusedAccess?.unusedAccessAge;
 
 test.provider(
   "unused-access analyzer: create with a tracking period, replace on change, destroy",
@@ -130,7 +127,7 @@ test.provider(
 
       const analyzerName = "alchemy-test-unused-access-age";
 
-      const makeStack = (unusedAccessAge: string) =>
+      const makeStack = (unusedAccessAge: Duration.Input) =>
         Effect.gen(function* () {
           return {
             analyzer: yield* Analyzer("UnusedAccessAnalyzer", {

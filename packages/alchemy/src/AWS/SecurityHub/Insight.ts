@@ -133,7 +133,7 @@ export const InsightProvider = () =>
           const name = yield* toName(id, news);
 
           // 1. OBSERVE — by cached ARN first, then by name.
-          let live = output?.insightArn
+          let live: securityhub.Insight | undefined = output?.insightArn
             ? yield* getInsight(output.insightArn)
             : undefined;
           if (!live) {
@@ -141,6 +141,7 @@ export const InsightProvider = () =>
             live = all.find((i) => i.Name === name);
           }
 
+          let final: securityhub.Insight;
           if (!live) {
             // 2. ENSURE.
             const { InsightArn } = yield* securityhub.createInsight({
@@ -149,7 +150,7 @@ export const InsightProvider = () =>
               GroupByAttribute: news.groupByAttribute,
             });
             // The read-after-create may lag — fall back to the desired state.
-            live = (yield* getInsight(InsightArn)) ?? {
+            final = (yield* getInsight(InsightArn)) ?? {
               InsightArn,
               Name: name,
               Filters: news.filters,
@@ -168,16 +169,19 @@ export const InsightProvider = () =>
               Filters: news.filters,
               GroupByAttribute: news.groupByAttribute,
             });
-            live = (yield* getInsight(arn)) ?? {
+            final = (yield* getInsight(arn)) ?? {
               InsightArn: arn,
               Name: name,
+              Filters: news.filters,
               GroupByAttribute: news.groupByAttribute,
             };
+          } else {
+            final = live;
           }
 
           // 4. RETURN fresh attributes.
-          yield* session.note(live.InsightArn!);
-          return buildAttrs(live);
+          yield* session.note(final.InsightArn!);
+          return buildAttrs(final);
         }),
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the insight (or the whole hub) may already be gone.

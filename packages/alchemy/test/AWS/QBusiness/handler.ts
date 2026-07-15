@@ -534,7 +534,7 @@ export default QBusinessTestFunction.make(
         // -------------------------------------------------- anonymous url
         if (pathname === "/anonymous-url") {
           const result = yield* errorTagged(
-            createAnonymousUrl({ sessionDurationInMinutes: 15 }),
+            createAnonymousUrl({ sessionDuration: "15 minutes" }),
           );
           return yield* HttpServerResponse.json(
             "errorTag" in result

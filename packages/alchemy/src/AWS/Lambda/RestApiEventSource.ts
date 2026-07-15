@@ -5,7 +5,10 @@ import * as Layer from "effect/Layer";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import { GatewayResource } from "../ApiGateway/GatewayResource.ts";
+import {
+  type ApiGatewayResource,
+  GatewayResource,
+} from "../ApiGateway/GatewayResource.ts";
 import { MethodResource } from "../ApiGateway/Method.ts";
 import type { RestApi } from "../ApiGateway/RestApi.ts";
 import {
@@ -93,7 +96,10 @@ export const RestApiEventSource = Layer.effect(
               prefix += `/${segment}`;
               const resourceKey =
                 prefix.replace(/[^A-Za-z0-9]+/g, "") || "root";
-              const resource = yield* Resource(
+              // Explicit annotation: `resource` feeds `parentId` for the next
+              // loop iteration's `Resource(...)` call, which TS 7 otherwise
+              // flags as a self-referential inference cycle (TS7022).
+              const resource: ApiGatewayResource = yield* Resource(
                 `${api.LogicalId}-${resourceKey}-Resource`,
                 {
                   restApiId: api.restApiId,

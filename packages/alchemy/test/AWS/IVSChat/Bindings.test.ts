@@ -231,7 +231,7 @@ describe("IVSChat Bindings", () => {
         );
       }).pipe(
         Effect.timeout("15 seconds"),
-        Effect.catchTag("TimeoutException", () =>
+        Effect.catchTag("TimeoutError", () =>
           Effect.fail(new WsFailure({ reason: "no frame within 15s" })),
         ),
       );
@@ -288,7 +288,9 @@ describe("IVSChat Bindings", () => {
             return received;
           }).pipe(
             Effect.tapError((e) =>
-              Effect.logInfo(`review-allow attempt failed: ${e.reason}`),
+              Effect.logInfo(
+                `review-allow attempt failed: ${e._tag === "WsFailure" ? e.reason : String(e)}`,
+              ),
             ),
             Effect.retry({
               schedule: Schedule.max([
@@ -325,7 +327,9 @@ describe("IVSChat Bindings", () => {
             return received;
           }).pipe(
             Effect.tapError((e) =>
-              Effect.logInfo(`review-deny attempt failed: ${e.reason}`),
+              Effect.logInfo(
+                `review-deny attempt failed: ${e._tag === "WsFailure" ? e.reason : String(e)}`,
+              ),
             ),
             Effect.retry({
               schedule: Schedule.max([

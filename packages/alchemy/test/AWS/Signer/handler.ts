@@ -183,6 +183,9 @@ export default SignerTestFunction.make(
             });
           }
           const started = yield* startSigningJob({
+            // Required idempotency token — a fresh UUID per request so each
+            // POST /start begins a new signing job.
+            clientRequestToken: yield* Effect.sync(() => crypto.randomUUID()),
             source: {
               s3: {
                 bucketName: yield* SrcName,

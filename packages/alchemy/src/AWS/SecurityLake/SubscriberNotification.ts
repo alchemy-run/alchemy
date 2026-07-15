@@ -1,6 +1,7 @@
 import * as securitylake from "@distilled.cloud/aws/securitylake";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -168,6 +169,32 @@ export const SubscriberNotificationProvider = () =>
             ? undefined
             : { subscriberId, subscriberEndpoint: endpoint };
         }),
+
+        // A notification exists only for subscribers that report a
+        // notification endpoint.
+        list: () =>
+          securitylake.listSubscribers.items({}).pipe(
+            Stream.filter(
+              (subscriber) => subscriber.subscriberEndpoint !== undefined,
+            ),
+            Stream.runCollect,
+            Effect.map((subscribers) =>
+              [...subscribers].map((subscriber) => ({
+                subscriberId: subscriber.subscriberId,
+                subscriberEndpoint: subscriber.subscriberEndpoint,
+              })),
+            ),
+            // An account that never onboarded Security Lake has no
+            // subscribers to enumerate.
+            Effect.catchTag(
+              [
+                "AccessDeniedException",
+                "ResourceNotFoundException",
+                "UnauthorizedException",
+              ],
+              () => Effect.succeed([]),
+            ),
+          ),
 
         // The notification is per-subscriber; changing the subscriber
         // replaces it.

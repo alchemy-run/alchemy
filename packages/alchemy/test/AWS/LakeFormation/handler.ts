@@ -258,7 +258,7 @@ export default LakeFormationTestFunction.make(
           { error: "not found" },
           { status: 404 },
         );
-      }),
+      }).pipe(Effect.orDie),
     };
   }).pipe(
     Effect.provide(

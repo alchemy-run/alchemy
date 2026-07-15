@@ -200,7 +200,7 @@ describe.runIf(!!process.env.AWS_TEST_SLOW)(
       HttpClient.execute(
         method === "POST"
           ? HttpClientRequest.post(`${baseUrl}${path}`)
-          : HttpClientRequest.del(`${baseUrl}${path}`),
+          : HttpClientRequest.delete(`${baseUrl}${path}`),
       ).pipe(Effect.flatMap((r) => r.json));
 
     beforeAll(

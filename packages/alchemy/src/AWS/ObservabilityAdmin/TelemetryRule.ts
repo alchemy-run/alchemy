@@ -173,12 +173,13 @@ const sameJson = (a: unknown, b: unknown): boolean =>
 const ruleNeedsUpdate = (
   desired: obs.TelemetryRule,
   observed: obs.TelemetryRule | undefined,
-): boolean =>
-  observed === undefined ||
-  Object.entries(desired).some(
-    ([key, value]) =>
-      !sameJson(value, (observed as Record<string, unknown>)[key]),
+): boolean => {
+  if (observed === undefined) return true;
+  const observedByKey = new Map<string, unknown>(Object.entries(observed));
+  return Object.entries(desired).some(
+    ([key, value]) => !sameJson(value, observedByKey.get(key)),
   );
+};
 
 /** Project props to the wire `TelemetryRule` struct (dropping undefineds). */
 const toWireRule = (props: TelemetryRuleProps): obs.TelemetryRule =>

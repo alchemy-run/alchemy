@@ -85,7 +85,7 @@ const waitForExecution = (baseUrl: string, executionId: string) =>
         : Effect.fail(new ExecutionNotFinished());
     }),
     Effect.retry({
-      while: (e): boolean => e._tag === "ExecutionNotFinished",
+      while: (e): boolean => e instanceof ExecutionNotFinished,
       schedule: Schedule.max([
         Schedule.fixed("5 seconds"),
         Schedule.recurs(18),

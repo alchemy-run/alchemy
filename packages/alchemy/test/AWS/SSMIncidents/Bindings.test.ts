@@ -419,11 +419,11 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // Resolve, clean up the timeline event and the record.
       yield* json(HttpClientRequest.post(`${baseUrl}/resolve?arn=${arn}`));
       yield* json(
-        HttpClientRequest.del(
+        HttpClientRequest.delete(
           `${baseUrl}/timeline?arn=${arn}&eventId=${eventId}`,
         ),
       );
-      yield* json(HttpClientRequest.del(`${baseUrl}/record?arn=${arn}`));
+      yield* json(HttpClientRequest.delete(`${baseUrl}/record?arn=${arn}`));
 
       // Destroy — response plan and Lambda first, then offboarding.
       yield* stack.destroy();

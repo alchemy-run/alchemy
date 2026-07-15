@@ -86,7 +86,7 @@ export default SmsVoicePhoneTestFunction.make(
                 Effect.succeed({
                   ok: false as const,
                   tag: e._tag,
-                  message: e.Message,
+                  message: e.message,
                 }),
             ),
           );
@@ -113,7 +113,7 @@ export default SmsVoicePhoneTestFunction.make(
                 Effect.succeed({
                   ok: false as const,
                   tag: e._tag,
-                  message: e.Message,
+                  message: e.message,
                 }),
             ),
           );

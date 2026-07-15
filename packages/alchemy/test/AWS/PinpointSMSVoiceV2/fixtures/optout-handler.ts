@@ -98,7 +98,7 @@ export default SmsVoiceOptOutTestFunction.make(
                 Effect.succeed({
                   ok: false as const,
                   tag: e._tag,
-                  message: e.Message,
+                  message: e.message,
                 }),
             ),
           );
@@ -129,7 +129,7 @@ export default SmsVoiceOptOutTestFunction.make(
                 Effect.succeed({
                   ok: false as const,
                   tag: e._tag,
-                  message: e.Message,
+                  message: e.message,
                 }),
             ),
           );
@@ -157,7 +157,7 @@ export default SmsVoiceOptOutTestFunction.make(
                 Effect.succeed({
                   ok: false as const,
                   tag: e._tag,
-                  message: e.Message,
+                  message: e.message,
                 }),
             ),
           );

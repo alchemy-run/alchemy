@@ -21,6 +21,16 @@ import { isTask, type Task } from "./Task.ts";
  * `*` conditioned on the bound cluster.
  */
 
+/**
+ * `iam:PassRole` pre-typed as `string[]` (a declared alternative of
+ * `PolicyStatement.Action`). A fresh literal array at the `host.bind` call
+ * site would be contextually typed against `Input<IamAction[] | string[]>`
+ * across the `Function | Task` host union, forcing normalization of the
+ * ~18k-literal `IamAction` union and tripping TS2590 ("union type too
+ * complex") under TypeScript 7.
+ */
+const passRoleActions: string[] = ["iam:PassRole"];
+
 /** IAM resource scopes for cluster-bound ECS operations. */
 export type EcsClusterIamResource =
   | "cluster"
@@ -148,7 +158,7 @@ export const makeEcsTaskLaunchHttpBinding = <
                 },
                 {
                   Effect: "Allow",
-                  Action: ["iam:PassRole"],
+                  Action: passRoleActions,
                   Resource: [task.taskRoleArn, task.executionRoleArn],
                 },
               ],

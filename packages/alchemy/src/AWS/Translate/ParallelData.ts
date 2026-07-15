@@ -226,9 +226,13 @@ export const ParallelDataProvider = () =>
           if (observedProps === undefined) {
             // Ensure — greenfield import. ConflictException is a race with a
             // concurrent create of the same name; fall through to observe.
+            // The client token only needs to be unique per submission;
+            // idempotency across crashed runs comes from observing first.
+            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
             yield* translate
               .createParallelData({
                 Name: name,
+                ClientToken: clientToken,
                 Description: news.description,
                 ParallelDataConfig: { S3Uri: news.s3Uri, Format: news.format },
                 EncryptionKey: news.encryptionKeyId
@@ -250,9 +254,13 @@ export const ParallelDataProvider = () =>
               (observedProps.Description ?? undefined) !==
                 (news.description ?? undefined);
             if (drift) {
+              // Computed outside the retry so replays of the same submission
+              // reuse one idempotency token.
+              const clientToken = yield* Effect.sync(() => crypto.randomUUID());
               yield* translate
                 .updateParallelData({
                   Name: name,
+                  ClientToken: clientToken,
                   Description: news.description,
                   ParallelDataConfig: {
                     S3Uri: news.s3Uri,

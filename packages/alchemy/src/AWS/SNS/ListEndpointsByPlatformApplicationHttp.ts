@@ -9,6 +9,5 @@ export const ListEndpointsByPlatformApplicationHttp = Layer.effect(
     tag: "AWS.SNS.ListEndpointsByPlatformApplication",
     operation: sns.listEndpointsByPlatformApplication,
     actions: ["sns:ListEndpointsByPlatformApplication"],
-    injectArn: true,
   }),
 );

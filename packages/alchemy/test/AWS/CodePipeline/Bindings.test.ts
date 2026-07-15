@@ -97,10 +97,10 @@ class ExecutionNotVisible extends Data.TaggedError("ExecutionNotVisible") {}
  * GetPipelineExecution / ListPipelineExecutions (eventual consistency) —
  * poll the route (bounded) until it stops answering not-found/absent.
  */
-const untilExecutionVisible = <A>(
-  effect: Effect.Effect<A>,
+const untilExecutionVisible = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
   visible: (body: A) => boolean,
-) =>
+): Effect.Effect<A, E | ExecutionNotVisible, R> =>
   effect.pipe(
     Effect.flatMap((body) =>
       visible(body)
@@ -108,7 +108,7 @@ const untilExecutionVisible = <A>(
         : Effect.fail(new ExecutionNotVisible()),
     ),
     Effect.retry({
-      while: (e): boolean => e._tag === "ExecutionNotVisible",
+      while: (e): boolean => e instanceof ExecutionNotVisible,
       schedule: Schedule.max([
         Schedule.fixed("3 seconds"),
         Schedule.recurs(10),

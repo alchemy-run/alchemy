@@ -56,8 +56,11 @@ export interface AcmHttpBindingConfig<Req extends object, Out, Err> {
  * Build the implementation effect for a certificate-scoped ACM capability:
  * `Layer.effect(Cap, makeAcmCertificateHttpBinding({ ... }))`.
  *
- * The runtime callable injects the bound certificate's ARN, so `Req` is the
- * operation's request type without `CertificateArn`.
+ * `Req` infers as the operation's *full* distilled request (inference against
+ * `Req & { CertificateArn: string }` captures the whole source type). The
+ * runtime callable injects the bound certificate's ARN, so its request type
+ * is `Omit<Req, "CertificateArn">` — matching the capability contracts, which
+ * declare `Omit<acm.XRequest, "CertificateArn">`.
  */
 export const makeAcmCertificateHttpBinding = <Req extends object, Out, Err>(
   config: AcmHttpBindingConfig<Req, Out, Err>,
@@ -85,11 +88,16 @@ export const makeAcmCertificateHttpBinding = <Req extends object, Out, Err>(
       }
       return Effect.fn(
         `AWS.ACM.${config.capability}(${certificate.LogicalId})`,
-      )(function* (request?: Req) {
+      )(function* (request?: Omit<Req, "CertificateArn">) {
+        // Sound: at instantiation `Req` always contains `CertificateArn: string`
+        // (every certificate-scoped distilled request does), so
+        // `Omit<Req, "CertificateArn"> & { CertificateArn: string }` is exactly
+        // `Req & { CertificateArn: string }`. TypeScript cannot prove this for
+        // an unresolved type parameter, hence the precise assertion.
         return yield* op({
-          ...(request ?? ({} as Req)),
+          ...(request ?? {}),
           CertificateArn: yield* CertificateArn,
-        });
+        } as Req & { CertificateArn: string });
       });
     });
   });

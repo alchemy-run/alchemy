@@ -165,11 +165,11 @@ export const makeSnsSubscriptionHttpBinding = <
 
 /**
  * Build the impl Effect for a platform-application-scoped mobile-push
- * operation (`CreatePlatformEndpoint`, `ListEndpointsByPlatformApplication`,
- * the endpoint attribute APIs): the runtime callable injects the bound
- * {@link PlatformApplication}'s ARN under `PlatformApplicationArn` when the
- * operation takes one, and the deploy-time half grants `actions` on `*`
- * (SNS mobile-push actions do not support resource-level permissions).
+ * operation whose request accepts `PlatformApplicationArn`
+ * (`CreatePlatformEndpoint`, `ListEndpointsByPlatformApplication`): the
+ * runtime callable injects the bound {@link PlatformApplication}'s ARN and
+ * the deploy-time half grants `actions` on `*` (SNS mobile-push actions do
+ * not support resource-level permissions).
  */
 export const makeSnsPlatformHttpBinding = <
   I extends { PlatformApplicationArn?: string },
@@ -179,15 +179,10 @@ export const makeSnsPlatformHttpBinding = <
 >(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SNS.CreatePlatformEndpoint`. */
   tag: string;
-  /** The distilled operation; the application ARN is injected when accepted. */
+  /** The distilled operation; the application ARN is injected. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on `*` (no resource-level support). */
   actions: readonly string[];
-  /**
-   * Whether the operation's request accepts `PlatformApplicationArn`
-   * (endpoint-scoped operations like `GetEndpointAttributes` do not).
-   */
-  injectArn: boolean;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -211,14 +206,53 @@ export const makeSnsPlatformHttpBinding = <
       return Effect.fn(`${options.tag}(${application.LogicalId})`)(function* (
         request?: Omit<I, "PlatformApplicationArn">,
       ) {
-        return yield* op(
-          (options.injectArn
-            ? {
-                ...request,
-                PlatformApplicationArn: yield* PlatformApplicationArn,
-              }
-            : { ...request }) as I,
-        );
+        return yield* op({
+          ...request,
+          PlatformApplicationArn: yield* PlatformApplicationArn,
+        } as I);
+      });
+    });
+  });
+
+/**
+ * Build the impl Effect for an endpoint-scoped mobile-push operation
+ * (`GetEndpointAttributes`, `SetEndpointAttributes`, `DeleteEndpoint`,
+ * publish-to-endpoint): the caller's request already carries the endpoint
+ * identity (`EndpointArn`/`TargetArn`) and is passed through unchanged; the
+ * binding is still scoped to a {@link PlatformApplication} for IAM naming
+ * and grants `actions` on `*` (SNS mobile-push actions do not support
+ * resource-level permissions).
+ */
+export const makeSnsEndpointHttpBinding = <I, A, E, R>(options: {
+  /** Fully-qualified binding tag, e.g. `AWS.SNS.DeleteEndpoint`. */
+  tag: string;
+  /** The distilled operation, invoked with the caller's request as-is. */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /** IAM actions granted on `*` (no resource-level support). */
+  actions: readonly string[];
+}) =>
+  Effect.gen(function* () {
+    const op = yield* options.operation;
+
+    return Effect.fn(function* (application: PlatformApplication) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isBindingHost(host)) {
+          yield* host.bind`Allow(${host}, ${options.tag}(${application}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: ["*"],
+              },
+            ],
+          });
+        }
+      }
+      return Effect.fn(`${options.tag}(${application.LogicalId})`)(function* (
+        request: I,
+      ) {
+        return yield* op(request);
       });
     });
   });

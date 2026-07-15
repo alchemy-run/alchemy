@@ -191,12 +191,23 @@ const retryWhileNamespaceNotVisible = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
   });
 
-export const ensureNamespace = <E, R>(
+/**
+ * The (identical) typed error union of the three namespace create operations.
+ * Kept concrete — a generic error parameter here would flow into
+ * `Effect.catchTag`, leaving an un-narrowable `{ _tag: unknown }` residue in
+ * the handler under TypeScript 7.
+ */
+type CreateNamespaceError =
+  | sd.CreateHttpNamespaceError
+  | sd.CreatePrivateDnsNamespaceError
+  | sd.CreatePublicDnsNamespaceError;
+
+export const ensureNamespace = <R>(
   type: NamespaceKind,
   name: string,
   create: Effect.Effect<
     { OperationId?: string | undefined },
-    sd.NamespaceAlreadyExists | sd.DuplicateRequest | E,
+    CreateNamespaceError,
     R
   >,
 ) =>

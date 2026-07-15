@@ -2,6 +2,7 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
+import type { Accessor } from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import {
   BatchGetSecretValue,
@@ -21,7 +22,7 @@ export const BatchGetSecretValueHttp = Layer.effect(
     const batchGetSecretValue = yield* secretsmanager.batchGetSecretValue;
 
     return Effect.fn(function* (secrets: readonly Secret[]) {
-      const SecretIds = [];
+      const SecretIds: Accessor<string>[] = [];
       for (const secret of secrets) {
         SecretIds.push(yield* secret.secretArn);
       }

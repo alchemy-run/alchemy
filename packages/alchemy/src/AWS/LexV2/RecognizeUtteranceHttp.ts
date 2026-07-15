@@ -13,7 +13,11 @@ import {
  */
 export const RecognizeUtteranceHttp = Layer.effect(
   RecognizeUtterance,
-  makeLexAliasHttpBinding({
+  makeLexAliasHttpBinding<
+    RecognizeUtteranceRequest,
+    lexr.RecognizeUtteranceResponse,
+    lexr.RecognizeUtteranceError
+  >({
     capability: "RecognizeUtterance",
     iamActions: ["lex:RecognizeUtterance"],
     operation: lexr.recognizeUtterance,

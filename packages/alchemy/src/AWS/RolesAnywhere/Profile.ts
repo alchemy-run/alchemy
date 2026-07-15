@@ -329,6 +329,12 @@ export const ProfileProvider = () =>
             }
           }
 
+          // Explicitly annotated so control-flow analysis inside the sync
+          // loops below (which reassign from API responses that themselves
+          // take `profile.profileId` as input) never cycles back into an
+          // inferred `ProfileDetail | undefined`.
+          let profile: rolesanywhere.ProfileDetail = live;
+
           // 3a. Sync attribute mappings — diff the OBSERVED mappings against
           // the desired set. A fresh profile carries AWS default mappings
           // that must not be touched unless the user manages that field, so
@@ -336,7 +342,7 @@ export const ProfileProvider = () =>
           // rather than full replacement of observed state.
           const desiredMappings = news.attributeMappings ?? [];
           const observedMappings = new Map(
-            (live.attributeMappings ?? []).map((m) => [
+            (profile.attributeMappings ?? []).map((m) => [
               m.certificateField,
               (m.mappingRules ?? []).map((r) => r.specifier),
             ]),
@@ -353,13 +359,13 @@ export const ProfileProvider = () =>
               !sameMembers(observedSpecifiers, desiredSpecifiers)
             ) {
               const mapped = yield* rolesanywhere.putAttributeMapping({
-                profileId: live.profileId!,
+                profileId: profile.profileId!,
                 certificateField: mapping.certificateField,
                 mappingRules: mapping.mappingRules.map((r) => ({
                   specifier: r.specifier,
                 })),
               });
-              live = mapped.profile;
+              profile = mapped.profile;
             }
           }
           const desiredFields = new Set(
@@ -372,7 +378,7 @@ export const ProfileProvider = () =>
             ) {
               const cleaned = yield* rolesanywhere
                 .deleteAttributeMapping({
-                  profileId: live.profileId!,
+                  profileId: profile.profileId!,
                   certificateField: previous.certificateField,
                 })
                 .pipe(
@@ -380,24 +386,24 @@ export const ProfileProvider = () =>
                     Effect.succeed(undefined),
                   ),
                 );
-              live = cleaned?.profile ?? live;
+              profile = cleaned?.profile ?? profile;
             }
           }
 
-          if ((live.enabled ?? false) !== desiredEnabled) {
+          if ((profile.enabled ?? false) !== desiredEnabled) {
             // The enable/disable response can echo the pre-toggle state — the
             // successful call itself is authoritative for the flag.
             yield* desiredEnabled
-              ? rolesanywhere.enableProfile({ profileId: live.profileId! })
-              : rolesanywhere.disableProfile({ profileId: live.profileId! });
-            live = { ...live, enabled: desiredEnabled };
+              ? rolesanywhere.enableProfile({ profileId: profile.profileId! })
+              : rolesanywhere.disableProfile({ profileId: profile.profileId! });
+            profile = { ...profile, enabled: desiredEnabled };
           }
 
           // 3b. Sync tags against observed cloud tags.
-          yield* syncRolesAnywhereTags(live.profileArn!, desiredTags);
+          yield* syncRolesAnywhereTags(profile.profileArn!, desiredTags);
 
-          yield* session.note(live.profileId!);
-          return toAttrs(live);
+          yield* session.note(profile.profileId!);
+          return toAttrs(profile);
         }),
 
         delete: Effect.fn(function* ({ output }) {

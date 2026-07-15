@@ -221,9 +221,9 @@ describe.sequential("AWS.S3Control bindings", () => {
 // minutes per create/delete cycle — far beyond the suite's polling budget, so
 // the failover-route bindings are gated like the MRAP resource lifecycle
 // test (AWS_TEST_SLOW=1 to run).
-describe.sequential.skipIf(!process.env.AWS_TEST_SLOW)(
-  "AWS.S3Control MRAP route bindings (slow)",
-  () => {
+describe
+  .skipIf(!process.env.AWS_TEST_SLOW)
+  .sequential("AWS.S3Control MRAP route bindings (slow)", () => {
     let mrapBaseUrl: string;
 
     beforeAll(
@@ -264,5 +264,4 @@ describe.sequential.skipIf(!process.env.AWS_TEST_SLOW)(
         { timeout: 240_000 },
       );
     });
-  },
-);
+  });

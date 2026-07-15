@@ -25,7 +25,9 @@ const readinessPolicy = Schedule.max([
 
 let baseUrl: string;
 
-interface RouteResult {
+// A `type` (not `interface`) so it carries an implicit index signature and is
+// comparable to the `JsonObject` member of `response.json`'s union.
+type RouteResult = {
   ok: boolean;
   tag: string;
   state?: string;
@@ -33,7 +35,7 @@ interface RouteResult {
   hasField?: boolean;
   redacted?: boolean | null;
   snapshotId?: string;
-}
+};
 
 // Call a fixture route, repeating (bounded) while the response still shows an
 // authorization failure — a freshly attached IAM policy is eventually

@@ -1,4 +1,6 @@
 import * as DocDB from "@/AWS/DocDB";
+import type { SecurityGroupId } from "@/AWS/EC2/SecurityGroup.ts";
+import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
 import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -16,9 +18,13 @@ const main = path.resolve(import.meta.dirname, "slow-handler.ts");
  * so the values are visible here at deploy time.
  */
 const subnetIds = () =>
-  (process.env.DOCDB_TEST_SUBNET_IDS ?? "").split(",").filter(Boolean);
+  (process.env.DOCDB_TEST_SUBNET_IDS ?? "")
+    .split(",")
+    .filter((id): id is SubnetId => id.startsWith("subnet-"));
 const securityGroupIds = () =>
-  (process.env.DOCDB_TEST_SG_IDS ?? "").split(",").filter(Boolean);
+  (process.env.DOCDB_TEST_SG_IDS ?? "")
+    .split(",")
+    .filter((id): id is SecurityGroupId => id.startsWith("sg-"));
 
 // The mongodb driver's optional native/companion packages are `require`d in
 // try/catch fallbacks — leave them external so the bundle builds and the

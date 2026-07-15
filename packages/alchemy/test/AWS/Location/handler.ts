@@ -197,7 +197,7 @@ export default LocationTestFunction.make(
             // Position verification needs real cell/Wi-Fi signal data; a
             // typed ValidationException still proves IAM + wiring.
             Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed({ validationError: e.Message }),
+              Effect.succeed({ validationError: e.message }),
             ),
           );
           return yield* HttpServerResponse.json(result);

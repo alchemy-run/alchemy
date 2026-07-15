@@ -59,9 +59,11 @@ export const makeTranslateHttpBinding = <I, A, E, R>(options: {
  * as `DataAccessRoleArn` on every runtime request, and the deploy-time half
  * grants `actions` on `*` plus `iam:PassRole` on the role — without the
  * PassRole grant, the start call fails only at runtime with an AccessDenied.
+ * `ClientToken` is optional on the runtime request (the AWS SDK also
+ * auto-generates it) — a UUID is generated per call when omitted.
  */
 export const makeTranslateStartJobHttpBinding = <
-  I extends { DataAccessRoleArn: string },
+  I extends { DataAccessRoleArn: string; ClientToken: string },
   A,
   E,
   R,
@@ -106,13 +108,17 @@ export const makeTranslateStartJobHttpBinding = <
       }
       return Effect.fn(`${options.tag}(${dataAccessRole.LogicalId})`)(
         function* (
-          request: Omit<I, "DataAccessRoleArn"> & {
+          request: Omit<I, "DataAccessRoleArn" | "ClientToken"> & {
             DataAccessRoleArn?: string;
+            ClientToken?: string;
           },
         ) {
           return yield* op({
             ...request,
             DataAccessRoleArn: request.DataAccessRoleArn ?? (yield* RoleArn),
+            ClientToken:
+              request.ClientToken ??
+              (yield* Effect.sync(() => crypto.randomUUID())),
           } as I);
         },
       );

@@ -148,15 +148,19 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
               ? "none"
               : `${invoked.error}: ${invoked.message}`,
           ).toBe("none");
-          expect(invoked.invocationArn).toContain(
-            ":data-automation-invocation/",
-          );
+          const invocationArn = invoked.invocationArn;
+          expect(invocationArn).toContain(":data-automation-invocation/");
+          if (invocationArn === undefined) {
+            // Unreachable — the expect above throws on undefined; this
+            // narrows the type for the status poll below.
+            return yield* Effect.die(new Error("invocationArn missing"));
+          }
 
           // Immediate status poll — the job settles asynchronously, so any
           // lifecycle status proves bedrock:GetDataAutomationStatus.
           const status = (yield* send(
             HttpClientRequest.get(
-              `${baseUrl}/status?invocationArn=${encodeURIComponent(invoked.invocationArn)}`,
+              `${baseUrl}/status?invocationArn=${encodeURIComponent(invocationArn)}`,
             ),
           ).pipe(Effect.flatMap((r) => r.json))) as { status: string };
           expect([

@@ -3,6 +3,7 @@ import { TelemetryRule } from "@/AWS/ObservabilityAdmin";
 import * as Test from "@/Test/Vitest";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import { describe, expect } from "@effect/vitest";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -56,7 +57,7 @@ describe.sequential("AWS.ObservabilityAdmin.TelemetryRule", () => {
 
           yield* stack.destroy();
 
-          const deployRule = (retention: string) =>
+          const deployRule = (retention: Duration.Input) =>
             stack.deploy(
               Effect.gen(function* () {
                 // The rule exists for well under the ~24h AWS Config

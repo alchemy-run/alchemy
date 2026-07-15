@@ -30,8 +30,16 @@ export const makeLogGroupHttpBinding = <
 >(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Logs.FilterLogEvents`. */
   tag: string;
-  /** The distilled operation the runtime callable invokes. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /**
+   * The distilled operation the runtime callable invokes.
+   *
+   * Typed as distilled's `OperationMethod` intersection (yieldable Effect +
+   * direct call signature) so `I` is inferred from the call signature — the
+   * Effect half alone defeats inference for requests without `logGroupName`
+   * (e.g. `GetLogRecord`, `GetQueryResults`, `StopQuery`).
+   */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R> &
+    ((input: I) => Effect.Effect<A, E, R>);
   /** IAM actions granted on the bound log group. */
   actions: readonly string[];
   /**

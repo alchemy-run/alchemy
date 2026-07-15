@@ -57,7 +57,10 @@ const callRoute = (
               new Error(`Route ${path} not ready: ${response.status}`),
             ),
       ),
-      Effect.map((json) => json as RouteResult),
+      // `json` is the untyped `Json` union; RouteResult's optional props
+      // (`string | undefined`) aren't Json-assignable, so the intentional
+      // two-step conversion is required (same pattern as the /refresh route).
+      Effect.map((json) => json as unknown as RouteResult),
       Effect.repeat({
         until: (body): boolean =>
           options.retryDenied === false ||

@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Output from "@/Output";
 import {
   AppMonitor,
   type MetricDefinition,
@@ -72,7 +73,7 @@ test.provider(
           });
           const policy = yield* ResourcePolicy("Policy", {
             appMonitorName: monitor.appMonitorName,
-            policyDocument: monitor.appMonitorArn.map((arn) =>
+            policyDocument: Output.map(monitor.appMonitorArn, (arn: string) =>
               policyFor(arn, policySid),
             ),
           });

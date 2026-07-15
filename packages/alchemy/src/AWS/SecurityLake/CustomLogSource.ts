@@ -203,16 +203,13 @@ export const CustomLogSourceProvider = () =>
           securitylake.listLogSources.items({}).pipe(
             Stream.map((entry) => entry.sources ?? []),
             Stream.flattenIterable,
-            Stream.filterMap((source) =>
-              source.customLogSource?.sourceName !== undefined
-                ? Option.some(source.customLogSource)
-                : Option.none(),
-            ),
             Stream.runCollect,
-            Effect.map((sources) => {
+            Effect.map((entries) => {
               const seen = new Set<string>();
-              const attrs = [];
-              for (const source of sources) {
+              const attrs: ReturnType<typeof buildAttrs>[] = [];
+              for (const entry of entries) {
+                const source = entry.customLogSource;
+                if (source?.sourceName === undefined) continue;
                 const key = `${source.sourceName}@${source.sourceVersion ?? ""}`;
                 if (seen.has(key)) continue;
                 seen.add(key);

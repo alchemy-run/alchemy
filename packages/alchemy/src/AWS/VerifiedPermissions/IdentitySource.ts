@@ -390,9 +390,15 @@ export const IdentitySourceProvider = () =>
               ? { cognito: news.cognito }
               : { openIdConnect: news.openIdConnect },
           );
-          const observed = normalize(
-            toObservedConfiguration(existing.configuration),
+          // If the response carries no configuration detail, we can't prove
+          // convergence — treat it as drift and (re)apply the desired config.
+          const observedConfiguration = toObservedConfiguration(
+            existing.configuration,
           );
+          const observed =
+            observedConfiguration === undefined
+              ? undefined
+              : normalize(observedConfiguration);
           const observedPrincipalType = unwrap(existing.principalEntityType);
           const principalDrift =
             news.principalEntityType !== undefined &&

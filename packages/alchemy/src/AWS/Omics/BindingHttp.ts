@@ -41,8 +41,13 @@ export const makeOmicsResourceHttpBinding = <
   actions: readonly string[];
   /** The request field the resource id is injected under. */
   key: K;
-  /** Resolve the injected id from the bound resource. */
-  id: (res: Res) => Output<string>;
+  /**
+   * Resolve the injected id from the bound resource. `Req` is pinned to
+   * `never` (resource attributes are `Output<string, never>`): the default
+   * `Output<string>` widens `Req` to `any`, which leaks into the per-resource
+   * Effect's requirements and breaks the binding contract's `never`.
+   */
+  id: (res: Res) => Output<string, never>;
   /** Resolve the ARN the IAM grant targets from the bound resource. */
   arn: (res: Res) => Output<string> | string;
   /** Grant `iam:PassRole` (conditioned to `omics.amazonaws.com`). */
@@ -57,25 +62,30 @@ export const makeOmicsResourceHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const policyStatements: PolicyStatement[] = [
-            {
-              Effect: "Allow",
-              Action: [...options.actions],
-              Resource: [options.arn(res)],
-            },
-          ];
-          if (options.passRole) {
-            policyStatements.push({
-              Effect: "Allow",
-              Action: ["iam:PassRole"],
-              Resource: ["*"],
-              Condition: {
-                StringEquals: { "iam:PassedToService": "omics.amazonaws.com" },
-              },
-            });
-          }
+          // Inline (not a `PolicyStatement[]`-typed local) so the bind data's
+          // `Input<…>` contextual typing accepts the `Output<string>` ARN.
           yield* host.bind`Allow(${host}, ${options.tag}(${res}))`({
-            policyStatements,
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [options.arn(res)],
+              },
+              ...(options.passRole
+                ? ([
+                    {
+                      Effect: "Allow",
+                      Action: ["iam:PassRole"],
+                      Resource: ["*"],
+                      Condition: {
+                        StringEquals: {
+                          "iam:PassedToService": "omics.amazonaws.com",
+                        },
+                      },
+                    },
+                  ] satisfies PolicyStatement[])
+                : []),
+            ],
           });
         }
       }

@@ -71,10 +71,13 @@ const postJson = (path: string) =>
     Effect.flatMap((r) => r.json),
   );
 
-interface Probe {
+// A type alias (not an interface) so it keeps the implicit index signature —
+// interfaces are not comparable to the JSON `JsonObject` type that
+// `response.json` returns, which breaks the `as Probe` casts below.
+type Probe = {
   ok: boolean;
   tag?: string;
-}
+};
 
 describe.sequential("GreengrassV2 Bindings", () => {
   beforeAll(
