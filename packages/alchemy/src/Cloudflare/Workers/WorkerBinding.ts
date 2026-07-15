@@ -31,15 +31,9 @@ import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
 
-export type WorkerBinding = Exclude<
-  workers.PutScriptRequest["metadata"]["bindings"],
-  undefined
->[number];
+export type WorkerBinding = workers.Binding;
 
-export type WorkerSettingsBinding = Exclude<
-  workers.GetScriptScriptAndVersionSettingResponse["bindings"],
-  null | undefined
->[number];
+export type WorkerSettingsBinding = workers.SettingsBinding;
 
 export type WorkerBindingResource =
   // Config values

@@ -1,4 +1,4 @@
-import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
+import type { Binding } from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { InputProps } from "../../Input.ts";
@@ -98,9 +98,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   }
 });
 
-type BindingSpec = InputProps<
-  Exclude<PutScriptRequest["metadata"]["bindings"], undefined>[number]
->;
+type BindingSpec = InputProps<Binding>;
 
 const toBinding = (
   bindingName: string,

@@ -767,7 +767,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
       return DurableObjectNamespace.local({
         binding: b.name,
         className: b.className,
-        scriptName: b.scriptName,
+        scriptName: b.scriptName ?? undefined,
         uniqueKey:
           b.namespaceId ??
           encodeURIComponent(`${b.scriptName!}-${b.className}`),
@@ -796,7 +796,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
         queueName: b.queueName,
       });
     case "r2_bucket":
-      return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
+      return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction ?? undefined);
     case "ratelimit":
       return RateLimit.local({
         binding: b.name,
@@ -812,15 +812,15 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
     case "send_email":
       return SendEmail.remote({
         binding: b.name,
-        destinationAddress: b.destinationAddress,
-        allowedDestinationAddresses: b.allowedDestinationAddresses,
-        allowedSenderAddresses: b.allowedSenderAddresses,
+        destinationAddress: b.destinationAddress ?? undefined,
+        allowedDestinationAddresses: b.allowedDestinationAddresses ?? undefined,
+        allowedSenderAddresses: b.allowedSenderAddresses ?? undefined,
       });
     case "service":
       return Service.local({
         binding: b.name,
         scriptName: b.service,
-        entrypoint: b.entrypoint,
+        entrypoint: b.entrypoint ?? undefined,
       });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
@@ -837,7 +837,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
         binding: b.name,
         workflowName: b.workflowName,
         className: b.className,
-        scriptName: b.scriptName,
+        scriptName: b.scriptName ?? undefined,
       });
     default:
       return yield* unsupported();
