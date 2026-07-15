@@ -1,10 +1,11 @@
 import * as ga from "@distilled.cloud/aws/global-accelerator";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { withGaRegion } from "./common.ts";
 
@@ -88,7 +89,7 @@ export interface EndpointGroupProps {
    * accepts `10` or `30` seconds.
    * @default "30 seconds"
    */
-  healthCheckIntervalSeconds?: Duration.Input;
+  healthCheckInterval?: Duration.Input;
   /**
    * Consecutive health-check successes/failures required to flip an
    * endpoint healthy/unhealthy.
@@ -120,7 +121,7 @@ export interface EndpointGroup extends Resource<
     /** The path used for HTTP/HTTPS health checks. */
     healthCheckPath: string | undefined;
     /** Seconds between health checks. */
-    healthCheckIntervalSeconds: number;
+    healthCheckInterval: number;
     /** Consecutive checks required to flip an endpoint's health state. */
     thresholdCount: number;
     /** The endpoints in the group with their observed health. */
@@ -169,7 +170,7 @@ export interface EndpointGroup extends Resource<
  *   ],
  *   healthCheckProtocol: "HTTP",
  *   healthCheckPath: "/health",
- *   healthCheckIntervalSeconds: "10 seconds",
+ *   healthCheckInterval: "10 seconds",
  * });
  * ```
  *
@@ -200,7 +201,7 @@ const toAttributes = (g: ga.EndpointGroup, endpointGroupArn: string) => ({
   healthCheckProtocol: g.HealthCheckProtocol ?? "TCP",
   healthCheckPort: g.HealthCheckPort,
   healthCheckPath: g.HealthCheckPath,
-  healthCheckIntervalSeconds: g.HealthCheckIntervalSeconds ?? 30,
+  healthCheckInterval: g.HealthCheckIntervalSeconds ?? 30,
   thresholdCount: g.ThresholdCount ?? 3,
   endpoints: (g.EndpointDescriptions ?? []).map((d) => ({
     endpointId: d.EndpointId,
@@ -209,13 +210,6 @@ const toAttributes = (g: ga.EndpointGroup, endpointGroupArn: string) => ({
     clientIPPreservationEnabled: d.ClientIPPreservationEnabled,
   })),
 });
-
-// The health-check interval is a `Duration.Input`; the GA wire unit is whole
-// seconds.
-const toIntervalSeconds = (
-  interval: Duration.Input | undefined,
-): number | undefined =>
-  interval !== undefined ? Math.round(Duration.toSeconds(interval)) : undefined;
 
 // The desired mutable configuration, shared by create and update. Defaults
 // are applied explicitly so removing a prop converges back to the default.
@@ -230,8 +224,7 @@ const desiredConfig = (news: EndpointGroupProps) => ({
   HealthCheckPort: news.healthCheckPort,
   HealthCheckProtocol: news.healthCheckProtocol ?? "TCP",
   HealthCheckPath: news.healthCheckPath,
-  HealthCheckIntervalSeconds:
-    toIntervalSeconds(news.healthCheckIntervalSeconds) ?? 30,
+  HealthCheckIntervalSeconds: toWireSeconds(news.healthCheckInterval) ?? 30,
   ThresholdCount: news.thresholdCount ?? 3,
   PortOverrides: (news.portOverrides ?? []).map((o) => ({
     ListenerPort: o.listenerPort,
@@ -265,7 +258,7 @@ const hasDrift = (
   }
   if (
     (live.HealthCheckIntervalSeconds ?? 30) !==
-    (toIntervalSeconds(news.healthCheckIntervalSeconds) ?? 30)
+    (toWireSeconds(news.healthCheckInterval) ?? 30)
   ) {
     return true;
   }

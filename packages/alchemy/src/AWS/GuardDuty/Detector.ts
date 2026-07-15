@@ -48,6 +48,8 @@ export interface Detector extends Resource<
   {
     /** The auto-generated detector ID (unique per account/region). */
     detectorId: string;
+    /** ARN of the detector — the IAM resource for detector-scoped actions. */
+    detectorArn: string;
     /** Current status of the detector (`ENABLED` / `DISABLED`). */
     status: string | undefined;
     /** The effective finding-publishing frequency. */
@@ -82,13 +84,23 @@ const DetectorResource = Resource<Detector>("AWS.GuardDuty.Detector");
 
 export { DetectorResource as Detector };
 
-const detectorArn = (region: string, accountId: string, detectorId: string) =>
-  `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}`;
+export const detectorArn = (
+  region: string,
+  accountId: string,
+  detectorId: string,
+) => `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}`;
 
-const buildAttrs = (detectorId: string, d: guardduty.GetDetectorResponse) => ({
-  detectorId,
-  status: d.Status,
-  findingPublishingFrequency: d.FindingPublishingFrequency,
+const buildAttrs = Effect.fn(function* (
+  detectorId: string,
+  d: guardduty.GetDetectorResponse,
+) {
+  const { accountId, region } = yield* AWSEnvironment.current;
+  return {
+    detectorId,
+    detectorArn: detectorArn(region, accountId, detectorId),
+    status: d.Status,
+    findingPublishingFrequency: d.FindingPublishingFrequency,
+  };
 });
 
 export const DetectorProvider = () =>
@@ -115,7 +127,7 @@ export const DetectorProvider = () =>
           if (!detectorId) return undefined;
           const d = yield* getDetector(detectorId);
           if (!d) return undefined;
-          const attrs = buildAttrs(detectorId, d);
+          const attrs = yield* buildAttrs(detectorId, d);
           return (yield* hasAlchemyTags(id, d.Tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -126,12 +138,13 @@ export const DetectorProvider = () =>
             const { DetectorIds } = yield* guardduty.listDetectors({});
             const out: {
               detectorId: string;
+              detectorArn: string;
               status: string | undefined;
               findingPublishingFrequency: string | undefined;
             }[] = [];
             for (const detectorId of DetectorIds ?? []) {
               const d = yield* getDetector(detectorId);
-              if (d) out.push(buildAttrs(detectorId, d));
+              if (d) out.push(yield* buildAttrs(detectorId, d));
             }
             return out;
           }),
@@ -195,7 +208,7 @@ export const DetectorProvider = () =>
             DetectorId: detectorId,
           });
           yield* session.note(detectorId);
-          return buildAttrs(detectorId, final);
+          return yield* buildAttrs(detectorId, final);
         }),
 
         delete: Effect.fn(function* ({ output }) {

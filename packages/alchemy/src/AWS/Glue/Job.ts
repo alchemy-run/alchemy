@@ -1,5 +1,5 @@
 import * as glue from "@distilled.cloud/aws/glue";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -213,10 +214,7 @@ export const JobProvider = () =>
             ? { Connections: props.connections }
             : undefined,
         MaxRetries: props.maxRetries,
-        Timeout:
-          props.timeout !== undefined
-            ? Math.round(Duration.toMinutes(props.timeout))
-            : undefined,
+        Timeout: toWireMinutes(props.timeout),
         MaxCapacity: props.maxCapacity,
         GlueVersion: props.glueVersion,
         NumberOfWorkers: props.numberOfWorkers,

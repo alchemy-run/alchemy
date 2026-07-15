@@ -37,9 +37,14 @@ test.provider("typed error semantics on a nonexistent virtual cluster", () =>
 );
 
 // Ungated typed-error probe for the job-run data plane the VC-scoped
-// bindings (StartJobRun / DescribeJobRun / CancelJobRun / ListJobRuns) call:
-// each op on a well-formed nonexistent virtual cluster id must surface a
-// typed tag from its inferred error union — never a catch-all.
+// bindings (DescribeJobRun / CancelJobRun / ListJobRuns) call: each op on a
+// well-formed nonexistent virtual cluster id must surface a typed tag from
+// its inferred error union — never a catch-all. Observed live: the API
+// reports job-run-addressed ops on a nonexistent virtual cluster as
+// validation errors, and ListJobRuns succeeds with an empty page.
+// (StartJobRun's tag depends on the caller's IAM scope — AccessDenied for
+// unauthorized arbitrary cluster ARNs — so it is not asserted here; the
+// binding grants on the bound cluster's ARN.)
 test.provider("typed error semantics for job run ops on a nonexistent vc", () =>
   Effect.gen(function* () {
     const virtualClusterId = "abcdefabcdefabcdefabcdef01";
@@ -48,21 +53,15 @@ test.provider("typed error semantics for job run ops on a nonexistent vc", () =>
     const describeError = yield* Effect.flip(
       emrc.describeJobRun({ id: jobRunId, virtualClusterId }),
     );
-    expect(describeError._tag).toBe("ResourceNotFoundException");
+    expect(describeError._tag).toBe("ValidationException");
 
-    const listError = yield* Effect.flip(
-      emrc.listJobRuns({ virtualClusterId }),
+    const cancelError = yield* Effect.flip(
+      emrc.cancelJobRun({ id: jobRunId, virtualClusterId }),
     );
-    expect(listError._tag).toBe("ValidationException");
+    expect(cancelError._tag).toBe("ValidationException");
 
-    const startError = yield* Effect.flip(
-      emrc.startJobRun({
-        virtualClusterId,
-        clientToken: "alchemy-emrc-probe",
-        jobTemplateId: "abcdefabcdefabcdefabcdef01",
-      }),
-    );
-    expect(startError._tag).toBe("ResourceNotFoundException");
+    const list = yield* emrc.listJobRuns({ virtualClusterId });
+    expect(list.jobRuns ?? []).toHaveLength(0);
   }),
 );
 

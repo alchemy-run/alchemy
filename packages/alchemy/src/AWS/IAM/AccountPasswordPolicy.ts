@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { durationToDays } from "./common.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 
 export interface AccountPasswordPolicyProps extends Omit<
   iam.UpdateAccountPasswordPolicyRequest,
@@ -76,7 +76,7 @@ export const AccountPasswordPolicyProvider = () =>
       // to diff because the request payload *is* the desired state.
       const request = {
         ...news,
-        MaxPasswordAge: durationToDays(news.MaxPasswordAge),
+        MaxPasswordAge: toWireDays(news.MaxPasswordAge),
       };
       yield* iam.updateAccountPasswordPolicy(request);
       yield* session.note("account-password-policy");

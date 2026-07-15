@@ -158,7 +158,10 @@ export interface JobTemplateProps {
    */
   kmsKeyArn?: string;
   /**
-   * Tags to apply to the job template. Merged with the internal Alchemy tags.
+   * Tags to apply to the job template. Merged with the internal Alchemy
+   * tags. Tags are set at creation only — the EMR containers `TagResource`
+   * API rejects job template ARNs (typed `InvalidResourceArn`), so changing
+   * tags replaces the template.
    */
   tags?: Record<string, string>;
 }
@@ -184,7 +187,8 @@ export interface JobTemplate extends Resource<
  * referenced by ID when starting job runs, optionally with `${placeholder}`
  * parameters filled in per run.
  *
- * Job templates are account-level and immutable: everything except tags
+ * Job templates are account-level and fully immutable: any change (including
+ * tags, which the tagging API does not support post-create for templates)
  * replaces the template. They pair with the
  * {@link StartJobRun | AWS.EMRContainers.StartJobRun} binding — a Lambda can
  * start a templated Spark job with just the template ID and parameter values.
@@ -289,31 +293,6 @@ export const JobTemplateProvider = () =>
         return byId ?? (yield* observeByName(name));
       });
 
-      const syncTags = Effect.fn(function* (
-        jt: emrc.JobTemplate,
-        desired: Record<string, string>,
-      ) {
-        // Diff against OBSERVED cloud tags (adoption may bring foreign tags).
-        const observed = Object.fromEntries(
-          Object.entries(jt.tags ?? {}).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-          ),
-        );
-        const { upsert, removed } = diffTags(observed, desired);
-        if (upsert.length > 0) {
-          yield* emrc.tagResource({
-            resourceArn: jt.arn!,
-            tags: Object.fromEntries(upsert.map((t) => [t.Key, t.Value])),
-          });
-        }
-        if (removed.length > 0) {
-          yield* emrc.untagResource({
-            resourceArn: jt.arn!,
-            tagKeys: removed,
-          });
-        }
-      });
-
       return JobTemplate.Provider.of({
         stables: ["jobTemplateId", "jobTemplateName", "jobTemplateArn"],
 
@@ -348,13 +327,21 @@ export const JobTemplateProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
+          const { upsert, removed } = diffTags(
+            olds.tags ?? {},
+            news.tags ?? {},
+          );
           if (
             oldName !== newName ||
             JSON.stringify(toJobTemplateData(olds.jobTemplateData)) !==
               JSON.stringify(toJobTemplateData(news.jobTemplateData)) ||
-            olds.kmsKeyArn !== news.kmsKeyArn
+            olds.kmsKeyArn !== news.kmsKeyArn ||
+            upsert.length > 0 ||
+            removed.length > 0
           ) {
-            // everything except tags is immutable
+            // job templates are fully immutable — even tags: the tagging API
+            // rejects job template ARNs (typed InvalidResourceArn), so tags
+            // are set at creation only and any change replaces
             return { action: "replace" } as const;
           }
         }),
@@ -401,8 +388,9 @@ export const JobTemplateProvider = () =>
             }
           }
 
-          // 3. SYNC TAGS — the only mutable aspect; diff observed vs desired
-          yield* syncTags(jt, desiredTags);
+          // No tag sync: EMR containers' TagResource rejects job template
+          // ARNs (typed InvalidResourceArn) — tags exist at creation only,
+          // and diff() replaces the template on any tag change.
 
           yield* session.note(jt.id!);
           return toAttributes(jt);

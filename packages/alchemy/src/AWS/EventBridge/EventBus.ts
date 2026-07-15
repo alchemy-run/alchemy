@@ -1,5 +1,6 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -314,9 +315,22 @@ export const EventBusProvider = () =>
           };
         }),
         delete: Effect.fn(function* (input) {
-          yield* eventbridge.deleteEventBus({
-            Name: input.output.eventBusName,
-          });
+          // Rules on the bus are deleted first by the engine (they depend on
+          // the bus), but EventBridge's view is eventually consistent — a
+          // just-deleted rule can still count against the bus for a few
+          // seconds. Retry the typed dependency violation on a bounded
+          // schedule.
+          yield* eventbridge
+            .deleteEventBus({
+              Name: input.output.eventBusName,
+            })
+            .pipe(
+              Effect.retry({
+                while: (e): boolean => e._tag === "EventBusHasRules",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 10,
+              }),
+            );
         }),
       };
     }),

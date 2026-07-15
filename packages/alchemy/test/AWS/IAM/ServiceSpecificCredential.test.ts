@@ -28,7 +28,7 @@ describe("AWS.IAM.ServiceSpecificCredential", () => {
                 userName: user.userName,
                 serviceName: "codecommit.amazonaws.com",
                 // Duration.Input prop — converted to whole wire days.
-                credentialAgeDays: "30 days",
+                credentialAge: "30 days",
               },
             );
             return { user, credential };

@@ -185,20 +185,17 @@ export default EventBridgeTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/replay") {
-          const body = (yield* request.json) as unknown as {
-            destinationArn: string;
-          };
           const replayName = "alchemy-test-eb-replay";
-          // Replay an empty window from the recent past. Replays cannot be
-          // deleted, so re-runs hit ResourceAlreadyExistsException — treated
-          // as success and observed via DescribeReplay below.
+          // Replay an empty window from the recent past onto the archive's
+          // source bus (the binding's default destination). Replays cannot
+          // be deleted, so re-runs hit ResourceAlreadyExistsException —
+          // treated as success and observed via DescribeReplay below.
           const now = Date.now();
           const started = yield* Effect.result(
             startReplay({
               ReplayName: replayName,
               EventStartTime: new Date(now - 10 * 60 * 1000),
               EventEndTime: new Date(now - 5 * 60 * 1000),
-              Destination: { Arn: body.destinationArn },
             }).pipe(
               Effect.catchTag("ResourceAlreadyExistsException", () =>
                 Effect.succeed(undefined),
@@ -207,7 +204,10 @@ export default EventBridgeTestFunction.make(
           );
           if (Result.isFailure(started)) {
             return yield* HttpServerResponse.json(
-              { error: "startReplay", failure: String(started.failure) },
+              {
+                error: "startReplay",
+                failure: JSON.stringify(started.failure),
+              },
               { status: 400 },
             );
           }
@@ -216,7 +216,10 @@ export default EventBridgeTestFunction.make(
           );
           if (Result.isFailure(described)) {
             return yield* HttpServerResponse.json(
-              { error: "describeReplay", failure: String(described.failure) },
+              {
+                error: "describeReplay",
+                failure: JSON.stringify(described.failure),
+              },
               { status: 400 },
             );
           }
@@ -232,7 +235,10 @@ export default EventBridgeTestFunction.make(
           );
           if (Result.isFailure(cancel)) {
             return yield* HttpServerResponse.json(
-              { error: "cancelReplay", failure: String(cancel.failure) },
+              {
+                error: "cancelReplay",
+                failure: JSON.stringify(cancel.failure),
+              },
               { status: 400 },
             );
           }

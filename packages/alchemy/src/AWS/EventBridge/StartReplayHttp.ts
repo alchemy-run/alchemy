@@ -22,6 +22,7 @@ export const StartReplayHttp = Layer.effect(
 
     return Effect.fn(function* (archive: Archive) {
       const ArchiveArn = yield* archive.archiveArn;
+      const EventSourceArn = yield* archive.eventSourceArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
@@ -40,6 +41,10 @@ export const StartReplayHttp = Layer.effect(
                     `arn:aws:events:${region}:${accountId}:replay/*`,
                     // StartReplay also authorizes against the source archive.
                     archive.archiveArn,
+                    // ...and against the DESTINATION event bus. EventBridge
+                    // only allows replaying to the archive's source bus, so
+                    // that bus ARN covers every legal destination.
+                    archive.eventSourceArn,
                   ],
                 },
               ],
@@ -52,6 +57,11 @@ export const StartReplayHttp = Layer.effect(
           return yield* startReplay({
             ...request,
             EventSourceArn: yield* ArchiveArn,
+            // Default the destination to the archive's source bus — the only
+            // destination EventBridge accepts for a replay.
+            Destination: request.Destination ?? {
+              Arn: yield* EventSourceArn,
+            },
           });
         },
       );

@@ -449,7 +449,7 @@ export const VaultProvider = () =>
           //     converges.
           const observedTags = yield* readVaultTags(vaultName);
           const desiredTags: Record<string, string> = {
-            ...(props.tags ?? {}),
+            ...props.tags,
             ...internalTags,
           };
           const { upsert, removed } = diffTags(observedTags, desiredTags);

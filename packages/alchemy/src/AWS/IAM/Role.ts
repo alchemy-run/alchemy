@@ -18,8 +18,8 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import {
-  durationToSeconds,
   parsePolicyDocument,
   stringifyPolicyDocument,
   toTagRecord,
@@ -514,7 +514,7 @@ export const RoleProvider = () =>
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const desiredMaxSessionDuration = durationToSeconds(
+          const desiredMaxSessionDuration = toWireSeconds(
             news.maxSessionDuration,
           );
 

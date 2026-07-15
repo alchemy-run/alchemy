@@ -44,7 +44,7 @@ test.provider("list returns a well-formed array of job templates", () =>
 // Full lifecycle — job templates are account-level, free, and provision
 // synchronously (no EKS cluster required), so this runs ungated.
 test.provider(
-  "job template lifecycle: create, tag update, replace, destroy",
+  "job template lifecycle: create, tag replace, data replace, destroy",
   (stack) =>
     Effect.gen(function* () {
       // Clean slate in case a previous run died mid-flight.
@@ -100,13 +100,15 @@ test.provider(
       );
       expect(observed.jobTemplate?.tags?.Purpose).toBe("alchemy-emrc-test");
 
-      // 2. TAG-ONLY UPDATE — same id (tags are the only mutable aspect)
+      // 2. TAG CHANGE — replaces (EMR containers' TagResource rejects job
+      // template ARNs with the typed InvalidResourceArn, so tags are
+      // create-only and any tag change replaces the template)
       const retagged = yield* deployTemplate("emr-7.5.0-latest", {
         Purpose: "alchemy-emrc-test-updated",
       });
-      expect(retagged.jobTemplateId).toBe(first.jobTemplateId);
+      expect(retagged.jobTemplateId).not.toBe(first.jobTemplateId);
       const retaggedObserved = yield* emrc.describeJobTemplate({
-        id: first.jobTemplateId,
+        id: retagged.jobTemplateId,
       });
       expect(retaggedObserved.jobTemplate?.tags?.Purpose).toBe(
         "alchemy-emrc-test-updated",
@@ -116,11 +118,11 @@ test.provider(
       const replaced = yield* deployTemplate("emr-7.2.0-latest", {
         Purpose: "alchemy-emrc-test-updated",
       });
-      expect(replaced.jobTemplateId).not.toBe(first.jobTemplateId);
+      expect(replaced.jobTemplateId).not.toBe(retagged.jobTemplateId);
 
       // The replaced (old) template is deleted by the engine.
       const oldGone = yield* Effect.flip(
-        emrc.describeJobTemplate({ id: first.jobTemplateId }),
+        emrc.describeJobTemplate({ id: retagged.jobTemplateId }),
       );
       expect(oldGone._tag).toBe("ResourceNotFoundException");
 

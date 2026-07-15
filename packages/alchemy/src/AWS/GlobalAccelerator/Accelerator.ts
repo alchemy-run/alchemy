@@ -40,9 +40,30 @@ export interface AcceleratorProps {
    */
   enabled?: boolean;
   /**
+   * Publish flow logs describing the traffic the accelerator serves to an
+   * S3 bucket. The bucket must live in the same account and carry a bucket
+   * policy granting `delivery.logs.amazonaws.com` permission to
+   * `s3:PutObject` (and `s3:GetBucketAcl`). Omit to keep flow logs
+   * disabled.
+   * @default disabled
+   */
+  flowLogs?: FlowLogs;
+  /**
    * Tags to apply to the accelerator. Merged with internal Alchemy tags.
    */
   tags?: Record<string, string>;
+}
+
+export interface FlowLogs {
+  /**
+   * Name of the S3 bucket flow logs are delivered to.
+   */
+  bucket: string;
+  /**
+   * Key prefix for the flow-log objects within the bucket.
+   * @default logs are delivered under `AWSLogs/` at the bucket root
+   */
+  prefix?: string;
 }
 
 export interface Accelerator extends Resource<
@@ -65,6 +86,12 @@ export interface Accelerator extends Resource<
     enabled: boolean;
     /** Deployment status: `DEPLOYED` or `IN_PROGRESS`. */
     status: string;
+    /** Whether flow logs are published to S3. */
+    flowLogsEnabled: boolean;
+    /** The S3 bucket receiving flow logs, when enabled. */
+    flowLogsS3Bucket: string | undefined;
+    /** The S3 key prefix for flow logs, when enabled. */
+    flowLogsS3Prefix: string | undefined;
   },
   never,
   Providers
@@ -95,6 +122,16 @@ export interface Accelerator extends Resource<
  * });
  * ```
  *
+ * @section Flow Logs
+ * @example Publish Flow Logs to S3
+ * ```typescript
+ * // the bucket policy must grant delivery.logs.amazonaws.com
+ * // s3:PutObject + s3:GetBucketAcl
+ * const accelerator = yield* GlobalAccelerator.Accelerator("Edge", {
+ *   flowLogs: { bucket: logBucket.bucketName, prefix: "ga-flow-logs" },
+ * });
+ * ```
+ *
  * @section Routing Traffic
  * @example Accelerator with Listener and Endpoint Group
  * ```typescript
@@ -122,7 +159,11 @@ const createAcceleratorName = Effect.fn(function* (
   return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
 });
 
-const toAttributes = (a: ga.Accelerator, acceleratorArn: string) => ({
+const toAttributes = (
+  a: ga.Accelerator,
+  acceleratorArn: string,
+  flowLogs?: ga.AcceleratorAttributes,
+) => ({
   acceleratorArn,
   name: a.Name ?? "",
   dnsName: a.DnsName,
@@ -131,6 +172,9 @@ const toAttributes = (a: ga.Accelerator, acceleratorArn: string) => ({
   ipAddressType: a.IpAddressType ?? "IPV4",
   enabled: a.Enabled ?? true,
   status: a.Status ?? "IN_PROGRESS",
+  flowLogsEnabled: flowLogs?.FlowLogsEnabled ?? false,
+  flowLogsS3Bucket: flowLogs?.FlowLogsS3Bucket,
+  flowLogsS3Prefix: flowLogs?.FlowLogsS3Prefix,
 });
 
 const describeAccelerator = Effect.fn(function* (acceleratorArn: string) {
@@ -138,6 +182,17 @@ const describeAccelerator = Effect.fn(function* (acceleratorArn: string) {
     ga.describeAccelerator({ AcceleratorArn: acceleratorArn }),
   ).pipe(
     Effect.map((r) => r.Accelerator),
+    Effect.catchTag("AcceleratorNotFoundException", () =>
+      Effect.succeed(undefined),
+    ),
+  );
+});
+
+const describeFlowLogs = Effect.fn(function* (acceleratorArn: string) {
+  return yield* withGaRegion(
+    ga.describeAcceleratorAttributes({ AcceleratorArn: acceleratorArn }),
+  ).pipe(
+    Effect.map((r) => r.AcceleratorAttributes),
     Effect.catchTag("AcceleratorNotFoundException", () =>
       Effect.succeed(undefined),
     ),
@@ -188,7 +243,8 @@ export const AcceleratorProvider = () =>
         live = yield* findAcceleratorByName(name);
       }
       if (!live?.AcceleratorArn) return undefined;
-      const attrs = toAttributes(live, live.AcceleratorArn);
+      const flowLogs = yield* describeFlowLogs(live.AcceleratorArn);
+      const attrs = toAttributes(live, live.AcceleratorArn, flowLogs);
       const tags = yield* fetchTags(live.AcceleratorArn);
       return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
     }),
@@ -281,6 +337,33 @@ export const AcceleratorProvider = () =>
         if (updated) live = updated;
       }
 
+      // Sync flow logs — diff observed attributes against the desired
+      // flowLogs prop; only call updateAcceleratorAttributes on drift.
+      let flowLogs = yield* describeFlowLogs(acceleratorArn);
+      const desiredFlowLogsEnabled = news.flowLogs !== undefined;
+      const flowLogsDrift =
+        (flowLogs?.FlowLogsEnabled ?? false) !== desiredFlowLogsEnabled ||
+        (desiredFlowLogsEnabled &&
+          (flowLogs?.FlowLogsS3Bucket !== news.flowLogs!.bucket ||
+            (news.flowLogs!.prefix !== undefined &&
+              flowLogs?.FlowLogsS3Prefix !== news.flowLogs!.prefix)));
+      if (flowLogsDrift) {
+        flowLogs = yield* retryGaTransaction(
+          withGaRegion(
+            ga.updateAcceleratorAttributes({
+              AcceleratorArn: acceleratorArn,
+              FlowLogsEnabled: desiredFlowLogsEnabled,
+              ...(desiredFlowLogsEnabled
+                ? {
+                    FlowLogsS3Bucket: news.flowLogs!.bucket,
+                    FlowLogsS3Prefix: news.flowLogs!.prefix,
+                  }
+                : {}),
+            }),
+          ),
+        ).pipe(Effect.map((r) => r.AcceleratorAttributes));
+      }
+
       // Sync tags against OBSERVED cloud tags so adoption converges.
       const observedTags = yield* fetchTags(acceleratorArn);
       const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -296,7 +379,7 @@ export const AcceleratorProvider = () =>
       }
 
       yield* session.note(acceleratorArn);
-      return toAttributes(live, acceleratorArn);
+      return toAttributes(live, acceleratorArn, flowLogs);
     }),
     delete: Effect.fn(function* ({ output, session }) {
       const acceleratorArn = output.acceleratorArn;

@@ -361,25 +361,26 @@ export default EntityResolutionTestFunction.make(
         // (or a typed ValidationException when the workflow family doesn't
         // support deletes) prove the grant end-to-end.
         if (request.method === "POST" && pathname === "/delete-unique-ids") {
-          const result = yield* batchDeleteUniqueId({
+          // Fully total: report ANY typed failure as its tag so the test can
+          // assert on the observed behavior (an IAM gap would surface here as
+          // AccessDeniedException rather than an opaque 500).
+          const outcome = yield* batchDeleteUniqueId({
             uniqueIds: ["ghost-1", "ghost-2"],
-          }).pipe(
-            Effect.map((r) => ({
-              result: "ok" as const,
-              status: r.status,
-              deleted: r.deleted.length,
-              errors: r.errors.length,
-              disconnected: r.disconnectedUniqueIds.length,
-            })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) =>
-                Effect.succeed({
-                  result: e._tag as string,
-                  message: e.message ?? null,
-                }),
-            ),
-          );
+          }).pipe(Effect.result);
+          const result =
+            outcome._tag === "Success"
+              ? {
+                  result: "ok" as const,
+                  status: outcome.success.status,
+                  deleted: (outcome.success.deleted ?? []).length,
+                  errors: (outcome.success.errors ?? []).length,
+                  disconnected: (outcome.success.disconnectedUniqueIds ?? [])
+                    .length,
+                }
+              : {
+                  result: outcome.failure._tag as string,
+                  message: String(outcome.failure),
+                };
           return yield* HttpServerResponse.json(result);
         }
 

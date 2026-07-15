@@ -7,7 +7,8 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { durationToDays, toRedactedString } from "./common.ts";
+import { toWireDays } from "../../Util/Duration.ts";
+import { toRedactedString } from "./common.ts";
 
 export interface ServiceSpecificCredentialProps {
   /**
@@ -23,7 +24,7 @@ export interface ServiceSpecificCredentialProps {
    * `Duration.days(30)`. Sent to IAM as whole days (a bare number is
    * milliseconds). Changing it replaces the credential.
    */
-  credentialAgeDays?: Duration.Input;
+  credentialAge?: Duration.Input;
   /**
    * Desired credential status.
    * @default "Active"
@@ -131,8 +132,7 @@ export const ServiceSpecificCredentialProvider = () =>
       if (
         olds.userName !== news.userName ||
         olds.serviceName !== news.serviceName ||
-        durationToDays(olds.credentialAgeDays) !==
-          durationToDays(news.credentialAgeDays)
+        toWireDays(olds.credentialAge) !== toWireDays(news.credentialAge)
       ) {
         return { action: "replace" } as const;
       }
@@ -215,7 +215,7 @@ export const ServiceSpecificCredentialProvider = () =>
         const created = yield* iam.createServiceSpecificCredential({
           UserName: news.userName,
           ServiceName: news.serviceName,
-          CredentialAgeDays: durationToDays(news.credentialAgeDays),
+          CredentialAgeDays: toWireDays(news.credentialAge),
         });
         const credential = created.ServiceSpecificCredential;
         if (!credential?.ServiceSpecificCredentialId) {

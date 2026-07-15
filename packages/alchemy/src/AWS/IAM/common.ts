@@ -1,45 +1,25 @@
 import type * as iam from "@distilled.cloud/aws/iam";
-import * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import type { PolicyDocument } from "./Policy.ts";
 
 /**
- * Reconstruct a valid `Duration.Input` from a value that may have
- * round-tripped through persisted state JSON, which flattens a `Duration`
- * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
- * shape `Duration.toSeconds` silently decodes as zero.
+ * Convert an optional `Duration.Input` prop to whole wire seconds.
+ *
+ * @deprecated Import {@link toWireSeconds} from `Util/Duration.ts` directly.
+ * Kept as an alias because several other AWS services still import it from
+ * here.
  */
-const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return typeof input === "object" && input !== null && json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
+export const durationToSeconds = toWireSeconds;
 
-/** Convert an optional {@link Duration.Input} prop to whole wire seconds. */
-export const durationToSeconds = (
-  input: Duration.Input | undefined,
-): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toSeconds(fromStateDurationInput(input)));
-
-/** Convert an optional {@link Duration.Input} prop to whole wire days. */
-export const durationToDays = (
-  input: Duration.Input | undefined,
-): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toDays(fromStateDurationInput(input)));
+/**
+ * Convert an optional `Duration.Input` prop to whole wire days.
+ *
+ * @deprecated Import {@link toWireDays} from `Util/Duration.ts` directly.
+ * Kept as an alias because several other AWS services still import it from
+ * here.
+ */
+export const durationToDays = toWireDays;
 
 export const toTagRecord = (
   tags: Array<{ Key?: string; Value?: string }> | undefined,

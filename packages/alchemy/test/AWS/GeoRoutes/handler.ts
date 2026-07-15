@@ -1,5 +1,6 @@
 import * as GeoRoutes from "@/AWS/GeoRoutes";
 import * as Lambda from "@/AWS/Lambda";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -139,7 +140,16 @@ export default GeoRoutesTestFunction.make(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
         );
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Surface the typed error (tag + message) instead of an opaque 500 so
+        // test failures show the real cause in the response body.
+        Effect.catchCause((cause) =>
+          HttpServerResponse.json(
+            { error: Cause.pretty(cause) },
+            { status: 500 },
+          ),
+        ),
+      ),
     };
   }).pipe(
     Effect.provide(

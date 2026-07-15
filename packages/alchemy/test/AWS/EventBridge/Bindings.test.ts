@@ -32,7 +32,6 @@ let baseUrl: string;
 let customQueueUrl: string;
 let defaultQueueUrl: string;
 let functionArn: string;
-let busArn: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -128,11 +127,11 @@ describe("EventBridge Bindings", () => {
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("EventBridge test setup: deploying fixture");
-      const { fn, custom, dflt, bus } = yield* sharedStack.deploy(
+      const { fn, custom, dflt } = yield* sharedStack.deploy(
         Effect.gen(function* () {
-          const { customQueue, defaultQueue, bus } = yield* BusAndQueues;
+          const { customQueue, defaultQueue } = yield* BusAndQueues;
           const fn = yield* EventBridgeTestFunction;
-          return { fn, custom: customQueue, dflt: defaultQueue, bus };
+          return { fn, custom: customQueue, dflt: defaultQueue };
         }).pipe(
           Effect.provide(
             Layer.mergeAll(EventBridgeTestFunctionLive, BusAndQueuesLive),
@@ -145,7 +144,6 @@ describe("EventBridge Bindings", () => {
       customQueueUrl = custom.queueUrl;
       defaultQueueUrl = dflt.queueUrl;
       functionArn = fn.functionArn;
-      busArn = bus.eventBusArn;
 
       yield* Effect.logInfo(
         `EventBridge test setup: probing readiness at ${baseUrl}/health`,
@@ -168,7 +166,9 @@ describe("EventBridge Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 120_000,
+  });
 
   describe("PutEvents", () => {
     test.provider("publishes an event to the custom bus", (_stack) =>
@@ -268,7 +268,7 @@ describe("EventBridge Bindings", () => {
           const res = yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/replay`),
-              { destinationArn: busArn },
+              {},
             ),
           );
           const bodyText = yield* res.text;
