@@ -99,16 +99,20 @@ export const makeMediaTailorPlaybackHttpBinding = <
                     Output.interpolate`${config.playbackConfigurationArn}`,
                     // Prefetch schedules live in a sibling ARN space:
                     // arn:…:prefetchSchedule/{configurationName}/{name}
-                    Output.map(config.playbackConfigurationArn, (arn) =>
-                      arn.replace(
-                        ":playbackConfiguration/",
-                        ":prefetchSchedule/",
-                      ),
-                    ),
                     Output.map(
                       config.playbackConfigurationArn,
                       (arn) =>
                         `${arn.replace(":playbackConfiguration/", ":prefetchSchedule/")}/*`,
+                    ),
+                    // ListPrefetchSchedules is authorized against the bare
+                    // account/region wildcard `…:prefetchSchedule/*` (the
+                    // configuration name is not part of the authorization
+                    // resource), so every prefetch binding also grants it.
+                    Output.map(config.playbackConfigurationArn, (arn) =>
+                      arn.replace(
+                        /:playbackConfiguration\/.*$/,
+                        ":prefetchSchedule/*",
+                      ),
                     ),
                   ],
                 },

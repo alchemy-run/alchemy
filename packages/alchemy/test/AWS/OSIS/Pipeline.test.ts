@@ -22,6 +22,30 @@ test.provider(
     }),
 );
 
+// Ungated typed-error probe for the ResourcePolicy provider's read path.
+test.provider(
+  "getResourcePolicy on a nonexistent pipeline fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      const { region, accountId } = yield* AWSEnvironment.current;
+      const error = yield* Effect.flip(
+        osis.getResourcePolicy({
+          ResourceArn: `arn:aws:osis:${region}:${accountId}:pipeline/alchemy-nonexistent-probe`,
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
+// Ungated probe for the PipelineEndpoint provider's observe path: the list
+// API answers (typed) even when the account has no endpoints.
+test.provider("listPipelineEndpoints succeeds on an empty account", () =>
+  Effect.gen(function* () {
+    const response = yield* osis.listPipelineEndpoints({});
+    expect(Array.isArray(response.PipelineEndpoints ?? [])).toBe(true);
+  }),
+);
+
 // Data Prepper configuration: HTTP source draining to an S3 sink. The role
 // and bucket are provisioned by the same stack; interpolation defers the
 // concrete values until deploy time.
@@ -71,17 +95,18 @@ const assertPipelineDeleting = (name: string) =>
   );
 
 // OSIS pipelines take ~5-10 minutes to provision and are billed per
-// Ingestion-OCU-hour while they exist (minimum 1 OCU). The full lifecycle is
-// gated behind AWS_TEST_SLOW=1 and always destroys what it created.
+// Ingestion-OCU-hour while they exist (minimum 1 OCU). The full lifecycle —
+// pipeline + resource policy + VPC pipeline endpoint — is gated behind
+// AWS_TEST_SLOW=1 and always destroys what it created.
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
-  "create http-to-s3 pipeline, verify active, destroy",
+  "create http-to-s3 pipeline with resource policy and VPC endpoint, verify, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { region } = yield* AWSEnvironment.current;
+      const { region, accountId } = yield* AWSEnvironment.current;
 
-      const { pipeline } = yield* stack.deploy(
+      const { pipeline, policy, endpoint } = yield* stack.deploy(
         Effect.gen(function* () {
           const bucket = yield* AWS.S3.Bucket("Sink", {
             forceDestroy: true,
@@ -125,7 +150,45 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             ),
             tags: { fixture: "osis-pipeline" },
           });
-          return { pipeline };
+
+          // Resource-based policy: allow this account root to ingest.
+          const policy = yield* AWS.OSIS.ResourcePolicy("IngestPolicy", {
+            resourceArn: pipeline.pipelineArn,
+            policy: Output.interpolate`{
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": { "AWS": "arn:aws:iam::${accountId}:root" },
+                  "Action": ["osis:Ingest"],
+                  "Resource": "${pipeline.pipelineArn}"
+                }
+              ]
+            }`,
+          });
+
+          // VPC pipeline endpoint: private ingest into the pipeline.
+          const vpc = yield* AWS.EC2.Vpc("EndpointVpc", {
+            cidrBlock: "10.42.0.0/16",
+          });
+          const subnet = yield* AWS.EC2.Subnet("EndpointSubnet", {
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.42.1.0/24",
+            availabilityZone: `${region}a`,
+          });
+          const securityGroup = yield* AWS.EC2.SecurityGroup("EndpointSG", {
+            vpcId: vpc.vpcId,
+            description: "osis pipeline endpoint fixture",
+          });
+          const endpoint = yield* AWS.OSIS.PipelineEndpoint("Private", {
+            pipelineArn: pipeline.pipelineArn,
+            vpcOptions: {
+              subnetIds: [subnet.subnetId],
+              securityGroupIds: [securityGroup.groupId],
+            },
+          });
+
+          return { pipeline, policy, endpoint };
         }),
       );
 
@@ -146,11 +209,28 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         "log-pipeline",
       );
 
+      // Resource policy: attached and readable out-of-band.
+      expect(policy.resourceArn).toBe(pipeline.pipelineArn);
+      const readPolicy = yield* osis.getResourcePolicy({
+        ResourceArn: pipeline.pipelineArn,
+      });
+      expect(readPolicy.Policy).toContain("osis:Ingest");
+
+      // VPC pipeline endpoint: created and visible out-of-band.
+      expect(endpoint.endpointId).toMatch(/^pe-/);
+      expect(endpoint.pipelineArn).toBe(pipeline.pipelineArn);
+      expect(endpoint.status).toBe("ACTIVE");
+      const endpoints = yield* osis.listPipelineEndpoints({});
+      expect(
+        (endpoints.PipelineEndpoints ?? []).map((e) => e.EndpointId),
+      ).toContain(endpoint.endpointId);
+
       // Destroy immediately — pipelines bill per OCU-hour — and verify
       // deletion was initiated out-of-band.
       yield* stack.destroy();
       yield* assertPipelineDeleting(pipeline.pipelineName);
     }),
-  // create (~5-10 min) + delete initiation, one test.
-  { timeout: 1_200_000 },
+  // pipeline create (~5-10 min) + endpoint create (~5 min) + delete
+  // initiation, one test.
+  { timeout: 1_800_000 },
 );

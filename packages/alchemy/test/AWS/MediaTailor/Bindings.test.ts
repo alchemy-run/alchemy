@@ -198,16 +198,19 @@ describe.sequential("MediaTailor Bindings", () => {
 
   describe("ListAlerts", () => {
     test.provider(
-      "lists alerts for the configuration ARN from the runtime",
+      "rejects a non-channel-assembly ARN with the typed BadRequestException",
       () =>
         Effect.gen(function* () {
           yield* resolveConfig;
 
+          // ListAlerts only accepts channel-assembly resource ARNs; a
+          // playback-configuration ARN is rejected with the typed
+          // BadRequestException (never AccessDenied — proving the
+          // mediatailor:ListAlerts grant reached the API).
           const body = (yield* getJson(
             `/alerts?arn=${encodeURIComponent(configArn!)}`,
           )) as { count: number; error?: string; detail?: string };
-          expect(body.error, body.detail).toBeUndefined();
-          expect(typeof body.count).toBe("number");
+          expect(body.error, body.detail).toBe("BadRequestException");
         }),
       { timeout: 120_000 },
     );

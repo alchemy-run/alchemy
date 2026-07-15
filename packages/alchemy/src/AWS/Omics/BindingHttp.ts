@@ -52,7 +52,8 @@ export const makeOmicsResourceHttpBinding = <
     const op = yield* options.operation;
 
     return Effect.fn(function* (res: Res) {
-      const Id = options.id(res);
+      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      const Id = yield* options.id(res);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
