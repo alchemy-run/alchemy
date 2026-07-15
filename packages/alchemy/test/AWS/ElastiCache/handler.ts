@@ -127,6 +127,8 @@ const cacheRoundtrip = (info: CacheConnectionInfo, value: string) =>
  *   from the injected environment.
  * - `/roundtrip?value=...` SETs then GETs a key through the cache over TLS
  *   with iovalkey and returns the read-back value.
+ * - `/snapshot?name=...` takes an on-demand snapshot of the fixture cache
+ *   through the cache-scoped CreateServerlessCacheSnapshot binding.
  */
 export const ElastiCacheTestFunctionLive = ElastiCacheTestFunction.make(
   Effect.gen(function* () {
@@ -142,6 +144,8 @@ export const ElastiCacheTestFunctionLive = ElastiCacheTestFunction.make(
   Effect.gen(function* () {
     const { cache } = yield* FixtureCache;
     const connection = yield* AWS.ElastiCache.Connect(cache);
+    const createSnapshot =
+      yield* AWS.ElastiCache.CreateServerlessCacheSnapshot(cache);
 
     return {
       fetch: Effect.gen(function* () {
@@ -155,6 +159,28 @@ export const ElastiCacheTestFunctionLive = ElastiCacheTestFunction.make(
 
         if (request.method === "GET" && pathname === "/connection") {
           return yield* HttpServerResponse.json(yield* connection);
+        }
+
+        if (request.method === "GET" && pathname === "/snapshot") {
+          const name = url.searchParams.get("name") ?? "alchemy-fixture-snap";
+          return yield* createSnapshot({
+            ServerlessCacheSnapshotName: name,
+          }).pipe(
+            Effect.flatMap((result) =>
+              HttpServerResponse.json({
+                name: result.ServerlessCacheSnapshot
+                  ?.ServerlessCacheSnapshotName,
+                status: result.ServerlessCacheSnapshot?.Status,
+              }),
+            ),
+            // Re-run after a crashed test: the snapshot already exists.
+            Effect.catchTag("ServerlessCacheSnapshotAlreadyExistsFault", () =>
+              HttpServerResponse.json({ name, status: "exists" }),
+            ),
+            Effect.catch((error) =>
+              HttpServerResponse.json({ error: error._tag }, { status: 500 }),
+            ),
+          );
         }
 
         if (request.method === "GET" && pathname === "/roundtrip") {
@@ -179,7 +205,11 @@ export const ElastiCacheTestFunctionLive = ElastiCacheTestFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(AWS.ElastiCache.ConnectHttp, FixtureCacheLive),
+      Layer.mergeAll(
+        AWS.ElastiCache.ConnectHttp,
+        AWS.ElastiCache.CreateServerlessCacheSnapshotHttp,
+        FixtureCacheLive,
+      ),
     ),
   ),
   // Re-merge so the deploying Stack can `yield* FixtureCache` and expose the

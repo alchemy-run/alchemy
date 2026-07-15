@@ -1,6 +1,8 @@
 import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -9,6 +11,8 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
 
 import ElbBindingsFunctionLive, {
+  bundleKey,
+  CA_BUNDLE_PEM,
   ElbBindingsFunction,
   testTargetIp,
 } from "./fixtures/bindings-handler.ts";
@@ -30,6 +34,7 @@ interface RouteResult {
   message?: string;
   targets?: { id?: string; state?: string }[];
   states?: string[];
+  location?: string;
 }
 
 // Call a fixture route, repeating (bounded) while the response still shows an
@@ -67,6 +72,32 @@ describe("ELBv2 runtime bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* sharedStack.destroy();
+
+      // Phase 1 — the trust store's CA bundle must exist in S3 before the
+      // TrustStore resource can be created, and there is no declarative S3
+      // object resource yet: deploy the bucket alone, upload the bundle
+      // out-of-band, then deploy the full fixture (same logical id, same
+      // stack, so phase 2 reconciles the bucket as a no-op).
+      const { bucketName } = yield* sharedStack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Bucket("ElbBindingsBundleBucket", {
+            forceDestroy: true,
+          });
+          return { bucketName: bucket.bucketName };
+        }),
+      );
+      // beforeAll runs outside the provider env, so the raw distilled call
+      // needs the AWS layers (credentials/region) provided explicitly.
+      yield* Core.withProviders(
+        s3.putObject({
+          Bucket: bucketName,
+          Key: bundleKey,
+          Body: CA_BUNDLE_PEM,
+          ContentType: "application/x-pem-file",
+        }),
+        testOptions,
+        sharedStack.name,
+      );
 
       const { fn } = yield* sharedStack.deploy(
         Effect.gen(function* () {
@@ -141,6 +172,31 @@ describe("ELBv2 runtime bindings", () => {
           "InvalidConfigurationRequestException",
           "CapacityReservationPendingException",
         ]).toContain(body.tag);
+      }),
+    { timeout: 60_000 },
+  );
+
+  test.provider(
+    "GetTrustStoreCaCertificatesBundle returns a presigned bundle location",
+    (_stack) =>
+      Effect.gen(function* () {
+        const body = yield* callRoute("GET", "/truststore-bundle");
+        expect(body.tag).toEqual("Success");
+        expect(body.location).toMatch(/^https:\/\//);
+      }),
+    { timeout: 60_000 },
+  );
+
+  test.provider(
+    "GetTrustStoreRevocationContent surfaces the typed not-found tag",
+    (_stack) =>
+      Effect.gen(function* () {
+        const body = yield* callRoute("GET", "/truststore-revocation-missing");
+        // The fixture queries a revocation id that was never added — the miss
+        // must surface as the typed tag (never an authorization or catch-all
+        // failure), proving both the IAM grant and the typed error path.
+        expect(body.ok).toBe(false);
+        expect(body.tag).toEqual("RevocationIdNotFoundException");
       }),
     { timeout: 60_000 },
   );

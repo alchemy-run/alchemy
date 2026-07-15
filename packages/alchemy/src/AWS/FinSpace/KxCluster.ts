@@ -8,7 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
-import { toSeconds } from "../../Util/Duration.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export type KxClusterStatus = finspace.KxClusterStatus;
@@ -41,12 +41,12 @@ export interface AutoScalingConfiguration {
    * The cooldown after a scale-in event before another scaling event —
    * e.g. `"5 minutes"`. Sent to AWS as whole seconds.
    */
-  scaleInCooldownSeconds?: Duration.Input;
+  scaleInCooldown?: Duration.Input;
   /**
    * The cooldown after a scale-out event before another scaling event —
    * e.g. `"5 minutes"`. Sent to AWS as whole seconds.
    */
-  scaleOutCooldownSeconds?: Duration.Input;
+  scaleOutCooldown?: Duration.Input;
 }
 
 /** Convert the alchemy-facing auto-scaling config to the wire shape (seconds). */
@@ -57,8 +57,8 @@ const toWireAutoScaling = (
   maxNodeCount: config.maxNodeCount,
   autoScalingMetric: config.autoScalingMetric,
   metricTarget: config.metricTarget,
-  scaleInCooldownSeconds: toSeconds(config.scaleInCooldownSeconds),
-  scaleOutCooldownSeconds: toSeconds(config.scaleOutCooldownSeconds),
+  scaleInCooldownSeconds: toWireSeconds(config.scaleInCooldown),
+  scaleOutCooldownSeconds: toWireSeconds(config.scaleOutCooldown),
 });
 
 export interface KxClusterProps {

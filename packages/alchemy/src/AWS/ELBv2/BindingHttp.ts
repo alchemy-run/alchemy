@@ -26,7 +26,7 @@ import type { TrustStore } from "./TrustStore.ts";
 const bindHost = (
   tag: string,
   actions: readonly string[],
-  resource: TargetGroup | LoadBalancer,
+  resource: TargetGroup | LoadBalancer | TrustStore,
   iamResource: Output.Output<string> | "*",
 ) =>
   Effect.gen(function* () {
@@ -141,6 +141,47 @@ export const makeLoadBalancerHttpBinding = <
         return yield* op({
           ...request,
           LoadBalancerArn: yield* LoadBalancerArn,
+        } as I);
+      });
+    });
+  });
+
+/**
+ * Build the impl Effect for a trust-store-addressed operation: the runtime
+ * callable injects the bound {@link TrustStore}'s ARN as `TrustStoreArn`;
+ * the deploy-time half grants `actions` on the trust-store ARN (mTLS
+ * `GetTrustStore*` reads support resource-level permissions).
+ */
+export const makeTrustStoreHttpBinding = <
+  I extends { TrustStoreArn?: string },
+  A,
+  E,
+  R,
+>(options: {
+  /** Fully-qualified binding tag, e.g. `AWS.ELBv2.GetTrustStoreCaCertificatesBundle`. */
+  tag: string;
+  /** The distilled operation; `TrustStoreArn` is injected from the store. */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /** IAM actions granted on the trust-store ARN. */
+  actions: readonly string[];
+}) =>
+  Effect.gen(function* () {
+    const op = yield* options.operation;
+
+    return Effect.fn(function* (trustStore: TrustStore) {
+      const TrustStoreArn = yield* trustStore.trustStoreArn;
+      yield* bindHost(
+        options.tag,
+        options.actions,
+        trustStore,
+        Output.interpolate`${trustStore.trustStoreArn}`,
+      );
+      return Effect.fn(`${options.tag}(${trustStore.LogicalId})`)(function* (
+        request?: Omit<I, "TrustStoreArn">,
+      ) {
+        return yield* op({
+          ...request,
+          TrustStoreArn: yield* TrustStoreArn,
         } as I);
       });
     });

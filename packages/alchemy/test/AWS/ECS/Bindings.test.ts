@@ -202,10 +202,17 @@ describe("ECS Bindings", () => {
       );
       yield* Effect.logInfo("ECS bindings setup: fixture ready");
     }),
-    { timeout: 300_000 },
+    // The cold path (Docker build/push + VPC + Lambda from scratch) can
+    // exceed 300s; warm reruns converge in a couple of minutes.
+    { timeout: 540_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 300_000 });
+  // NO_DESTROY=1 keeps the deployment around between runs while iterating —
+  // without it an interrupted run tears everything down and the next run
+  // pays the full cold build again.
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 300_000,
+  });
 
   describe("RunTask", () => {
     test.provider(

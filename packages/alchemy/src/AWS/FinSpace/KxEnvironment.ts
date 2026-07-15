@@ -17,6 +17,8 @@ import {
 import type { Providers } from "../Providers.ts";
 
 export type KxEnvironmentStatus = finspace.EnvironmentStatus;
+export type TransitGatewayConfiguration = finspace.TransitGatewayConfiguration;
+export type CustomDNSServer = finspace.CustomDNSServer;
 
 export interface KxEnvironmentProps {
   /**
@@ -33,6 +35,19 @@ export interface KxEnvironmentProps {
    * changing it replaces the environment.
    */
   kmsKeyId: string;
+  /**
+   * Transit gateway to attach so on-prem kdb clients can reach the
+   * environment. Attached once via `UpdateKxEnvironmentNetwork` after the
+   * environment is created; FinSpace does not support changing an attached
+   * network, so changing an existing configuration replaces the environment.
+   */
+  transitGatewayConfiguration?: TransitGatewayConfiguration;
+  /**
+   * Custom DNS servers to resolve on-prem hostnames from inside the
+   * environment. Attached together with `transitGatewayConfiguration`;
+   * changing an existing configuration replaces the environment.
+   */
+  customDNSConfiguration?: CustomDNSServer[];
   /**
    * Tags to associate with the environment.
    */
@@ -67,6 +82,14 @@ export interface KxEnvironment extends Resource<
      * The environment's description.
      */
     description: string | undefined;
+    /**
+     * The transit gateway attached to the environment, if any.
+     */
+    transitGatewayConfiguration: TransitGatewayConfiguration | undefined;
+    /**
+     * The custom DNS servers configured on the environment, if any.
+     */
+    customDNSConfiguration: CustomDNSServer[] | undefined;
     /**
      * Current tags reported for the environment.
      */
@@ -138,6 +161,8 @@ interface KxEnvironmentView {
   status?: KxEnvironmentStatus;
   kmsKeyId?: string;
   description?: string;
+  transitGatewayConfiguration?: TransitGatewayConfiguration;
+  customDNSConfiguration?: CustomDNSServer[];
 }
 
 const toKxAttributes = Effect.fn(function* (
@@ -152,6 +177,10 @@ const toKxAttributes = Effect.fn(function* (
     status: env.status,
     kmsKeyId: env.kmsKeyId,
     description: env.description,
+    transitGatewayConfiguration: env.transitGatewayConfiguration,
+    customDNSConfiguration: env.customDNSConfiguration
+      ? [...env.customDNSConfiguration]
+      : undefined,
     tags: environmentArn ? yield* fetchKxTags(environmentArn) : {},
   };
   return attrs;

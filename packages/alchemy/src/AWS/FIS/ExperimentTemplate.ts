@@ -1,5 +1,5 @@
 import * as fis from "@distilled.cloud/aws/fis";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -15,6 +15,7 @@ import {
   hasAlchemyTags,
   tagRecord,
 } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -460,14 +461,15 @@ export const ExperimentTemplateProvider = () =>
       });
 
       // Report-capture durations are `Duration.Input`s; the FIS wire format
-      // is an ISO-8601 duration string (e.g. `PT10M`). Emit hours when the
-      // duration is whole hours, else minutes, else seconds, matching the
-      // canonical forms FIS reports back.
+      // is an ISO-8601 duration string (e.g. `PT10M`). Normalize through the
+      // central Duration util (handles state-persisted Duration JSON), then
+      // emit hours when the duration is whole hours, else minutes, else
+      // seconds, matching the canonical forms FIS reports back.
       const toIsoDuration = (
         input: Duration.Input | undefined,
       ): string | undefined => {
         if (input === undefined) return undefined;
-        const seconds = Math.max(0, Math.round(Duration.toSeconds(input)));
+        const seconds = toSeconds(input)!;
         if (seconds > 0 && seconds % 3600 === 0) return `PT${seconds / 3600}H`;
         if (seconds % 60 === 0) return `PT${seconds / 60}M`;
         return `PT${seconds}S`;

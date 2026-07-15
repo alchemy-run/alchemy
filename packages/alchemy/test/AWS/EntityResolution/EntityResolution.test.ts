@@ -1,5 +1,10 @@
 import * as AWS from "@/AWS";
-import { MatchingWorkflow, SchemaMapping } from "@/AWS/EntityResolution";
+import {
+  IdMappingWorkflow,
+  IdNamespace,
+  MatchingWorkflow,
+  SchemaMapping,
+} from "@/AWS/EntityResolution";
 import { toTagRecord } from "@/AWS/EntityResolution/internal.ts";
 import { Database, Table } from "@/AWS/Glue";
 import { Role } from "@/AWS/IAM";
@@ -219,6 +224,24 @@ test.provider(
         }),
       );
       expect(schemaError._tag).toBe("ResourceNotFoundException");
+      const idMapError = yield* Effect.flip(
+        entityresolution.getIdMappingWorkflow({
+          workflowName: created.idMappingWorkflow.workflowName,
+        }),
+      );
+      expect(idMapError._tag).toBe("ResourceNotFoundException");
+      const sourceNsError = yield* Effect.flip(
+        entityresolution.getIdNamespace({
+          idNamespaceName: created.sourceNamespace.idNamespaceName,
+        }),
+      );
+      expect(sourceNsError._tag).toBe("ResourceNotFoundException");
+      const targetNsError = yield* Effect.flip(
+        entityresolution.getIdNamespace({
+          idNamespaceName: created.targetNamespace.idNamespaceName,
+        }),
+      );
+      expect(targetNsError._tag).toBe("ResourceNotFoundException");
     }),
   { timeout: 300_000 },
 );

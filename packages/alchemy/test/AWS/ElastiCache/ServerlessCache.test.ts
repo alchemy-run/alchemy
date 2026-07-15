@@ -30,6 +30,27 @@ test.provider(
     }),
 );
 
+const SNAPSHOT_NAME = "alchemy-elasticache-fixture-snap";
+
+// A snapshot still `creating` rejects deletion with
+// InvalidServerlessCacheSnapshotStateFault — retry (bounded) while it
+// settles. Already gone is success.
+const deleteSnapshot = (name: string) =>
+  ElastiCache.deleteServerlessCacheSnapshot({
+    ServerlessCacheSnapshotName: name,
+  }).pipe(
+    Effect.asVoid,
+    Effect.catchTag("ServerlessCacheSnapshotNotFoundFault", () => Effect.void),
+    Effect.retry({
+      while: (e): boolean =>
+        e._tag === "InvalidServerlessCacheSnapshotStateFault",
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(30),
+      ]),
+    }),
+  );
+
 // Serverless caches take ~1-3 minutes to provision and a similar time to
 // delete, and are metered (with a monthly floor) while they exist. The full
 // lifecycle is therefore gated behind AWS_TEST_SLOW=1 and runs as a single
@@ -38,8 +59,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "create serverless cache, bind Connect env, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {
-      // Clean slate in case a previous run died mid-flight.
+      // Clean slate in case a previous run died mid-flight (the snapshot is
+      // created out-of-band of the stack, so it needs its own cleanup).
       yield* stack.destroy();
+      yield* deleteSnapshot(SNAPSHOT_NAME);
 
       const { cache, fn } = yield* stack.deploy(
         Effect.gen(function* () {
@@ -118,6 +141,25 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // value.
       const roundtrip = yield* getJson("/roundtrip?value=hello-valkey", 10);
       expect((roundtrip as { value: string }).value).toBe("hello-valkey");
+
+      // Cache-scoped CreateServerlessCacheSnapshot binding: take an
+      // on-demand snapshot from inside the deployed function, verify it
+      // out-of-band, then delete it (snapshots bill per GB-month).
+      const snapshot = (yield* getJson(
+        `/snapshot?name=${SNAPSHOT_NAME}`,
+        10,
+      )) as { name: string; status: string };
+      expect(snapshot.name).toBe(SNAPSHOT_NAME);
+      expect(["creating", "available", "exists"]).toContain(snapshot.status);
+      const describedSnapshots =
+        yield* ElastiCache.describeServerlessCacheSnapshots({
+          ServerlessCacheSnapshotName: SNAPSHOT_NAME,
+        });
+      expect(
+        describedSnapshots.ServerlessCacheSnapshots?.[0]
+          ?.ServerlessCacheSnapshotName,
+      ).toBe(SNAPSHOT_NAME);
+      yield* deleteSnapshot(SNAPSHOT_NAME);
 
       // Destroy immediately — serverless caches bill while they exist —
       // and verify deletion out-of-band with a typed wait.

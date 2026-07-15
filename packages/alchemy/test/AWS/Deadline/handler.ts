@@ -278,10 +278,12 @@ export default DeadlineTestFunction.make(
         }
 
         // No workers means no sessions and therefore no session actions —
-        // proves the op + IAM wire up and returns an empty page.
+        // proves the op + IAM wire up and returns an empty page. The API
+        // requires a sessionId or taskId to scope the query.
         if (request.method === "GET" && pathname === "/session-actions") {
           const { sessionActions } = yield* listSessionActions({
             jobId: param("jobId"),
+            taskId: param("taskId"),
           });
           return yield* HttpServerResponse.json({
             ids: (sessionActions ?? []).map((action) => action.sessionActionId),
@@ -300,10 +302,15 @@ export default DeadlineTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/stats") {
+          // The API rejects timestamps whose minutes/seconds are not zero —
+          // align the window to whole hours.
+          const hourMs = 3600 * 1000;
+          const endTime = new Date(Math.floor(Date.now() / hourMs) * hourMs);
+          const startTime = new Date(endTime.getTime() - 24 * hourMs);
           const { aggregationId } = yield* startAggregation({
             resourceIds: { queueIds: [param("queueId")] },
-            startTime: new Date(Date.now() - 3600 * 1000),
-            endTime: new Date(),
+            startTime,
+            endTime,
             groupBy: ["QUEUE_ID"],
             statistics: ["SUM"],
           });

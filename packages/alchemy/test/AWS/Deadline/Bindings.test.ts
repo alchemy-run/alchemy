@@ -403,8 +403,13 @@ describe.sequential("Deadline Bindings", () => {
           };
           expect(sessions.ids).toEqual([]);
 
+          // ListSessionActions requires a sessionId or taskId scope — use
+          // the job's single task.
+          const tasks = (yield* getJson(
+            `/tasks?jobId=${jobId}&stepId=${stepId}`,
+          )) as { ids: string[] };
           const actions = (yield* getJson(
-            `/session-actions?jobId=${jobId}`,
+            `/session-actions?jobId=${jobId}&taskId=${tasks.ids[0]}`,
           )) as { ids: string[] };
           expect(actions.ids).toEqual([]);
         }),

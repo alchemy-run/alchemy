@@ -36,6 +36,36 @@ test.provider("typed error semantics on a nonexistent virtual cluster", () =>
   }),
 );
 
+// Ungated typed-error probe for the job-run data plane the VC-scoped
+// bindings (StartJobRun / DescribeJobRun / CancelJobRun / ListJobRuns) call:
+// each op on a well-formed nonexistent virtual cluster id must surface a
+// typed tag from its inferred error union — never a catch-all.
+test.provider("typed error semantics for job run ops on a nonexistent vc", () =>
+  Effect.gen(function* () {
+    const virtualClusterId = "abcdefabcdefabcdefabcdef01";
+    const jobRunId = "abcdefabcdefabcdefa";
+
+    const describeError = yield* Effect.flip(
+      emrc.describeJobRun({ id: jobRunId, virtualClusterId }),
+    );
+    expect(describeError._tag).toBe("ResourceNotFoundException");
+
+    const listError = yield* Effect.flip(
+      emrc.listJobRuns({ virtualClusterId }),
+    );
+    expect(listError._tag).toBe("ValidationException");
+
+    const startError = yield* Effect.flip(
+      emrc.startJobRun({
+        virtualClusterId,
+        clientToken: "alchemy-emrc-probe",
+        jobTemplateId: "abcdefabcdefabcdefabcdef01",
+      }),
+    );
+    expect(startError._tag).toBe("ResourceNotFoundException");
+  }),
+);
+
 // Ungated list() probe: enumerates live virtual clusters in the ambient
 // account/region — proves the pagination + attribute mapping wiring without
 // needing an EKS cluster.

@@ -7,13 +7,19 @@ import {
   DescribeCapacityReservationHttp,
   DescribeTargetHealth,
   DescribeTargetHealthHttp,
+  GetTrustStoreCaCertificatesBundle,
+  GetTrustStoreCaCertificatesBundleHttp,
+  GetTrustStoreRevocationContent,
+  GetTrustStoreRevocationContentHttp,
   LoadBalancer,
   ModifyCapacityReservation,
   ModifyCapacityReservationHttp,
   RegisterTargets,
   RegisterTargetsHttp,
   TargetGroup,
+  TrustStore,
 } from "@/AWS/ELBv2";
+import { Bucket } from "@/AWS/S3";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -29,6 +35,32 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  */
 export const testTargetIp = "192.168.100.10";
 
+/** S3 key of the trust store's CA bundle (uploaded out-of-band by the test). */
+export const bundleKey = "ca-bundle.pem";
+
+// A self-signed CA certificate generated once and checked in (never created
+// at test time, per the fixture convention). X.509 v3 with basicConstraints
+// CA:TRUE + keyCertSign — ELBv2 trust stores reject v1 certs.
+export const CA_BUNDLE_PEM = `-----BEGIN CERTIFICATE-----
+MIIC2jCCAcKgAwIBAgIJAJyM/Dvd55qtMA0GCSqGSIb3DQEBCwUAMBoxGDAWBgNV
+BAMMD2FsY2hlbXktdGVzdC1jYTAeFw0yNjA2MTcwNjA5MDlaFw0zNjA2MTQwNjA5
+MDlaMBoxGDAWBgNVBAMMD2FsY2hlbXktdGVzdC1jYTCCASIwDQYJKoZIhvcNAQEB
+BQADggEPADCCAQoCggEBANgo7XPCQMpyecXg2SCj6Tn6R1snlmhSA1vKGQnHoQBS
+QA11DMpv+iFRT9s1d3izaGA4GEcxfrXOsmUBkzYIHJIYakCWdr6qcUXs6lS2uhnZ
+qcyR0CamDtHTqAxRKEK+QPaISoxyD3BIwQqE0I8yNzV3/6osIE513e+7tp9E+J04
+dBhyG5goSwR3ueqs53gQioYVp/fgLKo4MqFcsA3p7anEE9hyeq1Q/lGAXxQwZmXT
+3kQli/JjMoF8OfccpA3aBx9Y2aDTCU8HXTscVYmPSHbnTGkTARGBwnag+Jwq5Uni
+YvM2OeDUPwvszgpi3JgiblZQhZQAy4/MeNhmE8qgIa8CAwEAAaMjMCEwDwYDVR0T
+AQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAQYwDQYJKoZIhvcNAQELBQADggEBAJnp
+el0xBbL/eQY87evhy0o+ZTHMVCdI9Uc+kDK0XPMi4hc5OfjWNIy8u5/s33kPkNYS
+Y5Jhm5KtGtMb9kXioCWjSi0aREA8zijGrXn1jC+0rksMQmJka63bKsJ4TjFaHMcc
+m/xt25xX1Ssp/gWr9YX3MzbPhcn57Uu9OTtzf13F6CMv1XtRS1RKFYtkLZrhvzBR
+WPdos3xvn3D0Fjd5H5AgVKTkeb2YPhINfN4jyzn3J09teKZpNN/qHTAQewIh2FnO
+MeplcuT3eQVUZNTBelvUE7VKHe11AUc8TkvVMS/XOFeN6OHAJtq08EegbTcjwz9Z
+lyGGetkNMmdhGRV6AlY=
+-----END CERTIFICATE-----
+`;
+
 export class ElbBindingsFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "ElbBindingsFunction",
 ) {}
@@ -42,7 +74,11 @@ export class ElbBindingsFunction extends AWS.Lambda.Function<AWS.Lambda.Function
  */
 export class BindingsFleet extends Context.Service<
   BindingsFleet,
-  { targetGroup: TargetGroup; loadBalancer: LoadBalancer }
+  {
+    targetGroup: TargetGroup;
+    loadBalancer: LoadBalancer;
+    trustStore: TrustStore;
+  }
 >()("ELBv2BindingsFleet") {}
 
 export const BindingsFleetLive = Layer.effect(
@@ -90,7 +126,17 @@ export const BindingsFleetLive = Layer.effect(
       scheme: "internal",
       subnets: subnetIds,
     });
-    return { targetGroup, loadBalancer };
+    // The CA bundle object is uploaded out-of-band by the test between the
+    // bucket-only phase-1 deploy and the full fixture deploy (there is no
+    // declarative S3 object resource yet).
+    const bucket = yield* Bucket("ElbBindingsBundleBucket", {
+      forceDestroy: true,
+    });
+    const trustStore = yield* TrustStore("ElbBindingsTrustStore", {
+      caCertificatesBundleS3Bucket: bucket.bucketName,
+      caCertificatesBundleS3Key: bundleKey,
+    });
+    return { targetGroup, loadBalancer, trustStore };
   }),
 );
 
@@ -100,7 +146,7 @@ export default ElbBindingsFunction.make(
     url: true,
   },
   Effect.gen(function* () {
-    const { targetGroup, loadBalancer } = yield* BindingsFleet;
+    const { targetGroup, loadBalancer, trustStore } = yield* BindingsFleet;
 
     const registerTargets = yield* RegisterTargets(targetGroup);
     const deregisterTargets = yield* DeregisterTargets(targetGroup);
@@ -109,6 +155,10 @@ export default ElbBindingsFunction.make(
       yield* DescribeCapacityReservation(loadBalancer);
     const modifyCapacityReservation =
       yield* ModifyCapacityReservation(loadBalancer);
+    const getCaCertificatesBundle =
+      yield* GetTrustStoreCaCertificatesBundle(trustStore);
+    const getRevocationContent =
+      yield* GetTrustStoreRevocationContent(trustStore);
 
     return {
       fetch: Effect.gen(function* () {
@@ -184,6 +234,33 @@ export default ElbBindingsFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/truststore-bundle") {
+          const result = yield* getCaCertificatesBundle().pipe(Effect.result);
+          return yield* HttpServerResponse.json({
+            ok: result._tag === "Success",
+            tag: result._tag === "Failure" ? result.failure._tag : "Success",
+            // A presigned S3 URL, valid for ten minutes.
+            location:
+              result._tag === "Success" ? result.success.Location : undefined,
+          });
+        }
+
+        // Queries a revocation id that was never added — proves the IAM grant
+        // and that the miss surfaces as the typed tag, without needing a CRL
+        // fixture.
+        if (
+          request.method === "GET" &&
+          pathname === "/truststore-revocation-missing"
+        ) {
+          const result = yield* getRevocationContent({
+            RevocationId: 424242,
+          }).pipe(Effect.result);
+          return yield* HttpServerResponse.json({
+            ok: result._tag === "Success",
+            tag: result._tag === "Failure" ? result.failure._tag : "Success",
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -198,6 +275,8 @@ export default ElbBindingsFunction.make(
         DescribeTargetHealthHttp,
         DescribeCapacityReservationHttp,
         ModifyCapacityReservationHttp,
+        GetTrustStoreCaCertificatesBundleHttp,
+        GetTrustStoreRevocationContentHttp,
         BindingsFleetLive,
       ),
     ),
