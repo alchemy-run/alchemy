@@ -71,7 +71,7 @@ test(
 );
 
 // Reproduces the `tick` streaming example from the Durable Objects tutorial:
-// https://v2.alchemy.run/tutorial/cloudflare/durable-objects/
+// https://alchemy.run/cloudflare/compute/durable-objects
 //
 // The DO exposes `tick(n): Stream<number>` and the Worker forwards it to the
 // HTTP response with `HttpServerResponse.stream`. The client reads the body as
