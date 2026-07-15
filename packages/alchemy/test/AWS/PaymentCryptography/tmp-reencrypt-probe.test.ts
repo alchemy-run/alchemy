@@ -70,8 +70,14 @@ test.provider.skipIf(!process.env.AWS_TEST_PAYMENTCRYPTO)(
             },
           })
           .pipe(Effect.result);
-        console.log("REENCRYPT RESULT:", JSON.stringify(result, null, 2));
-        expect(result).toBeTruthy();
+        yield* Effect.sync(() => {
+          if (result._tag !== "Success") {
+            throw new Error(
+              `REENCRYPT FAILED >>> ${JSON.stringify(result)} <<<`,
+            );
+          }
+        });
+        expect(result._tag).toBe("Success");
       }).pipe(Effect.ensuring(cleanup));
     }),
   { timeout: 60_000 },

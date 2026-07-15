@@ -26,7 +26,9 @@ import type { WebExperience } from "./WebExperience.ts";
  * (chat, conversations, users, subscriptions, chat controls, policy): the
  * runtime callable injects the bound {@link Application}'s id as
  * `applicationId` and the deploy-time half grants `actions` on the
- * application ARN.
+ * application ARN (plus any `subResources` suffix patterns, e.g.
+ * `retriever/*` for `SearchRelevantContent`, which Q Business additionally
+ * authorizes against the retriever it searches).
  */
 export const makeQBusinessApplicationHttpBinding = <
   I extends { applicationId: string },
@@ -40,6 +42,11 @@ export const makeQBusinessApplicationHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the application ARN. */
   actions: readonly string[];
+  /**
+   * Extra ARN suffix patterns (relative to the application ARN) the
+   * actions are also granted on, e.g. `retriever/*`.
+   */
+  subResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -54,7 +61,13 @@ export const makeQBusinessApplicationHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [application.applicationArn],
+                Resource: [
+                  application.applicationArn,
+                  ...(options.subResources ?? []).map(
+                    (suffix) =>
+                      Output.interpolate`${application.applicationArn}/${suffix}`,
+                  ),
+                ],
               },
             ],
           });
@@ -93,6 +106,12 @@ export const makeQBusinessIndexHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the index ARN + its parent application ARN. */
   actions: readonly string[];
+  /**
+   * Extra ARN suffix patterns (relative to the index ARN) the actions are
+   * also granted on, e.g. `data-source/*` for the principal-group
+   * operations that also act on data-source-scoped groups.
+   */
+  subResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -114,6 +133,9 @@ export const makeQBusinessIndexHttpBinding = <
                   // — the parent application ARN is its prefix.
                   index.indexArn.pipe(
                     Output.map((arn) => arn.split("/index/")[0]!),
+                  ),
+                  ...(options.subResources ?? []).map(
+                    (suffix) => Output.interpolate`${index.indexArn}/${suffix}`,
                   ),
                 ],
               },
@@ -216,6 +238,7 @@ export const makeQBusinessWebExperienceHttpBinding = <
   A,
   E,
   R,
+  Req = Omit<I, "applicationId" | "webExperienceId">,
 >(options: {
   /** Fully-qualified binding tag, e.g. `AWS.QBusiness.CreateAnonymousWebExperienceUrl`. */
   tag: string;
@@ -229,6 +252,14 @@ export const makeQBusinessWebExperienceHttpBinding = <
    * ARN.
    */
   actions: readonly string[];
+  /**
+   * Map the public request shape to the wire request (defaults to
+   * identity) — e.g. `CreateAnonymousWebExperienceUrl` converts a
+   * `Duration.Input` into the wire `sessionDurationInMinutes`.
+   */
+  prepare?: (
+    request: Req | undefined,
+  ) => Omit<I, "applicationId" | "webExperienceId">;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -259,10 +290,15 @@ export const makeQBusinessWebExperienceHttpBinding = <
         }
       }
       return Effect.fn(`${options.tag}(${webExperience.LogicalId})`)(function* (
-        request?: Omit<I, "applicationId" | "webExperienceId">,
+        request?: Req,
       ) {
+        const wire = options.prepare
+          ? options.prepare(request)
+          : (request as unknown as
+              | Omit<I, "applicationId" | "webExperienceId">
+              | undefined);
         return yield* op({
-          ...request,
+          ...wire,
           applicationId: yield* applicationId,
           webExperienceId: yield* webExperienceId,
         } as I);

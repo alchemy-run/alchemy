@@ -9,5 +9,6 @@ export const ListGroupsHttp = Layer.effect(
     tag: "AWS.QBusiness.ListGroups",
     operation: qbusiness.listGroups,
     actions: ["qbusiness:ListGroups"],
+    subResources: ["data-source/*"],
   }),
 );

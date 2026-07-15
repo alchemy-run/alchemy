@@ -9,5 +9,6 @@ export const GetGroupHttp = Layer.effect(
     tag: "AWS.QBusiness.GetGroup",
     operation: qbusiness.getGroup,
     actions: ["qbusiness:GetGroup"],
+    subResources: ["data-source/*"],
   }),
 );

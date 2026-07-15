@@ -9,5 +9,6 @@ export const DeleteGroupHttp = Layer.effect(
     tag: "AWS.QBusiness.DeleteGroup",
     operation: qbusiness.deleteGroup,
     actions: ["qbusiness:DeleteGroup"],
+    subResources: ["data-source/*"],
   }),
 );

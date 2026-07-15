@@ -9,5 +9,6 @@ export const SearchRelevantContentHttp = Layer.effect(
     tag: "AWS.QBusiness.SearchRelevantContent",
     operation: qbusiness.searchRelevantContent,
     actions: ["qbusiness:SearchRelevantContent"],
+    subResources: ["retriever/*"],
   }),
 );

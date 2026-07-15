@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -115,6 +116,22 @@ describe.sequential("ObservabilityAdmin Bindings", () => {
 
       expect(attrs.functionUrl).toBeTruthy();
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
+
+      // TEMP DIAGNOSTIC: dump the role's inline policies.
+      const policyNames = yield* aws(
+        iam.listRolePolicies({ RoleName: attrs.roleName }),
+      );
+      for (const policyName of policyNames.PolicyNames) {
+        const policy = yield* aws(
+          iam.getRolePolicy({
+            RoleName: attrs.roleName,
+            PolicyName: policyName,
+          }),
+        );
+        yield* Effect.logInfo(
+          `POLICY ${policyName}: ${decodeURIComponent(policy.PolicyDocument)}`,
+        );
+      }
 
       const readinessUrl = `${baseUrl}/bindings`;
       yield* Effect.logInfo(

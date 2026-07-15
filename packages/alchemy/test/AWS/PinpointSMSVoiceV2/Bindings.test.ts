@@ -136,7 +136,9 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 120_000,
+  });
 
   describe("PinpointSMSVoiceV2.PutOptedOutNumber", () => {
     test.provider(

@@ -9,5 +9,6 @@ export const PutGroupHttp = Layer.effect(
     tag: "AWS.QBusiness.PutGroup",
     operation: qbusiness.putGroup,
     actions: ["qbusiness:PutGroup"],
+    subResources: ["data-source/*"],
   }),
 );

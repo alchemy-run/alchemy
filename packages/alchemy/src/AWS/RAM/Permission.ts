@@ -275,7 +275,7 @@ export const PermissionProvider = () =>
           // 2. ENSURE — create if missing. PermissionAlreadyExists is a
           //    race with a concurrent create; fall through to observation.
           if (!detail) {
-            yield* ram
+            const created = yield* ram
               .createPermission({
                 name,
                 resourceType: news.resourceType,
@@ -286,13 +286,21 @@ export const PermissionProvider = () =>
                 })),
               })
               .pipe(
-                Effect.catchTag(
-                  "PermissionAlreadyExistsException",
-                  () => Effect.void,
+                Effect.map((r) => r.permission),
+                Effect.catchTag("PermissionAlreadyExistsException", () =>
+                  Effect.succeed(undefined),
                 ),
               );
-            detail = yield* readByName(name);
+            // Prefer the ARN from the create response; on the AlreadyExists
+            // race fall back to the (briefly eventually consistent) list.
+            detail = created?.arn
+              ? yield* readDetail(created.arn)
+              : yield* readByName(name);
             if (!detail?.arn) {
+              if (created?.arn) {
+                yield* session.note(created.arn);
+                return { ...toAttrs(created), tags: desiredTags };
+              }
               return yield* Effect.fail(
                 new Error(`permission '${name}' not found after create`),
               );

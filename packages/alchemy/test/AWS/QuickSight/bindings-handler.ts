@@ -1,5 +1,6 @@
 import * as Lambda from "@/AWS/Lambda";
 import * as QuickSight from "@/AWS/QuickSight";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -16,7 +17,7 @@ export default QuickSightBindingsFunction.make(
   {
     main,
     url: true,
-    timeout: 60,
+    timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
     const source = yield* QuickSight.DataSource("BindingsSource", {
@@ -145,9 +146,8 @@ export default QuickSightBindingsFunction.make(
             SnapshotJobId: "alchemy-nonexistent-snapshot-job",
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterValueException"],
-              () => Effect.succeed(true),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(true),
             ),
           );
           const result = yield* describeSnapshotJobResult({
