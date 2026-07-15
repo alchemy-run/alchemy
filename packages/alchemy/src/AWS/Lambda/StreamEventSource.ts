@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Namespace from "../../Namespace.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Stream as KinesisStream } from "../Kinesis/Stream.ts";
 import {
   StreamEventSource as KinesisStreamEventSource,
@@ -68,19 +67,15 @@ export const StreamEventSource = Layer.effect(
                 functionName: host.functionName,
                 eventSourceArn: stream.streamArn,
                 batchSize: props.batchSize,
-                maximumBatchingWindowInSeconds: toWireSeconds(
-                  props.maximumBatchingWindow,
-                ),
+                maximumBatchingWindow: props.maximumBatchingWindow,
                 enabled: true,
                 startingPosition: props.startingPosition ?? "LATEST",
                 startingPositionTimestamp: props.startingPositionTimestamp,
                 parallelizationFactor: props.parallelizationFactor,
                 bisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
-                maximumRecordAgeInSeconds: toWireSeconds(
-                  props.maximumRecordAge,
-                ),
+                maximumRecordAge: props.maximumRecordAge,
                 maximumRetryAttempts: props.maximumRetryAttempts,
-                tumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
+                tumblingWindow: props.tumblingWindow,
                 functionResponseTypes: props.functionResponseTypes,
                 destinationConfig: props.destinationConfig,
                 filterCriteria: props.filterCriteria,

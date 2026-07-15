@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import * as Output from "../../Output.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Thing } from "./Thing.ts";
@@ -94,7 +95,13 @@ export const makeIotThingHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [thing.thingArn],
+                // `thing/<name>` authorizes the classic shadow and the
+                // registry; `thing/<name>/*` authorizes NAMED shadows,
+                // whose IAM resource is `thing/<thingName>/<shadowName>`.
+                Resource: [
+                  thing.thingArn,
+                  Output.interpolate`${thing.thingArn}/*`,
+                ],
               },
             ],
           });

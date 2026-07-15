@@ -31,6 +31,14 @@ export const makeIotWirelessDeviceHttpBinding = <I, A, E, R, Req>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Map the public request shape + bound device id onto the wire request. */
   prepare: (request: Req, wirelessDeviceId: string) => I;
+  /**
+   * IAM resource scope. Defaults to the bound device's ARN. The position
+   * operations (`GetResourcePosition` / `UpdateResourcePosition`) must use
+   * `"any"`: IoT Wireless authorizes them against a type-level ARN
+   * (`…:WirelessDevice/WirelessDevice`, built from the `resourceType`
+   * query parameter), which the device ARN never matches.
+   */
+  resourceScope?: "device" | "any";
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -47,7 +55,10 @@ export const makeIotWirelessDeviceHttpBinding = <I, A, E, R, Req>(options: {
                 {
                   Effect: "Allow",
                   Action: [...options.iamActions],
-                  Resource: [device.wirelessDeviceArn],
+                  Resource:
+                    options.resourceScope === "any"
+                      ? ["*"]
+                      : [device.wirelessDeviceArn],
                 },
               ],
             },

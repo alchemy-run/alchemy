@@ -68,7 +68,7 @@ test.provider(
         program({
           functionConfig: {
             maximumRetryAttempts: 0,
-            maximumEventAgeInSeconds: 60,
+            maximumEventAge: "1 minute",
           },
         }),
       );
@@ -88,7 +88,7 @@ test.provider(
         program({
           functionConfig: {
             maximumRetryAttempts: 1,
-            maximumEventAgeInSeconds: 120,
+            maximumEventAge: "2 minutes",
             destinationConfig: {
               OnFailure: {
                 Destination: created.queue.queueArn,
@@ -124,7 +124,7 @@ test.provider(
             functionVersion: version,
             eventInvokeConfig: {
               maximumRetryAttempts: 2,
-              maximumEventAgeInSeconds: 300,
+              maximumEventAge: "5 minutes",
               destinationConfig: {
                 OnFailure: {
                   Destination: created.queue.queueArn,

@@ -1,5 +1,5 @@
 import * as lexm from "@distilled.cloud/aws/lex-models-v2";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -7,6 +7,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -46,7 +47,7 @@ export interface BotProps {
    * the wire unit is whole seconds.
    * @default 300 seconds
    */
-  idleSessionTTLInSeconds?: Duration.Input;
+  idleSessionTTL?: Duration.Input;
   /**
    * Description of the bot.
    */
@@ -112,7 +113,7 @@ export interface Bot extends Resource<
  * const bot = yield* AWS.LexV2.Bot("KidsBot", {
  *   roleArn: role.roleArn,
  *   dataPrivacy: { childDirected: true },
- *   idleSessionTTLInSeconds: "10 minutes",
+ *   idleSessionTTL: "10 minutes",
  *   description: "A bot for children",
  * });
  * ```
@@ -241,10 +242,7 @@ export const BotProvider = () =>
             childDirected: false,
           };
           // Wire unit is whole seconds (idleSessionTTLInSeconds).
-          const desiredTtl =
-            news.idleSessionTTLInSeconds !== undefined
-              ? Math.round(Duration.toSeconds(news.idleSessionTTLInSeconds))
-              : 300;
+          const desiredTtl = toWireSeconds(news.idleSessionTTL) ?? 300;
 
           // 1. OBSERVE — output.botId is only a cache; fall back to name.
           let observed =

@@ -30,8 +30,19 @@ export default KinesisVideoTestFunction.make(
     const channel = yield* AWS.KinesisVideo.SignalingChannel("FixtureChannel");
 
     const getHls = yield* AWS.KinesisVideo.GetHLSStreamingSessionURL(stream);
+    const getDash = yield* AWS.KinesisVideo.GetDASHStreamingSessionURL(stream);
+    const getClip = yield* AWS.KinesisVideo.GetClip(stream);
+    const getImages = yield* AWS.KinesisVideo.GetImages(stream);
+    const listFragments = yield* AWS.KinesisVideo.ListFragments(stream);
+    const getFragmentMedia =
+      yield* AWS.KinesisVideo.GetMediaForFragmentList(stream);
     const getIceServers = yield* AWS.KinesisVideo.GetIceServerConfig(channel);
     const getMedia = yield* AWS.KinesisVideo.GetMedia(stream);
+    const joinStorage = yield* AWS.KinesisVideo.JoinStorageSession(channel);
+    const joinStorageAsViewer =
+      yield* AWS.KinesisVideo.JoinStorageSessionAsViewer(channel);
+    const sendAlexaOffer =
+      yield* AWS.KinesisVideo.SendAlexaOfferToMaster(channel);
 
     return {
       fetch: Effect.gen(function* () {
@@ -54,6 +65,159 @@ export default KinesisVideoTestFunction.make(
             });
           }
           return yield* HttpServerResponse.json({
+            errorTag: result.failure._tag,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/dash") {
+          // Same shape as /hls — the empty stream deterministically returns
+          // the archived-media data plane's typed no-fragments error.
+          const result = yield* Effect.result(
+            getDash({ PlaybackMode: "LIVE" }),
+          );
+          if (Result.isSuccess(result)) {
+            return yield* HttpServerResponse.json({
+              url: result.success.DASHStreamingSessionURL,
+            });
+          }
+          return yield* HttpServerResponse.json({
+            errorTag: result.failure._tag,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/fragments") {
+          // ListFragments on an empty (but retained) stream succeeds with an
+          // empty page — a full data-plane round-trip.
+          const result = yield* Effect.result(listFragments());
+          if (Result.isSuccess(result)) {
+            return yield* HttpServerResponse.json({
+              ok: true,
+              count: (result.success.Fragments ?? []).length,
+            });
+          }
+          return yield* HttpServerResponse.json({
+            ok: false,
+            errorTag: result.failure._tag,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/clip") {
+          const now = yield* Effect.sync(() => Date.now());
+          const result = yield* Effect.result(
+            getClip({
+              ClipFragmentSelector: {
+                FragmentSelectorType: "SERVER_TIMESTAMP",
+                TimestampRange: {
+                  StartTimestamp: new Date(now - 60_000),
+                  EndTimestamp: new Date(now),
+                },
+              },
+            }),
+          );
+          if (Result.isSuccess(result)) {
+            return yield* HttpServerResponse.json({
+              ok: true,
+              contentType: result.success.ContentType,
+            });
+          }
+          return yield* HttpServerResponse.json({
+            ok: false,
+            errorTag: result.failure._tag,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/images") {
+          const now = yield* Effect.sync(() => Date.now());
+          const result = yield* Effect.result(
+            getImages({
+              ImageSelectorType: "SERVER_TIMESTAMP",
+              StartTimestamp: new Date(now - 60_000),
+              EndTimestamp: new Date(now),
+              SamplingInterval: 3000,
+              Format: "JPEG",
+            }),
+          );
+          if (Result.isSuccess(result)) {
+            return yield* HttpServerResponse.json({
+              ok: true,
+              count: (result.success.Images ?? []).length,
+            });
+          }
+          return yield* HttpServerResponse.json({
+            ok: false,
+            errorTag: result.failure._tag,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/fragment-media") {
+          // A syntactically-valid but nonexistent fragment number — the
+          // empty stream deterministically returns the typed no-fragment
+          // error, proving the signed data-plane call.
+          const result = yield* Effect.result(
+            getFragmentMedia({
+              Fragments: ["91343852333181432392682062607743920994"],
+            }),
+          );
+          if (Result.isSuccess(result)) {
+            return yield* HttpServerResponse.json({
+              ok: true,
+              contentType: result.success.ContentType,
+            });
+          }
+          return yield* HttpServerResponse.json({
+            ok: false,
+            errorTag: result.failure._tag,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/join-storage") {
+          // The fixture channel has no media storage configured, so the
+          // WEBRTC endpoint discovery (or the join call itself) fails with a
+          // typed error — reaching it proves IAM + endpoint resolution.
+          const result = yield* Effect.result(joinStorage());
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(result)
+              ? { ok: true }
+              : { ok: false, errorTag: result.failure._tag },
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/join-storage-viewer") {
+          const result = yield* Effect.result(
+            joinStorageAsViewer({ clientId: "alchemy-test-viewer" }),
+          );
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(result)
+              ? { ok: true }
+              : { ok: false, errorTag: result.failure._tag },
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/alexa-offer") {
+          // No master peer is connected to the fixture channel, so the
+          // service either rejects the junk SDP payload with a typed
+          // InvalidArgumentException or holds the offer for redelivery until
+          // our bounded timeout — both prove endpoint discovery, IAM, and
+          // the signed signaling call.
+          const result = yield* Effect.result(
+            sendAlexaOffer({
+              SenderClientId: "alchemy-test-alexa",
+              // base64("v=0") — a minimal, syntactically-plausible SDP stub
+              MessagePayload: "dj0w",
+            }).pipe(Effect.timeoutOption("5 seconds")),
+          );
+          if (Result.isSuccess(result)) {
+            return yield* HttpServerResponse.json(
+              Option.isNone(result.success)
+                ? { ok: true, timedOut: true }
+                : {
+                    ok: true,
+                    answered: result.success.value.Answer !== undefined,
+                  },
+            );
+          }
+          return yield* HttpServerResponse.json({
+            ok: false,
             errorTag: result.failure._tag,
           });
         }
@@ -108,8 +272,16 @@ export default KinesisVideoTestFunction.make(
     Effect.provide(
       Layer.mergeAll(
         AWS.KinesisVideo.GetHLSStreamingSessionURLHttp,
+        AWS.KinesisVideo.GetDASHStreamingSessionURLHttp,
+        AWS.KinesisVideo.GetClipHttp,
+        AWS.KinesisVideo.GetImagesHttp,
+        AWS.KinesisVideo.ListFragmentsHttp,
+        AWS.KinesisVideo.GetMediaForFragmentListHttp,
         AWS.KinesisVideo.GetIceServerConfigHttp,
+        AWS.KinesisVideo.SendAlexaOfferToMasterHttp,
         AWS.KinesisVideo.GetMediaHttp,
+        AWS.KinesisVideo.JoinStorageSessionHttp,
+        AWS.KinesisVideo.JoinStorageSessionAsViewerHttp,
       ),
     ),
   ),

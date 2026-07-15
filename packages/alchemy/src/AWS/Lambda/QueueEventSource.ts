@@ -61,8 +61,7 @@ export const QueueEventSource = Layer.effect(
               functionName: host.functionName,
               eventSourceArn: queue.queueArn,
               batchSize: props.batchSize,
-              maximumBatchingWindowInSeconds:
-                props.maximumBatchingWindowInSeconds,
+              maximumBatchingWindow: props.maximumBatchingWindow,
               enabled: true,
             });
           }),

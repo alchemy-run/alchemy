@@ -38,7 +38,7 @@ export interface PutLogEventsRequest extends Omit<
  *   { main: import.meta.url, url: true },
  *   Effect.gen(function* () {
  *     const logGroup = yield* AWS.Logs.LogGroup("AuditLogs", {
- *       retentionInDays: "30 days",
+ *       retention: "30 days",
  *     });
  *     const stream = yield* AWS.Logs.LogStream("AuditStream", {
  *       logGroupName: logGroup.logGroupName,

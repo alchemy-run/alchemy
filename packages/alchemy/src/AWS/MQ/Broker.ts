@@ -1,7 +1,7 @@
 import * as mq from "@distilled.cloud/aws/mq";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -317,7 +317,9 @@ const sameArray = (
 const toWireUsers = (users: BrokerUser[]): mq.User[] =>
   users.map((u) => ({
     Username: u.username,
-    Password: Redacted.value(u.password),
+    // distilled marks Password sensitive — pass the Redacted value through so
+    // it stays redacted until wire encoding.
+    Password: u.password,
     ConsoleAccess: u.consoleAccess,
     Groups: u.groups,
   }));

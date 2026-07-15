@@ -319,4 +319,179 @@ describe.sequential("LakeFormation", () => {
       }),
     { timeout: 240_000 },
   );
+
+  test.provider(
+    "LFTagExpression, DataCellsFilter, and OptIn lifecycle",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const admin = yield* callerPrincipalArn;
+
+        const build = (options: {
+          expressionValues: string[];
+          rowFilterExpression?: string;
+        }) =>
+          Effect.gen(function* () {
+            const settings = yield* AWS.LakeFormation.DataLakeSettings(
+              "Admin",
+              { dataLakeAdmins: [admin] },
+            );
+            const tag = yield* AWS.LakeFormation.LFTag("ExprTag", {
+              catalogId: settings.catalogId,
+              tagKey: "alchemy-lf-expr",
+              tagValues: ["a", "b"],
+            });
+            const expression = yield* AWS.LakeFormation.LFTagExpression(
+              "Expr",
+              {
+                catalogId: settings.catalogId,
+                name: "alchemy-lf-expression",
+                description: "alchemy test expression",
+                expression: [
+                  { tagKey: tag.tagKey, tagValues: options.expressionValues },
+                ],
+              },
+            );
+            const database = yield* AWS.Glue.Database("FilterDb", {});
+            const table = yield* AWS.Glue.Table("FilterTable", {
+              databaseName: database.databaseName,
+              tableType: "EXTERNAL_TABLE",
+              storageDescriptor: {
+                location: "s3://example-bucket/lf-filter/",
+                inputFormat:
+                  "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+                outputFormat:
+                  "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+                serdeInfo: {
+                  serializationLibrary:
+                    "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+                },
+                columns: [
+                  { name: "id", type: "string" },
+                  { name: "email", type: "string" },
+                ],
+              },
+            });
+            const filter = yield* AWS.LakeFormation.DataCellsFilter("NoEmail", {
+              tableCatalogId: settings.catalogId,
+              databaseName: database.databaseName,
+              tableName: table.tableName,
+              name: "alchemy-no-email",
+              excludedColumnNames: ["email"],
+              rowFilter:
+                options.rowFilterExpression !== undefined
+                  ? { filterExpression: options.rowFilterExpression }
+                  : undefined,
+            });
+            const role = yield* AWS.IAM.Role("OptInRole", {
+              assumeRolePolicyDocument: trustPolicy,
+            });
+            const optIn = yield* AWS.LakeFormation.OptIn("DbOptIn", {
+              principal: role.roleArn,
+              resource: {
+                // consume settings.catalogId so admin bootstrap deploys first
+                database: {
+                  catalogId: settings.catalogId,
+                  name: database.databaseName,
+                },
+              },
+            });
+            return {
+              settings,
+              tag,
+              expression,
+              database,
+              table,
+              filter,
+              role,
+              optIn,
+            };
+          });
+
+        const created = yield* stack.deploy(build({ expressionValues: ["a"] }));
+
+        expect(created.expression.name).toEqual("alchemy-lf-expression");
+        expect(created.expression.expression).toEqual([
+          { tagKey: "alchemy-lf-expr", tagValues: ["a"] },
+        ]);
+        expect(created.filter.name).toEqual("alchemy-no-email");
+        expect(created.optIn.principal).toEqual(created.role.roleArn);
+
+        // out-of-band verification
+        const observedExpr = yield* lf.getLFTagExpression({
+          Name: "alchemy-lf-expression",
+        });
+        expect(observedExpr.Expression?.[0]?.TagKey).toEqual("alchemy-lf-expr");
+        expect(observedExpr.Expression?.[0]?.TagValues).toEqual(["a"]);
+        const observedFilter = yield* lf.getDataCellsFilter({
+          TableCatalogId: created.filter.tableCatalogId,
+          DatabaseName: created.database.databaseName,
+          TableName: created.table.tableName,
+          Name: "alchemy-no-email",
+        });
+        expect(
+          observedFilter.DataCellsFilter?.ColumnWildcard?.ExcludedColumnNames,
+        ).toEqual(["email"]);
+        const observedOptIns = yield* lf.listLakeFormationOptIns({
+          Principal: {
+            DataLakePrincipalIdentifier: created.role.roleArn,
+          },
+          Resource: {
+            Database: { Name: created.database.databaseName },
+          },
+        });
+        expect(
+          observedOptIns.LakeFormationOptInsInfoList?.length,
+        ).toBeGreaterThanOrEqual(1);
+
+        // update — swap the expression's tag values and add a row filter
+        yield* stack.deploy(
+          build({ expressionValues: ["b"], rowFilterExpression: "id='x'" }),
+        );
+
+        const updatedExpr = yield* lf.getLFTagExpression({
+          Name: "alchemy-lf-expression",
+        });
+        expect(updatedExpr.Expression?.[0]?.TagValues).toEqual(["b"]);
+        const updatedFilter = yield* lf.getDataCellsFilter({
+          TableCatalogId: created.filter.tableCatalogId,
+          DatabaseName: created.database.databaseName,
+          TableName: created.table.tableName,
+          Name: "alchemy-no-email",
+        });
+        expect(
+          updatedFilter.DataCellsFilter?.RowFilter?.FilterExpression,
+        ).toEqual("id='x'");
+
+        // remove everything but the admin bootstrap so deletion can be
+        // verified out-of-band while the caller is still an admin
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const settings = yield* AWS.LakeFormation.DataLakeSettings(
+              "Admin",
+              { dataLakeAdmins: [admin] },
+            );
+            return { settings };
+          }),
+        );
+
+        const goneExpr = yield* lf
+          .getLFTagExpression({ Name: "alchemy-lf-expression" })
+          .pipe(
+            Effect.catchTag("EntityNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        expect(goneExpr).toBeUndefined();
+        const goneOptIns = yield* lf.listLakeFormationOptIns({
+          Principal: {
+            DataLakePrincipalIdentifier: created.role.roleArn,
+          },
+        });
+        expect(goneOptIns.LakeFormationOptInsInfoList ?? []).toHaveLength(0);
+
+        yield* stack.destroy();
+      }),
+    { timeout: 240_000 },
+  );
 });

@@ -2,7 +2,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Namespace from "../../Namespace.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import {
   ClusterEventSource as DocDBClusterEventSourceContract,
   type ClusterEventSourceProps,
@@ -62,9 +61,7 @@ export const DocDBClusterEventSource = Layer.effect(
                 eventSourceArn: cluster.dbClusterArn,
                 startingPosition: props.startingPosition ?? "LATEST",
                 batchSize: props.batchSize,
-                maximumBatchingWindowInSeconds: toWireSeconds(
-                  props.maximumBatchingWindow,
-                ),
+                maximumBatchingWindow: props.maximumBatchingWindow,
                 enabled: props.enabled ?? true,
                 documentDBEventSourceConfig: {
                   DatabaseName: props.databaseName,

@@ -1,5 +1,5 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -27,10 +28,10 @@ export interface LogGroupProps {
    * How long CloudWatch retains log events. If omitted, logs are kept
    * indefinitely. Accepts any `Duration.Input` (e.g. `"7 days"`,
    * `Duration.days(7)`; a bare number is milliseconds); the wire unit is
-   * whole days and must resolve to one of the retention values CloudWatch
-   * accepts (1, 3, 5, 7, 14, 30, ...).
+   * whole days (`retentionInDays`) and must resolve to one of the retention
+   * values CloudWatch accepts (1, 3, 5, 7, 14, 30, ...).
    */
-  retentionInDays?: Duration.Input;
+  retention?: Duration.Input;
   /**
    * Optional KMS key identifier used to encrypt the log group.
    */
@@ -75,7 +76,7 @@ export interface LogGroup extends Resource<
  * @example ECS Task Log Group
  * ```typescript
  * const logs = yield* LogGroup("TaskLogs", {
- *   retentionInDays: "7 days",
+ *   retention: "7 days",
  * });
  * ```
  *
@@ -83,7 +84,7 @@ export interface LogGroup extends Resource<
  * ```typescript
  * const key = yield* AWS.KMS.Key("LogsKey");
  * const logs = yield* LogGroup("AuditLogs", {
- *   retentionInDays: "30 days",
+ *   retention: "30 days",
  *   kmsKeyId: key.keyArn,
  *   deletionProtectionEnabled: true,
  * });
@@ -97,7 +98,7 @@ export interface LogGroup extends Resource<
  * ```typescript
  * // init
  * const logGroup = yield* AWS.Logs.LogGroup("AuditLogs", {
- *   retentionInDays: "30 days",
+ *   retention: "30 days",
  * });
  * const stream = yield* AWS.Logs.LogStream("AuditStream", {
  *   logGroupName: logGroup.logGroupName,
@@ -266,10 +267,7 @@ export const LogGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // Wire unit is whole days (retentionInDays).
-          const desiredRetention =
-            news.retentionInDays !== undefined
-              ? Math.round(Duration.toDays(news.retentionInDays))
-              : undefined;
+          const desiredRetention = toWireDays(news.retention);
 
           // Observe - fetch live state. `describeLogGroups` returns
           // retention/kms info so we can diff against desired without

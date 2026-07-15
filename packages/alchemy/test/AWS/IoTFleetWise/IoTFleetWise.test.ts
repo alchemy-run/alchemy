@@ -46,12 +46,6 @@ test.provider(
           .getSignalCatalog({ name: "alchemy-nonexistent-catalog-probe" })
           .pipe(inHomeRegion),
       );
-      yield* Effect.sync(() =>
-        require("node:fs").writeFileSync(
-          "/tmp/fleetwise-probe-tag.txt",
-          error._tag,
-        ),
-      );
       expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
         error._tag,
       );

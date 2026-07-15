@@ -143,6 +143,7 @@ describe.skipIf(!!process.env.FAST)(
                     autoScalingEnabled: false,
                   },
                 },
+                maintenanceWindowStartTime: "02:00",
                 tags: { Environment: "production", Team: "platform" },
               });
               return { app };
@@ -155,6 +156,9 @@ describe.skipIf(!!process.env.FAST)(
           );
           expect(updated.app.applicationVersionId).toBeGreaterThan(1);
           expect(updated.app.applicationStatus).toEqual("READY");
+          // Maintenance window applied via UpdateApplicationMaintenanceConfiguration.
+          expect(updated.app.maintenanceWindowStartTime).toEqual("02:00");
+          expect(updated.app.maintenanceWindowEndTime).toBeDefined();
 
           const updatedDescribe = yield* analytics.describeApplication({
             ApplicationName: deployed.app.applicationName,
@@ -204,6 +208,7 @@ describe.skipIf(!!process.env.FAST)(
                     autoScalingEnabled: false,
                   },
                 },
+                maintenanceWindowStartTime: "02:00",
                 tags: { Environment: "production", Team: "platform" },
               });
               return { app };

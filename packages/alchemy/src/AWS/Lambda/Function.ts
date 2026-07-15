@@ -497,7 +497,7 @@ const matchesConfiguredExternal = (
  *   main: "./src/handler.ts",
  *   eventInvokeConfig: {
  *     maximumRetryAttempts: 0,
- *     maximumEventAgeInSeconds: 60,
+ *     maximumEventAge: "1 minute",
  *     destinationConfig: {
  *       OnFailure: {
  *         Destination: queue.queueArn,

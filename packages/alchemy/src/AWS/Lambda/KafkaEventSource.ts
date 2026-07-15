@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import {
   KafkaEventSource as MSKKafkaEventSource,
   type KafkaEventSourceProps,
@@ -103,9 +102,7 @@ export const KafkaEventSource = Layer.effect(
                   ? { ConsumerGroupId: props.consumerGroupId }
                   : undefined,
                 batchSize: props.batchSize,
-                maximumBatchingWindowInSeconds: toWireSeconds(
-                  props.maximumBatchingWindow,
-                ),
+                maximumBatchingWindow: props.maximumBatchingWindow,
                 startingPosition: props.startingPosition ?? "LATEST",
                 enabled: props.enabled ?? true,
                 filterCriteria: props.filterCriteria,

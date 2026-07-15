@@ -86,8 +86,7 @@ export const BrokerEventSource = Layer.effect(
                 { Type: "BASIC_AUTH", URI: props.credentialsSecretArn },
               ],
               batchSize: props.batchSize ?? 100,
-              maximumBatchingWindowInSeconds:
-                props.maximumBatchingWindowInSeconds,
+              maximumBatchingWindow: props.maximumBatchingWindow,
               enabled: props.enabled ?? true,
             });
           }),

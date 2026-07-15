@@ -120,7 +120,7 @@ type LogEventsHandler<Req> = (
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const source = yield* AWS.Logs.LogGroup("AppLogs", {
- *       retentionInDays: "7 days",
+ *       retention: "7 days",
  *     });
  *     yield* AWS.Logs.consumeLogEvents(source, (events) =>
  *       Stream.runForEach(events, (event) => Effect.log(event.message)),

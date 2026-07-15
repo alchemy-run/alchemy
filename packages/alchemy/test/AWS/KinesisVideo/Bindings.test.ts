@@ -53,6 +53,35 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     }),
   );
 
+// The fixture's role policies are freshly created on every deploy, and IAM
+// is eventually consistent — the first data-plane calls can transiently
+// return AccessDeniedException. Fetch the route's JSON outcome and repeat
+// (bounded) until propagation settles on the terminal typed tag.
+const fetchOutcome = (url: string) =>
+  send(HttpClientRequest.get(url)).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? (response.json as Effect.Effect<unknown>)
+        : Effect.fail(
+            new TransientUpstream({ status: response.status, body: "" }),
+          ),
+    ),
+    Effect.map(
+      (body) =>
+        body as {
+          ok?: boolean;
+          count?: number;
+          url?: string;
+          errorTag?: string;
+        },
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("3 seconds"),
+      until: (body): boolean => body.errorTag !== "AccessDeniedException",
+      times: 20,
+    }),
+  );
+
 describe("KinesisVideo Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
@@ -95,12 +124,7 @@ describe("KinesisVideo Bindings", () => {
       "lambda reaches the archived-media data plane through the binding",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(HttpClientRequest.get(`${baseUrl}/hls`));
-          expect(response.status).toBe(200);
-          const body = (yield* response.json) as {
-            url?: string;
-            errorTag?: string;
-          };
+          const body = yield* fetchOutcome(`${baseUrl}/hls`);
           // The fixture stream has never ingested media, so LIVE playback
           // deterministically returns the archived-media data plane's typed
           // no-fragments error. Getting THIS tag (and not NotAuthorized /
@@ -132,6 +156,149 @@ describe("KinesisVideo Bindings", () => {
           );
           expect(turn).toBeDefined();
           expect(turn?.hasCredentials).toBe(true);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetDASHStreamingSessionURL", () => {
+    test.provider(
+      "lambda reaches the archived-media data plane through the binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = yield* fetchOutcome(`${baseUrl}/dash`);
+          // Same rationale as /hls: LIVE playback on the never-ingested
+          // stream returns the typed no-fragments error.
+          expect(body.errorTag).toBe("ResourceNotFoundException");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListFragments", () => {
+    test.provider(
+      "lambda lists fragments of the empty stream (empty page)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = yield* fetchOutcome(`${baseUrl}/fragments`);
+          expect(body.ok).toBe(true);
+          expect(body.count).toBe(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetClip", () => {
+    test.provider(
+      "lambda requests a clip and receives the typed no-fragments error",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = yield* fetchOutcome(`${baseUrl}/clip`);
+          expect(body.ok).toBe(false);
+          expect(body.errorTag).toBe("ResourceNotFoundException");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetImages", () => {
+    test.provider(
+      "lambda extracts images from the empty stream (empty page or typed error)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = yield* fetchOutcome(`${baseUrl}/images`);
+          // An empty (but retained) stream either answers with an empty
+          // image page or a typed no-media error (the service reports the
+          // empty window as InvalidArgumentException) — both prove endpoint
+          // discovery, IAM, and the signed data-plane call.
+          if (body.ok) {
+            expect(body.count).toBe(0);
+          } else {
+            expect([
+              "ResourceNotFoundException",
+              "InvalidArgumentException",
+              "NoDataRetentionException",
+            ]).toContain(body.errorTag);
+          }
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetMediaForFragmentList", () => {
+    test.provider(
+      "lambda requests fragment media and receives the typed no-fragment error",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = yield* fetchOutcome(`${baseUrl}/fragment-media`);
+          // The nonexistent fragment number surfaces as a typed rejection
+          // (the service reports it as InvalidArgumentException).
+          expect(body.ok).toBe(false);
+          expect([
+            "ResourceNotFoundException",
+            "InvalidArgumentException",
+          ]).toContain(body.errorTag);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("JoinStorageSession", () => {
+    test.provider(
+      "lambda reaches the WebRTC storage plane; unconfigured storage is a typed error",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = yield* fetchOutcome(`${baseUrl}/join-storage`);
+          // The fixture channel has no MediaStorageConfiguration, so the
+          // call fails with a typed tag: either endpoint discovery finds no
+          // WEBRTC endpoint (SignalingEndpointUnavailable) or the API
+          // rejects the un-configured channel.
+          expect(body.ok).toBe(false);
+          expect([
+            "SignalingEndpointUnavailable",
+            "ResourceNotFoundException",
+            "InvalidArgumentException",
+          ]).toContain(body.errorTag);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("JoinStorageSessionAsViewer", () => {
+    test.provider(
+      "lambda reaches the WebRTC storage plane as viewer; typed error without storage",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = yield* fetchOutcome(`${baseUrl}/join-storage-viewer`);
+          expect(body.ok).toBe(false);
+          expect([
+            "SignalingEndpointUnavailable",
+            "ResourceNotFoundException",
+            "InvalidArgumentException",
+          ]).toContain(body.errorTag);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("SendAlexaOfferToMaster", () => {
+    test.provider(
+      "lambda delivers an SDP offer through the signaling plane",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = (yield* fetchOutcome(`${baseUrl}/alexa-offer`)) as {
+            ok?: boolean;
+            timedOut?: boolean;
+            answered?: boolean;
+            errorTag?: string;
+          };
+          // With no master connected, the accepted offer idles until the
+          // fixture's bounded timeout; a junk-payload rejection surfaces as
+          // the typed InvalidArgumentException. Both prove the signed
+          // signaling data-plane call.
+          if (!body.ok) {
+            expect(body.errorTag).toBe("InvalidArgumentException");
+          }
         }),
       { timeout: 120_000 },
     );

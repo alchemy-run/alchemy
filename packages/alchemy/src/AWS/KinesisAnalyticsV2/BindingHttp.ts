@@ -19,6 +19,44 @@ import type { Application } from "./Application.ts";
  * the application's ARN (all `kinesisanalytics:*Application*` actions
  * authorize against the application resource).
  */
+/**
+ * Account-level variant of {@link makeKinesisAnalyticsHttpBinding} for
+ * operations that take no application argument (`ListApplications`). The
+ * deploy-time half grants `actions` on `*` — Kinesis Analytics list calls
+ * are not resource-scoped.
+ */
+export const makeKinesisAnalyticsAccountHttpBinding = <I, A, E, R>(options: {
+  /** Fully-qualified binding tag, e.g. `AWS.KinesisAnalyticsV2.ListApplications`. */
+  tag: string;
+  /** The distilled operation, invoked with the caller's request as-is. */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /** IAM actions granted on `*`. */
+  actions: readonly string[];
+}) =>
+  Effect.gen(function* () {
+    const op = yield* options.operation;
+
+    return Effect.fn(function* () {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isBindingHost(host)) {
+          yield* host.bind`Allow(${host}, ${options.tag}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: ["*"],
+              },
+            ],
+          });
+        }
+      }
+      return Effect.fn(options.tag)(function* (request?: I) {
+        return yield* op((request ?? {}) as I);
+      });
+    });
+  });
+
 export const makeKinesisAnalyticsHttpBinding = <
   I extends { ApplicationName?: string },
   A,

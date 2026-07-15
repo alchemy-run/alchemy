@@ -83,12 +83,12 @@ test.provider(
           });
           const ruleLogs = yield* Logs.LogGroup("RuleLogs", {
             logGroupName: "/aws/vendedlogs/prometheus/alchemy-test-amp-config",
-            retentionInDays: "1 day",
+            retention: "1 day",
           });
           const queryLogs = yield* Logs.LogGroup("QueryLogs", {
             logGroupName:
               "/aws/vendedlogs/prometheus/alchemy-test-amp-config-queries",
-            retentionInDays: "1 day",
+            retention: "1 day",
           });
           const logging = yield* LoggingConfiguration("Logging", {
             workspaceId: workspace.workspaceId,

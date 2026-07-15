@@ -370,6 +370,16 @@ export interface Application extends Resource<
  * });
  * ```
  *
+ * @section Maintenance Window
+ * @example Pin the daily maintenance window
+ * ```typescript
+ * const app = yield* AWS.KinesisAnalyticsV2.Application("Enrichment", {
+ *   runtimeEnvironment: "FLINK-1_20",
+ *   code: { bucketArn: bucket.bucketArn, fileKey: "jobs/enrichment-1.0.jar" },
+ *   maintenanceWindowStartTime: "02:00",
+ * });
+ * ```
+ *
  * @section Running the Application
  * @example Start the Flink job and keep it running
  * ```typescript

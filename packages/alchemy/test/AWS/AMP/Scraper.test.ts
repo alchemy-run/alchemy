@@ -73,7 +73,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AMP_SCRAPER)(
           });
           const logs = yield* Logs.LogGroup("ScraperLogs", {
             logGroupName: "/aws/vendedlogs/prometheus/alchemy-test-scraper",
-            retentionInDays: "1 day",
+            retention: "1 day",
           });
           const logging = yield* ScraperLoggingConfiguration("Logging", {
             scraperId: scraper.scraperId,

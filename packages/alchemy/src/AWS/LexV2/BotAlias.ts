@@ -1,4 +1,5 @@
 import * as lexm from "@distilled.cloud/aws/lex-models-v2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -16,6 +17,35 @@ import {
   syncLexTags,
   waitForAliasSettled,
 } from "./internal.ts";
+
+/**
+ * Lambda code hooks per locale (`localeId` → function ARN). Attached to the
+ * alias's `botAliasLocaleSettings` as
+ * `codeHookSpecification.lambdaCodeHook` with interface version `1.0`.
+ */
+export interface BotAliasCodeHooks extends Record<string, string> {}
+
+/**
+ * The binding contract of a bot alias: event sources contribute Lambda code
+ * hooks (`localeId` → function ARN) that the provider merges with
+ * `props.codeHooks` and syncs onto the alias's `botAliasLocaleSettings`.
+ */
+export interface BotAliasBinding {
+  /** Code hook entries injected by `LexV2.onCodeHook`. */
+  codeHooks?: BotAliasCodeHooks;
+}
+
+/**
+ * Two different Lambda functions were registered as the code hook of the
+ * same alias locale — Lex supports exactly one dialog/fulfillment function
+ * per alias locale.
+ */
+export class ConflictingCodeHook extends Data.TaggedError(
+  "ConflictingCodeHook",
+)<{
+  readonly localeId: string;
+  readonly functionArns: readonly string[];
+}> {}
 
 export interface BotAliasProps {
   /**
@@ -38,6 +68,14 @@ export interface BotAliasProps {
    * Description of the alias.
    */
   description?: string;
+  /**
+   * Lambda code hooks per locale (`localeId` → function ARN). Merged with
+   * code hook entries injected through the binding contract by
+   * `LexV2.onCodeHook` — prefer the event source over declaring ARNs here,
+   * since it also creates the invoke Permission and registers the runtime
+   * handler.
+   */
+  codeHooks?: BotAliasCodeHooks;
   /**
    * Tags to associate with the alias.
    */
@@ -63,7 +101,7 @@ export interface BotAlias extends Resource<
     /** Tags currently associated with the alias. */
     tags: Record<string, string>;
   },
-  never,
+  BotAliasBinding,
   Providers
 > {}
 
@@ -146,6 +184,83 @@ const aliasArnOf = Effect.fn(function* (botId: string, botAliasId: string) {
   return `arn:aws:lex:${region}:${accountId}:bot-alias/${botId}/${botAliasId}`;
 });
 
+/**
+ * The alias's desired code hooks: `props.codeHooks` merged with the entries
+ * contributed through the binding contract (`LexV2.onCodeHook`). Fails when
+ * two different function ARNs target the same locale. Returns `undefined`
+ * when no code hooks are desired (omitting `botAliasLocaleSettings` clears
+ * them on both create and update).
+ */
+const resolveCodeHooks = Effect.fn(function* (
+  news: BotAliasProps,
+  bindings: ReadonlyArray<BotAliasBinding | { data?: BotAliasBinding }>,
+) {
+  const merged: Record<string, string> = {};
+  const contributions = [
+    news.codeHooks,
+    ...bindings.map(
+      (binding) =>
+        (binding as { data?: BotAliasBinding }).data?.codeHooks ??
+        (binding as BotAliasBinding).codeHooks,
+    ),
+  ];
+  for (const hooks of contributions) {
+    if (hooks === undefined) continue;
+    for (const [localeId, arn] of Object.entries(hooks)) {
+      const existing = merged[localeId];
+      if (existing !== undefined && existing !== arn) {
+        return yield* Effect.fail(
+          new ConflictingCodeHook({
+            localeId,
+            functionArns: [existing, arn],
+          }),
+        );
+      }
+      merged[localeId] = arn;
+    }
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined;
+});
+
+/** Build the wire `botAliasLocaleSettings` map from desired code hooks. */
+const toLocaleSettings = (
+  codeHooks: Record<string, string> | undefined,
+): { [key: string]: lexm.BotAliasLocaleSettings } | undefined =>
+  codeHooks === undefined
+    ? undefined
+    : Object.fromEntries(
+        Object.entries(codeHooks).map(([localeId, lambdaARN]) => [
+          localeId,
+          {
+            enabled: true,
+            codeHookSpecification: {
+              lambdaCodeHook: { lambdaARN, codeHookInterfaceVersion: "1.0" },
+            },
+          },
+        ]),
+      );
+
+/**
+ * Project the aspects of `botAliasLocaleSettings` this resource manages
+ * (enabled + lambda ARN per locale) into a canonical string for drift
+ * comparison.
+ */
+const localeSettingsProjection = (
+  settings:
+    | { [key: string]: lexm.BotAliasLocaleSettings | undefined }
+    | undefined,
+): string =>
+  JSON.stringify(
+    Object.entries(settings ?? {})
+      .filter(([, value]) => value !== undefined)
+      .map(([localeId, value]) => [
+        localeId,
+        value!.enabled,
+        value!.codeHookSpecification?.lambdaCodeHook.lambdaARN,
+      ])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  );
+
 const attributesOf = Effect.fn(function* (
   alias: lexm.DescribeBotAliasResponse,
 ) {
@@ -196,10 +311,18 @@ export const BotAliasProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          news,
+          output,
+          session,
+          bindings,
+        }) {
           const botAliasName = yield* createAliasName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          const desiredCodeHooks = yield* resolveCodeHooks(news, bindings);
+          const desiredLocaleSettings = toLocaleSettings(desiredCodeHooks);
 
           // 1. OBSERVE — output.botAliasId is only a cache; fall back to name.
           let observed =
@@ -217,6 +340,7 @@ export const BotAliasProvider = () =>
                 botId: news.botId,
                 botAliasName,
                 botVersion: news.botVersion,
+                botAliasLocaleSettings: desiredLocaleSettings,
                 description: news.description,
                 tags: desiredTags,
               }),
@@ -231,7 +355,9 @@ export const BotAliasProvider = () =>
             (observed.botVersion ?? undefined) !==
               (news.botVersion ?? undefined) ||
             (observed.description ?? undefined) !==
-              (news.description ?? undefined)
+              (news.description ?? undefined) ||
+            localeSettingsProjection(observed.botAliasLocaleSettings) !==
+              localeSettingsProjection(desiredLocaleSettings)
           ) {
             yield* retryWhileConflict(
               lexm.updateBotAlias({
@@ -239,6 +365,7 @@ export const BotAliasProvider = () =>
                 botAliasId: observed.botAliasId!,
                 botAliasName,
                 botVersion: news.botVersion,
+                botAliasLocaleSettings: desiredLocaleSettings,
                 description: news.description,
               }),
             );

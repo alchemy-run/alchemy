@@ -25,7 +25,7 @@ export default LogEventSinkFunction.make(
   },
   Effect.gen(function* () {
     const logGroup = yield* Logs.LogGroup("SinkLogGroup", {
-      retentionInDays: "1 day",
+      retention: "1 day",
     });
     yield* Logs.LogStream("SinkLogStream", {
       logGroupName: logGroup.logGroupName,

@@ -22,6 +22,8 @@ export * from "./ListApplicationSnapshots.ts";
 export * from "./ListApplicationSnapshotsHttp.ts";
 export * from "./ListApplicationVersions.ts";
 export * from "./ListApplicationVersionsHttp.ts";
+export * from "./ListApplications.ts";
+export * from "./ListApplicationsHttp.ts";
 export * from "./RollbackApplication.ts";
 export * from "./RollbackApplicationHttp.ts";
 export * from "./StartApplication.ts";

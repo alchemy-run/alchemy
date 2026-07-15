@@ -11,6 +11,9 @@ export const GetResourcePositionHttp = Layer.effect(
   makeIotWirelessDeviceHttpBinding({
     capability: "GetResourcePosition",
     iamActions: ["iotwireless:GetResourcePosition"],
+    // IoT Wireless authorizes the position APIs against a type-level ARN
+    // (…:WirelessDevice/WirelessDevice) — the device ARN never matches.
+    resourceScope: "any",
     operation: iotw.getResourcePosition,
     prepare: (
       request: GetResourcePositionRequest | undefined,

@@ -95,7 +95,7 @@ test.provider.skipIf(!process.env.AWS_TEST_NETWORKFIREWALL)(
             tags: { fixture: "nfw-firewall" },
           });
           const logGroup = yield* LogGroup("FlowLogs", {
-            retentionInDays: "1 day",
+            retention: "1 day",
           });
           const logging = yield* LoggingConfiguration("Logging", {
             firewallArn: firewall.firewallArn,

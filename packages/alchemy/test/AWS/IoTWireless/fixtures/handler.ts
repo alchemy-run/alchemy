@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as IoTWireless from "@/AWS/IoTWireless";
 import * as Lambda from "@/AWS/Lambda";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -258,7 +259,7 @@ export default IoTWirelessTestFunction.make(
             }),
           );
           if (Result.isSuccess(result)) {
-            const geoJson = yield* decodeGeoJson(result.value.GeoJsonPayload);
+            const geoJson = yield* decodeGeoJson(result.success.GeoJsonPayload);
             return yield* HttpServerResponse.json({
               ok: true,
               geoJson: geoJson ?? null,
@@ -275,17 +276,16 @@ export default IoTWirelessTestFunction.make(
           { status: 404 },
         );
       }).pipe(
-        // Surface typed API errors as diagnosable 500s (the test's post
-        // helper retries 5xx through cold-start IAM propagation).
-        Effect.catch((error) =>
+        // Surface typed API errors AND defects as diagnosable 500s (the
+        // test's post helper retries 5xx through IAM propagation).
+        Effect.catchCause((cause) =>
           Effect.succeed(
             HttpServerResponse.text(
-              `IoTWireless fixture error: ${String(error)}`,
+              `IoTWireless fixture error: ${String(Cause.squash(cause))}`,
               { status: 500 },
             ),
           ),
         ),
-        Effect.orDie,
       ),
     };
   }).pipe(

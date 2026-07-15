@@ -26,6 +26,8 @@ export const PublishHttp = Layer.effect(
   makeIotTopicHttpBinding({
     tag: "AWS.IoT.Publish",
     operation: iotdata.publish,
-    actions: ["iot:Publish"],
+    // RetainPublish authorizes `retain: true` publishes (a separate IAM
+    // action from plain Publish) on the same topic filter.
+    actions: ["iot:Publish", "iot:RetainPublish"],
   }),
 );

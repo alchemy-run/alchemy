@@ -52,7 +52,7 @@ test.provider(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const logGroup = yield* LogGroup("MetricFilterLogGroup", {
-            retentionInDays: "1 day",
+            retention: "1 day",
           });
           return yield* MetricFilter("ErrorCount", {
             logGroupName: logGroup.logGroupName,
@@ -85,7 +85,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const logGroup = yield* LogGroup("MetricFilterLogGroup", {
-            retentionInDays: "1 day",
+            retention: "1 day",
           });
           return yield* MetricFilter("ErrorCount", {
             logGroupName: logGroup.logGroupName,
@@ -114,7 +114,7 @@ test.provider(
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           const logGroup = yield* LogGroup("MetricFilterLogGroup", {
-            retentionInDays: "1 day",
+            retention: "1 day",
           });
           return yield* MetricFilter("ErrorCount", {
             logGroupName: logGroup.logGroupName,

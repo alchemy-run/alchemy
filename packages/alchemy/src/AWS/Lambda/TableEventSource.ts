@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import {
   TableEventSource as DynamoDBTableEventSource,
   type StreamRecord,
@@ -108,19 +107,15 @@ export const TableEventSource = Layer.effect(
                 functionName: host.functionName,
                 eventSourceArn: latestStreamArn,
                 batchSize: props.batchSize,
-                maximumBatchingWindowInSeconds: toWireSeconds(
-                  props.maximumBatchingWindow,
-                ),
+                maximumBatchingWindow: props.maximumBatchingWindow,
                 enabled: true,
                 startingPosition: props.startingPosition ?? "LATEST",
                 startingPositionTimestamp: props.startingPositionTimestamp,
                 parallelizationFactor: props.parallelizationFactor,
                 bisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
-                maximumRecordAgeInSeconds: toWireSeconds(
-                  props.maximumRecordAge,
-                ),
+                maximumRecordAge: props.maximumRecordAge,
                 maximumRetryAttempts: props.maximumRetryAttempts,
-                tumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
+                tumblingWindow: props.tumblingWindow,
               },
             );
           }),

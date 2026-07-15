@@ -1,0 +1,13 @@
+import * as mq from "@distilled.cloud/aws/mq";
+import * as Layer from "effect/Layer";
+import { makeMqBrokerHttpBinding } from "./BindingHttp.ts";
+import { CreateUser } from "./CreateUser.ts";
+
+export const CreateUserHttp = Layer.effect(
+  CreateUser,
+  makeMqBrokerHttpBinding({
+    capability: "CreateUser",
+    operation: mq.createUser,
+    iamActions: ["mq:CreateUser"],
+  }),
+);

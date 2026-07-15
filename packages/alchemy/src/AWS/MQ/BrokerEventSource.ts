@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Broker } from "./Broker.ts";
@@ -65,10 +66,10 @@ export interface BrokerEventSourceProps {
    */
   batchSize?: number;
   /**
-   * The maximum time, in seconds, Lambda spends gathering records before
-   * invoking the function.
+   * The maximum time Lambda spends gathering records before invoking the
+   * function (e.g. `"5 seconds"`). Rounded to whole seconds on the wire.
    */
-  maximumBatchingWindowInSeconds?: number;
+  maximumBatchingWindow?: Duration.Input;
   /**
    * Whether the event source mapping is active.
    * @default true

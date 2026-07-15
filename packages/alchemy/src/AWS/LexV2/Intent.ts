@@ -39,6 +39,20 @@ export interface IntentProps {
    * `AMAZON.HelpIntent`.
    */
   parentIntentSignature?: string;
+  /**
+   * Invoke the alias's Lambda code hook on every dialog turn of this intent
+   * (slot elicitation, validation). Attach the function itself with
+   * `LexV2.onCodeHook`.
+   * @default false
+   */
+  dialogCodeHook?: boolean;
+  /**
+   * Invoke the alias's Lambda code hook to fulfill the intent once all
+   * required slots are filled. Attach the function itself with
+   * `LexV2.onCodeHook`.
+   * @default false
+   */
+  fulfillmentCodeHook?: boolean;
 }
 
 export interface Intent extends Resource<
@@ -192,6 +206,14 @@ export const IntentProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const intentName = yield* createIntentName(id, news);
           const desiredUtterances = news.sampleUtterances ?? [];
+          const desiredDialogCodeHook =
+            news.dialogCodeHook !== undefined
+              ? { enabled: news.dialogCodeHook }
+              : undefined;
+          const desiredFulfillmentCodeHook =
+            news.fulfillmentCodeHook !== undefined
+              ? { enabled: news.fulfillmentCodeHook }
+              : undefined;
 
           // 1. OBSERVE — output.intentId is only a cache; fall back to name.
           let observed =
@@ -221,6 +243,8 @@ export const IntentProvider = () =>
                 description: news.description,
                 sampleUtterances: toUtterances(news.sampleUtterances),
                 parentIntentSignature: news.parentIntentSignature,
+                dialogCodeHook: desiredDialogCodeHook,
+                fulfillmentCodeHook: desiredFulfillmentCodeHook,
               }),
             );
             observed = yield* describeIntent(
@@ -240,7 +264,11 @@ export const IntentProvider = () =>
             (observed.description ?? undefined) !==
               (news.description ?? undefined) ||
             JSON.stringify([...utterancesOf(observed)].sort()) !==
-              JSON.stringify([...desiredUtterances].sort())
+              JSON.stringify([...desiredUtterances].sort()) ||
+            (observed.dialogCodeHook?.enabled ?? false) !==
+              (news.dialogCodeHook ?? false) ||
+            (observed.fulfillmentCodeHook?.enabled ?? false) !==
+              (news.fulfillmentCodeHook ?? false)
           ) {
             yield* retryWhileConflict(
               lexm.updateIntent({
@@ -252,6 +280,8 @@ export const IntentProvider = () =>
                 description: news.description,
                 sampleUtterances: toUtterances(news.sampleUtterances),
                 parentIntentSignature: news.parentIntentSignature,
+                dialogCodeHook: desiredDialogCodeHook,
+                fulfillmentCodeHook: desiredFulfillmentCodeHook,
               }),
             );
             observed = yield* describeIntent(

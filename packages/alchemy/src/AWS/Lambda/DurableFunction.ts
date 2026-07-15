@@ -11,7 +11,7 @@ import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
-import { toSeconds } from "../../Util/Duration.ts";
+import { toSeconds, toWireDays } from "../../Util/Duration.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
 import {
@@ -88,10 +88,11 @@ export interface DurableFunctionProps extends Omit<
    */
   executionTimeout?: Duration.Input;
   /**
-   * How long completed execution history is retained, in days (1–90).
-   * @default 14 (AWS default)
+   * How long completed execution history is retained (e.g. `"7 days"`;
+   * 1–90 days). Rounded to whole days on the wire.
+   * @default "14 days" (AWS default)
    */
-  retentionPeriodInDays?: number;
+  retentionPeriod?: Duration.Input;
 }
 
 /**
@@ -318,9 +319,10 @@ const withDurableSdkInstall = (
  * vendor the Durable Execution SDK.
  */
 const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
-  const { executionTimeout, retentionPeriodInDays, build, ...rest } =
+  const { executionTimeout, retentionPeriod, build, ...rest } =
     props ?? ({} as DurableFunctionProps);
   const executionTimeoutSeconds = toSeconds(executionTimeout);
+  const retentionPeriodDays = toWireDays(retentionPeriod);
   return {
     ...rest,
     // Every invocation of a DurableConfig'd function arrives as the durable
@@ -334,8 +336,8 @@ const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
       ...(executionTimeoutSeconds !== undefined
         ? { ExecutionTimeout: executionTimeoutSeconds }
         : {}),
-      ...(typeof retentionPeriodInDays === "number"
-        ? { RetentionPeriodInDays: retentionPeriodInDays }
+      ...(retentionPeriodDays !== undefined
+        ? { RetentionPeriodInDays: retentionPeriodDays }
         : {}),
     },
   };
@@ -556,7 +558,7 @@ const composeDurableImpl = (
  *   {
  *     main: import.meta.url,
  *     executionTimeout: "1 hour",
- *     retentionPeriodInDays: 7,
+ *     retentionPeriod: "7 days",
  *   },
  *   Effect.gen(function* () {
  *     // init: resolve typed binding clients (IAM lands on this function's role)

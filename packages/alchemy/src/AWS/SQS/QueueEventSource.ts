@@ -1,4 +1,5 @@
 import type * as lambda from "aws-lambda";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
@@ -113,10 +114,12 @@ export interface QueueEventSourceProps {
    */
   batchSize?: number;
   /**
-   * The maximum amount of time, in seconds, that Lambda spends gathering records before invoking the function.
+   * The maximum amount of time that Lambda spends gathering records before
+   * invoking the function (e.g. `"5 seconds"`). Rounded to whole seconds on
+   * the wire.
    * @default 0
    */
-  maximumBatchingWindowInSeconds?: number;
+  maximumBatchingWindow?: Duration.Input;
 }
 
 export type QueueEventSourceService = <Req = never>(

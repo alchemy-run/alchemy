@@ -26,7 +26,7 @@ export default DurableFlow.make(
   {
     main,
     executionTimeout: Duration.hours(1),
-    retentionPeriodInDays: 1,
+    retentionPeriod: "1 day",
     // Per-invocation budget (each resume is its own invocation).
     timeout: Duration.seconds(60),
   },
