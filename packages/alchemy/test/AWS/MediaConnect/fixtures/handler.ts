@@ -164,8 +164,8 @@ export default MediaConnectTestFunction.make(
 
         // Grant an entitlement to this very account, then revoke it —
         // a full grant/revoke roundtrip with no cross-account dependency.
-        // Some accounts reject self-subscription; the typed tag is then
-        // the observable outcome.
+        // Failures surface as their typed tag so the test can diagnose
+        // (e.g. an IAM gap is a visible ForbiddenException, not a 500).
         if (request.method === "POST" && pathname === "/entitlement-cycle") {
           const flowArn = yield* FlowArn;
           const accountId = flowArn.split(":")[4]!;
@@ -197,7 +197,12 @@ export default MediaConnectTestFunction.make(
               );
             }),
             Effect.catchTag(
-              ["BadRequestException", "GrantFlowEntitlements420Exception"],
+              [
+                "BadRequestException",
+                "GrantFlowEntitlements420Exception",
+                "ForbiddenException",
+                "NotFoundException",
+              ],
               (e) =>
                 Effect.succeed({
                   granted: false,

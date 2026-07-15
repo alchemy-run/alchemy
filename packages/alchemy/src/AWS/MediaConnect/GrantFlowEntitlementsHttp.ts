@@ -9,5 +9,9 @@ export const GrantFlowEntitlementsHttp = Layer.effect(
     tag: "AWS.MediaConnect.GrantFlowEntitlements",
     operation: mediaconnect.grantFlowEntitlements,
     actions: ["mediaconnect:GrantFlowEntitlements"],
+    // The IAM resource types for GrantFlowEntitlements are the flow AND
+    // the entitlement; entitlement ARNs are siblings of (not derived
+    // from) the flow ARN, so they are granted by wildcard.
+    extraResources: ["arn:aws:mediaconnect:*:*:entitlement:*"],
   }),
 );

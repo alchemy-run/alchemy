@@ -17,9 +17,10 @@ import type { Flow } from "./Flow.ts";
 /**
  * Build the impl Effect for a MediaConnect operation scoped to a
  * {@link Flow}: the deploy-time half grants `actions` on the bound flow's
- * ARN (or `*` for operations like RevokeFlowEntitlement whose IAM resource
- * is the entitlement, not the flow), and the runtime half injects the
- * flow's ARN into every request as `FlowArn`.
+ * ARN (plus any `extraResources` — e.g. the entitlement wildcard for
+ * Grant/RevokeFlowEntitlement, whose IAM resource types are both the flow
+ * AND the entitlement, a sibling ARN not derived from the flow ARN), and
+ * the runtime half injects the flow's ARN into every request as `FlowArn`.
  */
 export const makeMediaConnectFlowHttpBinding = <
   I extends { FlowArn: string },
@@ -31,15 +32,14 @@ export const makeMediaConnectFlowHttpBinding = <
   tag: string;
   /** The distilled operation; `FlowArn` is injected from the flow. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
-  /** IAM actions granted on the flow ARN (or `*`, see `starResource`). */
+  /** IAM actions granted on the flow ARN + `extraResources`. */
   actions: readonly string[];
   /**
-   * Grant `actions` on `*` instead of the flow ARN — for operations whose
-   * IAM resource type is not the flow (e.g. RevokeFlowEntitlement acts on
-   * the entitlement ARN, which is a sibling of — not derived from — the
-   * flow ARN).
+   * Additional IAM resource ARNs granted alongside the flow ARN — for
+   * operations whose IAM resource types include more than the flow (e.g.
+   * entitlement ops act on `…:entitlement:*` ARNs too).
    */
-  starResource?: boolean;
+  extraResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -54,7 +54,7 @@ export const makeMediaConnectFlowHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: options.starResource ? ["*"] : [flow.flowArn],
+                Resource: [flow.flowArn, ...(options.extraResources ?? [])],
               },
             ],
           });

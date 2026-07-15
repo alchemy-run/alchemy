@@ -10,8 +10,9 @@ import type { Flow } from "./Flow.ts";
  * the content immediately becomes unavailable to the subscriber and the
  * associated output is removed from the flow. The flow ARN is injected
  * from the binding; the entitlement to revoke is passed at runtime.
- * Because the IAM resource for this action is the entitlement (a sibling
- * ARN, not derived from the flow ARN), the deploy-time grant is on `*`.
+ * Because the IAM resource types for this action are the flow AND the
+ * entitlement (a sibling ARN, not derived from the flow ARN), the
+ * deploy-time grant covers the flow ARN plus the entitlement wildcard.
  * Provide the implementation with
  * `Effect.provide(AWS.MediaConnect.RevokeFlowEntitlementHttp)`.
  * @binding

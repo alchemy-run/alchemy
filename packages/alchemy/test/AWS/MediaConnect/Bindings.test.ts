@@ -212,16 +212,10 @@ describe.sequential("MediaConnect Bindings", () => {
           revoked: boolean;
           tag?: string;
         };
-        // Self-subscription is accepted on most accounts; where it is
-        // rejected, the typed tag is the observable outcome.
-        if (response.granted) {
-          expect(response.revoked).toBe(true);
-        } else {
-          expect([
-            "BadRequestException",
-            "GrantFlowEntitlements420Exception",
-          ]).toContain(response.tag);
-        }
+        // A failure surfaces its typed tag in the response for diagnosis.
+        expect(response.tag).toBeUndefined();
+        expect(response.granted).toBe(true);
+        expect(response.revoked).toBe(true);
       }),
     );
   });

@@ -14,7 +14,7 @@ import {
   hasAlchemyTags,
   tagRecord,
 } from "../../Tags.ts";
-import { toSeconds } from "../../Util/Duration.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -91,9 +91,28 @@ export interface PlaybackConfigurationLivePreRoll {
   adDecisionServerUrl?: string;
   /**
    * Maximum allowed duration for the pre-roll ad avail, e.g. `"30 seconds"`.
-   * Sent to the API in whole seconds.
+   * Sent to the API in whole seconds (`MaxDurationSeconds`).
    */
-  maxDurationSeconds?: Duration.Input;
+  maxDuration?: Duration.Input;
+}
+
+/**
+ * CloudWatch log configuration for the playback configuration
+ * (`ConfigureLogsForPlaybackConfiguration`).
+ */
+export interface PlaybackConfigurationLogs {
+  /**
+   * The percentage of session logs MediaTailor sends to CloudWatch Logs
+   * (0–100). Session logs land in the `MediaTailor/PlaybackConfiguration`
+   * log group (legacy) or the vended-log delivery you configure.
+   */
+  percentEnabled: number;
+  /**
+   * The method MediaTailor uses to deliver the logs:
+   * `LEGACY_CLOUDWATCH` (direct to CloudWatch Logs) and/or `VENDED_LOGS`
+   * (CloudWatch vended log delivery to CloudWatch/S3/Firehose).
+   */
+  enabledLoggingStrategies?: ("LEGACY_CLOUDWATCH" | "VENDED_LOGS")[];
 }
 
 /**
@@ -138,9 +157,10 @@ export interface PlaybackConfigurationProps {
   /**
    * Defines the maximum duration of underfilled ad time (e.g. `"2 seconds"`)
    * allowed in an ad break. Underfilled time beyond the threshold is not
-   * filled with slate. Sent to the API in whole seconds.
+   * filled with slate. Sent to the API in whole seconds
+   * (`PersonalizationThresholdSeconds`).
    */
-  personalizationThresholdSeconds?: Duration.Input;
+  personalizationThreshold?: Duration.Input;
   /**
    * The name that is used to associate this playback configuration with a
    * custom transcode profile (set up with AWS Support).
@@ -176,6 +196,11 @@ export interface PlaybackConfigurationProps {
    * Origin-manifest processing rules (e.g. ad marker passthrough).
    */
   manifestProcessingRules?: PlaybackConfigurationManifestProcessingRules;
+  /**
+   * CloudWatch session-log configuration. Omit (or set `percentEnabled: 0`)
+   * to disable session logging.
+   */
+  logConfiguration?: PlaybackConfigurationLogs;
   /**
    * Tags to apply to the playback configuration. Merged with internal
    * Alchemy tags.
@@ -226,7 +251,7 @@ export interface PlaybackConfiguration extends Resource<
  *   adDecisionServerUrl: "https://ads.example.com/vast",
  *   videoContentSourceUrl: "https://origin.example.com/vod",
  *   slateAdUrl: "https://origin.example.com/slate.mp4",
- *   personalizationThresholdSeconds: "2 seconds",
+ *   personalizationThreshold: "2 seconds",
  * });
  * ```
  *
@@ -323,8 +348,8 @@ export const PlaybackConfigurationProvider = () =>
         AdDecisionServerUrl: props.adDecisionServerUrl,
         VideoContentSourceUrl: props.videoContentSourceUrl,
         SlateAdUrl: props.slateAdUrl,
-        PersonalizationThresholdSeconds: toSeconds(
-          props.personalizationThresholdSeconds,
+        PersonalizationThresholdSeconds: toWireSeconds(
+          props.personalizationThreshold,
         ),
         TranscodeProfileName: props.transcodeProfileName,
         InsertionMode: props.insertionMode,
@@ -349,8 +374,8 @@ export const PlaybackConfigurationProvider = () =>
         LivePreRollConfiguration: props.livePreRollConfiguration && {
           AdDecisionServerUrl:
             props.livePreRollConfiguration.adDecisionServerUrl,
-          MaxDurationSeconds: toSeconds(
-            props.livePreRollConfiguration.maxDurationSeconds,
+          MaxDurationSeconds: toWireSeconds(
+            props.livePreRollConfiguration.maxDuration,
           ),
         },
         ManifestProcessingRules: props.manifestProcessingRules && {

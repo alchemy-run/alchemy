@@ -1,5 +1,5 @@
 import * as memorydb from "@distilled.cloud/aws/memorydb";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { readMemoryDbTags, sameStringSet } from "./internal.ts";
 
@@ -351,10 +352,9 @@ export const ClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
           // The wire field is whole days.
-          const snapshotRetentionDays =
-            props.snapshotRetentionLimit !== undefined
-              ? Math.round(Duration.toDays(props.snapshotRetentionLimit))
-              : undefined;
+          const snapshotRetentionDays = toWireDays(
+            props.snapshotRetentionLimit,
+          );
 
           // 1. Observe — cloud state is authoritative.
           let observed = yield* readCluster(name);

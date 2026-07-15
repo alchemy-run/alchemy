@@ -56,8 +56,10 @@ test.provider(
 
       const deployStack = (props: {
         endpointDescription?: string;
-        startoverWindowSeconds?: Duration.Input;
+        startoverWindow?: Duration.Input;
         containerType: mediapackagev2.ContainerType;
+        channelPolicy?: string;
+        endpointPolicy?: string;
       }) =>
         stack.deploy(
           Effect.gen(function* () {
@@ -69,6 +71,7 @@ test.provider(
               channelGroupName: group.channelGroupName,
               inputType: "HLS",
               description: "alchemy mediapackagev2 test channel",
+              policy: props.channelPolicy,
               tags: { fixture: "mediapackagev2" },
             });
             const endpoint = yield* OriginEndpoint("Playback", {
@@ -77,8 +80,9 @@ test.provider(
               containerType: props.containerType,
               segment: { SegmentDurationSeconds: 6 },
               description: props.endpointDescription,
-              startoverWindowSeconds: props.startoverWindowSeconds,
+              startoverWindow: props.startoverWindow,
               hlsManifests: [{ ManifestName: "index" }],
+              policy: props.endpointPolicy,
               tags: { fixture: "mediapackagev2" },
             });
             return { group, channel, endpoint };
@@ -123,12 +127,43 @@ test.provider(
       expect(observedEndpoint.Description).toBe("v1");
       expect(observedEndpoint.Tags?.fixture).toBe("mediapackagev2");
 
-      // 2. In-place update: endpoint description + startover window change;
+      // 2. In-place update: endpoint description + startover window change,
+      //    and resource policies are attached to the channel and endpoint;
       //    every ARN must survive.
+      const accountId = first.channel.channelArn.split(":")[4]!;
+      const channelPolicy = JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "AllowIngest",
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+            Action: "mediapackagev2:PutObject",
+            Resource: first.channel.channelArn,
+          },
+        ],
+      });
+      const endpointPolicy = JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "AllowPlayback",
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+            Action: [
+              "mediapackagev2:GetObject",
+              "mediapackagev2:GetHeadObject",
+            ],
+            Resource: first.endpoint.originEndpointArn,
+          },
+        ],
+      });
       const second = yield* deployStack({
         endpointDescription: "v2",
-        startoverWindowSeconds: "5 minutes",
+        startoverWindow: "5 minutes",
         containerType: "TS",
+        channelPolicy,
+        endpointPolicy,
       });
       expect(second.group.channelGroupArn).toBe(first.group.channelGroupArn);
       expect(second.channel.channelArn).toBe(first.channel.channelArn);
@@ -142,13 +177,31 @@ test.provider(
       });
       expect(updatedEndpoint.Description).toBe("v2");
       expect(updatedEndpoint.StartoverWindowSeconds).toBe(300);
+      // Policies landed — verify out-of-band.
+      const observedChannelPolicy = yield* mediapackagev2.getChannelPolicy({
+        ChannelGroupName: second.group.channelGroupName,
+        ChannelName: second.channel.channelName,
+      });
+      expect(JSON.parse(observedChannelPolicy.Policy).Statement[0].Sid).toBe(
+        "AllowIngest",
+      );
+      const observedEndpointPolicy =
+        yield* mediapackagev2.getOriginEndpointPolicy({
+          ChannelGroupName: second.group.channelGroupName,
+          ChannelName: second.channel.channelName,
+          OriginEndpointName: second.endpoint.originEndpointName,
+        });
+      expect(JSON.parse(observedEndpointPolicy.Policy).Statement[0].Sid).toBe(
+        "AllowPlayback",
+      );
 
       // 3. Replacement: the container type is immutable, so TS → CMAF must
       //    replace the endpoint (new physical name) while the channel and
-      //    group stay in place.
+      //    group stay in place. Policies are dropped, exercising the
+      //    delete-policy sync path on the surviving channel.
       const third = yield* deployStack({
         endpointDescription: "v2",
-        startoverWindowSeconds: "5 minutes",
+        startoverWindow: "5 minutes",
         containerType: "CMAF",
       });
       expect(third.group.channelGroupArn).toBe(first.group.channelGroupArn);
@@ -169,6 +222,14 @@ test.provider(
         }),
       );
       expect(oldEndpointError._tag).toBe("ResourceNotFoundException");
+      // The channel policy was removed (policy prop dropped).
+      const removedPolicyError = yield* Effect.flip(
+        mediapackagev2.getChannelPolicy({
+          ChannelGroupName: third.group.channelGroupName,
+          ChannelName: third.channel.channelName,
+        }),
+      );
+      expect(removedPolicyError._tag).toBe("ResourceNotFoundException");
 
       // 4. Destroy everything (endpoint → channel → group) and verify the
       //    group is gone out-of-band.
