@@ -188,6 +188,7 @@ export const createEc2HostedSupport = ({
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
+import { reifyBoundConfigProvider } from "alchemy/Runtime";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -233,7 +234,7 @@ const program = handler.pipe(
       Layer.provideMerge(
         Layer.succeed(
           ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
+          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
         )
       ),
     )

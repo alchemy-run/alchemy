@@ -35,8 +35,11 @@ const hit = Effect.fn(function* (path: string) {
   return yield* res.json;
 });
 
-const freshName = () =>
-  `alchemy-tunnel-test-${Math.random().toString(36).slice(2, 10)}`;
+// Deterministic tunnel names: identical on every run so a crashed run never
+// leaks a uniquely-named tunnel. The fixture routes purge any leftover tunnel
+// with the same name before creating, making each run self-healing.
+const writeName = "alchemy-tunnel-test-write";
+const readWriteName = "alchemy-tunnel-test-readwrite";
 
 describe("Tunnel runtime bindings", () => {
   test(
@@ -54,7 +57,7 @@ describe("Tunnel runtime bindings", () => {
     Effect.gen(function* () {
       const { effectUrl } = yield* stack;
       const body = (yield* hit(
-        `${effectUrl}/write?name=${encodeURIComponent(freshName())}`,
+        `${effectUrl}/write?name=${encodeURIComponent(writeName)}`,
       )) as { id: string; deleted: boolean };
       expect(body.id).toBeTypeOf("string");
       expect(body.id.length).toBeGreaterThan(0);
@@ -67,7 +70,7 @@ describe("Tunnel runtime bindings", () => {
     "TunnelReadWrite drives the full CRUD surface",
     Effect.gen(function* () {
       const { effectUrl } = yield* stack;
-      const name = freshName();
+      const name = readWriteName;
       const body = (yield* hit(
         `${effectUrl}/readwrite?name=${encodeURIComponent(name)}`,
       )) as {

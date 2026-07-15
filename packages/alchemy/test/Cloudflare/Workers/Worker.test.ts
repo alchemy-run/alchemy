@@ -486,27 +486,22 @@ describe.concurrent("Cloudflare.Worker", () => {
 
         yield* stack.destroy();
 
-        // Use a fixed physical name so the worker's identity persists
-        // across a state-store wipe (otherwise `createWorkerName` would
-        // pick a fresh random suffix on the second deploy and we'd just
-        // be creating a new worker, not adopting).
-        const physicalName = `alchemy-test-owned-adopt-${Math.random()
-          .toString(36)
-          .slice(2, 8)}`;
-
         // Phase 1: deploy normally so a real Worker exists on Cloudflare,
-        // tagged with this stack/stage/id.
+        // tagged with this stack/stage/id. No explicit `name` — the engine
+        // generates a random-suffixed physical name (collision-free across
+        // concurrent runs, and alchemy-tagged so a crashed run's leftover is
+        // sweepable). The deploy output hands back the real name, which
+        // pins the worker's identity for the adoption phase below.
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("AdoptableWorker", {
               main,
-              name: physicalName,
               subdomain: { enabled: true, previewsEnabled: true },
               compatibility: { date: "2024-01-01" },
             });
           }),
         );
-        expect(initial.workerName).toEqual(physicalName);
+        const physicalName = initial.workerName;
         expect(yield* findWorker(physicalName, accountId)).toBeDefined();
 
         // Phase 2: wipe local state for this resource — the worker stays on
@@ -563,22 +558,21 @@ describe.concurrent("Cloudflare.Worker", () => {
 
       yield* stack.destroy();
 
-      // Phase 1: deploy under logical id "Original" with an explicit
-      // physical name. The Cloudflare Worker is now tagged
-      // `alchemy:id:Original` — i.e. owned by *that* logical resource.
-      const physicalName = `alchemy-test-adopt-takeover-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      // Phase 1: deploy under logical id "Original". The Cloudflare Worker
+      // is now tagged `alchemy:id:Original` — i.e. owned by *that* logical
+      // resource. No explicit `name` — the engine generates a random-suffixed
+      // physical name (collision-free across runs); the deploy output hands
+      // back the real name, which phase 2 reuses to target the same worker.
       const original = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Worker("Original", {
             main,
-            name: physicalName,
             subdomain: { enabled: true, previewsEnabled: true },
             compatibility: { date: "2024-01-01" },
           });
         }),
       );
+      const physicalName = original.workerName;
       expect(yield* findWorker(original.workerName, accountId)).toBeDefined();
       expect(yield* getWorkerTags(physicalName, accountId)).toContain(
         "alchemy:id:Original",

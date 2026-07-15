@@ -2,6 +2,7 @@ import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -24,7 +25,7 @@ import {
   buildFinalDockerfile,
   bundleContainerProgram,
   createContainerApplicationName,
-  foldEnvIntoEnvironmentVariables,
+  makeContainerEnv,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
@@ -105,8 +106,8 @@ export const LiveContainerProvider = () =>
 
       const desiredConfiguration = (
         props: ContainerApplicationProps,
+        env: Record<string, string | Redacted.Redacted<string>>,
         imageRef: string,
-        accountId: string,
       ) =>
         normalizeNulls({
           image: imageRef,
@@ -127,10 +128,10 @@ export const LiveContainerProvider = () =>
           vcpu: props.vcpu,
           memory: props.memory,
           disk: props.disk,
-          environmentVariables: foldEnvIntoEnvironmentVariables(
-            props,
-            accountId,
-          ),
+          environmentVariables: Object.entries(env).map(([name, value]) => ({
+            name,
+            value: Redacted.isRedacted(value) ? Redacted.value(value) : value,
+          })),
           labels: props.labels,
           network: props.network,
           command: props.command,
@@ -165,6 +166,7 @@ export const LiveContainerProvider = () =>
       const computeImage = Effect.fn(function* (
         id: string,
         props: ContainerApplicationProps,
+        env: Record<string, string | Redacted.Redacted<string>>,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createApplicationName(id, props.name);
@@ -211,9 +213,9 @@ export const LiveContainerProvider = () =>
             imageRef: makeRef(imageHash),
             imageHash,
             dev: {
-              context: contextDir,
-              dockerfile: path.join(contextDir, "Dockerfile"),
-              env: props.env,
+              context: path.relative(process.cwd(), contextDir),
+              dockerfile: "Dockerfile",
+              env,
             },
           };
         }
@@ -229,7 +231,7 @@ export const LiveContainerProvider = () =>
             imageRef: makeRef(imageHash),
             imageHash,
             // The local runtime pulls this image directly (no build context).
-            dev: { imageUri: props.image, env: props.env },
+            dev: { imageUri: props.image, env },
           };
         }
 
@@ -250,7 +252,11 @@ export const LiveContainerProvider = () =>
           imageHash,
           // The local runtime builds the user's Dockerfile against the same
           // (already real-path'd) context directory.
-          dev: { context, dockerfile, env: props.env },
+          dev: {
+            context: path.relative(process.cwd(), context),
+            dockerfile: path.relative(context, dockerfile),
+            env,
+          },
         };
       });
 
@@ -552,11 +558,13 @@ export const LiveContainerProvider = () =>
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
+        const env = makeContainerEnv(news, accountId);
         const { build, imageRef, imageHash, dev } = yield* computeImage(
           id,
           news,
+          env,
         );
-        const configuration = desiredConfiguration(news, imageRef, accountId);
+        const configuration = desiredConfiguration(news, env, imageRef);
 
         if (imageHash !== existing.hash?.image) {
           yield* buildAndPushImage(id, news, build, imageRef, session);
@@ -688,8 +696,12 @@ export const LiveContainerProvider = () =>
             return { action: "update", stables: ["accountId"] } as const;
           }
 
-          const { imageHash } = yield* computeImage(id, news);
-          if (imageHash !== output.hash?.image) {
+          const { imageHash, dev } = yield* computeImage(
+            id,
+            news,
+            makeContainerEnv(news, accountId),
+          );
+          if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
             return { action: "update" } as const;
           }
         }),
@@ -700,11 +712,13 @@ export const LiveContainerProvider = () =>
           );
 
           const { accountId } = yield* yield* CloudflareEnvironment;
+          const env = makeContainerEnv(news, accountId);
           const { build, imageRef, imageHash, dev } = yield* computeImage(
             id,
             news,
+            env,
           );
-          const configuration = desiredConfiguration(news, imageRef, accountId);
+          const configuration = desiredConfiguration(news, env, imageRef);
           yield* buildAndPushImage(id, news, build, imageRef, session);
 
           // Precreate intentionally omits the Durable Object attachment so the
@@ -742,11 +756,13 @@ export const LiveContainerProvider = () =>
           );
           const durableObjects = yield* getDurableObjects(bindings);
           const { accountId } = yield* yield* CloudflareEnvironment;
+          const env = makeContainerEnv(news, accountId);
           const { build, imageRef, imageHash, dev } = yield* computeImage(
             id,
             news,
+            env,
           );
-          const configuration = desiredConfiguration(news, imageRef, accountId);
+          const configuration = desiredConfiguration(news, env, imageRef);
 
           // Observe — re-fetch the cached application to confirm it still
           // exists. Cloudflare reports a deleted container application as

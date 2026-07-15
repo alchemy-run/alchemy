@@ -562,19 +562,17 @@ test.provider(
 
       yield* stack.destroy();
 
-      const databaseName = `alchemy-test-d1-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-
-      // Phase 1: deploy normally so a real D1 database exists.
+      // Phase 1: deploy normally so a real D1 database exists. No explicit
+      // `name` — the engine generates a random-suffixed physical name
+      // (collision-free across concurrent runs); the deploy output hands
+      // back the real name, which pins the database's identity for the
+      // adoption phase below.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("AdoptableDatabase", {
-            name: databaseName,
-          });
+          return yield* Cloudflare.D1.Database("AdoptableDatabase");
         }),
       );
-      expect(initial.databaseName).toEqual(databaseName);
+      const databaseName = initial.databaseName;
       const initialId = initial.databaseId;
 
       // Phase 2: wipe local state — the database stays on Cloudflare.

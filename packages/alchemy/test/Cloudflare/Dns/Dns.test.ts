@@ -48,10 +48,11 @@ test(
       "string",
     );
 
-    // Unique per run so repeated runs never collide on record name.
-    const name = `alchemy-dns-test-${Math.random()
-      .toString(36)
-      .slice(2, 10)}.${zoneName}`;
+    // Deterministic record name — the same on every run (never
+    // Date.now()/random). The fixture's /dns route deletes any leftover
+    // record with this name before creating, so a crashed run self-heals
+    // instead of leaking records into the zone.
+    const name = `alchemy-dns-test-crud.${zoneName}`;
 
     const client = yield* HttpClient.HttpClient;
     const res = yield* client

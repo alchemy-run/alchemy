@@ -1,4 +1,3 @@
-import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { InputProps } from "../../Input.ts";
@@ -23,9 +22,13 @@ import { isSecret } from "../SecretsStore/Secret.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
+import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
-import { isDurableObjectLike } from "./DurableObject.ts";
+import {
+  isDurableObjectLike,
+  normalizeTransferredFrom,
+} from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
@@ -54,32 +57,42 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           : bindingEff
       ) as WorkerBindingResource;
 
-      const bindingMeta: InputProps<WorkerBinding> | undefined = toBinding(
+      let bindingMeta: InputProps<WorkerBinding> | undefined = toBinding(
         bindingName,
         binding,
       );
 
       if (bindingMeta) {
+        let resolvedBindingMeta: InputProps<WorkerBinding> = bindingMeta;
+
+        if (isWorkflowLike(binding)) {
+          const className = binding.className ?? binding.name;
+          const scriptName = binding.scriptName ?? resource.workerName;
+          const workflowName = makeWorkflowName(scriptName, className);
+          resolvedBindingMeta = {
+            ...resolvedBindingMeta,
+            workflowName,
+          };
+
+          // A locally-hosted Workflow (no `scriptName`) must be registered
+          // with Cloudflare via `putWorkflow` once the host Worker exists.
+          // Cross-script references are binding-only; both sides derive the
+          // same physical workflow name from the host script and class.
+          if (!binding.scriptName) {
+            yield* WorkflowResource(binding.name, {
+              workflowName,
+              className,
+              scriptName: resource.workerName,
+            });
+          }
+        }
+
         yield* resource.bind`${bindingName}`({
-          bindings: [bindingMeta],
+          bindings: [resolvedBindingMeta],
           hyperdrives: isHyperdriveConnection(binding)
             ? getHyperdriveDevOrigin(binding)
             : undefined,
         });
-
-        // A locally-hosted Workflow (no `scriptName`) must be registered with
-        // Cloudflare via `putWorkflow` once the host Worker exists. Cross-script
-        // references (with `scriptName`) are reference-only — the host owns the
-        // workflow resource. `scriptName: resource.workerName` makes the
-        // WorkflowResource depend on the Worker so it reconciles afterwards.
-        if (isWorkflowLike(binding) && !binding.scriptName) {
-          const workflowName = binding.workflowName ?? binding.name;
-          yield* WorkflowResource(workflowName, {
-            workflowName,
-            className: binding.className ?? binding.name,
-            scriptName: resource.workerName,
-          });
-        }
       } else {
         return yield* Effect.die(`Unknown binding type: ${bindingName}`);
       }
@@ -87,9 +100,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   }
 });
 
-type BindingSpec = InputProps<
-  Exclude<PutScriptRequest["metadata"]["bindings"], undefined>[number]
->;
+type BindingSpec = InputProps<WorkerBinding>;
 
 const toBinding = (
   bindingName: string,
@@ -170,6 +181,7 @@ const toBinding = (
       name: bindingName,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
+      transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
     };
   } else if (isWorkflowLike(binding)) {
     return {

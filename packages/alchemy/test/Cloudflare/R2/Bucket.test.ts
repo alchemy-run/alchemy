@@ -99,19 +99,17 @@ test.provider(
 
       yield* stack.destroy();
 
-      const bucketName = `alchemy-test-r2-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-
-      // Phase 1: deploy normally so a real R2 bucket exists.
+      // Phase 1: deploy normally so a real R2 bucket exists. No explicit
+      // `name` — the engine generates a random-suffixed physical name
+      // (collision-free across concurrent runs); the deploy output hands
+      // back the real name, which pins the bucket's identity for the
+      // adoption phase below.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
-            name: bucketName,
-          });
+          return yield* Cloudflare.R2.Bucket("AdoptableBucket");
         }),
       );
-      expect(initial.bucketName).toEqual(bucketName);
+      const bucketName = initial.bucketName;
 
       // Phase 2: wipe local state — the bucket stays on Cloudflare.
       yield* Effect.gen(function* () {
