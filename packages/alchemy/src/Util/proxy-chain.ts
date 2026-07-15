@@ -71,6 +71,9 @@ const chain = (
       }
       return chain(cached, [...ops, { kind: "get", prop }]);
     },
+    has(target, prop) {
+      return Reflect.has(target, prop) || Reflect.has(effect, prop);
+    },
     apply(_, __, args) {
       return chain(cached, [...ops, { kind: "call", args }]);
     },

@@ -223,19 +223,17 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gatewayId = `alchemy-test-aigw-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-
-      // Phase 1: deploy normally so a real AI Gateway exists.
+      // Phase 1: deploy normally so a real AI Gateway exists. No explicit
+      // `id` — the engine generates a random-suffixed physical id
+      // (collision-free across concurrent runs); the deploy output hands
+      // back the real id, which pins the gateway's identity for the
+      // adoption phase below.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AI.Gateway("AdoptableGateway", {
-            id: gatewayId,
-          });
+          return yield* Cloudflare.AI.Gateway("AdoptableGateway");
         }),
       );
-      expect(initial.gatewayId).toEqual(gatewayId);
+      const gatewayId = initial.gatewayId;
 
       // Phase 2: wipe local state — the gateway stays on Cloudflare.
       yield* Effect.gen(function* () {

@@ -10,20 +10,163 @@ import EffectfulStack from "./fixtures/effectful/stack.ts";
 import ExternalStack from "./fixtures/external/stack.ts";
 import RemoteStack from "./fixtures/remote/stack.ts";
 
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
+describe.concurrent.each([
+  {
+    dev: true,
+    stage: "test-local",
+    timeout: 30_000,
+  },
+  {
+    dev: false,
+    stage: "test-live",
+    timeout: 300_000,
+  },
+])("Container (dev: $dev)", ({ dev, stage, timeout }) => {
+  // We need to create a new test context for each test case because the
+  // local runner stops running after the root scope is closed, which happens
+  // in an afterAll hook registered by `Test.make`.
+  const make = () =>
+    Test.make({
+      providers: Cloudflare.providers(),
+      state: Cloudflare.state(),
+      stage,
+      dev,
+    });
+
+  const logLevel = Effect.provideService(
+    MinimumLogLevel,
+    process.env.DEBUG ? "Debug" : "Info",
+  );
+
+  // Container image build + push + worker/DO deploy comfortably exceeds the
+  // default 120s hook budget, so give every deploy/destroy plenty of room.
+  const HOOK_TIMEOUT = 600_000;
+
+  /**
+   * Effect-native container (`main`): the entrypoint Effect is bundled into a
+   * generated image. The Durable Object proxies into the container two ways —
+   * RPC (`container.ping()` / `container.readObject()`) and HTTP over its
+   * port-3000 server (`getTcpPort(3000).fetch`). The bucket tests prove the
+   * full end-to-end R2 path: a value written through the DO's NATIVE binding is
+   * read back from inside the container over its scoped HTTP token, surfaced
+   * both via RPC and via fetch.
+   */
+  describe("effectful container (main)", () => {
+    const { test, beforeAll, afterAll, deploy, destroy } = make();
+    const stack = beforeAll(deploy(EffectfulStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(EffectfulStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+
+    test(
+      "RPC: ping round-trips into the container",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        const pong = yield* fetchReady(new URL("/ping", url), "pong");
+        expect(pong).toContain("pong");
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    test(
+      "fetch: serves over its TCP port",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        const hello = yield* fetchReady(
+          new URL("/hello", url),
+          "effectful container",
+        );
+        expect(hello).toContain("effectful container");
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    test(
+      "RPC: reads an R2 object from inside the container",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        yield* seed(url, "rpc.txt", "hello-rpc");
+        const body = yield* fetchReady(
+          new URL("/rpc?key=rpc.txt", url),
+          "hello-rpc",
+        );
+        expect(body).toContain("hello-rpc");
+      }).pipe(logLevel),
+      { timeout },
+    );
+
+    test(
+      "fetch: reads an R2 object from inside the container",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        yield* seed(url, "fetch.txt", "hello-fetch");
+        const body = yield* fetchReady(
+          new URL("/fetch?key=fetch.txt", url),
+          "hello-fetch",
+        );
+        expect(body).toContain("hello-fetch");
+      }).pipe(logLevel),
+      { timeout },
+    );
+  });
+
+  /**
+   * External container (`context` / `dockerfile`): Alchemy builds the user's
+   * Dockerfile against the context directory (nginx serving a static page on
+   * port 8080) and the DO proxies a request to it.
+   */
+  describe("external container (context/dockerfile)", () => {
+    const { test, beforeAll, afterAll, deploy, destroy } = make();
+    const stack = beforeAll(deploy(ExternalStack), { timeout: HOOK_TIMEOUT });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ExternalStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+
+    test(
+      "builds the user Dockerfile and serves it over its TCP port",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        const hello = yield* fetchReady(
+          new URL("/hello", url),
+          "external container",
+        );
+        expect(hello).toContain("external container");
+      }).pipe(logLevel),
+      { timeout },
+    );
+  });
+
+  /**
+   * Remote container (`image`): Alchemy pulls a pre-built public image and
+   * re-pushes it to Cloudflare's registry without building anything; the DO
+   * proxies a request to it.
+   */
+  describe("remote container (image)", () => {
+    const { test, beforeAll, afterAll, deploy, destroy } = make();
+    const stack = beforeAll(deploy(RemoteStack), { timeout: HOOK_TIMEOUT });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RemoteStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+
+    test(
+      "pulls and re-pushes the remote image and serves it over its TCP port",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+
+        const hello = yield* fetchReady(new URL("/hello", url), "method");
+        expect(hello).toContain("method");
+      }).pipe(logLevel),
+      { timeout },
+    );
+  });
 });
-
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-// Container image build + push + worker/DO deploy comfortably exceeds the
-// default 120s hook budget, so give every deploy/destroy plenty of room.
-const HOOK_TIMEOUT = 600_000;
-const TEST_TIMEOUT = 300_000;
 
 // Note on image choice for the non-Effect (`image`/`dockerfile`) variants:
 // stock nginx images crash-loop inside Cloudflare's container sandbox because
@@ -51,28 +194,32 @@ const DEPLOY_PLACEHOLDER = "Alchemy worker is being deployed...";
 // Force `Connection: close` so each readiness attempt opens a fresh connection
 // and can land on an edge that already has the new deploy (a pooled keep-alive
 // socket stays pinned to one edge metal and can keep reading the stale body).
-const freshConn = HttpClient.mapRequest(
-  HttpClientRequest.setHeader("connection", "close"),
+const freshConn = HttpClient.HttpClient.pipe(
+  Effect.map(
+    HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close")),
+  ),
 );
 
 // Retry a freshly-deployed worker route until it answers 200 with a body that
 // contains `expected` — rejecting both transient non-200s and the deploy stub.
 // Each attempt is bounded so a worker that is hung waiting on its container
 // surfaces as a retryable failure rather than blocking the whole test budget.
-const fetchReady = (url: string, expected: string) =>
+const fetchReady = (url: URL, expected: string) =>
   Effect.gen(function* () {
-    const client = freshConn(yield* HttpClient.HttpClient);
+    const client = yield* freshConn;
     return yield* client.get(url).pipe(
       Effect.flatMap((r) =>
-        r.status !== 200
-          ? Effect.fail(new Error(`Worker not ready: ${r.status}`))
-          : Effect.flatMap(r.text, (body) =>
-              body.includes(DEPLOY_PLACEHOLDER) || !body.includes(expected)
+        r.text.pipe(
+          Effect.flatMap((body) =>
+            r.status !== 200
+              ? Effect.fail(new Error(`Worker not ready: ${r.status} ${body}`))
+              : body.includes(DEPLOY_PLACEHOLDER) || !body.includes(expected)
                 ? Effect.fail(new Error(`not ready: got ${body}`))
                 : Effect.succeed(body),
-            ),
+          ),
+        ),
       ),
-      Effect.timeout("30 seconds"),
+      Effect.timeout("10 seconds"),
       Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
     );
   });
@@ -81,11 +228,11 @@ const fetchReady = (url: string, expected: string) =>
 // retrying through cold-start until the producer accepts it (200).
 const seed = (url: string, key: string, value: string) =>
   Effect.gen(function* () {
-    const client = freshConn(yield* HttpClient.HttpClient);
+    const client = yield* freshConn;
     return yield* client
       .execute(
         HttpClientRequest.put(
-          `${url}/seed?key=${encodeURIComponent(key)}`,
+          new URL(`/seed?key=${encodeURIComponent(key)}`, url),
         ).pipe(HttpClientRequest.bodyText(value)),
       )
       .pipe(
@@ -94,118 +241,10 @@ const seed = (url: string, key: string, value: string) =>
             ? Effect.succeed(r)
             : Effect.fail(new Error(`seed not ready: ${r.status}`)),
         ),
-        Effect.timeout("30 seconds"),
-        Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+        Effect.timeout("10 seconds"),
+        Effect.retry({
+          schedule: readinessSchedule,
+          times: readinessRetries,
+        }),
       );
   });
-
-/**
- * Effect-native container (`main`): the entrypoint Effect is bundled into a
- * generated image. The Durable Object proxies into the container two ways —
- * RPC (`container.ping()` / `container.readObject()`) and HTTP over its
- * port-3000 server (`getTcpPort(3000).fetch`). The bucket tests prove the
- * full end-to-end R2 path: a value written through the DO's NATIVE binding is
- * read back from inside the container over its scoped HTTP token, surfaced
- * both via RPC and via fetch.
- */
-describe("effectful container (main)", () => {
-  const stack = beforeAll(deploy(EffectfulStack), { timeout: HOOK_TIMEOUT });
-  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(EffectfulStack), {
-    timeout: HOOK_TIMEOUT,
-  });
-
-  test(
-    "RPC: ping round-trips into the container",
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-
-      const pong = yield* fetchReady(`${url}/ping`, "pong");
-      expect(pong).toContain("pong");
-    }).pipe(logLevel),
-    { timeout: TEST_TIMEOUT },
-  );
-
-  test(
-    "fetch: serves over its TCP port",
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-
-      const hello = yield* fetchReady(`${url}/hello`, "effectful container");
-      expect(hello).toContain("effectful container");
-    }).pipe(logLevel),
-    { timeout: TEST_TIMEOUT },
-  );
-
-  test(
-    "RPC: reads an R2 object from inside the container",
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-
-      yield* seed(url, "rpc.txt", "hello-rpc");
-      const body = yield* fetchReady(`${url}/rpc?key=rpc.txt`, "hello-rpc");
-      expect(body).toContain("hello-rpc");
-    }).pipe(logLevel),
-    { timeout: TEST_TIMEOUT },
-  );
-
-  test(
-    "fetch: reads an R2 object from inside the container",
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-
-      yield* seed(url, "fetch.txt", "hello-fetch");
-      const body = yield* fetchReady(
-        `${url}/fetch?key=fetch.txt`,
-        "hello-fetch",
-      );
-      expect(body).toContain("hello-fetch");
-    }).pipe(logLevel),
-    { timeout: TEST_TIMEOUT },
-  );
-});
-
-/**
- * External container (`context` / `dockerfile`): Alchemy builds the user's
- * Dockerfile against the context directory (nginx serving a static page on
- * port 8080) and the DO proxies a request to it.
- */
-describe("external container (context/dockerfile)", () => {
-  const stack = beforeAll(deploy(ExternalStack), { timeout: HOOK_TIMEOUT });
-  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ExternalStack), {
-    timeout: HOOK_TIMEOUT,
-  });
-
-  test(
-    "builds the user Dockerfile and serves it over its TCP port",
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-
-      const hello = yield* fetchReady(`${url}/hello`, "external container");
-      expect(hello).toContain("external container");
-    }).pipe(logLevel),
-    { timeout: TEST_TIMEOUT },
-  );
-});
-
-/**
- * Remote container (`image`): Alchemy pulls a pre-built public image and
- * re-pushes it to Cloudflare's registry without building anything; the DO
- * proxies a request to it.
- */
-describe("remote container (image)", () => {
-  const stack = beforeAll(deploy(RemoteStack), { timeout: HOOK_TIMEOUT });
-  afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RemoteStack), {
-    timeout: HOOK_TIMEOUT,
-  });
-
-  test(
-    "pulls and re-pushes the remote image and serves it over its TCP port",
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-
-      const hello = yield* fetchReady(`${url}/hello`, "method");
-      expect(hello).toContain("method");
-    }).pipe(logLevel),
-    { timeout: TEST_TIMEOUT },
-  );
-});

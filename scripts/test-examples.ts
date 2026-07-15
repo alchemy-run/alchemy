@@ -1,4 +1,5 @@
 const examples = [
+  "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
   "./examples/cloudflare-pr-package",
   "./examples/cloudflare-worker-async",

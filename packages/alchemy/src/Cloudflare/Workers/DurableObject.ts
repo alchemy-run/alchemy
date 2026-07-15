@@ -796,7 +796,8 @@ export class DurableObjectScope extends Context.Service<
  * a worker with no Alchemy ownership tags as `Unowned`.
  *
  * Alchemy normally tracks which class backs each binding through an
- * `alchemy:do:<logicalId>:<className>` tag it writes on the script. A
+ * `alchemy:dos:` metadata tag it writes on the script (mapping each
+ * binding's logical id to its class name). A
  * foreign worker has no such tag, so on the **adopting deploy** Alchemy
  * falls back to matching your binding to the live class **by binding
  * name**. The class is then reused in place — not recreated — so
@@ -807,7 +808,7 @@ export class DurableObjectScope extends Context.Service<
  * binding's `className` must match the class that already exists on the
  * worker.** You cannot rename the class in the same deploy that adopts
  * it. Once the deploy completes, Alchemy owns the worker and has written
- * the `alchemy:do:` tag, so subsequent renames are driven by logical id
+ * the `alchemy:dos:` tag, so subsequent renames are driven by logical id
  * and work normally.
  *
  * @example Adopting a worker whose `Counter` class already exists

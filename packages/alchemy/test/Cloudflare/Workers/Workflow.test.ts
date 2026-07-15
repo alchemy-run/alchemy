@@ -132,7 +132,9 @@ test(
     expect(lastStatus.status).toBe("complete");
     expect(lastStatus.error).toBeFalsy();
     expect(lastStatus.output?.greeting).toBe("Hello, world!");
-    expect(lastStatus.output?.workflowName).toBe("TestWorkflow");
+    // `event.workflowName` carries the account-global *physical* name, which
+    // is derived from the host Worker's unique name (stack-id-stage prefix).
+    expect(lastStatus.output?.workflowName).toMatch(/^workflowbindingstack-/);
     expect(lastStatus.output?.stepAttempt).toBe(1);
     expect(lastStatus.rollback).toBeNull();
     // The body yields `WorkerEnvironment` — if the regression from PR #71 ever
@@ -241,7 +243,11 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
       );
       const all = yield* provider.list();
 
-      expect(all.some((w) => w.workflowName === "TestWorkflow")).toBe(true);
+      // Physical names are derived from the host Worker name (which carries
+      // the stack-id-stage prefix), not the exported class name.
+      expect(
+        all.some((w) => w.workflowName.startsWith("workflowbindingstack-")),
+      ).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

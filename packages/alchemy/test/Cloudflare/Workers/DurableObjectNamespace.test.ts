@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { getWorkerTags } from "../Utils/Worker.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -476,10 +477,16 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       // Phase 1: provision a worker + `Counter` DO class straight through the
-      // Cloudflare API — no Alchemy involvement, so none of our tags.
-      const physicalName = `alchemy-test-do-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      // Cloudflare API — no Alchemy involvement, so none of our tags. The
+      // name is deterministic (never Date.now()/random); a crashed run can
+      // leave the worker behind, and `putScript` would then reject the
+      // `newSqliteClasses` migration ("class already exists"), so purge any
+      // leftover first.
+      const physicalName = "alchemy-test-do-adopt";
+
+      yield* workers
+        .deleteScript({ accountId, scriptName: physicalName, force: true })
+        .pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
 
       yield* workers.putScript({
         accountId,
@@ -542,4 +549,170 @@ test.provider(
       yield* scratch.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+// Reproduces #811: one script tag per DO binding blew Cloudflare's 10-tag
+// limit at 7+ Durable Objects (3 ownership tags + 1 migration tag + N DO
+// tags). The logical-id→class mapping is now packed into `alchemy:dos:`
+// tags, so a worker with 20 DOs — double the count that used to consume the
+// entire tag budget — deploys fine and the whole tag set stays within the
+// limit. The second deploy renames a class and drops another to prove
+// migrations are still driven by the packed mapping.
+test.provider(
+  "worker with 20 durable objects deploys within the 10-tag limit",
+  (scratch) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const ids = Array.from({ length: 20 }, (_, i) => `DO_${i}`);
+      const makeScript = (classes: string[], version: string) =>
+        `import { DurableObject } from "cloudflare:workers";
+${classes.map((c) => `export class ${c} extends DurableObject {}`).join("\n")}
+export default { async fetch() { return new Response("${version}"); } };
+`;
+
+      const v1 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            worker: yield* Cloudflare.Worker("worker", {
+              script: makeScript(
+                ids.map((_, i) => `Class${i}`),
+                "v1",
+              ),
+              env: Object.fromEntries(
+                ids.map((id, i) => [
+                  id,
+                  Cloudflare.DurableObject(id, { className: `Class${i}` }),
+                ]),
+              ),
+            }),
+          };
+        }),
+      );
+      expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
+
+      const tags = yield* getWorkerTags(v1.worker.workerName, accountId);
+      expect(tags.length).toBeLessThanOrEqual(10);
+      expect(tags.filter((t) => t.startsWith("alchemy:dos:"))).toHaveLength(1);
+      expect(tags.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
+
+      // Rename Class0 → Class0V2 (same binding id) and delete DO_19 — both
+      // migrations resolve their previous class through the packed tag.
+      const v2 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            worker: yield* Cloudflare.Worker("worker", {
+              script: makeScript(
+                [
+                  "Class0V2",
+                  ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`),
+                ],
+                "v2",
+              ),
+              env: Object.fromEntries(
+                ids.slice(0, 19).map((id, i) => [
+                  id,
+                  Cloudflare.DurableObject(id, {
+                    className: i === 0 ? "Class0V2" : `Class${i}`,
+                  }),
+                ]),
+              ),
+            }),
+          };
+        }),
+      );
+      expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+// Roll-forward from the legacy tag format: a worker last deployed by an
+// older alchemy carries one `alchemy:do:{logicalId}:{className}` tag per DO.
+// Simulate that by rewriting the live script tags to the legacy format
+// out-of-band, then redeploy with a class rename — reconcile must parse the
+// legacy tags to resolve the previous class, and the deploy rewrites the
+// mapping in the packed format.
+test.provider(
+  "rolls forward from legacy per-DO alchemy:do: tags",
+  (scratch) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const v1 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            worker: yield* Cloudflare.Worker("worker", {
+              script: `import { DurableObject } from "cloudflare:workers";
+export class CounterClass extends DurableObject {}
+export class MeterClass extends DurableObject {}
+export default { async fetch() { return new Response("v1"); } };
+`,
+              env: {
+                Counter: Cloudflare.DurableObject("Counter", {
+                  className: "CounterClass",
+                }),
+                Meter: Cloudflare.DurableObject("Meter", {
+                  className: "MeterClass",
+                }),
+              },
+            }),
+          };
+        }),
+      );
+      expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
+      const scriptName = v1.worker.workerName;
+
+      // Rewrite the tags the way alchemy <= beta.62 wrote them: one
+      // `alchemy:do:` tag per binding, no packed tag.
+      const deployedTags = yield* getWorkerTags(scriptName, accountId);
+      yield* workers.patchScriptScriptAndVersionSetting({
+        accountId,
+        scriptName,
+        settings: {
+          tags: [
+            ...deployedTags.filter((t) => !t.startsWith("alchemy:dos:")),
+            "alchemy:do:Counter:CounterClass",
+            "alchemy:do:Meter:MeterClass",
+          ],
+        },
+      });
+
+      // Redeploy with a rename; the previous class must be resolved from the
+      // legacy tags for the migration to succeed.
+      const v2 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            worker: yield* Cloudflare.Worker("worker", {
+              script: `import { DurableObject } from "cloudflare:workers";
+export class CounterClassV2 extends DurableObject {}
+export class MeterClass extends DurableObject {}
+export default { async fetch() { return new Response("v2"); } };
+`,
+              env: {
+                Counter: Cloudflare.DurableObject("Counter", {
+                  className: "CounterClassV2",
+                }),
+                Meter: Cloudflare.DurableObject("Meter", {
+                  className: "MeterClass",
+                }),
+              },
+            }),
+          };
+        }),
+      );
+      expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
+
+      // The deploy rewrote the mapping in the packed format.
+      const rolledForward = yield* getWorkerTags(scriptName, accountId);
+      expect(
+        rolledForward.filter((t) => t.startsWith("alchemy:dos:")),
+      ).toHaveLength(1);
+      expect(
+        rolledForward.filter((t) => t.startsWith("alchemy:do:")),
+      ).toHaveLength(0);
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

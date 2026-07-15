@@ -15,10 +15,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
-import type {
-  ContainerApplication,
-  ContainerApplicationProps,
-} from "./ContainerApplication.ts";
+import type { ContainerApplicationProps } from "./ContainerApplication.ts";
 
 /**
  * Fold the runtime-context `env` map (populated by `Binding.Service`s and
@@ -44,35 +41,24 @@ import type {
  *
  * Explicit `props.environmentVariables` win on a name collision.
  */
-export const foldEnvIntoEnvironmentVariables = (
+export const makeContainerEnv = (
   props: ContainerApplicationProps,
-  accountId?: string,
-): ContainerApplication.EnvironmentVariable[] | undefined => {
-  const explicitNames = new Set(
-    (props.environmentVariables ?? []).map((e) => e.name),
-  );
-  const environmentVariables: ContainerApplication.EnvironmentVariable[] = [
-    ...(props.environmentVariables ?? []),
-    ...(accountId !== undefined &&
-    !explicitNames.has("ALCHEMY_CLOUDFLARE_ACCOUNT_ID")
-      ? [{ name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID", value: accountId }]
-      : []),
-    ...Object.entries(props.env ?? {})
-      .filter(
-        ([name, value]) =>
-          value !== undefined &&
-          !Output.isOutput(value) &&
-          !explicitNames.has(name) &&
-          name !== "ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
-      )
-      .map(([name, value]) => ({
-        name,
-        value: Redacted.isRedacted(value)
-          ? Redacted.value(value as Redacted.Redacted<string>)
-          : (value as string),
-      })),
-  ];
-  return environmentVariables.length > 0 ? environmentVariables : undefined;
+  accountId: string,
+) => {
+  const env: Record<string, string | Redacted.Redacted<string>> = {};
+  for (const [name, value] of Object.entries(props.env ?? {})) {
+    if (Output.isOutput(value) || value === undefined) {
+      continue;
+    }
+    env[name] = value;
+  }
+  for (const value of props.environmentVariables ?? []) {
+    env[value.name] = value.value;
+  }
+  if (!env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID) {
+    env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID = accountId;
+  }
+  return env;
 };
 
 /**

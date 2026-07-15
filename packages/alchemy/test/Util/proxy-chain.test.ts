@@ -112,6 +112,26 @@ describe("proxyChain", () => {
     }),
   );
 
+  it.effect("is recognized by predicate-dispatched Effect operators", () =>
+    Effect.gen(function* () {
+      const api = proxyChain(
+        Effect.succeed({
+          transaction: () => Effect.fail({ _tag: "TestError" } as const),
+        }),
+      );
+
+      const transaction = api.transaction();
+
+      expect(Effect.isEffect(transaction)).toBe(true);
+
+      const result = yield* transaction.pipe(
+        Effect.catchTag("TestError", () => Effect.succeed("recovered")),
+      );
+
+      expect(result).toBe("recovered");
+    }),
+  );
+
   it.effect("a `.pipe`-d chain still composes inside Effect.all", () =>
     Effect.gen(function* () {
       const db = proxyChain<Db>(Effect.succeed(makeDb()));
