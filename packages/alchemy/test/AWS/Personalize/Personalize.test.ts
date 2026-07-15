@@ -89,8 +89,11 @@ test.provider(
             datasetType: "Interactions",
             tags: { Environment: "test" },
           });
+          // Depend on the DATASET's group ARN (not the group's): Personalize
+          // rejects creating an event tracker until the group has an
+          // Interactions dataset, so the tracker must be sequenced after it.
           const tracker = yield* EventTracker("Tracker", {
-            datasetGroupArn: group.datasetGroupArn,
+            datasetGroupArn: dataset.datasetGroupArn,
             tags: { Environment: "test" },
           });
           return { schema, group, dataset, tracker };
@@ -160,7 +163,7 @@ test.provider(
             tags: { Environment: "test" },
           });
           const tracker = yield* EventTracker("Tracker", {
-            datasetGroupArn: group.datasetGroupArn,
+            datasetGroupArn: dataset.datasetGroupArn,
             tags: { Environment: "test", Extra: "yes" },
           });
           return { schema, group, dataset, tracker };

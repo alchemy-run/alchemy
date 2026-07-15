@@ -3,6 +3,7 @@ import * as ObservabilityAdmin from "@/AWS/ObservabilityAdmin";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -57,16 +58,26 @@ export default ObservabilityAdminBindingsFunction.make(
           });
         }
 
-        // Account-level telemetry audit data plane.
+        // Account-level telemetry audit data plane. Right after onboarding
+        // the audit backend may answer with a service-side error until
+        // AWS Config discovery warms up (documented as up to 24h), so
+        // report the typed tag instead of dying — an IAM gap would surface
+        // as AccessDeniedException, which the test rejects.
         if (request.method === "GET" && pathname === "/resource-telemetry") {
-          const { TelemetryConfigurations } =
-            yield* bound.listResourceTelemetry({
+          const result = yield* Effect.result(
+            bound.listResourceTelemetry({
               ResourceTypes: ["AWS::EC2::VPC"],
               MaxResults: 10,
-            });
-          return yield* HttpServerResponse.json({
-            count: (TelemetryConfigurations ?? []).length,
-          });
+            }),
+          );
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(result)
+              ? {
+                  tag: "ok",
+                  count: (result.success.TelemetryConfigurations ?? []).length,
+                }
+              : { tag: result.failure._tag, error: String(result.failure) },
+          );
         }
 
         // Account onboarding status.

@@ -82,7 +82,12 @@ export default SmsVoicePhoneTestFunction.make(
                 "ValidationException",
                 "InternalServerException",
               ],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+              (e) =>
+                Effect.succeed({
+                  ok: false as const,
+                  tag: e._tag,
+                  message: e.Message,
+                }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -104,7 +109,12 @@ export default SmsVoicePhoneTestFunction.make(
                 "ValidationException",
                 "InternalServerException",
               ],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+              (e) =>
+                Effect.succeed({
+                  ok: false as const,
+                  tag: e._tag,
+                  message: e.Message,
+                }),
             ),
           );
           return yield* HttpServerResponse.json(result);

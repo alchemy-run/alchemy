@@ -1,10 +1,11 @@
 import * as rds from "@distilled.cloud/aws/rds";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -656,20 +657,13 @@ export const DBInstanceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // Duration props → the exact wire units the RDS API expects.
-          const backupRetentionDays =
-            news.backupRetentionPeriod !== undefined
-              ? Math.round(Duration.toDays(news.backupRetentionPeriod))
-              : undefined;
-          const performanceInsightsRetentionDays =
-            news.performanceInsightsRetentionPeriod !== undefined
-              ? Math.round(
-                  Duration.toDays(news.performanceInsightsRetentionPeriod),
-                )
-              : undefined;
-          const monitoringIntervalSeconds =
-            news.monitoringInterval !== undefined
-              ? Math.round(Duration.toSeconds(news.monitoringInterval))
-              : undefined;
+          const backupRetentionDays = toWireDays(news.backupRetentionPeriod);
+          const performanceInsightsRetentionDays = toWireDays(
+            news.performanceInsightsRetentionPeriod,
+          );
+          const monitoringIntervalSeconds = toWireSeconds(
+            news.monitoringInterval,
+          );
 
           // Observe — fetch live instance state.
           let observed = yield* readInstance(identifier);

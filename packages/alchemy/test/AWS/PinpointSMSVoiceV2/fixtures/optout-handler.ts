@@ -61,22 +61,48 @@ export default SmsVoiceOptOutTestFunction.make(
         if (request.method === "POST" && pathname === "/opt-out-check") {
           const result = yield* describeOptedOut({
             OptedOutNumbers: [TEST_DESTINATION],
-          });
-          return yield* HttpServerResponse.json({
-            count: (result.OptedOutNumbers ?? []).length,
-            numbers: (result.OptedOutNumbers ?? []).map(
-              (n) => n.OptedOutNumber,
+          }).pipe(
+            Effect.map((r) => ({
+              count: (r.OptedOutNumbers ?? []).length,
+              numbers: (r.OptedOutNumbers ?? []).map((n) => n.OptedOutNumber),
+            })),
+            // Filtering for a number that isn't in the list raises the
+            // typed not-found tag — semantically "0 opted out".
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({
+                count: 0,
+                numbers: [] as (string | undefined)[],
+              }),
             ),
-          });
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (request.method === "POST" && pathname === "/opt-out-delete") {
           const result = yield* deleteOptedOut({
             OptedOutNumber: TEST_DESTINATION,
-          });
-          return yield* HttpServerResponse.json({
-            deleted: result.OptedOutNumber,
-          });
+          }).pipe(
+            Effect.map((r) => ({
+              ok: true as const,
+              deleted: r.OptedOutNumber,
+            })),
+            Effect.catchTag(
+              [
+                "AccessDeniedException",
+                "ResourceNotFoundException",
+                "ValidationException",
+                "ThrottlingException",
+                "InternalServerException",
+              ],
+              (e) =>
+                Effect.succeed({
+                  ok: false as const,
+                  tag: e._tag,
+                  message: e.Message,
+                }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (request.method === "POST" && pathname === "/carrier-lookup") {
@@ -99,7 +125,12 @@ export default SmsVoiceOptOutTestFunction.make(
                 "ThrottlingException",
                 "InternalServerException",
               ],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+              (e) =>
+                Effect.succeed({
+                  ok: false as const,
+                  tag: e._tag,
+                  message: e.Message,
+                }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -122,7 +153,12 @@ export default SmsVoiceOptOutTestFunction.make(
                 "ThrottlingException",
                 "InternalServerException",
               ],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+              (e) =>
+                Effect.succeed({
+                  ok: false as const,
+                  tag: e._tag,
+                  message: e.Message,
+                }),
             ),
           );
           return yield* HttpServerResponse.json(result);

@@ -119,6 +119,19 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
+
+      // Freshly attached IAM role policies take a few seconds to
+      // propagate — hold the tests until the account-level grant works
+      // (the probe returns AccessDeniedException until then).
+      yield* post("/feedback-probe").pipe(
+        Effect.flatMap((r) => r.json),
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (body): boolean =>
+            (body as { tag?: string }).tag !== "AccessDeniedException",
+          times: 20,
+        }),
+      );
     }),
     { timeout: 240_000 },
   );
@@ -169,7 +182,13 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
           yield* post("/opt-out");
           const deleted = (yield* post("/opt-out-delete").pipe(
             Effect.flatMap((r) => r.json),
-          )) as { deleted?: string };
+          )) as {
+            ok: boolean;
+            deleted?: string;
+            tag?: string;
+            message?: string;
+          };
+          expect(deleted.ok, JSON.stringify(deleted)).toBe(true);
           expect(deleted.deleted).toBe(TEST_DESTINATION);
 
           const after = (yield* post("/opt-out-check").pipe(
@@ -193,12 +212,15 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
             e164PhoneNumber?: string;
             phoneNumberType?: string;
             tag?: string;
+            message?: string;
           };
 
           // The simulator number may be rejected as unsupported by the
           // lookup provider — the binding is proven as long as IAM let
           // the call through.
-          expect(response.tag).not.toBe("AccessDeniedException");
+          expect(response.tag, JSON.stringify(response)).not.toBe(
+            "AccessDeniedException",
+          );
           if (response.ok) {
             expect(response.e164PhoneNumber).toBe(TEST_DESTINATION);
             expect(response.phoneNumberType).toBeTruthy();
@@ -215,12 +237,14 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* post("/feedback-probe").pipe(
             Effect.flatMap((r) => r.json),
-          )) as { ok: boolean; tag?: string };
+          )) as { ok: boolean; tag?: string; message?: string };
 
           // The grant is on `*`; an unknown MessageId must surface the
           // typed not-found tag (AccessDenied would mean a broken grant).
           expect(response.ok).toBe(false);
-          expect(response.tag).toBe("ResourceNotFoundException");
+          expect(response.tag, JSON.stringify(response)).toBe(
+            "ResourceNotFoundException",
+          );
         }),
       { timeout: 120_000 },
     );

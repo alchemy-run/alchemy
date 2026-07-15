@@ -304,10 +304,9 @@ export const DBProxyProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // Duration prop → the wire unit the RDS API expects (whole seconds).
-          const idleClientTimeoutSeconds =
-            news.idleClientTimeout !== undefined
-              ? Math.round(Duration.toSeconds(news.idleClientTimeout))
-              : undefined;
+          const idleClientTimeoutSeconds = toWireSeconds(
+            news.idleClientTimeout,
+          );
 
           // Observe — fetch live proxy state.
           let observed = yield* readProxy(name);

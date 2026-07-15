@@ -16,8 +16,9 @@ import type { EventTracker } from "./EventTracker.ts";
  * - dataset-scoped operations (`PutItems`, `PutUsers`, `PutActions`) inject
  *   the bound {@link Dataset}'s ARN as `datasetArn` and grant on it,
  * - event-tracker-scoped operations (`PutEvents`, `PutActionInteractions`)
- *   inject the bound {@link EventTracker}'s `trackingId` and grant on the
- *   tracker ARN,
+ *   inject the bound {@link EventTracker}'s `trackingId`; per the service
+ *   authorization reference these actions support no resource types, so the
+ *   grant is on `Resource: ["*"]`,
  * - account-level operations (the `personalize-runtime` recommenders and the
  *   MLOps retraining loop) address campaigns / solutions / import jobs whose
  *   ARNs are created at runtime, so they grant on `Resource: ["*"]`.
@@ -74,8 +75,9 @@ export const makePersonalizeDatasetHttpBinding = <
 /**
  * Build the impl Effect for an event-tracker-scoped Personalize operation:
  * the runtime callable injects the bound {@link EventTracker}'s tracking ID
- * as `trackingId` and the deploy-time half grants `actions` on the event
- * tracker ARN.
+ * as `trackingId`. The deploy-time half grants `actions` on `Resource: ["*"]`
+ * — `personalize:PutEvents` / `personalize:PutActionInteractions` support no
+ * resource types (a tracker-ARN-scoped grant answers AccessDeniedException).
  */
 export const makePersonalizeEventTrackerHttpBinding = <
   I extends { trackingId: string },
@@ -103,7 +105,8 @@ export const makePersonalizeEventTrackerHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [tracker.eventTrackerArn],
+                // The event-ingestion actions support no resource types.
+                Resource: ["*"],
               },
             ],
           });

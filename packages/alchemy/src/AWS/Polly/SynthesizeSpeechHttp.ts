@@ -1,37 +1,20 @@
 import * as polly from "@distilled.cloud/aws/polly";
-import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import { makePollyHttpBinding } from "./BindingHttp.ts";
 import { SynthesizeSpeech } from "./SynthesizeSpeech.ts";
 
+// polly:SynthesizeSpeech only supports resource-level IAM for lexicons; the
+// synthesis call itself is account-wide, so the grant is Resource: ["*"]
+// (which also covers any LexiconNames in the request).
 export const SynthesizeSpeechHttp = Layer.effect(
   SynthesizeSpeech,
-  Effect.gen(function* () {
-    const synthesizeSpeech = yield* polly.synthesizeSpeech;
-
-    return Effect.fn(function* () {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Polly.SynthesizeSpeech())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["polly:SynthesizeSpeech"],
-                // polly:SynthesizeSpeech only supports resource-level IAM
-                // for lexicons; the synthesis call itself is account-wide.
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
-      }
-      return Effect.fn("AWS.Polly.SynthesizeSpeech")(function* (
-        request: polly.SynthesizeSpeechInput,
-      ) {
-        return yield* synthesizeSpeech(request);
-      });
-    });
+  makePollyHttpBinding<
+    polly.SynthesizeSpeechInput,
+    polly.SynthesizeSpeechOutput,
+    polly.SynthesizeSpeechError
+  >({
+    capability: "SynthesizeSpeech",
+    iamActions: ["polly:SynthesizeSpeech"],
+    operation: polly.synthesizeSpeech,
   }),
 );

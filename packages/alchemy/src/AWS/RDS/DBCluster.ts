@@ -1,11 +1,12 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -672,24 +673,14 @@ export const DBClusterProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const credentials = yield* resolveMasterCredentials(news);
           // Duration props → the exact wire units the RDS API expects.
-          const backupRetentionDays =
-            news.backupRetentionPeriod !== undefined
-              ? Math.round(Duration.toDays(news.backupRetentionPeriod))
-              : undefined;
-          const backtrackWindowSeconds =
-            news.backtrackWindow !== undefined
-              ? Math.round(Duration.toSeconds(news.backtrackWindow))
-              : undefined;
-          const monitoringIntervalSeconds =
-            news.monitoringInterval !== undefined
-              ? Math.round(Duration.toSeconds(news.monitoringInterval))
-              : undefined;
-          const performanceInsightsRetentionDays =
-            news.performanceInsightsRetentionPeriod !== undefined
-              ? Math.round(
-                  Duration.toDays(news.performanceInsightsRetentionPeriod),
-                )
-              : undefined;
+          const backupRetentionDays = toWireDays(news.backupRetentionPeriod);
+          const backtrackWindowSeconds = toWireSeconds(news.backtrackWindow);
+          const monitoringIntervalSeconds = toWireSeconds(
+            news.monitoringInterval,
+          );
+          const performanceInsightsRetentionDays = toWireDays(
+            news.performanceInsightsRetentionPeriod,
+          );
 
           // Observe — fetch live cluster state. We never trust `output`
           // blindly: the cluster may have been deleted out-of-band, or this

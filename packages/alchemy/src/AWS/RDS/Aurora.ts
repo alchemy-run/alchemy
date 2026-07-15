@@ -423,7 +423,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
       const monitoringInterval = props.monitoring?.interval;
       const monitoringRole =
         monitoringInterval !== undefined &&
-        Duration.toSeconds(monitoringInterval) > 0 &&
+        (toWireSeconds(monitoringInterval) ?? 0) > 0 &&
         !props.monitoring?.roleArn
           ? yield* IAM.Role("MonitoringRole", {
               assumeRolePolicyDocument: {

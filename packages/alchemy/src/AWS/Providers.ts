@@ -171,6 +171,7 @@ import * as PaymentCryptography from "./PaymentCryptography/index.ts";
 import * as Personalize from "./Personalize/index.ts";
 import * as PinpointSMSVoiceV2 from "./PinpointSMSVoiceV2/index.ts";
 import * as Pipes from "./Pipes/index.ts";
+import * as Polly from "./Polly/index.ts";
 import * as QApps from "./QApps/index.ts";
 import * as QBusiness from "./QBusiness/index.ts";
 import * as QuickSight from "./QuickSight/index.ts";
@@ -772,6 +773,7 @@ export const providers = () =>
       PinpointSMSVoiceV2.OptOutList,
       PinpointSMSVoiceV2.PhoneNumber,
       Pipes.Pipe,
+      Polly.Lexicon,
       QApps.QApp,
       QBusiness.Application,
       QBusiness.DataSource,
@@ -782,6 +784,7 @@ export const providers = () =>
       QuickSight.Dashboard,
       QuickSight.DataSet,
       QuickSight.DataSource,
+      RAM.Permission,
       RAM.ResourceShare,
       RDS.DBCluster,
       RDS.DBClusterEndpoint,
@@ -1273,6 +1276,7 @@ export const providers = () =>
           PaymentCryptography.AliasProvider(),
           PaymentCryptography.KeyProvider(),
           Pipes.PipeProvider(),
+          Polly.LexiconProvider(),
           QApps.QAppProvider(),
           QBusiness.ApplicationProvider(),
           QBusiness.DataSourceProvider(),
@@ -1378,6 +1382,7 @@ export const providers = () =>
           Macie2.AllowListProvider(),
           Macie2.CustomDataIdentifierProvider(),
           Macie2.FindingsFilterProvider(),
+          RAM.PermissionProvider(),
           RAM.ResourceShareProvider(),
         ),
         Layer.mergeAll(

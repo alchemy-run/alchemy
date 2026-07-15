@@ -20,6 +20,8 @@ export * from "./GetPublicKeyCertificateHttp.ts";
 export * from "./Key.ts";
 export * from "./ReEncryptData.ts";
 export * from "./ReEncryptDataHttp.ts";
+export * from "./TranslateKeyMaterial.ts";
+export * from "./TranslateKeyMaterialHttp.ts";
 export * from "./TranslatePinData.ts";
 export * from "./TranslatePinDataHttp.ts";
 export * from "./VerifyAuthRequestCryptogram.ts";
