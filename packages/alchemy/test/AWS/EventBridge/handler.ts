@@ -74,6 +74,12 @@ export default EventBridgeTestFunction.make(
     const describeReplay = yield* AWS.EventBridge.DescribeReplay();
     const cancelReplay = yield* AWS.EventBridge.CancelReplay();
     const listReplays = yield* AWS.EventBridge.ListReplays();
+    const describeCustomBus = yield* AWS.EventBridge.DescribeEventBus(bus);
+    const listEventBuses = yield* AWS.EventBridge.ListEventBuses();
+    const listCustomBusRules = yield* AWS.EventBridge.ListRules(bus);
+    const listToggleRuleTargets =
+      yield* AWS.EventBridge.ListTargetsByRule(toggleRule);
+    const testEventPattern = yield* AWS.EventBridge.TestEventPattern();
 
     // Consume loop on the CUSTOM bus: matching events are forwarded to the
     // custom sink queue where the test observes them out-of-band.
@@ -177,6 +183,65 @@ export default EventBridgeTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/bus-info") {
+          // DescribeEventBus scoped to the bound custom bus.
+          const info = yield* describeCustomBus();
+          return yield* HttpServerResponse.json({
+            name: info.Name,
+            arn: info.Arn,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/event-buses") {
+          // ListEventBuses is account-level; the default bus always exists.
+          const result = yield* listEventBuses();
+          return yield* HttpServerResponse.json({
+            names: (result.EventBuses ?? []).flatMap((b) =>
+              b.Name ? [b.Name] : [],
+            ),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/rules") {
+          // ListRules scoped to the bound custom bus — sees the toggle rule
+          // and the consume-loop rule.
+          const result = yield* listCustomBusRules();
+          return yield* HttpServerResponse.json({
+            ruleNames: (result.Rules ?? []).flatMap((r) =>
+              r.Name ? [r.Name] : [],
+            ),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/targets-by-rule") {
+          // ListTargetsByRule scoped to the (target-less) toggle rule.
+          const result = yield* listToggleRuleTargets();
+          return yield* HttpServerResponse.json({
+            targetCount: (result.Targets ?? []).length,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/test-pattern") {
+          const body = (yield* request.json) as unknown as { source: string };
+          const event = JSON.stringify({
+            id: "1",
+            source: body.source,
+            "detail-type": "TestEvent",
+            account: "123456789012",
+            region: "us-east-1",
+            time: new Date().toISOString(),
+            detail: {},
+          });
+          const pattern = JSON.stringify({ source: ["alchemy.test.pattern"] });
+          const matching = yield* testEventPattern({
+            EventPattern: pattern,
+            Event: event,
+          });
+          return yield* HttpServerResponse.json({
+            matches: matching.Result ?? false,
+          });
+        }
+
         if (request.method === "GET" && pathname === "/replays") {
           const result = yield* listReplays();
           return yield* HttpServerResponse.json({
@@ -268,6 +333,11 @@ export default EventBridgeTestFunction.make(
           AWS.EventBridge.DescribeReplayHttp,
           AWS.EventBridge.CancelReplayHttp,
           AWS.EventBridge.ListReplaysHttp,
+          AWS.EventBridge.DescribeEventBusHttp,
+          AWS.EventBridge.ListEventBusesHttp,
+          AWS.EventBridge.ListRulesHttp,
+          AWS.EventBridge.ListTargetsByRuleHttp,
+          AWS.EventBridge.TestEventPatternHttp,
           AWS.SQS.QueueSinkHttp,
           BusAndQueuesLive,
         ),

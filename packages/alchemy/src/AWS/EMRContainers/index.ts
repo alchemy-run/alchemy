@@ -16,6 +16,8 @@ export * from "./ListJobTemplates.ts";
 export * from "./ListJobTemplatesHttp.ts";
 export * from "./ListManagedEndpoints.ts";
 export * from "./ListManagedEndpointsHttp.ts";
+export * from "./ListVirtualClusters.ts";
+export * from "./ListVirtualClustersHttp.ts";
 export * from "./StartJobRun.ts";
 export * from "./StartJobRunHttp.ts";
 export * from "./VirtualCluster.ts";

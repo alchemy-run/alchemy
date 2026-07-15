@@ -33,6 +33,8 @@ export default FSxBindingsFunction.make(
     // identical scaffolding and is exercised by the account-level routes.
     const describeBackups = yield* FSx.DescribeBackups();
     const deleteBackup = yield* FSx.DeleteBackup();
+    const copyBackup = yield* FSx.CopyBackup();
+    const updateSnapshot = yield* FSx.UpdateSnapshot();
     const describeSnapshots = yield* FSx.DescribeSnapshots();
     const createSnapshot = yield* FSx.CreateSnapshot();
     const deleteSnapshot = yield* FSx.DeleteSnapshot();
@@ -49,6 +51,8 @@ export default FSxBindingsFunction.make(
     const bound = {
       describeBackups,
       deleteBackup,
+      copyBackup,
+      updateSnapshot,
       describeSnapshots,
       createSnapshot,
       deleteSnapshot,
@@ -137,6 +141,26 @@ export default FSxBindingsFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
+        if (request.method === "POST" && pathname === "/backup/copy-missing") {
+          const tag = yield* probeTag(
+            copyBackup({ SourceBackupId: MISSING_BACKUP_ID }),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (
+          request.method === "POST" &&
+          pathname === "/snapshot/update-missing"
+        ) {
+          const tag = yield* probeTag(
+            updateSnapshot({
+              SnapshotId: MISSING_SNAPSHOT_ID,
+              Name: "alchemy-fsx-bindings-probe",
+            }),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
         if (
           request.method === "POST" &&
           pathname === "/snapshot/delete-missing"
@@ -194,6 +218,8 @@ export default FSxBindingsFunction.make(
       Layer.mergeAll(
         FSx.DescribeBackupsHttp,
         FSx.DeleteBackupHttp,
+        FSx.CopyBackupHttp,
+        FSx.UpdateSnapshotHttp,
         FSx.DescribeSnapshotsHttp,
         FSx.CreateSnapshotHttp,
         FSx.DeleteSnapshotHttp,

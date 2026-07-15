@@ -107,10 +107,10 @@ describe.sequential("FSx Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 240_000 });
 
   describe("binding registration", () => {
-    test.provider("all 11 capabilities initialize in the runtime", (_stack) =>
+    test.provider("all 13 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = (yield* getJson("/bindings")) as any;
-        expect(response.bound).toHaveLength(11);
+        expect(response.bound).toHaveLength(13);
       }),
     );
   });
@@ -178,6 +178,28 @@ describe.sequential("FSx Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* postJson("/backup/delete-missing")) as any;
           expect(response.tag).toBe("BackupNotFound");
+        }),
+    );
+  });
+
+  describe("CopyBackup", () => {
+    test.provider(
+      "returns the typed BackupNotFound for a missing source backup",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* postJson("/backup/copy-missing")) as any;
+          expect(response.tag).toBe("BackupNotFound");
+        }),
+    );
+  });
+
+  describe("UpdateSnapshot", () => {
+    test.provider(
+      "returns the typed SnapshotNotFound for a missing snapshot",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* postJson("/snapshot/update-missing")) as any;
+          expect(response.tag).toBe("SnapshotNotFound");
         }),
     );
   });

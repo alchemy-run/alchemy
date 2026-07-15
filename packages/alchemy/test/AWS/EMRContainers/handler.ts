@@ -61,8 +61,13 @@ export default EmrcTestFunction.make(
     const describeJobTemplate =
       yield* EMRContainers.DescribeJobTemplate(template);
     const listJobTemplates = yield* EMRContainers.ListJobTemplates();
+    const listVirtualClusters = yield* EMRContainers.ListVirtualClusters();
 
-    const bound = { describeJobTemplate, listJobTemplates };
+    const bound = {
+      describeJobTemplate,
+      listJobTemplates,
+      listVirtualClusters,
+    };
 
     return {
       fetch: Effect.gen(function* () {
@@ -94,6 +99,17 @@ export default EmrcTestFunction.make(
           });
         }
 
+        // Account-level virtual cluster list (proves IAM grant + call path
+        // without needing an EKS-backed virtual cluster to exist).
+        if (request.method === "GET" && pathname === "/virtual-clusters") {
+          const { virtualClusters } = yield* listVirtualClusters({
+            states: ["RUNNING"],
+          });
+          return yield* HttpServerResponse.json({
+            ids: (virtualClusters ?? []).map((vc) => vc.id),
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -106,6 +122,7 @@ export default EmrcTestFunction.make(
         Lambda.EventSource,
         EMRContainers.DescribeJobTemplateHttp,
         EMRContainers.ListJobTemplatesHttp,
+        EMRContainers.ListVirtualClustersHttp,
       ),
     ),
   ),

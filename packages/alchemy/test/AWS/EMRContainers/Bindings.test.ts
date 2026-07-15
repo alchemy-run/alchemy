@@ -105,10 +105,10 @@ describe.sequential("EMRContainers Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
 
   describe("binding registration", () => {
-    test.provider("both capabilities initialize in the runtime", (_stack) =>
+    test.provider("all capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = (yield* getJson("/bindings")) as { bound: string[] };
-        expect(response.bound).toHaveLength(2);
+        expect(response.bound).toHaveLength(3);
       }),
     );
   });

@@ -1,5 +1,7 @@
 export * from "./CancelDataRepositoryTask.ts";
 export * from "./CancelDataRepositoryTaskHttp.ts";
+export * from "./CopyBackup.ts";
+export * from "./CopyBackupHttp.ts";
 export * from "./CreateBackup.ts";
 export * from "./CreateBackupHttp.ts";
 export * from "./CreateDataRepositoryTask.ts";
@@ -29,4 +31,6 @@ export * from "./ReleaseFileSystemNfsV3Locks.ts";
 export * from "./ReleaseFileSystemNfsV3LocksHttp.ts";
 export * from "./RestoreVolumeFromSnapshot.ts";
 export * from "./RestoreVolumeFromSnapshotHttp.ts";
+export * from "./UpdateSnapshot.ts";
+export * from "./UpdateSnapshotHttp.ts";
 // NOTE: BindingHttp.ts is shared scaffolding and intentionally NOT exported.
