@@ -12,17 +12,15 @@ import { fileURLToPath } from "node:url";
  * `role.origin`; local dev bypasses Hyperdrive, so it uses
  * `role.pooledOrigin` to avoid one direct connection per worker request.
  */
-export const PlanetscaleDb = Effect.gen(function* () {
-  // Resolved inside the effect (not at module scope) so it only runs at
-  // deploy time — `import.meta.url` is undefined in the bundled worker.
-  const migrationsDir = yield* Effect.sync(() =>
-    path.join(
-      import.meta.url ? fileURLToPath(import.meta.url) : ".",
-      "..",
-      "migrations",
-    ),
-  );
+// This module is bundled into the worker (hyperdrive-worker.ts imports it),
+// so this also evaluates at worker startup, where the bundler leaves
+// `import.meta.url` undefined. The fallback is never read there — resource
+// props are only consumed at deploy time.
+const migrationsDir = import.meta.url
+  ? path.join(fileURLToPath(import.meta.url), "..", "migrations")
+  : ".";
 
+export const PlanetscaleDb = Effect.gen(function* () {
   const database = yield* Planetscale.PostgresDatabase("HyperdriveTestDb", {
     name: "alchemy-postgres-hyperdrive",
     region: { slug: "us-east" },
