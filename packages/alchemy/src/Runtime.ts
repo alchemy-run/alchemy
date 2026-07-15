@@ -9,7 +9,7 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { sanitizeKey } from "./RuntimeContext.ts";
+import { isRedactedMarker, sanitizeKey } from "./RuntimeContext.ts";
 import { asEffect } from "./Util/types.ts";
 
 /**
@@ -48,14 +48,10 @@ const parseRedactedMarker = (raw: string): string | undefined => {
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      (parsed as { _tag?: unknown })._tag === "Redacted" &&
-      "value" in parsed
-    ) {
-      const value = (parsed as { value: unknown }).value;
-      return typeof value === "string" ? value : JSON.stringify(value);
+    if (isRedactedMarker(parsed)) {
+      return typeof parsed.value === "string"
+        ? parsed.value
+        : JSON.stringify(parsed.value);
     }
   } catch {
     // not JSON — plain env value, fall through
