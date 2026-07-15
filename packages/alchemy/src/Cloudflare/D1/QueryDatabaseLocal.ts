@@ -118,6 +118,26 @@ const toResult = <T>(
     meta: (r?.meta ?? {}) as any,
   }) as runtime.D1Result<T>;
 
+/**
+ * Normalize a bound value the way the native D1 binding does before it reaches
+ * SQLite. Over the raw HTTP query API, unlike the Worker binding, values are
+ * bound verbatim — a JS `true` would arrive as the string `"true"`. Match the
+ * native semantics: booleans become integers (1/0) and binary becomes a byte
+ * array (BLOB). `null`, numbers, and strings pass through unchanged.
+ */
+const normalizeBind = (value: unknown): unknown => {
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (value instanceof ArrayBuffer) {
+    return Array.from(new Uint8Array(value));
+  }
+  if (ArrayBuffer.isView(value)) {
+    return Array.from(
+      new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
+    );
+  }
+  return value;
+};
+
 const makeHttpD1Database = (ctx: QueryContext): runtime.D1Database => {
   const makeStatement = (
     query: string,
@@ -126,7 +146,7 @@ const makeHttpD1Database = (ctx: QueryContext): runtime.D1Database => {
     const exec = async () => {
       const res = await runQuery(ctx, {
         sql: query,
-        params: binds.length ? [...binds] : undefined,
+        params: binds.length ? binds.map(normalizeBind) : undefined,
       });
       return res.result[0];
     };
@@ -175,7 +195,7 @@ const makeHttpD1Database = (ctx: QueryContext): runtime.D1Database => {
         batch: statements.map((s) => ({
           sql: (s as any).__query as string,
           params: ((s as any).__params as unknown[]).length
-            ? ((s as any).__params as unknown[])
+            ? ((s as any).__params as unknown[]).map(normalizeBind)
             : undefined,
         })),
       });

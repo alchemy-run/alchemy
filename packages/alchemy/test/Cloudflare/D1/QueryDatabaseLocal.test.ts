@@ -85,3 +85,83 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+// Native D1 bind values (number/null/boolean/binary) must round-trip, not just
+// strings: the HTTP API binds verbatim, so the Local shim mirrors native D1
+// (booleans -> 1/0, binary -> BLOB) and Distilled models params as unknown[].
+test.provider(
+  "QueryDatabaseLocal: binds non-string parameters (single + batch)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const database = yield* Cloudflare.D1.Database("TypedBindDatabase");
+
+          const Query = Action(
+            "QueryTypedBind",
+            Effect.gen(function* () {
+              const db = yield* Cloudflare.D1.QueryDatabase(database);
+              return Effect.fn(function* () {
+                // Single statement: number, null, boolean (-> 1/0) via SELECT ?.
+                const num = yield* db
+                  .prepare("SELECT ? AS value")
+                  .bind(42)
+                  .first<number>("value");
+                const nul = yield* db
+                  .prepare("SELECT ? AS value")
+                  .bind(null)
+                  .first<null>("value");
+                const boolTrue = yield* db
+                  .prepare("SELECT ? AS value")
+                  .bind(true)
+                  .first<number>("value");
+                const boolFalse = yield* db
+                  .prepare("SELECT ? AS value")
+                  .bind(false)
+                  .first<number>("value");
+
+                // Batch: mixed-type params across statements round-trip too.
+                yield* db.exec(
+                  "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, qty INTEGER, note TEXT)",
+                );
+                yield* db.prepare("DELETE FROM items").run();
+                yield* db.batch([
+                  db
+                    .prepare(
+                      "INSERT INTO items (id, qty, note) VALUES (?, ?, ?)",
+                    )
+                    .bind(1, 10, null),
+                  db
+                    .prepare(
+                      "INSERT INTO items (id, qty, note) VALUES (?, ?, ?)",
+                    )
+                    .bind(2, 20, "second"),
+                ]);
+                const rows = yield* db
+                  .prepare("SELECT id, qty, note FROM items ORDER BY id")
+                  .all<{ id: number; qty: number; note: string | null }>();
+
+                return { num, nul, boolTrue, boolFalse, rows: rows.results };
+              });
+            }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseLocal)),
+          );
+
+          return yield* Query({});
+        }),
+      );
+
+      expect(out.num).toBe(42);
+      expect(out.nul).toBeNull();
+      expect(out.boolTrue).toBe(1);
+      expect(out.boolFalse).toBe(0);
+      expect(out.rows).toEqual([
+        { id: 1, qty: 10, note: null },
+        { id: 2, qty: 20, note: "second" },
+      ]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
