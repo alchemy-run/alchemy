@@ -1,5 +1,6 @@
 import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -183,7 +184,10 @@ export const DomainProvider = () =>
           let observed = yield* getDomain(name);
 
           // 2. Ensure — domains are immutable; create if missing. Tolerate a
-          // concurrent-create race as an existing domain.
+          // concurrent-create race as an existing domain, and retry through
+          // the deletion-propagation window where a freshly deleted domain
+          // still rejects creates (ConflictException) while describeDomain
+          // already reports it gone.
           if (observed?.arn === undefined) {
             observed = yield* codeartifact
               .createDomain({
@@ -197,10 +201,12 @@ export const DomainProvider = () =>
               .pipe(
                 Effect.map((res) => res.domain),
                 Effect.catchTag("ConflictException", () => getDomain(name)),
+                Effect.repeat({
+                  until: (domain): boolean => domain?.arn !== undefined,
+                  schedule: Schedule.spaced("2 seconds"),
+                  times: 10,
+                }),
               );
-            if (observed?.arn === undefined) {
-              observed = yield* getDomain(name);
-            }
           }
 
           // 3. Sync tags — diff against OBSERVED cloud tags.
@@ -213,8 +219,16 @@ export const DomainProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // DeleteDomain is idempotent — deleting a non-existent domain
-          // succeeds (its typed error union has no not-found variant).
-          yield* codeartifact.deleteDomain({ domain: output.domainName });
+          // succeeds (its typed error union has no not-found variant). A
+          // domain whose repositories were deleted moments earlier can
+          // transiently Conflict while those deletions propagate.
+          yield* codeartifact.deleteDomain({ domain: output.domainName }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "ConflictException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+            }),
+          );
         }),
 
         list: () =>

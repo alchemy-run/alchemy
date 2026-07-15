@@ -1,5 +1,6 @@
 import * as amplify from "@distilled.cloud/aws/amplify";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -112,6 +113,32 @@ export interface App extends Resource<
  *   buildSpec: "version: 1\nfrontend:\n  phases:\n    build:\n      commands: []\n",
  * });
  * ```
+ *
+ * @section Deploying and Observing From a Function
+ * @example Manual Deploy Pipeline (CreateDeployment + StartDeployment)
+ * ```typescript
+ * // init — bind the deployment operations to the app
+ * const createDeployment = yield* AWS.Amplify.CreateDeployment(app);
+ * const startDeployment = yield* AWS.Amplify.StartDeployment(app);
+ *
+ * // runtime — stage, upload, release
+ * const { jobId, zipUploadUrl } = yield* createDeployment({
+ *   branchName: "main",
+ * });
+ * // PUT the site zip to zipUploadUrl, then:
+ * yield* startDeployment({ branchName: "main", jobId });
+ * ```
+ *
+ * @example React to Deployment Status Changes
+ * ```typescript
+ * yield* AWS.Amplify.consumeDeploymentStatusChanges(
+ *   { jobStatus: ["FAILED"] },
+ *   (events) =>
+ *     Stream.runForEach(events, (event) =>
+ *       Effect.log(`build failed on ${event.detail.branchName}`),
+ *     ),
+ * );
+ * ```
  */
 export const App = Resource<App>("AWS.Amplify.App");
 
@@ -174,15 +201,28 @@ export const AppProvider = () =>
           let app = output?.appId ? yield* observe(output.appId) : undefined;
 
           if (!app) {
-            const created = yield* amplify.createApp({
-              name,
-              description: news.description,
-              platform: news.platform ?? "WEB",
-              environmentVariables: news.environmentVariables,
-              buildSpec: news.buildSpec,
-              customRules: news.customRules,
-              tags: desiredTags,
-            });
+            // Amplify throttles CreateApp aggressively (surfaced as a
+            // BadRequestException with a "Rate exceeded" message rather than
+            // a throttling error class) — retry with bounded backoff.
+            const created = yield* amplify
+              .createApp({
+                name,
+                description: news.description,
+                platform: news.platform ?? "WEB",
+                environmentVariables: news.environmentVariables,
+                buildSpec: news.buildSpec,
+                customRules: news.customRules,
+                tags: desiredTags,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e): boolean =>
+                    e._tag === "BadRequestException" &&
+                    (e.message ?? "").includes("Rate exceeded"),
+                  schedule: Schedule.exponential("2 seconds"),
+                  times: 4,
+                }),
+              );
             app = created.app;
           } else {
             yield* amplify.updateApp({

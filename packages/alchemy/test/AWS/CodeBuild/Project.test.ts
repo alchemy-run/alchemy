@@ -126,7 +126,7 @@ test.provider(
             computeType: "BUILD_GENERAL1_MEDIUM",
             environmentVariables: [{ name: "STAGE", value: "prod" }],
           },
-          timeoutInMinutes: "30 minutes",
+          timeout: "30 minutes",
           resourcePolicy,
         });
       });
@@ -178,7 +178,7 @@ test.provider(
               computeType: "BUILD_GENERAL1_MEDIUM",
               environmentVariables: [{ name: "STAGE", value: "prod" }],
             },
-            timeoutInMinutes: "30 minutes",
+            timeout: "30 minutes",
           });
         }),
       );

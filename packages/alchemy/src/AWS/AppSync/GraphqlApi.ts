@@ -1,6 +1,6 @@
 import * as appsync from "@distilled.cloud/aws/appsync";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -10,6 +10,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMillis, toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -54,10 +55,11 @@ export interface LambdaAuthorizerConfig {
   authorizerUri: string;
   /**
    * How long AppSync caches an authorizer response, e.g. `"5 minutes"` or
-   * `Duration.seconds(300)` (0 disables caching, max 1 hour).
+   * `Duration.seconds(300)` (0 disables caching, max 1 hour). Sent to AWS
+   * as whole seconds.
    * @default "300 seconds"
    */
-  authorizerResultTtlInSeconds?: Duration.Input;
+  authorizerResultTtl?: Duration.Input;
   /** Regular expression the authorization token must match before invoking. */
   identityValidationExpression?: string;
 }
@@ -182,6 +184,13 @@ export interface GraphqlApiProps {
    */
   cache?: ApiCacheConfig;
   /**
+   * Environment variables exposed to `APPSYNC_JS` resolver and function
+   * code via `ctx.env`. The whole map is replaced on each change; pass
+   * `{}` to clear all variables. When omitted, environment variables are
+   * left unmanaged.
+   */
+  environmentVariables?: Record<string, string>;
+  /**
    * Tags to apply to the API. Merged with internal Alchemy tags.
    */
   tags?: Record<string, string>;
@@ -269,6 +278,17 @@ export interface GraphqlApi extends Resource<
  *   cache: { type: "SMALL", behavior: "FULL_REQUEST_CACHING", ttl: "60 seconds" },
  * });
  * ```
+ *
+ * @section Environment Variables
+ * @example Expose variables to resolver code via ctx.env
+ * ```typescript
+ * const api = yield* AppSync.GraphqlApi("Api", {
+ *   schema,
+ *   environmentVariables: { STAGE: "prod" },
+ * });
+ * // in APPSYNC_JS resolver code:
+ * //   export function response(ctx) { return ctx.env.STAGE; }
+ * ```
  */
 export const GraphqlApi = Resource<GraphqlApi>("AWS.AppSync.GraphqlApi");
 
@@ -287,14 +307,6 @@ export class SchemaCreationTimedOut extends Data.TaggedError(
   readonly apiId: string;
   readonly status: string | undefined;
 }> {}
-
-/** Convert an optional {@link Duration.Input} to whole wire seconds. */
-const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined ? undefined : Math.round(Duration.toSeconds(input));
-
-/** Convert an optional {@link Duration.Input} to whole wire milliseconds. */
-const toWireMillis = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined ? undefined : Math.round(Duration.toMillis(input));
 
 const toWireOidcConfig = (
   config: OpenIDConnectAuthConfig | undefined,
@@ -316,9 +328,8 @@ const toWireLambdaAuthorizerConfig = (
     ? undefined
     : {
         authorizerUri: config.authorizerUri,
-        authorizerResultTtlInSeconds: toWireSeconds(
-          config.authorizerResultTtlInSeconds,
-        ),
+        // The wire field carries the unit; the prop is a Duration.Input.
+        authorizerResultTtlInSeconds: toWireSeconds(config.authorizerResultTtl),
         identityValidationExpression: config.identityValidationExpression,
       };
 
@@ -504,7 +515,7 @@ export const GraphqlApiProvider = () =>
           return;
         }
         // The wire TTL is whole seconds.
-        const desiredTtl = Math.round(Duration.toSeconds(desired.ttl));
+        const desiredTtl = toWireSeconds(desired.ttl)!;
         if (observed === undefined) {
           yield* retryConcurrentModification(
             appsync.createApiCache({
@@ -533,6 +544,29 @@ export const GraphqlApiProvider = () =>
               apiCachingBehavior: desired.behavior,
               ttl: desiredTtl,
               healthMetricsConfig: desired.healthMetricsConfig,
+            }),
+          );
+        }
+      });
+
+      /**
+       * Converge resolver environment variables (`ctx.env`). The AWS API
+       * replaces the whole map on PUT, so a single drift-guarded call
+       * suffices. Skipped entirely when the prop is unmanaged.
+       */
+      const syncEnvironmentVariables = Effect.fn(function* (
+        apiId: string,
+        desired: Record<string, string> | undefined,
+      ) {
+        if (desired === undefined) return;
+        const observed = yield* appsync
+          .getGraphqlApiEnvironmentVariables({ apiId })
+          .pipe(Effect.map((response) => response.environmentVariables ?? {}));
+        if (!deepEqual(tagRecord(observed), desired)) {
+          yield* retryConcurrentModification(
+            appsync.putGraphqlApiEnvironmentVariables({
+              apiId,
+              environmentVariables: desired,
             }),
           );
         }
@@ -654,7 +688,10 @@ export const GraphqlApiProvider = () =>
           // 3c. SYNC CACHE
           yield* syncCache(apiId, news.cache);
 
-          // 3d. SYNC TAGS — against OBSERVED cloud tags.
+          // 3d. SYNC ENVIRONMENT VARIABLES (ctx.env in resolver code).
+          yield* syncEnvironmentVariables(apiId, news.environmentVariables);
+
+          // 3e. SYNC TAGS — against OBSERVED cloud tags.
           if (observed.arn !== undefined) {
             yield* syncAppSyncTags({
               resourceArn: observed.arn,

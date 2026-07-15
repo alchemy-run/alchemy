@@ -1,12 +1,19 @@
 import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { CodeInterpreter } from "./CodeInterpreter.ts";
 
 export interface StartCodeInterpreterSessionRequest extends Omit<
   agentcore.StartCodeInterpreterSessionRequest,
-  "codeInterpreterIdentifier"
-> {}
+  "codeInterpreterIdentifier" | "sessionTimeoutSeconds"
+> {
+  /**
+   * How long the session may sit idle before AgentCore terminates it, e.g.
+   * `"5 minutes"` or `Duration.minutes(5)` (a bare number is milliseconds).
+   */
+  sessionTimeout?: Duration.Input;
+}
 
 /**
  * Starts an isolated code-execution session on a code interpreter.
@@ -29,7 +36,7 @@ export interface StartCodeInterpreterSessionRequest extends Omit<
  * return {
  *   fetch: Effect.gen(function* () {
  *     // runtime
- *     const session = yield* startSession({ sessionTimeoutSeconds: 300 });
+ *     const session = yield* startSession({ sessionTimeout: "5 minutes" });
  *     const result = yield* invoke({
  *       sessionId: session.sessionId,
  *       name: "executeCode",

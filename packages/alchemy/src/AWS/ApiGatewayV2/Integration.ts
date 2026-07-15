@@ -1,10 +1,11 @@
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireMillis } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { Api } from "./Api.ts";
 import { collectAllPages, retryOnTooManyRequests } from "./common.ts";
@@ -77,9 +78,10 @@ export interface IntegrationProps {
   /**
    * Integration timeout (e.g. `"29 seconds"` or `Duration.seconds(29)`;
    * a bare number is milliseconds). 50–29000 ms for WebSocket APIs,
-   * 50–30000 ms for HTTP APIs. Sent to the API in milliseconds.
+   * 50–30000 ms for HTTP APIs. Sent to the API in whole milliseconds
+   * (`TimeoutInMillis`).
    */
-  timeoutInMillis?: Duration.Input;
+  timeout?: Duration.Input;
   /** TLS configuration for private integrations. */
   tlsConfig?: agw2.TlsConfigInput;
   /** Content handling strategy (WebSocket APIs only). */
@@ -182,34 +184,6 @@ export const Integration = (id: string, props: IntegrationInputProps) =>
     return yield* IntegrationResource(id, { ...rest, apiId } as any);
   });
 
-/**
- * Normalize a `Duration.Input` that may have round-tripped through state
- * JSON (which flattens a `Duration` to its `toJSON` shape
- * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
- * `Duration.Input`) back into an input `Duration.toMillis` accepts.
- */
-const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional duration input to whole wire milliseconds. */
-const toWireMillis = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toMillis(normalizeDurationInput(input)));
-
 const snapshotFromIntegration = (
   apiId: string,
   integ: agw2.GetIntegrationResult,
@@ -249,7 +223,7 @@ const desiredRequest = (news: IntegrationProps) => ({
   RequestTemplates: news.requestTemplates,
   ResponseParameters: news.responseParameters,
   TemplateSelectionExpression: news.templateSelectionExpression,
-  TimeoutInMillis: toWireMillis(news.timeoutInMillis),
+  TimeoutInMillis: toWireMillis(news.timeout),
   TlsConfig: news.tlsConfig,
   ContentHandlingStrategy: news.contentHandlingStrategy,
 });

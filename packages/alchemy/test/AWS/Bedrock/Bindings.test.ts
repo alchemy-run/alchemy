@@ -97,6 +97,67 @@ describe("Bedrock Bindings", () => {
 
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
 
+  describe("CountTokens", () => {
+    test.provider(
+      "counts input tokens without invoking the model",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/count-tokens`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            inputTokens: number;
+          };
+
+          expect(response.inputTokens).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("Rerank", () => {
+    test.provider(
+      "reranks inline documents by relevance to the query",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/rerank`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            results: Array<{ index: number; relevanceScore: number }>;
+          };
+
+          expect(response.results).toHaveLength(2);
+          // The alchemy document must outrank the banana document.
+          expect(response.results[0]!.index).toBe(0);
+          expect(response.results[0]!.relevanceScore).toBeGreaterThan(
+            response.results[1]!.relevanceScore,
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("InvokeAgent", () => {
+    test.provider(
+      "invokes the bound agent alias and streams a completion",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/invoke-agent`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            sessionId: string;
+            chunkEvents: number;
+            text: string;
+          };
+
+          expect(response.sessionId.length).toBeGreaterThan(0);
+          expect(response.chunkEvents).toBeGreaterThan(0);
+          // Assert a non-empty completion — never exact model output.
+          expect(response.text.trim().length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   describe("Converse", () => {
     test.provider(
       "converses with the bound model and returns a completion",

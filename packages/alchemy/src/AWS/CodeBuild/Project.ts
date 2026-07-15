@@ -1,5 +1,5 @@
 import * as codebuild from "@distilled.cloud/aws/codebuild";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import {
   normalizePolicyDocument,
   stringifyPolicyDocument,
@@ -215,13 +216,13 @@ export interface ProjectProps {
    * (5 minutes to 36 hours). Rounded to whole minutes on the wire.
    * @default 60 minutes
    */
-  timeoutInMinutes?: Duration.Input;
+  timeout?: Duration.Input;
   /**
    * How long a build may sit queued before it is failed, e.g.
    * `"30 minutes"` (5 minutes to 8 hours). Rounded to whole minutes on
    * the wire.
    */
-  queuedTimeoutInMinutes?: Duration.Input;
+  queuedTimeout?: Duration.Input;
   /**
    * Maximum number of builds allowed to run concurrently for this project.
    */
@@ -349,12 +350,6 @@ const toWireArtifacts = (
   encryptionDisabled: artifacts?.encryptionDisabled,
 });
 
-/** The CodeBuild wire unit for build/queue timeouts is whole minutes. */
-const toWireMinutes = (
-  duration: Duration.Input | undefined,
-): number | undefined =>
-  duration === undefined ? undefined : Math.round(Duration.toMinutes(duration));
-
 const toWireEnvironment = (
   environment: ProjectEnvironmentConfig,
 ): codebuild.ProjectEnvironment => ({
@@ -453,8 +448,9 @@ export const ProjectProvider = () =>
             artifacts: toWireArtifacts(news.artifacts),
             environment: toWireEnvironment(news.environment),
             serviceRole: news.serviceRole,
-            timeoutInMinutes: toWireMinutes(news.timeoutInMinutes),
-            queuedTimeoutInMinutes: toWireMinutes(news.queuedTimeoutInMinutes),
+            // The CodeBuild wire unit for build/queue timeouts is whole minutes.
+            timeoutInMinutes: toWireMinutes(news.timeout),
+            queuedTimeoutInMinutes: toWireMinutes(news.queuedTimeout),
             concurrentBuildLimit: news.concurrentBuildLimit,
             encryptionKey: news.encryptionKey,
             badgeEnabled: news.badgeEnabled,

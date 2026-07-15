@@ -16,6 +16,14 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 // amazon.nova-micro-v1:0 rejects on-demand invocation).
 const MODEL = "us.amazon.nova-micro-v1:0";
 
+// Amazon's reranker — enabled in the testing account (us-west-2).
+const RERANK_MODEL = "amazon.rerank-v1:0";
+
+// CountTokens only supports a subset of models addressed by their BARE
+// foundation-model id — Nova rejects it with "The provided model doesn't
+// support counting tokens", as do cross-region inference-profile ids.
+const COUNT_TOKENS_MODEL = "anthropic.claude-haiku-4-5-20251001-v1:0";
+
 export class BedrockTestFunction extends Lambda.Function<Lambda.Function>()(
   "BedrockTestFunction",
 ) {}
@@ -24,13 +32,28 @@ export default BedrockTestFunction.make(
   {
     main,
     url: true,
-    // Model inference regularly exceeds Lambda's 3s default timeout.
-    timeout: Duration.seconds(30),
+    // Model inference (and agent orchestration especially) regularly
+    // exceeds Lambda's 3s default timeout.
+    timeout: Duration.seconds(60),
   },
   Effect.gen(function* () {
+    // An agent + alias to exercise InvokeAgent end-to-end. The alias
+    // snapshots the prepared DRAFT into version 1 on create.
+    const agent = yield* Bedrock.Agent("BindingsTestAgent", {
+      foundationModel: MODEL,
+      instruction:
+        "You are a helpful assistant. Answer every question with one short sentence.",
+    });
+    const alias = yield* Bedrock.AgentAlias("BindingsTestAlias", {
+      agentId: agent.agentId,
+    });
+
     const converse = yield* Bedrock.Converse(MODEL);
     const converseStream = yield* Bedrock.ConverseStream(MODEL);
+    const countTokens = yield* Bedrock.CountTokens(COUNT_TOKENS_MODEL);
+    const invokeAgent = yield* Bedrock.InvokeAgent(alias);
     const invokeModel = yield* Bedrock.InvokeModel(MODEL);
+    const rerank = yield* Bedrock.Rerank(RERANK_MODEL);
     const invokeModelStream =
       yield* Bedrock.InvokeModelWithResponseStream(MODEL);
 
@@ -43,6 +66,79 @@ export default BedrockTestFunction.make(
         // Cheap readiness route — no Bedrock call.
         if (request.method === "GET" && pathname === "/ping") {
           return yield* HttpServerResponse.json({ ok: true });
+        }
+
+        if (request.method === "GET" && pathname === "/count-tokens") {
+          const result = yield* countTokens({
+            input: {
+              converse: {
+                messages: [{ role: "user", content: [{ text: "Say hello." }] }],
+              },
+            },
+          });
+          return yield* HttpServerResponse.json({
+            inputTokens: result.inputTokens,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/rerank") {
+          const region = yield* Effect.sync(() => process.env.AWS_REGION);
+          const result = yield* rerank({
+            queries: [
+              { type: "TEXT", textQuery: { text: "What is alchemy?" } },
+            ],
+            sources: [
+              "alchemy is an infrastructure-as-effects framework",
+              "bananas are yellow",
+            ].map((text) => ({
+              type: "INLINE",
+              inlineDocumentSource: {
+                type: "TEXT",
+                textDocument: { text },
+              },
+            })),
+            rerankingConfiguration: {
+              type: "BEDROCK_RERANKING_MODEL",
+              bedrockRerankingConfiguration: {
+                modelConfiguration: {
+                  modelArn: `arn:aws:bedrock:${region}::foundation-model/${RERANK_MODEL}`,
+                },
+              },
+            },
+          });
+          return yield* HttpServerResponse.json({
+            results: result.results.map(({ index, relevanceScore }) => ({
+              index,
+              relevanceScore,
+            })),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/invoke-agent") {
+          const sessionId = yield* Effect.sync(() => crypto.randomUUID());
+          const result = yield* invokeAgent({
+            sessionId,
+            inputText: "What is the capital of France?",
+          });
+          const events = yield* Stream.runCollect(result.completion);
+          const decoder = new TextDecoder();
+          let chunkEvents = 0;
+          let text = "";
+          for (const event of events) {
+            const bytes = event.chunk?.bytes;
+            if (bytes !== undefined) {
+              chunkEvents += 1;
+              text += decoder.decode(
+                Redacted.isRedacted(bytes) ? Redacted.value(bytes) : bytes,
+                { stream: true },
+              );
+            }
+          }
+          return yield* HttpServerResponse.json({
+            sessionId: result.sessionId,
+            chunkEvents,
+            text,
+          });
         }
 
         if (request.method === "GET" && pathname === "/converse") {
@@ -166,8 +262,11 @@ export default BedrockTestFunction.make(
       Layer.mergeAll(
         Bedrock.ConverseHttp,
         Bedrock.ConverseStreamHttp,
+        Bedrock.CountTokensHttp,
+        Bedrock.InvokeAgentHttp,
         Bedrock.InvokeModelHttp,
         Bedrock.InvokeModelWithResponseStreamHttp,
+        Bedrock.RerankHttp,
       ),
     ),
   ),

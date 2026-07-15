@@ -1,5 +1,5 @@
 import * as aiops from "@distilled.cloud/aws/aiops";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -9,6 +9,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface InvestigationGroupEncryptionConfiguration {
@@ -51,12 +53,13 @@ export interface InvestigationGroupProps {
   roleArn: string;
   /**
    * How long investigations and their data are retained (e.g. `"7 days"`
-   * or `Duration.days(7)`). Rounded to whole days on the wire.
+   * or `Duration.days(7)`). Rounded to whole days on the wire
+   * (`retentionInDays`).
    * The retention period cannot be updated in place — changing it replaces
    * the investigation group.
    * @default 90 days
    */
-  retentionInDays?: Duration.Input;
+  retention?: Duration.Input;
   /**
    * Encryption configuration for investigation data. Omit to use an AWS
    * owned key.
@@ -85,6 +88,17 @@ export interface InvestigationGroupProps {
    */
   crossAccountConfigurations?: InvestigationGroupCrossAccountConfiguration[];
   /**
+   * IAM resource-policy statements attached to the investigation group,
+   * granting other principals or AWS services (for example
+   * `aiops.alarms.cloudwatch.amazonaws.com`, so CloudWatch alarms can start
+   * investigations) access to it. Serialized as a `2012-10-17` policy
+   * document via `PutInvestigationGroupPolicy`.
+   *
+   * Omit to leave any existing policy unmanaged; pass `[]` to delete a
+   * previously attached policy.
+   */
+  policy?: PolicyStatement[];
+  /**
    * Tags to apply to the investigation group. Merged with internal Alchemy
    * tags.
    */
@@ -95,9 +109,16 @@ export interface InvestigationGroup extends Resource<
   "AWS.AIOps.InvestigationGroup",
   InvestigationGroupProps,
   {
+    /** Name of the investigation group. */
     name: string;
+    /** ARN of the investigation group. */
     arn: string;
+    /** ARN of the IAM role investigations assume to access telemetry. */
     roleArn: string | undefined;
+    /**
+     * How long investigations and their data are retained, in whole days
+     * (the AWS wire unit for the `retention` prop).
+     */
     retentionInDays: number | undefined;
   },
   never,
@@ -140,9 +161,27 @@ export interface InvestigationGroup extends Resource<
  * ```typescript
  * const group = yield* AIOps.InvestigationGroup("Investigations", {
  *   roleArn: role.roleArn,
- *   retentionInDays: "7 days",
+ *   retention: "7 days",
  *   tagKeyBoundaries: ["Application"],
  *   tags: { Environment: "test" },
+ * });
+ * ```
+ *
+ * @section Resource Policy
+ * @example Let CloudWatch Alarms Start Investigations
+ * ```typescript
+ * const group = yield* AIOps.InvestigationGroup("Investigations", {
+ *   roleArn: role.roleArn,
+ *   policy: [{
+ *     Effect: "Allow",
+ *     Principal: { Service: "aiops.alarms.cloudwatch.amazonaws.com" },
+ *     Action: ["aiops:CreateInvestigation", "aiops:CreateInvestigationEvent"],
+ *     Resource: "*",
+ *     Condition: {
+ *       StringEquals: { "aws:SourceAccount": "111122223333" },
+ *       ArnLike: { "aws:SourceArn": "arn:aws:cloudwatch:us-east-1:111122223333:alarm:*" },
+ *     },
+ *   }],
  * });
  * ```
  */
@@ -172,34 +211,6 @@ const retryWhileRolePropagates = <A, R>(
 
 const sameStringArray = (l: readonly string[], r: readonly string[]) =>
   l.length === r.length && l.every((v, i) => v === r[i]);
-
-/**
- * Normalize a `Duration.Input` that may have round-tripped through state
- * JSON (which flattens a `Duration` to its `toJSON` shape
- * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
- * `Duration.Input`) back into an input `Duration.toDays` accepts.
- */
-const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional duration input to whole wire days. */
-const toWireDays = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toDays(normalizeDurationInput(input)));
 
 export const InvestigationGroupProvider = () =>
   Provider.effect(
@@ -306,10 +317,7 @@ export const InvestigationGroupProvider = () =>
             return { action: "replace", deleteFirst: true } as const;
           }
           // The retention period has no update API — replace to change it.
-          if (
-            toWireDays(olds?.retentionInDays) !==
-            toWireDays(news?.retentionInDays)
-          ) {
+          if (toWireDays(olds?.retention) !== toWireDays(news?.retention)) {
             return { action: "replace", deleteFirst: true } as const;
           }
           // fall through: engine default update logic for mutable fields
@@ -333,7 +341,7 @@ export const InvestigationGroupProvider = () =>
               .createInvestigationGroup({
                 name,
                 roleArn: news.roleArn,
-                retentionInDays: toWireDays(news.retentionInDays),
+                retentionInDays: toWireDays(news.retention),
                 encryptionConfiguration: news.encryptionConfiguration,
                 tagKeyBoundaries: news.tagKeyBoundaries,
                 chatbotNotificationChannel: news.chatbotNotificationChannel,
@@ -425,7 +433,55 @@ export const InvestigationGroupProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC POLICY — diff the OBSERVED resource policy against the
+          //     desired policy document and put/delete only on drift.
+          //     `policy: undefined` leaves any existing policy unmanaged;
+          //     `policy: []` deletes it.
+          if (arn !== undefined && news.policy !== undefined) {
+            const observedPolicy = yield* aiops
+              .getInvestigationGroupPolicy({ identifier: arn })
+              .pipe(
+                Effect.map((r) => r.policy),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            if (news.policy.length === 0) {
+              if (observedPolicy !== undefined) {
+                yield* aiops
+                  .deleteInvestigationGroupPolicy({ identifier: arn })
+                  .pipe(
+                    Effect.catchTag(
+                      "ResourceNotFoundException",
+                      () => Effect.void,
+                    ),
+                  );
+              }
+            } else {
+              const desiredPolicy = JSON.stringify({
+                Version: "2012-10-17",
+                Statement: news.policy,
+              });
+              const inSync = yield* Effect.sync(() => {
+                if (observedPolicy === undefined) return false;
+                try {
+                  return (
+                    JSON.stringify(JSON.parse(observedPolicy)) === desiredPolicy
+                  );
+                } catch {
+                  return false;
+                }
+              });
+              if (!inSync) {
+                yield* aiops.putInvestigationGroupPolicy({
+                  identifier: arn,
+                  policy: desiredPolicy,
+                });
+              }
+            }
+          }
+
+          // 3c. SYNC TAGS — diff against OBSERVED cloud tags so adoption
           //     converges (create-time tags only apply on first create).
           if (arn !== undefined) {
             const currentTags = yield* observedTags(arn);
@@ -450,7 +506,7 @@ export const InvestigationGroupProvider = () =>
             arn: arn!,
             roleArn: live?.roleArn ?? news.roleArn,
             retentionInDays:
-              live?.retentionInDays ?? toWireDays(news.retentionInDays),
+              live?.retentionInDays ?? toWireDays(news.retention),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

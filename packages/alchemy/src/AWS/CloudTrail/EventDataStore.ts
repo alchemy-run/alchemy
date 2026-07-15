@@ -1,5 +1,5 @@
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -96,6 +97,13 @@ export interface EventDataStoreProps {
    * to the event data store.
    */
   kmsKeyId?: string;
+  /**
+   * Whether the event data store ingests live events. Synced via
+   * `StartEventDataStoreIngestion` / `StopEventDataStoreIngestion`; a
+   * stopped store keeps its collected events queryable.
+   * @default true (AWS default)
+   */
+  ingestionEnabled?: boolean;
   /**
    * Tags to apply to the event data store. Merged with internal Alchemy
    * tags.
@@ -312,10 +320,7 @@ export const EventDataStoreProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredSelectors = toWireSelectors(news.advancedEventSelectors);
           // The CloudTrail wire unit for RetentionPeriod is whole days.
-          const retentionDays =
-            news.retentionPeriod === undefined
-              ? undefined
-              : Math.round(Duration.toDays(news.retentionPeriod));
+          const retentionDays = toWireDays(news.retentionPeriod);
 
           // 1. OBSERVE — prefer the cached ARN, fall back to name lookup.
           let store = output?.eventDataStoreArn
@@ -357,6 +362,7 @@ export const EventDataStoreProvider = () =>
                 TerminationProtectionEnabled: news.terminationProtectionEnabled,
                 BillingMode: news.billingMode,
                 KmsKeyId: news.kmsKeyId,
+                StartIngestion: news.ingestionEnabled,
                 TagsList: Object.entries({
                   ...news.tags,
                   ...internalTags,
@@ -458,7 +464,35 @@ export const EventDataStoreProvider = () =>
             );
           }
 
-          // 3b. SYNC tags against OBSERVED cloud tags (adoption-safe).
+          // 3b. SYNC ingestion state — only when declared. The store's
+          // Status is the observed ingestion state: ENABLED ingests,
+          // STOPPED_INGESTION does not. retryWhileSettling rides out the
+          // CREATED/STARTING_INGESTION window after create/restore.
+          if (news.ingestionEnabled !== undefined) {
+            const status = store.Status ?? "ENABLED";
+            if (news.ingestionEnabled && status === "STOPPED_INGESTION") {
+              yield* session.note(`Starting ingestion for ${name}`);
+              yield* retryWhileSettling(
+                cloudtrail.startEventDataStoreIngestion({
+                  EventDataStore: arn,
+                }),
+              );
+              store = (yield* getByArn(arn)) ?? store;
+            } else if (
+              !news.ingestionEnabled &&
+              status !== "STOPPED_INGESTION"
+            ) {
+              yield* session.note(`Stopping ingestion for ${name}`);
+              yield* retryWhileSettling(
+                cloudtrail.stopEventDataStoreIngestion({
+                  EventDataStore: arn,
+                }),
+              );
+              store = (yield* getByArn(arn)) ?? store;
+            }
+          }
+
+          // 3c. SYNC tags against OBSERVED cloud tags (adoption-safe).
           const observedTags = yield* fetchObservedTags(arn);
           const { upsert, removed } = diffTags(observedTags, {
             ...news.tags,

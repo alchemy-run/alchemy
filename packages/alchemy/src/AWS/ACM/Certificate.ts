@@ -42,8 +42,22 @@ export interface CertificateProps {
   keyAlgorithm?: acm.KeyAlgorithm;
   /**
    * Certificate transparency logging preference.
+   *
+   * Updated in place via `UpdateCertificateOptions`. Note that AWS no longer
+   * allows opting new public certificates out of CT logging.
    */
   certificateTransparencyLoggingPreference?: "ENABLED" | "DISABLED" | undefined;
+  /**
+   * Whether the certificate's private key can be exported with
+   * `acm:ExportCertificate` (see the `ExportCertificate` binding).
+   * Exportable public certificates carry an additional charge.
+   *
+   * Exportability can only be chosen when the certificate is requested —
+   * ACM rejects `UpdateCertificateOptions` for it ("Export option for
+   * certificates cannot be updated") — so changing this on an existing
+   * certificate forces a replacement.
+   */
+  export?: "ENABLED" | "DISABLED" | undefined;
   /**
    * User-defined tags to apply to the certificate.
    */
@@ -87,6 +101,16 @@ export interface Certificate extends Resource<
      */
     hostedZoneId: string | undefined;
     /**
+     * Certificate transparency logging preference currently on the certificate.
+     */
+    certificateTransparencyLoggingPreference:
+      | acm.CertificateTransparencyLoggingPreference
+      | undefined;
+    /**
+     * Whether the certificate's private key is exportable.
+     */
+    export: acm.CertificateExport | undefined;
+    /**
      * Current tags on the certificate.
      */
     tags: Record<string, string>;
@@ -127,6 +151,34 @@ export interface Certificate extends Resource<
  *   subjectAlternativeNames: ["www.example.com"],
  *   hostedZoneId: "Z1234567890",
  * });
+ * ```
+ *
+ * @example Exportable Certificate
+ * ```typescript
+ * // `export: "ENABLED"` lets the ExportCertificate binding retrieve the
+ * // certificate together with its (encrypted) private key at runtime.
+ * const cert = yield* Certificate("ExportableCertificate", {
+ *   domainName: "www.example.com",
+ *   hostedZoneId: "Z1234567890",
+ *   export: "ENABLED",
+ * });
+ * ```
+ *
+ * @section Certificate Expiry Events
+ * @example React to Approaching Expiration
+ * ```typescript
+ * // ACM emits "ACM Certificate Approaching Expiration" events through
+ * // EventBridge — consume them with the ACM expiry event source, scoped
+ * // to this certificate.
+ * yield* AWS.ACM.consumeExpiryEvents(
+ *   { certificateArns: [cert.certificateArn] },
+ *   (events) =>
+ *     Stream.runForEach(events, (event) =>
+ *       Effect.log(
+ *         `${event.detail.CommonName} expires in ${event.detail.DaysToExpiry} days`,
+ *       ),
+ *     ),
+ * );
  * ```
  */
 export const Certificate = Resource<Certificate>("AWS.ACM.Certificate");
@@ -186,6 +238,15 @@ export const CertificateProvider = () =>
             detail.DomainName !== props.domainName ||
             JSON.stringify(normalizeSanList(detail.SubjectAlternativeNames)) !==
               JSON.stringify(normalizeSanList(props.subjectAlternativeNames))
+          ) {
+            continue;
+          }
+          // Exportability is fixed at request time, so a certificate with a
+          // different export option can never converge to these props — it
+          // is the doomed half of a replacement, not a match.
+          if (
+            (props.export ?? "DISABLED") !==
+            (detail.Options?.Export ?? "DISABLED")
           ) {
             continue;
           }
@@ -351,11 +412,16 @@ export const CertificateProvider = () =>
               (news.validationMethod ?? defaultValidationMethod) ||
             olds.hostedZoneId !== news.hostedZoneId ||
             olds.keyAlgorithm !== news.keyAlgorithm ||
-            olds.certificateTransparencyLoggingPreference !==
-              news.certificateTransparencyLoggingPreference
+            // Exportability is fixed at request time — ACM rejects
+            // `UpdateCertificateOptions` for it ("Export option for
+            // certificates cannot be updated").
+            (olds.export ?? "DISABLED") !== (news.export ?? "DISABLED")
           ) {
             return { action: "replace" } as const;
           }
+          // `certificateTransparencyLoggingPreference` is intentionally NOT
+          // a replacement trigger — it is updated in place via
+          // `UpdateCertificateOptions` in `reconcile`.
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // `olds.domainName` may be `undefined` when a `creating` row was
@@ -415,12 +481,14 @@ export const CertificateProvider = () =>
                   ValidationMethod:
                     news.validationMethod ?? defaultValidationMethod,
                   KeyAlgorithm: news.keyAlgorithm,
-                  Options: news.certificateTransparencyLoggingPreference
-                    ? {
-                        CertificateTransparencyLoggingPreference:
-                          news.certificateTransparencyLoggingPreference,
-                      }
-                    : undefined,
+                  Options:
+                    news.certificateTransparencyLoggingPreference || news.export
+                      ? {
+                          CertificateTransparencyLoggingPreference:
+                            news.certificateTransparencyLoggingPreference,
+                          Export: news.export,
+                        }
+                      : undefined,
                   IdempotencyToken: instanceId
                     .replaceAll(/[^a-zA-Z0-9]/g, "")
                     .slice(0, 32),
@@ -463,6 +531,31 @@ export const CertificateProvider = () =>
             const withRecords = yield* waitForValidationRecords(certificateArn);
             yield* upsertValidationRecords(news.hostedZoneId!, withRecords);
             certificate = yield* waitForIssued(certificateArn);
+          }
+
+          // Sync options — only the CT logging preference is mutable in
+          // place via UpdateCertificateOptions (ACM rejects updating the
+          // export option; diff treats an `export` change as replacement).
+          // Diff OBSERVED options (adoption may hand us a certificate with
+          // foreign options); only call the API when an explicitly-desired
+          // value differs, and omit `Export` so the fixed option is left
+          // untouched.
+          const observedOptions = certificate.Options ?? {};
+          const wantsCtChange =
+            news.certificateTransparencyLoggingPreference !== undefined &&
+            news.certificateTransparencyLoggingPreference !==
+              observedOptions.CertificateTransparencyLoggingPreference;
+          if (wantsCtChange) {
+            yield* withAcmRegion(
+              acm.updateCertificateOptions({
+                CertificateArn: certificateArn,
+                Options: {
+                  CertificateTransparencyLoggingPreference:
+                    news.certificateTransparencyLoggingPreference,
+                },
+              }),
+            );
+            certificate = (yield* describeCertificate(certificateArn))!;
           }
 
           // Sync tags — diff observed cloud tags against desired so
@@ -577,6 +670,9 @@ const toAttrs = (
   hostedZoneId: props.hostedZoneId
     ? normalizeHostedZoneId(props.hostedZoneId)
     : undefined,
+  certificateTransparencyLoggingPreference:
+    detail.Options?.CertificateTransparencyLoggingPreference,
+  export: detail.Options?.Export,
   tags,
   issuedAt: detail.IssuedAt,
   notAfter: detail.NotAfter,

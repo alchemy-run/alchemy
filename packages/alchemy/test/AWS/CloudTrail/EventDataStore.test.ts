@@ -121,6 +121,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
       const make = (props: {
         retentionPeriod: Duration.Input;
         tags?: Record<string, string>;
+        ingestionEnabled?: boolean;
       }) =>
         Effect.gen(function* () {
           const store = yield* EventDataStore("Lake", {
@@ -128,6 +129,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
             multiRegionEnabled: false,
             retentionPeriod: props.retentionPeriod,
             terminationProtectionEnabled: false,
+            ingestionEnabled: props.ingestionEnabled,
             tags: props.tags,
           });
           return { store };
@@ -186,6 +188,23 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
       );
       expect(tagRecordAfter.team).toBe("audit");
       expect(tagRecordAfter.fixture).toBeUndefined();
+
+      // 2b. Stop ingestion — the store's Status converges to
+      // STOPPED_INGESTION; collected events stay queryable.
+      const { store: stopped } = yield* stack.deploy(
+        make({
+          retentionPeriod: "14 days",
+          tags: { team: "audit" },
+          ingestionEnabled: false,
+        }),
+      );
+      expect(stopped.eventDataStoreArn).toBe(store.eventDataStoreArn);
+      const observedStopped = yield* cloudtrail.getEventDataStore({
+        EventDataStore: store.eventDataStoreArn,
+      });
+      expect(["STOPPING_INGESTION", "STOPPED_INGESTION"]).toContain(
+        observedStopped.Status,
+      );
 
       // 3. Delete — schedules PENDING_DELETION (7-day wait, zero cost);
       // do NOT wait for the store to disappear.

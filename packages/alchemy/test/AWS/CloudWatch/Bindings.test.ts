@@ -22,10 +22,11 @@ import CloudWatchTestFunctionLive, {
 //   `putAlarmMuteRule` currently rejects every input with an empty-message
 //   ValidationException (see AlarmMuteRule.test.ts). ListAlarmMuteRules is
 //   covered below without a resource.
-// - GetMetricStream — binding requires a deployed MetricStream, which needs
-//   a live Firehose delivery stream + IAM roles and is gated behind
-//   AWS_TEST_METRICSTREAM at the resource level (see MetricStream.test.ts).
-//   ListMetricStreams is covered below without a resource.
+// - GetMetricStream / StartMetricStreams / StopMetricStreams — bindings
+//   require a deployed MetricStream, which needs a live Firehose delivery
+//   stream + IAM roles and is gated behind AWS_TEST_METRICSTREAM at the
+//   resource level (see MetricStream.test.ts). ListMetricStreams is covered
+//   below without a resource.
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -334,6 +335,17 @@ describe("CloudWatch Bindings", () => {
     test.provider("disables the deployed rule without failures", (_stack) =>
       Effect.gen(function* () {
         const response = (yield* postJson("/disable-insight-rules")) as {
+          failures: unknown[];
+        };
+        expect(response.failures).toEqual([]);
+      }),
+    );
+  });
+
+  describe("EnableInsightRules", () => {
+    test.provider("re-enables the deployed rule without failures", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/enable-insight-rules")) as {
           failures: unknown[];
         };
         expect(response.failures).toEqual([]);

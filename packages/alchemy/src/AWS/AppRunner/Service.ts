@@ -1,17 +1,45 @@
 import * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as ecr from "@distilled.cloud/aws/ecr";
+import * as iam from "@distilled.cloud/aws/iam";
+import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
+import * as Bundle from "../../Bundle/Bundle.ts";
+import {
+  findCwdForBundle,
+  getStableContextDir,
+  resolveMainPath,
+} from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
-import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  type ServerHost,
+} from "../../Server/Process.ts";
+import { Stack } from "../../Stack.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  hasAlchemyTags,
+  hasTags,
+} from "../../Tags.ts";
 import { toSeconds } from "../../Util/Duration.ts";
+import type { Credentials } from "../Credentials.ts";
+import { buildAndPushEcrImage } from "../ECR/Image.ts";
+import { AWSEnvironment } from "../Environment.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readAppRunnerTags,
@@ -77,7 +105,8 @@ export interface ServiceInstanceConfiguration {
   /**
    * IAM role assumed by the running service (analogous to an ECS task
    * role). Required when the app calls AWS APIs or reads
-   * `runtimeEnvironmentSecrets`.
+   * `runtimeEnvironmentSecrets`. For the Effect-native form (`main`),
+   * Alchemy provisions and manages this role automatically.
    */
   instanceRoleArn?: string;
 }
@@ -147,7 +176,22 @@ export interface ServiceNetworkConfiguration {
   ipAddressType?: "IPV4" | "DUAL_STACK";
 }
 
-export interface ServiceProps {
+/**
+ * Observability (tracing) settings for the service.
+ */
+export interface ServiceObservabilityProps {
+  /**
+   * Whether observability (X-Ray tracing) is enabled for the service.
+   */
+  observabilityEnabled: boolean;
+  /**
+   * ARN of the App Runner observability configuration to use. Required
+   * when `observabilityEnabled` is true.
+   */
+  observabilityConfigurationArn?: string;
+}
+
+export interface ServiceProps extends PlatformProps {
   /**
    * Name of the service. Must be 4-40 characters. If omitted, a
    * deterministic physical name is generated. Changing the name replaces
@@ -155,11 +199,58 @@ export interface ServiceProps {
    */
   serviceName?: string;
   /**
-   * Container image source for the service. Code-repository (GitHub)
-   * sources are not supported — they require an App Runner Connection
-   * whose handshake is completed manually in the console.
+   * Container image source for the service (low-level form). Required
+   * unless `main` is given. Code-repository (GitHub) sources are not
+   * supported — they require an App Runner Connection whose handshake is
+   * completed manually in the console.
    */
-  imageRepository: ServiceImageRepository;
+  imageRepository?: ServiceImageRepository;
+  /**
+   * Module entrypoint for an Effect-native service (typically
+   * `import.meta.url` from an inline Effect program). Alchemy bundles the
+   * program, builds a container image, pushes it to a managed ECR
+   * repository, and provisions the instance/access IAM roles — mutually
+   * exclusive with a caller-supplied `imageRepository`.
+   */
+  main?: string;
+  /**
+   * Named export to load from `main`.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * HTTP port the Effect-native program listens on (App Runner injects it
+   * as `PORT`). Only used with `main`; the low-level form configures
+   * `imageRepository.port` instead.
+   * @default 3000
+   */
+  port?: number;
+  /**
+   * Additional environment variables for the Effect-native container.
+   * Non-string values are JSON-encoded.
+   */
+  env?: Record<string, any>;
+  /**
+   * Bundler configuration for the Effect-native entrypoint.
+   */
+  build?: {
+    input?: Partial<rolldown.InputOptions>;
+    output?: Partial<rolldown.OutputOptions>;
+  };
+  /**
+   * Docker image build for the Effect-native form: optional full
+   * `dockerfile`. When omitted, Alchemy generates a Dockerfile for the
+   * bundled `index.mjs`.
+   */
+  docker?: {
+    /**
+     * Base image when Alchemy generates the Dockerfile.
+     * @default public.ecr.aws/docker/library/bun:1
+     */
+    base?: string;
+    /** Full Dockerfile content (replaces generated Dockerfile). */
+    dockerfile?: string;
+  };
   /**
    * Whether App Runner automatically deploys new image versions pushed to
    * the (private ECR only) repository.
@@ -169,7 +260,9 @@ export interface ServiceProps {
   /**
    * IAM role App Runner assumes to pull from private ECR (must trust
    * `build.apprunner.amazonaws.com`). Required for
-   * `imageRepositoryType: "ECR"`, forbidden for `ECR_PUBLIC`.
+   * `imageRepositoryType: "ECR"`, forbidden for `ECR_PUBLIC`. For the
+   * Effect-native form (`main`), Alchemy provisions and manages this role
+   * automatically.
    */
   accessRoleArn?: string;
   /**
@@ -189,6 +282,11 @@ export interface ServiceProps {
    * account's default configuration.
    */
   autoScalingConfigurationArn?: string;
+  /**
+   * Observability (X-Ray tracing) configuration, referencing an
+   * `AppRunner.ObservabilityConfiguration`.
+   */
+  observabilityConfiguration?: ServiceObservabilityProps;
   /**
    * Customer-managed KMS key ARN for encrypting stored copies of the
    * image and configuration. Changing the key replaces the service.
@@ -225,18 +323,76 @@ export interface Service extends Resource<
      * Current status of the service (e.g. `RUNNING`, `OPERATION_IN_PROGRESS`).
      */
     status: string;
+    /**
+     * The full URI of the container image the service runs (Effect-native
+     * form only).
+     */
+    imageUri: string | undefined;
+    /**
+     * The name of the managed ECR repository holding the built image
+     * (Effect-native form only).
+     */
+    repositoryName: string | undefined;
+    /**
+     * The URI of the managed ECR repository (Effect-native form only).
+     */
+    repositoryUri: string | undefined;
+    /**
+     * The ARN of the managed instance role (Effect-native form only).
+     */
+    instanceRoleArn: string | undefined;
+    /**
+     * The name of the managed instance role (Effect-native form only).
+     */
+    instanceRoleName: string | undefined;
+    /**
+     * The ARN of the managed ECR access role (Effect-native form only).
+     */
+    accessRoleArn: string | undefined;
+    /**
+     * The name of the managed ECR access role (Effect-native form only).
+     */
+    accessRoleName: string | undefined;
+    /**
+     * The content hash of the bundled application code (Effect-native
+     * form only).
+     */
+    codeHash: string | undefined;
   },
-  never,
+  {
+    /** Environment variables injected into the service's containers. */
+    env?: Record<string, any>;
+    /** IAM policy statements attached to the managed instance role. */
+    policyStatements?: PolicyStatement[];
+  },
   Providers
 > {}
 
+export type ServiceServices =
+  | Credentials
+  | Region
+  | ServerHost
+  | AWSEnvironment;
+
+export type ServiceShape = Main<ServiceServices>;
+
+export interface ServiceRuntimeContext extends HostRuntimeContext {
+  readonly Type: "AWS.AppRunner.Service";
+}
+
 /**
- * An AWS App Runner service running a container image.
+ * An AWS App Runner service — the zero-infrastructure way to run a
+ * container behind an HTTPS endpoint: App Runner provisions,
+ * load-balances, scales, and patches the fleet for you. Service creation
+ * and deletion are asynchronous and take several minutes; the provider
+ * waits (bounded) for operations to settle.
  *
- * App Runner is the zero-infrastructure way to run a container behind an
- * HTTPS endpoint: it provisions, load-balances, scales, and patches the
- * fleet for you. Service creation and deletion are asynchronous and take
- * several minutes; the provider waits (bounded) for operations to settle.
+ * `Service` is a Platform: alongside the low-level container-image form
+ * (`imageRepository`), it supports Effect-native implementations — an
+ * inline Effect HTTP program that Alchemy bundles, containerizes, pushes
+ * to a managed ECR repository, and deploys, provisioning the instance and
+ * ECR access roles automatically. Capability bindings (e.g. DynamoDB
+ * `GetItem`) attach IAM policy statements to the managed instance role.
  * @resource
  * @section Creating a Service
  * @example Public ECR Image
@@ -266,6 +422,27 @@ export interface Service extends Resource<
  * });
  * ```
  *
+ * @section Effect-Native Services
+ * @example Inline Effect HTTP Program
+ * ```typescript
+ * export default class Api extends AppRunner.Service<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     port: 3000,
+ *     instanceConfiguration: { cpu: "256", memory: "512" },
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         return HttpServerResponse.text("hello from app runner");
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
  * @section Scaling and Networking
  * @example Custom Auto Scaling and VPC Egress
  * ```typescript
@@ -283,7 +460,16 @@ export interface Service extends Resource<
  * });
  * ```
  */
-export const Service = Resource<Service>("AWS.AppRunner.Service");
+export const Service: Platform<
+  Service,
+  ServiceServices,
+  ServiceShape,
+  ServiceRuntimeContext
+> = Platform("AWS.AppRunner.Service", {
+  createRuntimeContext: createHostRuntimeContext("AWS.AppRunner.Service") as (
+    id: string,
+  ) => ServiceRuntimeContext,
+});
 
 class AppRunnerServiceNotSettled extends Data.TaggedError(
   "AppRunnerServiceNotSettled",
@@ -355,7 +541,14 @@ const sameRecord = (
   );
 };
 
-const toWireSource = (props: ServiceProps): apprunner.SourceConfiguration => ({
+/** Props with the source resolved (either given or built from `main`). */
+interface ResolvedServiceProps extends ServiceProps {
+  imageRepository: ServiceImageRepository;
+}
+
+const toWireSource = (
+  props: ResolvedServiceProps,
+): apprunner.SourceConfiguration => ({
   ImageRepository: {
     ImageIdentifier: props.imageRepository.imageIdentifier,
     ImageRepositoryType: props.imageRepository.imageRepositoryType,
@@ -420,6 +613,17 @@ const toWireNetwork = (
         IpAddressType: network.ipAddressType,
       };
 
+const toWireObservability = (
+  observability: ServiceObservabilityProps | undefined,
+): apprunner.ServiceObservabilityConfiguration | undefined =>
+  observability === undefined
+    ? undefined
+    : {
+        ObservabilityEnabled: observability.observabilityEnabled,
+        ObservabilityConfigurationArn:
+          observability.observabilityConfigurationArn,
+      };
+
 /**
  * True when any user-specified aspect of the source configuration differs
  * from the observed one. Only fields the user actually specified are
@@ -427,7 +631,7 @@ const toWireNetwork = (
  * spurious deployments.
  */
 const sourceDrifted = (
-  news: ServiceProps,
+  news: ResolvedServiceProps,
   observed: apprunner.SourceConfiguration | undefined,
 ): boolean => {
   const image = observed?.ImageRepository;
@@ -503,14 +707,395 @@ const networkDrifted = (
     (desired.ipAddressType !== undefined &&
       observed?.IpAddressType !== desired.ipAddressType));
 
+const observabilityDrifted = (
+  desired: ServiceObservabilityProps | undefined,
+  observed: apprunner.ServiceObservabilityConfiguration | undefined,
+): boolean =>
+  desired !== undefined &&
+  ((observed?.ObservabilityEnabled ?? false) !== desired.observabilityEnabled ||
+    (desired.observabilityConfigurationArn !== undefined &&
+      // App Runner echoes the resolved (revision-qualified) ARN; compare
+      // on the revision-less name partial so both forms converge.
+      !(observed?.ObservabilityConfigurationArn ?? "").startsWith(
+        desired.observabilityConfigurationArn.split("/").slice(0, 2).join("/"),
+      )));
+
+/** Attributes only produced by the Effect-native (`main`) form. */
+interface PlatformAttributes {
+  imageUri: string | undefined;
+  repositoryName: string | undefined;
+  repositoryUri: string | undefined;
+  instanceRoleArn: string | undefined;
+  instanceRoleName: string | undefined;
+  accessRoleArn: string | undefined;
+  accessRoleName: string | undefined;
+  codeHash: string | undefined;
+}
+
+const emptyPlatformAttributes: PlatformAttributes = {
+  imageUri: undefined,
+  repositoryName: undefined,
+  repositoryUri: undefined,
+  instanceRoleArn: undefined,
+  instanceRoleName: undefined,
+  accessRoleArn: undefined,
+  accessRoleName: undefined,
+  codeHash: undefined,
+};
+
 export const ServiceProvider = () =>
   Provider.effect(
     Service,
     Effect.gen(function* () {
+      const stack = yield* Stack;
+      const docker = yield* Docker;
+      const { dotAlchemy } = yield* AlchemyContext;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+
+      const alchemyEnv = {
+        ALCHEMY_STACK_NAME: stack.name,
+        ALCHEMY_STAGE: stack.stage,
+        ALCHEMY_PHASE: "runtime",
+      };
+
       const toName = (id: string, props: Partial<ServiceProps>) =>
         props.serviceName
           ? Effect.succeed(props.serviceName)
           : createPhysicalName({ id, maxLength: 40 });
+
+      const createRoleName = (id: string, suffix: string) =>
+        createPhysicalName({ id: `${id}-${suffix}`, maxLength: 64 });
+
+      const createRepositoryName = (id: string) =>
+        createPhysicalName({
+          id: `${id}-repo`,
+          maxLength: 256,
+          lowercase: true,
+        });
+
+      /**
+       * Ensure an IAM role trusted by the given App Runner principal exists
+       * (creates on miss, adopts on race when it carries our tags).
+       */
+      const ensureRole = Effect.fn(function* ({
+        id,
+        roleName,
+        principal,
+        managedPolicyArns,
+      }: {
+        id: string;
+        roleName: string;
+        principal: string;
+        managedPolicyArns?: string[];
+      }) {
+        const tags = yield* createInternalTags(id);
+        const role = yield* iam
+          .createRole({
+            RoleName: roleName,
+            AssumeRolePolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: principal },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            }),
+            Tags: createTagsList(tags),
+          })
+          .pipe(
+            Effect.catchTag("EntityAlreadyExistsException", () =>
+              iam.getRole({ RoleName: roleName }).pipe(
+                Effect.filterOrFail(
+                  (existing) => hasTags(tags, existing.Role?.Tags),
+                  () =>
+                    new Error(
+                      `Role '${roleName}' already exists and is not managed by alchemy`,
+                    ),
+                ),
+              ),
+            ),
+          );
+        for (const policyArn of managedPolicyArns ?? []) {
+          yield* iam
+            .attachRolePolicy({ RoleName: roleName, PolicyArn: policyArn })
+            .pipe(Effect.catchTag("LimitExceededException", () => Effect.void));
+        }
+        return role.Role!.Arn!;
+      });
+
+      /** Ensure the managed ECR repository for the built image exists. */
+      const ensureRepository = Effect.fn(function* ({
+        repositoryName,
+        tags,
+      }: {
+        repositoryName: string;
+        tags: Record<string, string>;
+      }) {
+        const created = yield* ecr
+          .createRepository({
+            repositoryName,
+            imageTagMutability: "MUTABLE",
+            imageScanningConfiguration: { scanOnPush: true },
+            tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+          })
+          .pipe(
+            Effect.catchTag("RepositoryAlreadyExistsException", () =>
+              Effect.gen(function* () {
+                const existing = yield* ecr.describeRepositories({
+                  repositoryNames: [repositoryName],
+                });
+                return { repository: existing.repositories?.[0] };
+              }),
+            ),
+          );
+        const repository = created.repository;
+        if (!repository?.repositoryUri) {
+          return yield* Effect.fail(
+            new Error(`Failed to resolve ECR repository '${repositoryName}'`),
+          );
+        }
+        return { repositoryUri: repository.repositoryUri };
+      });
+
+      /**
+       * Attach binding-declared IAM policy statements to the managed
+       * instance role and collect binding-declared environment variables.
+       */
+      const attachBindings = Effect.fn(function* ({
+        roleName,
+        policyName,
+        bindings,
+      }: {
+        roleName: string;
+        policyName: string;
+        bindings: ResourceBinding<Service["Binding"]>[];
+      }) {
+        const activeBindings = bindings.filter(
+          (
+            binding: ResourceBinding<Service["Binding"]> & { action?: string },
+          ) => binding.action !== "delete",
+        );
+
+        const env = activeBindings
+          .map((binding) => binding?.data?.env)
+          .reduce((acc, value) => ({ ...acc, ...value }), {});
+
+        const policyStatements = activeBindings.flatMap(
+          (binding) =>
+            binding?.data?.policyStatements?.map((statement) => ({
+              ...statement,
+              Sid: statement.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
+            })) ?? [],
+        );
+
+        if (policyStatements.length > 0) {
+          yield* iam.putRolePolicy({
+            RoleName: roleName,
+            PolicyName: policyName,
+            PolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: policyStatements,
+            }),
+          });
+        } else {
+          yield* iam
+            .deleteRolePolicy({ RoleName: roleName, PolicyName: policyName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }
+
+        return env;
+      });
+
+      /** Bundle the Effect-native program into container-ready files. */
+      const bundleProgram = Effect.fn(function* (props: ServiceProps) {
+        const handler = props.handler ?? "default";
+        const realMain = yield* resolveMainPath(props.main!);
+        const cwd = yield* findCwdForBundle(realMain);
+
+        const buildBundle = Effect.fn(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
+          return yield* Bundle.build(
+            {
+              ...props.build?.input,
+              input: entry,
+              cwd,
+              platform: "node",
+              // The container runs on `bun`; keep `bun`/`bun:*` external (the
+              // runtime provides them) and resolve the `bun` export condition
+              // so `@effect/platform-bun` picks its Bun implementations.
+              external: [
+                "bun",
+                "bun:*",
+                ...((props.build?.input?.external as string[] | undefined) ??
+                  []),
+              ],
+              resolve: {
+                conditionNames: ["bun", "import", "module", "default"],
+                ...props.build?.input?.resolve,
+              },
+              plugins: [props.build?.input?.plugins, plugins],
+            },
+            {
+              ...props.build?.output,
+              format: "esm",
+              sourcemap: props.build?.output?.sourcemap ?? false,
+              minify: props.build?.output?.minify ?? false,
+              entryFileNames: "index.mjs",
+            },
+          );
+        });
+
+        const bundleOutput = props.isExternal
+          ? yield* buildBundle(realMain)
+          : yield* buildBundle(
+              realMain,
+              virtualEntryPlugin(
+                (importPath) => `
+import { BunServices } from "@effect/platform-bun";
+import { BunHttpServer } from "alchemy/Http";
+import { Stack } from "alchemy/Stack";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Region from "@distilled.cloud/aws/Region";
+
+import { ${handler} as handler } from ${JSON.stringify(importPath)};
+
+const platform = Layer.mergeAll(
+  BunServices.layer,
+  FetchHttpClient.layer,
+  Logger.layer([Logger.consolePretty()]),
+);
+
+// Resolve the bundled program (the runners registered via host.run / serve)
+// and run it with a Bun HTTP server bound to PORT (App Runner injects PORT
+// for the configured service port), so a returned { fetch } handler is
+// actually served and host.run loops stay alive.
+const program = handler.pipe(
+  Effect.flatMap((service) => service.RuntimeContext.exports),
+  Effect.flatMap((exports) => exports.program),
+  Effect.provide(
+    Layer.effect(
+      Stack,
+      Effect.all([
+        Config.string("ALCHEMY_STACK_NAME"),
+        Config.string("ALCHEMY_STAGE")
+      ]).pipe(
+        Effect.map(([name, stage]) => ({
+          name,
+          stage,
+          bindings: {},
+          resources: {}
+        }))
+      )
+    ).pipe(
+      Layer.provideMerge(Credentials.fromEnv()),
+      Layer.provideMerge(Region.fromEnv()),
+      Layer.provideMerge(BunHttpServer()),
+      Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromEnv()
+        )
+      ),
+    )
+  ),
+  Effect.scoped
+);
+
+console.log("App Runner service bootstrap starting...");
+await Effect.runPromise(program).catch((err) => {
+  console.error("App Runner service bootstrap failed:", err);
+  process.exit(1);
+});
+`,
+              ),
+            );
+
+        // Return every emitted file (entry + shared chunks). Dynamic imports
+        // in the Bun HTTP server / AWS SDK split into chunks; dropping any of
+        // them crashes the container with `Cannot find module './chunk-X.js'`.
+        const files = bundleOutput.files.map((file) => ({
+          path: file.path,
+          content:
+            typeof file.content === "string"
+              ? new TextEncoder().encode(file.content)
+              : file.content,
+        }));
+
+        return { files, hash: bundleOutput.hash };
+      });
+
+      /** Build + push the container image for the bundled program. */
+      const buildAndPushImage = Effect.fn(function* ({
+        id,
+        repositoryUri,
+        hash,
+        files,
+        props,
+        port,
+      }: {
+        id: string;
+        repositoryUri: string;
+        hash: string;
+        files: { path: string; content: Uint8Array<ArrayBufferLike> }[];
+        props: ServiceProps;
+        port: number;
+      }) {
+        const realMain = yield* resolveMainPath(props.main!);
+        const contextDir = yield* getStableContextDir(
+          realMain,
+          dotAlchemy,
+          `${id}-image`,
+        );
+        const imageUri = `${repositoryUri}:${hash}`;
+
+        const generatedDockerfile = (() => {
+          const base =
+            props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
+          return [
+            `FROM ${base}`,
+            `WORKDIR /app`,
+            `COPY index.mjs /app/index.mjs`,
+            // Copy any additional rolldown chunks (`chunk-XXX.js`, ...).
+            // Non-trivial bundles always emit at least one; minimal bundles
+            // emit none and the COPY no-ops.
+            `COPY *.js /app/`,
+            `ENV PORT=${String(port)}`,
+            `EXPOSE ${String(port)}`,
+            `ENTRYPOINT ["bun", "/app/index.mjs"]`,
+          ].join("\n");
+        })();
+
+        const dockerfile = props.docker?.dockerfile ?? generatedDockerfile;
+
+        yield* docker.materialize({
+          context: contextDir,
+          dockerfile,
+          // Entry chunk becomes `index.mjs`; all other chunks keep their
+          // emitted `*.js` names so the entry's relative imports resolve.
+          files: files.map((file, index) => ({
+            path: index === 0 ? "index.mjs" : file.path,
+            content: file.content,
+          })),
+        });
+        // App Runner only runs x86_64 images — always build linux/amd64
+        // (cross-built via emulation on ARM64 hosts).
+        return yield* buildAndPushEcrImage(docker, {
+          imageUri,
+          context: contextDir,
+          platform: "linux/amd64",
+        });
+      });
 
       /** Describe a service; a missing or DELETED service reads as absent. */
       const readService = Effect.fn(function* (arn: string) {
@@ -602,16 +1187,46 @@ export const ServiceProvider = () =>
         );
       });
 
-      const toAttrs = (service: apprunner.Service) => ({
+      const toAttrs = (
+        service: apprunner.Service,
+        platform: PlatformAttributes,
+      ): Service["Attributes"] => ({
         serviceName: service.ServiceName,
         serviceArn: service.ServiceArn,
         serviceId: service.ServiceId,
         serviceUrl: service.ServiceUrl,
         status: service.Status,
+        ...platform,
       });
 
+      const platformAttributesOf = (
+        output: Service["Attributes"] | undefined,
+      ): PlatformAttributes =>
+        output === undefined
+          ? emptyPlatformAttributes
+          : {
+              imageUri: output.imageUri,
+              repositoryName: output.repositoryName,
+              repositoryUri: output.repositoryUri,
+              instanceRoleArn: output.instanceRoleArn,
+              instanceRoleName: output.instanceRoleName,
+              accessRoleArn: output.accessRoleArn,
+              accessRoleName: output.accessRoleName,
+              codeHash: output.codeHash,
+            };
+
       return {
-        stables: ["serviceName", "serviceArn", "serviceId"],
+        stables: [
+          "serviceName",
+          "serviceArn",
+          "serviceId",
+          "repositoryName",
+          "repositoryUri",
+          "instanceRoleArn",
+          "instanceRoleName",
+          "accessRoleArn",
+          "accessRoleName",
+        ],
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -633,16 +1248,159 @@ export const ServiceProvider = () =>
             ? yield* readService(output.serviceArn)
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (service === undefined) return undefined;
-          const attrs = toAttrs(service);
+          const attrs = toAttrs(service, platformAttributesOf(output));
           const tags = yield* readAppRunnerTags(attrs.serviceArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          news,
+          bindings,
+          output,
+          session,
+        }) {
           const name = output?.serviceName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          const desired = news;
+
+          const activeBindings = (
+            bindings as (ResourceBinding<Service["Binding"]> & {
+              action?: string;
+            })[]
+          ).filter((binding) => binding.action !== "delete");
+
+          // Effect-native form: bundle the program, build + push the image,
+          // and provision the managed IAM roles + ECR repository, then fall
+          // through to the same observe/ensure/sync flow with the derived
+          // source configuration.
+          let effective: ServiceProps = news;
+          let platformAttributes = emptyPlatformAttributes;
+          if (news.main !== undefined) {
+            const instanceRoleName =
+              output?.instanceRoleName ??
+              (yield* createRoleName(id, "instance-role"));
+            const accessRoleName =
+              output?.accessRoleName ??
+              (yield* createRoleName(id, "access-role"));
+            const policyName = yield* createPhysicalName({
+              id: `${id}-policy`,
+              maxLength: 128,
+            });
+            const repositoryName =
+              output?.repositoryName ?? (yield* createRepositoryName(id));
+
+            // Ensure roles + repository. Each helper is idempotent (creates
+            // on miss, adopts on race) so the same sequence runs on initial
+            // create, adoption, or update.
+            const instanceRoleArn =
+              output?.instanceRoleArn ??
+              (yield* ensureRole({
+                id,
+                roleName: instanceRoleName,
+                principal: "tasks.apprunner.amazonaws.com",
+              }));
+            const accessRoleArn =
+              output?.accessRoleArn ??
+              (yield* ensureRole({
+                id,
+                roleName: accessRoleName,
+                principal: "build.apprunner.amazonaws.com",
+                managedPolicyArns: [
+                  "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess",
+                ],
+              }));
+
+            const bindingEnv = yield* attachBindings({
+              roleName: instanceRoleName,
+              policyName,
+              bindings,
+            });
+
+            const { repositoryUri } =
+              output?.repositoryUri && output?.repositoryName === repositoryName
+                ? { repositoryUri: output.repositoryUri }
+                : yield* ensureRepository({
+                    repositoryName,
+                    tags: desiredTags,
+                  });
+
+            const port = news.port ?? 3000;
+            const { files, hash } = yield* bundleProgram(news);
+            const imageUri = yield* buildAndPushImage({
+              id,
+              repositoryUri,
+              hash,
+              files,
+              props: news,
+              port,
+            });
+
+            // App Runner env values must be strings — JSON-encode the rest.
+            const runtimeEnvironmentVariables = Object.fromEntries(
+              Object.entries({
+                ...bindingEnv,
+                ...alchemyEnv,
+                ...news.env,
+              }).map(([key, value]) => [
+                key,
+                typeof value === "string" ? value : JSON.stringify(value),
+              ]),
+            );
+
+            effective = {
+              ...news,
+              imageRepository: {
+                imageIdentifier: imageUri,
+                imageRepositoryType: "ECR",
+                port: String(port),
+                runtimeEnvironmentVariables,
+              },
+              accessRoleArn,
+              autoDeploymentsEnabled: news.autoDeploymentsEnabled ?? false,
+              instanceConfiguration: {
+                ...news.instanceConfiguration,
+                instanceRoleArn,
+              },
+            };
+            platformAttributes = {
+              imageUri,
+              repositoryName,
+              repositoryUri,
+              instanceRoleArn,
+              instanceRoleName,
+              accessRoleArn,
+              accessRoleName,
+              codeHash: hash,
+            };
+          } else if (
+            activeBindings.some(
+              (binding) =>
+                (binding.data?.policyStatements?.length ?? 0) > 0 ||
+                Object.keys(binding.data?.env ?? {}).length > 0,
+            )
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `App Runner service '${name}' received capability bindings but uses ` +
+                  "the low-level `imageRepository` form. Bindings attach IAM policies " +
+                  "and environment variables to the Alchemy-managed instance role, " +
+                  "which only exists for Effect-native services (`main`). Either use " +
+                  "the Effect-native form or grant the permissions on your own " +
+                  "`instanceConfiguration.instanceRoleArn`.",
+              ),
+            );
+          }
+
+          if (effective.imageRepository === undefined) {
+            return yield* Effect.fail(
+              new Error(
+                `App Runner service '${name}' needs either \`imageRepository\` ` +
+                  "(container-image form) or `main` (Effect-native form)",
+              ),
+            );
+          }
+          const desired = effective as ResolvedServiceProps;
 
           // 1. Observe — cloud state is authoritative; output is only an
           // identifier cache.
@@ -653,22 +1411,43 @@ export const ServiceProvider = () =>
             observed = yield* findByName(name);
           }
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure — create if missing. A freshly-minted access role can
+          // take a few seconds to become assumable by App Runner
+          // (InvalidRequestException "Error in assuming access role") —
+          // retry through that IAM-propagation window (bounded).
           if (observed === undefined) {
-            const created = yield* apprunner.createService({
-              ServiceName: name,
-              SourceConfiguration: toWireSource(desired),
-              InstanceConfiguration: toWireInstance(news.instanceConfiguration),
-              HealthCheckConfiguration: toWireHealthCheck(
-                news.healthCheckConfiguration,
-              ),
-              NetworkConfiguration: toWireNetwork(news.networkConfiguration),
-              AutoScalingConfigurationArn: news.autoScalingConfigurationArn,
-              EncryptionConfiguration: news.kmsKeyArn
-                ? { KmsKey: news.kmsKeyArn }
-                : undefined,
-              Tags: toWireTags(desiredTags),
-            });
+            const created = yield* apprunner
+              .createService({
+                ServiceName: name,
+                SourceConfiguration: toWireSource(desired),
+                InstanceConfiguration: toWireInstance(
+                  desired.instanceConfiguration,
+                ),
+                HealthCheckConfiguration: toWireHealthCheck(
+                  desired.healthCheckConfiguration,
+                ),
+                NetworkConfiguration: toWireNetwork(
+                  desired.networkConfiguration,
+                ),
+                AutoScalingConfigurationArn:
+                  desired.autoScalingConfigurationArn,
+                ObservabilityConfiguration: toWireObservability(
+                  desired.observabilityConfiguration,
+                ),
+                EncryptionConfiguration: desired.kmsKeyArn
+                  ? { KmsKey: desired.kmsKeyArn }
+                  : undefined,
+                Tags: toWireTags(desiredTags),
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e): boolean => e._tag === "InvalidRequestException",
+                  schedule: Schedule.max([
+                    Schedule.fixed("5 seconds"),
+                    Schedule.recurs(12),
+                  ]),
+                }),
+              );
             observed = created.Service;
           }
 
@@ -701,41 +1480,52 @@ export const ServiceProvider = () =>
           }
           if (
             instanceDrifted(
-              news.instanceConfiguration,
+              desired.instanceConfiguration,
               observed.InstanceConfiguration,
             )
           ) {
             update.InstanceConfiguration = toWireInstance(
-              news.instanceConfiguration,
+              desired.instanceConfiguration,
             );
           }
           if (
             healthCheckDrifted(
-              news.healthCheckConfiguration,
+              desired.healthCheckConfiguration,
               observed.HealthCheckConfiguration,
             )
           ) {
             update.HealthCheckConfiguration = toWireHealthCheck(
-              news.healthCheckConfiguration,
+              desired.healthCheckConfiguration,
             );
           }
           if (
             networkDrifted(
-              news.networkConfiguration,
+              desired.networkConfiguration,
               observed.NetworkConfiguration,
             )
           ) {
             update.NetworkConfiguration = toWireNetwork(
-              news.networkConfiguration,
+              desired.networkConfiguration,
             );
           }
           if (
-            news.autoScalingConfigurationArn !== undefined &&
+            observabilityDrifted(
+              desired.observabilityConfiguration,
+              observed.ObservabilityConfiguration,
+            )
+          ) {
+            update.ObservabilityConfiguration = toWireObservability(
+              desired.observabilityConfiguration,
+            );
+          }
+          if (
+            desired.autoScalingConfigurationArn !== undefined &&
             observed.AutoScalingConfigurationSummary
-              ?.AutoScalingConfigurationArn !== news.autoScalingConfigurationArn
+              ?.AutoScalingConfigurationArn !==
+              desired.autoScalingConfigurationArn
           ) {
             update.AutoScalingConfigurationArn =
-              news.autoScalingConfigurationArn;
+              desired.autoScalingConfigurationArn;
           }
 
           if (Object.keys(update).length > 0) {
@@ -759,22 +1549,97 @@ export const ServiceProvider = () =>
 
           // 4. Return fresh attributes.
           yield* session.note(name);
-          return toAttrs(observed);
+          return toAttrs(observed, platformAttributes);
         }),
 
         delete: Effect.fn(function* ({ output }) {
           // A service mid-operation rejects deletion with
           // InvalidStateException — wait (bounded) for it to settle first.
           const observed = yield* waitForSettled(output.serviceArn);
-          if (observed === undefined) return; // already gone
-          yield* apprunner
-            .deleteService({ ServiceArn: output.serviceArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // Already deleting — deletion is in progress.
-              Effect.catchTag("InvalidStateException", () => Effect.void),
+          if (observed !== undefined) {
+            yield* apprunner
+              .deleteService({ ServiceArn: output.serviceArn })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                // Already deleting — deletion is in progress.
+                Effect.catchTag("InvalidStateException", () => Effect.void),
+              );
+            yield* waitUntilGone(output.serviceArn);
+          }
+
+          // Effect-native form: also clean up the managed ECR repository and
+          // IAM roles so destroying the service leaves zero leftovers.
+          if (output.repositoryName !== undefined) {
+            yield* ecr
+              .deleteRepository({
+                repositoryName: output.repositoryName,
+                force: true,
+              })
+              .pipe(
+                Effect.catchTag(
+                  "RepositoryNotFoundException",
+                  () => Effect.void,
+                ),
+              );
+          }
+          for (const roleName of [
+            output.instanceRoleName,
+            output.accessRoleName,
+          ]) {
+            if (roleName === undefined) continue;
+            yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
+              // The role may already be gone (delete re-run / race) —
+              // treat a missing role as "no policies" so delete is
+              // idempotent.
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed({ PolicyNames: [] as string[] }),
+              ),
+              Effect.flatMap((policies) =>
+                Effect.all(
+                  (policies.PolicyNames ?? []).map((policyName) =>
+                    iam
+                      .deleteRolePolicy({
+                        RoleName: roleName,
+                        PolicyName: policyName,
+                      })
+                      .pipe(
+                        Effect.catchTag(
+                          "NoSuchEntityException",
+                          () => Effect.void,
+                        ),
+                      ),
+                  ),
+                ),
+              ),
             );
-          yield* waitUntilGone(output.serviceArn);
+            yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed({ AttachedPolicies: [] }),
+              ),
+              Effect.flatMap((policies) =>
+                Effect.all(
+                  (policies.AttachedPolicies ?? []).map((policy) =>
+                    iam
+                      .detachRolePolicy({
+                        RoleName: roleName,
+                        PolicyArn: policy.PolicyArn!,
+                      })
+                      .pipe(
+                        Effect.catchTag(
+                          "NoSuchEntityException",
+                          () => Effect.void,
+                        ),
+                      ),
+                  ),
+                ),
+              ),
+            );
+            yield* iam
+              .deleteRole({ RoleName: roleName })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
+          }
         }),
 
         list: () =>
@@ -796,6 +1661,7 @@ export const ServiceProvider = () =>
                           serviceId: s.ServiceId,
                           serviceUrl: s.ServiceUrl,
                           status: s.Status,
+                          ...emptyPlatformAttributes,
                         },
                       ]
                     : [],

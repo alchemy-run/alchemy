@@ -1,10 +1,10 @@
 import * as account from "@distilled.cloud/aws/account";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { unwrapSensitive as unwrap } from "./internal.ts";
 
 /**
  * The category of alternate contact. Each account has at most one contact of
@@ -17,13 +17,6 @@ const ALL_CONTACT_TYPES: AlternateContactType[] = [
   "OPERATIONS",
   "SECURITY",
 ];
-
-const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
 
 export interface AlternateContactProps {
   /**

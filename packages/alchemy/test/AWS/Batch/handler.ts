@@ -1,9 +1,11 @@
 import * as Batch from "@/AWS/Batch";
 import * as IAM from "@/AWS/IAM";
 import * as Lambda from "@/AWS/Lambda";
+import type * as batch from "@distilled.cloud/aws/batch";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -48,12 +50,26 @@ export default BatchTestFunction.make(
       image: "public.ecr.aws/docker/library/busybox:latest",
       command: ["echo", "hello-from-batch"],
       executionRoleArn: executionRole.roleArn,
-      timeoutSeconds: 300,
+      timeout: Duration.minutes(5),
     });
 
     const submitJob = yield* Batch.SubmitJob(queue, jobDefinition);
     const describeJobs = yield* Batch.DescribeJobs(queue);
     const terminateJob = yield* Batch.TerminateJob(queue);
+    const cancelJob = yield* Batch.CancelJob(queue);
+    const listJobs = yield* Batch.ListJobs(queue);
+    const getJobQueueSnapshot = yield* Batch.GetJobQueueSnapshot(queue);
+
+    // Deploy-time: creates the EventBridge rule (default bus, source
+    // aws.batch) targeting this Function. Runtime firing rides on real job
+    // submissions from the suite; the test verifies the rule deploys.
+    yield* Batch.consumeJobEvents({ kinds: ["job-state"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(
+          `batch job event: ${event.detail.jobId} -> ${event.detail.status}`,
+        ),
+      ),
+    );
 
     return {
       fetch: Effect.gen(function* () {
@@ -93,6 +109,36 @@ export default BatchTestFunction.make(
           return yield* HttpServerResponse.json({ terminated: true });
         }
 
+        if (request.method === "POST" && pathname === "/cancel") {
+          const body = (yield* request.json) as unknown as {
+            jobId: string;
+            reason: string;
+          };
+          yield* cancelJob({ jobId: body.jobId, reason: body.reason });
+          return yield* HttpServerResponse.json({ cancelled: true });
+        }
+
+        if (request.method === "GET" && pathname === "/jobs") {
+          const jobStatus = url.searchParams.get("jobStatus") ?? undefined;
+          const result = yield* listJobs(
+            jobStatus ? { jobStatus: jobStatus as batch.JobStatus } : {},
+          );
+          return yield* HttpServerResponse.json({
+            jobs: (result.jobSummaryList ?? []).map((job) => ({
+              jobId: job.jobId,
+              jobName: job.jobName,
+              status: job.status,
+            })),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/snapshot") {
+          const result = yield* getJobQueueSnapshot();
+          return yield* HttpServerResponse.json({
+            jobs: (result.frontOfQueue?.jobs ?? []).map((job) => job.jobArn),
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -102,9 +148,13 @@ export default BatchTestFunction.make(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        Lambda.EventSource,
         Batch.SubmitJobHttp,
         Batch.DescribeJobsHttp,
         Batch.TerminateJobHttp,
+        Batch.CancelJobHttp,
+        Batch.ListJobsHttp,
+        Batch.GetJobQueueSnapshotHttp,
       ),
     ),
   ),

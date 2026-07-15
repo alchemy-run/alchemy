@@ -1,4 +1,5 @@
 import * as aa from "@distilled.cloud/aws/accessanalyzer";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -12,6 +13,7 @@ import {
   hasAlchemyTags,
   tagRecord,
 } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -43,6 +45,18 @@ export interface AnalyzerProps {
    * @default "ACCOUNT"
    */
   type?: AnalyzerType;
+  /**
+   * How long access must go unused before the analyzer reports it as an
+   * unused-access finding. Accepts any duration input (e.g. `"180 days"`);
+   * converted to whole days on the wire (valid range 1–365 days). Only valid
+   * for `ACCOUNT_UNUSED_ACCESS` / `ORGANIZATION_UNUSED_ACCESS` analyzers.
+   * Create-only — the API rejects in-place tracking-period updates, so
+   * changing this replaces the analyzer (delete-first, since accounts are
+   * limited to one unused-access analyzer per Region). When omitted, the
+   * analyzer's existing tracking period is left unmanaged.
+   * @default "90 days" (the AWS default)
+   */
+  unusedAccessAge?: Duration.Input;
   /**
    * Tags to apply to the analyzer. Merged with internal Alchemy tags.
    */
@@ -87,6 +101,14 @@ export interface Analyzer extends Resource<
  *   analyzerName: "prod-external-access",
  *   type: "ACCOUNT",
  *   tags: { Environment: "prod" },
+ * });
+ * ```
+ *
+ * @example Unused-Access Analyzer with a Custom Tracking Period
+ * ```typescript
+ * const analyzer = yield* AWS.AccessAnalyzer.Analyzer("UnusedAccess", {
+ *   type: "ACCOUNT_UNUSED_ACCESS",
+ *   unusedAccessAge: "180 days",
  * });
  * ```
  *
@@ -174,6 +196,18 @@ export const AnalyzerProvider = () =>
           if ((olds.type ?? "ACCOUNT") !== (news.type ?? "ACCOUNT")) {
             return { action: "replace" } as const;
           }
+          // unusedAccessAge is create-only (the API rejects in-place
+          // tracking-period updates with "Cannot update unused access age").
+          // Delete first: accounts are limited to one unused-access analyzer
+          // per Region, so create-before-delete would hit the quota (and the
+          // physical name is stable across the replacement).
+          if (
+            news.unusedAccessAge !== undefined &&
+            toWireDays(olds.unusedAccessAge) !==
+              toWireDays(news.unusedAccessAge)
+          ) {
+            return { action: "replace", deleteFirst: true } as const;
+          }
           // only tags are mutable → default update path
         }),
 
@@ -182,6 +216,7 @@ export const AnalyzerProvider = () =>
           const type = news.type ?? "ACCOUNT";
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
+          const desiredUnusedAccessAge = toWireDays(news.unusedAccessAge);
 
           // 1. OBSERVE — cloud state is authoritative
           let analyzer = yield* observe(name);
@@ -193,6 +228,14 @@ export const AnalyzerProvider = () =>
                 analyzerName: name,
                 type,
                 tags: desiredTags,
+                configuration:
+                  desiredUnusedAccessAge !== undefined
+                    ? {
+                        unusedAccess: {
+                          unusedAccessAge: desiredUnusedAccessAge,
+                        },
+                      }
+                    : undefined,
               })
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             analyzer = yield* observe(name);
@@ -208,6 +251,8 @@ export const AnalyzerProvider = () =>
           }
 
           // 3. SYNC TAGS — diff against OBSERVED cloud tags
+          // (unusedAccessAge is create-only — diff replaces on change, so
+          // there is no configuration sync step.)
           const observedTags = tagRecord(analyzer.tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

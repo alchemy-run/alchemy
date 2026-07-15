@@ -1,5 +1,5 @@
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -8,6 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import {
   AgentCoreProvisioningFailed,
   createAgentCoreName,
@@ -286,9 +287,7 @@ export const MemoryProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
           const eventExpiryDuration =
-            props.eventExpiryDuration !== undefined
-              ? Math.round(Duration.toDays(props.eventExpiryDuration))
-              : 90;
+            toWireDays(props.eventExpiryDuration) ?? 90;
 
           // 1. OBSERVE — cloud state is authoritative; output is an id cache.
           let memory = output?.memoryId

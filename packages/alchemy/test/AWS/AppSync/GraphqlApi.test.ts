@@ -60,6 +60,9 @@ test.provider(
               schema,
               xrayEnabled: xray,
               queryDepthLimit: xray ? 5 : undefined,
+              environmentVariables: xray
+                ? { STAGE: "updated", EXTRA: "1" }
+                : { STAGE: "initial" },
             });
             const key = yield* AWS.AppSync.ApiKey("Key", {
               api,
@@ -97,6 +100,12 @@ test.provider(
       });
       expect(["SUCCESS", "ACTIVE"]).toContain(schemaStatus.status);
 
+      // Environment variables applied (ctx.env in resolver code).
+      const envVars = yield* appsync.getGraphqlApiEnvironmentVariables({
+        apiId: out.apiId,
+      });
+      expect(envVars.environmentVariables).toEqual({ STAGE: "initial" });
+
       // The API key is registered on the API.
       const keyId = Redacted.value(out.keyId);
       const keys = yield* appsync.listApiKeys({ apiId: out.apiId });
@@ -113,6 +122,15 @@ test.provider(
       const afterUpdate = yield* appsync.getGraphqlApi({ apiId: out.apiId });
       expect(afterUpdate.graphqlApi?.xrayEnabled).toBe(true);
       expect(afterUpdate.graphqlApi?.queryDepthLimit).toBe(5);
+
+      // The environment-variable map is replaced wholesale on update.
+      const envVarsAfter = yield* appsync.getGraphqlApiEnvironmentVariables({
+        apiId: out.apiId,
+      });
+      expect(envVarsAfter.environmentVariables).toEqual({
+        STAGE: "updated",
+        EXTRA: "1",
+      });
 
       yield* stack.destroy();
       yield* assertApiDeleted(out.apiId);
@@ -139,6 +157,8 @@ test.provider(
             authenticationType: "AWS_LAMBDA",
             lambdaAuthorizerConfig: {
               authorizerUri: authorizer.functionArn,
+              // Duration.Input prop — sent to AWS as whole seconds.
+              authorizerResultTtl: "10 minutes",
             },
             additionalAuthenticationProviders: [
               { authenticationType: "API_KEY" },
@@ -170,6 +190,9 @@ test.provider(
       expect(remote.graphqlApi?.lambdaAuthorizerConfig?.authorizerUri).toBe(
         out.authorizerArn,
       );
+      expect(
+        remote.graphqlApi?.lambdaAuthorizerConfig?.authorizerResultTtlInSeconds,
+      ).toBe(600);
       expect(
         remote.graphqlApi?.additionalAuthenticationProviders
           ?.map((p) => p.authenticationType)

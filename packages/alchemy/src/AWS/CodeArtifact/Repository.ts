@@ -1,5 +1,6 @@
 import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -340,6 +341,14 @@ export const RepositoryProvider = () =>
               repository: output.repositoryName,
             })
             .pipe(
+              // Deleting a downstream repository propagates eventually — a
+              // shared upstream deleted right after can transiently fail with
+              // "being used as an upstream repository".
+              Effect.retry({
+                while: (e): boolean => e._tag === "ConflictException",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
         }),

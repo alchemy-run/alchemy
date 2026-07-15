@@ -1,9 +1,23 @@
 import type * as appconfigdata from "@distilled.cloud/aws/appconfigdata";
+import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Application } from "./Application.ts";
 import type { ConfigurationProfile } from "./ConfigurationProfile.ts";
 import type { Environment } from "./Environment.ts";
+
+/**
+ * Options for a {@link GetConfiguration} binding.
+ */
+export interface GetConfigurationOptions {
+  /**
+   * The minimum interval the configuration session enforces between polls
+   * (e.g. `"30 seconds"` or `Duration.seconds(30)`; a bare number is
+   * milliseconds). Sent to AppConfig as whole seconds. If omitted, AppConfig
+   * uses the session default (60 seconds).
+   */
+  requiredMinimumPollInterval?: Duration.Input;
+}
 
 /**
  * The configuration returned by a {@link GetConfiguration} poll.
@@ -47,6 +61,7 @@ export interface GetConfiguration extends Binding.Service<
     application: Application,
     environment: Environment,
     configurationProfile: ConfigurationProfile,
+    options?: GetConfigurationOptions,
   ) => Effect.Effect<
     () => Effect.Effect<
       GetConfigurationResult,

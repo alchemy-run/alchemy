@@ -1,5 +1,5 @@
 import * as appconfig from "@distilled.cloud/aws/appconfig";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -26,9 +27,9 @@ export interface DeploymentStrategyProps {
   /**
    * Total amount of time over which the deployment rolls the configuration
    * out to targets (e.g. `"10 minutes"` or `Duration.minutes(10)`; a bare
-   * number is milliseconds). Rounded to whole minutes on the wire.
+   * number is milliseconds). Sent to AppConfig as whole minutes.
    */
-  deploymentDurationInMinutes: Duration.Input;
+  deploymentDuration: Duration.Input;
   /**
    * Percentage of targets to receive a deployed configuration during each
    * interval.
@@ -42,11 +43,11 @@ export interface DeploymentStrategyProps {
   growthType?: "LINEAR" | "EXPONENTIAL";
   /**
    * Amount of time AppConfig monitors for alarms before considering the
-   * deployment complete (e.g. `"5 minutes"`). Rounded to whole minutes on
-   * the wire.
+   * deployment complete (e.g. `"5 minutes"`). Sent to AppConfig as whole
+   * minutes.
    * @default 0
    */
-  finalBakeTimeInMinutes?: Duration.Input;
+  finalBakeTime?: Duration.Input;
   /**
    * Where to save a copy of the applied configuration. Immutable — changing
    * it replaces the strategy.
@@ -85,9 +86,9 @@ export interface DeploymentStrategy extends Resource<
  * @example All-At-Once (instant, no bake)
  * ```typescript
  * const strategy = yield* AppConfig.DeploymentStrategy("Fast", {
- *   deploymentDurationInMinutes: 0,
+ *   deploymentDuration: 0,
  *   growthFactor: 100,
- *   finalBakeTimeInMinutes: 0,
+ *   finalBakeTime: 0,
  *   replicateTo: "NONE",
  * });
  * ```
@@ -95,47 +96,16 @@ export interface DeploymentStrategy extends Resource<
  * @example Linear rollout over 10 minutes
  * ```typescript
  * const strategy = yield* AppConfig.DeploymentStrategy("Linear", {
- *   deploymentDurationInMinutes: "10 minutes",
+ *   deploymentDuration: "10 minutes",
  *   growthFactor: 25,
  *   growthType: "LINEAR",
- *   finalBakeTimeInMinutes: "5 minutes",
+ *   finalBakeTime: "5 minutes",
  * });
  * ```
  */
 export const DeploymentStrategy = Resource<DeploymentStrategy>(
   "AWS.AppConfig.DeploymentStrategy",
 );
-
-/**
- * Normalize a `Duration.Input` that may have round-tripped through state
- * JSON (which flattens a `Duration` to its `toJSON` shape
- * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
- * `Duration.Input`) back into an input `Duration.toMinutes` accepts.
- */
-const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional duration input to whole wire minutes. */
-function toWireMinutes(input: Duration.Input): number;
-function toWireMinutes(input: Duration.Input | undefined): number | undefined;
-function toWireMinutes(input: Duration.Input | undefined): number | undefined {
-  return input === undefined
-    ? undefined
-    : Math.round(Duration.toMinutes(normalizeDurationInput(input)));
-}
 
 export const DeploymentStrategyProvider = () =>
   Provider.effect(
@@ -225,11 +195,9 @@ export const DeploymentStrategyProvider = () =>
               Name: name,
               Description: news.description,
               DeploymentDurationInMinutes: toWireMinutes(
-                news.deploymentDurationInMinutes,
-              ),
-              FinalBakeTimeInMinutes: toWireMinutes(
-                news.finalBakeTimeInMinutes,
-              ),
+                news.deploymentDuration,
+              )!,
+              FinalBakeTimeInMinutes: toWireMinutes(news.finalBakeTime),
               GrowthFactor: news.growthFactor,
               GrowthType: news.growthType,
               ReplicateTo: news.replicateTo ?? "NONE",
@@ -241,11 +209,9 @@ export const DeploymentStrategyProvider = () =>
               DeploymentStrategyId: observed.Id,
               Description: news.description,
               DeploymentDurationInMinutes: toWireMinutes(
-                news.deploymentDurationInMinutes,
+                news.deploymentDuration,
               ),
-              FinalBakeTimeInMinutes: toWireMinutes(
-                news.finalBakeTimeInMinutes,
-              ),
+              FinalBakeTimeInMinutes: toWireMinutes(news.finalBakeTime),
               GrowthFactor: news.growthFactor,
               GrowthType: news.growthType,
             });

@@ -137,6 +137,44 @@ describe
       );
     });
 
+    describe("GetEvent + DeleteEvent", () => {
+      test.provider("creates, fetches, and deletes an event", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/events/roundtrip`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            eventId: string;
+            fetchedEventId: string;
+            deleted: boolean;
+          };
+          expect(response.eventId).toBeTruthy();
+          expect(response.fetchedEventId).toBe(response.eventId);
+          expect(response.deleted).toBe(true);
+        }),
+      );
+    });
+
+    describe("ListActors", () => {
+      test.provider("lists actors that recorded events", (_stack) =>
+        Effect.gen(function* () {
+          yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/events`),
+              {
+                actorId: "actor-list",
+                sessionId: "session-list",
+                text: "hello",
+              },
+            ),
+          );
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/actors`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+          expect(response.count).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
+
     describe("ListSessions", () => {
       test.provider("lists the actor's sessions", (_stack) =>
         Effect.gen(function* () {
@@ -186,20 +224,81 @@ describe
       );
     });
 
-    describe("StartCodeInterpreterSession", () => {
-      // one route drives start -> invoke(executeCode) -> stop, covering the
-      // three session bindings end-to-end.
+    describe("Batch*MemoryRecords + GetMemoryRecord + DeleteMemoryRecord", () => {
       test.provider(
-        "starts a session, executes python, stops the session",
+        "directly creates, reads, updates, and deletes records",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = (yield* send(
+              HttpClientRequest.post(`${baseUrl}/records/roundtrip`),
+            ).pipe(Effect.flatMap((r) => r.json))) as {
+              created: number;
+              fetchedRecordId: string;
+              updated: number;
+              batchDeleted: number;
+            };
+            expect(response.created).toBe(2);
+            expect(response.fetchedRecordId).toBeTruthy();
+            expect(response.updated).toBe(1);
+            expect(response.batchDeleted).toBe(1);
+          }),
+        { timeout: 120_000 },
+      );
+    });
+
+    describe("ListMemoryExtractionJobs", () => {
+      test.provider("lists the memory's extraction jobs", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/extraction/jobs`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        }),
+      );
+    });
+
+    describe("BrowserSessions", () => {
+      // one route drives start -> get -> list -> screenshot -> stop,
+      // covering five browser bindings end-to-end.
+      test.provider(
+        "starts, inspects, screenshots, and stops a browser session",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = (yield* send(
+              HttpClientRequest.post(`${baseUrl}/browser/run`),
+            ).pipe(Effect.flatMap((r) => r.json))) as {
+              sessionId: string;
+              sessionStatus: string;
+              sessionCount: number;
+              screenshotTaken: boolean;
+            };
+            expect(response.sessionId).toBeTruthy();
+            expect(response.sessionStatus).toBe("READY");
+            expect(response.sessionCount).toBeGreaterThanOrEqual(1);
+            expect(response.screenshotTaken).toBe(true);
+          }),
+        { timeout: 120_000 },
+      );
+    });
+
+    describe("StartCodeInterpreterSession", () => {
+      // one route drives start -> invoke(executeCode) -> get -> list -> stop,
+      // covering the five session bindings end-to-end.
+      test.provider(
+        "starts a session, executes python, inspects, stops the session",
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* send(
               HttpClientRequest.post(`${baseUrl}/code/run`),
             ).pipe(Effect.flatMap((r) => r.json))) as {
               sessionId: string;
+              sessionStatus: string;
+              sessionCount: number;
               chunks: unknown[];
             };
             expect(response.sessionId).toBeTruthy();
+            expect(response.sessionStatus).toBe("READY");
+            expect(response.sessionCount).toBeGreaterThanOrEqual(1);
             expect(JSON.stringify(response.chunks)).toContain("42");
           }),
         { timeout: 120_000 },

@@ -113,3 +113,53 @@ test.provider(
     }),
   { timeout: 180_000 },
 );
+
+const observedUnusedAccessAge = (
+  analyzer: aa.AnalyzerSummary | undefined,
+): number | undefined =>
+  analyzer?.configuration !== undefined &&
+  "unusedAccess" in analyzer.configuration
+    ? analyzer.configuration.unusedAccess.unusedAccessAge
+    : undefined;
+
+test.provider(
+  "unused-access analyzer: create with a tracking period, replace on change, destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const analyzerName = "alchemy-test-unused-access-age";
+
+      const makeStack = (unusedAccessAge: string) =>
+        Effect.gen(function* () {
+          return {
+            analyzer: yield* Analyzer("UnusedAccessAnalyzer", {
+              analyzerName,
+              type: "ACCOUNT_UNUSED_ACCESS",
+              unusedAccessAge,
+            }),
+          };
+        });
+
+      // create with a 180-day tracking period
+      const { analyzer } = yield* stack.deploy(makeStack("180 days"));
+      expect(analyzer.type).toBe("ACCOUNT_UNUSED_ACCESS");
+
+      const created = yield* findAnalyzer(analyzerName);
+      expect(observedUnusedAccessAge(created)).toBe(180);
+
+      // the tracking period is create-only — changing it replaces the
+      // analyzer (delete-first, keeping the pinned name). The new observed
+      // period is the proof: the API rejects in-place updates.
+      const updated = yield* stack.deploy(makeStack("365 days"));
+      expect(updated.analyzer.analyzerName).toBe(analyzerName);
+
+      const afterReplace = yield* findAnalyzer(analyzerName);
+      expect(observedUnusedAccessAge(afterReplace)).toBe(365);
+
+      // destroy
+      yield* stack.destroy();
+      yield* assertAnalyzerDeleted(analyzerName);
+    }),
+  { timeout: 180_000 },
+);

@@ -1,4 +1,5 @@
 import * as codedeploy from "@distilled.cloud/aws/codedeploy";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -7,8 +8,83 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+
+/**
+ * Blue/green deployment behaviour for a deployment group. Mirrors the wire
+ * `BlueGreenDeploymentConfiguration` with `Duration.Input` wait times
+ * (CodeDeploy's wire unit for both is whole minutes).
+ */
+export interface BlueGreenDeploymentConfigurationProps {
+  /**
+   * What happens to the original (blue) instances after a successful
+   * blue/green deployment.
+   */
+  terminateBlueInstancesOnDeploymentSuccess?: {
+    /**
+     * `TERMINATE` the blue instances (after `terminationWaitTime`) or
+     * `KEEP_ALIVE` them deregistered from the load balancer.
+     */
+    action?: codedeploy.InstanceAction;
+    /**
+     * How long to wait after a successful deployment before terminating
+     * the blue instances. Wire unit: whole minutes.
+     */
+    terminationWaitTime?: Duration.Input;
+  };
+  /**
+   * How traffic is rerouted to the green fleet once it is provisioned.
+   */
+  deploymentReadyOption?: {
+    /**
+     * `CONTINUE_DEPLOYMENT` reroutes automatically; `STOP_DEPLOYMENT`
+     * waits for {@link ContinueDeployment} (up to `waitTime`).
+     */
+    actionOnTimeout?: codedeploy.DeploymentReadyAction;
+    /**
+     * How long to wait for a manual continue before the deployment stops
+     * (only with `actionOnTimeout: "STOP_DEPLOYMENT"`). Wire unit: whole
+     * minutes.
+     */
+    waitTime?: Duration.Input;
+  };
+  /**
+   * How the green fleet's instances are provisioned (discover existing or
+   * copy the Auto Scaling group).
+   */
+  greenFleetProvisioningOption?: codedeploy.GreenFleetProvisioningOption;
+}
+
+/** Convert the blue/green props to the CodeDeploy wire shape (minutes). */
+const toWireBlueGreen = (
+  props: BlueGreenDeploymentConfigurationProps | undefined,
+): codedeploy.BlueGreenDeploymentConfiguration | undefined =>
+  props === undefined
+    ? undefined
+    : {
+        terminateBlueInstancesOnDeploymentSuccess:
+          props.terminateBlueInstancesOnDeploymentSuccess === undefined
+            ? undefined
+            : {
+                action: props.terminateBlueInstancesOnDeploymentSuccess.action,
+                terminationWaitTimeInMinutes: toWireMinutes(
+                  props.terminateBlueInstancesOnDeploymentSuccess
+                    .terminationWaitTime,
+                ),
+              },
+        deploymentReadyOption:
+          props.deploymentReadyOption === undefined
+            ? undefined
+            : {
+                actionOnTimeout: props.deploymentReadyOption.actionOnTimeout,
+                waitTimeInMinutes: toWireMinutes(
+                  props.deploymentReadyOption.waitTime,
+                ),
+              },
+        greenFleetProvisioningOption: props.greenFleetProvisioningOption,
+      };
 
 export interface DeploymentGroupProps {
   /**
@@ -50,9 +126,10 @@ export interface DeploymentGroupProps {
   loadBalancerInfo?: codedeploy.LoadBalancerInfo;
   /**
    * Blue/green deployment configuration (green-fleet provisioning, traffic
-   * ready-options, blue-instance termination).
+   * ready-options, blue-instance termination). Wait times accept
+   * `Duration.Input` (e.g. `"5 minutes"`).
    */
-  blueGreenDeploymentConfiguration?: codedeploy.BlueGreenDeploymentConfiguration;
+  blueGreenDeploymentConfiguration?: BlueGreenDeploymentConfigurationProps;
   /**
    * EC2 tag filters selecting the instances to deploy to (EC2/on-prem
    * `Server` platform).
@@ -285,8 +362,9 @@ export const DeploymentGroupProvider = () =>
                 autoRollbackConfiguration: news.autoRollbackConfiguration,
                 alarmConfiguration: news.alarmConfiguration,
                 loadBalancerInfo: news.loadBalancerInfo,
-                blueGreenDeploymentConfiguration:
+                blueGreenDeploymentConfiguration: toWireBlueGreen(
                   news.blueGreenDeploymentConfiguration,
+                ),
                 ec2TagFilters: news.ec2TagFilters,
                 autoScalingGroups: news.autoScalingGroups,
                 ecsServices: news.ecsServices,
@@ -313,8 +391,9 @@ export const DeploymentGroupProvider = () =>
               autoRollbackConfiguration: news.autoRollbackConfiguration,
               alarmConfiguration: news.alarmConfiguration,
               loadBalancerInfo: news.loadBalancerInfo,
-              blueGreenDeploymentConfiguration:
+              blueGreenDeploymentConfiguration: toWireBlueGreen(
                 news.blueGreenDeploymentConfiguration,
+              ),
               ec2TagFilters: news.ec2TagFilters,
               autoScalingGroups: news.autoScalingGroups,
               ecsServices: news.ecsServices,

@@ -1,11 +1,12 @@
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { Api } from "./Api.ts";
 import { collectAllPages, retryOnTooManyRequests } from "./common.ts";
@@ -58,10 +59,10 @@ export interface AuthorizerProps {
   /**
    * TTL for cached authorizer results (`REQUEST` only), e.g. `"5 minutes"`
    * or `Duration.seconds(300)` (a bare number is milliseconds). Rounded to
-   * whole seconds on the wire.
+   * whole seconds on the wire (`AuthorizerResultTtlInSeconds`).
    * @default 300 seconds
    */
-  authorizerResultTtlInSeconds?: Duration.Input;
+  authorizerResultTtl?: Duration.Input;
   /**
    * IAM role ARN API Gateway assumes to invoke the authorizer Lambda.
    * Omit to use a Lambda resource policy (`Lambda.Permission`) instead.
@@ -175,34 +176,6 @@ export const Authorizer = (id: string, props: AuthorizerInputProps) =>
     return yield* AuthorizerResource(id, { ...rest, apiId } as any);
   });
 
-/**
- * Normalize a `Duration.Input` that may have round-tripped through state
- * JSON (which flattens a `Duration` to its `toJSON` shape
- * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
- * `Duration.Input`) back into an input `Duration.toSeconds` accepts.
- */
-const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional duration input to whole wire seconds. */
-const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toSeconds(normalizeDurationInput(input)));
-
 const snapshotFromAuthorizer = (
   apiId: string,
   auth: agw2.GetAuthorizerResponse,
@@ -311,7 +284,7 @@ export const AuthorizerProvider = () =>
                   news.authorizerPayloadFormatVersion,
                 EnableSimpleResponses: news.enableSimpleResponses,
                 AuthorizerResultTtlInSeconds: toWireSeconds(
-                  news.authorizerResultTtlInSeconds,
+                  news.authorizerResultTtl,
                 ),
                 AuthorizerCredentialsArn: news.authorizerCredentialsArn,
                 IdentityValidationExpression: news.identityValidationExpression,
@@ -323,9 +296,7 @@ export const AuthorizerProvider = () =>
 
           // 3. SYNC — update on drift.
           const snapshot = snapshotFromAuthorizer(apiId, observed);
-          const desiredTtlSeconds = toWireSeconds(
-            news.authorizerResultTtlInSeconds,
-          );
+          const desiredTtlSeconds = toWireSeconds(news.authorizerResultTtl);
           const drift =
             snapshot.name !== name ||
             snapshot.authorizerType !== news.authorizerType ||

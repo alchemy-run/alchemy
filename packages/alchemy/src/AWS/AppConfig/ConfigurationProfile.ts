@@ -292,6 +292,40 @@ export const ConfigurationProfileProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          // Hosted configuration versions block profile deletion, and
+          // runtime writers (the CreateHostedConfigurationVersion binding)
+          // can add versions the engine never tracked — delete whatever
+          // versions remain before deleting the profile.
+          const versions = yield* appconfig.listHostedConfigurationVersions
+            .pages({
+              ApplicationId: output.applicationId,
+              ConfigurationProfileId: output.configurationProfileId,
+            })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.Items ?? []),
+              ),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed([]),
+              ),
+            );
+          for (const version of versions) {
+            if (version.VersionNumber !== undefined) {
+              yield* appconfig
+                .deleteHostedConfigurationVersion({
+                  ApplicationId: output.applicationId,
+                  ConfigurationProfileId: output.configurationProfileId,
+                  VersionNumber: version.VersionNumber,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    "ResourceNotFoundException",
+                    () => Effect.void,
+                  ),
+                );
+            }
+          }
           yield* appconfig
             .deleteConfigurationProfile({
               ApplicationId: output.applicationId,

@@ -31,7 +31,7 @@ test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
             type: "TOKEN",
             authorizerUri: uri,
             identitySource: "method.request.header.Authorization",
-            authorizerResultTtlInSeconds: "60 seconds",
+            authorizerResultTtl: "60 seconds",
           });
           return { api, authorizer };
         }),
@@ -47,7 +47,7 @@ test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
             type: "TOKEN",
             authorizerUri: uri,
             identitySource: "method.request.header.Authorization",
-            authorizerResultTtlInSeconds: "120 seconds",
+            authorizerResultTtl: "120 seconds",
           });
         }),
       );

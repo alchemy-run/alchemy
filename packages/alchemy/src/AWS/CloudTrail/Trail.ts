@@ -9,6 +9,84 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
+/**
+ * A data-event resource selection inside a basic event selector. Mirrors the
+ * CloudTrail `DataResource` wire shape.
+ */
+export interface TrailDataResource {
+  /** The resource type, e.g. `AWS::S3::Object` or `AWS::Lambda::Function`. */
+  type: string;
+  /** ARNs (or ARN prefixes) of the resources to log data events for. */
+  values?: string[];
+}
+
+/**
+ * A basic event selector controlling which management/data events the trail
+ * logs. Mirrors the CloudTrail `EventSelector` wire shape.
+ */
+export interface TrailEventSelector {
+  /**
+   * Whether to log read-only events, write-only events, or all.
+   * @default "All"
+   */
+  readWriteType?: "ReadOnly" | "WriteOnly" | "All";
+  /**
+   * Whether the selector includes management events.
+   * @default true
+   */
+  includeManagementEvents?: boolean;
+  /** Data-event resources to log (S3 objects, Lambda functions, …). */
+  dataResources?: TrailDataResource[];
+  /**
+   * Management event sources to exclude (`kms.amazonaws.com`,
+   * `rdsdata.amazonaws.com`).
+   */
+  excludeManagementEventSources?: string[];
+}
+
+/**
+ * A field selector inside an advanced event selector. Mirrors the CloudTrail
+ * `AdvancedFieldSelector` wire shape.
+ */
+export interface TrailFieldSelector {
+  /**
+   * The event record field to select on (e.g. `eventCategory`,
+   * `resources.type`).
+   */
+  field: string;
+  /** Exact-match values. */
+  equals?: string[];
+  /** Prefix-match values. */
+  startsWith?: string[];
+  /** Suffix-match values. */
+  endsWith?: string[];
+  /** Exact-mismatch values. */
+  notEquals?: string[];
+  /** Prefix-mismatch values. */
+  notStartsWith?: string[];
+  /** Suffix-mismatch values. */
+  notEndsWith?: string[];
+}
+
+/**
+ * An advanced event selector controlling which events the trail logs.
+ * Advanced and basic event selectors are mutually exclusive.
+ */
+export interface TrailAdvancedEventSelector {
+  /** Descriptive name for the selector. */
+  name?: string;
+  /** Field selectors that events must match to be logged. */
+  fieldSelectors: TrailFieldSelector[];
+}
+
+/**
+ * An Insights selector enabling anomaly detection on the trail's events.
+ */
+export interface TrailInsightSelector {
+  /** The type of Insights to enable. */
+  insightType: "ApiCallRateInsight" | "ApiErrorRateInsight";
+}
+
 export interface TrailProps {
   /**
    * Name of the trail. Must be 3-128 characters, contain only letters,
@@ -78,6 +156,25 @@ export interface TrailProps {
    * @default true
    */
   isLogging?: boolean;
+  /**
+   * Basic event selectors, synced via `PutEventSelectors`. Mutually
+   * exclusive with `advancedEventSelectors`. When omitted, the trail's
+   * selectors are left untouched; pass `[]`-free defaults explicitly to
+   * converge them.
+   */
+  eventSelectors?: TrailEventSelector[];
+  /**
+   * Advanced event selectors, synced via `PutEventSelectors`. Mutually
+   * exclusive with `eventSelectors`. When omitted, the trail's selectors
+   * are left untouched.
+   */
+  advancedEventSelectors?: TrailAdvancedEventSelector[];
+  /**
+   * Insights selectors, synced via `PutInsightSelectors`. Pass `[]` to
+   * disable Insights; when omitted, the trail's Insights configuration is
+   * left untouched.
+   */
+  insightSelectors?: TrailInsightSelector[];
   /**
    * Tags to apply to the trail. Merged with internal Alchemy tags.
    */
@@ -168,6 +265,24 @@ export interface Trail extends Resource<
  *   isLogging: false,
  * });
  * ```
+ *
+ * @section Selecting Events
+ * @example Advanced Event Selectors and Insights
+ * ```typescript
+ * const trail = yield* AWS.CloudTrail.Trail("Audit", {
+ *   trailName: "audit-trail",
+ *   s3BucketName: bucket.bucketName,
+ *   advancedEventSelectors: [
+ *     {
+ *       name: "Management events only",
+ *       fieldSelectors: [
+ *         { field: "eventCategory", equals: ["Management"] },
+ *       ],
+ *     },
+ *   ],
+ *   insightSelectors: [{ insightType: "ApiCallRateInsight" }],
+ * });
+ * ```
  */
 export const Trail = Resource<Trail>("AWS.CloudTrail.Trail");
 
@@ -205,6 +320,35 @@ const retryWhileConflict = <A, E extends { _tag: string }, R>(
     while: (e) => e._tag === "ConflictException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
+
+const toWireEventSelectors = (
+  selectors: TrailEventSelector[],
+): cloudtrail.EventSelector[] =>
+  selectors.map((s) => ({
+    ReadWriteType: s.readWriteType,
+    IncludeManagementEvents: s.includeManagementEvents,
+    DataResources: s.dataResources?.map((r) => ({
+      Type: r.type,
+      Values: r.values,
+    })),
+    ExcludeManagementEventSources: s.excludeManagementEventSources,
+  }));
+
+const toWireAdvancedSelectors = (
+  selectors: TrailAdvancedEventSelector[],
+): cloudtrail.AdvancedEventSelector[] =>
+  selectors.map((s) => ({
+    Name: s.name,
+    FieldSelectors: s.fieldSelectors.map((f) => ({
+      Field: f.field,
+      Equals: f.equals,
+      StartsWith: f.startsWith,
+      EndsWith: f.endsWith,
+      NotEquals: f.notEquals,
+      NotStartsWith: f.notStartsWith,
+      NotEndsWith: f.notEndsWith,
+    })),
+  }));
 
 export const TrailProvider = () =>
   Provider.effect(
@@ -425,7 +569,83 @@ export const TrailProvider = () =>
             }
           }
 
-          // 3c. SYNC tags against OBSERVED cloud tags (adoption-safe).
+          // 3c. SYNC event selectors — only when declared (undefined leaves
+          // the trail's selectors untouched). Basic and advanced selectors
+          // are mutually exclusive in the API; observed cloud selectors are
+          // the diff baseline.
+          if (
+            news.eventSelectors !== undefined ||
+            news.advancedEventSelectors !== undefined
+          ) {
+            const observedSelectors = yield* cloudtrail.getEventSelectors({
+              TrailName: trailArn,
+            });
+            if (news.advancedEventSelectors !== undefined) {
+              const desiredAdvanced = toWireAdvancedSelectors(
+                news.advancedEventSelectors,
+              );
+              if (
+                JSON.stringify(
+                  observedSelectors.AdvancedEventSelectors ?? [],
+                ) !== JSON.stringify(desiredAdvanced)
+              ) {
+                yield* session.note(`Updating advanced event selectors`);
+                yield* retryWhileConflict(
+                  cloudtrail.putEventSelectors({
+                    TrailName: trailArn,
+                    AdvancedEventSelectors: desiredAdvanced,
+                  }),
+                );
+              }
+            } else {
+              const desiredBasic = toWireEventSelectors(news.eventSelectors!);
+              if (
+                JSON.stringify(observedSelectors.EventSelectors ?? []) !==
+                JSON.stringify(desiredBasic)
+              ) {
+                yield* session.note(`Updating event selectors`);
+                yield* retryWhileConflict(
+                  cloudtrail.putEventSelectors({
+                    TrailName: trailArn,
+                    EventSelectors: desiredBasic,
+                  }),
+                );
+              }
+            }
+          }
+
+          // 3d. SYNC Insights selectors — only when declared. `[]` disables
+          // Insights; a trail with Insights disabled reads as [] (the typed
+          // InsightNotEnabledException).
+          if (news.insightSelectors !== undefined) {
+            const observedInsights = yield* cloudtrail
+              .getInsightSelectors({ TrailName: trailArn })
+              .pipe(
+                Effect.map((r) => r.InsightSelectors ?? []),
+                Effect.catchTag("InsightNotEnabledException", () =>
+                  Effect.succeed([] as cloudtrail.InsightSelector[]),
+                ),
+              );
+            const desiredInsights = news.insightSelectors.map((s) => ({
+              InsightType: s.insightType,
+            }));
+            if (
+              JSON.stringify(
+                observedInsights.map((s) => s.InsightType).sort(),
+              ) !==
+              JSON.stringify(desiredInsights.map((s) => s.InsightType).sort())
+            ) {
+              yield* session.note(`Updating Insights selectors`);
+              yield* retryWhileConflict(
+                cloudtrail.putInsightSelectors({
+                  TrailName: trailArn,
+                  InsightSelectors: desiredInsights,
+                }),
+              );
+            }
+          }
+
+          // 3e. SYNC tags against OBSERVED cloud tags (adoption-safe).
           const observedTags = yield* fetchObservedTags(trailArn);
           const { upsert, removed } = diffTags(observedTags, {
             ...news.tags,

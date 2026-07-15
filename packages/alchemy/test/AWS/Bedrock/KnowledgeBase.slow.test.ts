@@ -7,6 +7,8 @@ import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import BedrockKbTestFunctionLive, { BedrockKbTestFunction } from "./kb-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -119,6 +121,107 @@ test.provider.skipIf(gated)(
 
       yield* stack.destroy();
       yield* assertKbGone(result.knowledgeBaseId);
+    }),
+  { timeout: 600_000 },
+);
+
+// Runtime coverage for the KB-scoped bindings (document ingestion, ingestion
+// jobs, retrieve, streaming RAG) through a deployed Lambda — gated behind the
+// same vector-store env prerequisites as the lifecycle test above.
+test.provider.skipIf(gated)(
+  "KB-scoped bindings work from a deployed Lambda",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { functionUrl } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* BedrockKbTestFunction;
+        }).pipe(Effect.provide(BedrockKbTestFunctionLive)),
+      );
+      const baseUrl = functionUrl!.replace(/\/+$/, "");
+
+      // Fresh function URLs take a few seconds to start serving 200s.
+      yield* HttpClient.get(`${baseUrl}/ping`).pipe(
+        Effect.flatMap((r) =>
+          r.status === 200
+            ? Effect.succeed(r)
+            : Effect.fail(new Error(`not ready: ${r.status}`)),
+        ),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.fixed("2 seconds"),
+            Schedule.recurs(75),
+          ]),
+        }),
+      );
+
+      const getJson = (path: string) =>
+        HttpClient.get(`${baseUrl}${path}`).pipe(Effect.flatMap((r) => r.json));
+      const postJson = (path: string) =>
+        HttpClient.post(`${baseUrl}${path}`).pipe(
+          Effect.flatMap((r) => r.json),
+        );
+
+      // 1. Direct document ingestion into the CUSTOM data source.
+      const ingested = (yield* postJson("/ingest")) as { status?: string };
+      expect(ingested.status).toBeDefined();
+
+      // 2. Poll the document to INDEXED.
+      const docStatus = (yield* getJson("/doc-status").pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (r): boolean =>
+            (r as { status?: string }).status === "INDEXED" ||
+            (r as { status?: string }).status === "FAILED",
+          times: 36,
+        }),
+      )) as { status?: string };
+      expect(docStatus.status).toBe("INDEXED");
+
+      // 3. The document is tracked.
+      const docs = (yield* getJson("/docs")) as { count: number };
+      expect(docs.count).toBeGreaterThan(0);
+
+      // 4. Semantic retrieval finds the ingested passage.
+      const retrieved = (yield* getJson("/retrieve").pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (r): boolean => (r as { count: number }).count > 0,
+          times: 12,
+        }),
+      )) as { count: number; passages: string[] };
+      expect(retrieved.count).toBeGreaterThan(0);
+
+      // 5. Streaming RAG produces a grounded, non-empty answer.
+      const rag = (yield* getJson("/rag-stream")) as {
+        events: number;
+        text: string;
+      };
+      expect(rag.events).toBeGreaterThan(0);
+      expect(rag.text.trim().length).toBeGreaterThan(0);
+
+      // 6. Ingestion-job lifecycle on the S3 data source.
+      const sync = (yield* postJson("/sync")) as { jobId: string };
+      expect(sync.jobId).toBeDefined();
+      const job = (yield* getJson(`/job?id=${sync.jobId}`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (r): boolean =>
+            (r as { status: string }).status === "COMPLETE" ||
+            (r as { status: string }).status === "FAILED",
+          times: 36,
+        }),
+      )) as { status: string };
+      expect(job.status).toBe("COMPLETE");
+      const jobs = (yield* getJson("/jobs")) as { count: number };
+      expect(jobs.count).toBeGreaterThan(0);
+
+      // 7. Delete the document again.
+      const deleted = (yield* postJson("/delete-doc")) as { status?: string };
+      expect(deleted.status).toBeDefined();
+
+      yield* stack.destroy();
     }),
   { timeout: 600_000 },
 );

@@ -1,4 +1,5 @@
 import * as amp from "@distilled.cloud/aws/amp";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -7,8 +8,23 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { syncAmpTags, toTagRecord } from "./internal.ts";
+
+export interface WorkspaceLabelSetLimit {
+  /**
+   * The label set the limit applies to, as exact label name/value pairs. An
+   * empty record (`{}`) is the default bucket — it applies to all time
+   * series that match no other label set entry.
+   */
+  labelSet: Record<string, string>;
+  /**
+   * Maximum number of active time series that can carry this label set.
+   * Omit to track the label set without enforcing a limit.
+   */
+  maxSeries?: number;
+}
 
 export interface WorkspaceProps {
   /**
@@ -22,6 +38,20 @@ export interface WorkspaceProps {
    * workspace (encryption configuration is immutable).
    */
   kmsKeyArn?: string;
+  /**
+   * How long the workspace retains ingested metric data. Accepts any
+   * `Duration.Input` (e.g. `"30 days"`, `Duration.days(30)`; a bare number
+   * is milliseconds); the wire unit is whole days
+   * (`retentionPeriodInDays`). If omitted, the workspace keeps the service
+   * default retention (150 days) and any retention configured out-of-band
+   * is left untouched.
+   */
+  retentionPeriod?: Duration.Input;
+  /**
+   * Per-label-set ingestion limits (maximum active series per label set).
+   * If omitted, existing label-set limits are left untouched.
+   */
+  limitsPerLabelSet?: WorkspaceLabelSetLimit[];
   /**
    * User-defined tags for the workspace.
    */
@@ -66,11 +96,36 @@ export interface Workspace extends Resource<
  * });
  * ```
  *
+ * @example Workspace with Custom Retention and Series Limits
+ * ```typescript
+ * const workspace = yield* AMP.Workspace("Metrics", {
+ *   alias: "production-metrics",
+ *   retentionPeriod: "30 days",
+ *   limitsPerLabelSet: [
+ *     { labelSet: { team: "billing" }, maxSeries: 100_000 },
+ *     { labelSet: {}, maxSeries: 1_000_000 }, // default bucket
+ *   ],
+ * });
+ * ```
+ *
  * @section Using the Endpoint
  * @example Read the Remote-Write URL
  * ```typescript
  * // prometheusEndpoint ends in a trailing slash; append `api/v1/remote_write`
  * const remoteWrite = `${workspace.prometheusEndpoint}api/v1/remote_write`;
+ * ```
+ *
+ * @section Runtime Bindings
+ * @example Write and Query Metrics from a Function
+ * ```typescript
+ * // inside a Lambda Function's effect (provide the *Http layers):
+ * const remoteWrite = yield* AMP.RemoteWrite(workspace);
+ * const metrics = yield* AMP.QueryMetrics(workspace);
+ *
+ * yield* remoteWrite({
+ *   timeseries: [{ name: "jobs_done_total", samples: [{ value: 1 }] }],
+ * });
+ * const result = yield* metrics.query({ query: "jobs_done_total" });
  * ```
  */
 export const Workspace = Resource<Workspace>("AWS.AMP.Workspace");
@@ -97,6 +152,117 @@ export const WorkspaceProvider = () =>
             ),
           );
         return response?.workspace;
+      });
+
+      /**
+       * Canonical form of a label-set-limits list for observed-vs-desired
+       * comparison: entries keyed and sorted by their sorted label set.
+       */
+      const canonicalLimits = (
+        limits: {
+          labelSet: Record<string, string | undefined>;
+          maxSeries: number | undefined;
+        }[],
+      ) =>
+        JSON.stringify(
+          limits
+            .map((entry) => ({
+              labelSet: Object.fromEntries(
+                Object.entries(entry.labelSet)
+                  .filter(
+                    (kv): kv is [string, string] => typeof kv[1] === "string",
+                  )
+                  .sort(([a], [b]) => a.localeCompare(b)),
+              ),
+              maxSeries: entry.maxSeries ?? null,
+            }))
+            .sort((a, b) =>
+              JSON.stringify(a.labelSet).localeCompare(
+                JSON.stringify(b.labelSet),
+              ),
+            ),
+        );
+
+      /**
+       * Sync the workspace configuration (retention period + label-set
+       * limits) — diff OBSERVED configuration against desired and apply
+       * only the delta. Skipped entirely when neither prop is set, so
+       * out-of-band configuration is never clobbered.
+       */
+      const syncWorkspaceConfiguration = Effect.fn(function* (
+        workspaceId: string,
+        news: WorkspaceProps,
+      ) {
+        if (
+          news.retentionPeriod === undefined &&
+          news.limitsPerLabelSet === undefined
+        ) {
+          return;
+        }
+        const observed = (yield* amp.describeWorkspaceConfiguration({
+          workspaceId,
+        })).workspaceConfiguration;
+
+        const desiredDays = toWireDays(news.retentionPeriod);
+        const retentionDrifts =
+          desiredDays !== undefined &&
+          desiredDays !== observed.retentionPeriodInDays;
+
+        const desiredLimits = news.limitsPerLabelSet?.map((entry) => ({
+          labelSet: entry.labelSet,
+          limits: { maxSeries: entry.maxSeries },
+        }));
+        const limitsDrift =
+          desiredLimits !== undefined &&
+          canonicalLimits(
+            desiredLimits.map((l) => ({
+              labelSet: l.labelSet,
+              maxSeries: l.limits.maxSeries,
+            })),
+          ) !==
+            canonicalLimits(
+              (observed.limitsPerLabelSet ?? []).map((l) => ({
+                labelSet: l.labelSet,
+                maxSeries: l.limits.maxSeries,
+              })),
+            );
+
+        if (!retentionDrifts && !limitsDrift) return;
+
+        // A previous configuration update may still be applying
+        // (`UPDATING` rejects new updates with a conflict) — retry briefly.
+        yield* amp
+          .updateWorkspaceConfiguration({
+            workspaceId,
+            retentionPeriodInDays: desiredDays,
+            limitsPerLabelSet: desiredLimits,
+          })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([
+                Schedule.fixed("6 seconds"),
+                Schedule.recurs(15),
+              ]),
+            }),
+          );
+
+        // Bounded best-effort wait for the update to apply (the status
+        // returns to ACTIVE once the new configuration is in effect). A
+        // slower apply converges on a later reconcile.
+        yield* amp.describeWorkspaceConfiguration({ workspaceId }).pipe(
+          Effect.map((r) => r.workspaceConfiguration),
+          Effect.repeat({
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(30),
+            ]),
+            until: (c): boolean =>
+              c.status.statusCode === "ACTIVE" &&
+              (desiredDays === undefined ||
+                c.retentionPeriodInDays === desiredDays),
+          }),
+        );
       });
 
       /**
@@ -180,6 +346,9 @@ export const WorkspaceProvider = () =>
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
           yield* syncAmpTags(workspace.arn, desiredTags);
+
+          // 3c. Sync workspace configuration (retention + label-set limits).
+          yield* syncWorkspaceConfiguration(workspaceId, news);
 
           // 4. Re-read for fresh attributes (alias/status may have changed).
           const fresh = (yield* describe(workspaceId)) ?? workspace;

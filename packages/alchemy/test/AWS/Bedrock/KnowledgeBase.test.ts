@@ -63,3 +63,47 @@ test.provider(
     }),
   { timeout: 60_000 },
 );
+
+test.provider(
+  "listIngestionJobs on a missing data source returns a typed ResourceNotFoundException",
+  (_stack) =>
+    Effect.gen(function* () {
+      const result = yield* bedrock
+        .listIngestionJobs({
+          knowledgeBaseId: "AAAAAAAAAA",
+          dataSourceId: "BBBBBBBBBB",
+        })
+        .pipe(
+          Effect.map(() => "found" as const),
+          // Compiles only if ResourceNotFoundException is in the typed union
+          // — the error path the ingestion-job bindings depend on.
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed("not-found" as const),
+          ),
+        );
+      expect(result).toBe("not-found");
+    }),
+  { timeout: 60_000 },
+);
+
+test.provider(
+  "listKnowledgeBaseDocuments on a missing data source returns a typed ResourceNotFoundException",
+  (_stack) =>
+    Effect.gen(function* () {
+      const result = yield* bedrock
+        .listKnowledgeBaseDocuments({
+          knowledgeBaseId: "AAAAAAAAAA",
+          dataSourceId: "BBBBBBBBBB",
+        })
+        .pipe(
+          Effect.map(() => "found" as const),
+          // Compiles only if ResourceNotFoundException is in the typed union
+          // — the error path the document bindings depend on.
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed("not-found" as const),
+          ),
+        );
+      expect(result).toBe("not-found");
+    }),
+  { timeout: 60_000 },
+);

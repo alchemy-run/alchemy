@@ -38,6 +38,34 @@ test.provider(
     }),
 );
 
+test.provider(
+  "listSearchJobResults on a nonexistent identifier fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      // Underlying operation of the ListSearchJobResults runtime binding.
+      const error = yield* Effect.flip(
+        backupsearch.listSearchJobResults({
+          SearchJobIdentifier: "00000000-0000-0000-0000-000000000000",
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
+test.provider(
+  "listSearchJobBackups on a nonexistent identifier fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      // Underlying operation of the ListSearchJobBackups runtime binding.
+      const error = yield* Effect.flip(
+        backupsearch.listSearchJobBackups({
+          SearchJobIdentifier: "00000000-0000-0000-0000-000000000000",
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
 test.provider("listSearchJobs succeeds on an account-level scan", () =>
   Effect.gen(function* () {
     const page = yield* backupsearch.listSearchJobs({ MaxResults: 10 });

@@ -1,5 +1,5 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -7,6 +7,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AuthorizerProps {
@@ -52,10 +53,10 @@ export interface AuthorizerProps {
   identityValidationExpression?: string;
   /**
    * Cache TTL for authorizer results (e.g. `"5 minutes"` or
-   * `Duration.seconds(300)`; a bare number is milliseconds). Rounded to
-   * whole seconds on the wire.
+   * `Duration.seconds(300)`; a bare number is milliseconds). Sent to the
+   * API as whole seconds (`authorizerResultTtlInSeconds`).
    */
-  authorizerResultTtlInSeconds?: Duration.Input;
+  authorizerResultTtl?: Duration.Input;
 }
 
 /** @resource */
@@ -89,34 +90,6 @@ export interface Authorizer extends Resource<
 const AuthorizerResource = Resource<Authorizer>("AWS.ApiGateway.Authorizer");
 
 export { AuthorizerResource as Authorizer };
-
-/**
- * Normalize a `Duration.Input` that may have round-tripped through state
- * JSON (which flattens a `Duration` to its `toJSON` shape
- * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
- * `Duration.Input`) back into an input `Duration.toSeconds` accepts.
- */
-const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional duration input to whole wire seconds. */
-const toWireSeconds = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toSeconds(normalizeDurationInput(input)));
 
 const generatedName = (id: string, props: AuthorizerProps) =>
   props.name
@@ -208,7 +181,7 @@ export const AuthorizerProvider = () =>
               identitySource: news.identitySource,
               identityValidationExpression: news.identityValidationExpression,
               authorizerResultTtlInSeconds: toWireSeconds(
-                news.authorizerResultTtlInSeconds,
+                news.authorizerResultTtl,
               ),
             });
             if (!created.id)
@@ -259,9 +232,7 @@ export const AuthorizerProvider = () =>
               value: news.identityValidationExpression,
             });
           }
-          const desiredTtlSeconds = toWireSeconds(
-            news.authorizerResultTtlInSeconds,
-          );
+          const desiredTtlSeconds = toWireSeconds(news.authorizerResultTtl);
           if (desiredTtlSeconds !== observed.authorizerResultTtlInSeconds) {
             patches.push({
               op: desiredTtlSeconds === undefined ? "remove" : "replace",

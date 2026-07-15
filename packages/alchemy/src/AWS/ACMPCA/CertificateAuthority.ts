@@ -9,6 +9,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -88,10 +89,10 @@ export interface CrlConfigurationProps {
   enabled: boolean;
   /**
    * Validity period of the CRL (e.g. `"7 days"` or `Duration.days(7)`).
-   * Rounded to whole days on the wire.
+   * Rounded to whole days on the wire (`ExpirationInDays`).
    * @default 7 days (service default when enabled)
    */
-  expirationInDays?: Duration.Input;
+  expiration?: Duration.Input;
   /**
    * Alias to conceal the S3 bucket name inside issued certificates.
    */
@@ -187,10 +188,10 @@ export interface CertificateAuthorityProps {
    * How long (7-30 days, e.g. `"7 days"`) the CA remains restorable after
    * deletion. Used when the CA is destroyed while in the
    * `PENDING_CERTIFICATE` or `DISABLED` state. Rounded to whole days on the
-   * wire.
+   * wire (`PermanentDeletionTimeInDays`).
    * @default 7 days
    */
-  permanentDeletionTimeInDays?: Duration.Input;
+  permanentDeletionTime?: Duration.Input;
   /**
    * Tags to apply to the CA. Merged with internal Alchemy tags.
    */
@@ -260,7 +261,7 @@ export interface CertificateAuthority extends Resource<
  *   revocationConfiguration: {
  *     crlConfiguration: {
  *       enabled: true,
- *       expirationInDays: "7 days",
+ *       expiration: "7 days",
  *       s3BucketName: bucket.bucketName,
  *     },
  *   },
@@ -273,6 +274,23 @@ export interface CertificateAuthority extends Resource<
  * const permission = yield* ACMPCA.Permission("AcmRenewal", {
  *   certificateAuthorityArn: ca.certificateAuthorityArn,
  * });
+ * ```
+ *
+ * @section Reacting to CA Events
+ * @example Consume ACM PCA Events from EventBridge
+ * ```typescript
+ * // ACM PCA emits lifecycle events (certificate issuance, expiry, CRL and
+ * // audit-report generation) on the default EventBridge bus under the
+ * // `aws.acm-pca` source — consume them with the generic EventBridge
+ * // event source; there is no ACM PCA-specific notification config.
+ * yield* AWS.EventBridge.consumeBusEvents(
+ *   {
+ *     source: ["aws.acm-pca"],
+ *     "detail-type": ["ACM Private CA Certificate Issuance"],
+ *   },
+ *   (events) =>
+ *     Stream.runForEach(events, (event) => Effect.log(event.detail)),
+ * );
  * ```
  */
 export const CertificateAuthority = Resource<CertificateAuthority>(
@@ -310,34 +328,6 @@ const retryWhileConcurrentlyModified = <
     schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]),
   });
 
-/**
- * Normalize a `Duration.Input` that may have round-tripped through state
- * JSON (which flattens a `Duration` to its `toJSON` shape
- * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
- * `Duration.Input`) back into an input `Duration.toDays` accepts.
- */
-const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional duration input to whole wire days. */
-const toWireDays = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toDays(normalizeDurationInput(input)));
-
 const buildSubject = (
   subject: CertificateAuthoritySubject,
 ): acmpca.ASN1Subject => ({
@@ -367,7 +357,7 @@ const buildRevocationConfiguration = (
     CrlConfiguration: crl
       ? {
           Enabled: crl.enabled,
-          ExpirationInDays: toWireDays(crl.expirationInDays),
+          ExpirationInDays: toWireDays(crl.expiration),
           CustomCname: crl.customCname,
           S3BucketName: crl.s3BucketName,
           S3ObjectAcl: crl.s3ObjectAcl,
@@ -612,7 +602,7 @@ export const CertificateAuthorityProvider = () =>
                   ? {
                       enabled:
                         ca.RevocationConfiguration.CrlConfiguration.Enabled,
-                      expirationInDays:
+                      expiration:
                         ca.RevocationConfiguration.CrlConfiguration
                           .ExpirationInDays === undefined
                           ? undefined
@@ -658,7 +648,7 @@ export const CertificateAuthorityProvider = () =>
           // converges.
           const currentTags = yield* listCaTags(arn);
           const desiredTags: Record<string, string> = {
-            ...(news.tags ?? {}),
+            ...news.tags,
             ...internalTags,
           };
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -709,7 +699,7 @@ export const CertificateAuthorityProvider = () =>
             .deleteCertificateAuthority({
               CertificateAuthorityArn: arn,
               PermanentDeletionTimeInDays: canSetWindow
-                ? (toWireDays(olds?.permanentDeletionTimeInDays) ?? 7)
+                ? (toWireDays(olds?.permanentDeletionTime) ?? 7)
                 : undefined,
             })
             .pipe(

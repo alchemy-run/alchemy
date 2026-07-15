@@ -1,5 +1,9 @@
 import * as AWS from "@/AWS";
-import { Trail } from "@/AWS/CloudTrail";
+import {
+  Trail,
+  type TrailAdvancedEventSelector,
+  type TrailInsightSelector,
+} from "@/AWS/CloudTrail";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import * as Test from "@/Test/Vitest";
@@ -43,6 +47,8 @@ test.provider(
         includeGlobalServiceEvents?: boolean;
         s3KeyPrefix?: string;
         tags?: Record<string, string>;
+        advancedEventSelectors?: TrailAdvancedEventSelector[];
+        insightSelectors?: TrailInsightSelector[];
       }) =>
         Effect.gen(function* () {
           const bucket = yield* Bucket("TrailLogs", {
@@ -112,13 +118,44 @@ test.provider(
       expect(tagRecord.fixture).toBe("cloudtrail-trail");
       expect(tagRecord["alchemy::id"]).toBe("Audit");
 
-      // 2. Update in place — stop logging, flip settings, swap tags.
+      // 2. Sync event + Insights selectors while logging is still on.
+      const { trail: withSelectors } = yield* stack.deploy(
+        make({
+          tags: { fixture: "cloudtrail-trail" },
+          advancedEventSelectors: [
+            {
+              name: "Management events",
+              fieldSelectors: [
+                { field: "eventCategory", equals: ["Management"] },
+              ],
+            },
+          ],
+          insightSelectors: [{ insightType: "ApiCallRateInsight" }],
+        }),
+      );
+      expect(withSelectors.trailArn).toBe(trailArn);
+      const selectors = yield* cloudtrail.getEventSelectors({
+        TrailName: trailArn,
+      });
+      expect(selectors.AdvancedEventSelectors?.[0]?.Name).toBe(
+        "Management events",
+      );
+      const insights = yield* cloudtrail.getInsightSelectors({
+        TrailName: trailArn,
+      });
+      expect(
+        (insights.InsightSelectors ?? []).map((s) => s.InsightType),
+      ).toContain("ApiCallRateInsight");
+
+      // 3. Update in place — stop logging, flip settings, swap tags,
+      // disable Insights (`[]`). Omitted event selectors stay untouched.
       const { trail: updated } = yield* stack.deploy(
         make({
           isLogging: false,
           includeGlobalServiceEvents: false,
           s3KeyPrefix: "audit",
           tags: { team: "security" },
+          insightSelectors: [],
         }),
       );
       expect(updated.trailArn).toBe(trail.trailArn);
@@ -142,12 +179,31 @@ test.provider(
       expect(tagRecordAfter.fixture).toBeUndefined();
       expect(tagRecordAfter["alchemy::id"]).toBe("Audit");
 
-      // 3. Delete — trail deletion is synchronous.
+      // Insights disabled: reads back as the typed InsightNotEnabledException
+      // (or an empty list, depending on propagation).
+      const insightsAfter = yield* cloudtrail
+        .getInsightSelectors({ TrailName: trailArn })
+        .pipe(
+          Effect.map((r) => r.InsightSelectors ?? []),
+          Effect.catchTag("InsightNotEnabledException", () =>
+            Effect.succeed([] as cloudtrail.InsightSelector[]),
+          ),
+        );
+      expect(insightsAfter).toEqual([]);
+      // Omitted event selectors were left untouched by the update.
+      const selectorsAfter = yield* cloudtrail.getEventSelectors({
+        TrailName: trailArn,
+      });
+      expect(selectorsAfter.AdvancedEventSelectors?.[0]?.Name).toBe(
+        "Management events",
+      );
+
+      // 4. Delete — trail deletion is synchronous.
       yield* stack.destroy();
       const gone = yield* Effect.flip(
         cloudtrail.getTrail({ Name: TRAIL_NAME }),
       );
       expect(gone._tag).toBe("TrailNotFoundException");
     }),
-  { timeout: 180_000 },
+  { timeout: 240_000 },
 );

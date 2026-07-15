@@ -48,6 +48,14 @@ export const syncAmpTags = Effect.fn(function* (
   }
 });
 
+/**
+ * AMP's logging APIs expect the destination CloudWatch Logs log group ARN
+ * with a trailing `:*` (the log-stream wildcard). Append it when missing so
+ * callers can pass a `Logs.LogGroup`'s `logGroupArn` directly.
+ */
+export const normalizeAmpLogGroupArn = (arn: string): string =>
+  arn.endsWith(":*") ? arn : `${arn}:*`;
+
 /** Encode a UTF-8 string definition into the wire blob AMP expects. */
 export const encodeDefinition = (
   definition: string,

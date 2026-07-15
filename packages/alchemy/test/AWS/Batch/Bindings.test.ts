@@ -3,6 +3,7 @@ import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -228,6 +229,137 @@ describe("Batch Bindings", () => {
           expect(body.jobQueue).toContain("job-queue/");
         }),
       { timeout: 120_000 },
+    );
+  });
+
+  describe("CancelJob", () => {
+    test.provider(
+      "cancels a queued job from the runtime",
+      () =>
+        Effect.gen(function* () {
+          const { jobId } = yield* submit("alchemy-e2e-cancel");
+
+          // Cancel immediately — the job is still SUBMITTED/PENDING/RUNNABLE
+          // (Fargate placement takes ~a minute), so cancellation applies.
+          const response = yield* send(
+            HttpClientRequest.post(`${baseUrl}/cancel`).pipe(
+              HttpClientRequest.bodyJsonUnsafe({
+                jobId,
+                reason: "alchemy e2e cancel test",
+              }),
+            ),
+          );
+          expect(response.status).toBe(200);
+          expect((yield* response.json) as object).toEqual({
+            cancelled: true,
+          });
+
+          // Out-of-band: a cancelled-before-starting job lands in FAILED.
+          // (SUCCEEDED only if the cancel raced past STARTING — accepted to
+          // keep the test deterministic, but FAILED is the expected path.)
+          const status = yield* jobStatus(jobId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (s): boolean => s === "FAILED" || s === "SUCCEEDED",
+              times: 36,
+            }),
+          );
+          expect(["FAILED", "SUCCEEDED"]).toContain(status);
+        }),
+      { timeout: 240_000 },
+    );
+  });
+
+  describe("ListJobs", () => {
+    test.provider(
+      "lists a submitted job in the bound queue from the runtime",
+      () =>
+        Effect.gen(function* () {
+          const { jobId } = yield* submit("alchemy-e2e-list");
+
+          // The job moves through SUBMITTED→PENDING→RUNNABLE→STARTING→…;
+          // poll the runtime ListJobs across the non-terminal statuses until
+          // the submitted job shows up.
+          const findJob = Effect.gen(function* () {
+            for (const jobStatus of [
+              "SUBMITTED",
+              "PENDING",
+              "RUNNABLE",
+              "STARTING",
+              "RUNNING",
+              "SUCCEEDED",
+            ]) {
+              const response = yield* send(
+                HttpClientRequest.get(`${baseUrl}/jobs?jobStatus=${jobStatus}`),
+              );
+              expect(response.status).toBe(200);
+              const body = (yield* response.json) as {
+                jobs: { jobId: string; jobName: string }[];
+              };
+              const match = body.jobs.find((job) => job.jobId === jobId);
+              if (match) return match;
+            }
+            return undefined;
+          });
+          const found = yield* findJob.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (match): boolean => match !== undefined,
+              times: 24,
+            }),
+          );
+          expect(found?.jobId).toBe(jobId);
+          expect(found?.jobName).toBe("alchemy-e2e-list");
+        }),
+      { timeout: 240_000 },
+    );
+  });
+
+  describe("GetJobQueueSnapshot", () => {
+    test.provider(
+      "snapshots the front of the bound queue from the runtime",
+      () =>
+        Effect.gen(function* () {
+          // The queue-ARN-scoped IAM grant + injected `jobQueue` selector:
+          // a 200 with a jobs array proves the call path end to end (the
+          // snapshot only surfaces RUNNABLE jobs, so membership is racy and
+          // not asserted).
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/snapshot`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { jobs: unknown };
+          expect(Array.isArray(body.jobs)).toBe(true);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("consumeJobEvents", () => {
+    test.provider(
+      "created the EventBridge rule for batch job state changes",
+      () =>
+        Effect.gen(function* () {
+          // The rule's physical name embeds the fixture's logical id
+          // (`BatchTestFunction-BatchJobEvents`); find it on the default bus
+          // with bounded manual pagination.
+          let rule: eventbridge.Rule | undefined;
+          let nextToken: string | undefined;
+          for (let page = 0; page < 10 && !rule; page++) {
+            const result = yield* eventbridge.listRules({
+              NextToken: nextToken,
+            });
+            rule = (result.Rules ?? []).find((candidate) =>
+              candidate.Name?.includes("BatchJobEvents"),
+            );
+            nextToken = result.NextToken;
+            if (!nextToken) break;
+          }
+          expect(rule).toBeDefined();
+          expect(rule?.EventPattern).toContain("aws.batch");
+          expect(rule?.EventPattern).toContain("Batch Job State Change");
+        }),
+      { timeout: 60_000 },
     );
   });
 

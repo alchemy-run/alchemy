@@ -1,4 +1,5 @@
 import * as Cognito from "@/AWS/Cognito";
+import * as IAM from "@/AWS/IAM";
 import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -20,6 +21,7 @@ const plain = (
       : Redacted.value(value);
 
 const PASSWORD = "Alchemy-Test-Passw0rd!";
+const NEW_PASSWORD = "Alchemy-Test-Passw0rd!2";
 
 export class CognitoTestFunction extends Lambda.Function<Lambda.Function>()(
   "CognitoTestFunction",
@@ -53,8 +55,40 @@ export default CognitoTestFunction.make(
       description: "cognito bindings fixture group",
     });
 
+    const identities = yield* Cognito.IdentityPool("BindingsIdentityPool", {
+      allowUnauthenticatedIdentities: true,
+      allowClassicFlow: true,
+      tags: { Purpose: "cognito-bindings-fixture" },
+    });
+    const guestRole = yield* IAM.Role("BindingsGuestRole", {
+      assumeRolePolicyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { Federated: "cognito-identity.amazonaws.com" },
+            Action: ["sts:AssumeRoleWithWebIdentity"],
+            Condition: {
+              StringEquals: {
+                "cognito-identity.amazonaws.com:aud": identities.identityPoolId,
+              },
+              "ForAnyValue:StringLike": {
+                "cognito-identity.amazonaws.com:amr": "unauthenticated",
+              },
+            },
+          },
+        ],
+      },
+    });
+    yield* Cognito.IdentityPoolRoleAttachment("BindingsIdentityRoles", {
+      identityPoolId: identities.identityPoolId,
+      roles: { unauthenticated: guestRole.roleArn },
+    });
+
     const admin = yield* Cognito.UserPoolAdmin(pool);
     const auth = yield* Cognito.UserPoolAuth(client);
+    const identityAuth = yield* Cognito.IdentityPoolAuth(identities);
+    const identityAdmin = yield* Cognito.IdentityPoolAdmin(identities);
     // Output → deferred effect; resolved per-request inside the handler.
     const GroupName = yield* group.groupName;
     const UserPoolId = yield* pool.userPoolId;
@@ -197,6 +231,170 @@ export default CognitoTestFunction.make(
           });
         }
 
+        // Self-service flows: change password, update/delete own attributes,
+        // refresh-token exchange, self-deletion.
+        if (request.method === "POST" && pathname === "/self-service") {
+          yield* admin
+            .adminCreateUser({
+              Username: username,
+              MessageAction: "SUPPRESS",
+              UserAttributes: [
+                { Name: "email", Value: `${username}@example.com` },
+                { Name: "email_verified", Value: "true" },
+              ],
+            })
+            .pipe(
+              Effect.catchTag("UsernameExistsException", () => Effect.void),
+            );
+          yield* admin.adminSetUserPassword({
+            Username: username,
+            Password: PASSWORD,
+            Permanent: true,
+          });
+          const signIn = yield* auth.initiateAuth({
+            AuthFlow: "USER_PASSWORD_AUTH",
+            AuthParameters: { USERNAME: username, PASSWORD },
+          });
+          const firstToken = plain(signIn.AuthenticationResult?.AccessToken)!;
+          yield* auth.changePassword({
+            AccessToken: firstToken,
+            PreviousPassword: PASSWORD,
+            ProposedPassword: NEW_PASSWORD,
+          });
+          const reAuth = yield* auth.initiateAuth({
+            AuthFlow: "USER_PASSWORD_AUTH",
+            AuthParameters: { USERNAME: username, PASSWORD: NEW_PASSWORD },
+          });
+          const accessToken = plain(reAuth.AuthenticationResult?.AccessToken)!;
+          yield* auth.updateUserAttributes({
+            AccessToken: accessToken,
+            UserAttributes: [{ Name: "nickname", Value: "self-service" }],
+          });
+          const me = yield* auth.getUser({ AccessToken: accessToken });
+          const nickname = plain(
+            me.UserAttributes?.find((a) => a.Name === "nickname")?.Value,
+          );
+          yield* auth.deleteUserAttributes({
+            AccessToken: accessToken,
+            UserAttributeNames: ["nickname"],
+          });
+          const meAfter = yield* auth.getUser({ AccessToken: accessToken });
+          const nicknameAfter = plain(
+            meAfter.UserAttributes?.find((a) => a.Name === "nickname")?.Value,
+          );
+          const refreshed = yield* auth.getTokensFromRefreshToken({
+            RefreshToken: plain(reAuth.AuthenticationResult?.RefreshToken)!,
+          });
+          yield* auth.deleteUser({ AccessToken: accessToken });
+          const gone = yield* admin.adminGetUser({ Username: username }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("UserNotFoundException", () =>
+              Effect.succeed(true),
+            ),
+          );
+          return yield* HttpServerResponse.json({
+            changedPasswordAuth:
+              reAuth.AuthenticationResult?.AccessToken !== undefined,
+            nickname,
+            nicknameAfter: nicknameAfter ?? null,
+            refreshedHasAccessToken:
+              refreshed.AuthenticationResult?.AccessToken !== undefined,
+            deleted: gone,
+          });
+        }
+
+        // Extended admin surface: attribute deletion, group listings,
+        // device listing.
+        if (request.method === "POST" && pathname === "/admin-extended") {
+          yield* admin
+            .adminCreateUser({
+              Username: username,
+              MessageAction: "SUPPRESS",
+              UserAttributes: [
+                { Name: "email", Value: `${username}@example.com` },
+              ],
+            })
+            .pipe(
+              Effect.catchTag("UsernameExistsException", () => Effect.void),
+            );
+          yield* admin.adminUpdateUserAttributes({
+            Username: username,
+            UserAttributes: [{ Name: "nickname", Value: "admin-extended" }],
+          });
+          const withNickname = yield* admin.adminGetUser({
+            Username: username,
+          });
+          yield* admin.adminDeleteUserAttributes({
+            Username: username,
+            UserAttributeNames: ["nickname"],
+          });
+          const withoutNickname = yield* admin.adminGetUser({
+            Username: username,
+          });
+          const groupName = yield* GroupName;
+          yield* admin.adminAddUserToGroup({
+            Username: username,
+            GroupName: groupName,
+          });
+          const userGroups = yield* admin.adminListGroupsForUser({
+            Username: username,
+          });
+          const allGroups = yield* admin.listGroups();
+          const deviceCount = yield* admin
+            .adminListDevices({ Username: username })
+            .pipe(
+              Effect.map((r) => (r.Devices ?? []).length),
+              // device tracking is not configured on the fixture pool
+              Effect.catchTag("InvalidUserPoolConfigurationException", () =>
+                Effect.succeed(-1),
+              ),
+            );
+          yield* admin.adminDeleteUser({ Username: username });
+          const nicknameOf = (user: typeof withNickname): string | undefined =>
+            plain(
+              user.UserAttributes?.find((a) => a.Name === "nickname")?.Value,
+            );
+          return yield* HttpServerResponse.json({
+            nickname: nicknameOf(withNickname),
+            nicknameAfter: nicknameOf(withoutNickname) ?? null,
+            userGroups: (userGroups.Groups ?? []).map((g) => g.GroupName),
+            allGroups: (allGroups.Groups ?? []).map((g) => g.GroupName),
+            deviceCount,
+          });
+        }
+
+        // Identity pool data plane: guest identity → AWS credentials and
+        // OIDC token, then identity administration.
+        if (request.method === "POST" && pathname === "/identity-flow") {
+          const got = yield* identityAuth.getId();
+          const identityId = got.IdentityId!;
+          const creds = yield* identityAuth.getCredentialsForIdentity({
+            IdentityId: identityId,
+          });
+          const openId = yield* identityAuth.getOpenIdToken({
+            IdentityId: identityId,
+          });
+          const described = yield* identityAdmin.describeIdentity({
+            IdentityId: identityId,
+          });
+          const listed = yield* identityAdmin.listIdentities({
+            MaxResults: 60,
+          });
+          yield* identityAdmin.deleteIdentities({
+            IdentityIdsToDelete: [identityId],
+          });
+          return yield* HttpServerResponse.json({
+            identityId,
+            hasAccessKeyId: creds.Credentials?.AccessKeyId !== undefined,
+            hasSessionToken: creds.Credentials?.SessionToken !== undefined,
+            hasOpenIdToken: openId.Token !== undefined,
+            describedIdentityId: described.IdentityId,
+            listedContains: (listed.Identities ?? []).some(
+              (identity) => identity.IdentityId === identityId,
+            ),
+          });
+        }
+
         if (request.method === "GET" && pathname === "/config") {
           return yield* HttpServerResponse.json({
             ok: true,
@@ -209,11 +407,23 @@ export default CognitoTestFunction.make(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
         );
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Surface typed operation failures in the 500 body so the test's
+        // retry logging shows the real cause instead of a generic message.
+        Effect.catch((error) =>
+          HttpServerResponse.json({ error: String(error) }, { status: 500 }),
+        ),
+        Effect.orDie,
+      ),
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Cognito.UserPoolAdminHttp, Cognito.UserPoolAuthHttp),
+      Layer.mergeAll(
+        Cognito.UserPoolAdminHttp,
+        Cognito.UserPoolAuthHttp,
+        Cognito.IdentityPoolAuthHttp,
+        Cognito.IdentityPoolAdminHttp,
+      ),
     ),
   ),
 );

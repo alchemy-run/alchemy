@@ -67,6 +67,54 @@ export interface ListUsersInGroupRequest extends Omit<
   cip.ListUsersInGroupRequest,
   "UserPoolId"
 > {}
+export interface AdminDeleteUserAttributesRequest extends Omit<
+  cip.AdminDeleteUserAttributesRequest,
+  "UserPoolId"
+> {}
+export interface AdminListGroupsForUserRequest extends Omit<
+  cip.AdminListGroupsForUserRequest,
+  "UserPoolId"
+> {}
+export interface AdminSetUserMFAPreferenceRequest extends Omit<
+  cip.AdminSetUserMFAPreferenceRequest,
+  "UserPoolId"
+> {}
+export interface AdminLinkProviderForUserRequest extends Omit<
+  cip.AdminLinkProviderForUserRequest,
+  "UserPoolId"
+> {}
+export interface AdminDisableProviderForUserRequest extends Omit<
+  cip.AdminDisableProviderForUserRequest,
+  "UserPoolId"
+> {}
+export interface AdminGetDeviceRequest extends Omit<
+  cip.AdminGetDeviceRequest,
+  "UserPoolId"
+> {}
+export interface AdminListDevicesRequest extends Omit<
+  cip.AdminListDevicesRequest,
+  "UserPoolId"
+> {}
+export interface AdminForgetDeviceRequest extends Omit<
+  cip.AdminForgetDeviceRequest,
+  "UserPoolId"
+> {}
+export interface AdminUpdateDeviceStatusRequest extends Omit<
+  cip.AdminUpdateDeviceStatusRequest,
+  "UserPoolId"
+> {}
+export interface AdminListUserAuthEventsRequest extends Omit<
+  cip.AdminListUserAuthEventsRequest,
+  "UserPoolId"
+> {}
+export interface AdminUpdateAuthEventFeedbackRequest extends Omit<
+  cip.AdminUpdateAuthEventFeedbackRequest,
+  "UserPoolId"
+> {}
+export interface ListGroupsRequest extends Omit<
+  cip.ListGroupsRequest,
+  "UserPoolId"
+> {}
 
 /**
  * The typed client returned by binding {@link UserPoolAdmin} to a
@@ -162,6 +210,78 @@ export interface UserPoolAdminClient {
   listUsersInGroup: (
     request: ListUsersInGroupRequest,
   ) => Effect.Effect<cip.ListUsersInGroupResponse, cip.ListUsersInGroupError>;
+  /** Delete attributes from a user's profile as an administrator. */
+  adminDeleteUserAttributes: (
+    request: AdminDeleteUserAttributesRequest,
+  ) => Effect.Effect<
+    cip.AdminDeleteUserAttributesResponse,
+    cip.AdminDeleteUserAttributesError
+  >;
+  /** List the groups a user belongs to. */
+  adminListGroupsForUser: (
+    request: AdminListGroupsForUserRequest,
+  ) => Effect.Effect<
+    cip.AdminListGroupsForUserResponse,
+    cip.AdminListGroupsForUserError
+  >;
+  /** Set a user's MFA preferences (SMS / TOTP / email) as an administrator. */
+  adminSetUserMFAPreference: (
+    request: AdminSetUserMFAPreferenceRequest,
+  ) => Effect.Effect<
+    cip.AdminSetUserMFAPreferenceResponse,
+    cip.AdminSetUserMFAPreferenceError
+  >;
+  /** Link a federated identity to an existing native user. */
+  adminLinkProviderForUser: (
+    request: AdminLinkProviderForUserRequest,
+  ) => Effect.Effect<
+    cip.AdminLinkProviderForUserResponse,
+    cip.AdminLinkProviderForUserError
+  >;
+  /** Unlink a federated identity from a user. */
+  adminDisableProviderForUser: (
+    request: AdminDisableProviderForUserRequest,
+  ) => Effect.Effect<
+    cip.AdminDisableProviderForUserResponse,
+    cip.AdminDisableProviderForUserError
+  >;
+  /** Fetch one of a user's remembered devices. */
+  adminGetDevice: (
+    request: AdminGetDeviceRequest,
+  ) => Effect.Effect<cip.AdminGetDeviceResponse, cip.AdminGetDeviceError>;
+  /** List a user's remembered devices. */
+  adminListDevices: (
+    request: AdminListDevicesRequest,
+  ) => Effect.Effect<cip.AdminListDevicesResponse, cip.AdminListDevicesError>;
+  /** Forget (deregister) one of a user's remembered devices. */
+  adminForgetDevice: (
+    request: AdminForgetDeviceRequest,
+  ) => Effect.Effect<cip.AdminForgetDeviceResponse, cip.AdminForgetDeviceError>;
+  /** Mark a user's device as remembered or not remembered. */
+  adminUpdateDeviceStatus: (
+    request: AdminUpdateDeviceStatusRequest,
+  ) => Effect.Effect<
+    cip.AdminUpdateDeviceStatusResponse,
+    cip.AdminUpdateDeviceStatusError
+  >;
+  /** List a user's sign-in auth events (threat protection history). */
+  adminListUserAuthEvents: (
+    request: AdminListUserAuthEventsRequest,
+  ) => Effect.Effect<
+    cip.AdminListUserAuthEventsResponse,
+    cip.AdminListUserAuthEventsError
+  >;
+  /** Provide valid/invalid feedback on a user's auth event. */
+  adminUpdateAuthEventFeedback: (
+    request: AdminUpdateAuthEventFeedbackRequest,
+  ) => Effect.Effect<
+    cip.AdminUpdateAuthEventFeedbackResponse,
+    cip.AdminUpdateAuthEventFeedbackError
+  >;
+  /** List the groups in the pool. */
+  listGroups: (
+    request?: ListGroupsRequest,
+  ) => Effect.Effect<cip.ListGroupsResponse, cip.ListGroupsError>;
 }
 
 /**
@@ -206,6 +326,32 @@ export interface UserPoolAdminClient {
  *   GroupName: "Admins",
  * });
  * const admins = yield* admin.listUsersInGroup({ GroupName: "Admins" });
+ * const groups = yield* admin.adminListGroupsForUser({
+ *   Username: "user@example.com",
+ * });
+ * ```
+ *
+ * @section Federation and Devices
+ * @example Link a Federated Identity to a Native User
+ * ```typescript
+ * yield* admin.adminLinkProviderForUser({
+ *   DestinationUser: {
+ *     ProviderName: "Cognito",
+ *     ProviderAttributeValue: "user@example.com",
+ *   },
+ *   SourceUser: {
+ *     ProviderName: "Google",
+ *     ProviderAttributeName: "Cognito_Subject",
+ *     ProviderAttributeValue: googleSub,
+ *   },
+ * });
+ * ```
+ *
+ * @example List a User's Remembered Devices
+ * ```typescript
+ * const devices = yield* admin.adminListDevices({
+ *   Username: "user@example.com",
+ * });
  * ```
  */
 export interface UserPoolAdmin extends Binding.Service<

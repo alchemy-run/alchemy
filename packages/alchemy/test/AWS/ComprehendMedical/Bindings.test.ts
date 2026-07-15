@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -161,6 +162,133 @@ describe("ComprehendMedical Bindings", () => {
           expect(withCodes.length).toBeGreaterThan(0);
           // ICD-10-CM codes look like "E11.9", "I10", etc.
           expect(withCodes[0].codes[0].code.length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("InferRxNorm", () => {
+    test.provider(
+      "links medications to RxNorm concepts",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/rxnorm`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            entities: Array<{
+              text: string;
+              concepts: Array<{ code: string; description: string }>;
+            }>;
+          };
+
+          expect(response.entities.length).toBeGreaterThan(0);
+          const withConcepts = response.entities.filter(
+            (e) => e.concepts.length > 0,
+          );
+          expect(withConcepts.length).toBeGreaterThan(0);
+          expect(withConcepts[0].concepts[0].code.length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("InferSNOMEDCT", () => {
+    test.provider(
+      "links concepts to SNOMED CT codes",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/snomed`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            entities: Array<{
+              text: string;
+              concepts: Array<{ code: string; description: string }>;
+            }>;
+          };
+
+          expect(response.entities.length).toBeGreaterThan(0);
+          const withConcepts = response.entities.filter(
+            (e) => e.concepts.length > 0,
+          );
+          expect(withConcepts.length).toBeGreaterThan(0);
+          expect(withConcepts[0].concepts[0].code.length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("List*Jobs", () => {
+    test.provider(
+      "lists batch jobs across all five job families",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/jobs`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            entities: number;
+            icd10cm: number;
+            phi: number;
+            rxnorm: number;
+            snomedct: number;
+          };
+
+          // Every list call authorized and answered — counts are >= 0.
+          expect(response.entities).toBeGreaterThanOrEqual(0);
+          expect(response.icd10cm).toBeGreaterThanOrEqual(0);
+          expect(response.phi).toBeGreaterThanOrEqual(0);
+          expect(response.rxnorm).toBeGreaterThanOrEqual(0);
+          expect(response.snomedct).toBeGreaterThanOrEqual(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("Describe*/Stop*Job", () => {
+    test.provider(
+      "answers with the typed ResourceNotFoundException for unknown jobs",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/job-checks`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            describes: string[];
+            stops: string[];
+          };
+
+          // IAM authorizes before the job lookup, so the typed
+          // ResourceNotFoundException proves both wiring and permissions
+          // for every describe/stop binding.
+          expect(response.describes).toEqual(
+            Array(5).fill("ResourceNotFoundException"),
+          );
+          expect(response.stops).toEqual(
+            Array(5).fill("ResourceNotFoundException"),
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("StartPHIDetectionJob", () => {
+    test.provider(
+      "passes IAM authorization and fails typed on the bogus data-access role",
+      (_stack) =>
+        Effect.gen(function* () {
+          // A same-account-but-nonexistent role is rejected AFTER the
+          // comprehendmedical:StartPHIDetectionJob authorization with the
+          // typed InvalidRequestException (DATA_ACCESS_ROLE_ARN_INVALID); a
+          // caller missing the Start permission gets AccessDeniedException
+          // instead — so this proves the binding granted the action.
+          const { Account } = yield* sts.getCallerIdentity({});
+          const roleArn = `arn:aws:iam::${Account}:role/alchemy-nonexistent-comprehendmedical-role`;
+
+          const response = (yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/job-start?roleArn=${encodeURIComponent(roleArn)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
+
+          expect(response.tag).toBe("InvalidRequestException");
         }),
       { timeout: 120_000 },
     );

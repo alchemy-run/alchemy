@@ -1,12 +1,13 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
@@ -1120,12 +1121,6 @@ const isAccessDenied = (error: unknown) => {
     text.includes("AccessDenied")
   );
 };
-
-/** Convert an optional `Duration.Input` to the wire's whole seconds. */
-const toWireSeconds = (
-  duration: Duration.Input | undefined,
-): number | undefined =>
-  duration === undefined ? undefined : Math.round(Duration.toSeconds(duration));
 
 const toBehavior = (
   behavior: DistributionBehavior & {

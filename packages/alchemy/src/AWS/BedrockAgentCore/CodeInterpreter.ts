@@ -104,7 +104,7 @@ export interface CodeInterpreter extends Resource<
  * return {
  *   fetch: Effect.gen(function* () {
  *     // runtime
- *     const session = yield* startSession({ sessionTimeoutSeconds: 300 });
+ *     const session = yield* startSession({ sessionTimeout: "5 minutes" });
  *     const result = yield* invoke({
  *       sessionId: session.sessionId,
  *       name: "executeCode",

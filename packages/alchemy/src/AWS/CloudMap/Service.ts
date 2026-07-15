@@ -1,5 +1,5 @@
 import * as sd from "@distilled.cloud/aws/servicediscovery";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   awaitOperation,
@@ -87,6 +88,13 @@ export interface ServiceProps {
    */
   type?: "HTTP";
   /**
+   * Custom service-level attributes (up to 30 key/value pairs) stored on the
+   * service and readable at runtime via `GetServiceAttributes`. Mutable —
+   * reconcile diffs the observed attributes against this map, upserting
+   * changed keys and deleting keys no longer declared.
+   */
+  attributes?: Record<string, string>;
+  /**
    * Tags to apply to the service. Merged with internal Alchemy tags.
    */
   tags?: Record<string, string>;
@@ -162,6 +170,14 @@ export interface Service extends Resource<
  * });
  * ```
  *
+ * @example Service with Custom Attributes
+ * ```typescript
+ * const service = yield* AWS.CloudMap.Service("Backend", {
+ *   namespaceId: namespace.namespaceId,
+ *   attributes: { tier: "backend", version: "2" },
+ * });
+ * ```
+ *
  * @section Discovering Instances
  * @example Discover Healthy Instances from a Lambda
  * ```typescript
@@ -230,7 +246,7 @@ export const ServiceProvider = () =>
           ? {
               DnsRecords: props.dnsRecords.map((record) => ({
                 Type: record.type,
-                TTL: Math.round(Duration.toSeconds(record.ttl)),
+                TTL: toWireSeconds(record.ttl)!,
               })),
               RoutingPolicy: props.routingPolicy,
             }
@@ -471,7 +487,34 @@ export const ServiceProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags
+          // 3b. SYNC SERVICE ATTRIBUTES — diff OBSERVED custom attributes
+          // against the desired map; upsert changed keys, delete undeclared
+          const observedAttributes: { [key: string]: string | undefined } =
+            yield* sd.getServiceAttributes({ ServiceId: service.Id }).pipe(
+              Effect.map((r) => r.ServiceAttributes?.Attributes ?? {}),
+              Effect.catchTag("ServiceNotFound", () => Effect.succeed({})),
+            );
+          const desiredAttributes = news.attributes ?? {};
+          const attributeUpserts = Object.entries(desiredAttributes).filter(
+            ([key, value]) => observedAttributes[key] !== value,
+          );
+          const attributeRemovals = Object.keys(observedAttributes).filter(
+            (key) => !(key in desiredAttributes),
+          );
+          if (attributeUpserts.length > 0) {
+            yield* sd.updateServiceAttributes({
+              ServiceId: service.Id,
+              Attributes: Object.fromEntries(attributeUpserts),
+            });
+          }
+          if (attributeRemovals.length > 0) {
+            yield* sd.deleteServiceAttributes({
+              ServiceId: service.Id,
+              Attributes: attributeRemovals,
+            });
+          }
+
+          // 3c. SYNC TAGS — diff against OBSERVED cloud tags
           const observedTags = yield* fetchObservedTags(service.Arn);
           yield* syncTags(service.Arn, observedTags, desiredTags);
 

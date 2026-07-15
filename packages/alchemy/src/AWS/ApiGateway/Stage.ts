@@ -1,4 +1,5 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -6,11 +7,30 @@ import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 import { AWSEnvironment } from "../Environment.ts";
 import type { RestApi } from "./RestApi.ts";
 import { retryOnApiStatusUpdating, stageArn, syncTags } from "./common.ts";
+
+/**
+ * Per-method override settings for a stage. Mirrors the API's
+ * `MethodSetting` struct, with the cache TTL expressed as a
+ * {@link Duration.Input} (`cacheTtl`) instead of the raw wire field
+ * `cacheTtlInSeconds`.
+ */
+export interface StageMethodSetting extends Omit<
+  ag.MethodSetting,
+  "cacheTtlInSeconds"
+> {
+  /**
+   * Time-to-live for cached responses (e.g. `"5 minutes"` or
+   * `Duration.seconds(300)`; a bare number is milliseconds). Sent to the
+   * API as whole seconds (`cacheTtlInSeconds`).
+   */
+  cacheTtl?: Duration.Input;
+}
 
 export interface StageProps {
   /**
@@ -47,7 +67,7 @@ export interface StageProps {
   /**
    * Map of resource path pattern to method settings; keys use `{resourcePath}/{httpMethod}`.
    */
-  methodSettings?: { [key: string]: ag.MethodSetting | undefined };
+  methodSettings?: { [key: string]: StageMethodSetting | undefined };
   /** Access log destination ARN and log format for the stage. */
   accessLogSettings?: ag.AccessLogSettings;
   /** ARN of an AWS WAF web ACL to associate with the stage. */
@@ -146,7 +166,7 @@ interface StageInputProps {
   documentationVersion?: Input<string>;
   canarySettings?: Input<ag.CanarySettings>;
   tracingEnabled?: Input<boolean>;
-  methodSettings?: Input<{ [key: string]: ag.MethodSetting | undefined }>;
+  methodSettings?: Input<{ [key: string]: StageMethodSetting | undefined }>;
   accessLogSettings?: Input<ag.AccessLogSettings>;
   webAclArn?: Input<string>;
   tags?: Input<Record<string, string>>;
@@ -253,6 +273,30 @@ function methodSettingScalarPatch(
     value: typeof nv === "boolean" ? String(nv) : String(nv),
   };
 }
+
+/**
+ * Convert the user-facing {@link StageMethodSetting} map (with `cacheTtl` as
+ * a `Duration.Input`) to the wire `ag.MethodSetting` shape used for diffing
+ * against the observed stage. Own-key semantics are preserved: `cacheTtl`
+ * explicitly set to `undefined` still produces an own `cacheTtlInSeconds`
+ * key so `buildMethodSettingPatches` emits a `remove` op for it.
+ */
+const toWireMethodSettings = (
+  settings: { [key: string]: StageMethodSetting | undefined } | undefined,
+): { [key: string]: ag.MethodSetting | undefined } | undefined => {
+  if (settings === undefined) return undefined;
+  return Object.fromEntries(
+    Object.entries(settings).map(([key, setting]) => {
+      if (setting === undefined) return [key, undefined] as const;
+      const { cacheTtl, ...rest } = setting;
+      const wire: ag.MethodSetting = { ...rest };
+      if ("cacheTtl" in setting) {
+        wire.cacheTtlInSeconds = toWireSeconds(cacheTtl);
+      }
+      return [key, wire] as const;
+    }),
+  );
+};
 
 /**
  * AWS API Gateway's `getStage` response populates `methodSettings` with
@@ -522,7 +566,10 @@ const buildStagePatches = (
   }
   patches.push(...buildVariablePatches(prev.variables, news.variables));
   patches.push(
-    ...buildMethodSettingPatches(prev.methodSettings, news.methodSettings),
+    ...buildMethodSettingPatches(
+      prev.methodSettings,
+      toWireMethodSettings(news.methodSettings),
+    ),
   );
   patches.push(
     ...buildAccessLogPatches(prev.accessLogSettings, news.accessLogSettings),

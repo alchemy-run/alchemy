@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { InvestigationGroup } from "@/AWS/AIOps";
+import type { PolicyStatement } from "@/AWS/IAM/Policy.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import * as Test from "@/Test/Vitest";
 import * as aiops from "@distilled.cloud/aws/aiops";
@@ -63,9 +64,10 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
       yield* stack.destroy();
 
       const deployGroup = (props: {
-        retentionInDays: Duration.Input;
+        retention: Duration.Input;
         tagKeyBoundaries: string[];
         isCloudTrailEventHistoryEnabled?: boolean;
+        policy?: PolicyStatement[];
         tags: Record<string, string>;
       }) =>
         stack.deploy(
@@ -94,7 +96,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
         );
 
       const { group } = yield* deployGroup({
-        retentionInDays: "7 days",
+        retention: "7 days",
         tagKeyBoundaries: ["Application"],
         tags: { Environment: "test" },
       });
@@ -115,11 +117,18 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
       expect(tags["alchemy::id"]).toBe("Investigations");
 
       // Update mutable aspects in place: tag key boundaries, CloudTrail
-      // event history, and tags.
+      // event history, resource policy, and tags.
+      const alarmPolicyStatement: PolicyStatement = {
+        Effect: "Allow",
+        Principal: { Service: "aiops.alarms.cloudwatch.amazonaws.com" },
+        Action: ["aiops:CreateInvestigation", "aiops:CreateInvestigationEvent"],
+        Resource: "*",
+      };
       const { group: updated } = yield* deployGroup({
-        retentionInDays: "7 days",
+        retention: "7 days",
         tagKeyBoundaries: ["Application", "Service"],
         isCloudTrailEventHistoryEnabled: false,
+        policy: [alarmPolicyStatement],
         tags: { Environment: "test", Team: "obs" },
       });
       expect(updated.arn).toBe(group.arn);
@@ -132,10 +141,36 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
         .pipe(Effect.map((r) => r.tags ?? {}));
       expect(updatedTags.Team).toBe("obs");
 
+      // Out-of-band: the resource policy landed on the group.
+      const policyAfterUpdate = yield* aiops.getInvestigationGroupPolicy({
+        identifier: group.arn,
+      });
+      expect(
+        JSON.parse(policyAfterUpdate.policy ?? "{}").Statement,
+      ).toMatchObject([alarmPolicyStatement]);
+
+      // `policy: []` deletes the attached resource policy.
+      yield* deployGroup({
+        retention: "7 days",
+        tagKeyBoundaries: ["Application", "Service"],
+        isCloudTrailEventHistoryEnabled: false,
+        policy: [],
+        tags: { Environment: "test", Team: "obs" },
+      });
+      const policyAfterDelete = yield* aiops
+        .getInvestigationGroupPolicy({ identifier: group.arn })
+        .pipe(
+          Effect.map((r) => r.policy),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      expect(policyAfterDelete).toBeUndefined();
+
       // The retention period has no update API — changing it replaces the
       // group (delete-first, because only one group may exist per Region).
       const { group: replaced } = yield* deployGroup({
-        retentionInDays: "14 days",
+        retention: "14 days",
         tagKeyBoundaries: ["Application", "Service"],
         isCloudTrailEventHistoryEnabled: false,
         tags: { Environment: "test", Team: "obs" },

@@ -99,10 +99,13 @@ describe("AWS.CloudFront.KeyGroup", () => {
             }),
           );
         expect(after.KeyGroup?.KeyGroupConfig?.Comment).toEqual("updated");
-        expect(after.KeyGroup?.KeyGroupConfig?.Items).toEqual([
-          updated.primary.publicKeyId,
-          updated.secondary.publicKeyId,
-        ]);
+        // CloudFront does not preserve the order of key-group items —
+        // compare as sets.
+        expect(
+          [...(after.KeyGroup?.KeyGroupConfig?.Items ?? [])].sort(),
+        ).toEqual(
+          [updated.primary.publicKeyId, updated.secondary.publicKeyId].sort(),
+        );
 
         yield* stack.destroy();
         yield* assertKeyGroupDeleted(updated.group.keyGroupId);

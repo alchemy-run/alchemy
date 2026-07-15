@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as AppConfig from "@/AWS/AppConfig";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
 import * as Test from "@/Test/Vitest";
 import * as appconfig from "@distilled.cloud/aws/appconfig";
 import { expect } from "@effect/vitest";
@@ -58,9 +59,9 @@ test.provider(
               contentType: "application/json",
             });
             const strategy = yield* AppConfig.DeploymentStrategy("Strategy", {
-              deploymentDurationInMinutes: 0,
+              deploymentDuration: 0,
               growthFactor: 100,
-              finalBakeTimeInMinutes: 0,
+              finalBakeTime: 0,
               replicateTo: "NONE",
             });
             return {
@@ -112,6 +113,112 @@ test.provider(
       yield* stack.destroy();
       const gone = yield* waitUntilAppGone(created.applicationId);
       expect(gone).toBeUndefined();
+    }),
+  { timeout: 240_000 },
+);
+
+// Extension + association lifecycle: an extension whose action emits
+// deployment events to the default EventBridge bus (AppConfig EventBridge
+// extension actions only support the default bus; no invoke role required),
+// associated with the application. Update the extension description in
+// place, then destroy and verify out-of-band.
+test.provider(
+  "appconfig extension: create, associate, update, and destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { accountId, region } = yield* AWSEnvironment.current;
+      const defaultBusArn = `arn:aws:events:${region}:${accountId}:event-bus/default`;
+
+      const deploy = (description: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* AppConfig.Application("ExtApp", {});
+            const extension = yield* AppConfig.Extension("Ext", {
+              description,
+              actions: {
+                ON_DEPLOYMENT_COMPLETE: [
+                  { name: "notify-bus", uri: defaultBusArn },
+                ],
+              },
+              tags: { team: "platform" },
+            });
+            const association = yield* AppConfig.ExtensionAssociation(
+              "ExtAssoc",
+              {
+                extensionIdentifier: extension.extensionId,
+                resourceIdentifier: app.applicationArn,
+              },
+            );
+            return {
+              extensionId: extension.extensionId.as<string>(),
+              extensionArn: extension.extensionArn.as<string>(),
+              versionNumber: extension.versionNumber.as<number>(),
+              associationId: association.extensionAssociationId.as<string>(),
+            };
+          }),
+        );
+
+      const created = yield* deploy("v1 hook");
+      expect(created.extensionId).toBeTruthy();
+      expect(created.versionNumber).toBeGreaterThan(0);
+      expect(created.associationId).toBeTruthy();
+
+      // Out-of-band: the extension exists with the action and alchemy tags.
+      const extension = yield* appconfig.getExtension({
+        ExtensionIdentifier: created.extensionId,
+      });
+      expect(extension.Description).toBe("v1 hook");
+      expect(extension.Actions?.ON_DEPLOYMENT_COMPLETE?.[0]?.Name).toBe(
+        "notify-bus",
+      );
+      const tags = yield* appconfig.listTagsForResource({
+        ResourceArn: created.extensionArn,
+      });
+      expect(tags.Tags?.["alchemy::id"]).toBe("Ext");
+
+      // Out-of-band: the association binds the extension to the application.
+      const association = yield* appconfig.getExtensionAssociation({
+        ExtensionAssociationId: created.associationId,
+      });
+      expect(association.ExtensionArn).toBeTruthy();
+      expect(association.ResourceArn).toContain(":application/");
+
+      // Update the description in place — id and association are stable.
+      const updated = yield* deploy("v2 hook");
+      expect(updated.extensionId).toBe(created.extensionId);
+      expect(updated.associationId).toBe(created.associationId);
+      const after = yield* appconfig.getExtension({
+        ExtensionIdentifier: created.extensionId,
+      });
+      expect(after.Description).toBe("v2 hook");
+
+      // Destroy — association first, then the extension.
+      yield* stack.destroy();
+      const goneExtension = yield* appconfig
+        .getExtension({ ExtensionIdentifier: created.extensionId })
+        .pipe(
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (e): boolean => e === undefined,
+            times: 10,
+          }),
+        );
+      expect(goneExtension).toBeUndefined();
+      const goneAssociation = yield* appconfig
+        .getExtensionAssociation({
+          ExtensionAssociationId: created.associationId,
+        })
+        .pipe(
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      expect(goneAssociation).toBeUndefined();
     }),
   { timeout: 240_000 },
 );

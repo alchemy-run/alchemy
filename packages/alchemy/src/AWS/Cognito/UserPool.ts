@@ -1,6 +1,6 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -48,10 +49,11 @@ export interface UserPoolPasswordPolicy {
   passwordHistorySize?: number;
   /**
    * How long an admin-set temporary password stays valid, e.g.
-   * `"7 days"` (0-365 days). Rounded to whole days on the wire.
+   * `"7 days"` (0-365 days). Rounded to whole days on the wire
+   * (`TemporaryPasswordValidityDays`).
    * @default 7 days
    */
-  temporaryPasswordValidityDays?: Duration.Input;
+  temporaryPasswordValidity?: Duration.Input;
 }
 
 /**
@@ -327,13 +329,8 @@ export interface UserPool extends Resource<
  */
 export const UserPool = Resource<UserPool>("AWS.Cognito.UserPool");
 
-/** The Cognito wire unit for TemporaryPasswordValidityDays is whole days. */
-const toWireValidityDays = (
-  duration: Duration.Input | undefined,
-): number | undefined =>
-  duration === undefined ? undefined : Math.round(Duration.toDays(duration));
-
-/** Map camelCase password policy props to the Cognito wire shape. */
+/** Map camelCase password policy props to the Cognito wire shape (the wire
+ * unit for `TemporaryPasswordValidityDays` is whole days). */
 const toWirePasswordPolicy = (policy: UserPoolPasswordPolicy | undefined) =>
   policy === undefined
     ? undefined
@@ -344,8 +341,8 @@ const toWirePasswordPolicy = (policy: UserPoolPasswordPolicy | undefined) =>
         RequireNumbers: policy.requireNumbers,
         RequireSymbols: policy.requireSymbols,
         PasswordHistorySize: policy.passwordHistorySize,
-        TemporaryPasswordValidityDays: toWireValidityDays(
-          policy.temporaryPasswordValidityDays,
+        TemporaryPasswordValidityDays: toWireDays(
+          policy.temporaryPasswordValidity,
         ),
       };
 
@@ -540,14 +537,13 @@ export const UserPoolProvider = () =>
        * Operates on the wire shape — `temporaryPasswordValidityDays` is a
        * whole number of days (desired durations are converted first). */
       const normalizedPasswordPolicy = (
-        policy: Omit<
-          UserPoolPasswordPolicy,
-          "temporaryPasswordValidityDays"
-        > & { temporaryPasswordValidityDays?: number },
+        policy: Omit<UserPoolPasswordPolicy, "temporaryPasswordValidity"> & {
+          temporaryPasswordValidityDays?: number;
+        },
       ): Required<
         Omit<
           UserPoolPasswordPolicy,
-          "passwordHistorySize" | "temporaryPasswordValidityDays"
+          "passwordHistorySize" | "temporaryPasswordValidity"
         >
       > & {
         passwordHistorySize: number | undefined;
@@ -581,8 +577,8 @@ export const UserPoolProvider = () =>
         if (news.passwordPolicy !== undefined) {
           const desired = normalizedPasswordPolicy({
             ...news.passwordPolicy,
-            temporaryPasswordValidityDays: toWireValidityDays(
-              news.passwordPolicy.temporaryPasswordValidityDays,
+            temporaryPasswordValidityDays: toWireDays(
+              news.passwordPolicy.temporaryPasswordValidity,
             ),
           });
           const actual = normalizedPasswordPolicy({

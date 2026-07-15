@@ -3,27 +3,17 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
+import { cognitoMethods } from "./BindingHttp.ts";
 import type { UserPool } from "./UserPool.ts";
 import {
   UserPoolAdmin,
-  type AdminAddUserToGroupRequest,
-  type AdminConfirmSignUpRequest,
-  type AdminCreateUserRequest,
-  type AdminDeleteUserRequest,
-  type AdminDisableUserRequest,
-  type AdminEnableUserRequest,
-  type AdminGetUserRequest,
-  type AdminInitiateAuthRequest,
-  type AdminRemoveUserFromGroupRequest,
-  type AdminResetUserPasswordRequest,
-  type AdminRespondToAuthChallengeRequest,
-  type AdminSetUserPasswordRequest,
-  type AdminUpdateUserAttributesRequest,
-  type AdminUserGlobalSignOutRequest,
-  type ListUsersInGroupRequest,
+  type ListGroupsRequest,
   type ListUsersRequest,
   type UserPoolAdminClient,
 } from "./UserPoolAdmin.ts";
+
+/** The injected identifier field, in the distilled wire type. */
+type UserPoolIdField = Pick<cip.AdminGetUserRequest, "UserPoolId">;
 
 /**
  * HTTP implementation of {@link UserPoolAdmin}: grants the admin
@@ -37,6 +27,7 @@ export const UserPoolAdminHttp = Layer.effect(
     const adminGetUser = yield* cip.adminGetUser;
     const adminSetUserPassword = yield* cip.adminSetUserPassword;
     const adminUpdateUserAttributes = yield* cip.adminUpdateUserAttributes;
+    const adminDeleteUserAttributes = yield* cip.adminDeleteUserAttributes;
     const adminDeleteUser = yield* cip.adminDeleteUser;
     const adminConfirmSignUp = yield* cip.adminConfirmSignUp;
     const adminDisableUser = yield* cip.adminDisableUser;
@@ -47,8 +38,20 @@ export const UserPoolAdminHttp = Layer.effect(
     const adminUserGlobalSignOut = yield* cip.adminUserGlobalSignOut;
     const adminAddUserToGroup = yield* cip.adminAddUserToGroup;
     const adminRemoveUserFromGroup = yield* cip.adminRemoveUserFromGroup;
+    const adminListGroupsForUser = yield* cip.adminListGroupsForUser;
+    const adminSetUserMFAPreference = yield* cip.adminSetUserMFAPreference;
+    const adminLinkProviderForUser = yield* cip.adminLinkProviderForUser;
+    const adminDisableProviderForUser = yield* cip.adminDisableProviderForUser;
+    const adminGetDevice = yield* cip.adminGetDevice;
+    const adminListDevices = yield* cip.adminListDevices;
+    const adminForgetDevice = yield* cip.adminForgetDevice;
+    const adminUpdateDeviceStatus = yield* cip.adminUpdateDeviceStatus;
+    const adminListUserAuthEvents = yield* cip.adminListUserAuthEvents;
+    const adminUpdateAuthEventFeedback =
+      yield* cip.adminUpdateAuthEventFeedback;
     const listUsers = yield* cip.listUsers;
     const listUsersInGroup = yield* cip.listUsersInGroup;
+    const listGroups = yield* cip.listGroups;
 
     return Effect.fn(function* <P extends UserPool>(pool: P) {
       const UserPoolId = yield* pool.userPoolId;
@@ -64,16 +67,28 @@ export const UserPoolAdminHttp = Layer.effect(
                   "cognito-idp:AdminConfirmSignUp",
                   "cognito-idp:AdminCreateUser",
                   "cognito-idp:AdminDeleteUser",
+                  "cognito-idp:AdminDeleteUserAttributes",
+                  "cognito-idp:AdminDisableProviderForUser",
                   "cognito-idp:AdminDisableUser",
                   "cognito-idp:AdminEnableUser",
+                  "cognito-idp:AdminForgetDevice",
+                  "cognito-idp:AdminGetDevice",
                   "cognito-idp:AdminGetUser",
                   "cognito-idp:AdminInitiateAuth",
+                  "cognito-idp:AdminLinkProviderForUser",
+                  "cognito-idp:AdminListDevices",
+                  "cognito-idp:AdminListGroupsForUser",
+                  "cognito-idp:AdminListUserAuthEvents",
                   "cognito-idp:AdminRemoveUserFromGroup",
                   "cognito-idp:AdminResetUserPassword",
                   "cognito-idp:AdminRespondToAuthChallenge",
+                  "cognito-idp:AdminSetUserMFAPreference",
                   "cognito-idp:AdminSetUserPassword",
+                  "cognito-idp:AdminUpdateAuthEventFeedback",
+                  "cognito-idp:AdminUpdateDeviceStatus",
                   "cognito-idp:AdminUpdateUserAttributes",
                   "cognito-idp:AdminUserGlobalSignOut",
+                  "cognito-idp:ListGroups",
                   "cognito-idp:ListUsers",
                   "cognito-idp:ListUsersInGroup",
                 ],
@@ -83,132 +98,99 @@ export const UserPoolAdminHttp = Layer.effect(
           });
         }
       }
-      const logicalId = pool.LogicalId;
+      const methods = cognitoMethods(
+        "AWS.Cognito.UserPoolAdmin",
+        pool.LogicalId,
+      );
+      const withPool = methods.injecting(
+        Effect.map(UserPoolId, (id): UserPoolIdField => ({ UserPoolId: id })),
+      );
       const adminClient: UserPoolAdminClient = {
-        adminCreateUser: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminCreateUser(${logicalId})`,
-        )(function* (request: AdminCreateUserRequest) {
-          return yield* adminCreateUser({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminGetUser: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminGetUser(${logicalId})`,
-        )(function* (request: AdminGetUserRequest) {
-          return yield* adminGetUser({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminSetUserPassword: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminSetUserPassword(${logicalId})`,
-        )(function* (request: AdminSetUserPasswordRequest) {
-          return yield* adminSetUserPassword({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminUpdateUserAttributes: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminUpdateUserAttributes(${logicalId})`,
-        )(function* (request: AdminUpdateUserAttributesRequest) {
-          return yield* adminUpdateUserAttributes({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminDeleteUser: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminDeleteUser(${logicalId})`,
-        )(function* (request: AdminDeleteUserRequest) {
-          return yield* adminDeleteUser({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminConfirmSignUp: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminConfirmSignUp(${logicalId})`,
-        )(function* (request: AdminConfirmSignUpRequest) {
-          return yield* adminConfirmSignUp({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminDisableUser: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminDisableUser(${logicalId})`,
-        )(function* (request: AdminDisableUserRequest) {
-          return yield* adminDisableUser({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminEnableUser: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminEnableUser(${logicalId})`,
-        )(function* (request: AdminEnableUserRequest) {
-          return yield* adminEnableUser({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminResetUserPassword: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminResetUserPassword(${logicalId})`,
-        )(function* (request: AdminResetUserPasswordRequest) {
-          return yield* adminResetUserPassword({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminInitiateAuth: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminInitiateAuth(${logicalId})`,
-        )(function* (request: AdminInitiateAuthRequest) {
-          return yield* adminInitiateAuth({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminRespondToAuthChallenge: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminRespondToAuthChallenge(${logicalId})`,
-        )(function* (request: AdminRespondToAuthChallengeRequest) {
-          return yield* adminRespondToAuthChallenge({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminUserGlobalSignOut: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminUserGlobalSignOut(${logicalId})`,
-        )(function* (request: AdminUserGlobalSignOutRequest) {
-          return yield* adminUserGlobalSignOut({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminAddUserToGroup: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminAddUserToGroup(${logicalId})`,
-        )(function* (request: AdminAddUserToGroupRequest) {
-          return yield* adminAddUserToGroup({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
-        adminRemoveUserFromGroup: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.adminRemoveUserFromGroup(${logicalId})`,
-        )(function* (request: AdminRemoveUserFromGroupRequest) {
-          return yield* adminRemoveUserFromGroup({
-            ...request,
-            UserPoolId: yield* UserPoolId,
-          });
-        }),
+        adminCreateUser: withPool("adminCreateUser", adminCreateUser),
+        adminGetUser: withPool("adminGetUser", adminGetUser),
+        adminSetUserPassword: withPool(
+          "adminSetUserPassword",
+          adminSetUserPassword,
+        ),
+        adminUpdateUserAttributes: withPool(
+          "adminUpdateUserAttributes",
+          adminUpdateUserAttributes,
+        ),
+        adminDeleteUserAttributes: withPool(
+          "adminDeleteUserAttributes",
+          adminDeleteUserAttributes,
+        ),
+        adminDeleteUser: withPool("adminDeleteUser", adminDeleteUser),
+        adminConfirmSignUp: withPool("adminConfirmSignUp", adminConfirmSignUp),
+        adminDisableUser: withPool("adminDisableUser", adminDisableUser),
+        adminEnableUser: withPool("adminEnableUser", adminEnableUser),
+        adminResetUserPassword: withPool(
+          "adminResetUserPassword",
+          adminResetUserPassword,
+        ),
+        adminInitiateAuth: withPool("adminInitiateAuth", adminInitiateAuth),
+        adminRespondToAuthChallenge: withPool(
+          "adminRespondToAuthChallenge",
+          adminRespondToAuthChallenge,
+        ),
+        adminUserGlobalSignOut: withPool(
+          "adminUserGlobalSignOut",
+          adminUserGlobalSignOut,
+        ),
+        adminAddUserToGroup: withPool(
+          "adminAddUserToGroup",
+          adminAddUserToGroup,
+        ),
+        adminRemoveUserFromGroup: withPool(
+          "adminRemoveUserFromGroup",
+          adminRemoveUserFromGroup,
+        ),
+        adminListGroupsForUser: withPool(
+          "adminListGroupsForUser",
+          adminListGroupsForUser,
+        ),
+        adminSetUserMFAPreference: withPool(
+          "adminSetUserMFAPreference",
+          adminSetUserMFAPreference,
+        ),
+        adminLinkProviderForUser: withPool(
+          "adminLinkProviderForUser",
+          adminLinkProviderForUser,
+        ),
+        adminDisableProviderForUser: withPool(
+          "adminDisableProviderForUser",
+          adminDisableProviderForUser,
+        ),
+        adminGetDevice: withPool("adminGetDevice", adminGetDevice),
+        adminListDevices: withPool("adminListDevices", adminListDevices),
+        adminForgetDevice: withPool("adminForgetDevice", adminForgetDevice),
+        adminUpdateDeviceStatus: withPool(
+          "adminUpdateDeviceStatus",
+          adminUpdateDeviceStatus,
+        ),
+        adminListUserAuthEvents: withPool(
+          "adminListUserAuthEvents",
+          adminListUserAuthEvents,
+        ),
+        adminUpdateAuthEventFeedback: withPool(
+          "adminUpdateAuthEventFeedback",
+          adminUpdateAuthEventFeedback,
+        ),
+        listUsersInGroup: withPool("listUsersInGroup", listUsersInGroup),
+        // optional-request list operations stay bespoke (the helper's
+        // wrapped methods take a required request object)
         listUsers: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.listUsers(${logicalId})`,
+          `AWS.Cognito.UserPoolAdmin.listUsers(${pool.LogicalId})`,
         )(function* (request: ListUsersRequest = {}) {
           return yield* listUsers({
             ...request,
             UserPoolId: yield* UserPoolId,
           });
         }),
-        listUsersInGroup: Effect.fn(
-          `AWS.Cognito.UserPoolAdmin.listUsersInGroup(${logicalId})`,
-        )(function* (request: ListUsersInGroupRequest) {
-          return yield* listUsersInGroup({
+        listGroups: Effect.fn(
+          `AWS.Cognito.UserPoolAdmin.listGroups(${pool.LogicalId})`,
+        )(function* (request: ListGroupsRequest = {}) {
+          return yield* listGroups({
             ...request,
             UserPoolId: yield* UserPoolId,
           });

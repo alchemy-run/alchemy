@@ -5,12 +5,16 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Application } from "./Application.ts";
 import type { ConfigurationProfile } from "./ConfigurationProfile.ts";
 import type { Environment } from "./Environment.ts";
-import { GetConfiguration } from "./GetConfiguration.ts";
+import {
+  GetConfiguration,
+  type GetConfigurationOptions,
+} from "./GetConfiguration.ts";
 
 interface SessionCache {
   token: string | undefined;
@@ -54,6 +58,7 @@ export const GetConfigurationHttp = Layer.effect(
       application: Application,
       environment: Environment,
       configurationProfile: ConfigurationProfile,
+      options?: GetConfigurationOptions,
     ) {
       // Outputs yield DEFERRED effects — resolve again per invocation below.
       const ApplicationId = yield* application.applicationId;
@@ -108,6 +113,9 @@ export const GetConfigurationHttp = Layer.effect(
             ApplicationIdentifier: applicationId,
             EnvironmentIdentifier: environmentId,
             ConfigurationProfileIdentifier: configurationProfileId,
+            RequiredMinimumPollIntervalInSeconds: toWireSeconds(
+              options?.requiredMinimumPollInterval,
+            ),
           });
           state = { ...state, token: session.InitialConfigurationToken };
         }

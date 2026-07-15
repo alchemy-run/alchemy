@@ -96,6 +96,8 @@ export default CloudWatchTestFunction.make(
     const enableAlarmActions = yield* CloudWatch.EnableAlarmActions(alarm);
     const disableInsightRules =
       yield* CloudWatch.DisableInsightRules(insightRule);
+    const enableInsightRules =
+      yield* CloudWatch.EnableInsightRules(insightRule);
     const getDashboard = yield* CloudWatch.GetDashboard(dashboard);
     const getInsightRuleReport =
       yield* CloudWatch.GetInsightRuleReport(insightRule);
@@ -364,6 +366,13 @@ export default CloudWatchTestFunction.make(
           });
         }
 
+        if (request.method === "POST" && pathname === "/enable-insight-rules") {
+          const result = yield* enableInsightRules();
+          return yield* HttpServerResponse.json({
+            failures: result.Failures ?? [],
+          });
+        }
+
         if (
           request.method === "GET" &&
           pathname === "/list-managed-insight-rules"
@@ -441,6 +450,7 @@ export default CloudWatchTestFunction.make(
         CloudWatch.DisableAlarmActionsHttp,
         CloudWatch.DisableInsightRulesHttp,
         CloudWatch.EnableAlarmActionsHttp,
+        CloudWatch.EnableInsightRulesHttp,
         CloudWatch.GetDashboardHttp,
         CloudWatch.GetInsightRuleReportHttp,
         CloudWatch.GetMetricDataHttp,

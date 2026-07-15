@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Vitest";
+import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import { expect } from "@effect/vitest";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -43,7 +44,7 @@ test.provider(
           );
           const { api, stage, url } = yield* AWS.ApiGatewayV2.HttpApi(
             "TestHttpApi",
-            { handler: fn },
+            { handler: fn, timeout: "29 seconds" },
           );
           return {
             url,
@@ -56,6 +57,11 @@ test.provider(
       expect(out.url).toContain(out.apiId);
       expect(out.stageName).toBe("$default");
       const baseUrl = out.url.replace(/\/+$/, "");
+
+      // The `timeout: "29 seconds"` Duration.Input lands on the wire as
+      // whole milliseconds (out-of-band verification via distilled).
+      const integrations = yield* agw2.getIntegrations({ ApiId: out.apiId });
+      expect(integrations.Items?.[0]?.TimeoutInMillis).toBe(29_000);
 
       // 1. Routing + query strings (retries through edge propagation).
       const echo = yield* edgePropagationRetry(

@@ -1,11 +1,12 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireMillis } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { RestApi } from "./RestApi.ts";
 
@@ -43,9 +44,10 @@ export interface MethodIntegrationProps {
   contentHandling?: ag.ContentHandlingStrategy;
   /**
    * Integration timeout (e.g. `"29 seconds"` or `Duration.seconds(29)`;
-   * a bare number is milliseconds). Sent to the API in milliseconds.
+   * a bare number is milliseconds). Sent to the API in milliseconds
+   * (`timeoutInMillis`).
    */
-  timeoutInMillis?: Duration.Input;
+  timeout?: Duration.Input;
   /** TLS settings for HTTP integrations (e.g. `insecureSkipVerification`). */
   tlsConfig?: ag.TlsConfig;
   /** How the integration response is transferred to the client. */
@@ -258,34 +260,6 @@ const MethodImpl = (id: string, props: MethodInputProps) =>
  */
 export const Method = MethodImpl;
 
-/**
- * Normalize a `Duration.Input` that may have round-tripped through state
- * JSON (which flattens a `Duration` to its `toJSON` shape
- * `{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`, not a valid
- * `Duration.Input`) back into an input `Duration.toMillis` accepts.
- */
-const normalizeDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional duration input to whole wire milliseconds. */
-const toWireMillis = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toMillis(normalizeDurationInput(input)));
-
 const putIntegrationRequest = (
   restApiId: string,
   resourceId: string,
@@ -307,7 +281,7 @@ const putIntegrationRequest = (
   cacheNamespace: integration.cacheNamespace,
   cacheKeyParameters: integration.cacheKeyParameters,
   contentHandling: integration.contentHandling,
-  timeoutInMillis: toWireMillis(integration.timeoutInMillis),
+  timeoutInMillis: toWireMillis(integration.timeout),
   tlsConfig: integration.tlsConfig,
   responseTransferMode: integration.responseTransferMode,
   integrationTarget: integration.integrationTarget,
@@ -395,7 +369,10 @@ const readMethodSnapshot = (p: {
           cacheNamespace: integ.cacheNamespace,
           cacheKeyParameters: integ.cacheKeyParameters,
           contentHandling: integ.contentHandling,
-          timeoutInMillis: integ.timeoutInMillis,
+          // Wire milliseconds — a plain number is a valid `Duration.Input`,
+          // so the observed snapshot stays directly comparable to a desired
+          // spec normalized via `toWireMillis`.
+          timeout: integ.timeoutInMillis,
           tlsConfig: integ.tlsConfig,
           responseTransferMode: integ.responseTransferMode,
           integrationTarget: integ.integrationTarget,
@@ -624,7 +601,7 @@ export const MethodProvider = () =>
           // wire milliseconds so it compares against the observed snapshot.
           const desiredIntegration = news.integration && {
             ...news.integration,
-            timeoutInMillis: toWireMillis(news.integration.timeoutInMillis),
+            timeout: toWireMillis(news.integration.timeout),
           };
           if (!deepEqual(desiredIntegration, observed.integration)) {
             if (news.integration) {

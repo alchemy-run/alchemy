@@ -192,5 +192,103 @@ describe("Cognito Bindings", () => {
         }),
       { timeout: 120_000 },
     );
+
+    test.provider(
+      "extended admin surface: attribute deletion, group listings, devices",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/admin-extended?username=admin-extended-user`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            nickname: string | undefined;
+            nicknameAfter: string | null;
+            userGroups: string[];
+            allGroups: string[];
+            deviceCount: number;
+          };
+
+          expect(response.nickname).toBe("admin-extended");
+          expect(response.nicknameAfter).toBeNull();
+          expect(response.userGroups.length).toBe(1);
+          expect(response.allGroups).toEqual(
+            expect.arrayContaining(response.userGroups),
+          );
+          // no remembered devices on a fresh user (or device tracking off)
+          expect(response.deviceCount).toBeLessThanOrEqual(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("UserPoolAuth self-service", () => {
+    test.provider(
+      "changePassword, attribute self-service, token refresh, deleteUser",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/self-service?username=self-service-user`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            changedPasswordAuth: boolean;
+            nickname: string | undefined;
+            nicknameAfter: string | null;
+            refreshedHasAccessToken: boolean;
+            deleted: boolean;
+          };
+
+          expect(response.changedPasswordAuth).toBe(true);
+          expect(response.nickname).toBe("self-service");
+          expect(response.nicknameAfter).toBeNull();
+          expect(response.refreshedHasAccessToken).toBe(true);
+          expect(response.deleted).toBe(true);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("IdentityPoolAuth", () => {
+    test.provider(
+      "guest getId vends AWS credentials and an OIDC token",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/identity-flow`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            identityId: string;
+            hasAccessKeyId: boolean;
+            hasSessionToken: boolean;
+            hasOpenIdToken: boolean;
+          };
+
+          expect(response.identityId).toMatch(/^[a-z0-9-]+:/);
+          expect(response.hasAccessKeyId).toBe(true);
+          expect(response.hasSessionToken).toBe(true);
+          expect(response.hasOpenIdToken).toBe(true);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("IdentityPoolAdmin", () => {
+    test.provider(
+      "describeIdentity, listIdentities, deleteIdentities",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/identity-flow`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            identityId: string;
+            describedIdentityId: string;
+            listedContains: boolean;
+          };
+
+          expect(response.describedIdentityId).toBe(response.identityId);
+          expect(response.listedContains).toBe(true);
+        }),
+      { timeout: 120_000 },
+    );
   });
 });

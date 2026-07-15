@@ -52,10 +52,11 @@ export interface HttpApiProps {
   stageName?: Input<string>;
   /**
    * Integration timeout (e.g. `"29 seconds"`; a bare number is
-   * milliseconds, 50–30000).
+   * milliseconds, 50–30000). Sent to the API in whole milliseconds
+   * (`TimeoutInMillis`).
    * @default 30 seconds
    */
-  timeoutInMillis?: Input<Duration.Input>;
+  timeout?: Input<Duration.Input>;
   /** User-defined tags for the API and stage. */
   tags?: Record<string, string>;
 }
@@ -104,7 +105,7 @@ export const HttpApi = (id: string, props: HttpApiProps) =>
         integrationType: "AWS_PROXY",
         integrationUri: props.handler.functionArn,
         payloadFormatVersion: "2.0",
-        timeoutInMillis: props.timeoutInMillis,
+        timeout: props.timeout,
       });
 
       yield* Route("Default", {

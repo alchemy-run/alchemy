@@ -1,14 +1,50 @@
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as ecr from "@distilled.cloud/aws/ecr";
+import * as iam from "@distilled.cloud/aws/iam";
+import type { Credentials } from "../Credentials.ts";
+import type { Region } from "@distilled.cloud/aws/Region";
+import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
+import type * as rolldown from "rolldown";
+import { AlchemyContext } from "../../AlchemyContext.ts";
+import * as Bundle from "../../Bundle/Bundle.ts";
+import {
+  findCwdForBundle,
+  getStableContextDir,
+  resolveMainPath,
+} from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import {
+  Platform,
+  type PlatformProps,
+  type PlatformServices,
+} from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
-import { createInternalTags, diffTags } from "../../Tags.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  type ServerHost,
+} from "../../Server/Process.ts";
+import { Stack } from "../../Stack.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
+import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import type { Providers } from "../Providers.ts";
-import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 
 export type JobDefinitionName = string;
@@ -16,19 +52,46 @@ export type JobDefinitionName = string;
 export type JobDefinitionArn =
   `arn:aws:batch:${RegionID}:${AccountID}:job-definition/${JobDefinitionName}:${number}`;
 
-export interface JobDefinitionProps {
+/**
+ * Raised when the props don't select exactly one of the two forms: the
+ * low-level container form (`image` + `executionRoleArn`) or the
+ * Effect-native form (`main`).
+ */
+export class JobDefinitionConfigError extends Data.TaggedError(
+  "JobDefinitionConfigError",
+)<{
+  readonly message: string;
+}> {}
+
+export interface JobDefinitionProps extends PlatformProps {
   /**
    * Name (family) of the job definition. If omitted, a unique name is
    * generated. Content changes register a new revision under the same name.
    */
   jobDefinitionName?: string;
   /**
-   * Container image the job runs (e.g. `public.ecr.aws/docker/library/busybox:latest`).
+   * Container image the job runs (low-level form, e.g.
+   * `public.ecr.aws/docker/library/busybox:latest`). Mutually exclusive
+   * with `main`.
    */
-  image: string;
+  image?: string;
   /**
-   * Command to run in the container. Overridable per-submission via
-   * `containerOverrides.command`.
+   * Module entrypoint for an Effect-native run-to-completion job (typically
+   * `import.meta.url` from an inline Effect program). Alchemy bundles the
+   * program, builds a container image, pushes it to a managed ECR
+   * repository, and provisions the job/execution IAM roles — mutually
+   * exclusive with a caller-supplied `image`.
+   */
+  main?: string;
+  /**
+   * Named export to load from `main`.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * Command to run in the container (low-level form). Overridable
+   * per-submission via `containerOverrides.command`. The Effect-native form
+   * bakes its entrypoint into the image instead.
    */
   command?: string[];
   /**
@@ -48,14 +111,23 @@ export interface JobDefinitionProps {
    */
   environment?: Record<string, string>;
   /**
-   * IAM role assumed by the job's application code.
+   * Additional environment variables for the Effect-native container.
+   * Non-string values are JSON-encoded. (Capability bindings also inject
+   * their variables here automatically.)
+   */
+  env?: Record<string, any>;
+  /**
+   * IAM role assumed by the job's application code. For the Effect-native
+   * form (`main`), Alchemy provisions and manages this role automatically
+   * (binding policy statements attach to it).
    */
   jobRoleArn?: string;
   /**
    * Execution role used by ECS/Fargate to pull the image and write logs.
-   * Required for Fargate jobs.
+   * Required for the low-level form; provisioned automatically for the
+   * Effect-native form.
    */
-  executionRoleArn: string;
+  executionRoleArn?: string;
   /**
    * Whether the Fargate task ENI gets a public IP. Required for image pulls
    * from public registries when running in public subnets.
@@ -72,14 +144,41 @@ export interface JobDefinitionProps {
    */
   retryAttempts?: number;
   /**
-   * Job execution timeout in seconds (minimum 60).
+   * Job execution timeout (minimum 60 seconds), e.g. `"15 minutes"` or
+   * `Duration.minutes(15)`.
    */
-  timeoutSeconds?: number;
+  timeout?: Duration.Input;
   /**
    * Propagate job definition tags to the ECS task.
    * @default false
    */
   propagateTags?: boolean;
+  /**
+   * Bundler configuration for the Effect-native entrypoint.
+   */
+  build?: {
+    input?: Partial<rolldown.InputOptions>;
+    output?: Partial<rolldown.OutputOptions>;
+  };
+  /**
+   * Docker image build for the Effect-native form: optional full
+   * `dockerfile`. When omitted, Alchemy generates a Dockerfile for the
+   * bundled `index.mjs`.
+   */
+  docker?: {
+    /**
+     * Base image when Alchemy generates the Dockerfile.
+     * @default public.ecr.aws/docker/library/bun:1
+     */
+    base?: string;
+    /** Full Dockerfile content (replaces generated Dockerfile). */
+    dockerfile?: string;
+  };
+  /**
+   * Additional managed policy ARNs for the managed job role
+   * (Effect-native form only).
+   */
+  jobRoleManagedPolicyArns?: string[];
   /**
    * User-defined tags to apply to the job definition.
    */
@@ -95,10 +194,74 @@ export interface JobDefinition extends Resource<
     revision: number;
     status: string;
     tags: Record<string, string>;
+    /** The full URI of the built container image (Effect-native form only). */
+    imageUri: string | undefined;
+    /** The managed ECR repository name (Effect-native form only). */
+    repositoryName: string | undefined;
+    /** The managed ECR repository URI (Effect-native form only). */
+    repositoryUri: string | undefined;
+    /** The ARN of the managed job role (Effect-native form only). */
+    jobRoleArn: string | undefined;
+    /** The name of the managed job role (Effect-native form only). */
+    jobRoleName: string | undefined;
+    /** The ARN of the execution role the job definition uses. */
+    executionRoleArn: string | undefined;
+    /** The name of the managed execution role (Effect-native form only). */
+    executionRoleName: string | undefined;
+    /** Content hash of the bundled program (Effect-native form only). */
+    codeHash: string | undefined;
   },
-  never,
+  {
+    /** Environment variables injected into the job container. */
+    env?: Record<string, any>;
+    /** IAM policy statements attached to the managed job role. */
+    policyStatements?: PolicyStatement[];
+  },
   Providers
 > {}
+
+export type JobDefinitionServices =
+  | Credentials
+  | Region
+  | ServerHost
+  | AWSEnvironment;
+
+/**
+ * The shape an Effect-native job implementation returns: a single `run`
+ * Effect that is the run-to-completion body of the job. The container exits
+ * 0 when it succeeds (job `SUCCEEDED`) and 1 when it fails (job `FAILED`,
+ * subject to the definition's `retryAttempts`).
+ */
+export type JobDefinitionShape = void | {
+  run: Effect.Effect<
+    void,
+    unknown,
+    JobDefinitionServices | PlatformServices | RuntimeContext | Scope
+  >;
+};
+
+export interface JobDefinitionRuntimeContext extends HostRuntimeContext {
+  readonly Type: "AWS.Batch.JobDefinition";
+}
+
+const createJobDefinitionRuntimeContext = (
+  id: string,
+): JobDefinitionRuntimeContext => {
+  const base = createHostRuntimeContext("AWS.Batch.JobDefinition")(id);
+  return {
+    ...base,
+    // A Batch job is run-to-completion, not a server. `Platform` hands any
+    // non-`fetch` impl shape to `serve`; register the shape's `run` Effect
+    // as a host runner (collected into `exports.program`, executed by the
+    // generated container entrypoint) instead of booting an HTTP server.
+    serve: ((_handler, options) => {
+      const run = (options?.shape as { run?: unknown } | undefined)?.run;
+      return Effect.isEffect(run)
+        ? base.run(run as Effect.Effect<void, never, any>)
+        : Effect.void;
+    }) as HostRuntimeContext["serve"],
+  } as JobDefinitionRuntimeContext;
+};
 
 /**
  * An AWS Batch job definition for Fargate container jobs. Job definitions are
@@ -106,9 +269,18 @@ export interface JobDefinition extends Resource<
  * revision under the same name (like ECS task definitions); destroying the
  * resource deregisters every active revision.
  *
+ * `JobDefinition` is a Platform: alongside the low-level container form
+ * (`image` + `executionRoleArn`), it supports Effect-native run-to-completion
+ * implementations — an inline Effect program that Alchemy bundles,
+ * containerizes as the job container's command, pushes to a managed ECR
+ * repository, and registers, provisioning the job and execution roles
+ * automatically. Capability bindings (e.g. S3 `GetObject`) attach IAM policy
+ * statements to the managed job role and inject their environment variables
+ * into the container.
+ *
  * @resource
  * @section Creating Job Definitions
- * @example Busybox echo job
+ * @example Busybox echo job (low-level container form)
  * ```typescript
  * const jobDef = yield* Batch.JobDefinition("EchoJob", {
  *   image: "public.ecr.aws/docker/library/busybox:latest",
@@ -127,11 +299,55 @@ export interface JobDefinition extends Resource<
  *   jobRoleArn: jobRole.roleArn,
  *   executionRoleArn: executionRole.roleArn,
  *   retryAttempts: 3,
- *   timeoutSeconds: 900,
+ *   timeout: "15 minutes",
+ * });
+ * ```
+ *
+ * @section Effect-Native Jobs
+ * @example Tagged class with an inline run-to-completion Effect
+ * ```typescript
+ * export default class Nightly extends Batch.JobDefinition<Nightly>()(
+ *   "Nightly",
+ *   { main: import.meta.url, vcpus: 1, memory: 2048 },
+ *   Effect.gen(function* () {
+ *     const getObject = yield* AWS.S3.GetObject(bucket);
+ *     return {
+ *       run: Effect.gen(function* () {
+ *         const data = yield* getObject({ key: "input.csv" });
+ *         yield* Effect.log("processed nightly batch");
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @example Eager inline job
+ * ```typescript
+ * export default Batch.JobDefinition(
+ *   "Reindex",
+ *   { main: import.meta.url },
+ *   Effect.succeed({
+ *     run: Effect.log("reindex complete"),
+ *   }),
+ * );
+ * ```
+ *
+ * @example Plain external script (bundled as-is)
+ * ```typescript
+ * // ./job.ts runs top-level and exits; Alchemy bundles + containerizes it.
+ * const jobDef = yield* Batch.JobDefinition("Script", {
+ *   main: path.join(import.meta.dirname, "job.ts"),
  * });
  * ```
  */
-export const JobDefinition = Resource<JobDefinition>("AWS.Batch.JobDefinition");
+export const JobDefinition: Platform<
+  JobDefinition,
+  JobDefinitionServices,
+  JobDefinitionShape,
+  JobDefinitionRuntimeContext
+> = Platform("AWS.Batch.JobDefinition", {
+  createRuntimeContext: createJobDefinitionRuntimeContext,
+});
 
 const observedTagsOf = (d: { tags?: { [key: string]: string | undefined } }) =>
   Object.fromEntries(
@@ -140,16 +356,60 @@ const observedTagsOf = (d: { tags?: { [key: string]: string | undefined } }) =>
     ),
   );
 
+/** Attributes only produced by the Effect-native (`main`) form. */
+interface PlatformAttributes {
+  imageUri: string | undefined;
+  repositoryName: string | undefined;
+  repositoryUri: string | undefined;
+  jobRoleArn: string | undefined;
+  jobRoleName: string | undefined;
+  executionRoleName: string | undefined;
+  codeHash: string | undefined;
+}
+
+const emptyPlatformAttributes: PlatformAttributes = {
+  imageUri: undefined,
+  repositoryName: undefined,
+  repositoryUri: undefined,
+  jobRoleArn: undefined,
+  jobRoleName: undefined,
+  executionRoleName: undefined,
+  codeHash: undefined,
+};
+
 const toAttributes = (
   d: batch.JobDefinition,
   tags: Record<string, string>,
+  platform: PlatformAttributes = emptyPlatformAttributes,
 ) => ({
   jobDefinitionName: d.jobDefinitionName!,
   jobDefinitionArn: d.jobDefinitionArn as JobDefinitionArn,
   revision: d.revision ?? 1,
   status: d.status ?? "ACTIVE",
   tags,
+  executionRoleArn: d.containerProperties?.executionRoleArn,
+  ...platform,
 });
+
+/**
+ * The effective (resolved) container configuration a reconcile wants
+ * registered — identical for both forms once the Effect-native form has
+ * built its image and roles.
+ */
+interface EffectiveContainer {
+  image: string;
+  command: string[] | undefined;
+  vcpus: string;
+  memory: string;
+  environment: Record<string, string>;
+  jobRoleArn: string | undefined;
+  executionRoleArn: string;
+  assignPublicIp: "ENABLED" | "DISABLED";
+  parameters: Record<string, string> | undefined;
+  retryAttempts: number | undefined;
+  timeoutSeconds: number | undefined;
+  propagateTags: boolean | undefined;
+}
 
 /**
  * Normalized content fingerprint of a job definition — used to decide whether
@@ -217,30 +477,54 @@ const observedFingerprint = (d: batch.JobDefinition) => {
   });
 };
 
-const desiredFingerprint = (news: JobDefinitionProps) =>
+const desiredFingerprint = (
+  effective: EffectiveContainer,
+  news: JobDefinitionProps,
+) =>
   fingerprint({
-    image: news.image,
-    command: news.command,
-    vcpus: String(news.vcpus ?? 0.25),
-    memory: String(news.memory ?? 512),
-    environment: news.environment,
-    jobRoleArn: news.jobRoleArn,
-    executionRoleArn: news.executionRoleArn,
+    image: effective.image,
+    command: effective.command,
+    vcpus: effective.vcpus,
+    memory: effective.memory,
+    environment: effective.environment,
+    jobRoleArn: effective.jobRoleArn,
+    executionRoleArn: effective.executionRoleArn,
     assignPublicIp: news.assignPublicIp,
-    parameters: news.parameters,
-    retryAttempts: news.retryAttempts,
-    timeoutSeconds: news.timeoutSeconds,
-    propagateTags: news.propagateTags,
+    parameters: effective.parameters,
+    retryAttempts: effective.retryAttempts,
+    timeoutSeconds: effective.timeoutSeconds,
+    propagateTags: effective.propagateTags,
   });
 
 export const JobDefinitionProvider = () =>
   Provider.effect(
     JobDefinition,
     Effect.gen(function* () {
+      const stack = yield* Stack;
+      const docker = yield* Docker;
+      const { dotAlchemy } = yield* AlchemyContext;
+      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+
+      const alchemyEnv = {
+        ALCHEMY_STACK_NAME: stack.name,
+        ALCHEMY_STAGE: stack.stage,
+        ALCHEMY_PHASE: "runtime",
+      };
+
       const toName = (id: string, props: { jobDefinitionName?: string } = {}) =>
         props.jobDefinitionName
           ? Effect.succeed(props.jobDefinitionName)
           : createPhysicalName({ id, maxLength: 128 });
+
+      const createRoleName = (id: string, suffix: string) =>
+        createPhysicalName({ id: `${id}-${suffix}`, maxLength: 64 });
+
+      const createRepositoryName = (id: string) =>
+        createPhysicalName({
+          id: `${id}-repo`,
+          maxLength: 256,
+          lowercase: true,
+        });
 
       /** Every ACTIVE revision of the family, ascending by revision. */
       const activeRevisions = (name: string) =>
@@ -258,8 +542,404 @@ export const JobDefinitionProvider = () =>
       const latestRevision = (name: string) =>
         activeRevisions(name).pipe(Effect.map((defs) => defs.at(-1)));
 
+      /**
+       * Ensure an IAM role trusted by ECS tasks exists (creates on miss,
+       * adopts on race when it carries our tags).
+       */
+      const ensureRole = Effect.fn(function* ({
+        id,
+        roleName,
+        managedPolicyArns,
+      }: {
+        id: string;
+        roleName: string;
+        managedPolicyArns?: string[];
+      }) {
+        const tags = yield* createInternalTags(id);
+        const role = yield* iam
+          .createRole({
+            RoleName: roleName,
+            AssumeRolePolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ecs-tasks.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            }),
+            Tags: createTagsList(tags),
+          })
+          .pipe(
+            Effect.catchTag("EntityAlreadyExistsException", () =>
+              iam.getRole({ RoleName: roleName }).pipe(
+                Effect.filterOrFail(
+                  (existing) => hasTags(tags, existing.Role?.Tags),
+                  () =>
+                    new Error(
+                      `Role '${roleName}' already exists and is not managed by alchemy`,
+                    ),
+                ),
+              ),
+            ),
+          );
+        for (const policyArn of managedPolicyArns ?? []) {
+          yield* iam
+            .attachRolePolicy({ RoleName: roleName, PolicyArn: policyArn })
+            .pipe(Effect.catchTag("LimitExceededException", () => Effect.void));
+        }
+        return role.Role!.Arn!;
+      });
+
+      /** Ensure the managed ECR repository for the built image exists. */
+      const ensureRepository = Effect.fn(function* ({
+        repositoryName,
+        tags,
+      }: {
+        repositoryName: string;
+        tags: Record<string, string>;
+      }) {
+        const created = yield* ecr
+          .createRepository({
+            repositoryName,
+            imageTagMutability: "MUTABLE",
+            imageScanningConfiguration: { scanOnPush: true },
+            tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+          })
+          .pipe(
+            Effect.catchTag("RepositoryAlreadyExistsException", () =>
+              Effect.gen(function* () {
+                const existing = yield* ecr.describeRepositories({
+                  repositoryNames: [repositoryName],
+                });
+                return { repository: existing.repositories?.[0] };
+              }),
+            ),
+          );
+        const repository = created.repository;
+        if (!repository?.repositoryUri) {
+          return yield* Effect.die(
+            new Error(`Failed to resolve ECR repository '${repositoryName}'`),
+          );
+        }
+        return { repositoryUri: repository.repositoryUri };
+      });
+
+      /**
+       * Attach binding-declared IAM policy statements to the managed job
+       * role and collect binding-declared environment variables.
+       */
+      const attachBindings = Effect.fn(function* ({
+        roleName,
+        policyName,
+        bindings,
+      }: {
+        roleName: string;
+        policyName: string;
+        bindings: ResourceBinding<JobDefinition["Binding"]>[];
+      }) {
+        const activeBindings = bindings.filter(
+          (
+            binding: ResourceBinding<JobDefinition["Binding"]> & {
+              action?: string;
+            },
+          ) => binding.action !== "delete",
+        );
+
+        const env = activeBindings
+          .map((binding) => binding?.data?.env)
+          .reduce((acc, value) => ({ ...acc, ...value }), {});
+
+        const policyStatements = activeBindings.flatMap(
+          (binding) =>
+            binding?.data?.policyStatements?.map((statement) => ({
+              ...statement,
+              Sid: statement.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
+            })) ?? [],
+        );
+
+        if (policyStatements.length > 0) {
+          yield* iam.putRolePolicy({
+            RoleName: roleName,
+            PolicyName: policyName,
+            PolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: policyStatements,
+            }),
+          });
+        } else {
+          yield* iam
+            .deleteRolePolicy({ RoleName: roleName, PolicyName: policyName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }
+
+        return env;
+      });
+
+      /** Bundle the Effect-native program into container-ready files. */
+      const bundleProgram = Effect.fn(function* (props: JobDefinitionProps) {
+        const handler = props.handler ?? "default";
+        const realMain = yield* resolveMainPath(props.main!);
+        const cwd = yield* findCwdForBundle(realMain);
+
+        const buildBundle = Effect.fn(function* (
+          entry: string,
+          plugins?: rolldown.RolldownPluginOption,
+        ) {
+          return yield* Bundle.build(
+            {
+              ...props.build?.input,
+              input: entry,
+              cwd,
+              platform: "node",
+              // The container runs on `bun`; keep `bun`/`bun:*` external (the
+              // runtime provides them) and resolve the `bun` export condition
+              // so `@effect/platform-bun` picks its Bun implementations.
+              external: [
+                "bun",
+                "bun:*",
+                ...((props.build?.input?.external as string[] | undefined) ??
+                  []),
+              ],
+              resolve: {
+                conditionNames: ["bun", "import", "module", "default"],
+                ...props.build?.input?.resolve,
+              },
+              plugins: [props.build?.input?.plugins, plugins],
+            },
+            {
+              ...props.build?.output,
+              format: "esm",
+              sourcemap: props.build?.output?.sourcemap ?? false,
+              minify: props.build?.output?.minify ?? false,
+              entryFileNames: "index.mjs",
+            },
+          );
+        });
+
+        const bundleOutput = props.isExternal
+          ? yield* buildBundle(realMain)
+          : yield* buildBundle(
+              realMain,
+              virtualEntryPlugin(
+                (importPath) => `
+import { BunServices } from "@effect/platform-bun";
+import { Stack } from "alchemy/Stack";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Region from "@distilled.cloud/aws/Region";
+
+import { ${handler} as handler } from ${JSON.stringify(importPath)};
+
+const platform = Layer.mergeAll(
+  BunServices.layer,
+  FetchHttpClient.layer,
+  Logger.layer([Logger.consolePretty()]),
+);
+
+// Resolve the bundled program (the \`run\` Effect registered by the job's
+// impl shape plus any host.run loops) and run it TO COMPLETION — a Batch
+// job is not a server. Exit 0 on success (job SUCCEEDED) and 1 on failure
+// (job FAILED, subject to the definition's retry strategy).
+const program = handler.pipe(
+  Effect.flatMap((job) => job.RuntimeContext.exports),
+  Effect.flatMap((exports) => exports.program),
+  Effect.provide(
+    Layer.effect(
+      Stack,
+      Effect.all([
+        Config.string("ALCHEMY_STACK_NAME"),
+        Config.string("ALCHEMY_STAGE")
+      ]).pipe(
+        Effect.map(([name, stage]) => ({
+          name,
+          stage,
+          bindings: {},
+          resources: {}
+        }))
+      )
+    ).pipe(
+      Layer.provideMerge(Credentials.fromEnv()),
+      Layer.provideMerge(Region.fromEnv()),
+      Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromEnv()
+        )
+      ),
+    )
+  ),
+  Effect.scoped
+);
+
+console.log("Batch job bootstrap starting...");
+await Effect.runPromise(program).then(
+  () => {
+    console.log("Batch job completed.");
+    process.exit(0);
+  },
+  (err) => {
+    console.error("Batch job failed:", err);
+    process.exit(1);
+  },
+);
+`,
+              ),
+            );
+
+        // Return every emitted file (entry + shared chunks). Dynamic imports
+        // in the AWS SDK split into chunks; dropping any of them crashes the
+        // container with `Cannot find module './chunk-X.js'`.
+        const files = bundleOutput.files.map((file) => ({
+          path: file.path,
+          content:
+            typeof file.content === "string"
+              ? new TextEncoder().encode(file.content)
+              : file.content,
+        }));
+
+        return { files, hash: bundleOutput.hash };
+      });
+
+      /** Build + push the container image for the bundled program. */
+      const buildAndPushImage = Effect.fn(function* ({
+        id,
+        repositoryUri,
+        hash,
+        files,
+        props,
+      }: {
+        id: string;
+        repositoryUri: string;
+        hash: string;
+        files: { path: string; content: Uint8Array<ArrayBufferLike> }[];
+        props: JobDefinitionProps;
+      }) {
+        const realMain = yield* resolveMainPath(props.main!);
+        const contextDir = yield* getStableContextDir(
+          realMain,
+          dotAlchemy,
+          `${id}-image`,
+        );
+        const imageUri = `${repositoryUri}:${hash}`;
+
+        const generatedDockerfile = (() => {
+          const base =
+            props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
+          return [
+            `FROM ${base}`,
+            `WORKDIR /app`,
+            `COPY index.mjs /app/index.mjs`,
+            // Copy any additional rolldown chunks (`chunk-XXX.js`, ...).
+            // Non-trivial bundles always emit at least one; minimal bundles
+            // emit none and the COPY no-ops.
+            `COPY *.js /app/`,
+            `ENTRYPOINT ["bun", "/app/index.mjs"]`,
+          ].join("\n");
+        })();
+
+        const dockerfile = props.docker?.dockerfile ?? generatedDockerfile;
+
+        yield* docker.materialize({
+          context: contextDir,
+          dockerfile,
+          // Entry chunk becomes `index.mjs`; all other chunks keep their
+          // emitted `*.js` names so the entry's relative imports resolve.
+          files: files.map((file, index) => ({
+            path: index === 0 ? "index.mjs" : file.path,
+            content: file.content,
+          })),
+        });
+        // Batch Fargate defaults to X86_64 — always build linux/amd64
+        // (cross-built via emulation on ARM64 hosts).
+        return yield* buildAndPushEcrImage(docker, {
+          imageUri,
+          context: contextDir,
+          platform: "linux/amd64",
+        });
+      });
+
+      /**
+       * Delete the managed platform resources (ECR repository, job +
+       * execution roles). Used by `delete` and by a reconcile that switches
+       * an Effect-native definition back to the low-level form. Idempotent.
+       */
+      const cleanupPlatformResources = Effect.fn(function* (platform: {
+        repositoryName?: string | undefined;
+        jobRoleName?: string | undefined;
+        executionRoleName?: string | undefined;
+      }) {
+        if (platform.repositoryName) {
+          yield* ecr
+            .deleteRepository({
+              repositoryName: platform.repositoryName,
+              force: true,
+            })
+            .pipe(
+              Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
+            );
+        }
+        for (const roleName of [
+          platform.jobRoleName,
+          platform.executionRoleName,
+        ]) {
+          if (!roleName) continue;
+          yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed({ PolicyNames: [] as string[] }),
+            ),
+            Effect.flatMap((policies) =>
+              Effect.forEach(policies.PolicyNames ?? [], (policyName) =>
+                iam
+                  .deleteRolePolicy({
+                    RoleName: roleName,
+                    PolicyName: policyName,
+                  })
+                  .pipe(
+                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                  ),
+              ),
+            ),
+          );
+          yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed({ AttachedPolicies: [] }),
+            ),
+            Effect.flatMap((policies) =>
+              Effect.forEach(policies.AttachedPolicies ?? [], (policy) =>
+                iam
+                  .detachRolePolicy({
+                    RoleName: roleName,
+                    PolicyArn: policy.PolicyArn!,
+                  })
+                  .pipe(
+                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                  ),
+              ),
+            ),
+          );
+          yield* iam
+            .deleteRole({ RoleName: roleName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }
+      });
+
       return {
-        stables: ["jobDefinitionName"],
+        stables: [
+          "jobDefinitionName",
+          "repositoryName",
+          "repositoryUri",
+          "jobRoleArn",
+          "jobRoleName",
+          "executionRoleName",
+        ],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (
@@ -273,7 +953,22 @@ export const JobDefinitionProvider = () =>
             output?.jobDefinitionName ?? (yield* toName(id, olds ?? {}));
           const latest = yield* latestRevision(name);
           if (!latest?.jobDefinitionArn) return undefined;
-          return toAttributes(latest, observedTagsOf(latest));
+          // Managed platform resources (repo, roles) are stable identifiers —
+          // carry them through from the cached output.
+          return toAttributes(latest, observedTagsOf(latest), {
+            ...emptyPlatformAttributes,
+            ...(output
+              ? {
+                  imageUri: output.imageUri,
+                  repositoryName: output.repositoryName,
+                  repositoryUri: output.repositoryUri,
+                  jobRoleArn: output.jobRoleArn,
+                  jobRoleName: output.jobRoleName,
+                  executionRoleName: output.executionRoleName,
+                  codeHash: output.codeHash,
+                }
+              : {}),
+          });
         }),
         list: () =>
           Effect.gen(function* () {
@@ -295,10 +990,165 @@ export const JobDefinitionProvider = () =>
               toAttributes(d, observedTagsOf(d)),
             );
           }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          news,
+          bindings,
+          output,
+          session,
+        }) {
+          const { region } = yield* AWSEnvironment.current;
           const name = output?.jobDefinitionName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+
+          if (news.main !== undefined && news.image !== undefined) {
+            return yield* Effect.fail(
+              new JobDefinitionConfigError({
+                message:
+                  "`main` (Effect-native form) and `image` (low-level form) are mutually exclusive",
+              }),
+            );
+          }
+          if (news.main === undefined && news.image === undefined) {
+            return yield* Effect.fail(
+              new JobDefinitionConfigError({
+                message:
+                  "one of `main` (Effect-native form) or `image` (low-level form) is required",
+              }),
+            );
+          }
+          if (news.main === undefined && news.executionRoleArn === undefined) {
+            return yield* Effect.fail(
+              new JobDefinitionConfigError({
+                message:
+                  "`executionRoleArn` is required with `image` (Fargate jobs pull the image and write logs through it)",
+              }),
+            );
+          }
+
+          // Resolve the effective container configuration. The Effect-native
+          // form first ensures its managed roles + repository, bundles the
+          // program, and builds + pushes the image; the low-level form uses
+          // the caller-supplied image and roles directly. Each ensure step is
+          // independently idempotent.
+          let platformAttributes = emptyPlatformAttributes;
+          let effective: EffectiveContainer;
+          if (news.main !== undefined) {
+            const jobRoleName =
+              output?.jobRoleName ?? (yield* createRoleName(id, "job-role"));
+            const executionRoleName =
+              output?.executionRoleName ??
+              (yield* createRoleName(id, "execution-role"));
+            const repositoryName =
+              output?.repositoryName ?? (yield* createRepositoryName(id));
+            const jobPolicyName = yield* createPhysicalName({
+              id: `${id}-job-policy`,
+              maxLength: 128,
+            });
+
+            const jobRoleArn = yield* ensureRole({
+              id,
+              roleName: jobRoleName,
+              managedPolicyArns: news.jobRoleManagedPolicyArns,
+            });
+            const executionRoleArn = yield* ensureRole({
+              id,
+              roleName: executionRoleName,
+              managedPolicyArns: [
+                "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+              ],
+            });
+
+            const bindingEnv = yield* attachBindings({
+              roleName: jobRoleName,
+              policyName: jobPolicyName,
+              bindings,
+            });
+
+            const { repositoryUri } =
+              output?.repositoryUri && output.repositoryName === repositoryName
+                ? { repositoryUri: output.repositoryUri }
+                : yield* ensureRepository({
+                    repositoryName,
+                    tags: desiredTags,
+                  });
+
+            const { files, hash } = yield* bundleProgram(news);
+            const imageUri = yield* buildAndPushImage({
+              id,
+              repositoryUri,
+              hash,
+              files,
+              props: news,
+            });
+
+            platformAttributes = {
+              imageUri,
+              repositoryName,
+              repositoryUri,
+              jobRoleArn,
+              jobRoleName,
+              executionRoleName,
+              codeHash: hash,
+            };
+            effective = {
+              image: imageUri,
+              command: undefined,
+              vcpus: String(news.vcpus ?? 0.25),
+              memory: String(news.memory ?? 512),
+              environment: {
+                // Bindings + alchemy runtime env first (JSON-encoded), then
+                // the caller's `env`, then plain `environment` wins last.
+                ...Object.fromEntries(
+                  Object.entries({
+                    ...bindingEnv,
+                    ...alchemyEnv,
+                    // Fargate does not inject AWS_REGION — the bundled
+                    // program's `Region.fromEnv()` needs it.
+                    AWS_REGION: region,
+                    ...news.env,
+                  }).map(([key, value]) => [
+                    key,
+                    typeof value === "string" ? value : JSON.stringify(value),
+                  ]),
+                ),
+                ...news.environment,
+              },
+              jobRoleArn,
+              executionRoleArn,
+              assignPublicIp: news.assignPublicIp ?? "ENABLED",
+              parameters: news.parameters,
+              retryAttempts: news.retryAttempts,
+              timeoutSeconds: toWireSeconds(news.timeout),
+              propagateTags: news.propagateTags,
+            };
+          } else {
+            // Low-level form. If a previous deploy used the Effect-native
+            // form, its managed repo/roles are no longer referenced — reap
+            // them so nothing leaks.
+            if (
+              output?.repositoryName ||
+              output?.jobRoleName ||
+              output?.executionRoleName
+            ) {
+              yield* cleanupPlatformResources(output);
+            }
+            effective = {
+              image: news.image!,
+              command: news.command,
+              vcpus: String(news.vcpus ?? 0.25),
+              memory: String(news.memory ?? 512),
+              environment: { ...news.environment },
+              jobRoleArn: news.jobRoleArn,
+              executionRoleArn: news.executionRoleArn!,
+              assignPublicIp: news.assignPublicIp ?? "ENABLED",
+              parameters: news.parameters,
+              retryAttempts: news.retryAttempts,
+              timeoutSeconds: toWireSeconds(news.timeout),
+              propagateTags: news.propagateTags,
+            };
+          }
 
           // Observe — the latest ACTIVE revision is the live state.
           const latest = yield* latestRevision(name);
@@ -307,38 +1157,38 @@ export const JobDefinitionProvider = () =>
           // differs (revisions are immutable; registration IS the update).
           if (
             !latest ||
-            observedFingerprint(latest) !== desiredFingerprint(news)
+            observedFingerprint(latest) !== desiredFingerprint(effective, news)
           ) {
             const registered = yield* batch.registerJobDefinition({
               jobDefinitionName: name,
               type: "container",
               platformCapabilities: ["FARGATE"],
               containerProperties: {
-                image: news.image,
-                command: news.command,
-                jobRoleArn: news.jobRoleArn,
-                executionRoleArn: news.executionRoleArn,
+                image: effective.image,
+                command: effective.command,
+                jobRoleArn: effective.jobRoleArn,
+                executionRoleArn: effective.executionRoleArn,
                 resourceRequirements: [
-                  { type: "VCPU", value: String(news.vcpus ?? 0.25) },
-                  { type: "MEMORY", value: String(news.memory ?? 512) },
+                  { type: "VCPU", value: effective.vcpus },
+                  { type: "MEMORY", value: effective.memory },
                 ],
-                environment: Object.entries(news.environment ?? {}).map(
+                environment: Object.entries(effective.environment).map(
                   ([key, value]) => ({ name: key, value }),
                 ),
                 networkConfiguration: {
-                  assignPublicIp: news.assignPublicIp ?? "ENABLED",
+                  assignPublicIp: effective.assignPublicIp,
                 },
               },
-              parameters: news.parameters,
+              parameters: effective.parameters,
               retryStrategy:
-                news.retryAttempts !== undefined
-                  ? { attempts: news.retryAttempts }
+                effective.retryAttempts !== undefined
+                  ? { attempts: effective.retryAttempts }
                   : undefined,
               timeout:
-                news.timeoutSeconds !== undefined
-                  ? { attemptDurationSeconds: news.timeoutSeconds }
+                effective.timeoutSeconds !== undefined
+                  ? { attemptDurationSeconds: effective.timeoutSeconds }
                   : undefined,
-              propagateTags: news.propagateTags,
+              propagateTags: effective.propagateTags,
               tags: desiredTags,
             });
             yield* session.note(registered.jobDefinitionArn);
@@ -348,6 +1198,8 @@ export const JobDefinitionProvider = () =>
               revision: registered.revision,
               status: "ACTIVE",
               tags: desiredTags,
+              executionRoleArn: effective.executionRoleArn,
+              ...platformAttributes,
             };
           }
 
@@ -370,7 +1222,7 @@ export const JobDefinitionProvider = () =>
           }
 
           yield* session.note(latest.jobDefinitionArn!);
-          return toAttributes(latest, desiredTags);
+          return toAttributes(latest, desiredTags, platformAttributes);
         }),
         delete: Effect.fn(function* ({ output }) {
           // Deregister EVERY active revision of the family. Deregistration is
@@ -384,6 +1236,9 @@ export const JobDefinitionProvider = () =>
               }),
             { concurrency: 4 },
           );
+
+          // Reap the managed platform resources (Effect-native form only).
+          yield* cleanupPlatformResources(output);
 
           // Reap this family's log streams from the shared, service-managed
           // `/aws/batch/job` group. The awslogs driver names streams

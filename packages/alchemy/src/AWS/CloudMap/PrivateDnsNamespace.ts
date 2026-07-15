@@ -1,8 +1,9 @@
 import * as sd from "@distilled.cloud/aws/servicediscovery";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -202,10 +203,7 @@ export const PrivateDnsNamespaceProvider = () =>
           const name = output?.namespaceName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const desiredTtl =
-            news.ttl !== undefined
-              ? Math.round(Duration.toSeconds(news.ttl))
-              : undefined;
+          const desiredTtl = toWireSeconds(news.ttl);
 
           // 1. OBSERVE — cloud state is authoritative; output is an id cache
           let namespace = yield* observeNamespace(

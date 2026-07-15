@@ -6,8 +6,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
+import { fetchObservedTags, syncResourceTags, toTagList } from "./internal.ts";
 
 export interface ConnectionProps {
   /**
@@ -81,19 +82,6 @@ export const Connection = Resource<Connection>(
   "AWS.CodeConnections.Connection",
 );
 
-/** Convert a CodeConnections wire tag list into a plain record. */
-const toTagRecord = (
-  tags: ReadonlyArray<{ Key?: string; Value?: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries(
-    (tags ?? [])
-      .filter(
-        (tag): tag is { Key: string; Value: string } =>
-          typeof tag.Key === "string" && typeof tag.Value === "string",
-      )
-      .map((tag) => [tag.Key, tag.Value]),
-  );
-
 export const ConnectionProvider = () =>
   Provider.effect(
     Connection,
@@ -138,31 +126,6 @@ export const ConnectionProvider = () =>
         providerType: connection.ProviderType ?? "",
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
-        const observed = yield* codeconnections
-          .listTagsForResource({ ResourceArn: arn })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
-        const { removed, upsert } = diffTags(
-          toTagRecord(observed?.Tags),
-          desiredTags,
-        );
-        if (upsert.length > 0) {
-          yield* codeconnections.tagResource({
-            ResourceArn: arn,
-            Tags: upsert,
-          });
-        }
-        if (removed.length > 0) {
-          yield* codeconnections.untagResource({
-            ResourceArn: arn,
-            TagKeys: removed,
-          });
-        }
-      });
-
       return {
         stables: ["connectionName", "connectionArn", "providerType"],
 
@@ -191,12 +154,7 @@ export const ConnectionProvider = () =>
             : yield* findByName(name);
           if (connection?.ConnectionArn === undefined) return undefined;
           const attrs = toAttrs(connection, name);
-          const tags = yield* codeconnections
-            .listTagsForResource({ ResourceArn: attrs.connectionArn })
-            .pipe(
-              Effect.map((res) => toTagRecord(res.Tags)),
-              Effect.catch(() => Effect.succeed({})),
-            );
+          const tags = yield* fetchObservedTags(attrs.connectionArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -218,10 +176,7 @@ export const ConnectionProvider = () =>
               ConnectionName: name,
               ProviderType: news.providerType,
               HostArn: news.hostArn,
-              Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Tags: toTagList(desiredTags),
             });
             observed = yield* getByArn(created.ConnectionArn);
             if (observed?.ConnectionArn === undefined) {
@@ -235,7 +190,7 @@ export const ConnectionProvider = () =>
           }
 
           // 3. Sync tags — diff against OBSERVED cloud tags.
-          yield* syncTags(observed.ConnectionArn!, desiredTags);
+          yield* syncResourceTags(observed.ConnectionArn!, desiredTags);
 
           // 4. Return fresh attributes.
           yield* session.note(name);

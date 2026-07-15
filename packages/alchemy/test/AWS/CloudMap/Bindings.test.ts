@@ -23,6 +23,7 @@ const readinessPolicy = Schedule.max([
 
 let baseUrl: string;
 let serviceId: string;
+let customServiceId: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -88,13 +89,20 @@ const registerOutOfBand = (instanceId: string, ipv4: string) =>
       ),
     );
 
-const deregisterOutOfBand = (instanceId: string) =>
-  sd.deregisterInstance({ ServiceId: serviceId, InstanceId: instanceId }).pipe(
-    Effect.flatMap((r) =>
-      r.OperationId !== undefined ? waitOperation(r.OperationId) : Effect.void,
-    ),
-    Effect.catchTag("InstanceNotFound", () => Effect.void),
-  );
+const deregisterOutOfBand = (instanceId: string, inServiceId?: string) =>
+  sd
+    .deregisterInstance({
+      ServiceId: inServiceId ?? serviceId,
+      InstanceId: instanceId,
+    })
+    .pipe(
+      Effect.flatMap((r) =>
+        r.OperationId !== undefined
+          ? waitOperation(r.OperationId)
+          : Effect.void,
+      ),
+      Effect.catchTag("InstanceNotFound", () => Effect.void),
+    );
 
 interface DiscoveredInstance {
   instanceId: string;
@@ -210,7 +218,9 @@ describe("CloudMap Bindings", () => {
         `CloudMap test setup: fixture info = ${JSON.stringify(info)}`,
       );
       serviceId = (info as { serviceId: string }).serviceId;
+      customServiceId = (info as { customServiceId: string }).customServiceId;
       expect(serviceId).toBeTruthy();
+      expect(customServiceId).toBeTruthy();
     }),
     { timeout: 300_000 },
   );
@@ -221,23 +231,25 @@ describe("CloudMap Bindings", () => {
     // R=never, so provide them explicitly (Stack/Stage come from destroy()).
     Core.withProviders(
       Effect.gen(function* () {
-        // deregister any instances the tests left behind so the service (and
+        // deregister any instances the tests left behind so the services (and
         // then the namespace) can delete without ResourceInUse churn
-        if (serviceId !== undefined) {
-          const instances = yield* sd
-            .listInstances({ ServiceId: serviceId })
-            .pipe(
-              Effect.map((r) => r.Instances ?? []),
-              Effect.catchTag("ServiceNotFound", () => Effect.succeed([])),
+        for (const cleanupServiceId of [serviceId, customServiceId]) {
+          if (cleanupServiceId !== undefined) {
+            const instances = yield* sd
+              .listInstances({ ServiceId: cleanupServiceId })
+              .pipe(
+                Effect.map((r) => r.Instances ?? []),
+                Effect.catchTag("ServiceNotFound", () => Effect.succeed([])),
+              );
+            yield* Effect.forEach(
+              instances,
+              (instance) =>
+                instance.Id !== undefined
+                  ? deregisterOutOfBand(instance.Id, cleanupServiceId)
+                  : Effect.void,
+              { concurrency: 4 },
             );
-          yield* Effect.forEach(
-            instances,
-            (instance) =>
-              instance.Id !== undefined
-                ? deregisterOutOfBand(instance.Id)
-                : Effect.void,
-            { concurrency: 4 },
-          );
+          }
         }
         yield* sharedStack.destroy();
       }),
@@ -330,6 +342,157 @@ describe("CloudMap Bindings", () => {
           yield* expectInstanceState("bind-dereg", false);
         }),
       { timeout: 180_000 },
+    );
+  });
+
+  describe("GetInstance + ListInstances", () => {
+    test.provider(
+      "lambda reads a registered instance through the control-plane bindings",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* registerOutOfBand("read-a", "10.0.0.31");
+
+          // GetInstance — full attribute map by id
+          const single = yield* send(
+            HttpClientRequest.get(`${baseUrl}/instance?id=read-a`),
+          );
+          expect(single.status).toBe(200);
+          const singleBody = (yield* single.json) as {
+            instanceId: string;
+            attributes: Record<string, string>;
+          };
+          expect(singleBody.instanceId).toBe("read-a");
+          expect(singleBody.attributes.AWS_INSTANCE_IPV4).toBe("10.0.0.31");
+
+          // ListInstances — control-plane enumeration includes it
+          const listed = yield* send(
+            HttpClientRequest.get(`${baseUrl}/instances`),
+          );
+          expect(listed.status).toBe(200);
+          const listedBody = (yield* listed.json) as {
+            instances: { instanceId: string }[];
+          };
+          expect(listedBody.instances.map((i) => i.instanceId)).toContain(
+            "read-a",
+          );
+
+          // cleanup
+          yield* deregisterOutOfBand("read-a");
+        }),
+      { timeout: 180_000 },
+    );
+  });
+
+  describe("DiscoverInstancesRevision", () => {
+    test.provider(
+      "lambda reads the instance-set revision through the binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/revision`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { revision: number };
+          expect(typeof body.revision).toBe("number");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetServiceAttributes", () => {
+    test.provider(
+      "lambda reads the service attributes declared on the Service resource",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/service-attributes`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as {
+            attributes: Record<string, string>;
+          };
+          expect(body.attributes).toEqual({ tier: "backend", version: "1" });
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("UpdateInstanceCustomHealthStatus + GetInstancesHealthStatus + GetOperation", () => {
+    test.provider(
+      "lambda registers, awaits the operation, pushes custom health, and reads it back",
+      (_stack) =>
+        Effect.gen(function* () {
+          // register an instance on the custom-health service via the binding
+          const registered = yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/custom/register`),
+              {
+                instanceId: "cust-1",
+                attributes: { AWS_INSTANCE_IPV4: "10.0.0.41" },
+              },
+            ),
+          );
+          expect(registered.status).toBe(200);
+          const { operationId } = (yield* registered.json) as {
+            operationId: string;
+          };
+          expect(operationId).toBeTruthy();
+
+          // await the async registration THROUGH the GetOperation binding
+          const operation = yield* send(
+            HttpClientRequest.get(`${baseUrl}/operation?id=${operationId}`),
+          ).pipe(
+            Effect.flatMap((r) => r.json),
+            Effect.map((body) => body as { status?: string }),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (op): boolean =>
+                op.status === "SUCCESS" || op.status === "FAIL",
+              times: 45,
+            }),
+          );
+          expect(operation.status).toBe("SUCCESS");
+
+          const pushHealth = (status: "HEALTHY" | "UNHEALTHY") =>
+            send(
+              HttpClientRequest.bodyJsonUnsafe(
+                HttpClientRequest.post(`${baseUrl}/custom/health`),
+                { instanceId: "cust-1", status },
+              ),
+            );
+
+          const readHealth = send(
+            HttpClientRequest.get(`${baseUrl}/custom/health-status`),
+          ).pipe(
+            Effect.flatMap((r) => r.json),
+            Effect.map(
+              (body) =>
+                (body as { status: Record<string, string | undefined> }).status[
+                  "cust-1"
+                ],
+            ),
+          );
+
+          const expectHealth = (expected: "HEALTHY" | "UNHEALTHY") =>
+            readHealth.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("3 seconds"),
+                until: (status): boolean => status === expected,
+                times: 20,
+              }),
+              Effect.map((status) => expect(status).toBe(expected)),
+            );
+
+          // push UNHEALTHY then HEALTHY and observe both through the bindings
+          yield* pushHealth("UNHEALTHY");
+          yield* expectHealth("UNHEALTHY");
+          yield* pushHealth("HEALTHY");
+          yield* expectHealth("HEALTHY");
+
+          // cleanup
+          yield* deregisterOutOfBand("cust-1", customServiceId);
+        }),
+      { timeout: 300_000 },
     );
   });
 });

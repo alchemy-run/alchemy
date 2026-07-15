@@ -1,5 +1,5 @@
 import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -13,6 +13,7 @@ import {
   diffTags,
   hasAlchemyTags,
 } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { findClusterById, sameStringSet, toTagRecord } from "./internal.ts";
 
@@ -48,11 +49,11 @@ export interface ClusterProps {
   mode?: cloudhsm.ClusterMode;
   /**
    * How long automatic backups of the cluster are retained (e.g. `"30 days"`
-   * or `Duration.days(30)`; a bare number is milliseconds). Updated in place
-   * via ModifyCluster.
+   * or `Duration.days(30)`; a bare number is milliseconds). Converted to
+   * whole days on the wire. Updated in place via ModifyCluster.
    * @default 90 days
    */
-  backupRetentionDays?: Duration.Input;
+  backupRetention?: Duration.Input;
   /**
    * User-defined tags for the cluster.
    */
@@ -139,7 +140,7 @@ export interface Cluster extends Resource<
  *   hsmType: "hsm2m.medium",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  *   mode: "NON_FIPS",
- *   backupRetentionDays: "30 days",
+ *   backupRetention: "30 days",
  * });
  * ```
  *
@@ -293,10 +294,7 @@ export const ClusterProvider = () =>
           const props = news!;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
-          const backupRetentionDays =
-            props.backupRetentionDays !== undefined
-              ? Math.round(Duration.toDays(props.backupRetentionDays))
-              : undefined;
+          const backupRetentionDays = toWireDays(props.backupRetention);
 
           // 1. Observe — cloud state is authoritative; output is only an id
           //    cache. Without one, recover by alchemy tags (crash recovery /

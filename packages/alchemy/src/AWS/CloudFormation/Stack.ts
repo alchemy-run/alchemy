@@ -1,8 +1,9 @@
 import * as cloudformation from "@distilled.cloud/aws/cloudformation";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { toWireMinutes } from "../../Util/Duration.ts";
 
 /**
  * Bounded wait for a stack to leave an in-progress status. Explicitly-typed
@@ -88,9 +89,9 @@ export interface StackProps {
   /**
    * Amount of time that can pass before the stack status becomes
    * `CREATE_FAILED` (e.g. `"30 minutes"` or `Duration.minutes(30)`; a bare
-   * number is milliseconds).
+   * number is milliseconds). Converted to whole minutes on the wire.
    */
-  timeoutInMinutes?: Duration.Input;
+  timeout?: Duration.Input;
   /**
    * User-defined tags propagated to every resource in the stack.
    */
@@ -391,10 +392,7 @@ export const StackProvider = () =>
               NotificationARNs: news.notificationARNs,
               DisableRollback: news.disableRollback,
               OnFailure: news.onFailure,
-              TimeoutInMinutes:
-                news.timeoutInMinutes !== undefined
-                  ? Math.round(Duration.toMinutes(news.timeoutInMinutes))
-                  : undefined,
+              TimeoutInMinutes: toWireMinutes(news.timeout),
               Tags: toWireTags(desiredTags),
             });
             const settled = yield* waitForSettled(created.StackId!, name);

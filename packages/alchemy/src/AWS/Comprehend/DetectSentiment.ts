@@ -13,7 +13,7 @@ import * as Binding from "../../Binding.ts";
  * IAM).
  *
  * @binding
- * @section Detecting Sentiment
+ * @section Real-Time Analysis
  * @example Detect Sentiment of a Sentence
  * ```typescript
  * // init

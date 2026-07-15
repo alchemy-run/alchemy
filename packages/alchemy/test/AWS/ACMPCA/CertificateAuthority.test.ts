@@ -1,5 +1,9 @@
 import * as AWS from "@/AWS";
-import { CertificateAuthority, Permission } from "@/AWS/ACMPCA";
+import {
+  CertificateAuthority,
+  CertificateAuthorityPolicy,
+  Permission,
+} from "@/AWS/ACMPCA";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import * as Test from "@/Test/Vitest";
 import * as acmpca from "@distilled.cloud/aws/acm-pca";
@@ -20,6 +24,22 @@ test.provider(
       const error = yield* Effect.flip(
         acmpca.describeCertificateAuthority({
           CertificateAuthorityArn: `arn:aws:acm-pca:${region}:${accountId}:certificate-authority/00000000-0000-0000-0000-000000000000`,
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
+test.provider(
+  "getPolicy on a nonexistent CA fails with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      const { accountId, region } = yield* AWSEnvironment.current;
+      // Proves the typed tag the CertificateAuthorityPolicy provider's
+      // observe path treats as "no policy".
+      const error = yield* Effect.flip(
+        acmpca.getPolicy({
+          ResourceArn: `arn:aws:acm-pca:${region}:${accountId}:certificate-authority/00000000-0000-0000-0000-000000000000`,
         }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
@@ -75,6 +95,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const { accountId } = yield* AWSEnvironment.current;
 
       const deployCa = (props: {
         commonName: string;
@@ -85,13 +106,34 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
             const ca = yield* CertificateAuthority("TestCA", {
               subject: { commonName: props.commonName },
               usageMode: "SHORT_LIVED_CERTIFICATE",
-              permanentDeletionTimeInDays: "7 days",
+              permanentDeletionTime: "7 days",
               tags: props.tags,
             });
             const permission = yield* Permission("AcmRenewal", {
               certificateAuthorityArn: ca.certificateAuthorityArn,
             });
-            return { ca, permission };
+            const policy = yield* CertificateAuthorityPolicy("SharePolicy", {
+              certificateAuthorityArn: ca.certificateAuthorityArn,
+              policy: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                    Action: [
+                      "acm-pca:DescribeCertificateAuthority",
+                      "acm-pca:GetCertificate",
+                      "acm-pca:GetCertificateAuthorityCertificate",
+                      "acm-pca:ListPermissions",
+                      "acm-pca:IssueCertificate",
+                      "acm-pca:RevokeCertificate",
+                    ],
+                    Resource: ca.certificateAuthorityArn,
+                  },
+                ],
+              },
+            });
+            return { ca, permission, policy };
           }),
         );
 
@@ -133,6 +175,17 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
         "IssueCertificate",
         "ListPermissions",
       ]);
+
+      // The resource-based policy is attached (out-of-band via distilled).
+      expect(first.policy.certificateAuthorityArn).toBe(
+        first.ca.certificateAuthorityArn,
+      );
+      const attachedPolicy = yield* acmpca.getPolicy({
+        ResourceArn: first.ca.certificateAuthorityArn,
+      });
+      expect(attachedPolicy.Policy).toContain(
+        "acm-pca:DescribeCertificateAuthority",
+      );
 
       // 2. UPDATE — same CA (stable ARN); tags converge in place. (The
       // permission's action set cannot shrink: AWS requires all three

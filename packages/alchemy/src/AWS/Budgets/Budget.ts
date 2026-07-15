@@ -1,11 +1,12 @@
 import * as budgets from "@distilled.cloud/aws/budgets";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags } from "../../Tags.ts";
+import { createInternalTags, diffTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -114,6 +115,10 @@ export interface Budget extends Resource<
      * The AWS account ID that owns the budget.
      */
     accountId: string;
+    /**
+     * ARN of the budget, e.g. `arn:aws:budgets::123456789012:budget/my-budget`.
+     */
+    budgetArn: string;
   },
   never,
   Providers
@@ -160,6 +165,13 @@ export interface Budget extends Resource<
  */
 export const Budget = Resource<Budget>("AWS.Budgets.Budget");
 
+/**
+ * Compute the ARN of a budget. Budgets is a global service, so the ARN has no
+ * region component.
+ */
+export const budgetArn = (accountId: string, budgetName: string): string =>
+  `arn:aws:budgets::${accountId}:budget/${budgetName}`;
+
 const notificationKey = (n: budgets.Notification): string =>
   JSON.stringify({
     NotificationType: n.NotificationType,
@@ -174,6 +186,18 @@ const toNotification = (n: BudgetNotification): budgets.Notification => ({
   Threshold: n.threshold,
   ThresholdType: n.thresholdType ?? "PERCENTAGE",
 });
+
+/**
+ * Distilled marks `Subscriber.Address` sensitive, so observed subscribers
+ * come back as `Redacted` — unwrap before diffing, or every observed
+ * subscriber compares as `<redacted>` and gets torn down (and deleting the
+ * last subscriber deletes the whole notification).
+ */
+const subscriberAddress = (s: budgets.Subscriber): string =>
+  Redacted.isRedacted(s.Address) ? Redacted.value(s.Address) : s.Address;
+
+const subscriberKey = (s: budgets.Subscriber): string =>
+  `${s.SubscriptionType}:${subscriberAddress(s)}`;
 
 export const BudgetProvider = () =>
   Provider.effect(
@@ -225,16 +249,69 @@ export const BudgetProvider = () =>
 
         for (const n of desired) {
           const notif = toNotification(n);
-          if (currentKeys.has(notificationKey(notif))) continue;
-          yield* budgets.createNotification({
-            AccountId: accountId,
-            BudgetName: name,
-            Notification: notif,
-            Subscribers: n.subscribers.map((s) => ({
+          const desiredSubscribers = n.subscribers.map(
+            (s): budgets.Subscriber => ({
               SubscriptionType: s.subscriptionType,
               Address: s.address,
-            })),
-          });
+            }),
+          );
+          if (!currentKeys.has(notificationKey(notif))) {
+            // The notification listing is eventually consistent — right after
+            // `createBudget(NotificationsWithSubscribers)` it can come back
+            // empty, so an already-created notification surfaces here as a
+            // DuplicateRecordException race.
+            yield* budgets
+              .createNotification({
+                AccountId: accountId,
+                BudgetName: name,
+                Notification: notif,
+                Subscribers: desiredSubscribers,
+              })
+              .pipe(
+                Effect.catchTag("DuplicateRecordException", () => Effect.void),
+              );
+            continue;
+          }
+          // The notification already exists — converge its subscribers by
+          // diffing the OBSERVED subscriber list against the desired one.
+          const observedSubscribers = yield* budgets
+            .describeSubscribersForNotification({
+              AccountId: accountId,
+              BudgetName: name,
+              Notification: notif,
+            })
+            .pipe(
+              Effect.map((r) => r.Subscribers ?? []),
+              Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+            );
+          const observedKeys = new Set(observedSubscribers.map(subscriberKey));
+          const desiredSubKeys = new Set(desiredSubscribers.map(subscriberKey));
+          // Create before delete so the notification never drops to zero
+          // subscribers (the API requires at least one).
+          for (const s of desiredSubscribers) {
+            if (observedKeys.has(subscriberKey(s))) continue;
+            yield* budgets
+              .createSubscriber({
+                AccountId: accountId,
+                BudgetName: name,
+                Notification: notif,
+                Subscriber: s,
+              })
+              .pipe(
+                Effect.catchTag("DuplicateRecordException", () => Effect.void),
+              );
+          }
+          for (const s of observedSubscribers) {
+            if (desiredSubKeys.has(subscriberKey(s))) continue;
+            yield* budgets
+              .deleteSubscriber({
+                AccountId: accountId,
+                BudgetName: name,
+                Notification: notif,
+                Subscriber: s,
+              })
+              .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+          }
         }
         for (const n of current) {
           if (desiredKeys.has(notificationKey(n))) continue;
@@ -248,8 +325,41 @@ export const BudgetProvider = () =>
         }
       });
 
+      const syncTags = Effect.fn(function* (
+        arn: string,
+        desired: Record<string, string>,
+      ) {
+        // Diff against OBSERVED cloud tags (not olds/output) so adoption and
+        // out-of-band drift converge correctly.
+        const observed = yield* budgets
+          .listTagsForResource({ ResourceARN: arn })
+          .pipe(
+            Effect.map((r) =>
+              Object.fromEntries(
+                (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
+              ),
+            ),
+            Effect.catchTag("NotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
+        const { removed, upsert } = diffTags(observed, desired);
+        if (upsert.length > 0) {
+          yield* budgets.tagResource({
+            ResourceARN: arn,
+            ResourceTags: upsert,
+          });
+        }
+        if (removed.length > 0) {
+          yield* budgets.untagResource({
+            ResourceARN: arn,
+            ResourceTagKeys: removed,
+          });
+        }
+      });
+
       return Budget.Provider.of({
-        stables: ["budgetName", "accountId"],
+        stables: ["budgetName", "accountId", "budgetArn"],
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
@@ -263,6 +373,7 @@ export const BudgetProvider = () =>
                     .map((b) => ({
                       budgetName: b.BudgetName,
                       accountId,
+                      budgetArn: budgetArn(accountId, b.BudgetName),
                     })),
                 ),
                 Effect.catchTag("NotFoundException", () => Effect.succeed([])),
@@ -280,7 +391,11 @@ export const BudgetProvider = () =>
               ),
             );
           if (!found?.Budget) return undefined;
-          return { budgetName: name, accountId };
+          return {
+            budgetName: name,
+            accountId,
+            budgetArn: budgetArn(accountId, name),
+          };
         }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return undefined;
@@ -341,8 +456,12 @@ export const BudgetProvider = () =>
           // SYNC notifications — the budget update does not touch these.
           yield* syncNotifications(accountId, name, news.notifications ?? []);
 
+          // SYNC tags against observed cloud tags.
+          const arn = budgetArn(accountId, name);
+          yield* syncTags(arn, { ...news.tags, ...internalTags });
+
           yield* session.note(name);
-          return { budgetName: name, accountId };
+          return { budgetName: name, accountId, budgetArn: arn };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* budgets

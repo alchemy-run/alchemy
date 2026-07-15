@@ -47,6 +47,7 @@ test.provider(
       const makeStack = (
         records: { type: "A" | "SRV"; ttl: Duration.Input }[],
         description: string,
+        attributes?: Record<string, string>,
       ) =>
         Effect.gen(function* () {
           const namespace = yield* PrivateDnsNamespace("ServiceTestNamespace", {
@@ -60,13 +61,22 @@ test.provider(
             description,
             dnsRecords: records,
             routingPolicy: "MULTIVALUE",
+            attributes,
             tags: { Environment: "test" },
           });
           return { namespace, service };
         });
 
+      const findServiceAttributes = (serviceId: string) =>
+        sd
+          .getServiceAttributes({ ServiceId: serviceId })
+          .pipe(Effect.map((r) => r.ServiceAttributes?.Attributes ?? {}));
+
       const { namespace, service } = yield* stack.deploy(
-        makeStack([{ type: "A", ttl: "10 seconds" }], "initial"),
+        makeStack([{ type: "A", ttl: "10 seconds" }], "initial", {
+          tier: "backend",
+          stage: "one",
+        }),
       );
 
       expect(service.serviceId).toBeDefined();
@@ -93,9 +103,20 @@ test.provider(
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("Backend");
 
-      // TTL + description are mutable via updateService
+      // custom service attributes were written on create
+      expect(yield* findServiceAttributes(service.serviceId)).toEqual({
+        tier: "backend",
+        stage: "one",
+      });
+
+      // TTL + description + attributes are mutable via updateService /
+      // updateServiceAttributes / deleteServiceAttributes (tier changed,
+      // stage removed, extra added)
       const updated = yield* stack.deploy(
-        makeStack([{ type: "A", ttl: "30 seconds" }], "updated"),
+        makeStack([{ type: "A", ttl: "30 seconds" }], "updated", {
+          tier: "web",
+          extra: "x",
+        }),
       );
       expect(updated.service.serviceId).toBe(service.serviceId);
 
@@ -104,6 +125,10 @@ test.provider(
       expect(afterUpdate?.DnsConfig?.DnsRecords).toEqual([
         { Type: "A", TTL: 30 },
       ]);
+      expect(yield* findServiceAttributes(service.serviceId)).toEqual({
+        tier: "web",
+        extra: "x",
+      });
 
       // changing the record TYPE replaces the service
       const replaced = yield* stack.deploy(

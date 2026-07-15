@@ -131,4 +131,232 @@ describe("Athena Query", () => {
       }),
     { timeout: 180_000 },
   );
+
+  // One completed SELECT 1 execution shared by every query-execution binding
+  // below (each vitest file runs its tests sequentially).
+  let execId: string | undefined;
+  const ensureExecId = Effect.gen(function* () {
+    if (execId) return execId;
+    const response = yield* send(HttpClientRequest.get(`${baseUrl}/exec/run`));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { id: string };
+    execId = body.id;
+    return body.id;
+  });
+
+  describe("GetQueryExecution", () => {
+    test.provider(
+      "reads the execution's terminal state",
+      () =>
+        Effect.gen(function* () {
+          const id = yield* ensureExecId;
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/exec/get?id=${id}`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as {
+            state: string;
+            workGroup: string;
+          };
+          expect(body.state).toBe("SUCCEEDED");
+          expect(body.workGroup).toBeTruthy();
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetQueryResults", () => {
+    test.provider(
+      "reads the raw result page",
+      () =>
+        Effect.gen(function* () {
+          const id = yield* ensureExecId;
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/exec/results?id=${id}`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as {
+            rows: number;
+            columns: string[];
+          };
+          // SELECT 1 → header row + value row.
+          expect(body.rows).toBe(2);
+          expect(body.columns.length).toBe(1);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetQueryRuntimeStatistics", () => {
+    test.provider(
+      "reads the execution timeline",
+      () =>
+        Effect.gen(function* () {
+          const id = yield* ensureExecId;
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/exec/stats?id=${id}`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { totalMillis: number };
+          expect(body.totalMillis).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("BatchGetQueryExecution", () => {
+    test.provider(
+      "reads executions in bulk",
+      () =>
+        Effect.gen(function* () {
+          const id = yield* ensureExecId;
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/exec/batch?id=${id}`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { states: string[] };
+          expect(body.states).toEqual(["SUCCEEDED"]);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListQueryExecutions", () => {
+    test.provider(
+      "lists the workgroup's executions (workgroup injected)",
+      () =>
+        Effect.gen(function* () {
+          const id = yield* ensureExecId;
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/exec/list`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { ids: string[] };
+          expect(body.ids).toContain(id);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("StopQueryExecution", () => {
+    test.provider(
+      "stop on a completed execution is an idempotent no-op",
+      () =>
+        Effect.gen(function* () {
+          const id = yield* ensureExecId;
+          const stopped = yield* send(
+            HttpClientRequest.post(`${baseUrl}/exec/stop?id=${id}`),
+          );
+          expect(stopped.status).toBe(200);
+          // Still SUCCEEDED — stop did not flip a terminal state.
+          const after = yield* send(
+            HttpClientRequest.get(`${baseUrl}/exec/get?id=${id}`),
+          );
+          const body = (yield* after.json) as { state: string };
+          expect(body.state).toBe("SUCCEEDED");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListDatabases", () => {
+    test.provider(
+      "lists databases through the GLUE-backed catalog",
+      () =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/catalog/databases`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { names: string[] };
+          expect(body.names).toContain("alchemy_athena_e2e");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetDatabase", () => {
+    test.provider(
+      "reads a single database's metadata",
+      () =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/catalog/database?name=alchemy_athena_e2e`,
+            ),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { name: string };
+          expect(body.name).toBe("alchemy_athena_e2e");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListTableMetadata", () => {
+    test.provider(
+      "lists the database's tables",
+      () =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/catalog/tables?db=alchemy_athena_e2e`,
+            ),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { names: string[] };
+          expect(body.names).toContain("people");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetTableMetadata", () => {
+    test.provider(
+      "reads a table's columns",
+      () =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/catalog/table?db=alchemy_athena_e2e&name=people`,
+            ),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { columns: string[] };
+          expect(body.columns).toEqual(["id", "name"]);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("QueryStateChangeEventSource", () => {
+    test.provider(
+      "delivers query state-change events to the handler",
+      () =>
+        Effect.gen(function* () {
+          // The probe runs a query and polls S3 for the marker the event
+          // handler writes; retry the whole probe a few times to ride out
+          // fresh-rule propagation on the default bus.
+          const seen = yield* Effect.gen(function* () {
+            const response = yield* send(
+              HttpClientRequest.get(`${baseUrl}/events/probe`),
+            );
+            expect(response.status).toBe(200);
+            const body = (yield* response.json) as {
+              seen: boolean;
+              id: string;
+            };
+            return body.seen;
+          }).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (s): boolean => s,
+              times: 3,
+            }),
+          );
+          expect(seen).toBe(true);
+        }),
+      { timeout: 180_000 },
+    );
+  });
 });

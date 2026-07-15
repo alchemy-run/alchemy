@@ -63,6 +63,17 @@ export const configurationDataArn = (
 ): string =>
   `arn:aws:appconfig:${region}:${accountId}:application/${applicationId}/environment/${environmentId}/configuration/${configurationProfileId}`;
 
+/**
+ * Build the ARN of an AppConfig extension association.
+ * `arn:aws:appconfig:{region}:{account}:extensionassociation/{id}`
+ */
+export const extensionAssociationArn = (
+  region: string,
+  accountId: string,
+  extensionAssociationId: string,
+): string =>
+  `arn:aws:appconfig:${region}:${accountId}:extensionassociation/${extensionAssociationId}`;
+
 /** Drop undefined values from an AppConfig tag map. */
 export const toTagRecord = (
   tags: { [key: string]: string | undefined } | undefined,

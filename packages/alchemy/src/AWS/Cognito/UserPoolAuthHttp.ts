@@ -3,22 +3,16 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import {
-  UserPoolAuth,
-  type ConfirmForgotPasswordRequest,
-  type ConfirmSignUpRequest,
-  type ForgotPasswordRequest,
-  type InitiateAuthRequest,
-  type ResendConfirmationCodeRequest,
-  type RespondToAuthChallengeRequest,
-  type RevokeTokenRequest,
-  type SignUpRequest,
-  type UserPoolAuthClient,
-} from "./UserPoolAuth.ts";
+import { cognitoMethods } from "./BindingHttp.ts";
+import { UserPoolAuth, type UserPoolAuthClient } from "./UserPoolAuth.ts";
 import type { UserPoolClient } from "./UserPoolClient.ts";
 
+/** The injected identifier field, in the distilled wire type (Cognito marks
+ * `ClientId` sensitive, so the field accepts `string | Redacted<string>`). */
+type ClientIdField = Pick<cip.SignUpRequest, "ClientId">;
+
 /**
- * HTTP implementation of {@link UserPoolAuth}. The public auth-flow
+ * HTTP implementation of {@link UserPoolAuth}. The token-based auth-flow
  * operations are unauthenticated (Cognito does not evaluate IAM for them),
  * so the deploy-time half only records the binding — no policy statements
  * are attached.
@@ -36,6 +30,18 @@ export const UserPoolAuthHttp = Layer.effect(
     const getUser = yield* cip.getUser;
     const globalSignOut = yield* cip.globalSignOut;
     const revokeToken = yield* cip.revokeToken;
+    const getTokensFromRefreshToken = yield* cip.getTokensFromRefreshToken;
+    const changePassword = yield* cip.changePassword;
+    const updateUserAttributes = yield* cip.updateUserAttributes;
+    const deleteUserAttributes = yield* cip.deleteUserAttributes;
+    const getUserAttributeVerificationCode =
+      yield* cip.getUserAttributeVerificationCode;
+    const verifyUserAttribute = yield* cip.verifyUserAttribute;
+    const setUserMFAPreference = yield* cip.setUserMFAPreference;
+    const associateSoftwareToken = yield* cip.associateSoftwareToken;
+    const verifySoftwareToken = yield* cip.verifySoftwareToken;
+    const getUserAuthFactors = yield* cip.getUserAuthFactors;
+    const deleteUser = yield* cip.deleteUser;
 
     return Effect.fn(function* <C extends UserPoolClient>(client: C) {
       const ClientId = yield* client.clientId;
@@ -49,79 +55,73 @@ export const UserPoolAuthHttp = Layer.effect(
           );
         }
       }
-      const logicalId = client.LogicalId;
+      const methods = cognitoMethods(
+        "AWS.Cognito.UserPoolAuth",
+        client.LogicalId,
+      );
+      const withClient = methods.injecting(
+        Effect.map(ClientId, (id): ClientIdField => ({ ClientId: id })),
+      );
       const authClient: UserPoolAuthClient = {
-        signUp: Effect.fn(`AWS.Cognito.UserPoolAuth.signUp(${logicalId})`)(
-          function* (request: SignUpRequest) {
-            return yield* signUp({ ...request, ClientId: yield* ClientId });
-          },
+        // client-scoped flows — the app client ID is injected
+        signUp: withClient("signUp", signUp),
+        confirmSignUp: withClient("confirmSignUp", confirmSignUp),
+        resendConfirmationCode: withClient(
+          "resendConfirmationCode",
+          resendConfirmationCode,
         ),
-        confirmSignUp: Effect.fn(
-          `AWS.Cognito.UserPoolAuth.confirmSignUp(${logicalId})`,
-        )(function* (request: ConfirmSignUpRequest) {
-          return yield* confirmSignUp({
-            ...request,
-            ClientId: yield* ClientId,
-          });
-        }),
-        resendConfirmationCode: Effect.fn(
-          `AWS.Cognito.UserPoolAuth.resendConfirmationCode(${logicalId})`,
-        )(function* (request: ResendConfirmationCodeRequest) {
-          return yield* resendConfirmationCode({
-            ...request,
-            ClientId: yield* ClientId,
-          });
-        }),
-        initiateAuth: Effect.fn(
-          `AWS.Cognito.UserPoolAuth.initiateAuth(${logicalId})`,
-        )(function* (request: InitiateAuthRequest) {
-          return yield* initiateAuth({
-            ...request,
-            ClientId: yield* ClientId,
-          });
-        }),
-        respondToAuthChallenge: Effect.fn(
-          `AWS.Cognito.UserPoolAuth.respondToAuthChallenge(${logicalId})`,
-        )(function* (request: RespondToAuthChallengeRequest) {
-          return yield* respondToAuthChallenge({
-            ...request,
-            ClientId: yield* ClientId,
-          });
-        }),
-        forgotPassword: Effect.fn(
-          `AWS.Cognito.UserPoolAuth.forgotPassword(${logicalId})`,
-        )(function* (request: ForgotPasswordRequest) {
-          return yield* forgotPassword({
-            ...request,
-            ClientId: yield* ClientId,
-          });
-        }),
-        confirmForgotPassword: Effect.fn(
-          `AWS.Cognito.UserPoolAuth.confirmForgotPassword(${logicalId})`,
-        )(function* (request: ConfirmForgotPasswordRequest) {
-          return yield* confirmForgotPassword({
-            ...request,
-            ClientId: yield* ClientId,
-          });
-        }),
-        getUser: Effect.fn(`AWS.Cognito.UserPoolAuth.getUser(${logicalId})`)(
-          function* (request: cip.GetUserRequest) {
-            return yield* getUser(request);
-          },
+        initiateAuth: withClient("initiateAuth", initiateAuth),
+        respondToAuthChallenge: withClient(
+          "respondToAuthChallenge",
+          respondToAuthChallenge,
         ),
-        globalSignOut: Effect.fn(
-          `AWS.Cognito.UserPoolAuth.globalSignOut(${logicalId})`,
-        )(function* (request: cip.GlobalSignOutRequest) {
-          return yield* globalSignOut(request);
-        }),
-        revokeToken: Effect.fn(
-          `AWS.Cognito.UserPoolAuth.revokeToken(${logicalId})`,
-        )(function* (request: RevokeTokenRequest) {
-          return yield* revokeToken({
-            ...request,
-            ClientId: yield* ClientId,
-          });
-        }),
+        forgotPassword: withClient("forgotPassword", forgotPassword),
+        confirmForgotPassword: withClient(
+          "confirmForgotPassword",
+          confirmForgotPassword,
+        ),
+        revokeToken: withClient("revokeToken", revokeToken),
+        getTokensFromRefreshToken: withClient(
+          "getTokensFromRefreshToken",
+          getTokensFromRefreshToken,
+        ),
+        // token-scoped self-service — authorized by the access token itself
+        getUser: methods.plain("getUser", getUser),
+        globalSignOut: methods.plain("globalSignOut", globalSignOut),
+        changePassword: methods.plain("changePassword", changePassword),
+        updateUserAttributes: methods.plain(
+          "updateUserAttributes",
+          updateUserAttributes,
+        ),
+        deleteUserAttributes: methods.plain(
+          "deleteUserAttributes",
+          deleteUserAttributes,
+        ),
+        getUserAttributeVerificationCode: methods.plain(
+          "getUserAttributeVerificationCode",
+          getUserAttributeVerificationCode,
+        ),
+        verifyUserAttribute: methods.plain(
+          "verifyUserAttribute",
+          verifyUserAttribute,
+        ),
+        setUserMFAPreference: methods.plain(
+          "setUserMFAPreference",
+          setUserMFAPreference,
+        ),
+        associateSoftwareToken: methods.plain(
+          "associateSoftwareToken",
+          associateSoftwareToken,
+        ),
+        verifySoftwareToken: methods.plain(
+          "verifySoftwareToken",
+          verifySoftwareToken,
+        ),
+        getUserAuthFactors: methods.plain(
+          "getUserAuthFactors",
+          getUserAuthFactors,
+        ),
+        deleteUser: methods.plain("deleteUser", deleteUser),
       };
       return authClient;
     });

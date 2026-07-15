@@ -1,7 +1,8 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -153,15 +154,9 @@ export const CachePolicyProvider = () =>
       ): cloudfront.CachePolicyConfig => ({
         Name: name,
         Comment: props.comment,
-        MinTTL: Math.round(Duration.toSeconds(props.minTTL)),
-        DefaultTTL:
-          props.defaultTTL !== undefined
-            ? Math.round(Duration.toSeconds(props.defaultTTL))
-            : undefined,
-        MaxTTL:
-          props.maxTTL !== undefined
-            ? Math.round(Duration.toSeconds(props.maxTTL))
-            : undefined,
+        MinTTL: toWireSeconds(props.minTTL)!,
+        DefaultTTL: toWireSeconds(props.defaultTTL),
+        MaxTTL: toWireSeconds(props.maxTTL),
         ParametersInCacheKeyAndForwardedToOrigin:
           props.parametersInCacheKeyAndForwardedToOrigin,
       });

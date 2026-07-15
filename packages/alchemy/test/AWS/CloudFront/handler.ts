@@ -3,6 +3,7 @@ import * as Lambda from "@/AWS/Lambda";
 import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -49,6 +50,8 @@ export default CloudFrontTestFunction.make(
 
     const createInvalidation =
       yield* CloudFront.CreateInvalidation(distribution);
+    const getInvalidation = yield* CloudFront.GetInvalidation(distribution);
+    const listInvalidations = yield* CloudFront.ListInvalidations(distribution);
 
     return {
       fetch: Effect.gen(function* () {
@@ -80,11 +83,37 @@ export default CloudFrontTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/invalidation") {
+          const id = url.searchParams.get("id")!;
+          const response = yield* getInvalidation({ Id: id });
+          return yield* HttpServerResponse.json({
+            invalidationId: response.Invalidation?.Id,
+            status: response.Invalidation?.Status,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/invalidations") {
+          const response = yield* listInvalidations({});
+          return yield* HttpServerResponse.json({
+            invalidationIds: (response.InvalidationList?.Items ?? []).map(
+              (item) => item.Id,
+            ),
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found" },
           { status: 404 },
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(CloudFront.CreateInvalidationHttp)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        CloudFront.CreateInvalidationHttp,
+        CloudFront.GetInvalidationHttp,
+        CloudFront.ListInvalidationsHttp,
+      ),
+    ),
+  ),
 );

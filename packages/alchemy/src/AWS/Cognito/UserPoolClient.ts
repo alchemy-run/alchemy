@@ -1,5 +1,5 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -7,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -241,10 +242,7 @@ const desiredConfig = (news: UserPoolClientProps) => ({
   PreventUserExistenceErrors: news.preventUserExistenceErrors,
   EnableTokenRevocation: news.enableTokenRevocation,
   // The Cognito wire unit for AuthSessionValidity is whole minutes.
-  AuthSessionValidity:
-    news.authSessionValidity === undefined
-      ? undefined
-      : Math.round(Duration.toMinutes(news.authSessionValidity)),
+  AuthSessionValidity: toWireMinutes(news.authSessionValidity),
 });
 
 /** True when any prop the user specified differs from the observed client.
