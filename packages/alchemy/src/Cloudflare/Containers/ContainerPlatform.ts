@@ -1,4 +1,3 @@
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -91,38 +90,40 @@ export const ContainerPlatform: Platform<
             return key;
           }),
         get: <T>(key: string) =>
-          Config.string(key).pipe(
-            Effect.flatMap((value) =>
-              Effect.try({
-                try: () => {
-                  const parsed = JSON.parse(value) as T;
-                  // The `set` path serializes Redacted values as
-                  // `{_tag: "Redacted", value: ...}`. After JSON.parse the
-                  // result is a plain object — detect the marker shape and
-                  // rebuild the Redacted wrapper. Plain values pass through.
-                  if (
-                    typeof parsed === "object" &&
-                    parsed !== null &&
-                    (parsed as { _tag?: unknown })._tag === "Redacted" &&
-                    "value" in parsed
-                  ) {
-                    return Redacted.make(
-                      (parsed as { value: unknown }).value,
-                    ) as T;
-                  }
-                  return parsed;
-                },
-                catch: (error) => error as Error,
-              }),
-            ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
-          ),
+          // Read the captured value straight from `process.env`. We must NOT
+          // resolve through `Config.string` here: the ambient
+          // `ConfigProvider` at runtime reifies bound values (unwrapping the
+          // `Redacted` marker before we could detect it), and during init it
+          // is the interceptor installed in `Platform.ts`, whose runtime
+          // branch calls back into `ctx.get(key)` — going through `Config`
+          // would re-enter it for the same key and recurse forever. Mirrors
+          // the Lambda and Worker contexts.
+          Effect.sync(() => {
+            const val = process.env[key];
+            if (val === undefined) {
+              return undefined as T;
+            }
+            try {
+              const parsed = JSON.parse(val);
+              // The `set` path serializes Redacted values as
+              // `{_tag: "Redacted", value: ...}`. After JSON.parse the
+              // result is a plain object — detect the marker shape and
+              // rebuild the Redacted wrapper. Plain values pass through.
+              if (
+                typeof parsed === "object" &&
+                parsed !== null &&
+                (parsed as { _tag?: unknown })._tag === "Redacted" &&
+                "value" in parsed
+              ) {
+                return Redacted.make(
+                  (parsed as { value: unknown }).value,
+                ) as unknown as T;
+              }
+              return parsed as T;
+            } catch {
+              return val as unknown as T; // assume it's just a string
+            }
+          }),
         run: ((effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
             runners.push(effect);
