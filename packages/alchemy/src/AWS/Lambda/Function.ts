@@ -940,7 +940,7 @@ export const FunctionProvider = () =>
                 (importPath) => `
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer } from "alchemy/Runtime";
+import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { registerLambdaExtension } from "alchemy/AWS/Lambda/RuntimeExtension";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -1001,7 +1001,10 @@ const entryLayer = layer.pipe(
   Layer.provideMerge(
     Layer.succeed(
       ConfigProvider.ConfigProvider,
-      ConfigProvider.fromEnv()
+      // Auto-bound \`Config\` values arrive in the env as
+      // \`{"_tag":"Redacted","value":...}\` markers; reify them so a \`Config\`
+      // re-read inside a handler decodes the raw source value.
+      reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
     )
   ),
   Layer.provideMerge(
