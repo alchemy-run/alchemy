@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Lambda from "@/AWS/Lambda";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -78,7 +79,16 @@ describe.sequential("VpcLattice Bindings", () => {
       yield* Effect.logInfo("VpcLattice bindings setup: deploying fixture");
       const attrs = yield* sharedStack.deploy(
         Effect.gen(function* () {
-          return yield* LatticeTestFunction;
+          const fn = yield* LatticeTestFunction;
+          // Registering a Lambda target requires the function to allow
+          // vpc-lattice.amazonaws.com to invoke it — RegisterTargets rejects
+          // the target as `InvalidTarget` otherwise.
+          yield* Lambda.Permission("LatticeInvokePermission", {
+            action: "lambda:InvokeFunction",
+            functionName: fn.functionName,
+            principal: "vpc-lattice.amazonaws.com",
+          });
+          return fn;
         }).pipe(Effect.provide(LatticeTestFunctionLive)),
       );
 
