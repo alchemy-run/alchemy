@@ -1,6 +1,6 @@
 import type * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import type * as Duration from "effect/Duration";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import { toSeconds } from "../../Util/Duration.ts";
 import type { TargetGroupArn } from "./TargetGroup.ts";
 
@@ -238,10 +238,10 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
             TokenEndpoint: action.tokenEndpoint,
             UserInfoEndpoint: action.userInfoEndpoint,
             ClientId: action.clientId,
-            ClientSecret:
-              action.clientSecret !== undefined
-                ? Redacted.value(action.clientSecret)
-                : undefined,
+            // Redacted end-to-end: distilled's AuthenticateOidcActionConfig
+            // marks ClientSecret sensitive, so the Redacted passes straight
+            // through and is only unwrapped by the wire serializer.
+            ClientSecret: action.clientSecret,
             Scope: action.scope,
             SessionCookieName: action.sessionCookieName,
             SessionTimeout: toSeconds(action.sessionTimeout),

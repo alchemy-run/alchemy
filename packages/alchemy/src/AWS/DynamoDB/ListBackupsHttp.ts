@@ -9,5 +9,8 @@ export const ListBackupsHttp = Layer.effect(
     tag: "AWS.DynamoDB.ListBackups",
     operation: DynamoDB.listBackups,
     actions: ["dynamodb:ListBackups"],
+    // ListBackups does not support resource-level permissions (the runtime
+    // callable still scopes results to the bound table via TableName).
+    resources: () => ["*"],
   }),
 );

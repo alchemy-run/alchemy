@@ -30,8 +30,8 @@ test.provider(
             protocol: "HTTP",
             targetType: "ip",
             // Duration.Input props — verified on the wire below.
-            healthCheckIntervalSeconds: "45 seconds",
-            healthCheckTimeoutSeconds: "20 seconds",
+            healthCheckInterval: "45 seconds",
+            healthCheckTimeout: "20 seconds",
           });
 
           return { targetGroup };

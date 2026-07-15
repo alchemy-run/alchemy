@@ -163,7 +163,8 @@ describe.sequential("DocDB Bindings", () => {
         Effect.gen(function* () {
           // Build a well-formed cluster ARN in this account/region that
           // cannot exist — the apply call must decode ResourceNotFoundFault.
-          const region = yield* Region;
+          // (`Region`'s service value is itself an Effect — resolve twice.)
+          const region = yield* yield* Region;
           const identity = yield* sts.getCallerIdentity({});
           const arn = `arn:aws:rds:${region}:${identity.Account}:cluster:alchemy-nonexistent-docdb-probe`;
           const response = yield* getJson(
@@ -224,7 +225,8 @@ const ensureSecretsManagerEndpoint = (network: {
   securityGroupIds: string[];
 }) =>
   Effect.gen(function* () {
-    const region = yield* Region;
+    // `Region`'s service value is itself an Effect — resolve twice.
+    const region = yield* yield* Region;
     const serviceName = `com.amazonaws.${region}.secretsmanager`;
     const existing = yield* EC2.describeVpcEndpoints({
       Filters: [

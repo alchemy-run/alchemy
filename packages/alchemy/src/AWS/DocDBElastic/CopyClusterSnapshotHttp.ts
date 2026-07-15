@@ -8,6 +8,13 @@ export const CopyClusterSnapshotHttp = Layer.effect(
   makeDocDBElasticAccountHttpBinding({
     tag: "AWS.DocDBElastic.CopyClusterSnapshot",
     operation: docdbelastic.copyClusterSnapshot,
-    actions: ["docdb-elastic:CopyClusterSnapshot", "docdb-elastic:TagResource"],
+    actions: [
+      "docdb-elastic:CopyClusterSnapshot",
+      // Copying authorizes the creation of the target snapshot as a
+      // CreateClusterSnapshot on `cluster-snapshot/*` (verified live: without
+      // it the service returns AccessDeniedException naming this action).
+      "docdb-elastic:CreateClusterSnapshot",
+      "docdb-elastic:TagResource",
+    ],
   }),
 );

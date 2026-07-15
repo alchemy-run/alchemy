@@ -67,6 +67,12 @@ export interface ListenerProps {
     /** Whether to advertise the trust-store CA names in the TLS handshake. */
     advertiseTrustStoreCaNames?: "on" | "off";
   };
+  /**
+   * Raw listener attributes, synced via `modifyListenerAttributes` — e.g.
+   * `tcp.idle_timeout.seconds` (NLB TCP listeners) or
+   * `routing.http.response.server.enabled` (ALB HTTP/HTTPS listeners).
+   */
+  attributes?: Record<string, string>;
 }
 
 export interface Listener extends Resource<
@@ -394,6 +400,19 @@ export const ListenerProvider = () =>
       }
 
       const listenerArn = listener.ListenerArn!;
+
+      // Sync attributes — always apply when desired attrs are non-empty; AWS
+      // rejects an empty list anyway (same convention as LoadBalancer and
+      // TargetGroup attributes).
+      if (news.attributes && Object.keys(news.attributes).length > 0) {
+        yield* elbv2.modifyListenerAttributes({
+          ListenerArn: listenerArn,
+          Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
+            Key,
+            Value,
+          })),
+        });
+      }
 
       // Sync additional SNI certificates — observed ↔ desired. The default
       // certificate (certs[0]) is carried by modifyListener and is excluded

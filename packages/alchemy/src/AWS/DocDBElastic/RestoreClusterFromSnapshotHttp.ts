@@ -10,6 +10,10 @@ export const RestoreClusterFromSnapshotHttp = Layer.effect(
     operation: docdbelastic.restoreClusterFromSnapshot,
     actions: [
       "docdb-elastic:RestoreClusterFromSnapshot",
+      // Restoring authorizes the creation of the new cluster as a
+      // CreateCluster on `cluster/*` (verified live: without it the service
+      // returns AccessDeniedException naming this action).
+      "docdb-elastic:CreateCluster",
       "docdb-elastic:TagResource",
       // Restoring provisions a new cluster, which attaches to the VPC via a
       // service-managed VPC endpoint using the caller's EC2 permissions.

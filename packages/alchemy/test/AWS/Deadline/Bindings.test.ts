@@ -1,11 +1,13 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as deadline from "@distilled.cloud/aws/deadline";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as EffectStream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
@@ -52,7 +54,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       while: (e) => e._tag === "TransientUpstream",
       schedule: Schedule.max([
         Schedule.exponential("500 millis"),
-        Schedule.recurs(8),
+        Schedule.recurs(4),
       ]),
     }),
   );
@@ -61,6 +63,78 @@ const getJson = (path: string) =>
   send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
     Effect.flatMap((r) => r.json),
   );
+
+/**
+ * The account's farm quota is 2 and a deploy killed mid-crash leaks a farm
+ * that later runs cannot adopt (the physical-name instance id changes with
+ * fresh state). Reap any farm carrying one of this suite's fixture names so
+ * the deploy below never starts quota-blocked.
+ */
+const reapLeakedFarms = Effect.gen(function* () {
+  const farms = yield* deadline.listFarms.items({}).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+  );
+  const leaked = farms.filter((farm) =>
+    /TestFarm|BindingsFarm|FleetFarm/.test(farm.displayName),
+  );
+  yield* Effect.forEach(
+    leaked,
+    (farm) =>
+      Effect.gen(function* () {
+        const farmId = farm.farmId;
+        const queues = yield* deadline.listQueues.items({ farmId }).pipe(
+          EffectStream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed([] as deadline.QueueSummary[]),
+          ),
+        );
+        yield* Effect.forEach(
+          queues,
+          (queue) =>
+            deadline
+              .deleteQueue({ farmId, queueId: queue.queueId })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              ),
+          { discard: true },
+        );
+        const fleets = yield* deadline.listFleets.items({ farmId }).pipe(
+          EffectStream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed([] as deadline.FleetSummary[]),
+          ),
+        );
+        yield* Effect.forEach(
+          fleets,
+          (fleet) =>
+            deadline
+              .deleteFleet({ farmId, fleetId: fleet.fleetId })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              ),
+          { discard: true },
+        );
+        // Sub-resource deletion is asynchronous; the farm rejects deletion
+        // with ConflictException until they finish. Bounded.
+        yield* Effect.retry(deadline.deleteFarm({ farmId }), {
+          while: (e): boolean => e._tag === "ConflictException",
+          schedule: Schedule.max([
+            Schedule.spaced("5 seconds"),
+            Schedule.recurs(24),
+          ]),
+        }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+        yield* Effect.logInfo(
+          `reaped leaked farm ${farmId} (${farm.displayName})`,
+        );
+      }),
+    { discard: true },
+  );
+});
 
 const postJson = (path: string) =>
   send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
@@ -74,6 +148,12 @@ describe.sequential("Deadline Bindings", () => {
         "Deadline test setup: destroying previous resources",
       );
       yield* sharedStack.destroy();
+      // Raw distilled calls need the provider environment (credentials).
+      yield* Core.withProviders(
+        reapLeakedFarms,
+        testOptions,
+        "DeadlineBindings",
+      );
 
       yield* Effect.logInfo("Deadline test setup: deploying fixture");
       const attrs = yield* sharedStack.deploy(
@@ -244,9 +324,14 @@ describe.sequential("Deadline Bindings", () => {
           )) as { ids: string[] };
           expect(steps.ids).toContain(stepId);
 
-          const tasks = (yield* postJson(`/search/tasks?jobId=${jobId}`)) as {
-            ids: string[];
-          };
+          // The task search index lags job creation like the step index.
+          const tasks = (yield* postJson(`/search/tasks?jobId=${jobId}`).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (t): boolean => (t as { ids: string[] }).ids.length > 0,
+              times: 10,
+            }),
+          )) as { ids: string[] };
           expect(tasks.ids.length).toBeGreaterThanOrEqual(1);
 
           // The fixture template declares no parameters.

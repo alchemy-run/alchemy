@@ -86,6 +86,23 @@ export interface FileSystemProps {
    */
   lifecyclePolicies?: FileSystemLifecyclePolicy[];
   /**
+   * Whether AWS Backup automatic backups are enabled for the file system.
+   * Updatable in place. When omitted, the AWS default is left alone
+   * (disabled for regional file systems, enabled for One Zone file
+   * systems).
+   * @default AWS default (regional: disabled; One Zone: enabled)
+   */
+  backup?: boolean;
+  /**
+   * Replication overwrite protection. `ENABLED` (the AWS default) makes the
+   * file system writable and blocks it from being used as a replication
+   * destination; `DISABLED` makes it read-only so an EFS replication
+   * configuration can overwrite it. Updatable in place. When omitted, the
+   * current protection setting is left alone.
+   * @default AWS default ("ENABLED")
+   */
+  replicationOverwriteProtection?: "ENABLED" | "DISABLED";
+  /**
    * The file system policy — an IAM resource-based policy controlling client
    * access to the file system (e.g. enforcing in-transit encryption or
    * restricting mounts to access points). Either a structured
@@ -145,6 +162,21 @@ export interface FileSystem extends Resource<
  *     { transitionToIA: "AFTER_30_DAYS" },
  *     { transitionToPrimaryStorageClass: "AFTER_1_ACCESS" },
  *   ],
+ * });
+ * ```
+ *
+ * @section Backup and Protection
+ * @example Enable AWS Backup automatic backups
+ * ```typescript
+ * const files = yield* AWS.EFS.FileSystem("Files", {
+ *   backup: true,
+ * });
+ * ```
+ *
+ * @example Allow the file system to be a replication destination
+ * ```typescript
+ * const files = yield* AWS.EFS.FileSystem("Files", {
+ *   replicationOverwriteProtection: "DISABLED",
  * });
  * ```
  *
@@ -402,6 +434,7 @@ export const FileSystemProvider = () =>
                 PerformanceMode: news.performanceMode,
                 Encrypted: news.encrypted ?? true,
                 KmsKeyId: news.kmsKeyId,
+                Backup: news.backup,
                 ThroughputMode: news.throughputMode,
                 ProvisionedThroughputInMibps: news.provisionedThroughputInMibps,
                 AvailabilityZoneName: news.availabilityZoneName,
@@ -470,7 +503,53 @@ export const FileSystemProvider = () =>
             );
           }
 
-          // 3c. SYNC file system policy — compare the observed policy with
+          // 3c. SYNC backup policy — observed vs desired; only call the API
+          //     on a real delta. An in-flight transition (ENABLING/
+          //     DISABLING) counts as its target state. When the prop is
+          //     omitted the AWS default is left alone.
+          if (news.backup !== undefined) {
+            const observedBackupStatus = yield* efs
+              .describeBackupPolicy({ FileSystemId: fileSystemId })
+              .pipe(
+                Effect.map((r) => r.BackupPolicy?.Status),
+                Effect.catchTag("PolicyNotFound", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            const observedBackup =
+              observedBackupStatus === "ENABLED" ||
+              observedBackupStatus === "ENABLING";
+            if (observedBackup !== news.backup) {
+              yield* retryWhileFileSystemUpdating(
+                efs.putBackupPolicy({
+                  FileSystemId: fileSystemId,
+                  BackupPolicy: {
+                    Status: news.backup ? "ENABLED" : "DISABLED",
+                  },
+                }),
+              );
+            }
+          }
+
+          // 3d. SYNC replication overwrite protection — observed vs desired
+          //     from the file system description. When the prop is omitted
+          //     the current protection setting is left alone.
+          if (news.replicationOverwriteProtection !== undefined) {
+            const observedProtection =
+              fs.FileSystemProtection?.ReplicationOverwriteProtection ??
+              "ENABLED";
+            if (observedProtection !== news.replicationOverwriteProtection) {
+              yield* retryWhileFileSystemUpdating(
+                efs.updateFileSystemProtection({
+                  FileSystemId: fileSystemId,
+                  ReplicationOverwriteProtection:
+                    news.replicationOverwriteProtection,
+                }),
+              );
+            }
+          }
+
+          // 3e. SYNC file system policy — compare the observed policy with
           //     the desired one after canonicalization (sorted keys, no
           //     whitespace) so a re-deploy of an equivalent document is a
           //     no-op API-wise.
@@ -507,7 +586,7 @@ export const FileSystemProvider = () =>
             );
           }
 
-          // 3d. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3f. SYNC tags — diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = efsTagsToRecord(fs.Tags);
           const { upsert, removed } = diffTags(observedTags, {

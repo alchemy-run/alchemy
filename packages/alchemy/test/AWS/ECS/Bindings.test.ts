@@ -159,8 +159,11 @@ const describeUntilStopped = (taskArn: string) =>
 describe("ECS Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo("ECS bindings setup: destroying previous stack");
-      yield* sharedStack.destroy();
+      // No upfront destroy: deploys are reconciling, so phase 1 converges
+      // whatever a previous (possibly interrupted) run left behind, and
+      // phase 2 redeploys the Lambda whenever its bundle hash changes.
+      // Rebuilding the VPC + cluster + Docker image from scratch on every
+      // run blew the hook budget for zero correctness gain.
 
       // Phase 1: deploy the infra alone so its state exists before the
       // Lambda's `Resource.ref(...)`s resolve (refs read stack state, not

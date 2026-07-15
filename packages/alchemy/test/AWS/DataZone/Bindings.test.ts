@@ -15,6 +15,7 @@ import { describe } from "vitest";
 
 import DataZoneTestFunctionLive, {
   BINDINGS_DOMAIN_NAME,
+  BINDINGS_PROJECT_NAME,
   DataZoneTestFunction,
 } from "./handler";
 
@@ -132,14 +133,44 @@ describe.sequential("DataZone Bindings", () => {
       Effect.gen(function* () {
         const domainId = yield* findDomainId;
         expect(domainId).toBeTruthy();
-        yield* datazone
+        const profile = yield* datazone
           .createUserProfile({
             domainIdentifier: domainId!,
             userIdentifier: functionRoleArn,
             userType: "IAM_ROLE",
           })
           .pipe(
-            // already exists from a previous run
+            // already exists from a previous run — resolve it instead.
+            Effect.catchTag("ValidationException", () =>
+              datazone.getUserProfile({
+                domainIdentifier: domainId!,
+                userIdentifier: functionRoleArn,
+                type: "IAM",
+              }),
+            ),
+          );
+        expect(profile.id).toBeTruthy();
+
+        // Inventory search is project-scoped: the function's user profile
+        // must be a member of the fixture project.
+        const projects = yield* datazone.listProjects({
+          domainIdentifier: domainId!,
+        });
+        const project = (projects.items ?? []).find(
+          (p) =>
+            (Redacted.isRedacted(p.name) ? Redacted.value(p.name) : p.name) ===
+            BINDINGS_PROJECT_NAME,
+        );
+        expect(project).toBeTruthy();
+        yield* datazone
+          .createProjectMembership({
+            domainIdentifier: domainId!,
+            projectIdentifier: project!.id,
+            member: { userIdentifier: profile.id! },
+            designation: "PROJECT_CONTRIBUTOR",
+          })
+          .pipe(
+            // already a member from a previous run
             Effect.catchTag("ValidationException", () => Effect.void),
           );
       }),

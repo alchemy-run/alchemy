@@ -38,7 +38,7 @@ test.provider(
       // Clean slate in case a previous run died mid-flight.
       yield* stack.destroy();
 
-      const deployApp = (idleTimeoutMinutes: number) =>
+      const deployApp = (idleMinutes: number) =>
         stack.deploy(
           Effect.gen(function* () {
             return yield* Application("App", {
@@ -47,7 +47,7 @@ test.provider(
               autoStartConfiguration: { enabled: true },
               autoStopConfiguration: {
                 enabled: true,
-                idleTimeoutMinutes: Duration.minutes(idleTimeoutMinutes),
+                idleTimeout: Duration.minutes(idleMinutes),
               },
               tags: { purpose: "alchemy-test" },
             });
@@ -129,7 +129,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             releaseLabel: RELEASE_LABEL,
             autoStopConfiguration: {
               enabled: true,
-              idleTimeoutMinutes: "1 minute",
+              idleTimeout: "1 minute",
             },
           });
           return { app, role };

@@ -238,22 +238,21 @@ describe("ECR Bindings", () => {
       "delivers push events to the handler",
       () =>
         Effect.gen(function* () {
-          // The probe pushes its own tag (2.0.0, untouched by the lifecycle
-          // test) and polls S3 for the marker the event handler wrote; retry
-          // the whole probe a few times to ride out fresh-rule propagation
-          // on the default bus.
+          // Each probe pushes a FRESH tag (a re-push of an existing tag is
+          // ImageAlreadyExists — no new event) and polls S3 for the marker
+          // the event handler wrote. A freshly-created EventBridge rule on
+          // the default bus takes up to ~a minute to become effective, so
+          // successive fresh-tag pushes ride out the propagation window.
+          const probe = (tag: string) =>
+            getJson<{ seen: boolean; tag: string }>(
+              `/events/probe?tag=${tag}`,
+            ).pipe(Effect.map((body) => body.seen));
           const seen = yield* Effect.gen(function* () {
-            const body = yield* getJson<{ seen: boolean; tag: string }>(
-              "/events/probe?tag=2.0.0",
-            );
-            return body.seen;
-          }).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("2 seconds"),
-              until: (s): boolean => s,
-              times: 3,
-            }),
-          );
+            for (const tag of ["2.0.0", "2.0.1", "2.0.2", "2.0.3"]) {
+              if (yield* probe(tag)) return true;
+            }
+            return false;
+          });
           expect(seen).toBe(true);
         }),
       { timeout: 180_000 },

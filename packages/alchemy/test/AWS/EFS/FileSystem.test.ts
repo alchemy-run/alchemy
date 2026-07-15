@@ -58,12 +58,15 @@ test.provider(
       expect(observedTags.purpose).toBe("alchemy-efs-test");
       expect(observedTags["alchemy::id"]).toBe("Files");
 
-      // --- update: lifecycle policies + typed file system policy + tags,
-      //     same file system ---
+      // --- update: lifecycle policies + typed file system policy + backup
+      //     policy + replication overwrite protection + tags, same file
+      //     system ---
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const files = yield* AWS.EFS.FileSystem("Files", {
             throughputMode: "elastic",
+            backup: true,
+            replicationOverwriteProtection: "DISABLED",
             lifecyclePolicies: [
               { transitionToIA: "AFTER_30_DAYS" },
               { transitionToPrimaryStorageClass: "AFTER_1_ACCESS" },
@@ -112,6 +115,24 @@ test.provider(
         .pipe(Effect.map((r) => efsTagsToRecord(r.FileSystems![0].Tags)));
       expect(retagged.purpose).toBe("alchemy-efs-test-updated");
 
+      // backup: true converged (ENABLING settles to ENABLED asynchronously)
+      const backupStatus = yield* efs
+        .describeBackupPolicy({ FileSystemId: created.files.fileSystemId })
+        .pipe(Effect.map((r) => r.BackupPolicy?.Status));
+      expect(["ENABLED", "ENABLING"]).toContain(backupStatus);
+
+      // replication overwrite protection converged to DISABLED
+      const protection = yield* efs
+        .describeFileSystems({ FileSystemId: created.files.fileSystemId })
+        .pipe(
+          Effect.map(
+            (r) =>
+              r.FileSystems![0].FileSystemProtection
+                ?.ReplicationOverwriteProtection,
+          ),
+        );
+      expect(protection).toBe("DISABLED");
+
       // --- re-deploy: an equivalent PolicyDocument (statement keys in a
       //     different order) is a no-op — the normalized comparison skips
       //     the put and the stored policy is untouched. The tag change
@@ -156,11 +177,13 @@ test.provider(
       expect(redeployedPolicy).toBe(storedPolicy);
 
       // --- update: clearing lifecycle policies + policy converges to
-      //     empty / the default policy ---
+      //     empty / the default policy; backup + protection revert ---
       yield* stack.deploy(
         Effect.gen(function* () {
           const files = yield* AWS.EFS.FileSystem("Files", {
             throughputMode: "elastic",
+            backup: false,
+            replicationOverwriteProtection: "ENABLED",
             tags: { purpose: "alchemy-efs-test-updated" },
           });
           return { files };
@@ -170,6 +193,27 @@ test.provider(
         FileSystemId: created.files.fileSystemId,
       });
       expect(cleared.LifecyclePolicies ?? []).toHaveLength(0);
+
+      // backup: false converged (DISABLING settles asynchronously)
+      const backupDisabled = yield* efs
+        .describeBackupPolicy({ FileSystemId: created.files.fileSystemId })
+        .pipe(
+          Effect.map((r) => r.BackupPolicy?.Status ?? "DISABLED"),
+          Effect.catchTag("PolicyNotFound", () => Effect.succeed("DISABLED")),
+        );
+      expect(["DISABLED", "DISABLING"]).toContain(backupDisabled);
+
+      // protection reverted to ENABLED
+      const protectionReverted = yield* efs
+        .describeFileSystems({ FileSystemId: created.files.fileSystemId })
+        .pipe(
+          Effect.map(
+            (r) =>
+              r.FileSystems![0].FileSystemProtection
+                ?.ReplicationOverwriteProtection ?? "ENABLED",
+          ),
+        );
+      expect(protectionReverted).toBe("ENABLED");
 
       // removing the policy prop reverts to the default policy — the
       // explicit policy is gone (typed PolicyNotFound)

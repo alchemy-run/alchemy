@@ -324,7 +324,14 @@ export default DeadlineTestFunction.make(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
         );
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Surface typed operation errors as a JSON 500 so the test log
+        // shows the real cause instead of an opaque crash.
+        Effect.catch((error) =>
+          HttpServerResponse.json({ error: String(error) }, { status: 500 }),
+        ),
+        Effect.orDie,
+      ),
     };
   }).pipe(
     Effect.provide(

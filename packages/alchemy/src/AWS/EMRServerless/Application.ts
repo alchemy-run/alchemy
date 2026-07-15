@@ -1,5 +1,5 @@
 import * as emr from "@distilled.cloud/aws/emr-serverless";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   awaitApplicationCreated,
@@ -35,16 +36,13 @@ export interface AutoStopConfiguration {
    * `"5 minutes"` or `Duration.minutes(5)`. Sent to AWS as whole minutes.
    * @default "15 minutes"
    */
-  idleTimeoutMinutes?: Duration.Input;
+  idleTimeout?: Duration.Input;
 }
 
 /** Convert the alchemy-facing auto-stop config to the wire shape (minutes). */
 const toWireAutoStop = (config: AutoStopConfiguration): emr.AutoStopConfig => ({
   enabled: config.enabled,
-  idleTimeoutMinutes:
-    config.idleTimeoutMinutes !== undefined
-      ? Math.round(Duration.toMinutes(config.idleTimeoutMinutes))
-      : undefined,
+  idleTimeoutMinutes: toWireMinutes(config.idleTimeout),
 });
 
 export interface ApplicationProps {
@@ -149,7 +147,7 @@ export interface Application extends Resource<
  *   type: "HIVE",
  *   releaseLabel: "emr-7.9.0",
  *   autoStartConfiguration: { enabled: true },
- *   autoStopConfiguration: { enabled: true, idleTimeoutMinutes: "5 minutes" },
+ *   autoStopConfiguration: { enabled: true, idleTimeout: "5 minutes" },
  * });
  * ```
  *

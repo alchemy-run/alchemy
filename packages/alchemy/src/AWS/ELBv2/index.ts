@@ -1,5 +1,15 @@
 export * from "./common.ts";
+export * from "./DeregisterTargets.ts";
+export * from "./DeregisterTargetsHttp.ts";
+export * from "./DescribeCapacityReservation.ts";
+export * from "./DescribeCapacityReservationHttp.ts";
+export * from "./DescribeTargetHealth.ts";
+export * from "./DescribeTargetHealthHttp.ts";
 export { Listener, ListenerProvider } from "./Listener.ts";
+export * from "./ModifyCapacityReservation.ts";
+export * from "./ModifyCapacityReservationHttp.ts";
+export * from "./RegisterTargets.ts";
+export * from "./RegisterTargetsHttp.ts";
 export {
   ListenerCertificate,
   ListenerCertificateProvider,

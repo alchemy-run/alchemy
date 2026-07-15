@@ -4,6 +4,7 @@ import { Listener, LoadBalancer, TargetGroup } from "@/AWS/ELBv2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
@@ -93,6 +94,9 @@ test.provider(
             targetGroupArn: targetGroup.targetGroupArn,
             port: 80,
             protocol: "HTTP",
+            // Raw listener attribute — synced via modifyListenerAttributes
+            // and verified out of band below.
+            attributes: { "routing.http.response.server.enabled": "false" },
           });
 
           return { listener, internetGateway };
@@ -100,6 +104,16 @@ test.provider(
       );
 
       expect(deployed.listener.listenerArn).toBeDefined();
+
+      // Out-of-band: the listener attribute reached the cloud.
+      const attrs = yield* elbv2.describeListenerAttributes({
+        ListenerArn: deployed.listener.listenerArn,
+      });
+      expect(
+        attrs.Attributes?.find(
+          (a) => a.Key === "routing.http.response.server.enabled",
+        )?.Value,
+      ).toBe("false");
 
       const provider = yield* Provider.findProvider(Listener);
       const all = yield* provider.list();

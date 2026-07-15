@@ -131,9 +131,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               stepConcurrencyLevel: props.stepConcurrencyLevel,
               autoTerminationPolicy: props.idleTimeoutSeconds
                 ? {
-                    idleTimeoutSeconds: Duration.seconds(
-                      props.idleTimeoutSeconds,
-                    ),
+                    idleTimeout: Duration.seconds(props.idleTimeoutSeconds),
                   }
                 : undefined,
               tags: { fixture: "emr-cluster" },

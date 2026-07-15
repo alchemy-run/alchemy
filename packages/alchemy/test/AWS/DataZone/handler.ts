@@ -17,6 +17,13 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
  */
 export const BINDINGS_DOMAIN_NAME = "alchemy-datazone-bindings-test";
 
+/**
+ * Deterministic project name so the test can find the project id
+ * out-of-band (needed to add the function's user profile as a member —
+ * inventory search is project-scoped).
+ */
+export const BINDINGS_PROJECT_NAME = "alchemy-datazone-bindings-project";
+
 export class DataZoneTestFunction extends Lambda.Function<Lambda.Function>()(
   "DataZoneTestFunction",
 ) {}
@@ -38,6 +45,7 @@ export default DataZoneTestFunction.make(
     // owning project; subscription listing requires a project filter).
     const project = yield* DataZone.Project("BindingsProject", {
       domainId: domain.domainId,
+      name: BINDINGS_PROJECT_NAME,
       description: "alchemy datazone bindings fixture project",
     });
     const ProjectId = yield* project.projectId;
