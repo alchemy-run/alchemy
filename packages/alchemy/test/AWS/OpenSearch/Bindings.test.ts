@@ -117,33 +117,36 @@ describe.sequential("OpenSearch Bindings", () => {
 
   describe("DescribeDomainHealth", () => {
     test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
+      // OpenSearch reports a missing domain on this operation as the typed
+      // `BaseException` ("Domain not found"), not ResourceNotFoundException.
+      "surfaces the typed BaseException tag for a nonexistent domain",
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/domain-health");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
+          expect((response as any).tag).toBe("BaseException");
         }),
     );
   });
 
   describe("DescribeDomainNodes", () => {
     test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
+      "surfaces the typed BaseException tag for a nonexistent domain",
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/domain-nodes");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
+          expect((response as any).tag).toBe("BaseException");
         }),
     );
   });
 
   describe("DescribeDomainChangeProgress", () => {
     test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
+      // "No progress information found" surfaces as the typed BaseException.
+      "surfaces the typed BaseException tag when no change is in flight",
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/change-progress");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
+          expect((response as any).tag).toBe("BaseException");
         }),
     );
   });
@@ -192,22 +195,22 @@ describe.sequential("OpenSearch Bindings", () => {
 
   describe("GetDomainMaintenanceStatus", () => {
     test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
+      "surfaces the typed BaseException tag for a nonexistent domain",
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/maintenance-status-probe");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
+          expect((response as any).tag).toBe("BaseException");
         }),
     );
   });
 
   describe("ListDomainMaintenances", () => {
     test.provider(
-      "surfaces the typed not-found tag for a nonexistent domain",
+      "surfaces the typed BaseException tag for a nonexistent domain",
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* getJson("/maintenances");
-          expect((response as any).tag).toBe("ResourceNotFoundException");
+          expect((response as any).tag).toBe("BaseException");
         }),
     );
   });

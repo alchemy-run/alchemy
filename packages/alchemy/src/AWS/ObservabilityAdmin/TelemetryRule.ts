@@ -58,9 +58,12 @@ export interface TelemetryRuleProps {
    */
   scope?: string;
   /**
-   * Criteria selecting which resources the rule configures, e.g.
-   * `"ResourceTags['team'] = 'my-team'"`. Without selection criteria the
-   * rule applies to every resource of `resourceType` in the account.
+   * Criteria selecting which resources the rule configures (such as
+   * resource tags). The expression format is service-defined (the console's
+   * tag filter builder produces it); an invalid expression is rejected with
+   * `ValidationException: Invalid resource selection criteria`. Without
+   * selection criteria the rule applies to every resource of `resourceType`
+   * in the account.
    */
   selectionCriteria?: string;
   /**
@@ -110,7 +113,7 @@ export interface TelemetryRule extends Resource<
  *
  * @resource
  * @section Creating a Telemetry Rule
- * @example Enable VPC flow logs for tagged VPCs
+ * @example Enable VPC flow logs for the account's VPCs
  * ```typescript
  * import * as ObservabilityAdmin from "alchemy/AWS/ObservabilityAdmin";
  *
@@ -121,7 +124,6 @@ export interface TelemetryRule extends Resource<
  *   resourceType: "AWS::EC2::VPC",
  *   telemetryType: "Logs",
  *   telemetrySourceTypes: ["VPC_FLOW_LOGS"],
- *   selectionCriteria: "ResourceTags['team'] = 'networking'",
  *   destinationConfiguration: {
  *     DestinationType: "cloud-watch-logs",
  *     Retention: "30 days",
@@ -135,7 +137,6 @@ export interface TelemetryRule extends Resource<
  *   resourceType: "AWS::EC2::VPC",
  *   telemetryType: "Logs",
  *   telemetrySourceTypes: ["VPC_FLOW_LOGS"],
- *   selectionCriteria: "ResourceTags['team'] = 'networking'",
  *   destinationConfiguration: {
  *     DestinationType: "cloud-watch-logs",
  *     Retention: "90 days",

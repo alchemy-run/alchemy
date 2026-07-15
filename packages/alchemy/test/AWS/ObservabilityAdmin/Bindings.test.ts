@@ -82,16 +82,23 @@ const getJson = (path: string) =>
     Effect.flatMap((r) => r.json),
   );
 
+// beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
+// distilled calls need the provider layer (credentials, region) supplied
+// explicitly.
+const aws = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Core.withProviders(effect, testOptions, sharedStack.name);
+
 // The fixture's telemetry rule requires the account-wide telemetry config
 // feature, so run sequentially and capture-and-restore the onboarding state.
 describe.sequential("ObservabilityAdmin Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       // Telemetry rules need the account onboarded to telemetry config.
-      priorStatus = yield* awaitSettled;
+      priorStatus = yield* aws(awaitSettled);
       if (!isOn(priorStatus)) {
-        yield* obs.startTelemetryEvaluation({});
-        yield* awaitSettled;
+        yield* aws(
+          obs.startTelemetryEvaluation({}).pipe(Effect.andThen(awaitSettled)),
+        );
       }
 
       yield* Effect.logInfo(
@@ -134,13 +141,17 @@ describe.sequential("ObservabilityAdmin Bindings", () => {
     Effect.gen(function* () {
       yield* sharedStack.destroy();
       // Restore the account's pre-test onboarding state.
-      const settled = yield* awaitSettled;
-      if (isOn(priorStatus) && !isOn(settled)) {
-        yield* obs.startTelemetryEvaluation({});
-      }
-      if (!isOn(priorStatus) && isOn(settled)) {
-        yield* obs.stopTelemetryEvaluation({});
-      }
+      yield* aws(
+        Effect.gen(function* () {
+          const settled = yield* awaitSettled;
+          if (isOn(priorStatus) && !isOn(settled)) {
+            yield* obs.startTelemetryEvaluation({});
+          }
+          if (!isOn(priorStatus) && isOn(settled)) {
+            yield* obs.stopTelemetryEvaluation({});
+          }
+        }),
+      );
     }),
     { timeout: 180_000 },
   );

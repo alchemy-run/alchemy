@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { Dataset, DatasetGroup, Schema } from "@/AWS/Personalize";
+import { Dataset, DatasetGroup, EventTracker, Schema } from "@/AWS/Personalize";
 import { toTagRecord } from "@/AWS/Personalize/internal.ts";
 import * as Test from "@/Test/Vitest";
 import * as personalize from "@distilled.cloud/aws/personalize";
@@ -64,12 +64,13 @@ test.provider(
     }),
 );
 
-// Personalize schemas, dataset groups, and datasets are cheap, fast metadata
-// objects — the live lifecycle runs ungated with out-of-band verification.
-// The expensive training work (solutions, campaigns, import jobs) is out of
-// scope.
+// Personalize schemas, dataset groups, datasets, and event trackers are
+// cheap, fast metadata objects — the live lifecycle runs ungated with
+// out-of-band verification. The expensive training work (solutions,
+// campaigns, import jobs) runs at runtime through the MLOps bindings instead
+// of IaC resources.
 test.provider(
-  "create and destroy a schema, dataset group, and dataset",
+  "create and destroy a schema, dataset group, dataset, and event tracker",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -88,7 +89,11 @@ test.provider(
             datasetType: "Interactions",
             tags: { Environment: "test" },
           });
-          return { schema, group, dataset };
+          const tracker = yield* EventTracker("Tracker", {
+            datasetGroupArn: group.datasetGroupArn,
+            tags: { Environment: "test" },
+          });
+          return { schema, group, dataset, tracker };
         }),
       );
 

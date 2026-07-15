@@ -20,16 +20,15 @@ export default ObservabilityAdminBindingsFunction.make(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    // A rule scoped to a tag no resource carries — it never actually enables
-    // telemetry, but exercises the rule-scoped grant + name injection.
-    // (Requires the account to be onboarded to telemetry config; the test's
-    // beforeAll ensures that out-of-band.)
+    // A short-lived rule exercising the rule-scoped grant + name injection.
+    // It exists for well under the ~24h AWS Config discovery window, so it
+    // never actually configures flow logs. (Requires the account to be
+    // onboarded to telemetry config; the test's beforeAll ensures that
+    // out-of-band.)
     const rule = yield* ObservabilityAdmin.TelemetryRule("BindingsRule", {
       resourceType: "AWS::EC2::VPC",
       telemetryType: "Logs",
       telemetrySourceTypes: ["VPC_FLOW_LOGS"],
-      selectionCriteria:
-        "ResourceTags['alchemy-telemetry-bindings-test'] = 'noop'",
       destinationConfiguration: {
         DestinationType: "cloud-watch-logs",
         Retention: "30 days",

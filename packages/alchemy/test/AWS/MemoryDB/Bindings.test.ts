@@ -149,14 +149,14 @@ describe.sequential("MemoryDB Bindings", () => {
         };
         // Either the cluster comes back unprocessed or the call is rejected
         // with a typed tag — an IAM gap would have 500'd the route instead.
-        // Observed live: InvalidParameterCombinationException ("No
-        // modifications were requested"), typed via the distilled patch.
+        // Observed live: ServiceUpdateNotFoundFault ("Service Update ...
+        // not found").
         expect(
           unprocessed >= 1 ||
             [
+              "ServiceUpdateNotFoundFault",
               "InvalidParameterCombinationException",
               "InvalidParameterValueException",
-              "ServiceUpdateNotFoundFault",
             ].includes(tag),
         ).toBe(true);
       }),

@@ -22,18 +22,21 @@ test.provider(
     }),
 );
 
-// Ungated typed-error probe for the ResourcePolicy provider's read path.
+// Ungated probe for the ResourcePolicy provider's read path: OSIS reports
+// "no policy" as a SUCCESS response with the empty document `"{}"` (not a
+// ResourceNotFoundException) — the provider's absent-detection depends on
+// this observed behavior.
 test.provider(
-  "getResourcePolicy on a nonexistent pipeline fails with ResourceNotFoundException",
+  "getResourcePolicy on a nonexistent pipeline returns the empty document",
   () =>
     Effect.gen(function* () {
       const { region, accountId } = yield* AWSEnvironment.current;
-      const error = yield* Effect.flip(
-        osis.getResourcePolicy({
-          ResourceArn: `arn:aws:osis:${region}:${accountId}:pipeline/alchemy-nonexistent-probe`,
-        }),
+      const response = yield* osis.getResourcePolicy({
+        ResourceArn: `arn:aws:osis:${region}:${accountId}:pipeline/alchemy-nonexistent-probe`,
+      });
+      expect(response.Policy === undefined || response.Policy === "{}").toBe(
+        true,
       );
-      expect(error._tag).toBe("ResourceNotFoundException");
     }),
 );
 

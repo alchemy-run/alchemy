@@ -14,7 +14,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 const unwrap = (value: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-// Deterministic IV for the CBC round-trip route (test-only).
+// Deterministic IV for the CBC round-trip routes (test-only).
 const IV = "00000000000000000000000000000000";
 
 export class PaymentCryptographyTestFunction extends Lambda.Function<Lambda.Function>()(
@@ -41,6 +41,20 @@ export default PaymentCryptographyTestFunction.make(
         },
       },
     });
+    // Second data key — the ReEncryptData migration target.
+    const dataKey2 = yield* PaymentCryptography.Key("DataKey2", {
+      keyAttributes: {
+        keyAlgorithm: "AES_128",
+        keyClass: "SYMMETRIC_KEY",
+        keyUsage: "TR31_D0_SYMMETRIC_DATA_ENCRYPTION_KEY",
+        keyModesOfUse: {
+          encrypt: true,
+          decrypt: true,
+          wrap: true,
+          unwrap: true,
+        },
+      },
+    });
     const macKey = yield* PaymentCryptography.Key("MacKey", {
       keyAttributes: {
         keyAlgorithm: "HMAC_SHA256",
@@ -49,11 +63,85 @@ export default PaymentCryptographyTestFunction.make(
         keyModesOfUse: { generate: true, verify: true },
       },
     });
+    // Card Verification Key for CVV2 generation/verification.
+    const cvk = yield* PaymentCryptography.Key("Cvk", {
+      keyAttributes: {
+        keyAlgorithm: "TDES_2KEY",
+        keyClass: "SYMMETRIC_KEY",
+        keyUsage: "TR31_C0_CARD_VERIFICATION_KEY",
+        keyModesOfUse: { generate: true, verify: true },
+      },
+    });
+    // PIN Encryption Keys — PIN blocks are encrypted/translated under these.
+    const pek = yield* PaymentCryptography.Key("Pek", {
+      keyAttributes: {
+        keyAlgorithm: "TDES_2KEY",
+        keyClass: "SYMMETRIC_KEY",
+        keyUsage: "TR31_P0_PIN_ENCRYPTION_KEY",
+        keyModesOfUse: {
+          encrypt: true,
+          decrypt: true,
+          wrap: true,
+          unwrap: true,
+        },
+      },
+    });
+    const pek2 = yield* PaymentCryptography.Key("Pek2", {
+      keyAttributes: {
+        keyAlgorithm: "TDES_2KEY",
+        keyClass: "SYMMETRIC_KEY",
+        keyUsage: "TR31_P0_PIN_ENCRYPTION_KEY",
+        keyModesOfUse: {
+          encrypt: true,
+          decrypt: true,
+          wrap: true,
+          unwrap: true,
+        },
+      },
+    });
+    // Visa PIN Verification Key — generates/verifies PVVs.
+    const pvk = yield* PaymentCryptography.Key("Pvk", {
+      keyAttributes: {
+        keyAlgorithm: "TDES_2KEY",
+        keyClass: "SYMMETRIC_KEY",
+        keyUsage: "TR31_V2_VISA_PIN_VERIFICATION_KEY",
+        keyModesOfUse: { generate: true, verify: true },
+      },
+    });
+    // Asymmetric signing key pair — GetPublicKeyCertificate target.
+    const signKey = yield* PaymentCryptography.Key("SignKey", {
+      keyAttributes: {
+        keyAlgorithm: "ECC_NIST_P256",
+        keyClass: "ASYMMETRIC_KEY_PAIR",
+        keyUsage: "TR31_S0_ASYMMETRIC_KEY_FOR_DIGITAL_SIGNATURE",
+        keyModesOfUse: { sign: true, verify: true },
+      },
+    });
 
     const encryptData = yield* PaymentCryptography.EncryptData(dataKey);
     const decryptData = yield* PaymentCryptography.DecryptData(dataKey);
+    const decryptData2 = yield* PaymentCryptography.DecryptData(dataKey2);
     const generateMac = yield* PaymentCryptography.GenerateMac(macKey);
     const verifyMac = yield* PaymentCryptography.VerifyMac(macKey);
+    const reEncryptData = yield* PaymentCryptography.ReEncryptData(
+      dataKey,
+      dataKey2,
+    );
+    const generateCardValidationData =
+      yield* PaymentCryptography.GenerateCardValidationData(cvk);
+    const verifyCardValidationData =
+      yield* PaymentCryptography.VerifyCardValidationData(cvk);
+    const generatePinData = yield* PaymentCryptography.GeneratePinData(
+      pvk,
+      pek,
+    );
+    const verifyPinData = yield* PaymentCryptography.VerifyPinData(pvk, pek);
+    const translatePinData = yield* PaymentCryptography.TranslatePinData(
+      pek,
+      pek2,
+    );
+    const getPublicKeyCertificate =
+      yield* PaymentCryptography.GetPublicKeyCertificate(signKey);
 
     return {
       fetch: Effect.gen(function* () {
@@ -85,6 +173,131 @@ export default PaymentCryptographyTestFunction.make(
             keyArn: encrypted.KeyArn,
             cipherText,
             plainText: unwrap(decrypted.PlainText),
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/re-encrypt") {
+          const body = (yield* request.json) as unknown as {
+            plainTextHex: string;
+          };
+          const encrypted = yield* encryptData({
+            PlainText: body.plainTextHex,
+            EncryptionAttributes: {
+              Symmetric: { Mode: "CBC", InitializationVector: IV },
+            },
+          });
+          // Migrate the ciphertext from dataKey to dataKey2 inside the
+          // service — the plaintext never leaves Payment Cryptography.
+          const reEncrypted = yield* reEncryptData({
+            CipherText: unwrap(encrypted.CipherText),
+            IncomingEncryptionAttributes: {
+              Symmetric: { Mode: "CBC", InitializationVector: IV },
+            },
+            OutgoingEncryptionAttributes: {
+              Symmetric: { Mode: "CBC", InitializationVector: IV },
+            },
+          });
+          const decrypted = yield* decryptData2({
+            CipherText: unwrap(reEncrypted.CipherText),
+            DecryptionAttributes: {
+              Symmetric: { Mode: "CBC", InitializationVector: IV },
+            },
+          });
+          return yield* HttpServerResponse.json({
+            outgoingKeyArn: reEncrypted.KeyArn,
+            plainText: unwrap(decrypted.PlainText),
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/card") {
+          const body = (yield* request.json) as unknown as {
+            pan: string;
+            expiry: string;
+          };
+          const generated = yield* generateCardValidationData({
+            PrimaryAccountNumber: body.pan,
+            GenerationAttributes: {
+              CardVerificationValue2: { CardExpiryDate: body.expiry },
+            },
+          });
+          const cvv2 = unwrap(generated.ValidationData);
+          const verified = yield* verifyCardValidationData({
+            PrimaryAccountNumber: body.pan,
+            VerificationAttributes: {
+              CardVerificationValue2: { CardExpiryDate: body.expiry },
+            },
+            ValidationData: cvv2,
+          });
+          // A wrong CVV2 must fail with the typed
+          // VerificationFailedException.
+          const tamperedCvv2 = cvv2
+            .split("")
+            .map((d) => String((Number(d) + 1) % 10))
+            .join("");
+          const tampered = yield* verifyCardValidationData({
+            PrimaryAccountNumber: body.pan,
+            VerificationAttributes: {
+              CardVerificationValue2: { CardExpiryDate: body.expiry },
+            },
+            ValidationData: tamperedCvv2,
+          }).pipe(
+            Effect.map(() => "verified"),
+            Effect.catchTag("VerificationFailedException", () =>
+              Effect.succeed("verification-failed"),
+            ),
+          );
+          return yield* HttpServerResponse.json({
+            cvv2,
+            verifiedKeyArn: verified.KeyArn,
+            tampered,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/pin") {
+          const body = (yield* request.json) as unknown as { pan: string };
+          // Issue a Visa PIN: the PVK generates the PVV, the PEK encrypts
+          // the PIN block.
+          const generated = yield* generatePinData({
+            GenerationAttributes: { VisaPin: { PinVerificationKeyIndex: 1 } },
+            PrimaryAccountNumber: body.pan,
+            PinBlockFormat: "ISO_FORMAT_0",
+          });
+          const encryptedPinBlock = unwrap(generated.EncryptedPinBlock);
+          const pvv =
+            generated.PinData.VerificationValue === undefined
+              ? ""
+              : unwrap(generated.PinData.VerificationValue);
+          const verified = yield* verifyPinData({
+            VerificationAttributes: {
+              VisaPin: { PinVerificationKeyIndex: 1, VerificationValue: pvv },
+            },
+            EncryptedPinBlock: encryptedPinBlock,
+            PrimaryAccountNumber: body.pan,
+            PinBlockFormat: "ISO_FORMAT_0",
+          });
+          // Translate the PIN block from pek to pek2 (acquirer forwarding).
+          const translated = yield* translatePinData({
+            IncomingTranslationAttributes: {
+              IsoFormat0: { PrimaryAccountNumber: body.pan },
+            },
+            OutgoingTranslationAttributes: {
+              IsoFormat0: { PrimaryAccountNumber: body.pan },
+            },
+            EncryptedPinBlock: encryptedPinBlock,
+          });
+          return yield* HttpServerResponse.json({
+            pvv,
+            verificationKeyArn: verified.VerificationKeyArn,
+            translatedKeyArn: translated.KeyArn,
+            translatedPinBlock: unwrap(translated.PinBlock),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/public-key-cert") {
+          const certificate = yield* getPublicKeyCertificate();
+          return yield* HttpServerResponse.json({
+            keyCertificate: certificate.KeyCertificate,
+            keyCertificateChain: certificate.KeyCertificateChain,
           });
         }
 
@@ -137,6 +350,13 @@ export default PaymentCryptographyTestFunction.make(
         PaymentCryptography.DecryptDataHttp,
         PaymentCryptography.GenerateMacHttp,
         PaymentCryptography.VerifyMacHttp,
+        PaymentCryptography.ReEncryptDataHttp,
+        PaymentCryptography.GenerateCardValidationDataHttp,
+        PaymentCryptography.VerifyCardValidationDataHttp,
+        PaymentCryptography.GeneratePinDataHttp,
+        PaymentCryptography.VerifyPinDataHttp,
+        PaymentCryptography.TranslatePinDataHttp,
+        PaymentCryptography.GetPublicKeyCertificateHttp,
       ),
     ),
   ),

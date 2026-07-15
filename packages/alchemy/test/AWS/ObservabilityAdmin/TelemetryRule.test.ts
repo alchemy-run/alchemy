@@ -59,14 +59,14 @@ describe.sequential("AWS.ObservabilityAdmin.TelemetryRule", () => {
           const deployRule = (retention: string) =>
             stack.deploy(
               Effect.gen(function* () {
+                // The rule exists for well under the ~24h AWS Config
+                // discovery window, so it never actually configures flow
+                // logs (same shape as the terraform-provider-aws
+                // acceptance tests).
                 const rule = yield* TelemetryRule("Rule", {
                   resourceType: "AWS::EC2::VPC",
                   telemetryType: "Logs",
                   telemetrySourceTypes: ["VPC_FLOW_LOGS"],
-                  // Scope the rule to a tag no resource carries so it never
-                  // actually enables flow logs in the test account.
-                  selectionCriteria:
-                    "ResourceTags['alchemy-telemetry-rule-test'] = 'noop'",
                   destinationConfiguration: {
                     DestinationType: "cloud-watch-logs",
                     Retention: retention,

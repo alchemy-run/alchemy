@@ -143,7 +143,7 @@ export const RunGroupProvider = () =>
           const name = output?.name ?? (yield* createName(id, news));
           const maxDurationMinutes = toWireMinutes(news.maxDuration);
           const internalTags = yield* createInternalTags(id);
-          const desiredTags = { ...(news.tags ?? {}), ...internalTags };
+          const desiredTags = { ...news.tags, ...internalTags };
 
           // OBSERVE — the run group id is a server-generated cache.
           let group =

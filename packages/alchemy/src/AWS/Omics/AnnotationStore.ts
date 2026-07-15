@@ -221,7 +221,7 @@ export const AnnotationStoreProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.name ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
-          const desiredTags = { ...(news.tags ?? {}), ...internalTags };
+          const desiredTags = { ...news.tags, ...internalTags };
 
           // OBSERVE — annotation stores are addressable by name.
           let store = yield* omics

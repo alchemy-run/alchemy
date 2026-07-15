@@ -91,14 +91,24 @@ export const ResourcePolicyProvider = () =>
   Provider.effect(
     ResourcePolicy,
     Effect.gen(function* () {
-      /** Read the attached policy; typed not-found → undefined. */
+      /**
+       * Read the attached policy. OSIS reports "no policy" two ways: a typed
+       * `ResourceNotFoundException`, or (observed live) a success response
+       * whose `Policy` is the empty document `"{}"` — normalize both to
+       * `undefined`.
+       */
       const getPolicy = Effect.fn(function* (resourceArn: string) {
-        return yield* osis.getResourcePolicy({ ResourceArn: resourceArn }).pipe(
-          Effect.map((response) => response.Policy),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        const policy = yield* osis
+          .getResourcePolicy({ ResourceArn: resourceArn })
+          .pipe(
+            Effect.map((response) => response.Policy),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        return policy === undefined || canonicalJson(policy) === "{}"
+          ? undefined
+          : policy;
       });
 
       return {

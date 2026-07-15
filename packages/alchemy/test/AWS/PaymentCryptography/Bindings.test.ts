@@ -192,4 +192,113 @@ describe.skipIf(gated)("PaymentCryptography Bindings", () => {
         }),
     );
   });
+
+  describe("ReEncryptData", () => {
+    test.provider(
+      "migrates ciphertext to the outgoing key and round-trips",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/re-encrypt`),
+              // "ABCDABCDABCDABCD" — one full AES block, hex-encoded
+              { plainTextHex: "41424344414243444142434441424344" },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            outgoingKeyArn: string;
+            plainText: string;
+          };
+
+          expect(response.outgoingKeyArn).toContain(":key/");
+          expect(response.plainText.toUpperCase()).toBe(
+            "41424344414243444142434441424344",
+          );
+        }),
+    );
+  });
+
+  describe("GenerateCardValidationData", () => {
+    test.provider("generates a CVV2 for a PAN + expiry", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/card`),
+            { pan: "9123456789012345", expiry: "0130" },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          cvv2: string;
+        };
+
+        expect(response.cvv2).toMatch(/^\d{3}$/);
+      }),
+    );
+  });
+
+  describe("VerifyCardValidationData", () => {
+    test.provider(
+      "verifies the generated CVV2 and rejects a tampered one",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/card`),
+              { pan: "9123456789012345", expiry: "0130" },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            verifiedKeyArn: string;
+            tampered: string;
+          };
+
+          expect(response.verifiedKeyArn).toContain(":key/");
+          expect(response.tampered).toBe("verification-failed");
+        }),
+    );
+  });
+
+  describe("GeneratePinData / VerifyPinData / TranslatePinData", () => {
+    test.provider(
+      "issues a Visa PIN, verifies the PVV, and translates the PIN block",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/pin`),
+              { pan: "9123456789012345" },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            pvv: string;
+            verificationKeyArn: string;
+            translatedKeyArn: string;
+            translatedPinBlock: string;
+          };
+
+          expect(response.pvv).toMatch(/^\d+$/);
+          expect(response.verificationKeyArn).toContain(":key/");
+          // The translated block comes back under the outgoing PEK.
+          expect(response.translatedKeyArn).toContain(":key/");
+          expect(response.translatedKeyArn).not.toBe(
+            response.verificationKeyArn,
+          );
+          expect(response.translatedPinBlock).toMatch(/^[0-9A-Fa-f]+$/);
+        }),
+    );
+  });
+
+  describe("GetPublicKeyCertificate", () => {
+    test.provider(
+      "exports the public key certificate of the signing key pair",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/public-key-cert`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            keyCertificate: string;
+            keyCertificateChain: string;
+          };
+
+          expect(response.keyCertificate.length).toBeGreaterThan(0);
+          expect(response.keyCertificateChain.length).toBeGreaterThan(0);
+        }),
+    );
+  });
 });

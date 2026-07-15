@@ -25,6 +25,8 @@ export default PricingTestFunction.make(
     const getProducts = yield* Pricing.GetProducts();
     const describeServices = yield* Pricing.DescribeServices();
     const getAttributeValues = yield* Pricing.GetAttributeValues();
+    const listPriceLists = yield* Pricing.ListPriceLists();
+    const getPriceListFileUrl = yield* Pricing.GetPriceListFileUrl();
 
     return {
       fetch: Effect.gen(function* () {
@@ -96,6 +98,42 @@ export default PricingTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/price-list-file-url") {
+          // ListPriceLists -> GetPriceListFileUrl round trip: resolve a bulk
+          // Price List reference for EC2 in us-east-1, then presign its JSON
+          // file URL.
+          const lists = yield* listPriceLists({
+            ServiceCode: "AmazonEC2",
+            CurrencyCode: "USD",
+            EffectiveDate: new Date(),
+            RegionCode: "us-east-1",
+            MaxResults: 5,
+          });
+          const priceLists = lists.PriceLists ?? [];
+          const first = priceLists[0];
+          if (first?.PriceListArn === undefined) {
+            return yield* HttpServerResponse.json(
+              { error: "No price list returned" },
+              { status: 500 },
+            );
+          }
+          const fileFormat = (first.FileFormats ?? []).includes("json")
+            ? "json"
+            : (first.FileFormats ?? [])[0];
+          const { Url } = yield* getPriceListFileUrl({
+            PriceListArn: first.PriceListArn,
+            FileFormat: fileFormat ?? "json",
+          });
+          return yield* HttpServerResponse.json({
+            count: priceLists.length,
+            priceListArn: first.PriceListArn,
+            regionCode: first.RegionCode,
+            currencyCode: first.CurrencyCode,
+            fileFormats: first.FileFormats ?? [],
+            url: Url,
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -108,6 +146,8 @@ export default PricingTestFunction.make(
         Pricing.GetProductsHttp,
         Pricing.DescribeServicesHttp,
         Pricing.GetAttributeValuesHttp,
+        Pricing.ListPriceListsHttp,
+        Pricing.GetPriceListFileUrlHttp,
       ),
     ),
   ),

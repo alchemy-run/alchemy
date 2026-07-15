@@ -141,36 +141,47 @@ export default OpenSearchBindingsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/domain-health") {
+          // OpenSearch reports a missing domain on this operation as the
+          // typed `BaseException` ("Domain not found: …"), not
+          // ResourceNotFoundException — both are typed tags; catch both and
+          // surface whichever fired.
           const tag = yield* describeDomainHealth({
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "BaseException"],
+              (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
         if (request.method === "GET" && pathname === "/domain-nodes") {
+          // Missing domain surfaces as the typed `BaseException` here (see
+          // /domain-health).
           const tag = yield* describeDomainNodes({
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "BaseException"],
+              (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
         if (request.method === "GET" && pathname === "/change-progress") {
+          // A domain with no in-flight change (or no domain at all) surfaces
+          // as the typed `BaseException` ("No progress information found").
           const tag = yield* describeDomainChangeProgress({
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "BaseException"],
+              (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
@@ -232,25 +243,31 @@ export default OpenSearchBindingsTestFunction.make(
           request.method === "GET" &&
           pathname === "/maintenance-status-probe"
         ) {
+          // Missing domain surfaces as the typed `BaseException` here (see
+          // /domain-health).
           const tag = yield* getDomainMaintenanceStatus({
             DomainName: NONEXISTENT_DOMAIN,
             MaintenanceId: "nonexistent-maintenance-id",
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "BaseException"],
+              (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
         if (request.method === "GET" && pathname === "/maintenances") {
+          // Missing domain surfaces as the typed `BaseException` here (see
+          // /domain-health).
           const tag = yield* listDomainMaintenances({
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "BaseException"],
+              (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });

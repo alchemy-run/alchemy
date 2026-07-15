@@ -121,12 +121,18 @@ export default MemoryDBBindingsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/batch-probe") {
-          // A call without a ServiceUpdate is rejected with the typed
-          // InvalidParameterCombinationException ("No modifications were
-          // requested") — proving the grant and the (patched) typed union.
-          // An IAM gap would surface AccessDeniedException and 500 the route.
+          // A nonexistent service update is rejected with the typed
+          // ServiceUpdateNotFoundFault ("Service Update ... not found") —
+          // proving the grant and the typed union. A call with NO
+          // ServiceUpdate instead fails with the (distilled-patched)
+          // InvalidParameterCombinationException "No modifications were
+          // requested". An IAM gap would surface AccessDeniedException and
+          // 500 the route.
           const result = yield* batchUpdateCluster({
             ClusterNames: [name],
+            ServiceUpdate: {
+              ServiceUpdateNameToApply: `${name}-service-update`,
+            },
           }).pipe(
             Effect.map((r) => ({
               unprocessed: (r.UnprocessedClusters ?? []).length,

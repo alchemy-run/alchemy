@@ -1,6 +1,7 @@
 import type * as pipes from "@distilled.cloud/aws/pipes";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Table } from "../DynamoDB/Table.ts";
 import * as IAM from "../IAM/index.ts";
 import type { Stream } from "../Kinesis/Stream.ts";
@@ -24,7 +25,7 @@ export interface PipeSourceOptions {
    * `"30 seconds"` or `Duration.seconds(30)`). Sent to the API in whole
    * seconds.
    */
-  maximumBatchingWindowInSeconds?: Duration.Input;
+  maximumBatchingWindow?: Duration.Input;
   /**
    * Where to start reading a Kinesis or DynamoDB stream source. Ignored
    * for SQS sources. Changing it triggers a replacement.
@@ -188,10 +189,9 @@ interface SourceSpec {
 const sourceSpec = (state: PipeBuilderState): SourceSpec => {
   const { source, options, filters } = state;
   // The wire field is whole seconds.
-  const maximumBatchingWindowInSeconds =
-    options.maximumBatchingWindowInSeconds !== undefined
-      ? Math.round(Duration.toSeconds(options.maximumBatchingWindowInSeconds))
-      : undefined;
+  const maximumBatchingWindowInSeconds = toWireSeconds(
+    options.maximumBatchingWindow,
+  );
   const filterCriteria: Pick<pipes.PipeSourceParameters, "FilterCriteria"> =
     filters.length > 0
       ? { FilterCriteria: { Filters: filters.map((Pattern) => ({ Pattern })) } }

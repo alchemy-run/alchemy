@@ -172,7 +172,7 @@ export const ReferenceStoreProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.name ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
-          const desiredTags = { ...(news.tags ?? {}), ...internalTags };
+          const desiredTags = { ...news.tags, ...internalTags };
 
           // OBSERVE — the store id is a server-generated cache; if the store
           // was deleted out-of-band, getReferenceStore returns NotFound and we
