@@ -184,6 +184,10 @@ export default LexTestFunction.make(
                 dialogAction: { type: "ElicitIntent" },
                 sessionAttributes: body.attributes,
               },
+              // ElicitIntent requires a message to relay to the user.
+              messages: [
+                { contentType: "PlainText", content: "How can I help?" },
+              ],
               // Default is speech — the test locale has no voice configured.
               responseContentType: "text/plain; charset=utf-8",
             }),

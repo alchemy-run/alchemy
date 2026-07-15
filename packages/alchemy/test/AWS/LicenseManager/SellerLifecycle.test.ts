@@ -27,7 +27,8 @@ const FIXTURE_LICENSE_NAME = "alchemy-lm-seller-e2e";
 // License Manager requires one-time account onboarding (see
 // LicenseConfiguration.test.ts): create the service-linked role
 // idempotently, then probe with a bounded typed retry through IAM
-// propagation.
+// propagation. Raw distilled calls need the AWS layer, so this runs inside
+// `test.provider` bodies (beforeAll provides no cloud credentials).
 const ensureOnboarded = Effect.gen(function* () {
   yield* iam
     .createServiceLinkedRole({
@@ -51,7 +52,6 @@ const readinessPolicy = Schedule.max([
 ]);
 
 let baseUrl: string;
-let accountId: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -97,10 +97,6 @@ const postJson = (path: string) =>
 describe.sequential("LicenseManager Seller Lifecycle", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* ensureOnboarded;
-      const { Account } = yield* sts.getCallerIdentity({});
-      accountId = Account!;
-
       yield* Effect.logInfo(
         "LicenseManager seller setup: destroying previous resources",
       );
@@ -157,8 +153,10 @@ describe.sequential("LicenseManager Seller Lifecycle", () => {
       "issue -> version -> token mint/exchange -> checkout/extend/checkin -> grant -> delete",
       (_stack) =>
         Effect.gen(function* () {
+          yield* ensureOnboarded;
+          const { Account } = yield* sts.getCallerIdentity({});
           const response = (yield* postJson(
-            `/lifecycle?account=${accountId}`,
+            `/lifecycle?account=${Account}`,
           )) as {
             licenseArn: string;
             licenseStatus: string | null;

@@ -54,6 +54,21 @@ const send = (route: string) =>
     Effect.flatMap((response) => response.json),
   );
 
+/**
+ * GET a fixture route repeatedly until `until` holds — bounded. Location's
+ * list APIs (geofences, device positions, history) are eventually consistent
+ * with respect to writes made moments earlier.
+ */
+const sendUntil = <T>(route: string, until: (response: T) => boolean) =>
+  send(route).pipe(
+    Effect.map((response) => response as T),
+    Effect.repeat({
+      schedule: Schedule.spaced("3 seconds"),
+      until,
+      times: 10,
+    }),
+  );
+
 describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
@@ -130,10 +145,10 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
       "reads several devices in one call",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send("/tracker/batch-get")) as {
+          const response = yield* sendUntil<{
             found: number;
             errors: number;
-          };
+          }>("/tracker/batch-get", (r) => r.found > 0);
           expect(response.found).toBe(1);
           expect(response.errors).toBe(0);
         }),
@@ -146,9 +161,10 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
       "reads the device's position history",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send("/tracker/history")) as {
-            count: number;
-          };
+          const response = yield* sendUntil<{ count: number }>(
+            "/tracker/history",
+            (r) => r.count > 0,
+          );
           expect(response.count).toBeGreaterThan(0);
         }),
       { timeout: 120_000 },
@@ -160,10 +176,10 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
       "lists the tracker's device positions",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send("/tracker/list")) as {
+          const response = yield* sendUntil<{
             count: number;
             deviceIds: string[];
-          };
+          }>("/tracker/list", (r) => r.count > 0);
           expect(response.count).toBeGreaterThan(0);
           expect(response.deviceIds).toContain("device-1");
         }),
@@ -228,9 +244,10 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
       "lists the collection's geofences",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send("/geofence/list")) as {
-            count: number;
-          };
+          const response = yield* sendUntil<{ count: number }>(
+            "/geofence/list",
+            (r) => r.count > 0,
+          );
           expect(response.count).toBeGreaterThan(0);
         }),
       { timeout: 120_000 },
@@ -259,9 +276,10 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* send("/geofence/evaluate")) as {
-            errors: number;
+            ok: boolean;
+            errors?: number;
           };
-          expect(response.errors).toBe(0);
+          expect(response).toMatchObject({ ok: true, errors: 0 });
         }),
       { timeout: 120_000 },
     );
@@ -365,9 +383,11 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* send("/places/get-place")) as {
+            ok: boolean;
             label?: string;
             point?: number[];
           };
+          expect(response).toMatchObject({ ok: true });
           expect(typeof response.label).toBe("string");
           expect(response.point).toHaveLength(2);
         }),
@@ -477,8 +497,9 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* send("/jobs/get-missing")) as {
             tag: string;
+            message?: string;
           };
-          expect(response.tag).toBe("ResourceNotFoundException");
+          expect(response).toMatchObject({ tag: "ResourceNotFoundException" });
         }),
       { timeout: 120_000 },
     );
@@ -491,8 +512,9 @@ describe.skipIf(!!process.env.FAST)("AWS.Location Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* send("/jobs/cancel-missing")) as {
             tag: string;
+            message?: string;
           };
-          expect(response.tag).toBe("ResourceNotFoundException");
+          expect(response).toMatchObject({ tag: "ResourceNotFoundException" });
         }),
       { timeout: 120_000 },
     );

@@ -59,6 +59,24 @@ export const retryWhileMpConflict = <A, E extends { readonly _tag: string }, R>(
   });
 
 /**
+ * Compare two IAM policy documents for semantic equality: parse both as JSON
+ * and compare the normalized serialization, so whitespace/key-order changes
+ * introduced by AWS never register as drift. Falls back to strict string
+ * equality when either side is not valid JSON.
+ */
+export const policiesEqual = (
+  a: string | undefined,
+  b: string | undefined,
+): boolean => {
+  if (a === undefined || b === undefined) return a === b;
+  try {
+    return JSON.stringify(JSON.parse(a)) === JSON.stringify(JSON.parse(b));
+  } catch {
+    return a === b;
+  }
+};
+
+/**
  * Structural "desired is a subset of observed" comparison used for drift
  * detection. Only keys present (and defined) in `desired` are compared, so
  * server-side defaults on the observed state never register as drift. Arrays

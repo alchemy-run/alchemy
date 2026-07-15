@@ -102,6 +102,31 @@ export interface RuleSet extends Resource<
  *   trafficPolicyId: trafficPolicy.trafficPolicyId,
  * });
  * ```
+ *
+ * @section Delivering Email Events to Compute
+ * @example Invoke a Lambda for Matching Mail
+ * ```typescript
+ * // Mail Manager has no EventBridge events or event-source mapping — email
+ * // events reach compute through rule actions: InvokeLambda (direct),
+ * // PublishToSns (SNS event source), or WriteToS3 (S3 event source). The
+ * // role must be assumable by ses.amazonaws.com with lambda:InvokeFunction.
+ * const ruleSet = yield* MailManager.RuleSet("Inbound", {
+ *   rules: [
+ *     {
+ *       Name: "NotifyOnMail",
+ *       Actions: [
+ *         {
+ *           InvokeLambda: {
+ *             FunctionArn: fn.functionArn,
+ *             InvocationType: "EVENT",
+ *             RoleArn: invokeRole.roleArn,
+ *           },
+ *         },
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
  */
 export const RuleSet = Resource<RuleSet>("AWS.MailManager.RuleSet");
 

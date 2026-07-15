@@ -19,6 +19,15 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "LicenseManagerBindings");
 
+// NOTE: CreateLicenseConfiguration has a small DAILY account quota (~10
+// creates/day; deletes do NOT refund it — soft-deleted configurations still
+// count). This suite's fixture consumes 1 create per run. On a
+// quota-exhausted day the beforeAll deploy fails with the typed
+// ResourceLimitExceededException ("You have reached the maximum allowed
+// number of license configurations created in one day") and every test here
+// is skipped. That is quota, not a bug — re-run the next day (see the same
+// note in LicenseConfiguration.test.ts).
+
 // License Manager requires one-time account onboarding (see
 // LicenseConfiguration.test.ts): create the service-linked role
 // idempotently, then probe with a bounded typed retry through IAM

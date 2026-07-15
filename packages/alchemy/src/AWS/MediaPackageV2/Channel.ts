@@ -9,6 +9,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   matchesDesired,
+  policiesEqual,
   retryWhileMpConflict,
   syncMpTags,
   toMpTagRecord,
@@ -46,6 +47,12 @@ export interface ChannelProps {
    * MediaPackage includes in responses to the CDN.
    */
   outputHeaderConfiguration?: mediapackagev2.OutputHeaderConfiguration;
+  /**
+   * IAM resource policy (JSON) attached to the channel, controlling which
+   * principals may push content to it (`mediapackagev2:PutObject`).
+   * Omitting it removes any existing policy.
+   */
+  policy?: string;
   /**
    * User-defined tags for the channel. Merged with internal Alchemy tags.
    */
@@ -100,6 +107,23 @@ export interface Channel extends Resource<
  *   channelGroupName: group.channelGroupName,
  *   inputType: "CMAF",
  *   description: "CMAF contribution feed",
+ * });
+ * ```
+ *
+ * @section Resource Policy
+ * @example Allow a Principal to Push Content
+ * ```typescript
+ * const channel = yield* MediaPackageV2.Channel("Feed", {
+ *   channelGroupName: group.channelGroupName,
+ *   policy: JSON.stringify({
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Principal: { AWS: "arn:aws:iam::111122223333:root" },
+ *       Action: "mediapackagev2:PutObject",
+ *       Resource: "arn:aws:mediapackagev2:us-east-1:111122223333:channelGroup/live/channel/feed",
+ *     }],
+ *   }),
  * });
  * ```
  *
@@ -255,6 +279,34 @@ export const ChannelProvider = () =>
             toMpTagRecord(channel.Tags),
             desiredTags,
           );
+
+          // 3c. Sync the resource policy — observe the live policy (absent
+          //     policy is the typed not-found) and apply only the delta.
+          const observedPolicy = yield* mediapackagev2
+            .getChannelPolicy({
+              ChannelGroupName: channelGroupName,
+              ChannelName: channelName,
+            })
+            .pipe(
+              Effect.map((response) => response.Policy as string | undefined),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (news.policy !== undefined) {
+            if (!policiesEqual(observedPolicy, news.policy)) {
+              yield* mediapackagev2.putChannelPolicy({
+                ChannelGroupName: channelGroupName,
+                ChannelName: channelName,
+                Policy: news.policy,
+              });
+            }
+          } else if (observedPolicy !== undefined) {
+            yield* mediapackagev2.deleteChannelPolicy({
+              ChannelGroupName: channelGroupName,
+              ChannelName: channelName,
+            });
+          }
 
           yield* session.note(channelName);
           return toAttrs(channel);

@@ -38,9 +38,11 @@ export const makeLogGroupHttpBinding = <
    * Which ARNs the actions are granted on:
    * - `"group-and-streams"` (default): the log-group ARN plus `${arn}:*`;
    * - `"streams"`: only `${arn}:*` — for actions that authorize against the
-   *   log-stream resource (`PutLogEvents`, `DeleteLogStream`).
+   *   log-stream resource (`PutLogEvents`, `DeleteLogStream`);
+   * - `"all"`: `*` — for actions that do not support resource-level
+   *   permissions (`StopQuery`).
    */
-  iamResources?: "group-and-streams" | "streams";
+  iamResources?: "group-and-streams" | "streams" | "all";
   /**
    * Inject the bound group's name under `logGroupName` (default `true`).
    * Disable for operations scoped by a query id or record pointer.
@@ -62,12 +64,14 @@ export const makeLogGroupHttpBinding = <
                 Effect: "Allow",
                 Action: [...options.actions],
                 Resource:
-                  options.iamResources === "streams"
-                    ? [Output.interpolate`${logGroup.logGroupArn}:*`]
-                    : [
-                        logGroup.logGroupArn,
-                        Output.interpolate`${logGroup.logGroupArn}:*`,
-                      ],
+                  options.iamResources === "all"
+                    ? ["*"]
+                    : options.iamResources === "streams"
+                      ? [Output.interpolate`${logGroup.logGroupArn}:*`]
+                      : [
+                          logGroup.logGroupArn,
+                          Output.interpolate`${logGroup.logGroupArn}:*`,
+                        ],
               },
             ],
           });

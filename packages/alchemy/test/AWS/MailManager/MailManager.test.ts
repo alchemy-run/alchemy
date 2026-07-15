@@ -2,6 +2,8 @@ import * as AWS from "@/AWS";
 import {
   AddonInstance,
   AddonSubscription,
+  AddressList,
+  Archive,
   IngressPoint,
   Relay,
   RuleSet,
@@ -228,6 +230,126 @@ test.provider(
         mm.getRelay({ RelayId: updated.relay.relayId }),
       );
       expect(relayError._tag).toBe("ResourceNotFoundException");
+    }),
+  { timeout: 240_000 },
+);
+
+// Address lists and archives are free and provision instantly — full
+// lifecycle runs ungated. The destroy phase also pins the archive's
+// PENDING_DELETION semantics (deleted archives tombstone for 30 days) and
+// re-creates once to prove reruns don't collide with the tombstone.
+test.provider(
+  "lifecycle: address list + archive",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Create.
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const addressList = yield* AddressList("Members", {
+            tags: { fixture: "mailmanager" },
+          });
+          const archive = yield* Archive("Mail", {
+            retentionPeriod: "THREE_MONTHS",
+            tags: { fixture: "mailmanager" },
+          });
+          return { addressList, archive };
+        }),
+      );
+
+      expect(deployed.addressList.addressListId).toBeDefined();
+      expect(deployed.addressList.addressListArn).toContain("mailmanager");
+      expect(deployed.archive.archiveId).toBeDefined();
+      expect(deployed.archive.archiveArn).toContain("mailmanager");
+      expect(deployed.archive.archiveState).toBe("ACTIVE");
+
+      // Out-of-band verification via distilled.
+      const liveList = yield* mm.getAddressList({
+        AddressListId: deployed.addressList.addressListId,
+      });
+      expect(liveList.AddressListName).toBe(
+        deployed.addressList.addressListName,
+      );
+      const liveArchive = yield* mm.getArchive({
+        ArchiveId: deployed.archive.archiveId,
+      });
+      expect(liveArchive.ArchiveName).toBe(deployed.archive.archiveName);
+      expect(liveArchive.Retention?.RetentionPeriod).toBe("THREE_MONTHS");
+      const listTags = yield* mm.listTagsForResource({
+        ResourceArn: deployed.addressList.addressListArn,
+      });
+      expect(
+        listTags.Tags?.some(
+          (t) => t.Key === "alchemy::id" && t.Value === "Members",
+        ),
+      ).toBe(true);
+
+      // Update — archive retention changes in place; address list tags
+      // sync; identities are stable.
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          const addressList = yield* AddressList("Members", {
+            tags: { fixture: "mailmanager", env: "test" },
+          });
+          const archive = yield* Archive("Mail", {
+            retentionPeriod: "SIX_MONTHS",
+            tags: { fixture: "mailmanager" },
+          });
+          return { addressList, archive };
+        }),
+      );
+
+      expect(updated.addressList.addressListId).toBe(
+        deployed.addressList.addressListId,
+      );
+      expect(updated.archive.archiveId).toBe(deployed.archive.archiveId);
+      const updatedArchive = yield* mm.getArchive({
+        ArchiveId: updated.archive.archiveId,
+      });
+      expect(updatedArchive.Retention?.RetentionPeriod).toBe("SIX_MONTHS");
+      const updatedListTags = yield* mm.listTagsForResource({
+        ResourceArn: updated.addressList.addressListArn,
+      });
+      expect(
+        updatedListTags.Tags?.some(
+          (t) => t.Key === "env" && t.Value === "test",
+        ),
+      ).toBe(true);
+
+      // Destroy — the list is gone (typed); the archive tombstones in
+      // PENDING_DELETION (or is already invisible).
+      yield* stack.destroy();
+      const listError = yield* Effect.flip(
+        mm.getAddressList({
+          AddressListId: updated.addressList.addressListId,
+        }),
+      );
+      expect(listError._tag).toBe("ResourceNotFoundException");
+      const archiveState = yield* mm
+        .getArchive({ ArchiveId: updated.archive.archiveId })
+        .pipe(
+          Effect.map((a) => a.ArchiveState),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed("PENDING_DELETION" as const),
+          ),
+        );
+      expect(archiveState).toBe("PENDING_DELETION");
+
+      // Re-create — proves a rerun does not collide with the
+      // pending-deletion tombstone of the same deterministic name.
+      const recreated = yield* stack.deploy(
+        Effect.gen(function* () {
+          const archive = yield* Archive("Mail", {
+            retentionPeriod: "THREE_MONTHS",
+          });
+          return { archive };
+        }),
+      );
+      expect(recreated.archive.archiveId).not.toBe(deployed.archive.archiveId);
+      expect(recreated.archive.archiveState).toBe("ACTIVE");
+
+      yield* stack.destroy();
     }),
   { timeout: 240_000 },
 );

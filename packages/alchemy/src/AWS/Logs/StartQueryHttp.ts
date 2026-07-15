@@ -8,6 +8,9 @@ export const StartQueryHttp = Layer.effect(
   makeLogGroupHttpBinding({
     tag: "AWS.Logs.StartQuery",
     operation: Logs.startQuery,
-    actions: ["logs:StartQuery", "logs:StopQuery"],
+    // logs:StopQuery is deliberately NOT bundled here: it does not support
+    // resource-level permissions, so a group-scoped grant never matches.
+    // Use the dedicated StopQuery binding (which grants on `*`).
+    actions: ["logs:StartQuery"],
   }),
 );

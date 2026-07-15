@@ -74,6 +74,11 @@ const postJson = (path: string) =>
     Effect.flatMap((r) => r.json),
   );
 
+// Direct distilled calls in beforeAll/afterAll run OUTSIDE test.provider, so
+// the AWS client context (credentials, region) must be provided explicitly.
+const withAws = <A, E>(effect: Effect.Effect<A, E, any>) =>
+  Core.withProviders(effect, testOptions, sharedStack.name);
+
 // The definitions bucket + workflow YAML must exist in S3 BEFORE the fixture
 // deploys — MWAA Serverless validates the definition at createWorkflow time.
 const ensureDefinitionUploaded = Effect.gen(function* () {
@@ -131,7 +136,7 @@ describe.sequential("MWAAServerless Bindings", () => {
       yield* Effect.logInfo(
         "MWAAServerless test setup: uploading workflow definition",
       );
-      yield* ensureDefinitionUploaded;
+      yield* withAws(ensureDefinitionUploaded);
 
       yield* Effect.logInfo("MWAAServerless test setup: deploying fixture");
       const attrs = yield* sharedStack.deploy(
@@ -166,7 +171,9 @@ describe.sequential("MWAAServerless Bindings", () => {
   );
 
   afterAll(
-    sharedStack.destroy().pipe(Effect.andThen(Effect.orDie(cleanupOutOfBand))),
+    sharedStack
+      .destroy()
+      .pipe(Effect.andThen(Effect.orDie(withAws(cleanupOutOfBand)))),
     { timeout: 240_000 },
   );
 
@@ -201,30 +208,54 @@ describe.sequential("MWAAServerless Bindings", () => {
 
   // Typed probes on a nonexistent run: a typed service error (not
   // AccessDeniedException) proves the IAM grant covers the workflow ARN and
-  // the ARN was injected from the binding.
+  // the ARN was injected from the binding. ListTaskInstances is the
+  // exception — the service answers a nonexistent run with an empty list
+  // (`ok`), which proves the same thing.
   describe("typed not-found probes", () => {
     const probes: ReadonlyArray<
-      readonly [name: string, method: "GET" | "POST", path: string]
+      readonly [
+        name: string,
+        method: "GET" | "POST",
+        path: string,
+        tags: readonly string[],
+      ]
     > = [
-      ["GetWorkflowRun", "GET", "/run-fake"],
-      ["ListTaskInstances", "GET", "/tasks-fake"],
-      ["GetTaskInstance", "GET", "/task-fake"],
-      ["StopWorkflowRun", "POST", "/run-stop-fake"],
+      [
+        "GetWorkflowRun",
+        "GET",
+        "/run-fake",
+        ["ResourceNotFoundException", "ValidationException"],
+      ],
+      [
+        "ListTaskInstances",
+        "GET",
+        "/tasks-fake",
+        ["ok", "ResourceNotFoundException", "ValidationException"],
+      ],
+      [
+        "GetTaskInstance",
+        "GET",
+        "/task-fake",
+        ["ResourceNotFoundException", "ValidationException"],
+      ],
+      [
+        "StopWorkflowRun",
+        "POST",
+        "/run-stop-fake",
+        ["ResourceNotFoundException", "ValidationException"],
+      ],
     ] as const;
 
-    for (const [name, method, path] of probes) {
+    for (const [name, method, path, tags] of probes) {
       test.provider(
-        `${name} answers with a typed error (not AccessDenied)`,
+        `${name} answers with a typed outcome (not AccessDenied)`,
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* method === "GET"
               ? getJson(path)
               : postJson(path)) as { tag: string; detail: string };
             expect(response.detail).not.toContain("not authorized");
-            expect([
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(response.tag);
+            expect(tags).toContain(response.tag);
           }),
       );
     }

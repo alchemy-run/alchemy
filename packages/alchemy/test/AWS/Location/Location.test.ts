@@ -5,6 +5,7 @@ import * as location from "@distilled.cloud/aws/location";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -178,7 +179,41 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
     { timeout: 180_000 },
   );
 
+  // Ungated probe: this account cannot create Location V1 API keys — even
+  // AdministratorAccess gets an AccessDeniedException with an EMPTY action
+  // name ("is not authorized to perform:  because no resource-based policy
+  // allows the  action") from `geo:CreateKey` in every region. That is a
+  // service-side gate (Location classic is closed to newer accounts), not an
+  // IAM misconfiguration. The probe pins the typed tag forever at near-zero
+  // cost; an entitled account instead exercises cleanup of the probe key.
   test.provider(
+    "ApiKey: CreateKey is service-gated (typed AccessDeniedException) or succeeds",
+    (_stack) =>
+      Effect.gen(function* () {
+        const created = yield* Effect.result(
+          location.createKey({
+            KeyName: "alchemy-apikey-probe",
+            NoExpiry: true,
+            Restrictions: {
+              AllowActions: ["geo:GetMap*"],
+              AllowResources: ["arn:aws:geo:*:*:map/*"],
+            },
+          }),
+        );
+        if (Result.isSuccess(created)) {
+          // Entitled account: clean up the probe key immediately.
+          yield* location.deleteKey({
+            KeyName: "alchemy-apikey-probe",
+            ForceDelete: true,
+          });
+        } else {
+          expect(created.failure._tag).toBe("AccessDeniedException");
+        }
+      }),
+    { timeout: 60_000 },
+  );
+
+  test.provider.skipIf(!process.env.AWS_TEST_LOCATION_API_KEYS)(
     "ApiKey: create, update description, delete",
     (stack) =>
       Effect.gen(function* () {

@@ -18,6 +18,12 @@ export default LambdaBindingsTestFunction.make(
   {
     main,
     url: true,
+    // Resolve distilled from `src/*.ts` (the `bun` export condition — same
+    // as vitest) so distilled source changes are test-visible in the
+    // deployed bundle without a `lib/` rebuild.
+    build: {
+      resolve: { conditionNames: ["bun", "import", "module", "default"] },
+    },
   },
   Effect.gen(function* () {
     const target = yield* Lambda.Function("BindingsTarget", {

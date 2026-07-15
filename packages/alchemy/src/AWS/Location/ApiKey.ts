@@ -106,6 +106,11 @@ export interface ApiKey extends Resource<
  * The `key` attribute is the secret key value (`v1.public.…`) clients pass
  * as the `key` query parameter; it is wrapped in `Redacted`.
  *
+ * Availability: Amazon Location classic (V1) is closed to newer AWS
+ * accounts — `geo:CreateKey` is rejected service-side with an
+ * `AccessDeniedException` regardless of IAM policy. Accounts onboarded to
+ * Location before the V2 split can create keys normally.
+ *
  * @resource
  * @section Creating API Keys
  * @example Map-Rendering Key for Browsers

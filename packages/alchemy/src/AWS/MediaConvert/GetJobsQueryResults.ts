@@ -19,7 +19,7 @@ import * as Binding from "../../Binding.ts";
  *
  * // runtime
  * const results = yield* getJobsQueryResults({ Id: queryId });
- * if (results.JobsQueryStatus === "COMPLETE") {
+ * if (results.Status === "COMPLETE") {
  *   const jobs = results.Jobs ?? [];
  * }
  * ```

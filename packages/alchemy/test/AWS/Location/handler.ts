@@ -4,6 +4,7 @@ import * as Location from "@/AWS/Location";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -248,18 +249,26 @@ export default LocationTestFunction.make(
         }
 
         if (pathname === "/geofence/evaluate") {
-          const result = yield* evaluateGeofences({
-            DevicePositionUpdates: [
-              {
-                DeviceId: "device-1",
-                Position: SEATTLE,
-                SampleTime: new Date(),
-              },
-            ],
-          });
-          return yield* HttpServerResponse.json({
-            errors: result.Errors.length,
-          });
+          const result = yield* Effect.result(
+            evaluateGeofences({
+              DevicePositionUpdates: [
+                {
+                  DeviceId: "device-1",
+                  Position: SEATTLE,
+                  SampleTime: new Date(),
+                },
+              ],
+            }),
+          );
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(result)
+              ? { ok: true, errors: result.success.Errors.length }
+              : {
+                  ok: false,
+                  tag: result.failure._tag,
+                  message: String(result.failure),
+                },
+          );
         }
 
         if (pathname === "/geofence/forecast") {
@@ -326,16 +335,26 @@ export default LocationTestFunction.make(
           });
           const placeId = searched.Results?.[0]?.PlaceId;
           if (placeId === undefined) {
-            return yield* HttpServerResponse.json(
-              { error: "search returned no PlaceId" },
-              { status: 500 },
-            );
+            return yield* HttpServerResponse.json({
+              ok: false,
+              tag: "NoPlaceId",
+              message: "search returned no PlaceId",
+            });
           }
-          const place = yield* getPlace({ PlaceId: placeId });
-          return yield* HttpServerResponse.json({
-            label: place.Place?.Label,
-            point: place.Place?.Geometry?.Point,
-          });
+          const place = yield* Effect.result(getPlace({ PlaceId: placeId }));
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(place)
+              ? {
+                  ok: true,
+                  label: place.success.Place?.Label,
+                  point: place.success.Place?.Geometry?.Point,
+                }
+              : {
+                  ok: false,
+                  tag: place.failure._tag,
+                  message: String(place.failure),
+                },
+          );
         }
 
         if (pathname === "/routes/calculate") {
@@ -401,23 +420,31 @@ export default LocationTestFunction.make(
         }
 
         if (pathname === "/jobs/get-missing") {
-          const result = yield* getJob({ JobId: MISSING_JOB_ID }).pipe(
-            Effect.map(() => ({ tag: "found" })),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({ tag: "ResourceNotFoundException" }),
-            ),
+          const result = yield* Effect.result(
+            getJob({ JobId: MISSING_JOB_ID }),
           );
-          return yield* HttpServerResponse.json(result);
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(result)
+              ? { tag: "found" }
+              : {
+                  tag: result.failure._tag,
+                  message: String(result.failure),
+                },
+          );
         }
 
         if (pathname === "/jobs/cancel-missing") {
-          const result = yield* cancelJob({ JobId: MISSING_JOB_ID }).pipe(
-            Effect.map(() => ({ tag: "cancelled" })),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({ tag: "ResourceNotFoundException" }),
-            ),
+          const result = yield* Effect.result(
+            cancelJob({ JobId: MISSING_JOB_ID }),
           );
-          return yield* HttpServerResponse.json(result);
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(result)
+              ? { tag: "cancelled" }
+              : {
+                  tag: result.failure._tag,
+                  message: String(result.failure),
+                },
+          );
         }
 
         return yield* HttpServerResponse.json(

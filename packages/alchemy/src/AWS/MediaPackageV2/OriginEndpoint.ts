@@ -7,10 +7,11 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
-import { toSeconds } from "../../Util/Duration.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   matchesDesired,
+  policiesEqual,
   retryWhileMpConflict,
   syncMpTags,
   toMpTagRecord,
@@ -52,7 +53,7 @@ export interface OriginEndpointProps {
    * `Duration.hours(1)`) from which viewers can start over or catch up on
    * previously streamed content. Sent to the API in whole seconds.
    */
-  startoverWindowSeconds?: Duration.Input;
+  startoverWindow?: Duration.Input;
   /**
    * HLS manifest configurations served by the endpoint.
    */
@@ -80,6 +81,19 @@ export interface OriginEndpointProps {
    * segment URIs.
    */
   uriSeparator?: mediapackagev2.UriSeparator;
+  /**
+   * IAM resource policy (JSON) attached to the origin endpoint, controlling
+   * which principals may retrieve content from it
+   * (`mediapackagev2:GetObject` / `mediapackagev2:GetHeadObject`). Omitting
+   * it removes any existing policy.
+   */
+  policy?: string;
+  /**
+   * CDN authorization for the endpoint policy: the Secrets Manager secrets
+   * holding the CDN identifier and the role MediaPackage assumes to read
+   * them. Only applied together with {@link OriginEndpointProps.policy}.
+   */
+  cdnAuthConfiguration?: mediapackagev2.CdnAuthConfiguration;
   /**
    * User-defined tags for the origin endpoint. Merged with internal Alchemy
    * tags.
@@ -164,8 +178,28 @@ export interface OriginEndpoint extends Resource<
  *   channelGroupName: group.channelGroupName,
  *   channelName: channel.channelName,
  *   containerType: "TS",
- *   startoverWindowSeconds: "1 hour",
+ *   startoverWindow: "1 hour",
  *   hlsManifests: [{ ManifestName: "index" }],
+ * });
+ * ```
+ *
+ * @section Resource Policy
+ * @example Restrict playback to a CDN principal
+ * ```typescript
+ * const endpoint = yield* MediaPackageV2.OriginEndpoint("Playback", {
+ *   channelGroupName: group.channelGroupName,
+ *   channelName: channel.channelName,
+ *   containerType: "TS",
+ *   hlsManifests: [{ ManifestName: "index" }],
+ *   policy: JSON.stringify({
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Principal: { AWS: "arn:aws:iam::111122223333:root" },
+ *       Action: ["mediapackagev2:GetObject", "mediapackagev2:GetHeadObject"],
+ *       Resource: "arn:aws:mediapackagev2:us-east-1:111122223333:channelGroup/live/channel/feed/originEndpoint/playback",
+ *     }],
+ *   }),
  * });
  * ```
  *
@@ -296,7 +330,7 @@ export const OriginEndpointProvider = () =>
           const channelGroupName = news.channelGroupName;
           const channelName = news.channelName;
           // The wire field is whole seconds.
-          const startoverWindowSeconds = toSeconds(news.startoverWindowSeconds);
+          const startoverWindowSeconds = toWireSeconds(news.startoverWindow);
           const name =
             output?.originEndpointName ?? (yield* createName(id, news));
 
@@ -393,6 +427,56 @@ export const OriginEndpointProvider = () =>
             toMpTagRecord(endpoint.Tags),
             desiredTags,
           );
+
+          // 3c. Sync the resource policy — observe the live policy (absent
+          //     policy is the typed not-found) and apply only the delta.
+          const observedPolicy = yield* mediapackagev2
+            .getOriginEndpointPolicy({
+              ChannelGroupName: channelGroupName,
+              ChannelName: channelName,
+              OriginEndpointName: name,
+            })
+            .pipe(
+              Effect.map((response) => ({
+                policy: response.Policy as string | undefined,
+                cdnAuth: response.CdnAuthConfiguration,
+              })),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed({
+                  policy: undefined as string | undefined,
+                  cdnAuth: undefined as
+                    | mediapackagev2.CdnAuthConfiguration
+                    | undefined,
+                }),
+              ),
+            );
+          if (news.policy !== undefined) {
+            const cdnDrift =
+              news.cdnAuthConfiguration === undefined
+                ? observedPolicy.cdnAuth !== undefined
+                : !matchesDesired(
+                    news.cdnAuthConfiguration,
+                    observedPolicy.cdnAuth,
+                  );
+            if (
+              !policiesEqual(observedPolicy.policy, news.policy) ||
+              cdnDrift
+            ) {
+              yield* mediapackagev2.putOriginEndpointPolicy({
+                ChannelGroupName: channelGroupName,
+                ChannelName: channelName,
+                OriginEndpointName: name,
+                Policy: news.policy,
+                CdnAuthConfiguration: news.cdnAuthConfiguration,
+              });
+            }
+          } else if (observedPolicy.policy !== undefined) {
+            yield* mediapackagev2.deleteOriginEndpointPolicy({
+              ChannelGroupName: channelGroupName,
+              ChannelName: channelName,
+              OriginEndpointName: name,
+            });
+          }
 
           yield* session.note(name);
           return toAttrs(endpoint);
