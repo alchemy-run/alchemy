@@ -50,6 +50,13 @@ export interface VehicleProps {
    */
   associationBehavior?: iotfleetwise.VehicleAssociationBehavior;
   /**
+   * State templates associated with the vehicle — each pairs a
+   * {@link StateTemplate} identifier (name or ARN) with an update strategy
+   * (`{ onChange: {} }` or `{ periodic: { stateTemplateUpdateRate } }`).
+   * Synced in place via add/remove/update deltas.
+   */
+  stateTemplates?: iotfleetwise.StateTemplateAssociation[];
+  /**
    * User-defined tags for the vehicle.
    */
   tags?: Record<string, string>;
@@ -195,6 +202,7 @@ export const VehicleProvider = () =>
                 attributes: news.attributes,
                 associationBehavior:
                   news.associationBehavior ?? "CreateIotThing",
+                stateTemplates: news.stateTemplates,
                 tags: toFleetWiseTagList(desiredTags),
               })
               .pipe(
@@ -247,7 +255,67 @@ export const VehicleProvider = () =>
             );
           }
 
-          // 3b. Sync tags against OBSERVED cloud tags.
+          // 3b. Sync state-template associations against OBSERVED state.
+          // Associations are keyed by identifier; strategy changes are
+          // applied via stateTemplatesToUpdate. Identifiers are matched
+          // exactly (pass the same name-or-ARN form consistently).
+          if (news.stateTemplates !== undefined) {
+            const desired = news.stateTemplates;
+            const observedAssociations = observed.stateTemplates ?? [];
+            const observedByIdentifier = new Map(
+              observedAssociations.map((a) => [a.identifier, a]),
+            );
+            const desiredIdentifiers = new Set(
+              desired.map((a) => a.identifier),
+            );
+            const templatesToAdd = desired.filter(
+              (a) => !observedByIdentifier.has(a.identifier),
+            );
+            const templatesToUpdate = desired.filter((a) => {
+              const current = observedByIdentifier.get(a.identifier);
+              return (
+                current !== undefined &&
+                !stableEquals(
+                  current.stateTemplateUpdateStrategy,
+                  a.stateTemplateUpdateStrategy,
+                )
+              );
+            });
+            const templatesToRemove = observedAssociations
+              .filter((a) => !desiredIdentifiers.has(a.identifier))
+              .map((a) => a.identifier);
+            if (
+              templatesToAdd.length > 0 ||
+              templatesToUpdate.length > 0 ||
+              templatesToRemove.length > 0
+            ) {
+              yield* iotfleetwise
+                .updateVehicle({
+                  vehicleName: name,
+                  stateTemplatesToAdd:
+                    templatesToAdd.length > 0 ? templatesToAdd : undefined,
+                  stateTemplatesToUpdate:
+                    templatesToUpdate.length > 0
+                      ? templatesToUpdate
+                      : undefined,
+                  stateTemplatesToRemove:
+                    templatesToRemove.length > 0
+                      ? templatesToRemove
+                      : undefined,
+                })
+                .pipe(inFleetWiseRegion);
+              observed = yield* readVehicle(name).pipe(
+                Effect.flatMap((vehicle) =>
+                  vehicle === undefined
+                    ? Effect.fail(new Error(`Vehicle '${name}' not found`))
+                    : Effect.succeed(vehicle),
+                ),
+                retryObservation,
+              );
+            }
+          }
+
+          // 3c. Sync tags against OBSERVED cloud tags.
           const arn = observed.arn;
           if (arn !== undefined) {
             yield* syncFleetWiseTags(arn, desiredTags);

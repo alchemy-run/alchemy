@@ -207,10 +207,20 @@ describe.sequential("ImageBuilder Bindings", () => {
           const arn = encodeURIComponent(started.imageBuildVersionArn);
 
           const run = Effect.gen(function* () {
-            // Cancel it immediately — the build is still non-terminal.
-            const cancelled = (yield* postJson(`/build/cancel?arn=${arn}`)) as {
-              imageBuildVersionArn: string;
-            };
+            // Cancel it — early build states can briefly reject the
+            // cancellation, so retry through the window (bounded).
+            const cancelled = yield* postJson(`/build/cancel?arn=${arn}`).pipe(
+              Effect.map(
+                (body) =>
+                  body as { imageBuildVersionArn?: string; reason?: string },
+              ),
+              Effect.repeat({
+                schedule: Schedule.spaced("5 seconds"),
+                until: (body): boolean =>
+                  body.imageBuildVersionArn !== undefined,
+                times: 12,
+              }),
+            );
             expect(cancelled.imageBuildVersionArn).toBe(
               started.imageBuildVersionArn,
             );
@@ -219,8 +229,52 @@ describe.sequential("ImageBuilder Bindings", () => {
             // early in the build).
             const workflows = (yield* getJson(
               `/build/workflows?arn=${arn}`,
-            )) as { count: number };
-            expect(workflows.count).toBeGreaterThanOrEqual(0);
+            )) as { ids: string[] };
+            expect(Array.isArray(workflows.ids)).toBe(true);
+
+            // If the build already spawned a workflow execution, drill into
+            // it through the workflow-monitoring bindings.
+            const executionId = workflows.ids[0];
+            if (executionId !== undefined) {
+              const execution = (yield* getJson(
+                `/workflow-execution?id=${encodeURIComponent(executionId)}`,
+              )) as { id?: string; status?: string };
+              expect(execution.id).toBe(executionId);
+
+              const steps = (yield* getJson(
+                `/workflow-steps?id=${encodeURIComponent(executionId)}`,
+              )) as { ids: string[] };
+              expect(Array.isArray(steps.ids)).toBe(true);
+
+              const stepId = steps.ids[0];
+              if (stepId !== undefined) {
+                const step = (yield* getJson(
+                  `/workflow-step?id=${encodeURIComponent(stepId)}`,
+                )) as { name?: string; status?: string };
+                expect(typeof step.status).toBe("string");
+              }
+            }
+
+            // The build version shows up under its image version ARN
+            // (…:image/{name}/{version} — strip the build-number suffix).
+            const imageVersionArn = started.imageBuildVersionArn.replace(
+              /\/\d+$/,
+              "",
+            );
+            const versions = (yield* getJson(
+              `/build-versions?arn=${encodeURIComponent(imageVersionArn)}`,
+            )) as { arns: string[] };
+            expect(versions.arns).toContain(started.imageBuildVersionArn);
+
+            // Packages exist only for AVAILABLE builds — this in-flight or
+            // cancelled build reports the typed rejection instead.
+            const packages = (yield* getJson(`/build/packages?arn=${arn}`)) as {
+              count?: number;
+              reason?: string;
+            };
+            expect(
+              packages.count !== undefined || packages.reason !== undefined,
+            ).toBe(true);
 
             // Observe the build settle into CANCELLED via the GetImage
             // binding (bounded).

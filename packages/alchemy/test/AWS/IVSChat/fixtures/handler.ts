@@ -50,6 +50,8 @@ export default IVSChatTestFunction.make(
       ),
     );
 
+    const RoomArn = yield* room.roomArn;
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -102,9 +104,11 @@ export default IVSChatTestFunction.make(
                 ? Redacted.value(token)
                 : token;
           const region = yield* Effect.sync(() => process.env.AWS_REGION);
+          const roomArn = yield* RoomArn;
           return yield* HttpServerResponse.json({
             token: raw,
             endpoint: `wss://edge.ivschat.${region}.amazonaws.com`,
+            roomArn,
           });
         }
 

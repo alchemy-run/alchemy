@@ -1,6 +1,7 @@
 import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -8,9 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMillis, toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  durationToSeconds,
   inFleetWiseRegion,
   readFleetWiseTags,
   retryObservation,
@@ -18,6 +19,164 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+/**
+ * Time-based collection: collect the signals on a fixed cadence.
+ */
+export interface TimeBasedCollectionScheme {
+  /**
+   * How often to collect the signals, e.g. `"10 seconds"` or
+   * `Duration.seconds(10)`. A bare number is milliseconds. Sent to
+   * FleetWise as whole milliseconds (`periodMs`, 50 ms - 60 s).
+   */
+  period: Duration.Input;
+}
+
+/**
+ * Condition-based collection: collect the signals whenever the expression
+ * evaluates true.
+ */
+export interface ConditionBasedCollectionScheme {
+  /**
+   * The logical expression that triggers collection, e.g.
+   * `$variable.\`Vehicle.OutsideAirTemperature\` >= 105.0`.
+   */
+  expression: string | Redacted.Redacted<string>;
+  /**
+   * Minimum time between two triggers, e.g. `"1 second"`. A bare number
+   * is milliseconds. Sent to FleetWise as whole milliseconds
+   * (`minimumTriggerIntervalMs`).
+   * @default 0
+   */
+  minimumTriggerInterval?: Duration.Input;
+  /**
+   * Whether to trigger on every evaluation (`"ALWAYS"`) or only when the
+   * expression flips to true (`"RISING_EDGE"`).
+   * @default "ALWAYS"
+   */
+  triggerMode?: iotfleetwise.TriggerMode;
+  /**
+   * Version of the condition language.
+   * @default 1
+   */
+  conditionLanguageVersion?: number;
+}
+
+/**
+ * When to collect data — exactly one of a time-based or condition-based
+ * scheme.
+ */
+export type CollectionScheme =
+  | {
+      timeBasedCollectionScheme: TimeBasedCollectionScheme;
+      conditionBasedCollectionScheme?: never;
+    }
+  | {
+      timeBasedCollectionScheme?: never;
+      conditionBasedCollectionScheme: ConditionBasedCollectionScheme;
+    };
+
+/** A signal the campaign collects from vehicles. */
+export interface SignalInformation {
+  /** The name of the signal, e.g. `Vehicle.Speed`. */
+  name: string;
+  /** Maximum number of samples collected per trigger. */
+  maxSampleCount?: number;
+  /**
+   * Minimum time between two samples of this signal, e.g. `"500 millis"`.
+   * A bare number is milliseconds. Sent to FleetWise as whole milliseconds
+   * (`minimumSamplingIntervalMs`).
+   */
+  minimumSamplingInterval?: Duration.Input;
+  /** The ID of the data partition the signal is stored in. */
+  dataPartitionId?: string;
+}
+
+/** Time-based on-demand fetch: run the fetch actions on a fixed cadence. */
+export interface TimeBasedSignalFetchConfig {
+  /**
+   * How often to fetch the signal, e.g. `"1 minute"`. A bare number is
+   * milliseconds. Sent to FleetWise as whole milliseconds
+   * (`executionFrequencyMs`).
+   */
+  executionFrequency: Duration.Input;
+}
+
+/** How an on-demand signal fetch is triggered. */
+export type SignalFetchConfig =
+  | {
+      timeBased: TimeBasedSignalFetchConfig;
+      conditionBased?: never;
+    }
+  | {
+      timeBased?: never;
+      conditionBased: iotfleetwise.ConditionBasedSignalFetchConfig;
+    };
+
+/** A signal fetched on demand by actuator-triggered fetch configs. */
+export interface SignalFetchInformation {
+  /** The fully-qualified name of the signal to fetch. */
+  fullyQualifiedName: string;
+  /** When the fetch runs — time-based or condition-based. */
+  signalFetchConfig: SignalFetchConfig;
+  /**
+   * Version of the condition language used by condition-based configs.
+   * @default 1
+   */
+  conditionLanguageVersion?: number;
+  /** The actions (expressions) evaluated when the fetch triggers. */
+  actions: (string | Redacted.Redacted<string>)[];
+}
+
+const toWireCollectionScheme = (
+  scheme: CollectionScheme,
+): iotfleetwise.CollectionScheme =>
+  scheme.timeBasedCollectionScheme !== undefined
+    ? {
+        timeBasedCollectionScheme: {
+          periodMs: toWireMillis(scheme.timeBasedCollectionScheme.period)!,
+        },
+      }
+    : {
+        conditionBasedCollectionScheme: {
+          expression: scheme.conditionBasedCollectionScheme.expression,
+          minimumTriggerIntervalMs: toWireMillis(
+            scheme.conditionBasedCollectionScheme.minimumTriggerInterval,
+          ),
+          triggerMode: scheme.conditionBasedCollectionScheme.triggerMode,
+          conditionLanguageVersion:
+            scheme.conditionBasedCollectionScheme.conditionLanguageVersion,
+        },
+      };
+
+const toWireSignalsToCollect = (
+  signals: SignalInformation[] | undefined,
+): iotfleetwise.SignalInformation[] | undefined =>
+  signals?.map((signal) => ({
+    name: signal.name,
+    maxSampleCount: signal.maxSampleCount,
+    minimumSamplingIntervalMs: toWireMillis(signal.minimumSamplingInterval),
+    dataPartitionId: signal.dataPartitionId,
+  }));
+
+const toWireSignalsToFetch = (
+  signals: SignalFetchInformation[] | undefined,
+): iotfleetwise.SignalFetchInformation[] | undefined =>
+  signals?.map((signal) => ({
+    fullyQualifiedName: signal.fullyQualifiedName,
+    signalFetchConfig:
+      signal.signalFetchConfig.timeBased !== undefined
+        ? {
+            timeBased: {
+              executionFrequencyMs: toWireMillis(
+                signal.signalFetchConfig.timeBased.executionFrequency,
+              )!,
+            },
+          }
+        : { conditionBased: signal.signalFetchConfig.conditionBased },
+    conditionLanguageVersion: signal.conditionLanguageVersion,
+    actions: signal.actions,
+  }));
 
 export interface CampaignProps {
   /**
@@ -44,12 +203,12 @@ export interface CampaignProps {
    * When to collect data — a time-based or condition-based scheme.
    * Changing it replaces the campaign.
    */
-  collectionScheme: iotfleetwise.CollectionScheme;
+  collectionScheme: CollectionScheme;
   /**
    * Signals to collect from vehicles. Changing them replaces the
    * campaign.
    */
-  signalsToCollect?: iotfleetwise.SignalInformation[];
+  signalsToCollect?: SignalInformation[];
   /**
    * Destinations (S3, Timestream or MQTT topic) the collected data is
    * delivered to. Changing them replaces the campaign.
@@ -108,7 +267,7 @@ export interface CampaignProps {
    * Signals fetched on demand by actuator-triggered fetch configs.
    * Changing them replaces the campaign.
    */
-  signalsToFetch?: iotfleetwise.SignalFetchInformation[];
+  signalsToFetch?: SignalFetchInformation[];
   /**
    * Whether the provider approves the campaign (transitioning it from
    * `WAITING_FOR_APPROVAL` to `RUNNING`) after creation.
@@ -158,13 +317,35 @@ export interface Campaign extends Resource<
  *   signalCatalogArn: catalog.signalCatalogArn,
  *   targetArn: fleet.fleetArn,
  *   collectionScheme: {
- *     timeBasedCollectionScheme: { periodMs: 10_000 },
+ *     timeBasedCollectionScheme: { period: "10 seconds" },
  *   },
  *   signalsToCollect: [{ name: "Vehicle.Speed" }],
  *   dataDestinationConfigs: [
  *     { s3Config: { bucketArn: bucket.bucketArn } },
  *   ],
  *   autoApprove: true,
+ * });
+ * ```
+ *
+ * @example Condition-Based Collection
+ * ```typescript
+ * const campaign = yield* Campaign("HardBraking", {
+ *   signalCatalogArn: catalog.signalCatalogArn,
+ *   targetArn: fleet.fleetArn,
+ *   collectionScheme: {
+ *     conditionBasedCollectionScheme: {
+ *       expression: "$variable.`Vehicle.Speed` > 120.0",
+ *       minimumTriggerInterval: "5 seconds",
+ *       triggerMode: "RISING_EDGE",
+ *     },
+ *   },
+ *   signalsToCollect: [
+ *     { name: "Vehicle.Speed", minimumSamplingInterval: "500 millis" },
+ *   ],
+ *   postTriggerCollectionDuration: "30 seconds",
+ *   dataDestinationConfigs: [
+ *     { s3Config: { bucketArn: bucket.bucketArn } },
+ *   ],
  * });
  * ```
  */
@@ -237,19 +418,21 @@ export const CampaignProvider = () =>
           const createOnly = (props: CampaignProps) => ({
             signalCatalogArn: props.signalCatalogArn,
             targetArn: props.targetArn,
-            collectionScheme: props.collectionScheme,
-            signalsToCollect: props.signalsToCollect,
+            // Durations are compared in wire units so that equivalent
+            // inputs ("10 seconds" vs 10_000) never force a replacement.
+            collectionScheme: toWireCollectionScheme(props.collectionScheme),
+            signalsToCollect: toWireSignalsToCollect(props.signalsToCollect),
             dataDestinationConfigs: props.dataDestinationConfigs,
             startTime: props.startTime,
             expiryTime: props.expiryTime,
-            postTriggerCollectionDuration: durationToSeconds(
+            postTriggerCollectionDuration: toWireSeconds(
               props.postTriggerCollectionDuration,
             ),
             diagnosticsMode: props.diagnosticsMode,
             spoolingMode: props.spoolingMode,
             compression: props.compression,
             dataPartitions: props.dataPartitions,
-            signalsToFetch: props.signalsToFetch,
+            signalsToFetch: toWireSignalsToFetch(props.signalsToFetch),
           });
           if (!stableEquals(createOnly(olds), createOnly(news))) {
             return { action: "replace" } as const;
@@ -281,8 +464,8 @@ export const CampaignProvider = () =>
                 description: news.description,
                 signalCatalogArn: news.signalCatalogArn,
                 targetArn: news.targetArn,
-                collectionScheme: news.collectionScheme,
-                signalsToCollect: news.signalsToCollect,
+                collectionScheme: toWireCollectionScheme(news.collectionScheme),
+                signalsToCollect: toWireSignalsToCollect(news.signalsToCollect),
                 dataDestinationConfigs: news.dataDestinationConfigs,
                 startTime:
                   news.startTime !== undefined
@@ -292,7 +475,7 @@ export const CampaignProvider = () =>
                   news.expiryTime !== undefined
                     ? new Date(news.expiryTime)
                     : undefined,
-                postTriggerCollectionDuration: durationToSeconds(
+                postTriggerCollectionDuration: toWireSeconds(
                   news.postTriggerCollectionDuration,
                 ),
                 diagnosticsMode: news.diagnosticsMode,
@@ -300,7 +483,7 @@ export const CampaignProvider = () =>
                 compression: news.compression,
                 dataExtraDimensions: news.dataExtraDimensions,
                 dataPartitions: news.dataPartitions,
-                signalsToFetch: news.signalsToFetch,
+                signalsToFetch: toWireSignalsToFetch(news.signalsToFetch),
                 tags: toFleetWiseTagList(desiredTags),
               })
               .pipe(

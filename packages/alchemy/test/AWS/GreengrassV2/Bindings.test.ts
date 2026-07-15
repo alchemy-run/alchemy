@@ -277,17 +277,24 @@ describe.sequential("GreengrassV2 Bindings", () => {
   });
 
   describe("ResolveComponentCandidates", () => {
-    test.provider("resolves the fixture component for linux/amd64", (_stack) =>
-      Effect.gen(function* () {
-        const response = (yield* getJson("/resolve")) as {
-          ok: boolean;
-          names: string[];
-          tag?: string;
-        };
-        expect(response.tag).not.toBe("AccessDeniedException");
-        expect(response.ok).toBe(true);
-        expect(response.names).toContain(COMPONENT_NAME);
-      }),
+    // Per the AWS API reference, ResolveComponentCandidates must be called
+    // through the Greengrass data plane endpoint with an AWS IoT device
+    // certificate; IAM-signed calls are rejected with AccessDeniedException
+    // even with greengrass:ResolveComponentCandidates granted. This ungated
+    // probe proves the binding's request plumbing end-to-end: the call
+    // reaches the service and surfaces the documented typed rejection.
+    test.provider(
+      "IAM-signed resolve surfaces the documented typed rejection",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/resolve")) as {
+            ok: boolean;
+            names: string[];
+            tag?: string;
+          };
+          expect(response.ok).toBe(false);
+          expect(response.tag).toBe("AccessDeniedException");
+        }),
     );
   });
 

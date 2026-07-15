@@ -10,6 +10,13 @@ import * as Binding from "../../Binding.ts";
  * the version requirements — the same dependency-resolution API the
  * Greengrass nucleus calls during a deployment. Provide the implementation
  * with `Effect.provide(AWS.GreengrassV2.ResolveComponentCandidatesHttp)`.
+ *
+ * NOTE: per the AWS API reference, this operation must be called through the
+ * Greengrass **data plane** endpoint authenticated with an AWS IoT device
+ * certificate. Calls signed with plain IAM credentials (e.g. from a Lambda
+ * role) are rejected with a typed `AccessDeniedException` even when the
+ * `greengrass:ResolveComponentCandidates` permission is granted — use this
+ * binding only from device-credentialed contexts.
  * @binding
  * @section Reading Components
  * @example Resolve Versions For A Platform

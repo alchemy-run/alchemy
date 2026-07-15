@@ -228,7 +228,18 @@ export default GuardDutyTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/free-trial") {
-          const { Accounts } = yield* getRemainingFreeTrialDays();
+          // The smithy model requires AccountIds — the caller passes its
+          // own account id.
+          const account = url.searchParams.get("account");
+          if (!account) {
+            return yield* HttpServerResponse.json(
+              { error: "missing account" },
+              { status: 400 },
+            );
+          }
+          const { Accounts } = yield* getRemainingFreeTrialDays({
+            AccountIds: [account],
+          });
           return yield* HttpServerResponse.json({
             accounts: (Accounts ?? []).length,
           });

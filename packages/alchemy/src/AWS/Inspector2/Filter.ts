@@ -129,7 +129,9 @@ export const FilterProvider = () =>
       const findByName = (name: string) =>
         inspector2.listFilters.items({}).pipe(
           Stream.filter((f) => f.name === name),
-          Stream.runHead,
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.map((c) => Array.from(c)[0]),
         );
 
       const buildAttrs = (f: inspector2.Filter) => ({

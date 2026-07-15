@@ -137,9 +137,11 @@ test.provider(
       expect(liveThreatSet.Location).toContain(THREAT_KEY);
 
       // Update — flip the filter to auto-archive in place (no replacement).
+      // Rank stays 1: GuardDuty bounds rank by the number of filters on the
+      // detector, so a lone filter can only ever hold rank 1.
       const updated = yield* deploy({
         action: "ARCHIVE",
-        rank: 2,
+        rank: 1,
         description: "auto-archive high severity findings",
       });
       expect(updated.detectorId).toBe(created.detectorId);
@@ -152,7 +154,7 @@ test.provider(
         FilterName: created.filterName,
       });
       expect(afterUpdate.Action).toBe("ARCHIVE");
-      expect(afterUpdate.Rank).toBe(2);
+      expect(afterUpdate.Rank).toBe(1);
       expect(afterUpdate.Description).toBe(
         "auto-archive high severity findings",
       );

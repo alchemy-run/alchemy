@@ -194,12 +194,21 @@ export default ImageBuilderTestFunction.make(
           return yield* HttpServerResponse.json({ imageBuildVersionArn });
         }
 
-        // Cancel an in-flight build.
+        // Cancel an in-flight build. Early build states can briefly reject
+        // cancellation — report the typed tag so the test can poll.
         if (request.method === "POST" && pathname === "/build/cancel") {
-          const { imageBuildVersionArn } = yield* cancelBuild({
+          const result = yield* cancelBuild({
             imageBuildVersionArn: arn,
-          });
-          return yield* HttpServerResponse.json({ imageBuildVersionArn });
+          }).pipe(
+            Effect.map(({ imageBuildVersionArn }) => ({
+              imageBuildVersionArn,
+            })),
+            Effect.catchTag(
+              ["ResourceInUseException", "InvalidRequestException"],
+              (error) => Effect.succeed({ reason: error._tag }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         // Read a build version's state.

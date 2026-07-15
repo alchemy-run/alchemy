@@ -24,6 +24,7 @@ const readinessPolicy = Schedule.max([
 ]);
 
 let baseUrl: string;
+let accountId: string;
 // The GuardDuty detector is an account/region singleton. If the account
 // already runs a detector this suite did not create, deploying the fixture
 // would adopt (and later DELETE) it — so every test degrades to a logged
@@ -117,6 +118,7 @@ describe.sequential("GuardDuty Bindings", () => {
 
       expect(attrs.functionUrl).toBeTruthy();
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
+      accountId = attrs.roleArn.split(":")[4]!;
 
       const readinessUrl = `${baseUrl}/bindings`;
       yield* Effect.logInfo(
@@ -274,7 +276,9 @@ describe.sequential("GuardDuty Bindings", () => {
         };
         expect(coverage.resources).toBeGreaterThanOrEqual(0);
 
-        const freeTrial = (yield* getJson("/free-trial")) as {
+        const freeTrial = (yield* getJson(
+          `/free-trial?account=${accountId}`,
+        )) as {
           accounts: number;
         };
         expect(freeTrial.accounts).toBeGreaterThanOrEqual(0);

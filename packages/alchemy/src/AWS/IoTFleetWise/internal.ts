@@ -1,45 +1,8 @@
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { diffTags } from "../../Tags.ts";
-
-/**
- * Reconstruct a valid `Duration.Input` from a value that may have
- * round-tripped through persisted state JSON, which flattens a `Duration`
- * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
- * shape `Duration.toSeconds` silently decodes as zero.
- *
- * @internal
- */
-const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return typeof input === "object" && input !== null && json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/**
- * Convert an optional {@link Duration.Input} prop to whole wire seconds.
- *
- * @internal
- */
-export const durationToSeconds = (
-  input: Duration.Input | undefined,
-): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toSeconds(fromStateDurationInput(input)));
 
 /**
  * AWS IoT FleetWise is offered only in `us-east-1` and `eu-central-1`

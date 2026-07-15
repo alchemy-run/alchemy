@@ -1,3 +1,4 @@
+import * as ivschat from "@distilled.cloud/aws/ivschat";
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
@@ -163,6 +164,18 @@ describe("IVSChat Bindings", () => {
 
   describe("IVSChat.RoomMessageReviewEventSource", () => {
     /**
+     * The IVS Chat messaging wire format is PascalCase — send
+     * `{Action, Content, RequestId}`, receive `{Type, Content, ErrorCode,
+     * ErrorMessage}` frames.
+     */
+    interface ChatFrame {
+      Type: string;
+      Content?: string;
+      ErrorCode?: number;
+      ErrorMessage?: string;
+    }
+
+    /**
      * Connect to the room's WebSocket messaging endpoint with a chat token,
      * send one message, and resolve with the first frame the room sends
      * back for it (`MESSAGE` when the review handler allows, `ERROR` when
@@ -170,28 +183,10 @@ describe("IVSChat Bindings", () => {
      * closes the socket.
      */
     const wsSendMessage = (endpoint: string, token: string, content: string) =>
-      Effect.callback<
-        {
-          type: string;
-          content?: string;
-          errorCode?: number;
-          errorMessage?: string;
-        },
-        WsFailure
-      >((resume, signal) => {
+      Effect.callback<ChatFrame, WsFailure>((resume, signal) => {
         const socket = new WebSocket(endpoint, token);
         let settled = false;
-        const settle = (
-          effect: Effect.Effect<
-            {
-              type: string;
-              content?: string;
-              errorCode?: number;
-              errorMessage?: string;
-            },
-            WsFailure
-          >,
-        ) => {
+        const settle = (effect: Effect.Effect<ChatFrame, WsFailure>) => {
           if (settled) return;
           settled = true;
           try {
@@ -207,19 +202,14 @@ describe("IVSChat Bindings", () => {
         socket.on("open", () =>
           socket.send(
             JSON.stringify({
-              action: "SEND_MESSAGE",
-              requestId: "alchemy-review-test",
-              content,
+              Action: "SEND_MESSAGE",
+              RequestId: "alchemy-review-test",
+              Content: content,
             }),
           ),
         );
         socket.on("message", (data) => {
-          let frame: {
-            type: string;
-            content?: string;
-            errorCode?: number;
-            errorMessage?: string;
-          };
+          let frame: ChatFrame;
           try {
             frame = JSON.parse(String(data));
           } catch {
@@ -227,7 +217,7 @@ describe("IVSChat Bindings", () => {
           }
           // MESSAGE (delivered) and ERROR (denied) both settle the probe;
           // ignore unrelated frames (e.g. other EVENTs).
-          if (frame.type === "MESSAGE" || frame.type === "ERROR") {
+          if (frame.Type === "MESSAGE" || frame.Type === "ERROR") {
             settle(Effect.succeed(frame));
           }
         });
@@ -239,16 +229,37 @@ describe("IVSChat Bindings", () => {
             Effect.fail(new WsFailure({ reason: `closed early (${code})` })),
           ),
         );
-      }).pipe(Effect.timeout("15 seconds"));
+      }).pipe(
+        Effect.timeout("15 seconds"),
+        Effect.catchTag("TimeoutException", () =>
+          Effect.fail(new WsFailure({ reason: "no frame within 15s" })),
+        ),
+      );
 
     const wsInfo = Effect.gen(function* () {
       const info = (yield* post("/ws-info").pipe(
         Effect.flatMap((r) => r.json),
-      )) as { token?: string; endpoint?: string };
+      )) as { token?: string; endpoint?: string; roomArn?: string };
       expect(info.token).toBeTruthy();
       expect(info.endpoint).toContain("wss://edge.ivschat.");
-      return info as { token: string; endpoint: string };
+      return info as { token: string; endpoint: string; roomArn: string };
     });
+
+    test.provider(
+      "associates the handler + invoke permission on deploy",
+      (_stack) =>
+        Effect.gen(function* () {
+          const { roomArn } = yield* wsInfo;
+          // Out-of-band: the deployed room must carry the fixture Lambda as
+          // its messageReviewHandler (set through the binding contract).
+          const room = yield* ivschat.getRoom({ identifier: roomArn });
+          expect(room.messageReviewHandler?.uri).toContain(":function:");
+          expect(room.messageReviewHandler?.fallbackResult ?? "ALLOW").toBe(
+            "ALLOW",
+          );
+        }),
+      { timeout: 120_000 },
+    );
 
     test.provider(
       "review handler modifies allowed messages",
@@ -265,8 +276,8 @@ describe("IVSChat Bindings", () => {
               "hello moderators",
             );
             if (
-              received.type !== "MESSAGE" ||
-              !received.content?.includes("[reviewed]")
+              received.Type !== "MESSAGE" ||
+              !received.Content?.includes("[reviewed]")
             ) {
               return yield* Effect.fail(
                 new WsFailure({
@@ -276,16 +287,19 @@ describe("IVSChat Bindings", () => {
             }
             return received;
           }).pipe(
+            Effect.tapError((e) =>
+              Effect.logInfo(`review-allow attempt failed: ${e.reason}`),
+            ),
             Effect.retry({
               schedule: Schedule.max([
                 Schedule.exponential("2 seconds"),
-                Schedule.recurs(8),
+                Schedule.recurs(5),
               ]),
             }),
           );
 
-          expect(frame.type).toBe("MESSAGE");
-          expect(frame.content).toBe("hello moderators [reviewed]");
+          expect(frame.Type).toBe("MESSAGE");
+          expect(frame.Content).toBe("hello moderators [reviewed]");
         }),
       { timeout: 120_000 },
     );
@@ -301,7 +315,7 @@ describe("IVSChat Bindings", () => {
               token,
               "please deny-me now",
             );
-            if (received.type !== "ERROR") {
+            if (received.Type !== "ERROR") {
               return yield* Effect.fail(
                 new WsFailure({
                   reason: `not yet denied: ${JSON.stringify(received)}`,
@@ -310,17 +324,20 @@ describe("IVSChat Bindings", () => {
             }
             return received;
           }).pipe(
+            Effect.tapError((e) =>
+              Effect.logInfo(`review-deny attempt failed: ${e.reason}`),
+            ),
             Effect.retry({
               schedule: Schedule.max([
                 Schedule.exponential("2 seconds"),
-                Schedule.recurs(8),
+                Schedule.recurs(5),
               ]),
             }),
           );
 
-          expect(frame.type).toBe("ERROR");
-          expect(frame.errorCode).toBe(406);
-          expect(frame.errorMessage).toContain("alchemy-moderated");
+          expect(frame.Type).toBe("ERROR");
+          expect(frame.ErrorCode).toBe(406);
+          expect(frame.ErrorMessage).toContain("alchemy-moderated");
         }),
       { timeout: 120_000 },
     );
