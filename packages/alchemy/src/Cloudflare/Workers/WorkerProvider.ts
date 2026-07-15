@@ -12,7 +12,7 @@ import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
+import { hashViteBuildInputs } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -1118,14 +1118,13 @@ export const LiveWorkerProvider = () =>
             const [{ assets, bundle }, input] = yield* Effect.all(
               [
                 viteBuild(props),
-                // hashDirectory expects `{ cwd, memo }`. The vite props
-                // store the project root under `rootDir`, so map it
-                // here. Without this, `cwd` falls back to
-                // `process.cwd()` and the input hash is computed over
-                // the wrong directory tree (often the entire monorepo
-                // root), making it both slow and unable to detect
-                // changes scoped to the actual Vite project.
-                hashDirectory({
+                // Hashes the Vite root (`rootDir`) plus the workspace
+                // packages it depends on. Without `rootDir`, `cwd` would
+                // fall back to `process.cwd()` and hash the wrong tree
+                // (often the whole monorepo); without the workspace
+                // closure, changes to imported packages outside `rootDir`
+                // would look like a no-op and silently skip the deploy.
+                hashViteBuildInputs({
                   cwd: props.vite.rootDir,
                   memo: props.vite.memo,
                 }),
@@ -1732,7 +1731,7 @@ export const LiveWorkerProvider = () =>
           return assetsHash !== output.hash?.assets;
         }
         if (props.vite) {
-          const input = yield* hashDirectory({
+          const input = yield* hashViteBuildInputs({
             cwd: props.vite.rootDir,
             memo: props.vite.memo,
           });

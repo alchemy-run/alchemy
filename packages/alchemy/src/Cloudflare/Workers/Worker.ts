@@ -579,9 +579,15 @@ export interface ViteOptions {
    */
   rootDir?: string;
   /**
-   * Controls which files are hashed to decide whether a rebuild is needed.
-   * By default every non-gitignored file in `cwd` is hashed, plus the nearest
-   * lockfile. Provide explicit globs to narrow the scope.
+   * Controls which files under `rootDir` are hashed to decide whether a
+   * rebuild is needed. By default every non-gitignored file in `rootDir` is
+   * hashed, plus the nearest lockfile. Provide explicit globs to narrow the
+   * scope.
+   *
+   * The workspace packages `rootDir` depends on are always hashed in addition
+   * to this — changing an imported monorepo package triggers a rebuild even
+   * when nothing under `rootDir` changed. These options only scope the
+   * `rootDir` portion of the hash.
    *
    * @see {@link MemoOptions}
    */
