@@ -8,6 +8,16 @@ export const ListEffectiveDeploymentsHttp = Layer.effect(
   makeGreengrassAccountHttpBinding({
     tag: "AWS.GreengrassV2.ListEffectiveDeployments",
     operation: greengrassv2.listEffectiveDeployments,
-    actions: ["greengrass:ListEffectiveDeployments"],
+    // Effective deployments are backed by IoT Jobs; enumerating them resolves
+    // each job, its execution on the device, and the thing/thing-group target
+    // with the caller's credentials (documented dependent actions).
+    actions: [
+      "greengrass:ListEffectiveDeployments",
+      "iot:DescribeJob",
+      "iot:DescribeJobExecution",
+      "iot:DescribeThing",
+      "iot:DescribeThingGroup",
+      "iot:GetThingShadow",
+    ],
   }),
 );

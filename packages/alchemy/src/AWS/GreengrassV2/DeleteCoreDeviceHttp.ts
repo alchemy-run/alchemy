@@ -8,6 +8,8 @@ export const DeleteCoreDeviceHttp = Layer.effect(
   makeGreengrassAccountHttpBinding({
     tag: "AWS.GreengrassV2.DeleteCoreDevice",
     operation: greengrassv2.deleteCoreDevice,
-    actions: ["greengrass:DeleteCoreDevice"],
+    // Deleting a core device resolves the device's deployment job executions
+    // with the caller's credentials (documented dependent action).
+    actions: ["greengrass:DeleteCoreDevice", "iot:DescribeJobExecution"],
   }),
 );

@@ -46,7 +46,10 @@ test.provider(
           .pipe(inHomeRegion),
       );
       yield* Effect.sync(() =>
-        console.log(`FLEETWISE PROBE TAG: ${error._tag}`),
+        require("node:fs").writeFileSync(
+          "/tmp/fleetwise-probe-tag.txt",
+          error._tag,
+        ),
       );
       expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
         error._tag,

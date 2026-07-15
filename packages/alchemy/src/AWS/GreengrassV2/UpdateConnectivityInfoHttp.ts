@@ -8,6 +8,12 @@ export const UpdateConnectivityInfoHttp = Layer.effect(
   makeGreengrassAccountHttpBinding({
     tag: "AWS.GreengrassV2.UpdateConnectivityInfo",
     operation: greengrassv2.updateConnectivityInfo,
-    actions: ["greengrass:UpdateConnectivityInfo"],
+    // Connectivity info is stored in IoT Core; Greengrass writes it with the
+    // caller's credentials (documented dependent action).
+    actions: [
+      "greengrass:UpdateConnectivityInfo",
+      "iot:GetThingShadow",
+      "iot:UpdateThingShadow",
+    ],
   }),
 );

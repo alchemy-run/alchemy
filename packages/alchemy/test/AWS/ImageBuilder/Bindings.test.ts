@@ -71,7 +71,7 @@ const postJson = (path: string) =>
   );
 
 const deleteJson = (path: string) =>
-  send(HttpClientRequest.del(`${baseUrl}${path}`)).pipe(
+  send(HttpClientRequest.delete(`${baseUrl}${path}`)).pipe(
     Effect.flatMap((r) => r.json),
   );
 
@@ -118,10 +118,14 @@ describe.sequential("ImageBuilder Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 180_000 });
 
   describe("binding registration", () => {
-    test.provider("all eight capabilities initialize in the runtime", () =>
+    test.provider("all eighteen capabilities initialize in the runtime", () =>
       Effect.gen(function* () {
         const response = (yield* getJson("/bindings")) as { bound: string[] };
-        expect(response.bound).toHaveLength(8);
+        expect(response.bound).toHaveLength(18);
+        // SendWorkflowStepAction needs a WAIT_FOR_ACTION step and RetryImage
+        // a FAILED build — registration/IAM wiring only.
+        expect(response.bound).toContain("sendWorkflowStepAction");
+        expect(response.bound).toContain("retryImage");
       }),
     );
   });
@@ -163,6 +167,30 @@ describe.sequential("ImageBuilder Bindings", () => {
         const response = (yield* getJson("/images")) as { count: number };
         expect(response.count).toBeGreaterThanOrEqual(0);
       }),
+    );
+  });
+
+  describe("account-level reads", () => {
+    test.provider(
+      "ListImageScanFindings + ListImageScanFindingAggregations + ListWaitingWorkflowSteps",
+      () =>
+        Effect.gen(function* () {
+          const findings = (yield* getJson("/scan-findings")) as {
+            count: number;
+          };
+          expect(findings.count).toBeGreaterThanOrEqual(0);
+
+          const aggregations = (yield* getJson("/scan-aggregations")) as {
+            count: number;
+          };
+          expect(aggregations.count).toBeGreaterThanOrEqual(0);
+
+          const waiting = (yield* getJson("/waiting-steps")) as {
+            count: number;
+          };
+          expect(waiting.count).toBeGreaterThanOrEqual(0);
+        }),
+      { timeout: 60_000 },
     );
   });
 

@@ -107,6 +107,20 @@ export default ImageBuilderTestFunction.make(
     const deleteImage = yield* ImageBuilder.DeleteImage();
     const listImages = yield* ImageBuilder.ListImages();
     const listWorkflowExecutions = yield* ImageBuilder.ListWorkflowExecutions();
+    const listImageBuildVersions = yield* ImageBuilder.ListImageBuildVersions();
+    const listImagePackages = yield* ImageBuilder.ListImagePackages();
+    const listImageScanFindings = yield* ImageBuilder.ListImageScanFindings();
+    const listImageScanFindingAggregations =
+      yield* ImageBuilder.ListImageScanFindingAggregations();
+    const getWorkflowExecution = yield* ImageBuilder.GetWorkflowExecution();
+    const getWorkflowStepExecution =
+      yield* ImageBuilder.GetWorkflowStepExecution();
+    const listWorkflowStepExecutions =
+      yield* ImageBuilder.ListWorkflowStepExecutions();
+    const listWaitingWorkflowSteps =
+      yield* ImageBuilder.ListWaitingWorkflowSteps();
+    const sendWorkflowStepAction = yield* ImageBuilder.SendWorkflowStepAction();
+    const retryImage = yield* ImageBuilder.RetryImage();
 
     const bound = {
       getPipeline,
@@ -117,6 +131,19 @@ export default ImageBuilderTestFunction.make(
       deleteImage,
       listImages,
       listWorkflowExecutions,
+      listImageBuildVersions,
+      listImagePackages,
+      listImageScanFindings,
+      listImageScanFindingAggregations,
+      getWorkflowExecution,
+      getWorkflowStepExecution,
+      listWorkflowStepExecutions,
+      listWaitingWorkflowSteps,
+      // Approving needs a build paused on WAIT_FOR_ACTION and retrying needs
+      // a FAILED build, so the suite only proves registration/IAM wiring for
+      // these two.
+      sendWorkflowStepAction,
+      retryImage,
     };
 
     return {
@@ -125,6 +152,7 @@ export default ImageBuilderTestFunction.make(
         const url = new URL(request.originalUrl);
         const pathname = url.pathname;
         const arn = url.searchParams.get("arn") ?? "";
+        const id = url.searchParams.get("id") ?? "";
 
         if (request.method === "GET" && pathname === "/bindings") {
           return yield* HttpServerResponse.json({
@@ -188,7 +216,99 @@ export default ImageBuilderTestFunction.make(
             imageBuildVersionArn: arn,
           });
           return yield* HttpServerResponse.json({
-            count: (workflowExecutions ?? []).length,
+            ids: (workflowExecutions ?? []).flatMap((execution) =>
+              execution.workflowExecutionId !== undefined
+                ? [execution.workflowExecutionId]
+                : [],
+            ),
+          });
+        }
+
+        // List the build versions of an image version.
+        if (request.method === "GET" && pathname === "/build-versions") {
+          const { imageSummaryList } = yield* listImageBuildVersions({
+            imageVersionArn: arn,
+          });
+          return yield* HttpServerResponse.json({
+            arns: (imageSummaryList ?? []).flatMap((image) =>
+              image.arn !== undefined ? [image.arn] : [],
+            ),
+          });
+        }
+
+        // Packages only exist once a build is AVAILABLE; earlier states
+        // report the typed rejection so the test can assert it.
+        if (request.method === "GET" && pathname === "/build/packages") {
+          const result = yield* listImagePackages({
+            imageBuildVersionArn: arn,
+          }).pipe(
+            Effect.map(({ imagePackageList }) => ({
+              count: (imagePackageList ?? []).length,
+            })),
+            Effect.catchTag(
+              ["InvalidRequestException", "ResourceNotFoundException"],
+              (error) => Effect.succeed({ reason: error._tag }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        // Account-level Inspector scan findings (empty unless scanning is
+        // enabled somewhere in the account).
+        if (request.method === "GET" && pathname === "/scan-findings") {
+          const { findings } = yield* listImageScanFindings();
+          return yield* HttpServerResponse.json({
+            count: (findings ?? []).length,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/scan-aggregations") {
+          const { responses } = yield* listImageScanFindingAggregations();
+          return yield* HttpServerResponse.json({
+            count: (responses ?? []).length,
+          });
+        }
+
+        // Steps across the account waiting on WAIT_FOR_ACTION.
+        if (request.method === "GET" && pathname === "/waiting-steps") {
+          const { steps } = yield* listWaitingWorkflowSteps();
+          return yield* HttpServerResponse.json({
+            count: (steps ?? []).length,
+          });
+        }
+
+        // Read one workflow execution by id.
+        if (request.method === "GET" && pathname === "/workflow-execution") {
+          const execution = yield* getWorkflowExecution({
+            workflowExecutionId: id,
+          });
+          return yield* HttpServerResponse.json({
+            id: execution.workflowExecutionId,
+            type: execution.type,
+            status: execution.status,
+          });
+        }
+
+        // List the steps of one workflow execution.
+        if (request.method === "GET" && pathname === "/workflow-steps") {
+          const { steps } = yield* listWorkflowStepExecutions({
+            workflowExecutionId: id,
+          });
+          return yield* HttpServerResponse.json({
+            ids: (steps ?? []).flatMap((step) =>
+              step.stepExecutionId !== undefined ? [step.stepExecutionId] : [],
+            ),
+          });
+        }
+
+        // Read one workflow step by id.
+        if (request.method === "GET" && pathname === "/workflow-step") {
+          const step = yield* getWorkflowStepExecution({
+            stepExecutionId: id,
+          });
+          return yield* HttpServerResponse.json({
+            name: step.name,
+            status: step.status,
           });
         }
 
@@ -226,6 +346,16 @@ export default ImageBuilderTestFunction.make(
         ImageBuilder.DeleteImageHttp,
         ImageBuilder.ListImagesHttp,
         ImageBuilder.ListWorkflowExecutionsHttp,
+        ImageBuilder.ListImageBuildVersionsHttp,
+        ImageBuilder.ListImagePackagesHttp,
+        ImageBuilder.ListImageScanFindingsHttp,
+        ImageBuilder.ListImageScanFindingAggregationsHttp,
+        ImageBuilder.GetWorkflowExecutionHttp,
+        ImageBuilder.GetWorkflowStepExecutionHttp,
+        ImageBuilder.ListWorkflowStepExecutionsHttp,
+        ImageBuilder.ListWaitingWorkflowStepsHttp,
+        ImageBuilder.SendWorkflowStepActionHttp,
+        ImageBuilder.RetryImageHttp,
       ),
     ),
   ),

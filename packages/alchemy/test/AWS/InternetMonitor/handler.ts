@@ -118,9 +118,10 @@ export default InternetMonitorBindingsFunction.make(
         // trailing hour, poll (bounded) until terminal, read results when
         // it succeeds, and probe StopQuery's grant on the finished query.
         if (request.method === "GET" && pathname === "/query") {
+          const now = yield* Effect.sync(() => Date.now());
           const { QueryId } = yield* bound.startQuery({
-            StartTime: new Date(Date.now() - 3_600_000),
-            EndTime: new Date(),
+            StartTime: new Date(now - 3_600_000),
+            EndTime: new Date(now),
             QueryType: "MEASUREMENTS",
           });
           const { Status } = yield* bound.getQueryStatus({ QueryId }).pipe(

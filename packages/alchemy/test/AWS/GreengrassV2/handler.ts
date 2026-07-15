@@ -36,14 +36,20 @@ export class GreengrassTestFunction extends Lambda.Function<Lambda.Function>()(
   "GreengrassTestFunction",
 ) {}
 
-/** Collapse a typed call into `{ ok: true }` or `{ ok: false, tag }`. */
+/**
+ * Collapse a typed call into `{ ok: true }` or `{ ok: false, tag }`.
+ * Failures are logged (visible in CloudWatch) so unexpected tags are
+ * diagnosable without redeploying.
+ */
 const probe = <A, E extends { readonly _tag: string }>(
   self: Effect.Effect<A, E>,
 ) =>
   self.pipe(
     Effect.map(() => ({ ok: true as const })),
     Effect.catch((error) =>
-      Effect.succeed({ ok: false as const, tag: error._tag }),
+      Effect.logWarning(`probe failed: ${String(error)}`).pipe(
+        Effect.map(() => ({ ok: false as const, tag: error._tag })),
+      ),
     ),
   );
 
@@ -304,11 +310,13 @@ export default GreengrassTestFunction.make(
               ),
             })),
             Effect.catch((error) =>
-              Effect.succeed({
-                ok: false as const,
-                names: [] as string[],
-                tag: error._tag,
-              }),
+              Effect.logWarning(`resolve failed: ${String(error)}`).pipe(
+                Effect.map(() => ({
+                  ok: false as const,
+                  names: [] as string[],
+                  tag: error._tag,
+                })),
+              ),
             ),
           );
           return yield* HttpServerResponse.json(result);

@@ -9,5 +9,17 @@ export const CancelDeploymentHttp = Layer.effect(
     tag: "AWS.GreengrassV2.CancelDeployment",
     operation: greengrassv2.cancelDeployment,
     actions: ["greengrass:CancelDeployment"],
+    // Canceling a deployment cancels the backing IoT Job and resolves the
+    // thing/thing-group target with the caller's credentials.
+    dependentActions: [
+      "iot:CancelJob",
+      "iot:DeleteThingShadow",
+      "iot:DescribeJob",
+      "iot:DescribeThing",
+      "iot:DescribeThingGroup",
+      "iot:GetThingShadow",
+      "iot:UpdateJob",
+      "iot:UpdateThingShadow",
+    ],
   }),
 );

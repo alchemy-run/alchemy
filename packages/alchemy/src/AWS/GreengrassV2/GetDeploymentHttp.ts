@@ -9,5 +9,13 @@ export const GetDeploymentHttp = Layer.effect(
     tag: "AWS.GreengrassV2.GetDeployment",
     operation: greengrassv2.getDeployment,
     actions: ["greengrass:GetDeployment"],
+    // Deployments are backed by IoT Jobs; reading one resolves the job and
+    // the thing/thing-group target with the caller's credentials.
+    dependentActions: [
+      "iot:DescribeJob",
+      "iot:DescribeThing",
+      "iot:DescribeThingGroup",
+      "iot:GetThingShadow",
+    ],
   }),
 );

@@ -78,6 +78,16 @@ export const makeGreengrassDeploymentHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the deployment ARN. */
   actions: readonly string[];
+  /**
+   * Dependent IAM actions granted on `*`. Greengrass V2 deployments are
+   * implemented on IoT Jobs and resolve their thing/thing-group targets with
+   * the caller's credentials, so deployment-plane operations require
+   * `iot:DescribeJob`/`iot:DescribeThing`-family permissions (see the
+   * "dependent actions" column of the service authorization reference).
+   * These cannot be scoped to the deployment ARN — the backing job and
+   * target thing have their own ARNs.
+   */
+  dependentActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -94,6 +104,16 @@ export const makeGreengrassDeploymentHttpBinding = <
                 Action: [...options.actions],
                 Resource: [deployment.deploymentArn],
               },
+              ...(options.dependentActions !== undefined &&
+              options.dependentActions.length > 0
+                ? [
+                    {
+                      Effect: "Allow" as const,
+                      Action: [...options.dependentActions],
+                      Resource: ["*"],
+                    },
+                  ]
+                : []),
             ],
           });
         }
