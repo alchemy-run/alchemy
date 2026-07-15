@@ -50,7 +50,7 @@ const USERS_SCHEMA = JSON.stringify({
 /**
  * Personalize bindings fixture: deploys the cheap definition resources (three
  * schemas, a dataset group, Interactions/Items/Users datasets, and an event
- * tracker) plus a Lambda bound to all fourteen Personalize bindings.
+ * tracker) plus a Lambda bound to all nineteen Personalize bindings.
  *
  * The event-ingestion routes (`/put-events`, `/put-items`, `/put-users`)
  * exercise the data plane for real against the deployed datasets/tracker.
@@ -117,6 +117,13 @@ export default PersonalizeTestFunction.make(
       yield* Personalize.DescribeSolutionVersion();
     const updateCampaign = yield* Personalize.UpdateCampaign();
     const describeCampaign = yield* Personalize.DescribeCampaign();
+    const createSolution = yield* Personalize.CreateSolution();
+    const createCampaign = yield* Personalize.CreateCampaign();
+    const getSolutionMetrics = yield* Personalize.GetSolutionMetrics();
+    const createBatchInferenceJob =
+      yield* Personalize.CreateBatchInferenceJob();
+    const describeBatchInferenceJob =
+      yield* Personalize.DescribeBatchInferenceJob();
 
     const bound = {
       putEvents,
@@ -133,6 +140,11 @@ export default PersonalizeTestFunction.make(
       describeSolutionVersion,
       updateCampaign,
       describeCampaign,
+      createSolution,
+      createCampaign,
+      getSolutionMetrics,
+      createBatchInferenceJob,
+      describeBatchInferenceJob,
     };
 
     return {
@@ -141,6 +153,9 @@ export default PersonalizeTestFunction.make(
         const url = new URL(request.originalUrl);
         const pathname = url.pathname;
         const arn = url.searchParams.get("arn") ?? "";
+        const roleArn =
+          url.searchParams.get("role") ??
+          "arn:aws:iam::000000000000:role/alchemy_probe";
 
         if (pathname === "/bindings") {
           return yield* HttpServerResponse.json({ bound: Object.keys(bound) });
@@ -263,7 +278,7 @@ export default PersonalizeTestFunction.make(
             dataSource: {
               dataLocation: "s3://alchemy-nonexistent-probe-bucket/data.csv",
             },
-            roleArn: "arn:aws:iam::000000000000:role/alchemy_probe",
+            roleArn,
           }).pipe(
             Effect.map(() => "Created"),
             Effect.catch((e) => Effect.succeed(e._tag)),
@@ -317,6 +332,71 @@ export default PersonalizeTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
+        if (pathname === "/solution-create-probe") {
+          const tag = yield* createSolution({
+            name: "alchemy-solution-probe",
+            recipeArn: "arn:aws:personalize:::recipe/aws-user-personalization",
+            datasetGroupArn: arn,
+          }).pipe(
+            Effect.map(() => "Created"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (pathname === "/campaign-create-probe") {
+          const tag = yield* createCampaign({
+            name: "alchemy-campaign-probe",
+            solutionVersionArn: arn,
+          }).pipe(
+            Effect.map(() => "Created"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (pathname === "/solution-metrics-probe") {
+          const tag = yield* getSolutionMetrics({
+            solutionVersionArn: arn,
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (pathname === "/batch-create-probe") {
+          const tag = yield* createBatchInferenceJob({
+            jobName: "alchemy-batch-probe",
+            solutionVersionArn: arn,
+            jobInput: {
+              s3DataSource: {
+                path: "s3://alchemy-nonexistent-probe-bucket/users.json",
+              },
+            },
+            jobOutput: {
+              s3DataDestination: {
+                path: "s3://alchemy-nonexistent-probe-bucket/scores/",
+              },
+            },
+            roleArn,
+          }).pipe(
+            Effect.map(() => "Created"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (pathname === "/batch-probe") {
+          const tag = yield* describeBatchInferenceJob({
+            batchInferenceJobArn: arn,
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", pathname },
           { status: 404 },
@@ -340,6 +420,11 @@ export default PersonalizeTestFunction.make(
         Personalize.DescribeSolutionVersionHttp,
         Personalize.UpdateCampaignHttp,
         Personalize.DescribeCampaignHttp,
+        Personalize.CreateSolutionHttp,
+        Personalize.CreateCampaignHttp,
+        Personalize.GetSolutionMetricsHttp,
+        Personalize.CreateBatchInferenceJobHttp,
+        Personalize.DescribeBatchInferenceJobHttp,
       ),
     ),
   ),

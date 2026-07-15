@@ -114,7 +114,9 @@ export default PaymentCryptographyTestFunction.make(
         keyAlgorithm: "ECC_NIST_P256",
         keyClass: "ASYMMETRIC_KEY_PAIR",
         keyUsage: "TR31_S0_ASYMMETRIC_KEY_FOR_DIGITAL_SIGNATURE",
-        keyModesOfUse: { sign: true, verify: true },
+        // S0 key pairs generated in-service sign with the private half; the
+        // service rejects sign+verify combined on this usage.
+        keyModesOfUse: { sign: true },
       },
     });
 

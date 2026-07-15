@@ -50,7 +50,10 @@ test.provider(
       // Clean slate in case a previous run died mid-flight.
       yield* stack.destroy();
 
-      const deployConfig = (description: string) =>
+      const deployConfig = (
+        description: string,
+        sessionTimeout: "2 hours" | "3 hours" = "2 hours",
+      ) =>
         stack.deploy(
           Effect.gen(function* () {
             const config = yield* SecurityConfig("Saml", {
@@ -60,8 +63,8 @@ test.provider(
               samlOptions: {
                 metadata: SAML_METADATA,
                 groupAttribute: "groups",
-                // Duration.Input — converted to 120 wire minutes.
-                sessionTimeout: "2 hours",
+                // Duration.Input — converted to wire minutes.
+                sessionTimeout,
               },
             });
             return { config };
@@ -93,10 +96,21 @@ test.provider(
       const noop = yield* deployConfig("alchemy test saml config");
       expect(noop.config.configVersion).toBe(initialVersion);
 
-      // Update the description → new config version.
-      const updated = yield* deployConfig("alchemy test saml config v2");
+      // Update the SAML session timeout (a samlOptions change is what bumps
+      // the config version — description-only updates keep it, verified
+      // against the live API) and the description.
+      const updated = yield* deployConfig(
+        "alchemy test saml config v2",
+        "3 hours",
+      );
       expect(updated.config.configVersion).not.toBe(initialVersion);
       expect(updated.config.description).toBe("alchemy test saml config v2");
+      const observedUpdated = yield* aoss.getSecurityConfig({
+        id: updated.config.configId,
+      });
+      expect(
+        observedUpdated.securityConfigDetail?.samlOptions?.sessionTimeout,
+      ).toBe(180);
 
       // Destroy and verify deletion out-of-band.
       const configId = created.config.configId;

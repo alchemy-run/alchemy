@@ -57,12 +57,18 @@ test.provider(
       expect(created.group.collectionGroupId).toBeDefined();
       expect(created.group.standbyReplicas).toBe("DISABLED");
 
-      // Out-of-band verification via distilled (including internal tags).
+      // Out-of-band verification via distilled (including internal tags —
+      // batchGetCollectionGroup does not return tags, so read them via
+      // listTagsForResource).
       const observed = yield* observe(GROUP_NAME);
       expect(observed?.name).toBe(GROUP_NAME);
-      const tagKeys = (observed?.tags ?? []).map((t) => t.key);
-      expect(tagKeys).toContain("purpose");
-      expect(tagKeys.some((k) => k.startsWith("alchemy::"))).toBe(true);
+      const observedTags = yield* aoss
+        .listTagsForResource({
+          resourceArn: created.group.collectionGroupArn,
+        })
+        .pipe(Effect.map((r) => (r.tags ?? []).map((t) => t.key)));
+      expect(observedTags).toContain("purpose");
+      expect(observedTags.some((k) => k.startsWith("alchemy::"))).toBe(true);
 
       // No-op redeploy.
       const noop = yield* deployGroup("alchemy test group");

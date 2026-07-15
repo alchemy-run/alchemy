@@ -191,6 +191,33 @@ describe("Pricing Bindings", () => {
     );
   });
 
+  describe("ListPriceLists + GetPriceListFileUrl", () => {
+    test.provider(
+      "lists EC2 price lists and presigns a bulk file URL",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/price-list-file-url`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            count: number;
+            priceListArn: string;
+            regionCode: string | undefined;
+            currencyCode: string | undefined;
+            fileFormats: string[];
+            url: string | undefined;
+          };
+
+          expect(response.count).toBeGreaterThan(0);
+          expect(response.priceListArn).toContain("arn:aws:pricing:");
+          expect(response.regionCode).toBe("us-east-1");
+          expect(response.currencyCode).toBe("USD");
+          expect(response.fileFormats.length).toBeGreaterThan(0);
+          expect(response.url).toMatch(/^https:\/\//);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   describe("GetAttributeValues", () => {
     test.provider(
       "lists volumeType attribute values for AmazonEC2",

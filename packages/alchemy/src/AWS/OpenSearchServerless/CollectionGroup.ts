@@ -165,6 +165,14 @@ export const CollectionGroupProvider = () =>
             observed?.minIndexingCapacityInOCU ||
           desired.minSearchCapacityInOCU !== observed?.minSearchCapacityInOCU);
 
+      // batchGetCollectionGroup does not return the group's tags — read them
+      // via listTagsForResource (the authoritative tag store).
+      const observeTags = Effect.fn(function* (arn: string) {
+        return yield* aoss
+          .listTagsForResource({ resourceArn: arn })
+          .pipe(Effect.map((r) => tagsToRecord(r.tags)));
+      });
+
       const syncTags = Effect.fn(function* (
         arn: string,
         observed: Record<string, string>,
@@ -220,9 +228,12 @@ export const CollectionGroupProvider = () =>
             return undefined;
           }
           const attrs = toAttributes(detail);
+          const tags = yield* observeTags(detail.arn).pipe(
+            Effect.catch(() => Effect.succeed({})),
+          );
           return (yield* hasAlchemyTags(
             id,
-            (detail.tags ?? []).map((t) => ({ Key: t.key, Value: t.value })),
+            Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
           ))
             ? attrs
             : Unowned(attrs);
@@ -290,12 +301,6 @@ export const CollectionGroupProvider = () =>
                 capacityLimits: limitsDrift ? news.capacityLimits : undefined,
               });
             }
-            // 3b. SYNC TAGS — diff against observed cloud tags
-            yield* syncTags(
-              detail.arn!,
-              tagsToRecord(detail.tags),
-              desiredTags,
-            );
           }
 
           if (detail?.id === undefined || detail.arn === undefined) {
@@ -305,6 +310,16 @@ export const CollectionGroupProvider = () =>
               }),
             );
           }
+
+          // 3b. SYNC TAGS — diff against observed cloud tags (read via
+          // listTagsForResource on every path: adoption may bring foreign
+          // tags, and a create race may have dropped ours).
+          yield* syncTags(
+            detail.arn,
+            yield* observeTags(detail.arn),
+            desiredTags,
+          );
+
           yield* session.note(detail.id);
           return toAttributes(detail);
         }),

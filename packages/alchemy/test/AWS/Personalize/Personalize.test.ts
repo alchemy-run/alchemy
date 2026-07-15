@@ -131,6 +131,19 @@ test.provider(
         created.schema.schemaArn,
       );
 
+      expect(created.tracker.eventTrackerArn).toContain(":event-tracker/");
+      expect(created.tracker.status).toBe("ACTIVE");
+      expect(created.tracker.trackingId).toBeTruthy();
+      const describedTracker = yield* personalize.describeEventTracker({
+        eventTrackerArn: created.tracker.eventTrackerArn,
+      });
+      expect(describedTracker.eventTracker?.trackingId).toBe(
+        created.tracker.trackingId,
+      );
+      expect(describedTracker.eventTracker?.datasetGroupArn).toBe(
+        created.group.datasetGroupArn,
+      );
+
       // Update: change the dataset group's tags in place.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -146,17 +159,29 @@ test.provider(
             datasetType: "Interactions",
             tags: { Environment: "test" },
           });
-          return { schema, group, dataset };
+          const tracker = yield* EventTracker("Tracker", {
+            datasetGroupArn: group.datasetGroupArn,
+            tags: { Environment: "test", Extra: "yes" },
+          });
+          return { schema, group, dataset, tracker };
         }),
       );
       // Stable identifiers are preserved across the update.
       expect(updated.group.datasetGroupArn).toBe(created.group.datasetGroupArn);
       expect(updated.dataset.datasetArn).toBe(created.dataset.datasetArn);
+      expect(updated.tracker.eventTrackerArn).toBe(
+        created.tracker.eventTrackerArn,
+      );
+      expect(updated.tracker.trackingId).toBe(created.tracker.trackingId);
 
       const updatedTags = yield* personalize.listTagsForResource({
         resourceArn: created.group.datasetGroupArn,
       });
       expect(toTagRecord(updatedTags.tags).Extra).toBe("yes");
+      const updatedTrackerTags = yield* personalize.listTagsForResource({
+        resourceArn: created.tracker.eventTrackerArn,
+      });
+      expect(toTagRecord(updatedTrackerTags.tags).Extra).toBe("yes");
 
       // Destroy and verify deletion out-of-band.
       yield* stack.destroy();
@@ -167,6 +192,12 @@ test.provider(
         }),
       );
       expect(datasetError._tag).toBe("ResourceNotFoundException");
+      const trackerError = yield* Effect.flip(
+        personalize.describeEventTracker({
+          eventTrackerArn: created.tracker.eventTrackerArn,
+        }),
+      );
+      expect(trackerError._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 300_000 },
+  { timeout: 420_000 },
 );
