@@ -8,6 +8,10 @@ export const ListImageScanFindingsHttp = Layer.effect(
   makeImageBuilderAccountHttpBinding({
     tag: "AWS.ImageBuilder.ListImageScanFindings",
     operation: imagebuilder.listImageScanFindings,
-    actions: ["imagebuilder:ListImageScanFindings"],
+    // Image Builder serves scan findings from Amazon Inspector, so the API
+    // authorizes the dependent inspector2 action too — without it the call
+    // fails with AccessDeniedException even when the imagebuilder action is
+    // granted.
+    actions: ["imagebuilder:ListImageScanFindings", "inspector2:ListFindings"],
   }),
 );

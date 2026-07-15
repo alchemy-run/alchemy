@@ -5,6 +5,7 @@ import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import KafkaTestFunctionLive, {
   FixtureCluster,
   KafkaTestFunction,
@@ -46,6 +47,50 @@ describe.sequential("AWS.Kafka.KafkaEventSource", () => {
         );
         expect(mapping.Topics).toEqual(["orders"]);
         expect(mapping.State).not.toBe("Failed");
+
+        // Drive the control-plane bindings end-to-end through the deployed
+        // function URL: GetBootstrapBrokers, ConnectReadWrite (env-published
+        // endpoint), ListTopics, and the CreateTopic → DescribeTopic →
+        // DeleteTopic roundtrip.
+        const baseUrl = fn.functionUrl!.replace(/\/+$/, "");
+        const get = (path: string) =>
+          HttpClient.get(`${baseUrl}${path}`).pipe(
+            Effect.retry({
+              schedule: Schedule.exponential("500 millis"),
+              times: 10,
+            }),
+            Effect.flatMap((res) => res.json),
+          );
+
+        const brokers = (yield* get("/brokers")) as { saslIam?: string };
+        expect(brokers.saslIam).toContain(":9098");
+
+        const connect = (yield* get("/connect")) as {
+          bootstrapServers: string;
+          brokers: string[];
+          clusterArn: string;
+          authentication: string;
+        };
+        expect(connect.authentication).toBe("iam");
+        expect(connect.bootstrapServers).toContain(":9098");
+        expect(connect.clusterArn).toBe(cluster.clusterArn);
+
+        const topics = (yield* get("/topics")) as { topics: string[] };
+        expect(Array.isArray(topics.topics)).toBe(true);
+
+        const roundtrip = (yield* get("/topics/roundtrip")) as {
+          created: boolean;
+          partitions?: number;
+          error?: string;
+        };
+        // Serverless clusters that don't support the topic control plane
+        // surface a typed BadRequestException — either branch proves the
+        // grant + ClusterArn injection (an IAM gap would be a 500).
+        if (roundtrip.created) {
+          expect(roundtrip.partitions).toBe(1);
+        } else {
+          expect(roundtrip.error).toBeDefined();
+        }
 
         yield* stack.destroy();
       }),

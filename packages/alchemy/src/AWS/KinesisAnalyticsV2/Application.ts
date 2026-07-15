@@ -1,7 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -17,6 +17,7 @@ import {
   hasAlchemyTags,
   type Tags,
 } from "../../Tags.ts";
+import { toWireMillis } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -218,6 +219,12 @@ export interface ApplicationProps {
    */
   start?: boolean;
   /**
+   * Start of the 8-hour daily window in which the service may apply
+   * maintenance (patching) to the application, as `"HH:mm"` UTC — e.g.
+   * `"02:00"`. When omitted the service-assigned window is left unchanged.
+   */
+  maintenanceWindowStartTime?: string;
+  /**
    * Tags to apply to the application.
    */
   tags?: Record<string, string>;
@@ -277,6 +284,16 @@ export interface Application extends Resource<
      * Object version of the application code currently configured.
      */
     codeObjectVersion: string | undefined;
+    /**
+     * Start of the daily maintenance window currently configured, as
+     * `"HH:mm"` UTC.
+     */
+    maintenanceWindowStartTime: string | undefined;
+    /**
+     * End of the daily maintenance window currently configured, as
+     * `"HH:mm"` UTC (always 8 hours after the start).
+     */
+    maintenanceWindowEndTime: string | undefined;
     /**
      * Current tags reported for the application.
      */
@@ -500,6 +517,12 @@ const toAttrs = ({
     codeBucketArn: code?.BucketARN,
     codeFileKey: code?.FileKey,
     codeObjectVersion: code?.ObjectVersion,
+    maintenanceWindowStartTime:
+      detail.ApplicationMaintenanceConfigurationDescription
+        ?.ApplicationMaintenanceWindowStartTime,
+    maintenanceWindowEndTime:
+      detail.ApplicationMaintenanceConfigurationDescription
+        ?.ApplicationMaintenanceWindowEndTime,
     tags,
   };
 };
@@ -699,10 +722,6 @@ const canonicalPropertyGroups = (
 
 const sameStringSet = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
   a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
-
-/** The Flink API expresses checkpoint intervals in whole milliseconds. */
-const toWireMillis = (input: Duration.Input | undefined) =>
-  input === undefined ? undefined : Math.round(Duration.toMillis(input));
 
 const checkpointDiffers = (
   desired: CheckpointConfigurationProps,
@@ -1217,7 +1236,32 @@ export const ApplicationProvider = () =>
           yield* retryWhileInUse(syncConfiguration);
           yield* waitForApplicationStable(applicationName);
 
-          // 3b. SYNC VPC attach/detach — separate APIs from
+          // 3b. SYNC maintenance window — separate API from
+          // UpdateApplication; only applied when the caller pins a window
+          // (otherwise the service-assigned window is left as-is).
+          if (news.maintenanceWindowStartTime !== undefined) {
+            const syncMaintenanceWindow = Effect.gen(function* () {
+              const detail = yield* describeApplicationDetail(applicationName);
+              if (!detail) return;
+              const observedStart =
+                detail.ApplicationMaintenanceConfigurationDescription
+                  ?.ApplicationMaintenanceWindowStartTime;
+              if (observedStart === news.maintenanceWindowStartTime) return;
+              yield* analytics.updateApplicationMaintenanceConfiguration({
+                ApplicationName: applicationName,
+                ApplicationMaintenanceConfigurationUpdate: {
+                  ApplicationMaintenanceWindowStartTimeUpdate:
+                    news.maintenanceWindowStartTime!,
+                },
+              });
+              yield* session.note(
+                `Updated maintenance window for ${applicationName}`,
+              );
+            });
+            yield* retryWhileInUse(syncMaintenanceWindow);
+          }
+
+          // 3c. SYNC VPC attach/detach — separate APIs from
           // UpdateApplication; each re-reads the fresh version id.
           const syncVpcAttachment = Effect.gen(function* () {
             const detail = yield* describeApplicationDetail(applicationName);
@@ -1251,7 +1295,7 @@ export const ApplicationProvider = () =>
           yield* retryWhileInUse(syncVpcAttachment);
           const stable = yield* waitForApplicationStable(applicationName);
 
-          // 3c. SYNC run state — start when `start: true`, force-stop a
+          // 3d. SYNC run state — start when `start: true`, force-stop a
           // running application when `start` is absent/false.
           if (news.start === true && stable.ApplicationStatus !== "RUNNING") {
             yield* retryWhileInUse(
@@ -1276,7 +1320,7 @@ export const ApplicationProvider = () =>
             yield* waitForApplicationStopped(applicationName);
           }
 
-          // 3d. SYNC TAGS — diff against OBSERVED cloud tags (adoption may
+          // 3e. SYNC TAGS — diff against OBSERVED cloud tags (adoption may
           // bring an application with foreign tags), never olds/output.
           const applicationArn = stable.ApplicationARN;
           const observedTagsResponse = yield* analytics

@@ -3,7 +3,10 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface GetRecordsRequest extends Kinesis.GetRecordsInput {}
+export interface GetRecordsRequest extends Omit<
+  Kinesis.GetRecordsInput,
+  "StreamARN"
+> {}
 
 /**
  * Runtime binding for `kinesis:GetRecords`.

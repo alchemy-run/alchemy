@@ -1,6 +1,6 @@
 import * as keyspaces from "@distilled.cloud/aws/keyspaces";
 import * as keyspacesstreams from "@distilled.cloud/aws/keyspacesstreams";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -10,6 +10,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -444,10 +445,7 @@ export const TableProvider = () =>
           const keyspaceName = props.keyspaceName;
           const tableName = output?.tableName ?? (yield* toName(id, props));
           // The Keyspaces API expects the default TTL in whole seconds.
-          const desiredTtlSeconds =
-            props.defaultTimeToLive !== undefined
-              ? Math.round(Duration.toSeconds(props.defaultTimeToLive))
-              : undefined;
+          const desiredTtlSeconds = toWireSeconds(props.defaultTimeToLive);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 

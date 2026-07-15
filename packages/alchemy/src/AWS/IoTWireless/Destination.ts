@@ -122,6 +122,29 @@ export interface Destination extends Resource<
  *   }],
  * });
  * ```
+ *
+ * @section Consuming Uplinks in a Function
+ * Uplinks are delivered through AWS IoT Core. For a `RuleName` destination,
+ * `IoTWireless.consumeUplinks` (see {@link DestinationEventSource}) creates
+ * the named IoT rule targeting the current Lambda and invokes the handler
+ * for every uplink. Alternatively, point an `MqttTopic` destination at a
+ * topic and consume it with `AWS.IoT.consumeTopicMessages`.
+ * @example Route Device Uplinks into a Lambda
+ * ```typescript
+ * const destination = yield* IoTWireless.Destination("Uplinks", {
+ *   expressionType: "RuleName",
+ *   expression: "sensor_uplinks",
+ *   roleArn: deliveryRole.roleArn,
+ * });
+ *
+ * // inside the Function effect (provide Lambda.WirelessDestinationEventSource):
+ * yield* IoTWireless.consumeUplinks(destination, (uplinks) =>
+ *   uplinks.pipe(
+ *     Stream.runForEach((uplink) => processUplink(uplink)),
+ *     Effect.orDie,
+ *   ),
+ * );
+ * ```
  */
 export const Destination = Resource<Destination>("AWS.IoTWireless.Destination");
 

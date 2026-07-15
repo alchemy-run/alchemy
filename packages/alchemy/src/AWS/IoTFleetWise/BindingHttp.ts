@@ -46,7 +46,10 @@ export const makeFleetWiseResourceHttpBinding = <
   resources: (resource: Res) => (OutputType<string> | string)[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    // Capture the client in the FleetWise home region: yielding an
+    // operation captures its services (region, credentials, HTTP client)
+    // once, so the pin must wrap the capture, not the later calls.
+    const op = yield* inFleetWiseRegion(options.operation);
 
     return Effect.fn(function* (resource: Res) {
       const Identifier = yield* options.identifier(resource);
@@ -70,7 +73,7 @@ export const makeFleetWiseResourceHttpBinding = <
         return yield* op({
           ...request,
           [options.requestKey]: yield* Identifier,
-        } as unknown as I).pipe(inFleetWiseRegion);
+        } as unknown as I);
       });
     });
   });
@@ -96,7 +99,9 @@ export const makeFleetWiseAccountHttpBinding = <I, A, E, R>(options: {
   resources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    // See makeFleetWiseResourceHttpBinding: the region pin wraps the
+    // service capture, not the later calls.
+    const op = yield* inFleetWiseRegion(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -114,7 +119,7 @@ export const makeFleetWiseAccountHttpBinding = <I, A, E, R>(options: {
         }
       }
       return Effect.fn(options.tag)(function* (request?: I) {
-        return yield* op((request ?? {}) as I).pipe(inFleetWiseRegion);
+        return yield* op((request ?? {}) as I);
       });
     });
   });

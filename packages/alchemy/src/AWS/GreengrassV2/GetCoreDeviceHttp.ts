@@ -8,6 +8,9 @@ export const GetCoreDeviceHttp = Layer.effect(
   makeGreengrassAccountHttpBinding({
     tag: "AWS.GreengrassV2.GetCoreDevice",
     operation: greengrassv2.getCoreDevice,
-    actions: ["greengrass:GetCoreDevice"],
+    // Core devices are IoT things; Greengrass authorizes the IoT-side lookup
+    // with the caller's credentials before resolving the device (observed
+    // "not authorized to call Iot Core services for thing" without it).
+    actions: ["greengrass:GetCoreDevice", "iot:DescribeThing"],
   }),
 );

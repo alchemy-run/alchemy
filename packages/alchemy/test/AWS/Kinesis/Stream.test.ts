@@ -87,7 +87,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
           Effect.gen(function* () {
             return yield* Stream("TestStream", {
               streamMode: "ON_DEMAND",
-              retentionPeriodHours: "48 hours",
+              retentionPeriod: "48 hours",
               tags: { Environment: "production", Team: "platform" },
             });
           }),
@@ -413,7 +413,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const stream = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Stream("RetentionStream", {
-              retentionPeriodHours: "48 hours",
+              retentionPeriod: "48 hours",
             });
           }),
         );
@@ -430,7 +430,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Stream("RetentionStream", {
-              retentionPeriodHours: "24 hours",
+              retentionPeriod: "24 hours",
             });
           }),
         );

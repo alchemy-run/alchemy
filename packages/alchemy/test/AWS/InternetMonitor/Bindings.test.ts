@@ -103,7 +103,9 @@ describe.sequential("InternetMonitor Bindings", () => {
     { timeout: 300_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 300_000 });
+  afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), {
+    timeout: 300_000,
+  });
 
   describe("binding registration", () => {
     test.provider("all 8 capabilities initialize in the runtime", (_stack) =>
@@ -176,7 +178,7 @@ describe.sequential("InternetMonitor Bindings", () => {
       "runs a MEASUREMENTS query end-to-end on the bound monitor",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/query")) as {
+          interface QueryResponse {
             step: string;
             tag?: string;
             error?: string;
@@ -185,9 +187,22 @@ describe.sequential("InternetMonitor Bindings", () => {
             fields?: number;
             rows?: number;
             stopTag?: string;
-          };
-          // On a step failure the route reports { step, tag, error } — the
-          // assertion message then carries the exact typed failure.
+          }
+          // The role policy granting internetmonitor:* is attached moments
+          // before this test — IAM propagation can lag ~10-30s, surfacing as
+          // AccessDeniedException from a step. Retry (bounded) until the
+          // grant lands; any other failure surfaces immediately.
+          const response = yield* getJson("/query").pipe(
+            Effect.map((r) => r as QueryResponse),
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (r): boolean => r.tag !== "AccessDeniedException",
+              times: 10,
+            }),
+          );
+          // On a step failure the route reports { step, tag, error } — log
+          // the full payload so the exact typed failure is never elided.
+          yield* Effect.logInfo(`/query response: ${JSON.stringify(response)}`);
           expect(response).toMatchObject({ step: "ok" });
           expect(response.queryId).toBeTruthy();
           // An empty monitor's query still runs to a terminal state.
@@ -197,7 +212,7 @@ describe.sequential("InternetMonitor Bindings", () => {
           expect(response.rows).toBeGreaterThanOrEqual(0);
           expect(response.stopTag).not.toBe("AccessDeniedException");
         }),
-      { timeout: 120_000 },
+      { timeout: 180_000 },
     );
   });
 

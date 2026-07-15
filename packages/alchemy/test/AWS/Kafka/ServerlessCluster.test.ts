@@ -27,6 +27,66 @@ test.provider(
     }),
 );
 
+const nonexistentClusterArn = Effect.gen(function* () {
+  const { accountId, region } = yield* AWSEnvironment.current;
+  return `arn:aws:kafka:${region}:${accountId}:cluster/alchemy-nonexistent-probe/00000000-0000-0000-0000-000000000000-1`;
+});
+
+// Ungated typed-error probes for the operations behind the runtime bindings
+// (GetBootstrapBrokers + the topic control plane). Each proves the distilled
+// error union carries the tag a caller must handle for a missing cluster.
+test.provider(
+  "getBootstrapBrokers on a nonexistent cluster fails with a typed tag",
+  () =>
+    Effect.gen(function* () {
+      const ClusterArn = yield* nonexistentClusterArn;
+      const error = yield* Effect.flip(
+        Kafka.getBootstrapBrokers({ ClusterArn }),
+      );
+      expect(error._tag).toBe("NotFoundException");
+    }),
+);
+
+test.provider(
+  "listTopics on a nonexistent cluster fails with a typed tag",
+  () =>
+    Effect.gen(function* () {
+      const ClusterArn = yield* nonexistentClusterArn;
+      const error = yield* Effect.flip(Kafka.listTopics({ ClusterArn }));
+      expect(error._tag).toBe("NotFoundException");
+    }),
+);
+
+test.provider(
+  "describeTopic on a nonexistent cluster fails with a typed tag",
+  () =>
+    Effect.gen(function* () {
+      const ClusterArn = yield* nonexistentClusterArn;
+      const error = yield* Effect.flip(
+        Kafka.describeTopic({ ClusterArn, TopicName: "alchemy-probe" }),
+      );
+      expect(error._tag).toBe("NotFoundException");
+    }),
+);
+
+test.provider(
+  "createTopic on a nonexistent cluster fails with a typed tag",
+  () =>
+    Effect.gen(function* () {
+      const ClusterArn = yield* nonexistentClusterArn;
+      const error = yield* Effect.flip(
+        Kafka.createTopic({
+          ClusterArn,
+          TopicName: "alchemy-probe",
+          PartitionCount: 1,
+        }),
+      );
+      // The topic control plane validates the request body before resolving
+      // the cluster, so a nonexistent cluster surfaces the typed 400.
+      expect(error._tag).toBe("BadRequestException");
+    }),
+);
+
 // Resolve two default-for-AZ subnets from the account's default VPC — MSK
 // requires at least two subnets in distinct Availability Zones.
 const resolveSubnets = Effect.gen(function* () {

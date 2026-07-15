@@ -47,7 +47,7 @@ export const makeKmsKeyHttpBinding = <
         }
       }
       return Effect.fn(`${options.tag}(${keyLabel(key)})`)(function* (
-        request: Omit<I, "KeyId">,
+        request?: Omit<I, "KeyId">,
       ) {
         const keyId = yield* KeyId;
         return yield* op({ ...request, KeyId: keyId } as I);

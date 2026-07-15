@@ -74,11 +74,6 @@ export default IoTBindingsFunction.make(
           return yield* HttpServerResponse.json({
             ok: true,
             thingName: yield* thingName,
-            envKeys: yield* Effect.sync(() =>
-              Object.keys(process.env).filter(
-                (k) => !k.startsWith("AWS_") && !k.startsWith("LAMBDA_"),
-              ),
-            ),
           });
         }
 

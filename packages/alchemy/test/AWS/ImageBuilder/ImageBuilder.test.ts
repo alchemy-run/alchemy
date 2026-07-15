@@ -35,6 +35,27 @@ test.provider(
     }),
 );
 
+// Ungated typed-error probe: the Smithy model omits ResourceNotFoundException
+// from GetImage / DeleteImage / CancelImageCreation even though the wire
+// returns it — patched in distilled (patches/imagebuilder.json). This pins
+// the patch so the image data-plane bindings can rely on the typed tag.
+test.provider(
+  "getImage/deleteImage on a nonexistent ARN fail with ResourceNotFoundException",
+  () =>
+    Effect.gen(function* () {
+      const { accountId, region } = yield* AWSEnvironment.current;
+      const arn = `arn:aws:imagebuilder:${region}:${accountId}:image/alchemy-nonexistent-probe/1.0.0/1`;
+      const getError = yield* Effect.flip(
+        imagebuilder.getImage({ imageBuildVersionArn: arn }),
+      );
+      expect(getError._tag).toBe("ResourceNotFoundException");
+      const deleteError = yield* Effect.flip(
+        imagebuilder.deleteImage({ imageBuildVersionArn: arn }),
+      );
+      expect(deleteError._tag).toBe("ResourceNotFoundException");
+    }),
+);
+
 const componentData = (marker: string) =>
   [
     "name: alchemy-test-component",

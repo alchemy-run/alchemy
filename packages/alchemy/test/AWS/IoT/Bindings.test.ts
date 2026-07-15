@@ -93,22 +93,33 @@ describe("IoT Bindings", () => {
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
+      // Readiness requires `thingName` to be present, not just a 200: the
+      // function is pre-created as a stub (no env) and the env-carrying
+      // UpdateFunctionConfiguration is async, so the very first execution
+      // environment can serve with stale env. Retry until a fresh
+      // environment picks up the bound env.
       const ready = yield* HttpClient.get(`${baseUrl}/ready`).pipe(
         Effect.flatMap((response) =>
           response.status === 200
-            ? (response.json as Effect.Effect<{ thingName: string }>)
+            ? (response.json as Effect.Effect<{ thingName?: string }>)
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        ),
+        Effect.flatMap((body) =>
+          body.thingName
+            ? Effect.succeed(body as { thingName: string })
+            : Effect.fail(new Error("Function env not yet propagated")),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
-      yield* Effect.logInfo(`IoT bindings /ready: ${JSON.stringify(ready)}`);
       thingName = ready.thingName;
       expect(thingName).toBeTruthy();
     }),
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 120_000,
+  });
 
   describe("UpdateThingShadow / GetThingShadow", () => {
     test.provider(

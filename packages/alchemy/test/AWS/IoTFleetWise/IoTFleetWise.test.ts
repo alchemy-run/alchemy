@@ -5,6 +5,7 @@ import {
   Fleet,
   ModelManifest,
   SignalCatalog,
+  StateTemplate,
   Vehicle,
 } from "@/AWS/IoTFleetWise";
 import { Bucket } from "@/AWS/S3";
@@ -50,6 +51,25 @@ test.provider(
           "/tmp/fleetwise-probe-tag.txt",
           error._tag,
         ),
+      );
+      expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
+        error._tag,
+      );
+    }),
+);
+
+// Same ungated probe for the state-template API — proves the typed tags the
+// StateTemplate provider's read path depends on decode on every account.
+test.provider(
+  "getStateTemplate on a nonexistent template fails with a typed tag",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        iotfleetwise
+          .getStateTemplate({
+            identifier: "alchemy-nonexistent-state-template-probe",
+          })
+          .pipe(inHomeRegion),
       );
       expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
         error._tag,
@@ -161,6 +181,12 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
             attributes: { "Vehicle.VIN": "1HGBH41JXMN109186" },
           });
 
+          const stateTemplate = yield* StateTemplate("SpeedState", {
+            signalCatalogArn: catalog.signalCatalogArn,
+            stateTemplateProperties: ["Vehicle.Speed"],
+            description: "alchemy fleetwise test state template",
+          });
+
           // Campaign data lands in S3; FleetWise writes require a bucket
           // policy trusting the service principal. Deterministic name so
           // the policy can reference the bucket ARN as a literal.
@@ -184,7 +210,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
             signalCatalogArn: catalog.signalCatalogArn,
             targetArn: fleet.fleetArn,
             collectionScheme: {
-              timeBasedCollectionScheme: { periodMs: 10_000 },
+              timeBasedCollectionScheme: { period: "10 seconds" },
             },
             signalsToCollect: [{ name: "Vehicle.Speed" }],
             dataDestinationConfigs: [
@@ -192,11 +218,25 @@ test.provider.skipIf(!process.env.AWS_TEST_IOTFLEETWISE)(
             ],
           });
 
-          return { catalog, model, decoder, fleet, vehicle, campaign };
+          return {
+            catalog,
+            model,
+            decoder,
+            fleet,
+            vehicle,
+            stateTemplate,
+            campaign,
+          };
         }),
       );
 
       expect(deployed.catalog.signalCatalogArn).toContain(":signal-catalog/");
+      expect(deployed.stateTemplate.stateTemplateArn).toContain(
+        ":state-template/",
+      );
+      expect(deployed.stateTemplate.stateTemplateProperties).toEqual([
+        "Vehicle.Speed",
+      ]);
       expect(deployed.model.status).toBe("ACTIVE");
       expect(deployed.decoder.status).toBe("ACTIVE");
       expect(deployed.fleet.fleetArn).toContain(":fleet/");

@@ -77,6 +77,8 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
     const putRecord = yield* AWS.Kinesis.PutRecord(stream);
     const putRecords = yield* AWS.Kinesis.PutRecords(stream);
     const sink = yield* AWS.Kinesis.StreamSink(stream);
+    const splitShard = yield* AWS.Kinesis.SplitShard(stream);
+    const mergeShards = yield* AWS.Kinesis.MergeShards(stream);
 
     return {
       fetch: Effect.gen(function* () {
@@ -260,6 +262,30 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
           });
         }
 
+        if (request.method === "POST" && pathname === "/split-shard") {
+          const body = (yield* request.json) as {
+            shardToSplit: string;
+            newStartingHashKey: string;
+          };
+          yield* splitShard({
+            ShardToSplit: body.shardToSplit,
+            NewStartingHashKey: body.newStartingHashKey,
+          });
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
+        if (request.method === "POST" && pathname === "/merge-shards") {
+          const body = (yield* request.json) as {
+            shardToMerge: string;
+            adjacentShardToMerge: string;
+          };
+          yield* mergeShards({
+            ShardToMerge: body.shardToMerge,
+            AdjacentShardToMerge: body.adjacentShardToMerge,
+          });
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
         if (request.method === "POST" && pathname === "/subscribe") {
           const body = (yield* request.json) as { shardId: string };
           const result = yield* subscribeToShard({
@@ -296,8 +322,10 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
           AWS.Kinesis.ListStreamConsumersHttp,
           AWS.Kinesis.ListStreamsHttp,
           AWS.Kinesis.ListTagsForResourceHttp,
+          AWS.Kinesis.MergeShardsHttp,
           AWS.Kinesis.PutRecordHttp,
           AWS.Kinesis.PutRecordsHttp,
+          AWS.Kinesis.SplitShardHttp,
           AWS.Kinesis.SubscribeToShardHttp,
           StreamAndConsumerLive,
         ),

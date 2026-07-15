@@ -255,7 +255,7 @@ describe.sequential("GreengrassV2 Bindings", () => {
                 Object.values(r as Record<string, Probe>).every(
                   (probe) => probe.tag !== "AccessDeniedException",
                 ),
-              times: 10,
+              times: 20,
             }),
           )) as Record<string, Probe>;
           // Point reads/writes on a missing core device are typed not-found.
@@ -268,6 +268,7 @@ describe.sequential("GreengrassV2 Bindings", () => {
             expect(probe.tag).not.toBe("AccessDeniedException");
           }
         }),
+      { timeout: 240_000 },
     );
   });
 
@@ -326,15 +327,35 @@ describe.sequential("GreengrassV2 Bindings", () => {
   describe("CancelDeployment", () => {
     // Runs last: cancels the fixture rollout (the deployment stays ACTIVE
     // until canceled because no live core device ever picks it up).
-    test.provider("cancels the bound deployment", (_stack) =>
-      Effect.gen(function* () {
-        const response = (yield* postJson("/cancel-deployment")) as Probe;
-        expect(response.ok).toBe(true);
-        const detail = (yield* getJson("/deployment")) as {
-          deploymentStatus: string;
-        };
-        expect(detail.deploymentStatus).toBe("CANCELED");
-      }),
+    test.provider(
+      "cancels the bound deployment",
+      (_stack) =>
+        Effect.gen(function* () {
+          // The cancel path exercises freshly attached iot:CancelJob/UpdateJob
+          // grants — retry the attempt while IAM propagation still rejects it.
+          // A prior (retried) attempt may already have canceled the rollout,
+          // so the deployment status below is the authoritative assertion.
+          const response = (yield* postJson("/cancel-deployment").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (r): boolean =>
+                (r as Probe).tag !== "AccessDeniedException",
+              times: 20,
+            }),
+          )) as Probe;
+          expect(response.tag).not.toBe("AccessDeniedException");
+          const detail = (yield* getJson("/deployment").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (d): boolean =>
+                (d as { deploymentStatus: string }).deploymentStatus ===
+                "CANCELED",
+              times: 10,
+            }),
+          )) as { deploymentStatus: string };
+          expect(detail.deploymentStatus).toBe("CANCELED");
+        }),
+      { timeout: 150_000 },
     );
   });
 });
