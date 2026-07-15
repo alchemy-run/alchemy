@@ -10,6 +10,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   awaitOperation,
+  ensureNamespace,
   fetchObservedTags,
   observeNamespace,
   retryWhileResourceInUse,
@@ -173,28 +174,23 @@ export const HttpNamespaceProvider = () =>
             output?.namespaceId,
           );
 
-          // 2. ENSURE — create if missing (async operation)
+          // 2. ENSURE — create if missing (async operation); the created
+          // namespace is observed by the operation's target id, riding out
+          // a same-name predecessor still deleting (see ensureNamespace)
           if (namespace === undefined) {
-            const created = yield* sd
-              .createHttpNamespace({
+            yield* session.note(`creating HTTP namespace ${name} (async)...`);
+            namespace = yield* ensureNamespace(
+              "HTTP",
+              name,
+              sd.createHttpNamespace({
                 Name: name,
                 Description: news.description,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
                   Value,
                 })),
-              })
-              .pipe(
-                Effect.catchTag(
-                  ["NamespaceAlreadyExists", "DuplicateRequest"],
-                  () => Effect.succeed({ OperationId: undefined }),
-                ),
-              );
-            if (created.OperationId !== undefined) {
-              yield* session.note(`creating HTTP namespace ${name} (async)...`);
-              yield* awaitOperation(created.OperationId);
-            }
-            namespace = yield* observeNamespace("HTTP", name, undefined);
+              }),
+            );
           }
           if (namespace?.Id === undefined) {
             return yield* Effect.fail(

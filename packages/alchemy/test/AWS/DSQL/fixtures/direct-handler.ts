@@ -32,12 +32,24 @@ export default DsqlDirectFunction.make(
   Effect.gen(function* () {
     const cluster = yield* Db;
     const conn = yield* DSQL.Connect(cluster, { admin: true });
+    const getVpcEndpointServiceName =
+      yield* DSQL.GetVpcEndpointServiceName(cluster);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.originalUrl);
         const pathname = url.pathname;
+
+        // PrivateLink service-name lookup via the management binding.
+        if (request.method === "GET" && pathname === "/vpc-endpoint-service") {
+          const { serviceName, clusterVpcEndpoint } =
+            yield* getVpcEndpointServiceName();
+          return yield* HttpServerResponse.json({
+            serviceName,
+            clusterVpcEndpoint: clusterVpcEndpoint ?? null,
+          });
+        }
 
         // Connection descriptor shape — no socket opened. The password
         // (auth token) is never echoed, only its presence.
@@ -80,5 +92,9 @@ export default DsqlDirectFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(DSQL.ConnectHttp)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(DSQL.ConnectHttp, DSQL.GetVpcEndpointServiceNameHttp),
+    ),
+  ),
 );

@@ -12,6 +12,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   awaitOperation,
+  ensureNamespace,
   fetchObservedTags,
   observeNamespace,
   retryWhileResourceInUse,
@@ -212,10 +213,17 @@ export const PrivateDnsNamespaceProvider = () =>
             output?.namespaceId,
           );
 
-          // 2. ENSURE — create if missing; namespace creation is async
+          // 2. ENSURE — create if missing; namespace creation is async. The
+          // created namespace is observed by the operation's target id,
+          // riding out a same-name predecessor still deleting
           if (namespace === undefined) {
-            const created = yield* sd
-              .createPrivateDnsNamespace({
+            yield* session.note(
+              `creating private DNS namespace ${name} (async)...`,
+            );
+            namespace = yield* ensureNamespace(
+              "DNS_PRIVATE",
+              name,
+              sd.createPrivateDnsNamespace({
                 Name: name,
                 Vpc: news.vpc,
                 Description: news.description,
@@ -227,22 +235,8 @@ export const PrivateDnsNamespaceProvider = () =>
                   Key,
                   Value,
                 })),
-              })
-              .pipe(
-                // a concurrent reconciler (or an interrupted previous run)
-                // already created it — fall through to observation
-                Effect.catchTag(
-                  ["NamespaceAlreadyExists", "DuplicateRequest"],
-                  () => Effect.succeed({ OperationId: undefined }),
-                ),
-              );
-            if (created.OperationId !== undefined) {
-              yield* session.note(
-                `creating private DNS namespace ${name} (async)...`,
-              );
-              yield* awaitOperation(created.OperationId);
-            }
-            namespace = yield* observeNamespace("DNS_PRIVATE", name, undefined);
+              }),
+            );
           }
           if (namespace?.Id === undefined) {
             return yield* Effect.fail(

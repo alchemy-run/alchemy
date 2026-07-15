@@ -171,6 +171,75 @@ export const observeNamespace = Effect.fn("AWS.CloudMap.observeNamespace")(
 );
 
 /**
+ * Ensure a namespace exists: submit `create`, await its async operation, and
+ * observe the created namespace **by the operation's target id** — the
+ * `listNamespaces` name lookup is eventually consistent and can miss a
+ * namespace created milliseconds earlier.
+ *
+ * A same-name predecessor still mid-deletion (e.g. the old physical resource
+ * of a replacement, or an out-of-band cleaner) surfaces the create as
+ * `NamespaceAlreadyExists` while remaining invisible to observation; the
+ * whole create+observe sequence retries (bounded, ~40s) until the deletion
+ * completes and the create goes through. A `DuplicateRequest` means an
+ * identical create is already in flight — its operation is awaited instead.
+ */
+const retryWhileNamespaceNotVisible = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "NamespaceNotFound",
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
+  });
+
+export const ensureNamespace = <E, R>(
+  type: NamespaceKind,
+  name: string,
+  create: Effect.Effect<
+    { OperationId?: string | undefined },
+    sd.NamespaceAlreadyExists | sd.DuplicateRequest | E,
+    R
+  >,
+) =>
+  retryWhileNamespaceNotVisible(
+    Effect.gen(function* () {
+      const created: {
+        OperationId?: string | undefined;
+        NamespaceId?: string | undefined;
+      } = yield* create.pipe(
+        Effect.catchTag(["NamespaceAlreadyExists", "DuplicateRequest"], (e) =>
+          e._tag === "NamespaceAlreadyExists"
+            ? // the name is taken — by an ACTIVE namespace (observed below)
+              // or by one still deleting (observation misses it and the
+              // bounded outer retry re-submits the create)
+              Effect.succeed({
+                OperationId: undefined,
+                NamespaceId: e.NamespaceId,
+              })
+            : // an identical create is already in flight — await THAT one
+              Effect.succeed({
+                OperationId: e.DuplicateOperationId,
+                NamespaceId: undefined,
+              }),
+        ),
+      );
+      let namespaceId = created.NamespaceId;
+      if (created.OperationId !== undefined) {
+        const operation = yield* awaitOperation(created.OperationId);
+        namespaceId = operation?.Targets?.NAMESPACE ?? namespaceId;
+      }
+      const namespace = yield* observeNamespace(type, name, namespaceId);
+      if (namespace?.Id === undefined) {
+        return yield* Effect.fail(
+          new sd.NamespaceNotFound({
+            Message: `namespace ${name} not visible after create`,
+          }),
+        );
+      }
+      return namespace;
+    }),
+  );
+
+/**
  * Fetch the observed Cloud Map tags for a resource ARN as a plain record,
  * tolerating a missing resource (race during create/delete) as `{}`.
  */

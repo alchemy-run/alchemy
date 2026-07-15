@@ -212,6 +212,22 @@ describe("DSQL.Connect", () => {
   );
 
   test.provider(
+    "GetVpcEndpointServiceName binding resolves the PrivateLink service name",
+    (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.get(`${directUrl}/vpc-endpoint-service`),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          serviceName: string;
+          clusterVpcEndpoint: string | null;
+        };
+        expect(response.serviceName).toMatch(/^com\.amazonaws\./);
+        expect(response.serviceName).toContain("dsql");
+      }),
+    { timeout: 180_000 },
+  );
+
+  test.provider(
     "connects DIRECTLY to the public endpoint (raw pg, no Drizzle, no VPC)",
     (_stack) =>
       Effect.gen(function* () {

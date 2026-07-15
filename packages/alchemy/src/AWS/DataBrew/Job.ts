@@ -1,7 +1,8 @@
 import * as databrew from "@distilled.cloud/aws/databrew";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -9,6 +10,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { buildS3Location, type S3Location } from "./Dataset.ts";
@@ -411,10 +413,7 @@ const buildCommon = (props: JobProps) => ({
   MaxCapacity: props.maxCapacity,
   MaxRetries: props.maxRetries,
   RoleArn: props.role,
-  Timeout:
-    props.timeout !== undefined
-      ? Math.round(Duration.toMinutes(props.timeout))
-      : undefined,
+  Timeout: toWireMinutes(props.timeout),
 });
 
 export const JobProvider = () =>
@@ -583,6 +582,53 @@ export const JobProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          // A run in STARTING/RUNNING/STOPPING keeps the job's dataset and
+          // recipe associated — downstream Dataset/Recipe deletes then fail
+          // with ConflictException ("is used in job …") long after DeleteJob
+          // itself succeeds. Stop in-flight runs and wait (bounded) for every
+          // run to reach a terminal state before deleting the job.
+          const runs = yield* databrew
+            .listJobRuns({ Name: output.jobName })
+            .pipe(
+              Effect.map((r) => r.JobRuns ?? []),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed([]),
+              ),
+            );
+          const isActive = (state: string | undefined): boolean =>
+            state === "STARTING" || state === "RUNNING" || state === "STOPPING";
+          yield* Effect.forEach(
+            runs.filter(
+              (run) =>
+                run.RunId !== undefined &&
+                (run.State === "STARTING" || run.State === "RUNNING"),
+            ),
+            (run) =>
+              databrew
+                .stopJobRun({ Name: output.jobName, RunId: run.RunId! })
+                .pipe(
+                  // Already stopping/stopped (ValidationException) or gone.
+                  Effect.catchTag(
+                    ["ResourceNotFoundException", "ValidationException"],
+                    () => Effect.succeed(undefined),
+                  ),
+                ),
+          );
+          if (runs.some((run) => isActive(run.State))) {
+            yield* databrew.listJobRuns({ Name: output.jobName }).pipe(
+              Effect.map((r) =>
+                (r.JobRuns ?? []).every((run) => !isActive(run.State)),
+              ),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(true),
+              ),
+              Effect.repeat({
+                schedule: Schedule.spaced("5 seconds"),
+                until: (settled): boolean => settled,
+                times: 18,
+              }),
+            );
+          }
           // ConflictException while a job run is still in flight.
           yield* retryWhileConflict(
             databrew.deleteJob({ Name: output.jobName }),

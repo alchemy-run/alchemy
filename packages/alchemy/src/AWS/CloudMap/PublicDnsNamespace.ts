@@ -12,6 +12,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   awaitOperation,
+  ensureNamespace,
   fetchObservedTags,
   observeNamespace,
   retryWhileResourceInUse,
@@ -180,10 +181,17 @@ export const PublicDnsNamespaceProvider = () =>
             output?.namespaceId,
           );
 
-          // 2. ENSURE — create if missing (async operation)
+          // 2. ENSURE — create if missing (async operation); the created
+          // namespace is observed by the operation's target id, riding out
+          // a same-name predecessor still deleting (see ensureNamespace)
           if (namespace === undefined) {
-            const created = yield* sd
-              .createPublicDnsNamespace({
+            yield* session.note(
+              `creating public DNS namespace ${name} (async)...`,
+            );
+            namespace = yield* ensureNamespace(
+              "DNS_PUBLIC",
+              name,
+              sd.createPublicDnsNamespace({
                 Name: name,
                 Description: news.description,
                 Properties:
@@ -194,20 +202,8 @@ export const PublicDnsNamespaceProvider = () =>
                   Key,
                   Value,
                 })),
-              })
-              .pipe(
-                Effect.catchTag(
-                  ["NamespaceAlreadyExists", "DuplicateRequest"],
-                  () => Effect.succeed({ OperationId: undefined }),
-                ),
-              );
-            if (created.OperationId !== undefined) {
-              yield* session.note(
-                `creating public DNS namespace ${name} (async)...`,
-              );
-              yield* awaitOperation(created.OperationId);
-            }
-            namespace = yield* observeNamespace("DNS_PUBLIC", name, undefined);
+              }),
+            );
           }
           if (namespace?.Id === undefined) {
             return yield* Effect.fail(

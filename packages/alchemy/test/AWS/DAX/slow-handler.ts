@@ -24,7 +24,8 @@ export class DAXSlowTestFunction extends Lambda.Function<Lambda.Function>()(
 /**
  * Cluster-scoped binding fixture: deploys a real single-node DAX cluster
  * (~10 minutes, billed per node-hour — gated behind AWS_TEST_SLOW) and a
- * Lambda bound to it with ConnectReadWrite + RebootNode + DescribeClusters.
+ * Lambda bound to it with ConnectReadWrite + RebootNode + DescribeClusters +
+ * IncreaseReplicationFactor + DecreaseReplicationFactor.
  * The Lambda is not VPC-attached: the connect binding only resolves endpoint
  * env/attributes and RebootNode is a control-plane call.
  */
@@ -61,6 +62,10 @@ export default DAXSlowTestFunction.make(
     const connect = yield* DAX.ConnectReadWrite(cluster);
     const rebootNode = yield* DAX.RebootNode(cluster);
     const describeClusters = yield* DAX.DescribeClusters();
+    const increaseReplicationFactor =
+      yield* DAX.IncreaseReplicationFactor(cluster);
+    const decreaseReplicationFactor =
+      yield* DAX.DecreaseReplicationFactor(cluster);
 
     return {
       fetch: Effect.gen(function* () {
@@ -97,6 +102,34 @@ export default DAXSlowTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/scale-probe") {
+          // Cheap probes for the scaling bindings: invalid target factors
+          // must reach service-side validation and surface a typed tag.
+          // An IAM gap (or a ClusterName-injection bug) would surface
+          // AccessDeniedException / ClusterNotFoundFault instead.
+          const increaseTag = yield* increaseReplicationFactor({
+            // A single-node cluster cannot "increase" to its current size.
+            NewReplicationFactor: 1,
+          }).pipe(
+            Effect.map(() => "Increased"),
+            Effect.catchTag(
+              ["InvalidParameterValueException", "InvalidClusterStateFault"],
+              (e) => Effect.succeed(e._tag),
+            ),
+          );
+          const decreaseTag = yield* decreaseReplicationFactor({
+            // Zero nodes is never a valid replication factor.
+            NewReplicationFactor: 0,
+          }).pipe(
+            Effect.map(() => "Decreased"),
+            Effect.catchTag(
+              ["InvalidParameterValueException", "InvalidClusterStateFault"],
+              (e) => Effect.succeed(e._tag),
+            ),
+          );
+          return yield* HttpServerResponse.json({ increaseTag, decreaseTag });
+        }
+
         if (request.method === "GET" && pathname === "/nodes") {
           const info = yield* connect;
           const clusterName = info.host.split(".")[0] ?? "";
@@ -120,6 +153,8 @@ export default DAXSlowTestFunction.make(
         DAX.ConnectReadWriteHttp,
         DAX.RebootNodeHttp,
         DAX.DescribeClustersHttp,
+        DAX.IncreaseReplicationFactorHttp,
+        DAX.DecreaseReplicationFactorHttp,
       ),
     ),
   ),

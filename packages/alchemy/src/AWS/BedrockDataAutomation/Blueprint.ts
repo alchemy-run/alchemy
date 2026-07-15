@@ -281,6 +281,39 @@ export const BlueprintProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          // Versions (immutable snapshots, e.g. from CreateBlueprintVersion)
+          // block deletion of the blueprint itself — delete them first.
+          // NOTE: the blueprintArn filter cannot be combined with other
+          // filters ("Invalid List filter combination").
+          const versions = yield* bda.listBlueprints
+            .items({ blueprintArn: output.blueprintArn })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((summaries) =>
+                Array.from(summaries)
+                  .map((s) => s.blueprintVersion)
+                  .filter((v): v is string => v !== undefined),
+              ),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed([] as string[]),
+              ),
+            );
+          yield* Effect.forEach(
+            versions,
+            (blueprintVersion) =>
+              bda
+                .deleteBlueprint({
+                  blueprintArn: output.blueprintArn,
+                  blueprintVersion,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    "ResourceNotFoundException",
+                    () => Effect.void,
+                  ),
+                ),
+            { concurrency: 1 },
+          );
           yield* bda
             .deleteBlueprint({ blueprintArn: output.blueprintArn })
             .pipe(

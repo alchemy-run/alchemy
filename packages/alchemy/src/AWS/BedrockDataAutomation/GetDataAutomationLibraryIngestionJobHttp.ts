@@ -9,5 +9,10 @@ export const GetDataAutomationLibraryIngestionJobHttp = Layer.effect(
     tag: "AWS.BedrockDataAutomation.GetDataAutomationLibraryIngestionJob",
     operation: bda.getDataAutomationLibraryIngestionJob,
     actions: ["bedrock:GetDataAutomationLibraryIngestionJob"],
+    // The action authorizes against the ingestion-job resource (minted at
+    // runtime), not the library ARN.
+    additionalResources: [
+      "arn:aws:bedrock:*:*:data-automation-library-ingestion-job/*",
+    ],
   }),
 );
