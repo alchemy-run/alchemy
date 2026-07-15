@@ -1,3 +1,4 @@
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "./Input.ts";
@@ -51,6 +52,38 @@ const _hasUnresolved = (value: unknown): boolean => {
     return Object.values(value as Record<string, unknown>).some(_hasUnresolved);
   }
   return false;
+};
+
+/**
+ * Deeply replace every unresolved plan-time expression (an `Output`/`Expr`
+ * or an un-evaluated `Effect`) with `undefined`, leaving resolved values
+ * (including opaque `Redacted`/`Duration` instances) intact.
+ *
+ * Persisted resource state must only ever hold plain data. Durable (JSON)
+ * state stores already enforce this implicitly — Output proxies are
+ * function-typed, so `JSON.stringify` silently drops them — but the
+ * in-memory store used by tests retains live proxies, which would later be
+ * fed back into provider lifecycle operations as `olds` after an
+ * interrupted apply (e.g. `read` during a destroy plan) and blow up on
+ * first string coercion. Sanitizing at the commit boundary keeps both
+ * store kinds consistent with the provider contract that `olds` is
+ * resolved `Props`.
+ */
+export const stripUnresolved = <T>(value: T): T => _stripUnresolved(value) as T;
+
+const _stripUnresolved = (value: unknown): unknown => {
+  if (value == null || isPrimitive(value)) return value;
+  if (Output.isExpr(value) || Effect.isEffect(value)) return undefined;
+  // Opaque resolved values — rebuilding them structurally would strip
+  // their prototype (see resolveInput in Plan.ts for the same rule).
+  if (Redacted.isRedacted(value) || Duration.isDuration(value)) return value;
+  if (Array.isArray(value)) return value.map(_stripUnresolved);
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, _stripUnresolved(item)]),
+    );
+  }
+  return value;
 };
 
 export const somePropsAreDifferent = <Props extends Record<string, any>>(

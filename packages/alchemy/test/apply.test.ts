@@ -5028,3 +5028,35 @@ describe("engine-level adoption persists at apply, not plan (issue #793)", () =>
       }),
   );
 });
+
+describe("interrupted create persists no unresolved Output exprs", () => {
+  test.provider(
+    "creating-state props are plain data and destroy converges",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const a = yield* TestResource("A", { string: "a-value" });
+          const b = yield* TestResource("B", { string: a.string });
+          return { a, b };
+        });
+
+        // B's reconcile fails AFTER the engine committed its `creating`
+        // state, which snapshots the plan props — where `string` is still
+        // an unresolved PropExpr referencing A's output.
+        yield* program.pipe(stack.deploy, hook(failOn("B", "create")));
+
+        const b = yield* getState("B");
+        expect(b?.status).toEqual("creating");
+        // State only holds plain data: the unresolved expr must be
+        // stripped, never persisted as a live proxy. A later destroy plan
+        // hands these props back to `provider.read` as `olds`; a live
+        // proxy explodes on first string coercion (e.g. inside a distilled
+        // path-parameter builder).
+        expect((b?.props as TestResourceProps).string).toBeUndefined();
+
+        yield* stack.destroy();
+        expect(yield* getState("B")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+});

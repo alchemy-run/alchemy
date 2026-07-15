@@ -1,6 +1,8 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Planetscale from "@/Planetscale/index.ts";
 import * as Effect from "effect/Effect";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Shared Planetscale + Cloudflare wiring used by the Hyperdrive
@@ -11,6 +13,16 @@ import * as Effect from "effect/Effect";
  * `role.pooledOrigin` to avoid one direct connection per worker request.
  */
 export const PlanetscaleDb = Effect.gen(function* () {
+  // Resolved inside the effect (not at module scope) so it only runs at
+  // deploy time — `import.meta.url` is undefined in the bundled worker.
+  const migrationsDir = yield* Effect.sync(() =>
+    path.join(
+      import.meta.url ? fileURLToPath(import.meta.url) : ".",
+      "..",
+      "migrations",
+    ),
+  );
+
   const database = yield* Planetscale.PostgresDatabase("HyperdriveTestDb", {
     name: "alchemy-postgres-hyperdrive",
     region: { slug: "us-east" },
@@ -19,8 +31,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
 
   const branch = yield* Planetscale.PostgresBranch("HyperdriveTestBranch", {
     database,
-    migrationsDir:
-      "./packages/alchemy/test/Planetscale/Postgres/fixtures/migrations",
+    migrationsDir,
   });
 
   const role = yield* Planetscale.PostgresRole("HyperdriveTestRole", {
