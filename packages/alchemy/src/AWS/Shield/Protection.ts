@@ -19,6 +19,13 @@ const healthCheckIdFromArn = (arn: string) => arn.split("/").pop() ?? arn;
 const healthCheckArnFromId = (id: string) =>
   `arn:aws:route53:::healthcheck/${id}`;
 
+/**
+ * How Shield Advanced responds automatically to application-layer (layer 7)
+ * DDoS attacks against the protected resource: `BLOCK` the attacking traffic
+ * with the associated AWS WAF web ACL, or `COUNT` it for visibility only.
+ */
+export type ApplicationLayerAutomaticResponseAction = "BLOCK" | "COUNT";
+
 export interface ProtectionProps {
   /**
    * Friendly name for the protection. Immutable — changing it replaces the
@@ -36,6 +43,14 @@ export interface ProtectionProps {
    * health-based DDoS detection. Mutable.
    */
   healthCheckArns?: string[];
+  /**
+   * Shield Advanced automatic application-layer DDoS mitigation: `BLOCK`
+   * attacking traffic with the associated AWS WAF web ACL, or `COUNT` it for
+   * visibility only. Omit to leave the feature disabled. Only supported for
+   * CloudFront distributions and Application Load Balancers that have an
+   * associated web ACL. Mutable.
+   */
+  applicationLayerAutomaticResponse?: ApplicationLayerAutomaticResponseAction;
   /**
    * User-defined tags. Alchemy ownership tags are merged in automatically.
    */
@@ -56,6 +71,13 @@ export interface Protection extends Resource<
     resourceArn: string;
     /** IDs of the associated Route 53 health checks. */
     healthCheckIds: string[];
+    /**
+     * The automatic application-layer DDoS mitigation action, or `undefined`
+     * when the feature is disabled.
+     */
+    applicationLayerAutomaticResponse:
+      | ApplicationLayerAutomaticResponseAction
+      | undefined;
     /** Tags on the protection (including Alchemy ownership tags). */
     tags: Record<string, string>;
   },

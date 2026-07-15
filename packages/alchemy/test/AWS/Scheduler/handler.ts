@@ -65,8 +65,10 @@ export default SchedulerTestFunction.make(
     });
 
     const createSchedule = yield* Scheduler.CreateSchedule(executionRole);
+    const updateSchedule = yield* Scheduler.UpdateSchedule(executionRole);
     const getSchedule = yield* Scheduler.GetSchedule();
     const deleteSchedule = yield* Scheduler.DeleteSchedule();
+    const listSchedules = yield* Scheduler.ListSchedules();
     const sendCron = yield* SQS.SendMessage(cronQueue);
 
     // The cron-handler DX: consume this Lambda's own scheduled invocations
@@ -99,6 +101,27 @@ export default SchedulerTestFunction.make(
             sinkQueueUrl: yield* sinkQueueUrl,
             cronQueueUrl: yield* cronQueueUrl,
           });
+        }
+
+        if (request.method === "GET" && pathname === "/schedules") {
+          const namePrefix = url.searchParams.get("namePrefix") ?? undefined;
+          // Surface the typed failure in the body (424 so the test's 5xx
+          // retry doesn't mask a genuine error) instead of dying to a 500.
+          return yield* listSchedules({ NamePrefix: namePrefix }).pipe(
+            Effect.flatMap((listed) =>
+              HttpServerResponse.json({
+                names: (listed.Schedules ?? []).flatMap((s) =>
+                  s.Name ? [s.Name] : [],
+                ),
+              }),
+            ),
+            Effect.catchAll((e) =>
+              HttpServerResponse.json(
+                { error: e._tag, message: String(e) },
+                { status: 424 },
+              ),
+            ),
+          );
         }
 
         if (pathname.startsWith("/schedules/")) {
@@ -137,6 +160,45 @@ export default SchedulerTestFunction.make(
             }
             return yield* HttpServerResponse.json({
               scheduleArn: created.ScheduleArn,
+              expression,
+            });
+          }
+
+          if (request.method === "PUT") {
+            const delaySeconds = Number(
+              url.searchParams.get("delaySeconds") ?? "900",
+            );
+            const description =
+              url.searchParams.get("description") ?? undefined;
+            const fireAt = yield* Effect.sync(
+              () => new Date(Date.now() + delaySeconds * 1000),
+            );
+            const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
+
+            // UpdateSchedule is a full PUT — resend the complete config.
+            const updated = yield* updateSchedule({
+              Name: name,
+              ScheduleExpression: expression,
+              Description: description,
+              ActionAfterCompletion: "DELETE",
+              Target: {
+                Arn: yield* sinkQueueArn,
+                Input: JSON.stringify({ marker: name }),
+              },
+            }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+
+            if (updated === undefined) {
+              return yield* HttpServerResponse.json(
+                { error: "Not found", name },
+                { status: 404 },
+              );
+            }
+            return yield* HttpServerResponse.json({
+              scheduleArn: updated.ScheduleArn,
               expression,
             });
           }
@@ -186,8 +248,10 @@ export default SchedulerTestFunction.make(
     Effect.provide(
       Layer.mergeAll(
         Scheduler.CreateScheduleHttp,
+        Scheduler.UpdateScheduleHttp,
         Scheduler.GetScheduleHttp,
         Scheduler.DeleteScheduleHttp,
+        Scheduler.ListSchedulesHttp,
         Lambda.ScheduleEventSource,
         SQS.SendMessageHttp,
       ),

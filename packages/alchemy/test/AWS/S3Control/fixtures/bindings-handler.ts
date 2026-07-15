@@ -240,16 +240,14 @@ export default S3ControlBindingsFunction.make(
 
               // Observe the job's final state after the cancel attempt.
               const final = yield* describeJob({ JobId: jobId });
+              const finalStatus = final.Job?.Status ?? "Cancelled";
 
               // 5. LIST — the job is observable in the account listing.
+              // NOTE: a single status value only — distilled's SigV4 signer
+              // currently mis-signs repeated query params
+              // (jobStatuses=A&jobStatuses=B → SignatureDoesNotMatch).
               const listed = yield* listJobs({
-                JobStatuses: [
-                  "Cancelled",
-                  "Suspended",
-                  "Failed",
-                  "Complete",
-                  "Cancelling",
-                ],
+                JobStatuses: [finalStatus],
               });
 
               return {
@@ -258,7 +256,7 @@ export default S3ControlBindingsFunction.make(
                 settledStatus: settled.status,
                 priorityOutcome,
                 cancelOutcome,
-                finalStatus: final.Job?.Status as string,
+                finalStatus: finalStatus as string,
                 listedJobIds: (listed.Jobs ?? []).map((j) => j.JobId),
               };
             }),

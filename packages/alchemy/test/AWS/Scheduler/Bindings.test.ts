@@ -309,6 +309,102 @@ describe("Scheduler Bindings", () => {
     );
   });
 
+  describe("UpdateSchedule", () => {
+    test.provider(
+      "reschedules a pending schedule (full PUT + iam:PassRole)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const name = `${SCHEDULE_PREFIX}upd`;
+
+          yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/schedules/${name}?delaySeconds=900`,
+            ),
+          );
+
+          // Update: push the fire time out further and set a description.
+          const updated = (yield* send(
+            HttpClientRequest.put(
+              `${baseUrl}/schedules/${name}?delaySeconds=1800&description=rescheduled`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            scheduleArn: string;
+            expression: string;
+          };
+          expect(updated.scheduleArn).toContain(`:schedule/default/${name}`);
+
+          // Out-of-band: the new expression and description landed.
+          const observed = yield* scheduler.getSchedule({ Name: name });
+          expect(observed.ScheduleExpression).toBe(updated.expression);
+          expect(observed.Description).toBe("rescheduled");
+
+          // cleanup via the DeleteSchedule binding route
+          const deleted = yield* send(
+            HttpClientRequest.delete(`${baseUrl}/schedules/${name}`),
+          );
+          expect(deleted.status).toBe(200);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider("surfaces the typed not-found as a 404", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.put(
+            `${baseUrl}/schedules/${SCHEDULE_PREFIX}missing-upd`,
+          ),
+        );
+        expect(response.status).toBe(404);
+      }),
+    );
+  });
+
+  describe("ListSchedules", () => {
+    test.provider(
+      "lists runtime-minted schedules by prefix (default-group scoped)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const nameA = `${SCHEDULE_PREFIX}list-a`;
+          const nameB = `${SCHEDULE_PREFIX}list-b`;
+
+          yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/schedules/${nameA}?delaySeconds=900`,
+            ),
+          );
+          yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/schedules/${nameB}?delaySeconds=900`,
+            ),
+          );
+
+          const listed = (yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/schedules?namePrefix=${SCHEDULE_PREFIX}list-`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            names: string[];
+            error?: string;
+            message?: string;
+          };
+
+          // A typed failure inside the Lambda surfaces here with its tag.
+          expect(listed.error, listed.message).toBeUndefined();
+          expect(listed.names).toContain(nameA);
+          expect(listed.names).toContain(nameB);
+
+          // cleanup via the DeleteSchedule binding route
+          for (const name of [nameA, nameB]) {
+            const deleted = yield* send(
+              HttpClientRequest.delete(`${baseUrl}/schedules/${name}`),
+            );
+            expect(deleted.status).toBe(200);
+          }
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   describe("DeleteSchedule", () => {
     test.provider(
       "deletes a pending schedule and reports not-found on repeat",

@@ -46,10 +46,9 @@ export default RekognitionTestFunction.make(
     // The image-analysis route runs seven sequential inferences and the
     // collection route ~15 sequential data-plane calls.
     timeout: Duration.seconds(120),
-    // The video routes decode eight large Rekognition Video request/response
-    // schema graphs in a single invocation — the 128 MB default OOM-kills the
-    // sandbox (observed Max Memory Used: 118 MB on the cheap routes alone),
-    // which surfaces as an uncatchable 500.
+    // The bundled Rekognition schema graph is large — the 128 MB default
+    // leaves almost no headroom (observed Max Memory Used: 118 MB on the
+    // cheap routes alone).
     memorySize: 512,
   },
   Effect.gen(function* () {

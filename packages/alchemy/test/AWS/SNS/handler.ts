@@ -350,7 +350,11 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/sms/attributes") {
-          return yield* HttpServerResponse.json(yield* getSmsAttributes());
+          return yield* HttpServerResponse.json(
+            yield* getSmsAttributes().pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
+          );
         }
 
         if (request.method === "POST" && pathname === "/sms/attributes") {
@@ -358,13 +362,17 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           return yield* HttpServerResponse.json(
             yield* setSmsAttributes({
               attributes: { DefaultSMSType: body.type },
-            }),
+            }).pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
           );
         }
 
         if (request.method === "GET" && pathname === "/sms/opted-out") {
           return yield* HttpServerResponse.json(
-            yield* listPhoneNumbersOptedOut(),
+            yield* listPhoneNumbersOptedOut().pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
           );
         }
 
@@ -373,7 +381,9 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           return yield* HttpServerResponse.json(
             yield* checkIfPhoneNumberIsOptedOut({
               phoneNumber: body.phoneNumber,
-            }),
+            }).pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
           );
         }
 
@@ -390,16 +400,26 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           pathname === "/sms/origination-numbers"
         ) {
           return yield* HttpServerResponse.json(
-            yield* listOriginationNumbers(),
+            yield* listOriginationNumbers().pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
           );
         }
 
         if (request.method === "GET" && pathname === "/sms/sandbox-status") {
-          return yield* HttpServerResponse.json(yield* getSandboxStatus());
+          return yield* HttpServerResponse.json(
+            yield* getSandboxStatus().pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
+          );
         }
 
         if (request.method === "GET" && pathname === "/sms/sandbox-numbers") {
-          return yield* HttpServerResponse.json(yield* listSandboxNumbers());
+          return yield* HttpServerResponse.json(
+            yield* listSandboxNumbers().pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
+          );
         }
 
         if (request.method === "POST" && pathname === "/sms/sandbox-create") {
@@ -444,7 +464,9 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
 
         if (request.method === "GET" && pathname === "/platform/applications") {
           return yield* HttpServerResponse.json(
-            yield* listPlatformApplications(),
+            yield* listPlatformApplications().pipe(
+              Effect.catch((error) => Effect.succeed(formatError(error))),
+            ),
           );
         }
 

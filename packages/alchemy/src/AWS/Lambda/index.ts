@@ -59,6 +59,7 @@ export * from "./ResumeMicrovmHttp.ts";
 export * from "./RunMicrovm.ts";
 export * from "./RunMicrovmHttp.ts";
 export * from "./ScheduleEventSource.ts";
+export * from "./SecretRotationEventSource.ts";
 export * from "./StreamEventSource.ts";
 export * from "./SuspendMicrovm.ts";
 export * from "./SuspendMicrovmHttp.ts";

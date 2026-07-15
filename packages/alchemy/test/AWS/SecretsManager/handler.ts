@@ -48,6 +48,11 @@ export default SecretsManagerTestFunction.make(
     const binarySecret = yield* SecretsManager.Secret("BinarySecret", {
       description: "alchemy binding fixture (binary value)",
     });
+    // Rotated by this function itself via the RotationEventSource below.
+    const rotationSecret = yield* SecretsManager.Secret("RotationSecret", {
+      description: "alchemy binding fixture (rotated value)",
+      secretString: Redacted.make("alchemy-sm-rotation-initial"),
+    });
 
     const getStringSecret = yield* SecretsManager.GetSecretValue(stringSecret);
     const putStringSecret = yield* SecretsManager.PutSecretValue(stringSecret);
@@ -57,6 +62,73 @@ export default SecretsManagerTestFunction.make(
       yield* SecretsManager.DescribeSecret(stringSecret);
     const getRandomPassword = yield* SecretsManager.GetRandomPassword();
     const listSecrets = yield* SecretsManager.ListSecrets();
+    const listStringVersions =
+      yield* SecretsManager.ListSecretVersionIds(stringSecret);
+    const batchGetSecrets = yield* SecretsManager.BatchGetSecretValue([
+      stringSecret,
+      rotationSecret,
+    ]);
+
+    // Rotation-protocol bindings for the rotation secret.
+    const getRotationValue =
+      yield* SecretsManager.GetSecretValue(rotationSecret);
+    const putRotationValue =
+      yield* SecretsManager.PutSecretValue(rotationSecret);
+    const describeRotationSecret =
+      yield* SecretsManager.DescribeSecret(rotationSecret);
+    const updateRotationStage =
+      yield* SecretsManager.UpdateSecretVersionStage(rotationSecret);
+    const listRotationVersions =
+      yield* SecretsManager.ListSecretVersionIds(rotationSecret);
+    const rotateRotationSecret =
+      yield* SecretsManager.RotateSecret(rotationSecret);
+
+    // Register this function as the rotation function for the rotation
+    // secret. The handler implements the 4-step protocol against the secret
+    // itself (self-contained: no downstream system to `setSecret`/`testSecret`).
+    yield* SecretsManager.onSecretRotation(
+      rotationSecret,
+      { rotationRules: { scheduleExpression: "rate(4 hours)" } },
+      (event) =>
+        Effect.gen(function* () {
+          if (event.Step === "createSecret") {
+            // Idempotent: skip if the pending version already exists.
+            const versions = yield* listRotationVersions({
+              IncludeDeprecated: true,
+            });
+            const exists = (versions.Versions ?? []).some(
+              (version) => version.VersionId === event.ClientRequestToken,
+            );
+            if (!exists) {
+              const generated = yield* getRandomPassword({
+                PasswordLength: 24,
+                ExcludePunctuation: true,
+              });
+              const password = unwrapString(generated.RandomPassword) ?? "";
+              yield* putRotationValue({
+                ClientRequestToken: event.ClientRequestToken,
+                SecretString: `alchemy-sm-rotated-${password}`,
+                VersionStages: ["AWSPENDING"],
+              });
+            }
+          } else if (event.Step === "finishSecret") {
+            const described = yield* describeRotationSecret();
+            const stages = described.SecretVersionsToStages ?? {};
+            const currentVersion = Object.entries(stages).find(([, labels]) =>
+              (labels ?? []).includes("AWSCURRENT"),
+            )?.[0];
+            if (currentVersion !== event.ClientRequestToken) {
+              yield* updateRotationStage({
+                VersionStage: "AWSCURRENT",
+                MoveToVersionId: event.ClientRequestToken,
+                RemoveFromVersionId: currentVersion,
+              });
+            }
+          }
+          // setSecret / testSecret: nothing to apply or verify — the secret
+          // is self-contained.
+        }).pipe(Effect.asVoid, Effect.orDie),
+    );
 
     return {
       fetch: Effect.gen(function* () {
@@ -139,6 +211,54 @@ export default SecretsManagerTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/versions") {
+          const result = yield* listStringVersions({
+            IncludeDeprecated: true,
+          });
+          return yield* HttpServerResponse.json({
+            versions: (result.Versions ?? []).map((version) => ({
+              versionId: version.VersionId,
+              stages: version.VersionStages ?? [],
+            })),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/batch") {
+          const result = yield* batchGetSecrets();
+          return yield* HttpServerResponse.json({
+            values: (result.SecretValues ?? [])
+              .map((entry) => ({
+                name: entry.Name,
+                secretString: unwrapString(entry.SecretString),
+              }))
+              .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+            errors: (result.Errors ?? []).map((error) => error.ErrorCode),
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/rotate") {
+          const result = yield* rotateRotationSecret();
+          return yield* HttpServerResponse.json({
+            versionId: result.VersionId,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/rotation-value") {
+          const result = yield* getRotationValue();
+          return yield* HttpServerResponse.json({
+            versionId: result.VersionId,
+            secretString: unwrapString(result.SecretString),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/rotation-status") {
+          const result = yield* describeRotationSecret();
+          return yield* HttpServerResponse.json({
+            rotationEnabled: result.RotationEnabled === true,
+            lastRotated: result.LastRotatedDate,
+          });
+        }
+
         return yield* HttpServerResponse.json(
           {
             error: "Not found",
@@ -157,6 +277,11 @@ export default SecretsManagerTestFunction.make(
         SecretsManager.DescribeSecretHttp,
         SecretsManager.GetRandomPasswordHttp,
         SecretsManager.ListSecretsHttp,
+        SecretsManager.ListSecretVersionIdsHttp,
+        SecretsManager.BatchGetSecretValueHttp,
+        SecretsManager.UpdateSecretVersionStageHttp,
+        SecretsManager.RotateSecretHttp,
+        Lambda.SecretRotationEventSource,
       ),
     ),
   ),

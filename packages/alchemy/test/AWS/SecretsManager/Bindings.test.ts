@@ -240,6 +240,105 @@ describe.sequential("SecretsManager Bindings", () => {
       }),
     );
   });
+
+  describe("ListSecretVersionIds", () => {
+    test.provider("lists the string secret's versions with stages", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* fetchUntil(
+          send(HttpClientRequest.get(`${baseUrl}/versions`)).pipe(
+            Effect.flatMap((r) => r.json),
+          ),
+          (body) =>
+            Array.isArray(body?.versions) &&
+            body.versions.some((version: any) =>
+              version.stages?.includes("AWSCURRENT"),
+            ),
+        );
+
+        const current = (response as any).versions.find((version: any) =>
+          version.stages.includes("AWSCURRENT"),
+        );
+        expect(current.versionId).toBeTruthy();
+      }),
+    );
+  });
+
+  describe("BatchGetSecretValue", () => {
+    test.provider("reads both bound secrets in one call", (_stack) =>
+      Effect.gen(function* () {
+        // BatchGetSecretValue is eventually consistent right after the
+        // fixture secrets are created; poll until both values are served.
+        const response = yield* fetchUntil(
+          send(HttpClientRequest.get(`${baseUrl}/batch`)).pipe(
+            Effect.flatMap((r) => r.json),
+          ),
+          (body) =>
+            Array.isArray(body?.values) &&
+            body.values.length === 2 &&
+            body.values.every(
+              (entry: any) =>
+                typeof entry.secretString === "string" &&
+                entry.secretString.length > 0,
+            ),
+        );
+
+        expect((response as any).values).toHaveLength(2);
+        expect((response as any).errors).toHaveLength(0);
+      }),
+    );
+  });
+
+  // The RotationEventSource wires this same fixture Lambda as the rotation
+  // function: RotateSecret kicks off the 4-step protocol
+  // (createSecret -> setSecret -> testSecret -> finishSecret), which the
+  // handler implements via the GetRandomPassword / PutSecretValue /
+  // DescribeSecret / UpdateSecretVersionStage bindings. Runs LAST — it
+  // permanently changes the rotation secret's value.
+  describe("RotationEventSource", () => {
+    test.provider("rotation is configured on the secret", (_stack) =>
+      Effect.gen(function* () {
+        const status = yield* send(
+          HttpClientRequest.get(`${baseUrl}/rotation-status`),
+        ).pipe(Effect.flatMap((r) => r.json));
+
+        expect((status as any).rotationEnabled).toBe(true);
+      }),
+    );
+
+    test.provider(
+      "RotateSecret triggers the rotation protocol end-to-end",
+      (_stack) =>
+        Effect.gen(function* () {
+          const before = yield* fetchUntil(
+            send(HttpClientRequest.get(`${baseUrl}/rotation-value`)).pipe(
+              Effect.flatMap((r) => r.json),
+            ),
+            (body) => typeof body?.secretString === "string",
+          );
+
+          const rotate = yield* send(
+            HttpClientRequest.post(`${baseUrl}/rotate`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((rotate as any).versionId).toBeTruthy();
+
+          // Secrets Manager drives the protocol asynchronously — poll until
+          // the handler's finishSecret promoted the new version.
+          const after = yield* fetchUntil(
+            send(HttpClientRequest.get(`${baseUrl}/rotation-value`)).pipe(
+              Effect.flatMap((r) => r.json),
+            ),
+            (body) =>
+              typeof body?.secretString === "string" &&
+              body.secretString.startsWith("alchemy-sm-rotated-"),
+            45,
+          );
+
+          expect((after as any).secretString).toMatch(/^alchemy-sm-rotated-/);
+          expect((after as any).versionId).not.toBe((before as any).versionId);
+        }),
+      { timeout: 150_000 },
+    );
+  });
 });
 
 // A request hit a Lambda instance observing not-yet-consistent control-plane
@@ -249,6 +348,7 @@ class BindingNotConsistent extends Data.TaggedError("BindingNotConsistent") {}
 const fetchUntil = <A>(
   fetch: Effect.Effect<unknown, any, HttpClient.HttpClient>,
   ready: (body: any) => boolean,
+  attempts = 20,
 ) =>
   fetch.pipe(
     Effect.flatMap((body) =>
@@ -260,7 +360,7 @@ const fetchUntil = <A>(
       while: (e) => e._tag === "BindingNotConsistent",
       schedule: Schedule.max([
         Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
+        Schedule.recurs(attempts),
       ]),
     }),
   );

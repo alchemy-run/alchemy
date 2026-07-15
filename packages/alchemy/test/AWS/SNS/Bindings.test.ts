@@ -84,6 +84,11 @@ describe.sequential("SNS Bindings", () => {
 
         const getJson = (path: string) =>
           HttpClient.get(`${baseUrl}${path}`).pipe(
+            Effect.tap((response) =>
+              Effect.flatMap(response.text, (text) =>
+                Effect.logInfo(`GET ${path} -> ${text.slice(0, 400)}`),
+              ),
+            ),
             Effect.flatMap((response) => response.json),
           );
 

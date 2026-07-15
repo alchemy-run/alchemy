@@ -1,11 +1,12 @@
 import * as securitylake from "@distilled.cloud/aws/securitylake";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -187,34 +188,6 @@ export class DataLakeCreateFailed extends Data.TaggedError(
   readonly reason: string | undefined;
   readonly code: string | undefined;
 }> {}
-
-/**
- * Reconstruct a valid `Duration.Input` from a value that may have
- * round-tripped through persisted state JSON, which flattens a `Duration`
- * to its `toJSON` shape (`{_id:"Duration",_tag:"Millis",millis:n}`) — a
- * shape `Duration.toDays` silently decodes as zero.
- */
-const fromStateDurationInput = (input: Duration.Input): Duration.Input => {
-  const json = input as {
-    _id?: unknown;
-    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
-    millis?: number;
-    nanos?: string;
-  };
-  return typeof input === "object" && input !== null && json._id === "Duration"
-    ? json._tag === "Millis"
-      ? json.millis!
-      : json._tag === "Nanos"
-        ? BigInt(json.nanos!)
-        : "Infinity"
-    : input;
-};
-
-/** Convert an optional {@link Duration.Input} prop to whole wire days. */
-const toWireDays = (input: Duration.Input | undefined): number | undefined =>
-  input === undefined
-    ? undefined
-    : Math.round(Duration.toDays(fromStateDurationInput(input)));
 
 // Convert a per-Region prop configuration (Duration-typed lifecycle days)
 // into the wire shape the Security Lake API expects (whole days).

@@ -155,4 +155,102 @@ describe("ServiceQuotas Bindings", () => {
       { timeout: 120_000 },
     );
   });
+
+  describe("GetAWSDefaultServiceQuota", () => {
+    test.provider(
+      "reads the AWS default quota value through the deployed Lambda",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band expectation from the same account/region.
+          const expected = yield* servicequotas
+            .getAWSDefaultServiceQuota({
+              ServiceCode: "vpc",
+              QuotaCode: "L-F678F1CE",
+            })
+            .pipe(Effect.map((r) => r.Quota?.Value));
+
+          const response = yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/default-quota?service=vpc&quota=L-F678F1CE`,
+            ),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as {
+            quotaCode: string;
+            value: number;
+          };
+          expect(body.quotaCode).toBe("L-F678F1CE");
+          expect(body.value).toBe(expected);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListServices", () => {
+    test.provider(
+      "lists Service Quotas service codes through the deployed Lambda",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/services`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { serviceCodes: string[] };
+          expect(body.serviceCodes.length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListServiceQuotas", () => {
+    test.provider(
+      "lists a service's applied quotas through the deployed Lambda",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/quotas?service=vpc`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { quotaCodes: string[] };
+          expect(body.quotaCodes.length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListRequestedServiceQuotaChangeHistoryByQuota", () => {
+    test.provider(
+      "lists a quota's request history through the deployed Lambda",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/history?service=vpc&quota=L-F678F1CE`,
+            ),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { count: number };
+          expect(body.count).toBeGreaterThanOrEqual(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("RequestServiceQuotaIncrease", () => {
+    test.provider(
+      "surfaces the typed NoSuchResourceException for a bogus quota (write-path IAM verified, no request submitted)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/request-increase?service=vpc&quota=L-00000000`,
+            ),
+          );
+          expect(response.status).toBe(404);
+          const body = (yield* response.json) as { tag: string };
+          expect(body.tag).toBe("NoSuchResourceException");
+        }),
+      { timeout: 120_000 },
+    );
+  });
 });
