@@ -27,7 +27,7 @@ export interface ListProfileResourceAssociationsRequest extends Omit<
  * @section Listing Attached DNS Resources
  * @example Enumerate the DNS resources attached to a Profile
  * ```typescript
- * // init — grants route53profiles:ListProfileResourceAssociations on the profile
+ * // init — grants route53profiles:ListProfileResourceAssociations
  * const listProfileResourceAssociations =
  *   yield* AWS.Route53Profiles.ListProfileResourceAssociations(profile);
  *

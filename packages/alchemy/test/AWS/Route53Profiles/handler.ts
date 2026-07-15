@@ -55,8 +55,7 @@ export default ProfilesTestFunction.make(
           });
         }
 
-        // Profile-scoped list: the ProfileId is injected from the binding
-        // and the grant is scoped to the profile's ARN.
+        // Profile-scoped list: the ProfileId is injected from the binding.
         if (request.method === "GET" && pathname === "/resource-associations") {
           const { ProfileResourceAssociations = [] } =
             yield* listProfileResourceAssociations();

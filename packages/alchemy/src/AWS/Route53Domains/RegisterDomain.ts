@@ -18,9 +18,11 @@ export interface RegisterDomainRequest
  *
  * Route 53 Domains is a global registration API with no resource-level IAM:
  * the binding takes no arguments and grants the function
- * `route53domains:RegisterDomain` on `*`. Calls are pinned to `us-east-1`,
- * the only region that serves the Route 53 Domains API, regardless of where
- * the function runs.
+ * `route53domains:RegisterDomain` plus `route53:CreateHostedZone` (the API
+ * pre-validates that the caller can create the hosted zone Route 53
+ * auto-creates during registration) on `*`. Calls are pinned to
+ * `us-east-1`, the only region that serves the Route 53 Domains API,
+ * regardless of where the function runs.
  *
  * Provide the implementation with
  * `Effect.provide(AWS.Route53Domains.RegisterDomainHttp)`.

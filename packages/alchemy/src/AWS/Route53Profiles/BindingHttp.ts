@@ -14,10 +14,12 @@ import type { Profile } from "./Profile.ts";
 
 /**
  * Build the impl Effect for a Route 53 Profiles operation scoped to a
- * {@link Profile}: the deploy-time half grants `actions` (on the bound
- * profile's ARN, or on `*` for list actions without resource-level
- * permission support), and the runtime half injects the profile's
- * `ProfileId` into every request.
+ * {@link Profile}: the deploy-time half grants `actions`, and the runtime
+ * half injects the profile's `ProfileId` into every request.
+ *
+ * The grant is on `*` — the Route 53 Profiles list actions follow the
+ * common AWS List-action pattern of not supporting resource-level
+ * permissions (a profile-ARN-scoped grant is rejected with AccessDenied).
  */
 export const makeProfilesHttpBinding = <
   I extends { ProfileId?: string },
@@ -31,12 +33,6 @@ export const makeProfilesHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted by the binding. */
   actions: readonly string[];
-  /**
-   * Grant scope — `"profile"` scopes the grant to the bound Profile's ARN;
-   * `"account"` grants on `*` (for list actions that do not support
-   * resource-level permissions).
-   */
-  scope: "profile" | "account";
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -51,8 +47,7 @@ export const makeProfilesHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource:
-                  options.scope === "profile" ? [profile.profileArn] : ["*"],
+                Resource: ["*"],
               },
             ],
           });

@@ -59,6 +59,37 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     }),
   );
 
+// Drive a fixture route and parse its JSON response. The Lambda role's
+// inline policy can take a few seconds to propagate after deploy, so a
+// 403-shaped AccessDenied tag from a probe route (or a raw 403) is retried
+// by the caller where relevant; transient 5xx are retried by `send`.
+const getJson = <T>(path: string) =>
+  Effect.gen(function* () {
+    const response = yield* send(HttpClientRequest.get(`${baseUrl}${path}`));
+    expect(response.status).toBe(200);
+    return (yield* response.json) as T;
+  });
+
+// Probe routes answer `{ tag }` — retry while IAM propagation still yields
+// AccessDenied so we assert the *expected* typed platform rejection.
+const getTag = (path: string) =>
+  getJson<{ tag: string }>(path).pipe(
+    Effect.map((body) => body.tag),
+    Effect.flatMap(
+      (tag): Effect.Effect<string, IamNotPropagated> =>
+        tag === "AccessDenied"
+          ? Effect.fail(new IamNotPropagated({ status: 403, body: tag }))
+          : Effect.succeed(tag),
+    ),
+    Effect.retry({
+      while: (e): boolean => e._tag === "IamNotPropagated",
+      schedule: Schedule.max([
+        Schedule.exponential("1 second"),
+        Schedule.recurs(8),
+      ]),
+    }),
+  );
+
 // Mint a presigned URL via the deployed Lambda fixture.
 const presign = (
   op: "presign-get" | "presign-put",
@@ -298,6 +329,292 @@ describe("S3 Bindings", () => {
             }),
           );
           expect(status).toBe(403);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  const seed = (key: string, body: string) =>
+    S3.putObject({ Bucket: bucketName, Key: key, Body: body });
+
+  const route = (pathname: string, params: Record<string, string>) =>
+    `${pathname}?${new URLSearchParams(params).toString()}`;
+
+  describe("DeleteObjects", () => {
+    test.provider(
+      "batch-deletes several objects in one call",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("batch/one.txt", "first");
+          yield* seed("batch/two.txt", "second");
+
+          const result = yield* getJson<{
+            deleted: string[];
+            errors: string[];
+          }>(route("/delete-objects", { keys: "batch/one.txt,batch/two.txt" }));
+          expect(result.errors).toEqual([]);
+          expect(result.deleted).toContain("batch/one.txt");
+          expect(result.deleted).toContain("batch/two.txt");
+
+          // out-of-band verification via distilled — the objects are gone
+          const head = yield* S3.headObject({
+            Bucket: bucketName,
+            Key: "batch/one.txt",
+          }).pipe(
+            Effect.map(() => "found" as const),
+            Effect.catchTag("NotFound", () =>
+              Effect.succeed("not-found" as const),
+            ),
+          );
+          expect(head).toBe("not-found");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("PutObjectTagging", () => {
+    test.provider(
+      "replaces an object's tag set",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("tagging/put.txt", "tag me");
+
+          yield* getJson<{ ok: boolean }>(
+            route("/put-tagging", {
+              key: "tagging/put.txt",
+              tagKey: "env",
+              tagValue: "prod",
+            }),
+          );
+
+          // out-of-band verification via distilled
+          const tags = yield* S3.getObjectTagging({
+            Bucket: bucketName,
+            Key: "tagging/put.txt",
+          });
+          expect(tags.TagSet).toEqual([{ Key: "env", Value: "prod" }]);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetObjectTagging", () => {
+    test.provider(
+      "reads an object's tag set",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("tagging/get.txt", "tagged");
+          yield* S3.putObjectTagging({
+            Bucket: bucketName,
+            Key: "tagging/get.txt",
+            Tagging: { TagSet: [{ Key: "team", Value: "alchemy" }] },
+          });
+
+          const result = yield* getJson<{ tags: Record<string, string> }>(
+            route("/get-tagging", { key: "tagging/get.txt" }),
+          );
+          expect(result.tags).toEqual({ team: "alchemy" });
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("DeleteObjectTagging", () => {
+    test.provider(
+      "removes an object's entire tag set",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("tagging/delete.txt", "untag me");
+          yield* S3.putObjectTagging({
+            Bucket: bucketName,
+            Key: "tagging/delete.txt",
+            Tagging: { TagSet: [{ Key: "ephemeral", Value: "yes" }] },
+          });
+
+          yield* getJson<{ ok: boolean }>(
+            route("/delete-tagging", { key: "tagging/delete.txt" }),
+          );
+
+          // out-of-band verification via distilled
+          const tags = yield* S3.getObjectTagging({
+            Bucket: bucketName,
+            Key: "tagging/delete.txt",
+          });
+          expect(tags.TagSet ?? []).toEqual([]);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetObjectAttributes", () => {
+    test.provider(
+      "reads object size and storage class without the body",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = "attribute probe body";
+          yield* seed("attrs/object.txt", body);
+
+          const result = yield* getJson<{
+            size: number;
+            storageClass: string;
+          }>(route("/attributes", { key: "attrs/object.txt" }));
+          expect(result.size).toBe(body.length);
+          expect(result.storageClass).toBe("STANDARD");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListObjectVersions", () => {
+    test.provider(
+      "lists versions under a prefix",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("versions/a.txt", "v1");
+
+          const result = yield* getJson<{
+            versions: string[];
+            deleteMarkers: number;
+          }>(route("/versions", { prefix: "versions/" }));
+          expect(result.versions).toContain("versions/a.txt");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListParts", () => {
+    test.provider(
+      "lists the uploaded parts of an in-progress multipart upload",
+      (_stack) =>
+        Effect.gen(function* () {
+          const result = yield* getJson<{
+            parts: number[];
+            uploads: string[];
+          }>(route("/multipart-list", { key: "mpu/list.bin" }));
+          expect(result.parts).toEqual([1]);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListMultipartUploads", () => {
+    test.provider(
+      "lists in-progress multipart uploads",
+      (_stack) =>
+        Effect.gen(function* () {
+          const result = yield* getJson<{
+            parts: number[];
+            uploads: string[];
+          }>(route("/multipart-list", { key: "mpu/uploads.bin" }));
+          expect(result.uploads).toContain("mpu/uploads.bin");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("UploadPartCopy", () => {
+    test.provider(
+      "assembles an object from a copied part",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = "upload part copy source payload";
+          yield* seed("mpu/src.txt", body);
+
+          const result = yield* getJson<{ etag: string | undefined }>(
+            route("/multipart-copy", {
+              src: "mpu/src.txt",
+              dest: "mpu/dest.txt",
+            }),
+          );
+          expect(result.etag).toBeTruthy();
+
+          // out-of-band verification via distilled — the copy landed intact
+          const head = yield* S3.headObject({
+            Bucket: bucketName,
+            Key: "mpu/dest.txt",
+          });
+          expect(head.ContentLength).toBe(body.length);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("RestoreObject", () => {
+    test.provider(
+      "restore of a STANDARD object fails with the typed InvalidObjectState",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("restore/std.txt", "not archived");
+
+          const tag = yield* getTag(
+            route("/restore", { key: "restore/std.txt" }),
+          );
+          // STANDARD objects are not restorable — the binding must surface
+          // the *typed* platform rejection, proving IAM + wiring works.
+          expect([
+            "InvalidObjectState",
+            "ObjectAlreadyInActiveTierError",
+          ]).toContain(tag);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetObjectRetention", () => {
+    test.provider(
+      "returns the typed InvalidRequest on a bucket without Object Lock",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("lock/get-retention.txt", "no lock");
+          const tag = yield* getTag(
+            route("/retention", { key: "lock/get-retention.txt" }),
+          );
+          expect(tag).toBe("InvalidRequest");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("PutObjectRetention", () => {
+    test.provider(
+      "returns the typed InvalidRequest on a bucket without Object Lock",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("lock/put-retention.txt", "no lock");
+          const tag = yield* getTag(
+            route("/retention-put", { key: "lock/put-retention.txt" }),
+          );
+          expect(tag).toBe("InvalidRequest");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("GetObjectLegalHold", () => {
+    test.provider(
+      "returns the typed InvalidRequest on a bucket without Object Lock",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("lock/get-hold.txt", "no lock");
+          const tag = yield* getTag(
+            route("/legal-hold", { key: "lock/get-hold.txt" }),
+          );
+          expect(tag).toBe("InvalidRequest");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("PutObjectLegalHold", () => {
+    test.provider(
+      "returns the typed InvalidRequest on a bucket without Object Lock",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* seed("lock/put-hold.txt", "no lock");
+          const tag = yield* getTag(
+            route("/legal-hold-put", { key: "lock/put-hold.txt" }),
+          );
+          expect(tag).toBe("InvalidRequest");
         }),
       { timeout: 120_000 },
     );

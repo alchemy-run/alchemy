@@ -255,12 +255,14 @@ export const TableProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // Deliberately NO versionToken: destroy is unconditional. Runtime
+      // commits (UpdateTableMetadataLocation) rotate the token, so the
+      // persisted one may be stale and would fail with ConflictException.
       yield* s3tables
         .deleteTable({
           tableBucketARN: output.tableBucketArn,
           namespace: output.namespace,
           name: output.name,
-          versionToken: output.versionToken,
         })
         .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
     }),

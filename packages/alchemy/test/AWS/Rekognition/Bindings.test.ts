@@ -183,11 +183,16 @@ describe("Rekognition Bindings", () => {
             "InvalidParameterException",
             "ResourceNotFoundException",
           ]).toContain(result.searchUsersTag);
+          // Associate/Disassociate with a well-formed unknown face id either
+          // succeed (reported via UnsuccessfulFaceAssociations) or reject
+          // with a typed validation/not-found tag.
           expect([
+            "Success",
             "InvalidParameterException",
             "ResourceNotFoundException",
           ]).toContain(result.associateTag);
           expect([
+            "Success",
             "InvalidParameterException",
             "ResourceNotFoundException",
           ]).toContain(result.disassociateTag);

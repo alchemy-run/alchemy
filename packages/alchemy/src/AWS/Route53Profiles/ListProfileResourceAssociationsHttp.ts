@@ -9,8 +9,5 @@ export const ListProfileResourceAssociationsHttp = Layer.effect(
     tag: "AWS.Route53Profiles.ListProfileResourceAssociations",
     operation: profiles.listProfileResourceAssociations,
     actions: ["route53profiles:ListProfileResourceAssociations"],
-    // The profile is the addressed resource (its id is in the request URI),
-    // so the grant is scoped to the bound profile's ARN.
-    scope: "profile",
   }),
 );

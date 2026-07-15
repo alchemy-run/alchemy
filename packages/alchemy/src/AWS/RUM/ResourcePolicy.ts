@@ -14,10 +14,9 @@ export interface ResourcePolicyProps {
    */
   appMonitorName: string;
   /**
-   * The IAM resource-based policy document (JSON) that controls access to
-   * the app monitor — most commonly a statement allowing unauthenticated
-   * `rum:PutRumEvents` from the RUM web client, or cross-account reads.
-   * Updated in place. Maximum size is 4 KB.
+   * The IAM resource-based policy document (JSON) that controls who may send
+   * events to the app monitor. RUM only accepts `rum:PutRumEvents` as the
+   * statement action. Updated in place. Maximum size is 4 KB.
    */
   policyDocument: string;
 }

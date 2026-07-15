@@ -27,6 +27,9 @@ const errorRoute = <A, E extends { _tag: string }>(
       return yield* HttpServerResponse.json({
         ok: false,
         errorTag: result.failure._tag,
+        errorMessage: String(
+          (result.failure as { message?: unknown }).message ?? "",
+        ),
       });
     }
     return yield* HttpServerResponse.json({

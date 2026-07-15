@@ -9,8 +9,5 @@ export const ListProfileAssociationsHttp = Layer.effect(
     tag: "AWS.Route53Profiles.ListProfileAssociations",
     operation: profiles.listProfileAssociations,
     actions: ["route53profiles:ListProfileAssociations"],
-    // ListProfileAssociations is an account-wide list (the profile id is an
-    // optional filter) without resource-level permission support.
-    scope: "account",
   }),
 );

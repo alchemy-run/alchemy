@@ -140,7 +140,7 @@ describe.sequential("Route53Profiles Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           // No DNS resources are ever attached to the fixture's profile, so
-          // an empty list proves both the profile-ARN-scoped
+          // an empty list proves both the
           // route53profiles:ListProfileResourceAssociations grant and the
           // ProfileId injection.
           const response = (yield* getJson("/resource-associations")) as {

@@ -116,8 +116,15 @@ export const ProfileProvider = () =>
   Provider.effect(
     Profile,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (id: string, props: ProfileProps) {
-        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
+      // `props` may be undefined at runtime — all ProfileProps fields are
+      // optional, so callers can omit the props object entirely.
+      const createName = Effect.fn(function* (
+        id: string,
+        props: ProfileProps | undefined,
+      ) {
+        return (
+          props?.name ?? (yield* createPhysicalName({ id, maxLength: 64 }))
+        );
       });
 
       // A deleted Profile lingers in `DELETING`/`DELETED` and is still
@@ -265,7 +272,7 @@ export const ProfileProvider = () =>
           live = settled ?? live;
 
           // SYNC tags against observed cloud tags.
-          yield* syncTags(id, live.Arn!, news.tags);
+          yield* syncTags(id, live.Arn!, news?.tags);
 
           yield* session.note(live.Id!);
           return {

@@ -43,21 +43,23 @@ test.provider(
       yield* stack.destroy();
 
       const { Account } = yield* sts.getCallerIdentity({});
-      const policyFor = (arn: string, action: string) =>
+      // RUM resource policies only accept rum:PutRumEvents actions — rotate
+      // the policy document by its Sid instead.
+      const policyFor = (arn: string, sid: string) =>
         JSON.stringify({
           Version: "2012-10-17",
           Statement: [
             {
-              Sid: "AlchemyRumTest",
+              Sid: sid,
               Effect: "Allow",
               Principal: { AWS: `arn:aws:iam::${Account}:root` },
-              Action: [action],
+              Action: ["rum:PutRumEvents"],
               Resource: arn,
             },
           ],
         });
 
-      const program = (definitions: MetricDefinition[], policyAction: string) =>
+      const program = (definitions: MetricDefinition[], policySid: string) =>
         Effect.gen(function* () {
           const monitor = yield* AppMonitor("ConfigMonitor", {
             appMonitorName: MONITOR_NAME,
@@ -89,7 +91,7 @@ test.provider(
       const created = yield* stack.deploy(
         program(
           [{ name: "SessionCount", eventPattern: sessionCountPattern }],
-          "rum:PutRumEvents",
+          "AlchemyRumTest",
         ),
       );
       expect(created.metrics.appMonitorName).toBe(MONITOR_NAME);
@@ -124,7 +126,7 @@ test.provider(
             },
             { name: "JsErrorCount", eventPattern: jsErrorCountPattern },
           ],
-          "rum:PutRumEvents",
+          "AlchemyRumTest",
         ),
       );
       expect(updated.policy.policyRevisionId).toBe(firstRevision);
@@ -138,12 +140,12 @@ test.provider(
         defsAfterUpdate.find((d) => d.Name === "SessionCount")?.DimensionKeys,
       ).toEqual({ "metadata.browserName": "BrowserName" });
 
-      // Update: drop SessionCount (batch delete) and rotate the policy to a
-      // different action (revision changes).
+      // Update: drop SessionCount (batch delete) and rotate the policy
+      // document (revision changes).
       const rotated = yield* stack.deploy(
         program(
           [{ name: "JsErrorCount", eventPattern: jsErrorCountPattern }],
-          "rum:GetAppMonitorData",
+          "AlchemyRumTestRotated",
         ),
       );
       expect(rotated.policy.policyRevisionId).not.toBe(firstRevision);
@@ -153,7 +155,7 @@ test.provider(
       const rotatedPolicy = yield* rum.getResourcePolicy({
         Name: MONITOR_NAME,
       });
-      expect(rotatedPolicy.PolicyDocument).toContain("rum:GetAppMonitorData");
+      expect(rotatedPolicy.PolicyDocument).toContain("AlchemyRumTestRotated");
 
       yield* stack.destroy();
 
