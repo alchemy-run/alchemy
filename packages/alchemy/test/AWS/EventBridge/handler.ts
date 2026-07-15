@@ -35,6 +35,10 @@ export const BusAndQueuesLive = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* AWS.EventBridge.EventBus("TestBus", {
       name: "alchemy-test-eb-bindings",
+      // A crashed run can leak event-source rules whose state rows are
+      // gone; without forceDestroy those orphans block deleteEventBus
+      // with EventBusHasRules forever.
+      forceDestroy: true,
     });
     const customQueue = yield* AWS.SQS.Queue("CustomBusSink");
     const defaultQueue = yield* AWS.SQS.Queue("DefaultBusSink");

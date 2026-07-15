@@ -178,7 +178,7 @@ export default IamTestFunction.make(
           // the s3 namespace (guaranteed present — the user's inline policy
           // allows s3).
           const { JobId } = yield* generateServiceLastAccessedDetails({
-            Arn: userArn,
+            Arn: yield* userArn,
           });
           const details = yield* getServiceLastAccessedDetails({
             JobId: JobId!,
@@ -215,7 +215,7 @@ export default IamTestFunction.make(
         ) {
           const { PoliciesGrantingServiceAccess } =
             yield* listPoliciesGrantingServiceAccess({
-              Arn: userArn,
+              Arn: yield* userArn,
               ServiceNamespaces: ["s3"],
             });
           const s3 = (PoliciesGrantingServiceAccess ?? []).find(
@@ -245,7 +245,7 @@ export default IamTestFunction.make(
 
         if (request.method === "GET" && pathname === "/simulate-principal") {
           const { EvaluationResults } = yield* simulatePrincipalPolicy({
-            PolicySourceArn: userArn,
+            PolicySourceArn: yield* userArn,
             ActionNames: ["s3:ListAllMyBuckets"],
           });
           return yield* HttpServerResponse.json({
@@ -267,7 +267,7 @@ export default IamTestFunction.make(
           pathname === "/context-keys-principal"
         ) {
           const { ContextKeyNames } = yield* getContextKeysForPrincipalPolicy({
-            PolicySourceArn: userArn,
+            PolicySourceArn: yield* userArn,
           });
           return yield* HttpServerResponse.json({
             contextKeys: ContextKeyNames ?? [],
@@ -280,7 +280,7 @@ export default IamTestFunction.make(
           const { UserName, AccessKeyLastUsed } = yield* getAccessKeyLastUsed();
           return yield* HttpServerResponse.json({
             userName: UserName ?? null,
-            expectedUserName: userName,
+            expectedUserName: yield* userName,
             lastUsedService: AccessKeyLastUsed?.ServiceName ?? null,
           });
         }

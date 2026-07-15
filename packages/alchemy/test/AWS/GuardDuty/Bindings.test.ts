@@ -223,7 +223,11 @@ describe.sequential("GuardDuty Bindings", () => {
             errorTag?: string;
           };
           if (response.errorTag) {
-            expect(["BadRequestException"]).toContain(response.errorTag);
+            // GuardDuty rejects the call outright for a standalone
+            // (non-member) account.
+            expect(["BadRequestException", "AccessDeniedException"]).toContain(
+              response.errorTag,
+            );
           } else {
             expect(response.administrator ?? null).toBeNull();
           }

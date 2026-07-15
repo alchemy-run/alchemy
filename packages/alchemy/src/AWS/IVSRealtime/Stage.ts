@@ -1,6 +1,6 @@
 import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   retryWhileConflict,
@@ -33,7 +34,7 @@ export interface StageAutoParticipantRecordingConfiguration {
    * disables). The API stores whole seconds.
    * @default 0
    */
-  recordingReconnectWindowSeconds?: Duration.Input;
+  recordingReconnectWindow?: Duration.Input;
   /**
    * Whether participant replicas are also recorded.
    * @default true
@@ -139,12 +140,9 @@ const toWireRecordingConfig = (
     : {
         storageConfigurationArn: config.storageConfigurationArn,
         mediaTypes: config.mediaTypes,
-        recordingReconnectWindowSeconds:
-          config.recordingReconnectWindowSeconds !== undefined
-            ? Math.round(
-                Duration.toSeconds(config.recordingReconnectWindowSeconds),
-              )
-            : undefined,
+        recordingReconnectWindowSeconds: toWireSeconds(
+          config.recordingReconnectWindow,
+        ),
         recordParticipantReplicas: config.recordParticipantReplicas,
       };
 

@@ -171,10 +171,12 @@ export default GuardDutyTestFunction.make(
           if ((FindingIds ?? []).length === 0) {
             return yield* HttpServerResponse.json({ archived: 0 });
           }
-          yield* archiveFindings({ FindingIds: FindingIds! });
-          return yield* HttpServerResponse.json({
-            archived: FindingIds!.length,
-          });
+          const result = yield* errorTagged(
+            archiveFindings({ FindingIds: FindingIds! }).pipe(
+              Effect.map(() => ({ archived: FindingIds!.length })),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (request.method === "GET" && pathname === "/members") {
