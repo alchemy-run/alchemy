@@ -182,8 +182,8 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
               attributes: { id: "S" },
               tags: { Environment: "test" },
               pointInTimeRecoverySpecification: {
-                PointInTimeRecoveryEnabled: true,
-                RecoveryPeriodInDays: 7,
+                pointInTimeRecoveryEnabled: true,
+                recoveryPeriod: "7 days",
               },
             });
           }),
@@ -215,7 +215,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
               attributes: { id: "S" },
               tags: { Environment: "prod", Team: "platform" },
               pointInTimeRecoverySpecification: {
-                PointInTimeRecoveryEnabled: false,
+                pointInTimeRecoveryEnabled: false,
               },
             });
           }),

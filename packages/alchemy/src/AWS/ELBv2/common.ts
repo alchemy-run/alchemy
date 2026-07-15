@@ -42,7 +42,7 @@ export interface ForwardAction {
      * or `Duration.hours(1)`. Sent to AWS as whole seconds.
      * @default "1 hour"
      */
-    durationSeconds?: Duration.Input;
+    duration?: Duration.Input;
   };
 }
 
@@ -193,7 +193,7 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
             TargetGroupStickinessConfig: action.stickiness
               ? {
                   Enabled: action.stickiness.enabled,
-                  DurationSeconds: toSeconds(action.stickiness.durationSeconds),
+                  DurationSeconds: toSeconds(action.stickiness.duration),
                 }
               : undefined,
           },

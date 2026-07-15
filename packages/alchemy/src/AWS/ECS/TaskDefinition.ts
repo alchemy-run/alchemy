@@ -217,6 +217,20 @@ export interface TaskDefinition extends Resource<
  * - changing the `family` replaces the resource;
  * - destroy deregisters (and best-effort deletes) every `ACTIVE` revision of
  *   the family.
+ *
+ * **Layering — why `TaskDefinition` is deliberately *not* a Platform.** ECS
+ * splits "what runs" from "how it runs": a task definition is the immutable
+ * container spec, while `Task` (one-shot) and `Service` (long-running) are
+ * the execution vehicles. The effectful Platform abstraction requires
+ * Alchemy to own the container image and entrypoint so it can bundle the
+ * inline Effect program — that is exactly what `AWS.ECS.Task` does (bundle →
+ * Docker build/push → register definition → serve the program). Making
+ * `TaskDefinition` *also* a Platform would duplicate `Task` while
+ * contradicting this resource's purpose: user-supplied images whose
+ * entrypoint Alchemy must not rewrite. So the effectful path is
+ * `AWS.ECS.Task`; the bring-your-own-container path is `TaskDefinition`.
+ * Both surface `taskDefinitionArn` / `containerName` / `port`, so either
+ * plugs into `AWS.ECS.Service`'s `task` prop unchanged.
  * @resource
  * @section Creating a Task Definition
  * @example Public Image on Fargate

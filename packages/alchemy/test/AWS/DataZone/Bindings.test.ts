@@ -55,10 +55,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("2 seconds"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(8)]),
     }),
   );
 
@@ -167,11 +164,13 @@ describe.sequential("DataZone Bindings", () => {
       () =>
         Effect.gen(function* () {
           const response = (yield* getJson("/search")) as {
+            ok: boolean;
             totalMatchCount: number;
             items: number;
+            error?: string;
           };
           // fresh domain — no assets, but the call must succeed end-to-end.
-          expect(response.items).toBe(0);
+          expect(response).toMatchObject({ ok: true, items: 0 });
         }),
       { timeout: 240_000 },
     );
@@ -180,8 +179,11 @@ describe.sequential("DataZone Bindings", () => {
   describe("SearchListings", () => {
     test.provider("searches the published catalog", () =>
       Effect.gen(function* () {
-        const response = (yield* getJson("/listings")) as { items: number };
-        expect(response.items).toBe(0);
+        const response = (yield* getJson("/listings")) as {
+          ok: boolean;
+          items: number;
+        };
+        expect(response).toMatchObject({ ok: true, items: 0 });
       }),
     );
   });
@@ -192,9 +194,10 @@ describe.sequential("DataZone Bindings", () => {
       () =>
         Effect.gen(function* () {
           const response = (yield* getJson("/subscriptions")) as {
+            ok: boolean;
             items: number;
           };
-          expect(response.items).toBe(0);
+          expect(response).toMatchObject({ ok: true, items: 0 });
         }),
     );
   });
@@ -202,8 +205,11 @@ describe.sequential("DataZone Bindings", () => {
   describe("ListSubscriptionRequests", () => {
     test.provider("lists pending requests (empty in a fresh domain)", () =>
       Effect.gen(function* () {
-        const response = (yield* getJson("/requests")) as { items: number };
-        expect(response.items).toBe(0);
+        const response = (yield* getJson("/requests")) as {
+          ok: boolean;
+          items: number;
+        };
+        expect(response).toMatchObject({ ok: true, items: 0 });
       }),
     );
   });
@@ -212,9 +218,11 @@ describe.sequential("DataZone Bindings", () => {
     test.provider("mints a data portal sign-in URL", () =>
       Effect.gen(function* () {
         const response = (yield* getJson("/portal")) as {
+          ok: boolean;
           authCodeUrl?: string;
           userProfileId?: string;
         };
+        expect(response.ok).toBe(true);
         expect(response.authCodeUrl).toBeTruthy();
       }),
     );

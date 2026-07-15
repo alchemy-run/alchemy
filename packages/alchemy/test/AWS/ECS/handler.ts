@@ -50,6 +50,11 @@ export default EcsBindingsTestFunction.make(
     const stopTask = yield* ECS.StopTask(cluster);
     const describeTasks = yield* ECS.DescribeTasks(cluster);
     const listTasks = yield* ECS.ListTasks(cluster);
+    const describeServices = yield* ECS.DescribeServices(cluster);
+    const listServices = yield* ECS.ListServices(cluster);
+    const listContainerInstances = yield* ECS.ListContainerInstances(cluster);
+    const getTaskProtection = yield* ECS.GetTaskProtection(cluster);
+    const updateTaskProtection = yield* ECS.UpdateTaskProtection(cluster);
 
     const SubnetId = yield* subnet.subnetId;
     const ContainerName = yield* task.containerName;
@@ -148,6 +153,75 @@ export default EcsBindingsTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/services") {
+          const response = yield* listServices({});
+          return yield* HttpServerResponse.json({
+            serviceArns: response.serviceArns ?? [],
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/describe-services") {
+          const service = url.searchParams.get("service");
+          if (!service) {
+            return HttpServerResponse.text("Missing service", { status: 400 });
+          }
+          const response = yield* describeServices({ services: [service] });
+          return yield* HttpServerResponse.json({
+            services: response.services?.map((s) => ({
+              serviceName: s.serviceName,
+              status: s.status,
+            })),
+            failures: response.failures,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/container-instances") {
+          const response = yield* listContainerInstances({});
+          return yield* HttpServerResponse.json({
+            containerInstanceArns: response.containerInstanceArns ?? [],
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/protection") {
+          const taskArn = url.searchParams.get("task");
+          if (!taskArn) {
+            return HttpServerResponse.text("Missing task", { status: 400 });
+          }
+          const response = yield* getTaskProtection({ tasks: [taskArn] }).pipe(
+            Effect.map((r) => ({
+              protectedTasks: r.protectedTasks,
+              failures: r.failures,
+            })),
+            Effect.catchTag(
+              ["InvalidParameterException", "ResourceNotFoundException"],
+              (e) => Effect.succeed({ error: e._tag as string }),
+            ),
+          );
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (request.method === "POST" && pathname === "/protect") {
+          const body = (yield* request.json) as unknown as {
+            taskArn: string;
+          };
+          const response = yield* updateTaskProtection({
+            tasks: [body.taskArn],
+            protectionEnabled: true,
+            // Duration.Input → whole wire minutes via the central util.
+            expiresIn: "10 minutes",
+          }).pipe(
+            Effect.map((r) => ({
+              protectedTasks: r.protectedTasks,
+              failures: r.failures,
+            })),
+            Effect.catchTag(
+              ["InvalidParameterException", "ResourceNotFoundException"],
+              (e) => Effect.succeed({ error: e._tag as string }),
+            ),
+          );
+          return yield* HttpServerResponse.json(response);
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found" },
           { status: 404 },
@@ -161,6 +235,11 @@ export default EcsBindingsTestFunction.make(
         ECS.StopTaskHttp,
         ECS.DescribeTasksHttp,
         ECS.ListTasksHttp,
+        ECS.DescribeServicesHttp,
+        ECS.ListServicesHttp,
+        ECS.ListContainerInstancesHttp,
+        ECS.GetTaskProtectionHttp,
+        ECS.UpdateTaskProtectionHttp,
       ),
     ),
   ),

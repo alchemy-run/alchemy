@@ -1,12 +1,10 @@
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import type {
-  PointInTimeRecoverySpecification,
-  TimeToLiveSpecification,
-} from "@distilled.cloud/aws/dynamodb";
+import type { TimeToLiveSpecification } from "@distilled.cloud/aws/dynamodb";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import type * as lambda from "aws-lambda";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -23,6 +21,7 @@ import {
   diffTags,
   hasAlchemyTags,
 } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -44,6 +43,20 @@ export type TableEvent<Data> = Omit<lambda.DynamoDBStreamEvent, "Records"> & {
 };
 
 export type ScalarAttributeType = "S" | "N" | "B";
+
+export interface PointInTimeRecoverySpecification {
+  /**
+   * Whether point-in-time recovery (continuous backups) is enabled for the
+   * table.
+   */
+  pointInTimeRecoveryEnabled: boolean;
+  /**
+   * How far back the table can be restored, e.g. `"7 days"` or
+   * `Duration.days(7)`. Rounded to whole days on the wire (1–35 days).
+   * @default 35 days
+   */
+  recoveryPeriod?: Duration.Input;
+}
 
 export interface KinesisStreamingDestination {
   /**
@@ -91,7 +104,12 @@ export type TableProps = {
   billingMode?: DynamoDB.BillingMode;
   deletionProtectionEnabled?: boolean;
   onDemandThroughput?: DynamoDB.OnDemandThroughput;
-  pointInTimeRecoverySpecification?: DynamoDB.PointInTimeRecoverySpecification;
+  /**
+   * Enables point-in-time recovery (continuous backups) and optionally sets
+   * the recovery window via `recoveryPeriod` (a `Duration.Input`, rounded to
+   * whole days on the wire).
+   */
+  pointInTimeRecoverySpecification?: PointInTimeRecoverySpecification;
   provisionedThroughput?: DynamoDB.ProvisionedThroughput;
   sseSpecification?: DynamoDB.SSESpecification;
   tags?: Record<string, string>;
@@ -494,7 +512,7 @@ export const TableProvider = () =>
 
       const updateContinuousBackups = (
         tableName: string,
-        pointInTimeRecoverySpecification: PointInTimeRecoverySpecification,
+        pointInTimeRecoverySpecification: DynamoDB.PointInTimeRecoverySpecification,
       ) =>
         dynamodb
           .updateContinuousBackups({
@@ -1714,12 +1732,13 @@ export const TableProvider = () =>
             state.pointInTimeRecoveryDescription?.PointInTimeRecoveryStatus ===
             "ENABLED";
           const desiredPitrEnabled =
-            news.pointInTimeRecoverySpecification?.PointInTimeRecoveryEnabled ??
+            news.pointInTimeRecoverySpecification?.pointInTimeRecoveryEnabled ??
             false;
           const currentPitrPeriod =
             state.pointInTimeRecoveryDescription?.RecoveryPeriodInDays;
-          const desiredPitrPeriod =
-            news.pointInTimeRecoverySpecification?.RecoveryPeriodInDays;
+          const desiredPitrPeriod = toWireDays(
+            news.pointInTimeRecoverySpecification?.recoveryPeriod,
+          );
           if (
             currentPitrEnabled !== desiredPitrEnabled ||
             (desiredPitrEnabled && currentPitrPeriod !== desiredPitrPeriod)

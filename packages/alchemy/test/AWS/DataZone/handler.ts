@@ -3,6 +3,7 @@ import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -32,6 +33,14 @@ export default DataZoneTestFunction.make(
       name: BINDINGS_DOMAIN_NAME,
       description: "alchemy datazone bindings fixture domain",
     });
+
+    // A project for the project-scoped calls (inventory search requires an
+    // owning project; subscription listing requires a project filter).
+    const project = yield* DataZone.Project("BindingsProject", {
+      domainId: domain.domainId,
+      description: "alchemy datazone bindings fixture project",
+    });
+    const ProjectId = yield* project.projectId;
 
     // Event source: subscribe the host to DataZone workflow events. The
     // deploy proves the EventBridge rule + invoke permission wiring.
@@ -84,6 +93,25 @@ export default DataZoneTestFunction.make(
       getUserProfile: yield* DataZone.GetUserProfile(domain),
     };
 
+    /**
+     * Run a DataZone call and answer `{ ok: true, ... }` on success, or a
+     * 502 carrying the typed error tag on failure — so the test's retry
+     * loop surfaces the exact DataZone error instead of an opaque 500.
+     */
+    const respond = <A, E>(
+      effect: Effect.Effect<A, E>,
+      body: (value: A) => Record<string, unknown>,
+    ) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.result(effect);
+        return yield* Result.isSuccess(result)
+          ? HttpServerResponse.json({ ok: true, ...body(result.success) })
+          : HttpServerResponse.json(
+              { ok: false, error: String(result.failure) },
+              { status: 502 },
+            );
+      });
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -96,50 +124,56 @@ export default DataZoneTestFunction.make(
           });
         }
 
-        // Inventory search: the domain id is injected from the binding.
+        // Inventory search: the domain id is injected from the binding;
+        // inventory assets are project-scoped, so the owning project is
+        // required.
         if (request.method === "GET" && pathname === "/search") {
-          const result = yield* bound.search({ searchScope: "ASSET" });
-          return yield* HttpServerResponse.json({
-            totalMatchCount: result.totalMatchCount ?? 0,
-            items: (result.items ?? []).length,
-          });
+          const owningProjectIdentifier = yield* ProjectId;
+          return yield* respond(
+            bound.search({ searchScope: "ASSET", owningProjectIdentifier }),
+            (result) => ({
+              totalMatchCount: result.totalMatchCount ?? 0,
+              items: (result.items ?? []).length,
+            }),
+          );
         }
 
         // Listing search over the published catalog.
         if (request.method === "GET" && pathname === "/listings") {
-          const result = yield* bound.searchListings({});
-          return yield* HttpServerResponse.json({
+          return yield* respond(bound.searchListings({}), (result) => ({
             items: (result.items ?? []).length,
-          });
+          }));
         }
 
-        // Approved subscriptions (empty in a fresh domain).
+        // Approved subscriptions (empty in a fresh domain). DataZone
+        // requires a project (or listing/principal) filter.
         if (request.method === "GET" && pathname === "/subscriptions") {
-          const result = yield* bound.listSubscriptions({
-            status: "APPROVED",
-          });
-          return yield* HttpServerResponse.json({
-            items: (result.items ?? []).length,
-          });
+          const owningProjectId = yield* ProjectId;
+          return yield* respond(
+            bound.listSubscriptions({ status: "APPROVED", owningProjectId }),
+            (result) => ({ items: (result.items ?? []).length }),
+          );
         }
 
-        // Pending subscription requests (empty in a fresh domain).
+        // Pending subscription requests (empty in a fresh domain). Same
+        // project filter requirement as /subscriptions.
         if (request.method === "GET" && pathname === "/requests") {
-          const result = yield* bound.listSubscriptionRequests({
-            status: "PENDING",
-          });
-          return yield* HttpServerResponse.json({
-            items: (result.items ?? []).length,
-          });
+          const owningProjectId = yield* ProjectId;
+          return yield* respond(
+            bound.listSubscriptionRequests({
+              status: "PENDING",
+              owningProjectId,
+            }),
+            (result) => ({ items: (result.items ?? []).length }),
+          );
         }
 
         // Single-use data portal sign-in URL.
         if (request.method === "GET" && pathname === "/portal") {
-          const result = yield* bound.getIamPortalLoginUrl();
-          return yield* HttpServerResponse.json({
+          return yield* respond(bound.getIamPortalLoginUrl(), (result) => ({
             authCodeUrl: result.authCodeUrl,
             userProfileId: result.userProfileId,
-          });
+          }));
         }
 
         return yield* HttpServerResponse.json(

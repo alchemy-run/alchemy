@@ -412,7 +412,7 @@ test.provider(
             ],
             // Duration.Input audit coverage: only valid on services with a
             // load balancer — assert the wire value round-trips as seconds.
-            healthCheckGracePeriodSeconds: "45 seconds",
+            healthCheckGracePeriod: "45 seconds",
           });
         }),
       );

@@ -240,7 +240,7 @@ test.provider(
                   { targetGroupArn: tgBlue.targetGroupArn, weight: 90 },
                   { targetGroupArn: tgGreen.targetGroupArn, weight: 10 },
                 ],
-                stickiness: { enabled: true, durationSeconds: "1 hour" },
+                stickiness: { enabled: true, duration: "1 hour" },
               },
             ],
           });

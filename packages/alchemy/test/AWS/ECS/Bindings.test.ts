@@ -285,6 +285,110 @@ describe("ECS Bindings", () => {
     );
   });
 
+  describe("ListServices", () => {
+    test.provider(
+      "lists services in the bound cluster (none deployed)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/services`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as { serviceArns: string[] }).serviceArns).toEqual(
+            [],
+          );
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("DescribeServices", () => {
+    test.provider(
+      "reports MISSING for an unknown service",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/describe-services?service=alchemy-no-such-service`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json));
+          const failures = (response as { failures?: { reason?: string }[] })
+            .failures;
+          expect(failures?.length).toBe(1);
+          expect(failures?.[0]?.reason).toBe("MISSING");
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("ListContainerInstances", () => {
+    test.provider(
+      "returns no container instances for a Fargate-only cluster",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/container-instances`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect(
+            (response as { containerInstanceArns: string[] })
+              .containerInstanceArns,
+          ).toEqual([]);
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("TaskProtection", () => {
+    test.provider(
+      "get/update task protection round-trips for a standalone task",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Task protection only applies to service-managed tasks; for a
+          // standalone RunTask task AWS reports TASK_NOT_VALID (as a failure
+          // entry or a typed InvalidParameterException). Either way the
+          // probe proves IAM, the cluster injection, and (for /protect) the
+          // Duration → expiresInMinutes mapping reached AWS intact.
+          const run = yield* runTask({
+            command: ["sh", "-c", "sleep 300"],
+            startedBy: "alchemy-protection-test",
+          });
+          expect(run.taskArn).toBeTruthy();
+
+          interface ProtectionResponse {
+            error?: string;
+            failures?: { reason?: string }[];
+            protectedTasks?: unknown[];
+          }
+          const isTaskNotValid = (r: ProtectionResponse): boolean =>
+            r.error === "InvalidParameterException" ||
+            r.failures?.[0]?.reason === "TASK_NOT_VALID";
+
+          const protect = (yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/protect`),
+              { taskArn: run.taskArn },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as ProtectionResponse;
+          expect(isTaskNotValid(protect)).toBe(true);
+
+          const protection = (yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/protection?task=${encodeURIComponent(run.taskArn!)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as ProtectionResponse;
+          expect(isTaskNotValid(protection)).toBe(true);
+
+          // Clean up the sleeping task.
+          yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/stop`),
+              { taskArn: run.taskArn, reason: "protection test done" },
+            ),
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   describe("StopTask", () => {
     test.provider(
       "stops a long-running task with a reason",

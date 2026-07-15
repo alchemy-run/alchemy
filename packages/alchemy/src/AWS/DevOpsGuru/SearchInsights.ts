@@ -5,7 +5,8 @@ import * as Binding from "../../Binding.ts";
 /**
  * Runtime binding for `devops-guru:SearchInsights`.
  *
- * Searches the account's insights within a start-time range, filtered by severity, status, service, or resource collection.
+ * Searches the account's insights within a start-time range, filtered by severity, status, service, or resource collection. The service
+ * requires both `FromTime` and `ToTime` on the range.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.SearchInsightsHttp)`.
  * @binding
@@ -18,7 +19,10 @@ import * as Binding from "../../Binding.ts";
  * // runtime
  * const { ReactiveInsights } = yield* searchInsights({
  *   Type: "REACTIVE",
- *   StartTimeRange: { FromTime: new Date(Date.now() - 24 * 3600_000) },
+ *   StartTimeRange: {
+ *     FromTime: new Date(Date.now() - 24 * 3600_000),
+ *     ToTime: new Date(),
+ *   },
  *   Filters: { Severities: ["HIGH"] },
  * });
  * yield* Effect.log(`high severity: ${ReactiveInsights?.length}`);

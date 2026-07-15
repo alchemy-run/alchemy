@@ -51,9 +51,9 @@ export interface TargetGroupProps {
   /** Whether health checks are enabled. Updated in place. */
   healthCheckEnabled?: boolean;
   /** The approximate interval between health checks — e.g. `"15 seconds"`. Sent to AWS as whole seconds. Updated in place. */
-  healthCheckIntervalSeconds?: Duration.Input;
+  healthCheckInterval?: Duration.Input;
   /** The amount of time to wait for a health-check response — e.g. `"5 seconds"`. Sent to AWS as whole seconds. Updated in place. */
-  healthCheckTimeoutSeconds?: Duration.Input;
+  healthCheckTimeout?: Duration.Input;
   /** The number of consecutive successes before a target is healthy. Updated in place. */
   healthyThresholdCount?: number;
   /** The number of consecutive failures before a target is unhealthy. Updated in place. */
@@ -132,7 +132,7 @@ export interface TargetGroup extends Resource<
  *   port: 8080,
  *   protocol: "HTTP",
  *   healthCheckPath: "/healthz",
- *   healthCheckIntervalSeconds: "15 seconds",
+ *   healthCheckInterval: "15 seconds",
  *   healthyThresholdCount: 3,
  *   unhealthyThresholdCount: 3,
  * });
@@ -298,12 +298,8 @@ export const TargetGroupProvider = () =>
               HealthCheckPort: news.healthCheckPort,
               HealthCheckProtocol: news.healthCheckProtocol,
               HealthCheckEnabled: news.healthCheckEnabled,
-              HealthCheckIntervalSeconds: toSeconds(
-                news.healthCheckIntervalSeconds,
-              ),
-              HealthCheckTimeoutSeconds: toSeconds(
-                news.healthCheckTimeoutSeconds,
-              ),
+              HealthCheckIntervalSeconds: toSeconds(news.healthCheckInterval),
+              HealthCheckTimeoutSeconds: toSeconds(news.healthCheckTimeout),
               HealthyThresholdCount: news.healthyThresholdCount,
               UnhealthyThresholdCount: news.unhealthyThresholdCount,
               Matcher: news.matcher,
@@ -343,10 +339,10 @@ export const TargetGroupProvider = () =>
             HealthCheckEnabled:
               news.healthCheckEnabled ?? observedHc.HealthCheckEnabled,
             HealthCheckIntervalSeconds:
-              toSeconds(news.healthCheckIntervalSeconds) ??
+              toSeconds(news.healthCheckInterval) ??
               observedHc.HealthCheckIntervalSeconds,
             HealthCheckTimeoutSeconds:
-              toSeconds(news.healthCheckTimeoutSeconds) ??
+              toSeconds(news.healthCheckTimeout) ??
               observedHc.HealthCheckTimeoutSeconds,
             HealthyThresholdCount:
               news.healthyThresholdCount ?? observedHc.HealthyThresholdCount,

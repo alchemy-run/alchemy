@@ -96,7 +96,7 @@ export interface MongoOptions {
 export const mongo = <E, R>(
   connection: Effect.Effect<MongoConnectionInfo, E, R>,
   options?: MongoOptions,
-): Effect.Effect<Effect.Effect<MongoClusterClient, E | MongoError, R>> =>
+) =>
   makeExecutionMemo(
     Effect.gen(function* () {
       const info = yield* connection;

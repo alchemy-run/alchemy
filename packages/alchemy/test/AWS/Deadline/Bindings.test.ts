@@ -132,19 +132,24 @@ describe.sequential("Deadline Bindings", () => {
           expect(created.jobId).toMatch(/^job-/);
           jobId = created.jobId;
 
-          // Read back; the job settles to CREATE_COMPLETE within seconds.
+          // Read back; the job settles within seconds. A brand-new job can
+          // report either CREATE_COMPLETE or UPDATE_SUCCEEDED (the service
+          // applies an internal update right after creation), so poll until
+          // it leaves the transitional statuses and assert it settled.
+          const settled = ["CREATE_COMPLETE", "UPDATE_SUCCEEDED"];
           const job = (yield* getJson(`/job?jobId=${jobId}`).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (j): boolean =>
-                (j as { lifecycleStatus: string }).lifecycleStatus ===
-                "CREATE_COMPLETE",
+                settled.includes(
+                  (j as { lifecycleStatus: string }).lifecycleStatus,
+                ),
               times: 10,
             }),
           )) as { jobId: string; priority: number; lifecycleStatus: string };
           expect(job.jobId).toBe(jobId);
           expect(job.priority).toBe(50);
-          expect(job.lifecycleStatus).toBe("CREATE_COMPLETE");
+          expect(settled).toContain(job.lifecycleStatus);
 
           // Enumerate + search — summaries carry the queueId back out.
           const listed = (yield* getJson("/jobs")) as { ids: string[] };

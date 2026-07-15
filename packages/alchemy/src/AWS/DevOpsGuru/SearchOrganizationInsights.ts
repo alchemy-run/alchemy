@@ -5,7 +5,8 @@ import * as Binding from "../../Binding.ts";
 /**
  * Runtime binding for `devops-guru:SearchOrganizationInsights`.
  *
- * Searches insights across specific organization accounts within a start-time range (management or delegated-administrator account).
+ * Searches insights across specific organization accounts within a start-time range (management or delegated-administrator account). The
+ * service requires both `FromTime` and `ToTime` on the range.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.SearchOrganizationInsightsHttp)`.
  * @binding
@@ -19,7 +20,10 @@ import * as Binding from "../../Binding.ts";
  * const { ReactiveInsights } = yield* searchOrganizationInsights({
  *   AccountIds: ["111111111111"],
  *   Type: "REACTIVE",
- *   StartTimeRange: { FromTime: new Date(Date.now() - 24 * 3600_000) },
+ *   StartTimeRange: {
+ *     FromTime: new Date(Date.now() - 24 * 3600_000),
+ *     ToTime: new Date(),
+ *   },
  * });
  * yield* Effect.log(`found: ${ReactiveInsights?.length}`);
  * ```

@@ -99,10 +99,7 @@ export default DocDBElasticTestFunction.make(
             targetSnapshotName: "alchemy-docdb-elastic-copy-probe",
           }).pipe(
             Effect.map(() => "Copied"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed(e._tag),
-            ),
+            Effect.catch((e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -113,10 +110,7 @@ export default DocDBElasticTestFunction.make(
             clusterName: "alchemy-docdb-elastic-restore-probe",
           }).pipe(
             Effect.map(() => "Restored"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed(e._tag),
-            ),
+            Effect.catch((e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }

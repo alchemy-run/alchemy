@@ -110,12 +110,14 @@ export default DevOpsGuruTestFunction.make(
           });
         }
 
-        // Search reactive insights in the trailing 24 hours.
+        // Search reactive insights in the trailing 24 hours. The service
+        // requires ToTime even though the SDK marks it optional.
         if (request.method === "GET" && pathname === "/search") {
           const { ReactiveInsights } = yield* bound.searchInsights({
             Type: "REACTIVE",
             StartTimeRange: {
               FromTime: new Date(Date.now() - 24 * 3600_000),
+              ToTime: new Date(),
             },
           });
           return yield* HttpServerResponse.json({

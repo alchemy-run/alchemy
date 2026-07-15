@@ -1,6 +1,6 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import type { ClusterArn } from "./Cluster.ts";
@@ -220,7 +221,7 @@ export interface ServiceProps {
    * `"30 seconds"` or `Duration.seconds(30)`. Rounded to whole seconds on
    * the wire. Updated in place.
    */
-  healthCheckGracePeriodSeconds?: Duration.Input;
+  healthCheckGracePeriod?: Duration.Input;
 
   /**
    * User-defined tags to apply to the ECS service and generated ingress
@@ -373,7 +374,7 @@ export interface Service extends Resource<
  *     maximumPercent: 200,
  *     deploymentCircuitBreaker: { enable: true, rollback: true },
  *   },
- *   healthCheckGracePeriodSeconds: "30 seconds",
+ *   healthCheckGracePeriod: "30 seconds",
  * });
  * ```
  */
@@ -539,12 +540,9 @@ export const ServiceProvider = () =>
         desiredCount: news.desiredCount ?? 1,
         platformVersion: news.platformVersion,
         deploymentConfiguration: news.deploymentConfiguration,
-        healthCheckGracePeriodSeconds:
-          news.healthCheckGracePeriodSeconds === undefined
-            ? undefined
-            : Math.round(
-                Duration.toSeconds(news.healthCheckGracePeriodSeconds),
-              ),
+        healthCheckGracePeriodSeconds: toWireSeconds(
+          news.healthCheckGracePeriod,
+        ),
         networkConfiguration: networkConfigurationOf(news),
         capacityProviderStrategy: news.capacityProviderStrategy,
         placementConstraints: news.placementConstraints,

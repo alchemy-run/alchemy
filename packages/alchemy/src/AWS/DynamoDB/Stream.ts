@@ -1,4 +1,5 @@
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
@@ -46,10 +47,12 @@ export interface TableEventSourceProps {
    */
   batchSize?: number;
   /**
-   * The maximum amount of time, in seconds, that Lambda spends gathering records before invoking the function.
+   * The maximum amount of time that Lambda spends gathering records before
+   * invoking the function, e.g. `"5 seconds"` or `Duration.seconds(5)`.
+   * Rounded to whole seconds on the wire.
    * @default 0
    */
-  maximumBatchingWindowInSeconds?: number;
+  maximumBatchingWindow?: Duration.Input;
   /**
    * The position in the stream from which to start reading.
    * @default "LATEST"
@@ -70,19 +73,22 @@ export interface TableEventSourceProps {
    */
   bisectBatchOnFunctionError?: boolean;
   /**
-   * Discard records older than the specified age in seconds.
-   * @default -1
+   * Discard records older than the specified age, e.g. `"1 hour"` or
+   * `Duration.hours(1)`. Rounded to whole seconds on the wire. Omit to never
+   * discard records by age.
    */
-  maximumRecordAgeInSeconds?: number;
+  maximumRecordAge?: Duration.Input;
   /**
    * Discard records after the specified number of retries.
    * @default -1
    */
   maximumRetryAttempts?: number;
   /**
-   * The duration in seconds of a processing window for tumbling windows.
+   * The duration of a processing window for tumbling windows, e.g.
+   * `"30 seconds"` or `Duration.seconds(30)`. Rounded to whole seconds on
+   * the wire (0–900 seconds).
    */
-  tumblingWindowInSeconds?: number;
+  tumblingWindow?: Duration.Input;
 }
 
 export interface StreamsProps extends TableEventSourceProps {

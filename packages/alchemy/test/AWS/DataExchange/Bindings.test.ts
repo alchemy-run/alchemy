@@ -184,12 +184,15 @@ describe.sequential("DataExchange Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* postJson("/import")) as {
-            jobState: string;
-            jobErrors: unknown[] | undefined;
-            assetCount: number;
-            assetName: string | undefined;
+            jobState?: string;
+            jobErrors?: unknown[];
+            assetCount?: number;
+            assetName?: string;
+            error?: string;
+            message?: string;
           };
-          expect(response.jobErrors ?? []).toHaveLength(0);
+          expect(response.error, response.message).toBeUndefined();
+          expect(JSON.stringify(response.jobErrors ?? [])).toBe("[]");
           expect(response.jobState).toBe("COMPLETED");
           expect(response.assetCount).toBeGreaterThanOrEqual(1);
           expect(response.assetName).toBe("prices.csv");
@@ -206,16 +209,24 @@ describe.sequential("DataExchange Bindings", () => {
   });
 
   describe("SendDataSetNotification", () => {
+    // Provider-generated notifications only work for data sets attached to
+    // an AWS Marketplace data product, which cannot be provisioned
+    // self-contained. The typed rejection proves the binding's IAM grant,
+    // call path, and error decoding end-to-end.
     test.provider(
-      "sends a provider-generated DATA_UPDATE notification",
+      "rejects a data set outside a Marketplace product with a typed error",
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* postJson("/notify")) as {
             ok: boolean;
             error: string | undefined;
+            message: string | undefined;
           };
-          expect(response.error).toBeUndefined();
-          expect(response.ok).toBe(true);
+          expect(response.ok).toBe(false);
+          expect(response.error).toBe("ValidationException");
+          expect(response.message).toContain(
+            "not configured for AWS Marketplace",
+          );
         }),
     );
   });

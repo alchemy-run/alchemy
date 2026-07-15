@@ -157,51 +157,63 @@ export default DataExchangeTestFunction.make(
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             error: result._tag === "Failure" ? result.failure._tag : undefined,
+            message:
+              result._tag === "Failure" ? String(result.failure) : undefined,
           });
         }
 
         // Full import flow: put a CSV in S3, import it into the bound
         // revision via a job, poll the job to COMPLETED, then read the
-        // imported asset back through the revision-scoped bindings.
+        // imported asset back through the revision-scoped bindings. Typed
+        // failures are surfaced as JSON so the test can report the cause.
         if (request.method === "POST" && pathname === "/import") {
-          yield* putObject({ Key: KEY, Body: CSV, ContentType: "text/csv" });
+          const flow = Effect.gen(function* () {
+            yield* putObject({ Key: KEY, Body: CSV, ContentType: "text/csv" });
 
-          const dataSetDetail = yield* getDataSet();
-          const revisionDetail = yield* getRevision();
-          const job = yield* createJob({
-            Type: "IMPORT_ASSETS_FROM_S3",
-            Details: {
-              ImportAssetsFromS3: {
-                DataSetId: dataSetDetail.Id!,
-                RevisionId: revisionDetail.Id!,
-                AssetSources: [{ Bucket: yield* BucketName, Key: KEY }],
+            const dataSetDetail = yield* getDataSet();
+            const revisionDetail = yield* getRevision();
+            const job = yield* createJob({
+              Type: "IMPORT_ASSETS_FROM_S3",
+              Details: {
+                ImportAssetsFromS3: {
+                  DataSetId: dataSetDetail.Id!,
+                  RevisionId: revisionDetail.Id!,
+                  AssetSources: [{ Bucket: yield* BucketName, Key: KEY }],
+                },
               },
-            },
-          });
-          yield* startJob({ JobId: job.Id! });
-          const done = yield* getJob({ JobId: job.Id! }).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("2 seconds"),
-              until: (j): boolean =>
-                j.State === "COMPLETED" ||
-                j.State === "ERROR" ||
-                j.State === "CANCELLED",
-              times: 40,
-            }),
-          );
+            });
+            yield* startJob({ JobId: job.Id! });
+            const done = yield* getJob({ JobId: job.Id! }).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (j): boolean =>
+                  j.State === "COMPLETED" ||
+                  j.State === "ERROR" ||
+                  j.State === "CANCELLED",
+                times: 40,
+              }),
+            );
 
-          const { Assets } = yield* listRevisionAssets();
-          const assetId = (Assets ?? [])[0]?.Id;
-          const asset =
-            assetId !== undefined
-              ? yield* getAsset({ AssetId: assetId })
-              : undefined;
-          return yield* HttpServerResponse.json({
-            jobState: done.State,
-            jobErrors: done.Errors,
-            assetCount: (Assets ?? []).length,
-            assetName: asset?.Name,
+            const { Assets } = yield* listRevisionAssets();
+            const assetId = (Assets ?? [])[0]?.Id;
+            const asset =
+              assetId !== undefined
+                ? yield* getAsset({ AssetId: assetId })
+                : undefined;
+            return {
+              jobState: done.State,
+              jobErrors: done.Errors,
+              assetCount: (Assets ?? []).length,
+              assetName: asset?.Name,
+            };
           });
+          const result = yield* flow.pipe(Effect.result);
+          return result._tag === "Success"
+            ? yield* HttpServerResponse.json(result.success)
+            : yield* HttpServerResponse.json({
+                error: result.failure._tag,
+                message: String(result.failure),
+              });
         }
 
         if (request.method === "GET" && pathname === "/jobs") {

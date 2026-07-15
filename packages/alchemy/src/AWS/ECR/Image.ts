@@ -2,6 +2,7 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import { isResolved } from "../../Diff.ts";
@@ -14,11 +15,13 @@ import type { Providers } from "../Providers.ts";
 
 /**
  * Docker login credentials for the account's private ECR registry, in the
- * shape `Docker.image.push` expects.
+ * shape `Docker.image.push` expects. The password is the decoded ECR bearer
+ * token — a credential — so it is carried as `Redacted` and only unwrapped
+ * inside `docker push`'s ephemeral auth config.
  */
 export interface EcrRegistryCredentials {
   username: string;
-  password: string;
+  password: Redacted.Redacted<string>;
   server: string;
 }
 
@@ -37,9 +40,10 @@ export const getEcrRegistryCredentials = Effect.gen(function* () {
     );
   }
   const password = yield* Effect.sync(() => {
-    const decoded = Buffer.from(token, "base64").toString("utf8");
+    const raw = Redacted.isRedacted(token) ? Redacted.value(token) : token;
+    const decoded = Buffer.from(raw, "base64").toString("utf8");
     const [, secret] = decoded.split(":", 2);
-    return secret;
+    return Redacted.make(secret);
   });
   return {
     username: "AWS",
