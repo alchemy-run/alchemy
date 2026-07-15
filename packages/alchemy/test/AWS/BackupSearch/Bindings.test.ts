@@ -133,7 +133,7 @@ describe.skipIf(gated)("BackupSearch Bindings", () => {
   );
 
   describe("binding registration", () => {
-    test.provider("both capabilities initialize in the runtime", (_stack) =>
+    test.provider("all capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = yield* send(
           HttpClientRequest.get(`${baseUrl}/bindings`),
@@ -141,7 +141,26 @@ describe.skipIf(gated)("BackupSearch Bindings", () => {
         expect((response as any).bound).toEqual([
           "listSearchJobResults",
           "listSearchJobBackups",
+          "getSearchJob",
         ]);
+      }),
+    );
+  });
+
+  describe("GetSearchJob", () => {
+    test.provider("reads the fixture search job's status", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.get(`${baseUrl}/job`),
+        ).pipe(Effect.flatMap((r) => r.json));
+        expect((response as any).name).toBe(FIXTURE_SEARCH_JOB_NAME);
+        expect([
+          "RUNNING",
+          "COMPLETED",
+          "STOPPING",
+          "STOPPED",
+          "FAILED",
+        ]).toContain((response as any).status);
       }),
     );
   });

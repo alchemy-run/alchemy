@@ -259,6 +259,39 @@ describe("Athena Query", () => {
     );
   });
 
+  describe("ListNamedQueries", () => {
+    test.provider(
+      "lists the workgroup's saved queries (workgroup injected)",
+      () =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/named/list`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { ids: string[] };
+          // The fixture saves exactly one named query in the (fresh) workgroup.
+          expect(body.ids.length).toBeGreaterThanOrEqual(1);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("ListPreparedStatements", () => {
+    test.provider(
+      "lists the workgroup's prepared statements (workgroup injected)",
+      () =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/prepared/list`),
+          );
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as { names: string[] };
+          expect(body.names).toContain("alchemy_athena_e2e_stmt");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   describe("ListDatabases", () => {
     test.provider(
       "lists databases through the GLUE-backed catalog",

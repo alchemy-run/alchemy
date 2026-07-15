@@ -126,12 +126,16 @@ export const ApplicationProvider = () =>
             ),
           );
 
-      /** Find an application ARN by name+namespace via list enumeration. */
-      const findByName = (name: string, namespace: string) =>
+      /**
+       * Find an application ARN by namespace via list enumeration. The
+       * namespace is the account-unique key; the name is a generated
+       * physical name whose instance-id suffix changes across lost-state
+       * re-runs, so matching on it would miss the existing application and
+       * `createApplication` would then fail with "Namespace already in use".
+       */
+      const findByNamespace = (namespace: string) =>
         appintegrations.listApplications.items({}).pipe(
-          Stream.filter(
-            (item) => item.Name === name && item.Namespace === namespace,
-          ),
+          Stream.filter((item) => item.Namespace === namespace),
           Stream.take(1),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)[0]?.Arn),
@@ -187,8 +191,7 @@ export const ApplicationProvider = () =>
           let arn = output?.applicationArn;
           if (arn === undefined) {
             if (olds === undefined) return undefined;
-            const name = yield* createName(id, olds);
-            arn = yield* findByName(name, olds.namespace);
+            arn = yield* findByNamespace(olds.namespace);
           }
           if (arn === undefined) return undefined;
           const live = yield* observe(arn);
@@ -222,24 +225,41 @@ export const ApplicationProvider = () =>
           };
 
           // 1. Observe — prefer the cached ARN; fall back to enumerating by
-          //    name+namespace so a lost-state re-run converges.
+          //    the unique namespace so a lost-state re-run converges even
+          //    though the generated physical name changed.
           let arn = output?.applicationArn;
           let live = arn === undefined ? undefined : yield* observe(arn);
           if (live === undefined) {
-            arn = yield* findByName(name, news.namespace);
+            arn = yield* findByNamespace(news.namespace);
             live = arn === undefined ? undefined : yield* observe(arn);
           }
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure — create if missing. A concurrent create can win the
+          //    unique namespace between observe and create ("Namespace
+          //    already in use" InvalidRequestException) — treat it as a race
+          //    and re-observe; rethrow if the namespace holder still can't
+          //    be found.
           if (live === undefined) {
-            const created = yield* appintegrations.createApplication({
-              Name: name,
-              Namespace: news.namespace,
-              Description: news.description,
-              ApplicationSourceConfig: desiredSourceConfig,
-              Permissions: news.permissions,
-              Tags: desiredTags,
-            });
+            const created = yield* appintegrations
+              .createApplication({
+                Name: name,
+                Namespace: news.namespace,
+                Description: news.description,
+                ApplicationSourceConfig: desiredSourceConfig,
+                Permissions: news.permissions,
+                Tags: desiredTags,
+              })
+              .pipe(
+                Effect.catchTag("InvalidRequestException", (error) =>
+                  Effect.gen(function* () {
+                    const existing = yield* findByNamespace(news.namespace);
+                    if (existing === undefined) {
+                      return yield* Effect.fail(error);
+                    }
+                    return { Arn: existing };
+                  }),
+                ),
+              );
             if (created.Arn === undefined) {
               return yield* new ApplicationIncomplete({
                 message: `createApplication for '${name}' returned no Arn`,

@@ -30,6 +30,8 @@ export default AmpTestFunction.make(
     const getMetricMetadata = yield* AMP.GetMetricMetadata(workspace);
     const describeWorkspace = yield* AMP.DescribeWorkspace(workspace);
     const listWorkspaces = yield* AMP.ListWorkspaces();
+    const getDefaultScraperConfiguration =
+      yield* AMP.GetDefaultScraperConfiguration();
 
     return {
       fetch: Effect.gen(function* () {
@@ -125,6 +127,14 @@ export default AmpTestFunction.make(
           });
         }
 
+        if (
+          request.method === "GET" &&
+          pathname === "/default-scraper-config"
+        ) {
+          const configuration = yield* getDefaultScraperConfiguration();
+          return yield* HttpServerResponse.json({ configuration });
+        }
+
         if (request.method === "GET" && pathname === "/metadata") {
           const metadata = yield* getMetricMetadata({
             metric: url.searchParams.get("metric") ?? undefined,
@@ -148,6 +158,7 @@ export default AmpTestFunction.make(
         AMP.GetMetricMetadataHttp,
         AMP.DescribeWorkspaceHttp,
         AMP.ListWorkspacesHttp,
+        AMP.GetDefaultScraperConfigurationHttp,
       ),
     ),
   ),

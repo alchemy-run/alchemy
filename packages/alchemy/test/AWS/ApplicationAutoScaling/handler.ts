@@ -5,6 +5,7 @@ import * as Output from "@/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -69,6 +70,19 @@ export default ApplicationAutoScalingTestFunction.make(
       yield* ApplicationAutoScaling.DescribeScalingActivities(target);
     const getPredictiveScalingForecast =
       yield* ApplicationAutoScaling.GetPredictiveScalingForecast(policy);
+
+    // Subscribe to scaling-activity state-change (scaled-to-max) events —
+    // creates the EventBridge rule + Lambda permission at deploy time.
+    yield* ApplicationAutoScaling.consumeScalingActivityEvents(
+      target,
+      {},
+      (events) =>
+        Stream.runForEach(events, (event) =>
+          Effect.log(
+            `${event["detail-type"]}: ${event.detail.resourceId} scaledToMax=${event.detail.scaledToMax}`,
+          ),
+        ),
+    );
 
     const bound = {
       describeScalingActivities,
@@ -138,6 +152,7 @@ export default ApplicationAutoScalingTestFunction.make(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        Lambda.EventSource,
         ApplicationAutoScaling.DescribeScalingActivitiesHttp,
         ApplicationAutoScaling.GetPredictiveScalingForecastHttp,
       ),

@@ -1,5 +1,6 @@
 import * as amplify from "@distilled.cloud/aws/amplify";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -61,6 +62,15 @@ export interface AppProps {
    */
   customRules?: CustomRule[];
   /**
+   * Whether to require basic auth to view the app's branches by default.
+   */
+  enableBasicAuth?: boolean;
+  /**
+   * Default basic auth credentials for the app's branches, as base64 of
+   * `user:password`.
+   */
+  basicAuthCredentials?: Redacted.Redacted<string>;
+  /**
    * User-defined tags to apply to the app.
    */
   tags?: Record<string, string>;
@@ -88,9 +98,11 @@ export interface App extends Resource<
  * Connecting a repository requires an OAuth handshake (via CodeConnections or a
  * personal access token) that is inherently human-in-the-loop and cannot be
  * automated from infrastructure code. To wire a repo, create the app with this
- * resource, then connect the repository and create branches from the Amplify
- * console or CLI. For a fully code-driven static/SSR site on AWS, prefer
- * Alchemy's own `Website` composites (S3 + CloudFront).
+ * resource, then connect the repository from the Amplify console or CLI.
+ * Manual-deploy branches (no repo required) are code-driven via the
+ * {@link Branch} resource plus the `CreateDeployment`/`StartDeployment`
+ * bindings. For a fully code-driven static/SSR site on AWS, prefer Alchemy's
+ * own `Website` composites (S3 + CloudFront).
  *
  * @resource
  * @section Creating Amplify Apps
@@ -212,6 +224,8 @@ export const AppProvider = () =>
                 environmentVariables: news.environmentVariables,
                 buildSpec: news.buildSpec,
                 customRules: news.customRules,
+                enableBasicAuth: news.enableBasicAuth,
+                basicAuthCredentials: news.basicAuthCredentials,
                 tags: desiredTags,
               })
               .pipe(
@@ -220,7 +234,7 @@ export const AppProvider = () =>
                     e._tag === "BadRequestException" &&
                     (e.message ?? "").includes("Rate exceeded"),
                   schedule: Schedule.exponential("2 seconds"),
-                  times: 4,
+                  times: 5,
                 }),
               );
             app = created.app;
@@ -233,6 +247,8 @@ export const AppProvider = () =>
               environmentVariables: news.environmentVariables,
               buildSpec: news.buildSpec,
               customRules: news.customRules,
+              enableBasicAuth: news.enableBasicAuth,
+              basicAuthCredentials: news.basicAuthCredentials,
             });
             yield* syncTags(app.appArn, desiredTags, tagRecord(app.tags));
           }

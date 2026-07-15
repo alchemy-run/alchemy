@@ -240,6 +240,42 @@ describe("AppSync Bindings", () => {
     );
   });
 
+  describe("EvaluateMappingTemplate", () => {
+    test.provider(
+      "the Lambda renders a VTL mapping template through the binding",
+      () =>
+        Effect.gen(function* () {
+          const result = yield* send(
+            HttpClientRequest.post(`${baseUrl}/evaluate-template`),
+          ).pipe(
+            Effect.flatMap((response) => response.json),
+            Effect.map(
+              (json) =>
+                json as {
+                  evaluationResult?: string;
+                  error?: { message?: string };
+                },
+            ),
+            Effect.filterOrFail(
+              (json) => json.evaluationResult != null,
+              (json) =>
+                new Error(`no evaluationResult: ${JSON.stringify(json)}`),
+            ),
+            Effect.retry({
+              schedule: Schedule.max([
+                Schedule.spaced("3 seconds"),
+                Schedule.recurs(10),
+              ]),
+            }),
+          );
+          expect(JSON.parse(result.evaluationResult!)).toMatchObject({
+            sum: 5,
+          });
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   describe("FlushApiCache", () => {
     test.provider(
       "the flush call is authorized and returns the typed NotFoundException without a cache",

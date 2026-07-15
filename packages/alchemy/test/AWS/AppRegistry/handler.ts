@@ -48,6 +48,8 @@ export default AppRegistryTestFunction.make(
 
     // --- account-level bindings ---
     const syncResource = yield* AppRegistry.SyncResource();
+    const listApplications = yield* AppRegistry.ListApplications();
+    const listAttributeGroups = yield* AppRegistry.ListAttributeGroups();
 
     const bound = {
       getApplication,
@@ -57,6 +59,8 @@ export default AppRegistryTestFunction.make(
       listAttributeGroupsForApplication,
       getAttributeGroup,
       syncResource,
+      listApplications,
+      listAttributeGroups,
     };
 
     return {
@@ -138,6 +142,45 @@ export default AppRegistryTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
+        if (request.method === "GET" && pathname === "/applications") {
+          // The fixture's own application must appear in the account listing.
+          // Bounded pagination (5 pages) keeps the assertion robust as the
+          // account accumulates applications.
+          const names: (string | null)[] = [];
+          let nextToken: string | undefined;
+          for (let page = 0; page < 5; page++) {
+            const result = yield* listApplications({
+              maxResults: 25,
+              nextToken,
+            });
+            names.push(
+              ...(result.applications ?? []).map((a) => a.name ?? null),
+            );
+            nextToken = result.nextToken;
+            if (!nextToken) break;
+          }
+          return yield* HttpServerResponse.json({ names });
+        }
+
+        if (request.method === "GET" && pathname === "/attribute-groups") {
+          // The fixture's own attribute group must appear in the account
+          // listing. Bounded pagination (5 pages) as above.
+          const names: (string | null)[] = [];
+          let nextToken: string | undefined;
+          for (let page = 0; page < 5; page++) {
+            const result = yield* listAttributeGroups({
+              maxResults: 25,
+              nextToken,
+            });
+            names.push(
+              ...(result.attributeGroups ?? []).map((g) => g.name ?? null),
+            );
+            nextToken = result.nextToken;
+            if (!nextToken) break;
+          }
+          return yield* HttpServerResponse.json({ names });
+        }
+
         if (request.method === "POST" && pathname === "/sync-resource") {
           // A nonexistent stack proves the servicecatalog:SyncResource grant
           // end-to-end via its typed error (an IAM gap would surface
@@ -177,6 +220,8 @@ export default AppRegistryTestFunction.make(
         AppRegistry.ListAttributeGroupsForApplicationHttp,
         AppRegistry.GetAttributeGroupHttp,
         AppRegistry.SyncResourceHttp,
+        AppRegistry.ListApplicationsHttp,
+        AppRegistry.ListAttributeGroupsHttp,
       ),
     ),
   ),

@@ -80,6 +80,7 @@ export default AppSyncBindingsFunction.make(
     const flushCache = yield* AppSync.FlushApiCache(api);
     const getSchema = yield* AppSync.GetIntrospectionSchema(api);
     const evaluateCode = yield* AppSync.EvaluateCode();
+    const evaluateTemplate = yield* AppSync.EvaluateMappingTemplate();
 
     return {
       fetch: Effect.gen(function* () {
@@ -141,6 +142,23 @@ export default AppSyncBindingsFunction.make(
           });
         }
 
+        if (request.method === "POST" && pathname === "/evaluate-template") {
+          // Render a VTL template against a mock context — template
+          // evaluation errors surface on `result.error`.
+          const result = yield* evaluateTemplate({
+            // VTL only allows arithmetic inside #set directives.
+            template: [
+              `#set($sum = $ctx.args.a + $ctx.args.b)`,
+              `{ "sum": $util.toJson($sum) }`,
+            ].join("\n"),
+            context: JSON.stringify({ arguments: { a: 2, b: 3 } }),
+          });
+          return yield* HttpServerResponse.json({
+            evaluationResult: result.evaluationResult,
+            error: result.error,
+          });
+        }
+
         if (request.method === "GET" && pathname === "/ping") {
           return yield* HttpServerResponse.json({ ok: true });
         }
@@ -158,6 +176,7 @@ export default AppSyncBindingsFunction.make(
         AppSync.FlushApiCacheHttp,
         AppSync.GetIntrospectionSchemaHttp,
         AppSync.EvaluateCodeHttp,
+        AppSync.EvaluateMappingTemplateHttp,
       ),
     ),
   ),

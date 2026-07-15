@@ -20,6 +20,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 const DATABASE = "alchemy_athena_e2e";
 const TABLE = "people";
 const CATALOG = "alchemy_athena_e2e_catalog";
+const STATEMENT = "alchemy_athena_e2e_stmt";
 const CSV = "1,alice\n2,bob\n3,carol\n";
 
 export class AthenaTestFunction extends Lambda.Function<Lambda.Function>()(
@@ -81,6 +82,19 @@ export default AthenaTestFunction.make(
       },
     });
 
+    // Saved-query + prepared-statement fixtures in the workgroup — the
+    // ListNamedQueries/ListPreparedStatements bindings enumerate them.
+    yield* Athena.NamedQuery("AthenaNamedQuery", {
+      queryString: `SELECT * FROM ${TABLE} LIMIT 1`,
+      database: DATABASE,
+      workGroup: workGroup.workGroupName,
+    });
+    yield* Athena.PreparedStatement("AthenaPreparedStatement", {
+      statementName: STATEMENT,
+      queryStatement: `SELECT * FROM ${DATABASE}.${TABLE} WHERE id = ?`,
+      workGroup: workGroup.workGroupName,
+    });
+
     const putObject = yield* S3.PutObject(bucket);
     const getObject = yield* S3.GetObject(bucket);
     const runQuery = yield* Athena.Query(workGroup, bucket);
@@ -94,6 +108,9 @@ export default AthenaTestFunction.make(
     const listQueryExecutions = yield* Athena.ListQueryExecutions(workGroup);
     const getQueryRuntimeStatistics =
       yield* Athena.GetQueryRuntimeStatistics(workGroup);
+    const listNamedQueries = yield* Athena.ListNamedQueries(workGroup);
+    const listPreparedStatements =
+      yield* Athena.ListPreparedStatements(workGroup);
 
     // --- catalog-metadata bindings ---
     const listDatabases = yield* Athena.ListDatabases(dataCatalog);
@@ -228,6 +245,20 @@ export default AthenaTestFunction.make(
           return yield* HttpServerResponse.json({ stopped: true });
         }
 
+        if (request.method === "GET" && pathname === "/named/list") {
+          const res = yield* listNamedQueries({ MaxResults: 50 });
+          return yield* HttpServerResponse.json({
+            ids: res.NamedQueryIds ?? [],
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/prepared/list") {
+          const res = yield* listPreparedStatements({ MaxResults: 50 });
+          return yield* HttpServerResponse.json({
+            names: (res.PreparedStatements ?? []).map((s) => s.StatementName),
+          });
+        }
+
         if (request.method === "GET" && pathname === "/catalog/databases") {
           const res = yield* listDatabases({});
           return yield* HttpServerResponse.json({
@@ -293,6 +324,8 @@ export default AthenaTestFunction.make(
         Athena.BatchGetQueryExecutionHttp,
         Athena.ListQueryExecutionsHttp,
         Athena.GetQueryRuntimeStatisticsHttp,
+        Athena.ListNamedQueriesHttp,
+        Athena.ListPreparedStatementsHttp,
         Athena.ListDatabasesHttp,
         Athena.GetDatabaseHttp,
         Athena.ListTableMetadataHttp,

@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
 import * as aas from "@distilled.cloud/aws/application-auto-scaling";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -130,6 +131,39 @@ describe.sequential("ApplicationAutoScaling Bindings", () => {
         // injected and the IAM grant works).
         expect(typeof (response as any).count).toBe("number");
       }),
+    );
+  });
+
+  describe("ScalingActivityEventSource", () => {
+    test.provider(
+      "consumeScalingActivityEvents created the EventBridge rule",
+      (_stack) =>
+        Effect.gen(function* () {
+          // The rule's physical name starts with the stack name but the
+          // 64-char rule-name budget truncates the long
+          // `BindingsTarget-ScalingActivityEvents` logical id, so scope by
+          // NamePrefix and match on the rule's event pattern instead
+          // (bounded manual pagination).
+          let rule: eventbridge.Rule | undefined;
+          let nextToken: string | undefined;
+          for (let page = 0; page < 10 && !rule; page++) {
+            const result = yield* eventbridge.listRules({
+              NamePrefix: "ApplicationAutoScalingBindings",
+              NextToken: nextToken,
+            });
+            rule = (result.Rules ?? []).find((candidate) =>
+              candidate.EventPattern?.includes("aws.application-autoscaling"),
+            );
+            nextToken = result.NextToken;
+            if (!nextToken) break;
+          }
+          expect(rule).toBeDefined();
+          expect(rule?.EventPattern).toContain("aws.application-autoscaling");
+          expect(rule?.EventPattern).toContain(
+            "Application Auto Scaling Scaling Activity State Change",
+          );
+        }),
+      { timeout: 60_000 },
     );
   });
 

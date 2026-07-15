@@ -4,6 +4,8 @@ export * from "./DataSource.ts";
 export * from "./DomainName.ts";
 export * from "./EvaluateCode.ts";
 export * from "./EvaluateCodeHttp.ts";
+export * from "./EvaluateMappingTemplate.ts";
+export * from "./EvaluateMappingTemplateHttp.ts";
 export * from "./FlushApiCache.ts";
 export * from "./FlushApiCacheHttp.ts";
 export * from "./Function.ts";

@@ -45,8 +45,9 @@ export default BackupSearchTestFunction.make(
       yield* BackupSearch.ListSearchJobResults(search);
     const listSearchJobBackups =
       yield* BackupSearch.ListSearchJobBackups(search);
+    const getSearchJob = yield* BackupSearch.GetSearchJob(search);
 
-    const bound = { listSearchJobResults, listSearchJobBackups };
+    const bound = { listSearchJobResults, listSearchJobBackups, getSearchJob };
 
     return {
       fetch: Effect.gen(function* () {
@@ -65,6 +66,14 @@ export default BackupSearchTestFunction.make(
           return yield* HttpServerResponse.json({
             count: page.Results.length,
             nextToken: page.NextToken ?? null,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/job") {
+          const job = yield* getSearchJob();
+          return yield* HttpServerResponse.json({
+            status: job.Status ?? null,
+            name: job.Name ?? null,
           });
         }
 
@@ -87,6 +96,7 @@ export default BackupSearchTestFunction.make(
       Layer.mergeAll(
         BackupSearch.ListSearchJobResultsHttp,
         BackupSearch.ListSearchJobBackupsHttp,
+        BackupSearch.GetSearchJobHttp,
       ),
     ),
   ),

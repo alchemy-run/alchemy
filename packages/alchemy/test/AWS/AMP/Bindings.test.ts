@@ -230,6 +230,18 @@ describe("AMP Bindings", () => {
     );
   });
 
+  describe("GetDefaultScraperConfiguration", () => {
+    test.provider("reads the default scraper configuration YAML", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* getJson("/default-scraper-config")) as {
+          configuration: string;
+        };
+        // The default configuration is Prometheus scrape-config YAML.
+        expect(body.configuration).toContain("scrape_configs");
+      }),
+    );
+  });
+
   describe("GetMetricMetadata", () => {
     test.provider("reads metric metadata", (_stack) =>
       Effect.gen(function* () {

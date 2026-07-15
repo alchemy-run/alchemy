@@ -99,12 +99,12 @@ describe.sequential("AppRegistry Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
 
   describe("binding registration", () => {
-    test.provider("all 7 capabilities initialize in the runtime", (_stack) =>
+    test.provider("all 9 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = yield* send(
           HttpClientRequest.get(`${baseUrl}/bindings`),
         ).pipe(Effect.flatMap((r) => r.json));
-        expect((response as any).bound).toHaveLength(7);
+        expect((response as any).bound).toHaveLength(9);
       }),
     );
   });
@@ -176,6 +176,38 @@ describe.sequential("AppRegistry Bindings", () => {
             HttpClientRequest.get(`${baseUrl}/associated-resource-not-found`),
           ).pipe(Effect.flatMap((r) => r.json));
           expect((response as any).found).toBe(false);
+        }),
+    );
+  });
+
+  describe("ListApplications", () => {
+    test.provider(
+      "account listing includes the fixture application",
+      (_stack) =>
+        Effect.gen(function* () {
+          const app = yield* send(
+            HttpClientRequest.get(`${baseUrl}/application`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/applications`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as any).names).toContain((app as any).name);
+        }),
+    );
+  });
+
+  describe("ListAttributeGroups", () => {
+    test.provider(
+      "account listing includes the fixture attribute group",
+      (_stack) =>
+        Effect.gen(function* () {
+          const group = yield* send(
+            HttpClientRequest.get(`${baseUrl}/attribute-group`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/attribute-groups`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as any).names).toContain((group as any).name);
         }),
     );
   });

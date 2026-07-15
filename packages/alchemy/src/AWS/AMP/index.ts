@@ -2,6 +2,8 @@ export * from "./AlertManagerDefinition.ts";
 export * from "./AnomalyDetector.ts";
 export * from "./DescribeWorkspace.ts";
 export * from "./DescribeWorkspaceHttp.ts";
+export * from "./GetDefaultScraperConfiguration.ts";
+export * from "./GetDefaultScraperConfigurationHttp.ts";
 export * from "./GetLabels.ts";
 export * from "./GetLabelsHttp.ts";
 export * from "./GetMetricMetadata.ts";
@@ -19,6 +21,8 @@ export * from "./RemoteWrite.ts";
 export * from "./RemoteWriteHttp.ts";
 export * from "./ResourcePolicy.ts";
 export * from "./RuleGroupsNamespace.ts";
+export * from "./Scraper.ts";
+export * from "./ScraperLoggingConfiguration.ts";
 export * from "./Workspace.ts";
 // NOTE: BindingHttp.ts and RemoteWriteCodec.ts are internal scaffolding —
 // deliberately NOT exported.
