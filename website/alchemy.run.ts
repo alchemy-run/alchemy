@@ -21,8 +21,8 @@ const Website = Cloudflare.Website.StaticSite(
     main: "./src/worker.ts",
     outdir: "dist",
     // `alchemy.run` first: the Worker's `url` output is `domains[0]`.
-    // `v2.alchemy.run` stays attached (DNS + cert) but is 301-redirected
-    // to `alchemy.run` by the redirect Ruleset below.
+    // `v2.alchemy.run` stays attached (DNS + cert); the Worker 301s it
+    // to `alchemy.run` (see `redirectLegacyHost` in src/worker.ts).
     domain:
       stack.stage === "prod" ? ["alchemy.run", "v2.alchemy.run"] : undefined,
     memo: {
@@ -58,35 +58,15 @@ export default Alchemy.Stack(
 
     if (stage === "prod") {
       // The `alchemy.run` zone predates this stack (the v1 website created
-      // it), so adopt it — and never delete it on destroy.
-      const zone = yield* Cloudflare.Zone.Zone("Zone", {
+      // it), so adopt it — and never delete it on destroy. The
+      // `v2.alchemy.run` → `alchemy.run` redirect is handled by the Worker
+      // itself (`redirectLegacyHost` in src/worker.ts) rather than a
+      // `http_request_dynamic_redirect` Ruleset: the prod deploy token has
+      // no zone-ruleset permissions (PUT .../rulesets/phases/.../entrypoint
+      // returns 403), and the Worker already runs first on every request.
+      yield* Cloudflare.Zone.Zone("Zone", {
         name: "alchemy.run",
       }).pipe(AdoptPolicy.adopt(true), RemovalPolicy.retain());
-
-      // Single Redirects run at the edge before Workers, so requests to
-      // `v2.alchemy.run` never reach the Worker — they 301 to `alchemy.run`
-      // with path and query preserved.
-      yield* Cloudflare.Ruleset.Ruleset("V2Redirect", {
-        zone,
-        phase: "http_request_dynamic_redirect",
-        rules: [
-          {
-            description: "Redirect v2.alchemy.run to alchemy.run",
-            expression: 'http.host eq "v2.alchemy.run"',
-            action: "redirect",
-            actionParameters: {
-              fromValue: {
-                targetUrl: {
-                  expression:
-                    'concat("https://alchemy.run", http.request.uri.path)',
-                },
-                preserveQueryString: true,
-                statusCode: 301,
-              },
-            },
-          },
-        ],
-      });
     }
 
     if (stage.startsWith("pr-")) {

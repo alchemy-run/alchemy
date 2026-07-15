@@ -221,6 +221,8 @@ const resolveRedirect = (url: URL): string | undefined => {
 
 export default {
   fetch: async (request: Request, env: WorkerEnv) => {
+    const legacyRedirect = redirectLegacyHost(request);
+    if (legacyRedirect !== undefined) return legacyRedirect;
     const redirect = resolveRedirect(new URL(request.url));
     if (redirect !== undefined) {
       return Response.redirect(new URL(redirect, request.url), 301);
@@ -239,6 +241,22 @@ export default {
       await rewriteLlmsTxtOrigin(request, rewriteCanonicalHost(request, res)),
     );
   },
+};
+
+/**
+ * The site moved from `v2.alchemy.run` to the apex. The legacy hostname
+ * stays attached to this Worker (DNS + cert) and every request to it is
+ * 301-redirected to `alchemy.run`, path and query preserved. Done here
+ * rather than with a `http_request_dynamic_redirect` Ruleset because the
+ * prod deploy token has no zone-ruleset permissions, and assets are
+ * configured with `runWorkerFirst` so the Worker sees every request.
+ */
+const LEGACY_HOST = "v2.alchemy.run";
+const redirectLegacyHost = (request: Request): Response | undefined => {
+  const url = new URL(request.url);
+  if (url.host !== LEGACY_HOST) return undefined;
+  url.host = CANONICAL_HOST;
+  return Response.redirect(url.toString(), 301);
 };
 
 /**
