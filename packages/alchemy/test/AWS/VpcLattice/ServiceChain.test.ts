@@ -234,6 +234,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertTargetGroupDeleted(first.targetGroup.targetGroupId);
       yield* assertServiceDeleted(first.service.serviceId);
-    }),
+    }).pipe(
+      // A mid-test failure must not orphan the VPC (default quota is 5 per
+      // region) — always tear the stack down.
+      Effect.ensuring(Effect.ignore(stack.destroy())),
+    ),
   { timeout: 600_000 },
 );

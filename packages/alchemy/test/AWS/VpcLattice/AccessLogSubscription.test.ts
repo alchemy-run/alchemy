@@ -79,6 +79,6 @@ test.provider(
           ),
         );
       expect(gone).toBe(true);
-    }),
+    }).pipe(Effect.ensuring(Effect.ignore(stack.destroy()))),
   { timeout: 300_000 },
 );

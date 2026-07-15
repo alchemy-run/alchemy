@@ -1,6 +1,7 @@
 import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -510,6 +511,27 @@ export const TargetGroupProvider = () =>
           // in a draining conflict while deleting.
           yield* syncTargets(output.targetGroupId, []).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          // Deregistered targets sit in DRAINING for a while and
+          // DeleteTargetGroup rejects with `ConflictException: TargetGroup
+          // has targets registered with it` until they are gone. Wait
+          // (bounded) for the drain to complete.
+          yield* Effect.repeat(
+            vpclattice
+              .listTargets({ targetGroupIdentifier: output.targetGroupId })
+              .pipe(
+                Effect.map((r) => r.items.length),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(0),
+                ),
+              ),
+            {
+              schedule: Schedule.max([
+                Schedule.spaced("5 seconds"),
+                Schedule.recurs(30),
+              ]),
+              until: (remaining): boolean => remaining === 0,
+            },
           );
           yield* retryOnConflict(
             vpclattice.deleteTargetGroup({
