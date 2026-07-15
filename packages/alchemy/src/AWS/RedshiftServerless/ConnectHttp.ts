@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
@@ -78,7 +79,7 @@ export const ConnectHttp = Layer.effect(
         const credentials = yield* getCredentials({
           workgroupName,
           dbName: database,
-          durationSeconds: options.durationSeconds,
+          durationSeconds: toWireSeconds(options.duration),
         });
         const username = unwrap(credentials.dbUser);
         const rawPassword = unwrap(credentials.dbPassword);

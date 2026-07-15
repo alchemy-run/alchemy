@@ -226,9 +226,9 @@ describe.sequential("ResourceExplorer", () => {
     { timeout: 240_000 },
   );
 
-  describe("Search", () => {
+  describe("Bindings", () => {
     test.provider(
-      "deployed Lambda searches through a view binding",
+      "deployed Lambda exercises Search, ListResources and ListSupportedResourceTypes",
       (stack) =>
         Effect.gen(function* () {
           if (yield* foreignIndexExists) {
@@ -276,6 +276,28 @@ describe.sequential("ResourceExplorer", () => {
           expect(body.viewArn).toContain(":view/");
           expect(typeof body.totalResources).toBe("number");
           expect(Array.isArray(body.resources)).toBe(true);
+
+          // ListResources — structured-filter enumeration through the same
+          // view (a brand-new index may be empty; assert the round-trip).
+          const listRes = yield* client.get(
+            `${baseUrl}/resources?filter=service:s3`,
+          );
+          expect(listRes.status).toBe(200);
+          const listBody = (yield* listRes.json) as {
+            viewArn: string;
+            resources: string[];
+          };
+          expect(listBody.viewArn).toContain(":view/");
+          expect(Array.isArray(listBody.resources)).toBe(true);
+
+          // ListSupportedResourceTypes — account-level discovery; always
+          // returns a non-empty catalog.
+          const typesRes = yield* client.get(`${baseUrl}/types`);
+          expect(typesRes.status).toBe(200);
+          const typesBody = (yield* typesRes.json) as {
+            resourceTypes: string[];
+          };
+          expect(typesBody.resourceTypes.length).toBeGreaterThan(0);
 
           yield* stack.destroy();
           const goneIndex = yield* waitForIndexGone;

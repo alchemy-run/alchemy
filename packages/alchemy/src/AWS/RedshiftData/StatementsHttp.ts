@@ -8,7 +8,13 @@ import type { Workgroup } from "../RedshiftServerless/Workgroup.ts";
 import {
   RedshiftStatementFailed,
   Statements,
+  type BatchExecuteStatementRequest,
+  type DescribeTableRequest,
   type ExecuteStatementRequest,
+  type ListDatabasesRequest,
+  type ListSchemasRequest,
+  type ListStatementsRequest,
+  type ListTablesRequest,
   type StatementsClient,
   type StatementsOptions,
 } from "./Statements.ts";
@@ -21,8 +27,16 @@ export const StatementsHttp = Layer.effect(
   Statements,
   Effect.gen(function* () {
     const executeStatement = yield* data.executeStatement;
+    const batchExecuteStatement = yield* data.batchExecuteStatement;
     const describeStatement = yield* data.describeStatement;
+    const cancelStatement = yield* data.cancelStatement;
     const getStatementResult = yield* data.getStatementResult;
+    const getStatementResultV2 = yield* data.getStatementResultV2;
+    const describeTableOp = yield* data.describeTable;
+    const listDatabasesOp = yield* data.listDatabases;
+    const listSchemasOp = yield* data.listSchemas;
+    const listTablesOp = yield* data.listTables;
+    const listStatementsOp = yield* data.listStatements;
 
     return Effect.fn(function* (
       workgroup: Workgroup,
@@ -36,21 +50,29 @@ export const StatementsHttp = Layer.effect(
             {
               policyStatements: [
                 {
+                  // Workgroup-scoped Data API actions (submit statements and
+                  // read database metadata through the workgroup).
                   Effect: "Allow",
                   Action: [
                     "redshift-data:ExecuteStatement",
                     "redshift-data:BatchExecuteStatement",
+                    "redshift-data:DescribeTable",
+                    "redshift-data:ListDatabases",
+                    "redshift-data:ListSchemas",
+                    "redshift-data:ListTables",
                   ],
                   Resource: [workgroup.workgroupArn],
                 },
                 {
-                  // DescribeStatement/GetStatementResult/CancelStatement are
-                  // authorized per-statement (owner condition), not by ARN.
+                  // Statement-scoped actions are authorized per-statement
+                  // (owner condition), not by ARN.
                   Effect: "Allow",
                   Action: [
                     "redshift-data:DescribeStatement",
                     "redshift-data:GetStatementResult",
+                    "redshift-data:GetStatementResultV2",
                     "redshift-data:CancelStatement",
+                    "redshift-data:ListStatements",
                   ],
                   Resource: ["*"],
                 },
@@ -93,16 +115,97 @@ export const StatementsHttp = Layer.effect(
         });
       });
 
+      const executeBatch = Effect.fn(
+        `AWS.RedshiftData.Statements.executeBatch(${workgroup.LogicalId})`,
+      )(function* (request: BatchExecuteStatementRequest) {
+        return yield* batchExecuteStatement({
+          ...request,
+          WorkgroupName: yield* workgroupName,
+          Database: database,
+          SecretArn: options.secretArn,
+          DbUser: options.dbUser,
+        });
+      });
+
       const describe = Effect.fn(
         `AWS.RedshiftData.Statements.describe(${workgroup.LogicalId})`,
       )(function* (id: string) {
         return yield* describeStatement({ Id: id });
       });
 
+      const cancel = Effect.fn(
+        `AWS.RedshiftData.Statements.cancel(${workgroup.LogicalId})`,
+      )(function* (id: string) {
+        return yield* cancelStatement({ Id: id });
+      });
+
       const getResult = Effect.fn(
         `AWS.RedshiftData.Statements.getResult(${workgroup.LogicalId})`,
-      )(function* (id: string) {
-        return yield* getStatementResult({ Id: id });
+      )(function* (id: string, nextToken?: string) {
+        return yield* getStatementResult({ Id: id, NextToken: nextToken });
+      });
+
+      const getResultV2 = Effect.fn(
+        `AWS.RedshiftData.Statements.getResultV2(${workgroup.LogicalId})`,
+      )(function* (id: string, nextToken?: string) {
+        return yield* getStatementResultV2({ Id: id, NextToken: nextToken });
+      });
+
+      const describeTable = Effect.fn(
+        `AWS.RedshiftData.Statements.describeTable(${workgroup.LogicalId})`,
+      )(function* (request: DescribeTableRequest) {
+        return yield* describeTableOp({
+          ...request,
+          WorkgroupName: yield* workgroupName,
+          Database: database,
+          SecretArn: options.secretArn,
+          DbUser: options.dbUser,
+        });
+      });
+
+      const listDatabases = Effect.fn(
+        `AWS.RedshiftData.Statements.listDatabases(${workgroup.LogicalId})`,
+      )(function* (request: ListDatabasesRequest = {}) {
+        return yield* listDatabasesOp({
+          ...request,
+          WorkgroupName: yield* workgroupName,
+          Database: database,
+          SecretArn: options.secretArn,
+          DbUser: options.dbUser,
+        });
+      });
+
+      const listSchemas = Effect.fn(
+        `AWS.RedshiftData.Statements.listSchemas(${workgroup.LogicalId})`,
+      )(function* (request: ListSchemasRequest = {}) {
+        return yield* listSchemasOp({
+          ...request,
+          WorkgroupName: yield* workgroupName,
+          Database: database,
+          SecretArn: options.secretArn,
+          DbUser: options.dbUser,
+        });
+      });
+
+      const listTables = Effect.fn(
+        `AWS.RedshiftData.Statements.listTables(${workgroup.LogicalId})`,
+      )(function* (request: ListTablesRequest = {}) {
+        return yield* listTablesOp({
+          ...request,
+          WorkgroupName: yield* workgroupName,
+          Database: database,
+          SecretArn: options.secretArn,
+          DbUser: options.dbUser,
+        });
+      });
+
+      const listStatements = Effect.fn(
+        `AWS.RedshiftData.Statements.listStatements(${workgroup.LogicalId})`,
+      )(function* (request: ListStatementsRequest = {}) {
+        return yield* listStatementsOp({
+          ...request,
+          WorkgroupName: yield* workgroupName,
+        });
       });
 
       const query = Effect.fn(
@@ -132,7 +235,20 @@ export const StatementsHttp = Layer.effect(
         return yield* getResult(id);
       });
 
-      return { execute, describe, getResult, query } satisfies StatementsClient;
+      return {
+        execute,
+        executeBatch,
+        describe,
+        cancel,
+        getResult,
+        getResultV2,
+        describeTable,
+        listDatabases,
+        listSchemas,
+        listTables,
+        listStatements,
+        query,
+      } satisfies StatementsClient;
     });
   }),
 );

@@ -103,8 +103,8 @@ export default RePostSpaceBindingsFunction.make(
           const reread = yield* getChannel({ channelId });
           return yield* HttpServerResponse.json({
             channelId,
-            name: read.channelName,
-            renamed: reread.channelName,
+            name: unwrapSensitive(read.channelName),
+            renamed: unwrapSensitive(reread.channelName),
           });
         }
 

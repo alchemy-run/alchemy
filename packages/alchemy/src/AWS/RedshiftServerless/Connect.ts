@@ -1,4 +1,5 @@
 import type * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -18,7 +19,7 @@ import type { Workgroup } from "./Workgroup.ts";
 export interface WorkgroupConnectionInfo extends SqlConnectionInfo {
   /**
    * When the temporary database credentials expire (15-60 minutes from
-   * minting, per `durationSeconds`).
+   * minting, per {@link ConnectOptions.duration}).
    */
   expiration: Date | undefined;
 }
@@ -30,10 +31,12 @@ export interface ConnectOptions {
    */
   database?: string;
   /**
-   * How long the temporary credentials remain valid, in seconds (900-3600).
-   * @default 900
+   * How long the temporary credentials remain valid, e.g. `"15 minutes"` or
+   * `Duration.minutes(30)` (a bare number is milliseconds). Rounded to whole
+   * seconds on the wire; must land between 900 and 3600 seconds.
+   * @default 900 seconds
    */
-  durationSeconds?: number;
+  duration?: Duration.Input;
 }
 
 /**
