@@ -82,6 +82,16 @@ export default FMSTestFunction.make(
       yield* FMS.ListAdminAccountsForOrganization();
     const listAdminsManagingAccount = yield* FMS.ListAdminsManagingAccount();
 
+    // --- third-party firewalls (marketplace-subscription gated) ---
+    const associateThirdPartyFirewall =
+      yield* FMS.AssociateThirdPartyFirewall();
+    const disassociateThirdPartyFirewall =
+      yield* FMS.DisassociateThirdPartyFirewall();
+    const getThirdPartyFirewallAssociationStatus =
+      yield* FMS.GetThirdPartyFirewallAssociationStatus();
+    const listThirdPartyFirewallFirewallPolicies =
+      yield* FMS.ListThirdPartyFirewallFirewallPolicies();
+
     const bound = {
       getPolicy,
       listPolicies,
@@ -114,6 +124,10 @@ export default FMSTestFunction.make(
       getAdminScope,
       listAdminAccountsForOrganization,
       listAdminsManagingAccount,
+      associateThirdPartyFirewall,
+      disassociateThirdPartyFirewall,
+      getThirdPartyFirewallAssociationStatus,
+      listThirdPartyFirewallFirewallPolicies,
     };
 
     return {
@@ -261,6 +275,36 @@ export default FMSTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
+        if (
+          request.method === "GET" &&
+          pathname === "/third-party-firewall-status"
+        ) {
+          const result = yield* getThirdPartyFirewallAssociationStatus({
+            ThirdPartyFirewall: "PALO_ALTO_NETWORKS_CLOUD_NGFW",
+          }).pipe(
+            Effect.map((r) => ({
+              tag: "Ok",
+              status: r.ThirdPartyFirewallStatus ?? null,
+              marketplaceStatus: r.MarketplaceOnboardingStatus ?? null,
+            })),
+            Effect.catchTag(
+              [
+                "AccessDeniedException",
+                "InvalidOperationException",
+                "InvalidInputException",
+                "ResourceNotFoundException",
+              ],
+              (e) =>
+                Effect.succeed({
+                  tag: e._tag,
+                  status: null,
+                  marketplaceStatus: null,
+                }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -302,6 +346,10 @@ export default FMSTestFunction.make(
         FMS.GetAdminScopeHttp,
         FMS.ListAdminAccountsForOrganizationHttp,
         FMS.ListAdminsManagingAccountHttp,
+        FMS.AssociateThirdPartyFirewallHttp,
+        FMS.DisassociateThirdPartyFirewallHttp,
+        FMS.GetThirdPartyFirewallAssociationStatusHttp,
+        FMS.ListThirdPartyFirewallFirewallPoliciesHttp,
       ),
     ),
   ),

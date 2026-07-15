@@ -31,7 +31,10 @@ const probeArns = Effect.gen(function* () {
     importJob: `arn:aws:forecast:${region}:${accountId}:dataset-import-job/alchemy_probe/alchemy_probe`,
     predictor: `arn:aws:forecast:${region}:${accountId}:predictor/alchemy_probe`,
     forecast: `arn:aws:forecast:${region}:${accountId}:forecast/alchemy_probe`,
+    forecastExport: `arn:aws:forecast:${region}:${accountId}:forecast-export-job/alchemy_probe/alchemy_probe`,
+    whatIfAnalysis: `arn:aws:forecast:${region}:${accountId}:what-if-analysis/alchemy_probe`,
     whatIfForecast: `arn:aws:forecast:${region}:${accountId}:what-if-forecast/alchemy_probe`,
+    whatIfForecastExport: `arn:aws:forecast:${region}:${accountId}:what-if-forecast-export/alchemy_probe/alchemy_probe`,
   };
 });
 
@@ -102,10 +105,10 @@ describe.sequential("Forecast Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
 
   describe("binding registration", () => {
-    test.provider("all eleven capabilities initialize in the runtime", () =>
+    test.provider("all twenty capabilities initialize in the runtime", () =>
       Effect.gen(function* () {
         const response = (yield* getJson("/bindings")) as { bound: string[] };
-        expect(response.bound).toHaveLength(11);
+        expect(response.bound).toHaveLength(20);
       }),
     );
   });
@@ -195,6 +198,118 @@ describe.sequential("Forecast Bindings", () => {
       Effect.gen(function* () {
         const arns = yield* probeArns;
         const tag = yield* probeTag("/whatif-query-probe", arns.whatIfForecast);
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
+    );
+  });
+
+  describe("CreateForecastExportJob", () => {
+    test.provider("rejects a nonexistent forecast with a typed tag", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag("/export-create-probe", arns.forecast);
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
+    );
+  });
+
+  describe("DescribeForecastExportJob", () => {
+    test.provider("surfaces a typed tag for a nonexistent export job", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag("/export-probe", arns.forecastExport);
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
+    );
+  });
+
+  describe("CreateWhatIfAnalysis", () => {
+    test.provider("rejects a nonexistent forecast with a typed tag", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag(
+          "/whatif-analysis-create-probe",
+          arns.forecast,
+        );
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
+    );
+  });
+
+  describe("DescribeWhatIfAnalysis", () => {
+    test.provider("surfaces a typed tag for a nonexistent analysis", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag(
+          "/whatif-analysis-probe",
+          arns.whatIfAnalysis,
+        );
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
+    );
+  });
+
+  describe("CreateWhatIfForecast", () => {
+    test.provider("rejects a nonexistent analysis with a typed tag", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag(
+          "/whatif-create-probe",
+          arns.whatIfAnalysis,
+        );
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
+    );
+  });
+
+  describe("DescribeWhatIfForecast", () => {
+    test.provider(
+      "surfaces a typed tag for a nonexistent scenario forecast",
+      () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const tag = yield* probeTag(
+            "/whatif-forecast-probe",
+            arns.whatIfForecast,
+          );
+          expect(EXPECTED_PROBE_TAGS).toContain(tag);
+        }),
+    );
+  });
+
+  describe("CreateWhatIfForecastExport", () => {
+    test.provider(
+      "rejects a nonexistent scenario forecast with a typed tag",
+      () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const tag = yield* probeTag(
+            "/whatif-export-create-probe",
+            arns.whatIfForecast,
+          );
+          expect(EXPECTED_PROBE_TAGS).toContain(tag);
+        }),
+    );
+  });
+
+  describe("DescribeWhatIfForecastExport", () => {
+    test.provider("surfaces a typed tag for a nonexistent export", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag(
+          "/whatif-export-probe",
+          arns.whatIfForecastExport,
+        );
+        expect(EXPECTED_PROBE_TAGS).toContain(tag);
+      }),
+    );
+  });
+
+  describe("DeleteResourceTree", () => {
+    test.provider("surfaces a typed tag for a nonexistent parent", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const tag = yield* probeTag("/delete-tree-probe", arns.predictor);
         expect(EXPECTED_PROBE_TAGS).toContain(tag);
       }),
     );

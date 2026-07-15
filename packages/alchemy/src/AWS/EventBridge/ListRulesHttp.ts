@@ -16,5 +16,8 @@ export const ListRulesHttp = Layer.effect(
     operation: eventbridge.listRules,
     actions: ["events:ListRules"],
     busNameKey: "EventBusName",
+    // events:ListRules does not support resource-level permissions — a grant
+    // scoped to the bus ARN is AccessDenied at runtime. Grant on `*`.
+    resources: () => ["*"],
   }),
 );

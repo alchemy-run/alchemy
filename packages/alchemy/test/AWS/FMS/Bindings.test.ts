@@ -108,10 +108,10 @@ describe.sequential("FMS Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
 
   describe("binding registration", () => {
-    test.provider("all 31 capabilities initialize in the runtime", (_stack) =>
+    test.provider("all 35 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/bindings");
-        expect((response as any).bound).toHaveLength(31);
+        expect((response as any).bound).toHaveLength(35);
       }),
     );
   });
@@ -240,6 +240,26 @@ describe.sequential("FMS Bindings", () => {
             "Ok",
             "AccessDeniedException",
             "InvalidOperationException",
+            "ResourceNotFoundException",
+          ]).toContain(response.tag);
+        }),
+      { timeout: 60_000 },
+    );
+  });
+
+  describe("GetThirdPartyFirewallAssociationStatus", () => {
+    test.provider(
+      "reads third-party firewall onboarding status (typed rejection on a non-onboarded account)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson(
+            "/third-party-firewall-status",
+          )) as any;
+          expect([
+            "Ok",
+            "AccessDeniedException",
+            "InvalidOperationException",
+            "InvalidInputException",
             "ResourceNotFoundException",
           ]).toContain(response.tag);
         }),

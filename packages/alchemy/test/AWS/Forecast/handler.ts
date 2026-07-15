@@ -41,6 +41,18 @@ export default ForecastTestFunction.make(
     const resumeResource = yield* Forecast.ResumeResource();
     const queryForecast = yield* Forecast.QueryForecast();
     const queryWhatIfForecast = yield* Forecast.QueryWhatIfForecast();
+    const createForecastExportJob = yield* Forecast.CreateForecastExportJob();
+    const describeForecastExportJob =
+      yield* Forecast.DescribeForecastExportJob();
+    const createWhatIfAnalysis = yield* Forecast.CreateWhatIfAnalysis();
+    const describeWhatIfAnalysis = yield* Forecast.DescribeWhatIfAnalysis();
+    const createWhatIfForecast = yield* Forecast.CreateWhatIfForecast();
+    const describeWhatIfForecast = yield* Forecast.DescribeWhatIfForecast();
+    const createWhatIfForecastExport =
+      yield* Forecast.CreateWhatIfForecastExport();
+    const describeWhatIfForecastExport =
+      yield* Forecast.DescribeWhatIfForecastExport();
+    const deleteResourceTree = yield* Forecast.DeleteResourceTree();
 
     const bound = {
       createDatasetImportJob,
@@ -54,6 +66,15 @@ export default ForecastTestFunction.make(
       resumeResource,
       queryForecast,
       queryWhatIfForecast,
+      createForecastExportJob,
+      describeForecastExportJob,
+      createWhatIfAnalysis,
+      describeWhatIfAnalysis,
+      createWhatIfForecast,
+      describeWhatIfForecast,
+      createWhatIfForecastExport,
+      describeWhatIfForecastExport,
+      deleteResourceTree,
     };
 
     return {
@@ -154,6 +175,116 @@ export default ForecastTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
+        if (request.method === "GET" && pathname === "/export-create-probe") {
+          const tag = yield* createForecastExportJob({
+            ForecastExportJobName: "alchemy_forecast_export_probe",
+            ForecastArn: arn,
+            Destination: {
+              S3Config: {
+                Path: "s3://alchemy-nonexistent-probe-bucket/exports/",
+                RoleArn: "arn:aws:iam::000000000000:role/alchemy_probe",
+              },
+            },
+          }).pipe(
+            Effect.map(() => "Created"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (request.method === "GET" && pathname === "/export-probe") {
+          const tag = yield* describeForecastExportJob({
+            ForecastExportJobArn: arn,
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/whatif-analysis-create-probe"
+        ) {
+          const tag = yield* createWhatIfAnalysis({
+            WhatIfAnalysisName: "alchemy_whatif_analysis_probe",
+            ForecastArn: arn,
+          }).pipe(
+            Effect.map(() => "Created"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (request.method === "GET" && pathname === "/whatif-analysis-probe") {
+          const tag = yield* describeWhatIfAnalysis({
+            WhatIfAnalysisArn: arn,
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (request.method === "GET" && pathname === "/whatif-create-probe") {
+          const tag = yield* createWhatIfForecast({
+            WhatIfForecastName: "alchemy_whatif_forecast_probe",
+            WhatIfAnalysisArn: arn,
+          }).pipe(
+            Effect.map(() => "Created"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (request.method === "GET" && pathname === "/whatif-forecast-probe") {
+          const tag = yield* describeWhatIfForecast({
+            WhatIfForecastArn: arn,
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/whatif-export-create-probe"
+        ) {
+          const tag = yield* createWhatIfForecastExport({
+            WhatIfForecastExportName: "alchemy_whatif_export_probe",
+            WhatIfForecastArns: [arn],
+            Destination: {
+              S3Config: {
+                Path: "s3://alchemy-nonexistent-probe-bucket/whatif/",
+                RoleArn: "arn:aws:iam::000000000000:role/alchemy_probe",
+              },
+            },
+          }).pipe(
+            Effect.map(() => "Created"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (request.method === "GET" && pathname === "/whatif-export-probe") {
+          const tag = yield* describeWhatIfForecastExport({
+            WhatIfForecastExportArn: arn,
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (request.method === "GET" && pathname === "/delete-tree-probe") {
+          const tag = yield* deleteResourceTree({ ResourceArn: arn }).pipe(
+            Effect.map(() => "Deleted"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -174,6 +305,15 @@ export default ForecastTestFunction.make(
         Forecast.ResumeResourceHttp,
         Forecast.QueryForecastHttp,
         Forecast.QueryWhatIfForecastHttp,
+        Forecast.CreateForecastExportJobHttp,
+        Forecast.DescribeForecastExportJobHttp,
+        Forecast.CreateWhatIfAnalysisHttp,
+        Forecast.DescribeWhatIfAnalysisHttp,
+        Forecast.CreateWhatIfForecastHttp,
+        Forecast.DescribeWhatIfForecastHttp,
+        Forecast.CreateWhatIfForecastExportHttp,
+        Forecast.DescribeWhatIfForecastExportHttp,
+        Forecast.DeleteResourceTreeHttp,
       ),
     ),
   ),

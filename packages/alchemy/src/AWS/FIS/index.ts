@@ -28,5 +28,6 @@ export * from "./StartExperiment.ts";
 export * from "./StartExperimentHttp.ts";
 export * from "./StopExperiment.ts";
 export * from "./StopExperimentHttp.ts";
+export * from "./TargetAccountConfiguration.ts";
 export * from "./UpdateSafetyLeverState.ts";
 export * from "./UpdateSafetyLeverStateHttp.ts";

@@ -58,6 +58,9 @@ export default EKSClusterTestFunction.make(
     const listAccessEntries = yield* EKS.ListAccessEntries(cluster);
     const listInsights = yield* EKS.ListInsights(cluster);
     const listUpdates = yield* EKS.ListUpdates(cluster);
+    const listCapabilities = yield* EKS.ListCapabilities(cluster);
+    const listIdentityProviderConfigs =
+      yield* EKS.ListIdentityProviderConfigs(cluster);
     const listAssociatedAccessPolicies =
       yield* EKS.ListAssociatedAccessPolicies(cluster);
     const describeNodegroup = yield* EKS.DescribeNodegroup(cluster);
@@ -68,6 +71,11 @@ export default EKSClusterTestFunction.make(
     const describeAccessEntry = yield* EKS.DescribeAccessEntry(cluster);
     const describeUpdate = yield* EKS.DescribeUpdate(cluster);
     const describeInsight = yield* EKS.DescribeInsight(cluster);
+    const describeCapability = yield* EKS.DescribeCapability(cluster);
+    const describeIdentityProviderConfig =
+      yield* EKS.DescribeIdentityProviderConfig(cluster);
+    const describeInsightsRefresh = yield* EKS.DescribeInsightsRefresh(cluster);
+    const startInsightsRefresh = yield* EKS.StartInsightsRefresh(cluster);
 
     const bound = {
       describeCluster,
@@ -86,6 +94,12 @@ export default EKSClusterTestFunction.make(
       describeAccessEntry,
       describeUpdate,
       describeInsight,
+      listCapabilities,
+      listIdentityProviderConfigs,
+      describeCapability,
+      describeIdentityProviderConfig,
+      describeInsightsRefresh,
+      startInsightsRefresh,
     };
 
     return {
@@ -120,6 +134,8 @@ export default EKSClusterTestFunction.make(
           const accessEntries = yield* listAccessEntries();
           const insights = yield* listInsights();
           const updates = yield* listUpdates();
+          const capabilities = yield* listCapabilities();
+          const identityProviderConfigs = yield* listIdentityProviderConfigs();
           return yield* HttpServerResponse.json({
             nodegroups: (nodegroups.nodegroups ?? []).length,
             addons: (addons.addons ?? []).length,
@@ -130,6 +146,10 @@ export default EKSClusterTestFunction.make(
             accessEntries: (accessEntries.accessEntries ?? []).length,
             insights: (insights.insights ?? []).length,
             updates: (updates.updateIds ?? []).length,
+            capabilities: (capabilities.capabilities ?? []).length,
+            identityProviderConfigs: (
+              identityProviderConfigs.identityProviderConfigs ?? []
+            ).length,
           });
         }
 
@@ -205,6 +225,25 @@ export default EKSClusterTestFunction.make(
               (e) => Effect.succeed(e._tag),
             ),
           );
+          const capabilityTag = yield* describeCapability({
+            capabilityName: BOGUS,
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "InvalidParameterException"],
+              (e) => Effect.succeed(e._tag),
+            ),
+          );
+          const identityProviderConfigTag =
+            yield* describeIdentityProviderConfig({
+              identityProviderConfig: { type: "oidc", name: BOGUS },
+            }).pipe(
+              Effect.map(() => "Found"),
+              Effect.catchTag(
+                ["ResourceNotFoundException", "InvalidParameterException"],
+                (e) => Effect.succeed(e._tag),
+              ),
+            );
           return yield* HttpServerResponse.json({
             nodegroupTag,
             addonTag,
@@ -214,7 +253,30 @@ export default EKSClusterTestFunction.make(
             updateTag,
             insightTag,
             associatedPoliciesTag,
+            capabilityTag,
+            identityProviderConfigTag,
           });
+        }
+
+        if (request.method === "GET" && pathname === "/insights-refresh") {
+          // Kick an on-demand refresh, then read its status back — proves both
+          // grants. A refresh already in flight surfaces the service's typed
+          // InvalidRequestException, which proves the same wiring.
+          const startTag = yield* startInsightsRefresh().pipe(
+            Effect.map((r) => r.status ?? "STARTED"),
+            Effect.catchTag(
+              ["InvalidRequestException", "ResourceNotFoundException"],
+              (e) => Effect.succeed(e._tag),
+            ),
+          );
+          const describeTag = yield* describeInsightsRefresh().pipe(
+            Effect.map((r) => r.status ?? "UNKNOWN"),
+            Effect.catchTag(
+              ["InvalidRequestException", "ResourceNotFoundException"],
+              (e) => Effect.succeed(e._tag),
+            ),
+          );
+          return yield* HttpServerResponse.json({ startTag, describeTag });
         }
 
         return yield* HttpServerResponse.json(
@@ -242,6 +304,12 @@ export default EKSClusterTestFunction.make(
         EKS.DescribeAccessEntryHttp,
         EKS.DescribeUpdateHttp,
         EKS.DescribeInsightHttp,
+        EKS.ListCapabilitiesHttp,
+        EKS.ListIdentityProviderConfigsHttp,
+        EKS.DescribeCapabilityHttp,
+        EKS.DescribeIdentityProviderConfigHttp,
+        EKS.DescribeInsightsRefreshHttp,
+        EKS.StartInsightsRefreshHttp,
       ),
     ),
   ),

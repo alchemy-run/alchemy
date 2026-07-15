@@ -167,7 +167,11 @@ describe("EventBridge Bindings", () => {
   );
 
   afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    timeout: 120_000,
+    // Teardown deletes ~10 resources serially (invoke permissions,
+    // event-source rules, the Lambda fixture, ToggleRule, TestArchive,
+    // both sinks, then the buses); each delete is individually bounded
+    // but the sum can exceed two minutes on a slow AWS day.
+    timeout: 240_000,
   });
 
   describe("PutEvents", () => {
@@ -246,6 +250,83 @@ describe("EventBridge Bindings", () => {
           expect(response.ruleNames.length).toBeGreaterThanOrEqual(1);
         }),
       { timeout: 60_000 },
+    );
+  });
+
+  describe("DescribeEventBus", () => {
+    test.provider("describes the bound custom bus", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.get(`${baseUrl}/bus-info`),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          name: string;
+          arn: string;
+        };
+
+        expect(response.name).toBe("alchemy-test-eb-bindings");
+        expect(response.arn).toContain(":event-bus/alchemy-test-eb-bindings");
+      }),
+    );
+  });
+
+  describe("ListEventBuses", () => {
+    test.provider("enumerates account buses including the default", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.get(`${baseUrl}/event-buses`),
+        ).pipe(Effect.flatMap((r) => r.json))) as { names: string[] };
+
+        expect(response.names).toContain("default");
+        expect(response.names).toContain("alchemy-test-eb-bindings");
+      }),
+    );
+  });
+
+  describe("ListRules", () => {
+    test.provider("lists the rules on the bound custom bus", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.get(`${baseUrl}/rules`),
+        ).pipe(Effect.flatMap((r) => r.json))) as { ruleNames: string[] };
+
+        // The toggle rule and the custom-bus consume-loop rule live here.
+        expect(response.ruleNames).toContain("alchemy-test-eb-toggle");
+        expect(response.ruleNames.length).toBeGreaterThanOrEqual(2);
+      }),
+    );
+  });
+
+  describe("ListTargetsByRule", () => {
+    test.provider("lists the (empty) targets of the toggle rule", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.get(`${baseUrl}/targets-by-rule`),
+        ).pipe(Effect.flatMap((r) => r.json))) as { targetCount: number };
+
+        expect(response.targetCount).toBe(0);
+      }),
+    );
+  });
+
+  describe("TestEventPattern", () => {
+    test.provider("matches and rejects events against a pattern", (_stack) =>
+      Effect.gen(function* () {
+        const matching = (yield* send(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/test-pattern`),
+            { source: "alchemy.test.pattern" },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as { matches: boolean };
+        expect(matching.matches).toBe(true);
+
+        const nonMatching = (yield* send(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/test-pattern`),
+            { source: "other.source" },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as { matches: boolean };
+        expect(nonMatching.matches).toBe(false);
+      }),
     );
   });
 

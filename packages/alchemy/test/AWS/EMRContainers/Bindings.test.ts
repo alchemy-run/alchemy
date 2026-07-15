@@ -143,6 +143,22 @@ describe.sequential("EMRContainers Bindings", () => {
     );
   });
 
+  describe("ListVirtualClusters", () => {
+    test.provider(
+      "enumerates the account's virtual clusters (IAM grant + call path)",
+      (_stack) =>
+        Effect.gen(function* () {
+          // The account may have zero RUNNING virtual clusters (they require
+          // an EKS-backed cluster); the assertion is the authorized round
+          // trip, not the count.
+          const response = (yield* getJson("/virtual-clusters")) as {
+            ids: string[];
+          };
+          expect(Array.isArray(response.ids)).toBe(true);
+        }),
+    );
+  });
+
   describe("consumeJobRunEvents", () => {
     test.provider(
       "the deploy created an EventBridge rule targeting the function",

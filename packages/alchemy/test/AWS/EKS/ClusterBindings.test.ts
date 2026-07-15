@@ -49,7 +49,7 @@ test.provider.skipIf(
           );
 
         const bindings = (yield* get("/bindings")) as { bound: string[] };
-        expect(bindings.bound).toHaveLength(16);
+        expect(bindings.bound).toHaveLength(22);
 
         // DescribeCluster returns the live control-plane connection info.
         const cluster = (yield* get("/cluster")) as {
@@ -73,6 +73,8 @@ test.provider.skipIf(
           "accessEntries",
           "insights",
           "updates",
+          "capabilities",
+          "identityProviderConfigs",
         ]) {
           expect(lists[key]).toBeGreaterThanOrEqual(0);
         }
@@ -104,6 +106,26 @@ test.provider.skipIf(
           "ResourceNotFoundException",
           "InvalidRequestException",
         ]).toContain(probes.associatedPoliciesTag);
+        expect([
+          "ResourceNotFoundException",
+          "InvalidParameterException",
+        ]).toContain(probes.capabilityTag);
+        expect([
+          "ResourceNotFoundException",
+          "InvalidParameterException",
+        ]).toContain(probes.identityProviderConfigTag);
+
+        // Insights refresh: kick an on-demand refresh and read its status
+        // back. A refresh already in flight surfaces the typed
+        // InvalidRequestException — either outcome proves both grants.
+        const refresh = (yield* get("/insights-refresh")) as {
+          startTag: string;
+          describeTag: string;
+        };
+        expect(typeof refresh.startTag).toBe("string");
+        expect(refresh.startTag.length).toBeGreaterThan(0);
+        expect(typeof refresh.describeTag).toBe("string");
+        expect(refresh.describeTag.length).toBeGreaterThan(0);
       }).pipe(Effect.ensuring(slowStack.destroy().pipe(Effect.orDie)));
     }),
   // cluster create (~10 min) + probes + delete (~10 min) in one test.

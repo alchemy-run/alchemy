@@ -194,12 +194,15 @@ describe.sequential("FSx Bindings", () => {
   });
 
   describe("UpdateSnapshot", () => {
+    // FSx misclassifies this not-found as a wire `BadRequest`; the distilled
+    // patch (patches/fsx.json) carves the typed UpdateSnapshotNotFound out
+    // of it by message predicate.
     test.provider(
-      "returns the typed SnapshotNotFound for a missing snapshot",
+      "returns the typed UpdateSnapshotNotFound for a missing snapshot",
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* postJson("/snapshot/update-missing")) as any;
-          expect(response.tag).toBe("SnapshotNotFound");
+          expect(response.tag).toBe("UpdateSnapshotNotFound");
         }),
     );
   });

@@ -101,6 +101,13 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
   /** Request field the bound bus's name is injected under. */
   busNameKey: string;
+  /**
+   * Override the IAM resources the actions are granted on. Some bus-scoped
+   * operations (`events:ListRules`) do not support resource-level
+   * permissions and must be granted on `*`; the default is the bound bus's
+   * ARN (or the account default bus ARN when no bus is bound).
+   */
+  resources?: (env: { accountId: string; region: string }) => readonly string[];
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -129,7 +136,9 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
                 {
                   Effect: "Allow",
                   Action: [...options.actions],
-                  Resource: [resource],
+                  Resource: options.resources
+                    ? [...options.resources({ accountId, region })]
+                    : [resource],
                 },
               ],
             },
