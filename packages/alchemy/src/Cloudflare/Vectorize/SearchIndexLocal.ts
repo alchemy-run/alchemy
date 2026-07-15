@@ -114,7 +114,7 @@ export const SearchIndexLocal = Layer.effect(
               .insertIndex({
                 accountId,
                 indexName: name,
-                vectors: toNdjsonBlob(vectors),
+                body: toNdjsonBlob(vectors),
               })
               .pipe(Effect.map(toMutation)),
           ),
@@ -124,7 +124,7 @@ export const SearchIndexLocal = Layer.effect(
               .upsertIndex({
                 accountId,
                 indexName: name,
-                vectors: toNdjsonBlob(vectors),
+                body: toNdjsonBlob(vectors),
               })
               .pipe(Effect.map(toMutation)),
           ),
