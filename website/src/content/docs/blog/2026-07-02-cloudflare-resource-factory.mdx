@@ -28,7 +28,7 @@ loop grew Alchemy's Cloudflare provider from **22 resources to
 230** between June 11 and June 17, producing 288 test files
 with roughly 700 tests and **720 SDK patches**. Most of it
 landed in a single PR
-([#601](https://github.com/alchemy-run/alchemy-effect/pull/601))
+([#601](https://github.com/alchemy-run/alchemy/pull/601))
 that added 101,178 lines across 542 files and was open for 22
 hours. The PR description, in its entirety:
 
@@ -159,7 +159,7 @@ returns.
 Two choices kept the loop fast. distilled is a git submodule
 inside alchemy's bun workspace, so an agent patches the SDK
 and the resource that consumes it in one working tree, and a
-wave lands as two PRs, one to alchemy-effect and one to
+wave lands as two PRs, one to alchemy and one to
 distilled. And vitest resolves distilled from its TypeScript
 source, so a regenerated service is visible to the very next
 test run. The loop's cycle time is the test's runtime.
@@ -174,6 +174,6 @@ Cloudflare run was the proof, and it shipped in
 [2.0.0-beta.56](/blog/2026-06-17-beta-56).
 
 - [2.0.0-beta.56 — the release these resources shipped in](/blog/2026-06-17-beta-56)
-- [PR #601 — the generation wave](https://github.com/alchemy-run/alchemy-effect/pull/601)
+- [PR #601 — the generation wave](https://github.com/alchemy-run/alchemy/pull/601)
 - [distilled — the generated, patchable SDK](https://github.com/alchemy-run/distilled)
 - [Cloudflare provider reference](/providers/cloudflare)

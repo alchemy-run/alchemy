@@ -713,7 +713,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
     { timeout: 360_000 },
   );
 
-  // Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+  // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
   //
   // An interrupted first deploy persists the table as `status: "creating"`
   // with no attributes — and Output-valued props do not survive the state

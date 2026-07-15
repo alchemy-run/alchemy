@@ -31,7 +31,7 @@ jobs:
       # distilled submodule, so consumer checkouts must fetch it.
       submodules: "true"
       version: ${{ inputs.version }}
-      repo: alchemy-run/alchemy-effect
+      repo: alchemy-run/alchemy
       current-version: "2.0.0"
       # Each package builds in its own publish job: the tsc build pulls
       # in the alchemy -> distilled project-reference chain (distilled/aws

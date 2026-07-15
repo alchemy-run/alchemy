@@ -717,7 +717,7 @@ export const make = <A>(
             // If planning persisted here, a mere `alchemy plan` / `--dry-run`
             // would claim ownership of an unowned cloud resource, arming a
             // later unrelated deploy to orphan-delete it. See
-            // https://github.com/alchemy-run/alchemy-effect/issues/793.
+            // https://github.com/alchemy-run/alchemy/issues/793.
             //
             // After a cold-start adoption (engine just discovered an
             // existing cloud resource via `read`), force the engine's
@@ -784,7 +784,7 @@ export const make = <A>(
                 // The adopted state rides onto the plan node via `oldState`
                 // (→ `node.state`) and is persisted at APPLY time by the
                 // update lifecycle's `updating` / `updated` commits. See
-                // https://github.com/alchemy-run/alchemy-effect/issues/793.
+                // https://github.com/alchemy-run/alchemy/issues/793.
                 oldState = adoptedState;
                 forceUpdateAfterAdoption = true;
               }

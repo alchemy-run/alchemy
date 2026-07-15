@@ -8,7 +8,7 @@ import { relations, Widgets } from "./schema.ts";
 
 /**
  * Regression guard for the ExecutionContext-in-Workflow fix
- * (https://github.com/alchemy-run/alchemy-effect/pull/515).
+ * (https://github.com/alchemy-run/alchemy/pull/515).
  *
  * `Drizzle.postgres` resolves its pool through `ExecutionContext`, which
  * `WorkflowBridge.run` now provides per run and `task` threads into each

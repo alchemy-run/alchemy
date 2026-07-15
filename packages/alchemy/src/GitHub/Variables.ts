@@ -33,7 +33,7 @@ export interface VariablesProps {
  * ```ts
  * yield* GitHub.Variables({
  *   owner: "alchemy-run",
- *   repository: "alchemy-effect",
+ *   repository: "alchemy",
  *   variables: {
  *     AWS_ROLE_ARN: role.roleArn,
  *     AWS_REGION: region,

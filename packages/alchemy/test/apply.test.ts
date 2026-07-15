@@ -415,10 +415,10 @@ describe("basic operations", () => {
 
 // Regression: a logical ID may legitimately contain the FQN separator ("/").
 // The GitHub event source registers a webhook keyed by `${owner}/${repository}`
-// (e.g. "alchemy-run/alchemy-effect"). During destroy the deletion path used to
+// (e.g. "alchemy-run/alchemy"). During destroy the deletion path used to
 // recompute the state key via `toFqn(namespace, logicalId)`, but `logicalId`
 // came from `parseFqn` which splits on "/" and keeps only the last segment
-// ("alchemy-effect"). The recomputed key missed the real state row, so the
+// ("alchemy"). The recomputed key missed the real state row, so the
 // resource was deleted from the cloud yet never removed from state — resurfacing
 // as an orphan deletion on every subsequent destroy, forever.
 describe("FQN separator in logical ID", () => {
@@ -426,7 +426,7 @@ describe("FQN separator in logical ID", () => {
     "destroy clears state for a top-level logical ID containing '/'",
     (stack) =>
       Effect.gen(function* () {
-        const fqn = "alchemy-run/alchemy-effect";
+        const fqn = "alchemy-run/alchemy";
 
         yield* stack.deploy(
           Effect.gen(function* () {
@@ -461,11 +461,11 @@ describe("FQN separator in logical ID", () => {
       Effect.gen(function* () {
         // Mirrors the GitHub webhook: a host construct (the Worker) whose
         // child resource's logical ID is "owner/repo".
-        const fqn = "ReleaseService/alchemy-run/alchemy-effect";
+        const fqn = "ReleaseService/alchemy-run/alchemy";
 
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* TestResource("alchemy-run/alchemy-effect", {
+            return yield* TestResource("alchemy-run/alchemy", {
               string: "v1",
             });
           }).pipe(Namespace.push("ReleaseService")),
@@ -4965,7 +4965,7 @@ describe("type aliases", () => {
 });
 
 // Regression coverage for
-// https://github.com/alchemy-run/alchemy-effect/issues/793
+// https://github.com/alchemy-run/alchemy/issues/793
 //
 // `Plan.make` used to `state.set(...)` the adopted `created` state during plan
 // construction. Because `alchemy plan` / `deploy --dry-run` build a plan the

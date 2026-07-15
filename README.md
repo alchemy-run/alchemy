@@ -59,7 +59,7 @@ Use the root action to deploy `prod` from `main`, deploy PR previews as
 `staging-{number}`, and destroy PR previews when the PR closes:
 
 ```yaml
-- uses: alchemy-run/alchemy-effect@v1
+- uses: alchemy-run/alchemy@v1
   env:
     CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

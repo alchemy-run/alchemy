@@ -261,7 +261,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/alchemy-run/alchemy-effect",
+          href: "https://github.com/alchemy-run/alchemy",
         },
         {
           icon: "discord",
@@ -270,8 +270,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl:
-          "https://github.com/alchemy-run/alchemy-effect/edit/main/website",
+        baseUrl: "https://github.com/alchemy-run/alchemy/edit/main/website",
       },
       // One top-level group per docs tab (see src/docs-tabs.ts). The
       // docs-tabs-sidebar middleware swaps in the active tab's group, so

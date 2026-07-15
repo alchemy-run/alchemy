@@ -92,7 +92,7 @@ export default Alchemy.Stack(
     if (stage.startsWith("pr-")) {
       yield* GitHub.Comment("preview-comment", {
         owner: "alchemy-run",
-        repository: "alchemy-effect",
+        repository: "alchemy",
         issueNumber: Number(process.env.PULL_REQUEST),
         body: Output.interpolate`
           ## Website Preview Deployed
@@ -106,7 +106,7 @@ export default Alchemy.Stack(
             // commit on `pull_request` events, which is not what
             // anyone wants to see in the comment.
             process.env.BUILD_SHA
-              ? `[\`${process.env.BUILD_SHA.slice(0, 7)}\`](https://github.com/alchemy-run/alchemy-effect/commit/${process.env.BUILD_SHA})`
+              ? `[\`${process.env.BUILD_SHA.slice(0, 7)}\`](https://github.com/alchemy-run/alchemy/commit/${process.env.BUILD_SHA})`
               : "unknown"
           }.
 

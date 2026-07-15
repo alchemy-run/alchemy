@@ -272,7 +272,7 @@ export const AwsAuth = AuthProviderLayer<
                   ? Effect.fail(
                       new AuthError({
                         message:
-                          "AWS stored credentials not found. Run: alchemy-effect login --configure",
+                          "AWS stored credentials not found. Run: alchemy login --configure",
                       }),
                     )
                   : Effect.succeed({
