@@ -108,10 +108,10 @@ describe.sequential("Glue Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 300_000 });
 
   describe("binding registration", () => {
-    test.provider("all sixteen capabilities initialize in the runtime", () =>
+    test.provider("all twenty capabilities initialize in the runtime", () =>
       Effect.gen(function* () {
         const response = (yield* getJson("/bindings")) as { bound: string[] };
-        expect(response.bound).toHaveLength(16);
+        expect(response.bound).toHaveLength(20);
       }),
     );
   });
@@ -154,6 +154,19 @@ describe.sequential("Glue Bindings", () => {
           expect(response.stopSubmitted + response.stopErrors).toBe(1);
         }),
       { timeout: 120_000 },
+    );
+  });
+
+  describe("GetCrawler", () => {
+    test.provider("reads the bound crawler's live state", () =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/crawler")) as {
+          name: string;
+          state: string;
+        };
+        expect(response.name).toBeTruthy();
+        expect(["READY", "RUNNING", "STOPPING"]).toContain(response.state);
+      }),
     );
   });
 
@@ -204,20 +217,28 @@ describe.sequential("Glue Bindings", () => {
 
   describe("Partitions", () => {
     test.provider(
-      "create, get, update, batch-create, list, delete",
+      "create, get, update, batch-create/update/get, list, batch-delete",
       () =>
         Effect.gen(function* () {
           const response = (yield* postJson("/partitions")) as {
             created: string[];
             updatedParam: string;
             batchErrors: number;
+            batchUpdateErrors: number;
+            bulkRead: number;
+            bulkUpdatedParams: number;
             count: number;
+            batchDeleteErrors: number;
             remaining: number;
           };
           expect(response.created).toEqual(["2026-01-01"]);
           expect(response.updatedParam).toBe("true");
           expect(response.batchErrors).toBe(0);
+          expect(response.batchUpdateErrors).toBe(0);
+          expect(response.bulkRead).toBe(3);
+          expect(response.bulkUpdatedParams).toBe(2);
           expect(response.count).toBe(3);
+          expect(response.batchDeleteErrors).toBe(0);
           expect(response.remaining).toBe(0);
         }),
       { timeout: 120_000 },

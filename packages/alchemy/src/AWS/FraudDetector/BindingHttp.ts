@@ -3,6 +3,7 @@ import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Detector } from "./Detector.ts";
 import type { EventType } from "./EventType.ts";
+import type { List } from "./List.ts";
 
 /**
  * Shared scaffolding for Amazon Fraud Detector HTTP bindings.
@@ -68,6 +69,54 @@ export const makeFraudDetectorDetectorHttpBinding = <
  * event type's ARN, and the runtime half injects the event type's
  * `eventTypeName` into every request.
  */
+/**
+ * Build the impl Effect for a Fraud Detector list data-plane operation scoped
+ * to a {@link List} (`GetListElements`, `UpdateList`): the deploy-time half
+ * grants `actions` on the bound list's ARN, and the runtime half injects the
+ * list's `name` into every request.
+ */
+export const makeFraudDetectorListHttpBinding = <
+  I extends { name: string },
+  A,
+  E,
+  R,
+>(options: {
+  /** Fully-qualified binding tag, e.g. `AWS.FraudDetector.GetListElements`. */
+  tag: string;
+  /** The distilled operation. */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /** IAM actions granted on the list ARN. */
+  actions: readonly string[];
+}) =>
+  Effect.gen(function* () {
+    const op = yield* options.operation;
+
+    return Effect.fn(function* (list: List) {
+      // Output yields a DEFERRED effect — resolve again per invocation below.
+      const ListName = yield* list.name;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isBindingHost(host)) {
+          yield* host.bind`Allow(${host}, ${options.tag}(${list}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [list.arn],
+              },
+            ],
+          });
+        }
+      }
+      return Effect.fn(`${options.tag}(${list.LogicalId})`)(function* (
+        request: Omit<I, "name">,
+      ) {
+        const name = yield* ListName;
+        return yield* op({ ...request, name } as unknown as I);
+      });
+    });
+  });
+
 export const makeFraudDetectorEventTypeHttpBinding = <
   I extends { eventTypeName: string },
   A,

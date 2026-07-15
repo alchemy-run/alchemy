@@ -105,6 +105,7 @@ export default GlueTestFunction.make(
     // Crawler-scoped bindings.
     const startCrawler = yield* Glue.StartCrawler(crawler);
     const stopCrawler = yield* Glue.StopCrawler(crawler);
+    const getCrawler = yield* Glue.GetCrawler(crawler);
 
     // Catalog bindings.
     const getTables = yield* Glue.GetTables(database);
@@ -113,8 +114,11 @@ export default GlueTestFunction.make(
     const getPartition = yield* Glue.GetPartition(table);
     const createPartition = yield* Glue.CreatePartition(table);
     const batchCreatePartition = yield* Glue.BatchCreatePartition(table);
+    const batchGetPartition = yield* Glue.BatchGetPartition(table);
     const updatePartition = yield* Glue.UpdatePartition(table);
+    const batchUpdatePartition = yield* Glue.BatchUpdatePartition(table);
     const deletePartition = yield* Glue.DeletePartition(table);
+    const batchDeletePartition = yield* Glue.BatchDeletePartition(table);
 
     const bound = {
       startJobRun,
@@ -125,14 +129,18 @@ export default GlueTestFunction.make(
       resetJobBookmark,
       startCrawler,
       stopCrawler,
+      getCrawler,
       getTables,
       getTable,
       getPartitions,
       getPartition,
       createPartition,
       batchCreatePartition,
+      batchGetPartition,
       updatePartition,
+      batchUpdatePartition,
       deletePartition,
+      batchDeletePartition,
     };
 
     return {
@@ -190,6 +198,15 @@ export default GlueTestFunction.make(
             state: JobRun?.JobRunState,
             stopSubmitted: (stopped.SuccessfulSubmissions ?? []).length,
             stopErrors: (stopped.Errors ?? []).length,
+          });
+        }
+
+        // GetCrawler reads the crawler's live state — proves the op + grant.
+        if (request.method === "GET" && pathname === "/crawler") {
+          const { Crawler } = yield* getCrawler();
+          return yield* HttpServerResponse.json({
+            name: Crawler?.Name,
+            state: Crawler?.State,
           });
         }
 
@@ -271,20 +288,47 @@ export default GlueTestFunction.make(
               { Values: ["2026-01-03"] },
             ],
           });
+          // Bulk update the batch-created partitions' parameters.
+          const batchUpdated = yield* batchUpdatePartition({
+            Entries: ["2026-01-02", "2026-01-03"].map((dt) => ({
+              PartitionValueList: [dt],
+              PartitionInput: {
+                Values: [dt],
+                Parameters: { bulkUpdated: "true" },
+              },
+            })),
+          });
+          // Bulk read all three back (one miss to prove UnprocessedKeys).
+          const bulk = yield* batchGetPartition({
+            PartitionsToGet: [
+              { Values: ["2026-01-01"] },
+              { Values: ["2026-01-02"] },
+              { Values: ["2026-01-03"] },
+            ],
+          });
           const all = yield* getPartitions();
-          yield* Effect.forEach(
-            ["2026-01-01", "2026-01-02", "2026-01-03"],
-            (dt) =>
-              deletePartition({ PartitionValues: [dt] }).pipe(
-                Effect.catchTag("EntityNotFoundException", () => Effect.void),
-              ),
+          // Bulk delete two, single-delete the third.
+          const batchDeleted = yield* batchDeletePartition({
+            PartitionsToDelete: [
+              { Values: ["2026-01-02"] },
+              { Values: ["2026-01-03"] },
+            ],
+          });
+          yield* deletePartition({ PartitionValues: ["2026-01-01"] }).pipe(
+            Effect.catchTag("EntityNotFoundException", () => Effect.void),
           );
           const after = yield* getPartitions();
           return yield* HttpServerResponse.json({
             created: created.Partition?.Values,
             updatedParam: updated.Partition?.Parameters?.updated,
             batchErrors: (batch.Errors ?? []).length,
+            batchUpdateErrors: (batchUpdated.Errors ?? []).length,
+            bulkRead: (bulk.Partitions ?? []).length,
+            bulkUpdatedParams: (bulk.Partitions ?? []).filter(
+              (p) => p.Parameters?.bulkUpdated === "true",
+            ).length,
             count: (all.Partitions ?? []).length,
+            batchDeleteErrors: (batchDeleted.Errors ?? []).length,
             remaining: (after.Partitions ?? []).length,
           });
         }
@@ -307,14 +351,18 @@ export default GlueTestFunction.make(
         Glue.ResetJobBookmarkHttp,
         Glue.StartCrawlerHttp,
         Glue.StopCrawlerHttp,
+        Glue.GetCrawlerHttp,
         Glue.GetTablesHttp,
         Glue.GetTableHttp,
         Glue.GetPartitionsHttp,
         Glue.GetPartitionHttp,
         Glue.CreatePartitionHttp,
         Glue.BatchCreatePartitionHttp,
+        Glue.BatchGetPartitionHttp,
         Glue.UpdatePartitionHttp,
+        Glue.BatchUpdatePartitionHttp,
         Glue.DeletePartitionHttp,
+        Glue.BatchDeletePartitionHttp,
       ),
     ),
   ),

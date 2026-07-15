@@ -14,15 +14,20 @@ export const UpdateTaskProtectionHttp = Layer.effect(
     tag: "AWS.ECS.UpdateTaskProtection",
     // Wrap the distilled operation so the binding accepts a Duration.Input
     // `expiresIn` and converts it to the wire's whole minutes.
-    operation: Effect.map(
-      ECS.updateTaskProtection,
-      (op) =>
-        ({
-          expiresIn,
-          ...request
-        }: UpdateTaskProtectionRequest & { cluster: string }) =>
-          op({ ...request, expiresInMinutes: toWireMinutes(expiresIn) }),
-    ),
+    //
+    // The operation must be *yielded* (its `Symbol.iterator`/`asEffect`
+    // protocol), never passed to `Effect.map`: an `API.OperationMethod` is a
+    // plain callable that is not `Effect.isEffect`, so `Effect.map` wraps it
+    // into an invalid effect that crashes the fiber at run time with
+    // "Not a valid effect: function ...".
+    operation: Effect.gen(function* () {
+      const op = yield* ECS.updateTaskProtection;
+      return ({
+        expiresIn,
+        ...request
+      }: UpdateTaskProtectionRequest & { cluster: string }) =>
+        op({ ...request, expiresInMinutes: toWireMinutes(expiresIn) });
+    }),
     actions: ["ecs:UpdateTaskProtection"],
     // Authorizes against the task resource:
     // arn:aws:ecs:{region}:{account}:task/{clusterName}/*
