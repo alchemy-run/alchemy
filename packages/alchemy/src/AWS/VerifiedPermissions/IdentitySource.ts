@@ -1,6 +1,7 @@
 import * as avp from "@distilled.cloud/aws/verifiedpermissions";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -358,13 +359,24 @@ export const IdentitySourceProvider = () =>
               ? yield* observe(news.policyStoreId, output.identitySourceId)
               : undefined;
 
-          // 2. ENSURE
+          // 2. ENSURE — a freshly created policy store is eventually
+          // consistent; createIdentitySource can briefly 404 on it
           if (existing === undefined) {
-            const created = yield* avp.createIdentitySource({
-              policyStoreId: news.policyStoreId,
-              configuration: toConfiguration(news),
-              principalEntityType: news.principalEntityType,
-            });
+            const created = yield* avp
+              .createIdentitySource({
+                policyStoreId: news.policyStoreId,
+                configuration: toConfiguration(news),
+                principalEntityType: news.principalEntityType,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e): boolean => e._tag === "ResourceNotFoundException",
+                  schedule: Schedule.max([
+                    Schedule.exponential("1 second"),
+                    Schedule.recurs(5),
+                  ]),
+                }),
+              );
             yield* session.note(created.identitySourceId);
             return {
               policyStoreId: news.policyStoreId,

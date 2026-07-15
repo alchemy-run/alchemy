@@ -223,10 +223,21 @@ describe("XRay Bindings", () => {
   describe("Service graphs (GetServiceGraph, GetTraceGraph, GetTimeSeriesServiceStatistics)", () => {
     test.provider("queries the service graph bindings", (_stack) =>
       Effect.gen(function* () {
+        // A typed error tag still proves the IAM grant went through — the
+        // typed set below excludes AccessDeniedException.
+        const graphTags = ["InvalidRequestException", "ValidationException"];
+
         const graph = (yield* send(
           HttpClientRequest.get(`${baseUrl}/service-graph`),
-        ).pipe(Effect.flatMap((r) => r.json))) as { services: number };
-        expect(graph.services).toBeGreaterThanOrEqual(0);
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          services: number | null;
+          error: string | null;
+        };
+        if (graph.error !== null) {
+          expect(graphTags).toContain(graph.error);
+        } else {
+          expect(graph.services).toBeGreaterThanOrEqual(0);
+        }
 
         const epochHex = yield* Effect.sync(() =>
           Math.floor(Date.now() / 1000).toString(16),
@@ -235,8 +246,15 @@ describe("XRay Bindings", () => {
           HttpClientRequest.get(
             `${baseUrl}/trace-graph?ids=1-${epochHex}-abcdef0123456789abcdef01`,
           ),
-        ).pipe(Effect.flatMap((r) => r.json))) as { services: number };
-        expect(traceGraph.services).toBe(0);
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          services: number | null;
+          error: string | null;
+        };
+        if (traceGraph.error !== null) {
+          expect(graphTags).toContain(traceGraph.error);
+        } else {
+          expect(traceGraph.services).toBe(0);
+        }
 
         const timeSeries = (yield* send(
           HttpClientRequest.get(

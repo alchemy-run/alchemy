@@ -29,6 +29,7 @@ let functionArn: string;
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
+  readonly url: string;
 }> {}
 
 // The shared Lambda fixture occasionally answers a transient 5xx under load
@@ -42,7 +43,11 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
         ? response.text.pipe(
             Effect.flatMap((body) =>
               Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
+                new TransientUpstream({
+                  status: response.status,
+                  body,
+                  url: request.url,
+                }),
               ),
             ),
           )
@@ -105,7 +110,9 @@ describe.sequential("Signer Bindings", () => {
     { timeout: 300_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 180_000 });
+  afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), {
+    timeout: 180_000,
+  });
 
   describe("binding registration", () => {
     test.provider("all nine capabilities initialize in the runtime", (_stack) =>

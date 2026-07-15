@@ -180,6 +180,8 @@ export default Wafv2BindingsFunction.make(
             );
           const arn = yield* ruleGroupArn;
           const account = arn.split(":")[4];
+          // The policy must NOT include a Resource parameter — the resource
+          // is implied by the ResourceArn the binding injects.
           yield* bound.putPermissionPolicy({
             Policy: JSON.stringify({
               Version: "2012-10-17",
@@ -192,7 +194,6 @@ export default Wafv2BindingsFunction.make(
                     "wafv2:UpdateWebACL",
                     "wafv2:PutFirewallManagerRuleGroups",
                   ],
-                  Resource: arn,
                 },
               ],
             }),

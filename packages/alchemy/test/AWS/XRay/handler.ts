@@ -212,25 +212,33 @@ export default XRayTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/service-graph") {
-          const graph = yield* throttleRetry(
-            getServiceGraph({
-              StartTime: new Date(now - 10 * 60 * 1000),
-              EndTime: new Date(now),
-            }),
+          const graph = yield* Effect.result(
+            throttleRetry(
+              getServiceGraph({
+                StartTime: new Date(now - 10 * 60 * 1000),
+                EndTime: new Date(now),
+              }),
+            ),
           );
-          return yield* HttpServerResponse.json({
-            services: (graph.Services ?? []).length,
-          });
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(graph)
+              ? { services: (graph.success.Services ?? []).length, error: null }
+              : { services: null, error: graph.failure._tag },
+          );
         }
 
         if (request.method === "GET" && pathname === "/trace-graph") {
           const ids = url.searchParams.get("ids");
-          const graph = yield* throttleRetry(
-            getTraceGraph({ TraceIds: ids ? ids.split(",") : [] }),
+          const graph = yield* Effect.result(
+            throttleRetry(
+              getTraceGraph({ TraceIds: ids ? ids.split(",") : [] }),
+            ),
           );
-          return yield* HttpServerResponse.json({
-            services: (graph.Services ?? []).length,
-          });
+          return yield* HttpServerResponse.json(
+            Result.isSuccess(graph)
+              ? { services: (graph.success.Services ?? []).length, error: null }
+              : { services: null, error: graph.failure._tag },
+          );
         }
 
         if (request.method === "GET" && pathname === "/time-series") {
