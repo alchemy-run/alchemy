@@ -1,5 +1,5 @@
 import * as kv from "@distilled.cloud/aws/kinesis-video";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream_ from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compactTags,
@@ -33,10 +34,11 @@ export interface SignalingChannelProps {
   /**
    * How long an undelivered signaling message is retained (5–120 seconds).
    * Accepts any `Duration.Input` (e.g. `"30 seconds"`, `Duration.seconds(30)`;
-   * a bare number is milliseconds). Updated in place.
+   * a bare number is milliseconds); the wire unit is whole seconds. Updated
+   * in place.
    * @default 60 seconds
    */
-  messageTtlSeconds?: Duration.Input;
+  messageTtl?: Duration.Input;
   /**
    * Tags to apply to the channel. Merged with internal Alchemy tags.
    */
@@ -59,7 +61,7 @@ export interface SignalingChannel extends Resource<
  * point that WebRTC master and viewer peers use to exchange SDP offers,
  * answers, and ICE candidates.
  *
- * `messageTtlSeconds` is updated in place; changing `channelName` or `type`
+ * `messageTtl` is updated in place; changing `channelName` or `type`
  * replaces the channel.
  * @resource
  * @section Creating Channels
@@ -73,7 +75,7 @@ export interface SignalingChannel extends Resource<
  * @example Channel with Message TTL
  * ```typescript
  * const channel = yield* AWS.KinesisVideo.SignalingChannel("Doorbell", {
- *   messageTtlSeconds: "30 seconds",
+ *   messageTtl: "30 seconds",
  *   tags: { Environment: "production" },
  * });
  * ```
@@ -178,7 +180,7 @@ export const SignalingChannelProvider = () =>
           if (oldType !== newType) {
             return { action: "replace" } as const;
           }
-          // messageTtlSeconds/tags fall through to the default update path.
+          // messageTtl/tags fall through to the default update path.
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -191,10 +193,7 @@ export const SignalingChannelProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
           // Wire unit is whole seconds (MessageTtlSeconds).
-          const desiredTtl =
-            props.messageTtlSeconds !== undefined
-              ? Math.round(Duration.toSeconds(props.messageTtlSeconds))
-              : undefined;
+          const desiredTtl = toWireSeconds(props.messageTtl);
 
           // 1. OBSERVE
           let info = yield* observeChannel(channelName);

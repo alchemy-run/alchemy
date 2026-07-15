@@ -1,5 +1,5 @@
 import * as kv from "@distilled.cloud/aws/kinesis-video";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream_ from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireHours } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compactTags,
@@ -42,13 +43,13 @@ export interface StreamProps {
    */
   kmsKeyId?: string;
   /**
-   * How long stream data is retained. `0` means no retention — data is
-   * only available live. Accepts any `Duration.Input` (e.g. `"24 hours"`,
-   * `Duration.hours(24)`; a bare number is milliseconds); the wire unit is
-   * whole hours. Adjusted in place via `UpdateDataRetention`.
+   * How long stream data is retained. Zero duration means no retention —
+   * data is only available live. Accepts any `Duration.Input` (e.g.
+   * `"24 hours"`, `Duration.hours(24)`; a bare number is milliseconds); the
+   * wire unit is whole hours. Adjusted in place via `UpdateDataRetention`.
    * @default 0
    */
-  dataRetentionInHours?: Duration.Input;
+  dataRetention?: Duration.Input;
   /**
    * Tags to apply to the stream. Merged with internal Alchemy tags.
    */
@@ -72,9 +73,8 @@ export interface Stream extends Resource<
  *
  * Stream creation is asynchronous — the provider waits (bounded) for the
  * stream to become `ACTIVE` before returning. `deviceName` and `mediaType`
- * are updated in place; `dataRetentionInHours` converges via
- * `UpdateDataRetention`; changing `streamName` or `kmsKeyId` replaces the
- * stream.
+ * are updated in place; `dataRetention` converges via `UpdateDataRetention`;
+ * changing `streamName` or `kmsKeyId` replaces the stream.
  * @resource
  * @section Creating Streams
  * @example Basic Video Stream
@@ -88,7 +88,7 @@ export interface Stream extends Resource<
  * ```typescript
  * const stream = yield* AWS.KinesisVideo.Stream("Camera", {
  *   mediaType: "video/h264",
- *   dataRetentionInHours: "24 hours",
+ *   dataRetention: "24 hours",
  *   tags: { Environment: "production" },
  * });
  * ```
@@ -198,7 +198,7 @@ export const StreamProvider = () =>
           if (olds?.kmsKeyId !== news?.kmsKeyId) {
             return { action: "replace" } as const;
           }
-          // deviceName/mediaType/dataRetentionInHours/tags fall through to
+          // deviceName/mediaType/dataRetention/tags fall through to
           // the default update path (reconcile applies the deltas).
         }),
 
@@ -212,10 +212,7 @@ export const StreamProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
           // Wire unit is whole hours (DataRetentionInHours).
-          const desiredRetention =
-            props.dataRetentionInHours !== undefined
-              ? Math.round(Duration.toHours(props.dataRetentionInHours))
-              : undefined;
+          const desiredRetention = toWireHours(props.dataRetention);
 
           // 1. OBSERVE — cloud state is authoritative
           let info = yield* observeStream(streamName);

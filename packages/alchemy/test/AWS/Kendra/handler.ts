@@ -32,8 +32,8 @@ const errorTagged = <A, E extends { _tag: string }, R>(
 /**
  * Index-scoped binding fixture: deploys a real Developer-edition Kendra
  * index (~20-30 minutes to provision, billed while it exists — gated behind
- * AWS_TEST_SLOW) plus an S3 data source and a Lambda bound to all eighteen
- * Kendra bindings.
+ * AWS_TEST_SLOW) plus an S3 data source and a Lambda bound to all
+ * twenty-three Kendra bindings.
  */
 export default KendraTestFunction.make(
   {
@@ -149,6 +149,11 @@ export default KendraTestFunction.make(
     const suggestionsConfig =
       yield* Kendra.DescribeQuerySuggestionsConfig(index);
     const updateSuggestions = yield* Kendra.UpdateQuerySuggestionsConfig(index);
+    const createAcl = yield* Kendra.CreateAccessControlConfiguration(index);
+    const describeAcl = yield* Kendra.DescribeAccessControlConfiguration(index);
+    const updateAcl = yield* Kendra.UpdateAccessControlConfiguration(index);
+    const deleteAcl = yield* Kendra.DeleteAccessControlConfiguration(index);
+    const listAcls = yield* Kendra.ListAccessControlConfigurations(index);
     const startSync = yield* Kendra.StartDataSourceSyncJob(source);
     const stopSync = yield* Kendra.StopDataSourceSyncJob(source);
     const listSyncJobs = yield* Kendra.ListDataSourceSyncJobs(source);
@@ -169,6 +174,11 @@ export default KendraTestFunction.make(
       clearSuggestions,
       suggestionsConfig,
       updateSuggestions,
+      createAcl,
+      describeAcl,
+      updateAcl,
+      deleteAcl,
+      listAcls,
       startSync,
       stopSync,
       listSyncJobs,
@@ -363,6 +373,53 @@ export default KendraTestFunction.make(
           );
         }
 
+        if (pathname === "/access-control") {
+          // Full create -> describe -> update -> delete round trip through
+          // the four ACL bindings.
+          const created = yield* errorTagged(
+            createAcl({
+              Name: "block-departed-users",
+              AccessControlList: [
+                { Name: "departed-user", Type: "USER", Access: "DENY" },
+              ],
+            }),
+          );
+          if ("errorTag" in created) {
+            return yield* HttpServerResponse.json(created);
+          }
+          const described = yield* errorTagged(describeAcl({ Id: created.Id }));
+          if ("errorTag" in described) {
+            return yield* HttpServerResponse.json(described);
+          }
+          const updated = yield* errorTagged(
+            updateAcl({
+              Id: created.Id,
+              AccessControlList: [
+                { Name: "departed-user", Type: "USER", Access: "DENY" },
+                { Name: "auditor", Type: "USER", Access: "ALLOW" },
+              ],
+            }),
+          );
+          if ("errorTag" in updated) {
+            return yield* HttpServerResponse.json(updated);
+          }
+          const deleted = yield* errorTagged(deleteAcl({ Id: created.Id }));
+          return yield* HttpServerResponse.json(
+            "errorTag" in deleted
+              ? deleted
+              : { id: created.Id, name: described.Name },
+          );
+        }
+
+        if (pathname === "/access-controls") {
+          const result = yield* errorTagged(listAcls());
+          return yield* HttpServerResponse.json(
+            "errorTag" in result
+              ? result
+              : { count: (result.AccessControlConfigurations ?? []).length },
+          );
+        }
+
         if (pathname === "/sync") {
           const result = yield* errorTagged(startSync());
           return yield* HttpServerResponse.json(
@@ -410,6 +467,11 @@ export default KendraTestFunction.make(
         Kendra.ClearQuerySuggestionsHttp,
         Kendra.DescribeQuerySuggestionsConfigHttp,
         Kendra.UpdateQuerySuggestionsConfigHttp,
+        Kendra.CreateAccessControlConfigurationHttp,
+        Kendra.DescribeAccessControlConfigurationHttp,
+        Kendra.UpdateAccessControlConfigurationHttp,
+        Kendra.DeleteAccessControlConfigurationHttp,
+        Kendra.ListAccessControlConfigurationsHttp,
         Kendra.StartDataSourceSyncJobHttp,
         Kendra.StopDataSourceSyncJobHttp,
         Kendra.ListDataSourceSyncJobsHttp,

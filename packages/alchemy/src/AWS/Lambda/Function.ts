@@ -1407,10 +1407,6 @@ export default handler;
           }
         });
         const runtimeEnv = withNodeSourceMaps(env, news);
-        // TEMP DEBUG (IoT env investigation) — remove before commit
-        yield* Effect.logInfo(
-          `[createOrUpdateFunction:${id}] envKeys=${JSON.stringify(Object.keys(env ?? {}))} envVals=${JSON.stringify(Object.fromEntries(Object.entries(env ?? {}).map(([k, v]) => [k, typeof v])))}`,
-        );
 
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
@@ -1975,11 +1971,6 @@ export default handler;
 
           const { identityHash, buildArchive } = yield* bundleCode(id, news);
           const { archive, archiveHash } = yield* buildArchive;
-
-          // TEMP DEBUG (IoT env investigation) — remove before commit
-          yield* Effect.logInfo(
-            `[reconcile:${id}] newsKeys=${JSON.stringify(Object.keys(news ?? {}))} newsEnvKeys=${JSON.stringify(Object.keys((news as any).env ?? {}))}`,
-          );
 
           yield* createOrUpdateFunction({
             id,

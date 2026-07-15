@@ -39,7 +39,7 @@ export interface GetHLSStreamingSessionURLRequest extends Omit<
  *   Effect.gen(function* () {
  *     const stream = yield* AWS.KinesisVideo.Stream("Camera", {
  *       mediaType: "video/h264",
- *       dataRetentionInHours: "24 hours",
+ *       dataRetention: "24 hours",
  *     });
  *     const getHls = yield* AWS.KinesisVideo.GetHLSStreamingSessionURL(stream);
  *     return {

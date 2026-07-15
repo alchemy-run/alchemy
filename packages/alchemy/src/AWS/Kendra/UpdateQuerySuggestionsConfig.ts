@@ -5,24 +5,23 @@ import * as Binding from "../../Binding.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
- * `UpdateQuerySuggestionsConfig` request with `IndexId` injected from the
- * bound index, and the wire `QueryLogLookBackWindowInDays` expressed as a
- * `Duration.Input`.
+ * `UpdateQuerySuggestionsConfig` request with `IndexId` injected from the bound index.
  */
 export interface UpdateQuerySuggestionsConfigRequest extends Omit<
   kendra.UpdateQuerySuggestionsConfigRequest,
   "IndexId" | "QueryLogLookBackWindowInDays"
 > {
   /**
-   * How far back in the query log Kendra looks when building suggestions.
-   * Converted to whole days on the wire.
+   * How far back in the index's query log Kendra looks for popular queries
+   * when building suggestions. Accepts any duration input (e.g. `"14 days"`);
+   * converted to whole days on the wire.
    */
-  QueryLogLookBackWindow?: Duration.Input;
+  queryLogLookBackWindow?: Duration.Input;
 }
 
 /**
- * Runtime binding for the `UpdateQuerySuggestionsConfig` operation (IAM
- * action `kendra:UpdateQuerySuggestionsConfig`), scoped to one {@link Index}.
+ * Runtime binding for the `UpdateQuerySuggestionsConfig` operation (IAM action
+ * `kendra:UpdateQuerySuggestionsConfig`), scoped to one {@link Index}.
  *
  * Tunes the index's query-suggestions settings — switch between
  * `ENABLED` and `LEARN_ONLY`, adjust the query-log look-back window, or
@@ -39,7 +38,7 @@ export interface UpdateQuerySuggestionsConfigRequest extends Omit<
  *
  * yield* updateSuggestions({
  *   Mode: "LEARN_ONLY",
- *   QueryLogLookBackWindow: "30 days",
+ *   queryLogLookBackWindow: "14 days",
  *   MinimumNumberOfQueryingUsers: 2,
  * });
  * ```

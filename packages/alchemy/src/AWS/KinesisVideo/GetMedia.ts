@@ -38,7 +38,7 @@ export interface GetMediaRequest extends Omit<
  *   Effect.gen(function* () {
  *     const stream = yield* AWS.KinesisVideo.Stream("Camera", {
  *       mediaType: "video/h264",
- *       dataRetentionInHours: "24 hours",
+ *       dataRetention: "24 hours",
  *     });
  *     const getMedia = yield* AWS.KinesisVideo.GetMedia(stream);
  *     // ... read media.Payload in the fetch handler

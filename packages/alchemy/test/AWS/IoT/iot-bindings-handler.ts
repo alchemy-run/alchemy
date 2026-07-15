@@ -71,9 +71,22 @@ export default IoTBindingsFunction.make(
         const shadowName = url.searchParams.get("shadowName") ?? undefined;
 
         if (request.method === "GET" && pathname === "/ready") {
+          // `updateFunctionConfiguration` (which delivers the accessor env
+          // vars) is eventually consistent: a sandbox that boots between the
+          // code update and the config update runs the REAL code with the
+          // STALE (pre-binding) env, and stays warm serving it. Report 503
+          // until the env is visible so the test's readiness retry keeps
+          // polling until Lambda retires the stale environment.
+          const resolvedThingName = yield* thingName;
+          if (!resolvedThingName) {
+            return yield* HttpServerResponse.json(
+              { ok: false, error: "binding env not yet propagated" },
+              { status: 503 },
+            );
+          }
           return yield* HttpServerResponse.json({
             ok: true,
-            thingName: yield* thingName,
+            thingName: resolvedThingName,
           });
         }
 
