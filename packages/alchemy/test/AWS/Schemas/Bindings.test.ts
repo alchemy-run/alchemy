@@ -107,7 +107,9 @@ describe.sequential("Schemas Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 120_000,
+  });
 
   describe("binding registration", () => {
     test.provider("all ten capabilities initialize in the runtime", (_stack) =>

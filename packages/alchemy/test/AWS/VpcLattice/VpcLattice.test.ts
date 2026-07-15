@@ -119,7 +119,7 @@ test.provider(
       const service = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Service("TestLatticeService", {
-            idleTimeoutSeconds: "60 seconds",
+            idleTimeout: "60 seconds",
           });
         }),
       );
@@ -139,7 +139,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Service("TestLatticeService", {
-            idleTimeoutSeconds: "120 seconds",
+            idleTimeout: "120 seconds",
           });
         }),
       );

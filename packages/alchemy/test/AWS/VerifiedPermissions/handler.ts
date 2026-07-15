@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -23,7 +24,7 @@ export default VerifiedPermissionsTestFunction.make(
       validationMode: "OFF",
     });
     // permit only alice to view photos
-    yield* AWS.VerifiedPermissions.Policy("AllowAlice", {
+    const allowAlice = yield* AWS.VerifiedPermissions.Policy("AllowAlice", {
       policyStoreId: store.policyStoreId,
       statement: `permit(
         principal == PhotoApp::User::"alice",
@@ -33,7 +34,9 @@ export default VerifiedPermissionsTestFunction.make(
     });
 
     const authz = yield* AWS.VerifiedPermissions.IsAuthorized(store);
+    const policies = yield* AWS.VerifiedPermissions.GetPolicies(store);
     const PolicyStoreId = yield* store.policyStoreId;
+    const AllowAlicePolicyId = yield* allowAlice.policyId;
 
     return {
       fetch: Effect.gen(function* () {
@@ -98,11 +101,57 @@ export default VerifiedPermissionsTestFunction.make(
           });
         }
 
+        // /policies -> batchGetPolicy for the AllowAlice policy
+        if (request.method === "GET" && pathname === "/policies") {
+          const policyId = yield* AllowAlicePolicyId;
+          const result = yield* policies.batchGetPolicy({
+            policyIds: [policyId],
+          });
+          return yield* HttpServerResponse.json({
+            ids: result.results.map((r) => r.policyId),
+            types: result.results.map((r) => r.policyType),
+            errors: result.errors.length,
+          });
+        }
+
+        // /batch-token -> batchIsAuthorizedWithToken with a malformed token;
+        // no identity source is configured, so AVP rejects the request with
+        // a typed ValidationException — proving IAM + wiring end-to-end
+        if (request.method === "GET" && pathname === "/batch-token") {
+          const result = yield* Effect.result(
+            authz.batchIsAuthorizedWithToken({
+              accessToken: "not-a-jwt",
+              requests: [
+                {
+                  action: {
+                    actionType: "PhotoApp::Action",
+                    actionId: "viewPhoto",
+                  },
+                  resource: {
+                    entityType: "PhotoApp::Photo",
+                    entityId: "vacation.jpg",
+                  },
+                },
+              ],
+            }),
+          );
+          return yield* HttpServerResponse.json({
+            tag: Result.isFailure(result)
+              ? result.failure._tag
+              : "unexpected-success",
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found" },
           { status: 404 },
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(AWS.VerifiedPermissions.IsAuthorizedHttp)),
+  }).pipe(
+    Effect.provide([
+      AWS.VerifiedPermissions.IsAuthorizedHttp,
+      AWS.VerifiedPermissions.GetPoliciesHttp,
+    ]),
+  ),
 );

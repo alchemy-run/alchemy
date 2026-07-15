@@ -1,6 +1,8 @@
+import { isBindingHost } from "@/AWS/Lambda/Function.ts";
 import * as Lambda from "@/AWS/Lambda";
 import * as S3 from "@/AWS/S3";
 import * as Signer from "@/AWS/Signer";
+import * as Binding from "@/Binding";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -75,6 +77,29 @@ export default SignerTestFunction.make(
     const putObject = yield* S3.PutObject(src);
     yield* S3.GetObject(src); // grants s3:GetObject(Version) for the signing job
     yield* S3.PutObject(dst); // grants s3:PutObject on the destination
+
+    // Signer validates BUCKET-level access on both buckets when starting a
+    // job ("S3 bucket … not accessible") — grant the documented signing-
+    // caller set the object-level bindings above don't cover.
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      const host = yield* Binding.Host;
+      if (isBindingHost(host)) {
+        yield* host.bind`Allow(${host}, SignerSourceDestinationBucketAccess)`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "s3:GetBucketLocation",
+                "s3:GetBucketVersioning",
+                "s3:ListBucket",
+                "s3:ListBucketVersions",
+              ],
+              Resource: [src.bucketArn, dst.bucketArn],
+            },
+          ],
+        });
+      }
+    }
 
     const startSigningJob = yield* Signer.StartSigningJob(profile);
     const signPayload = yield* Signer.SignPayload(notationProfile);

@@ -121,4 +121,38 @@ describe("VerifiedPermissions Bindings", () => {
       }),
     );
   });
+
+  describe("BatchIsAuthorizedWithToken", () => {
+    test.provider(
+      "rejects a malformed token with a typed ValidationException",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/batch-token`),
+          );
+          const body = (yield* response.json) as { tag: string };
+          // the request reaches AVP (IAM allowed) and fails Cedar-side token
+          // validation — proving the binding + IAM wiring end-to-end
+          expect(body.tag).toBe("ValidationException");
+        }),
+    );
+  });
+
+  describe("GetPolicies", () => {
+    test.provider("batchGetPolicy returns the AllowAlice policy", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.get(`${baseUrl}/policies`),
+        );
+        const body = (yield* response.json) as {
+          ids: string[];
+          types: string[];
+          errors: number;
+        };
+        expect(body.ids).toHaveLength(1);
+        expect(body.types).toEqual(["STATIC"]);
+        expect(body.errors).toBe(0);
+      }),
+    );
+  });
 });

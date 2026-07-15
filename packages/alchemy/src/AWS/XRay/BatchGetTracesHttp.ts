@@ -1,12 +1,7 @@
 import * as xray from "@distilled.cloud/aws/xray";
-import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
-import {
-  BatchGetTraces,
-  type BatchGetTracesRequest,
-} from "./BatchGetTraces.ts";
+import { BatchGetTraces } from "./BatchGetTraces.ts";
+import { makeXRayHttpBinding } from "./BindingHttp.ts";
 
 /**
  * HTTP implementation of the `XRay.BatchGetTraces` binding.
@@ -28,31 +23,9 @@ import {
  */
 export const BatchGetTracesHttp = Layer.effect(
   BatchGetTraces,
-  Effect.gen(function* () {
-    const batchGetTraces = yield* xray.batchGetTraces;
-
-    return Effect.fn(function* () {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.XRay.BatchGetTraces())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["xray:BatchGetTraces"],
-                // xray:BatchGetTraces does not support resource-level
-                // permissions.
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
-      }
-      return Effect.fn(`AWS.XRay.BatchGetTraces`)(function* (
-        request: BatchGetTracesRequest,
-      ) {
-        return yield* batchGetTraces(request);
-      });
-    });
+  makeXRayHttpBinding({
+    tag: "AWS.XRay.BatchGetTraces",
+    operation: xray.batchGetTraces,
+    actions: ["xray:BatchGetTraces"],
   }),
 );

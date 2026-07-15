@@ -159,11 +159,15 @@ export const makeSchemasDiscovererHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
+          // The managed rule is named `Schemas-{discovererId}` but TRUNCATED
+          // to EventBridge's 64-char rule-name limit, so the grant wildcards
+          // the name under the `Schemas-` prefix instead of interpolating
+          // the full discoverer id.
           const toRuleArn = (busSegment: string) =>
-            Output.map(discoverer.discovererArn, (arn) =>
-              arn
-                .replace(":schemas:", ":events:")
-                .replace(":discoverer/", `:rule/${busSegment}Schemas-`),
+            Output.map(
+              discoverer.discovererArn,
+              (arn) =>
+                `${arn.replace(":schemas:", ":events:").split(":discoverer/")[0]}:rule/${busSegment}Schemas-*`,
             );
           yield* host.bind`Allow(${host}, ${options.tag}(${discoverer}))`({
             policyStatements: [

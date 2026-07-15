@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import {
   type BatchIsAuthorizedRequest,
+  type BatchIsAuthorizedWithTokenRequest,
   IsAuthorized,
   type IsAuthorizedRequest,
   type IsAuthorizedWithTokenRequest,
@@ -17,6 +18,7 @@ export const IsAuthorizedHttp = Layer.effect(
     const isAuthorized = yield* AVP.isAuthorized;
     const isAuthorizedWithToken = yield* AVP.isAuthorizedWithToken;
     const batchIsAuthorized = yield* AVP.batchIsAuthorized;
+    const batchIsAuthorizedWithToken = yield* AVP.batchIsAuthorizedWithToken;
 
     return Effect.fn(function* <S extends PolicyStore>(store: S) {
       const PolicyStoreId = yield* store.policyStoreId;
@@ -28,10 +30,13 @@ export const IsAuthorizedHttp = Layer.effect(
               policyStatements: [
                 {
                   Effect: "Allow",
-                  // batchIsAuthorized authorizes under verifiedpermissions:IsAuthorized
+                  // the batch operations authorize under the non-batch
+                  // verifiedpermissions:IsAuthorized[WithToken] actions
                   Action: [
                     "verifiedpermissions:IsAuthorized",
                     "verifiedpermissions:IsAuthorizedWithToken",
+                    "verifiedpermissions:BatchIsAuthorized",
+                    "verifiedpermissions:BatchIsAuthorizedWithToken",
                   ],
                   Resource: [store.policyStoreArn],
                 },
@@ -59,6 +64,15 @@ export const IsAuthorizedHttp = Layer.effect(
         )(function* (request: BatchIsAuthorizedRequest) {
           const policyStoreId = yield* PolicyStoreId;
           return yield* batchIsAuthorized({ ...request, policyStoreId });
+        }),
+        batchIsAuthorizedWithToken: Effect.fn(
+          `AWS.VerifiedPermissions.BatchIsAuthorizedWithToken(${label})`,
+        )(function* (request: BatchIsAuthorizedWithTokenRequest) {
+          const policyStoreId = yield* PolicyStoreId;
+          return yield* batchIsAuthorizedWithToken({
+            ...request,
+            policyStoreId,
+          });
         }),
       };
     });

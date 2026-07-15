@@ -29,6 +29,7 @@ export default TimestreamTestFunction.make(
 
     const writeRecords = yield* Timestream.WriteRecords(table);
     const query = yield* Timestream.Query(table);
+    const prepareQuery = yield* Timestream.PrepareQuery(table);
 
     return {
       fetch: Effect.gen(function* () {
@@ -57,6 +58,16 @@ export default TimestreamTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/prepare") {
+          const result = yield* prepareQuery({
+            QueryString: `SELECT COUNT(*) AS c FROM "${DatabaseName}"."${TableName}"`,
+            ValidateOnly: true,
+          });
+          return yield* HttpServerResponse.json({
+            columns: result.Columns,
+          });
+        }
+
         if (request.method === "GET" && pathname === "/query") {
           const result = yield* query({
             QueryString: `SELECT COUNT(*) AS c FROM "${DatabaseName}"."${TableName}"`,
@@ -75,7 +86,11 @@ export default TimestreamTestFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Timestream.WriteRecordsHttp, Timestream.QueryHttp),
+      Layer.mergeAll(
+        Timestream.WriteRecordsHttp,
+        Timestream.QueryHttp,
+        Timestream.PrepareQueryHttp,
+      ),
     ),
   ),
 );

@@ -83,8 +83,10 @@ export default TextractTestFunction.make(
         const url = new URL(request.originalUrl);
         const pathname = url.pathname;
         const jobId = url.searchParams.get("jobId") ?? "";
+        // BucketName is an Output accessor — resolve it per invocation.
+        const Bucket = yield* BucketName;
         const s3Input = {
-          S3Object: { Bucket: BucketName, Name: INPUT_KEY },
+          S3Object: { Bucket, Name: INPUT_KEY },
         };
 
         // Cheap readiness route — no AWS call.
@@ -249,12 +251,12 @@ export default TextractTestFunction.make(
           const createVersionProbe = yield* createAdapterVersion({
             DatasetConfig: {
               ManifestS3Object: {
-                Bucket: BucketName,
+                Bucket,
                 Name: "missing-manifest.jsonl",
               },
             },
             OutputConfig: {
-              S3Bucket: BucketName,
+              S3Bucket: Bucket,
               S3Prefix: "adapter-training/",
             },
           }).pipe(

@@ -15,6 +15,10 @@ export interface BatchIsAuthorizedRequest extends Omit<
   AVP.BatchIsAuthorizedInput,
   "policyStoreId"
 > {}
+export interface BatchIsAuthorizedWithTokenRequest extends Omit<
+  AVP.BatchIsAuthorizedWithTokenInput,
+  "policyStoreId"
+> {}
 
 /**
  * The runtime authorization client returned by binding `IsAuthorized` to a
@@ -46,6 +50,17 @@ export interface IsAuthorizedClient {
   batchIsAuthorized(
     request: BatchIsAuthorizedRequest,
   ): Effect.Effect<AVP.BatchIsAuthorizedOutput, AVP.BatchIsAuthorizedError>;
+  /**
+   * Make up to 30 authorization decisions in one call for the principal
+   * derived from a JWT (identity or access token) issued by a configured
+   * identity source.
+   */
+  batchIsAuthorizedWithToken(
+    request: BatchIsAuthorizedWithTokenRequest,
+  ): Effect.Effect<
+    AVP.BatchIsAuthorizedWithTokenOutput,
+    AVP.BatchIsAuthorizedWithTokenError
+  >;
 }
 
 /**

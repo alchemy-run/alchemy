@@ -83,6 +83,22 @@ describe("AWS.Timestream Bindings", () => {
         );
         expect(Number(rows[0]!.Data[0]!.ScalarValue)).toBeGreaterThanOrEqual(1);
 
+        // Validate the same SQL through the PrepareQuery binding.
+        const prepared = (yield* HttpClient.get(`${baseUrl}/prepare`).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? response.json
+              : Effect.fail(new Error(`prepare failed: ${response.status}`)),
+          ),
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.spaced("2 seconds"),
+              Schedule.recurs(8),
+            ]),
+          }),
+        )) as { columns: Array<{ Name?: string }> };
+        expect(prepared.columns[0]?.Name).toBe("c");
+
         yield* stack.destroy();
       }),
     { timeout: 600_000 },
