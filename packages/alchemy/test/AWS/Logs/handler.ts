@@ -40,6 +40,12 @@ export default LogsTestFunction.make(
     const getLogEvents = yield* Logs.GetLogEvents(logGroup);
     const startQuery = yield* Logs.StartQuery(logGroup);
     const getQueryResults = yield* Logs.GetQueryResults(logGroup);
+    const stopQuery = yield* Logs.StopQuery(logGroup);
+    const getLogRecord = yield* Logs.GetLogRecord(logGroup);
+    const getLogGroupFields = yield* Logs.GetLogGroupFields(logGroup);
+    const describeLogStreams = yield* Logs.DescribeLogStreams(logGroup);
+    const createLogStream = yield* Logs.CreateLogStream(logGroup);
+    const deleteLogStream = yield* Logs.DeleteLogStream(logGroup);
 
     const LogStreamName = yield* logStream.logStreamName;
 
@@ -113,11 +119,101 @@ export default LogsTestFunction.make(
               ]),
             }),
           );
+          // Surface the first row's @ptr so the test can exercise GetLogRecord.
+          const ptr =
+            (results.results ?? [])
+              .flat()
+              .find((field) => field.field === "@ptr")?.value ?? null;
           return yield* HttpServerResponse.json({
             queryId,
             status: results.status,
             resultCount: (results.results ?? []).length,
+            ptr,
           });
+        }
+
+        if (request.method === "GET" && pathname === "/record") {
+          const ptr = url.searchParams.get("ptr");
+          if (!ptr) {
+            return yield* HttpServerResponse.json(
+              { error: "missing ptr" },
+              { status: 400 },
+            );
+          }
+          const { logRecord } = yield* getLogRecord({ logRecordPointer: ptr });
+          return yield* HttpServerResponse.json({
+            message: logRecord?.["@message"] ?? null,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/stop-query") {
+          const now = yield* Clock.currentTimeMillis;
+          const { queryId } = yield* startQuery({
+            queryString: "fields @timestamp, @message | limit 10000",
+            startTime: Math.floor(now / 1000) - 86_400,
+            endTime: Math.floor(now / 1000) + 60,
+          });
+          if (!queryId) {
+            return yield* HttpServerResponse.json(
+              { error: "no queryId" },
+              { status: 500 },
+            );
+          }
+          const stopped = yield* stopQuery({ queryId }).pipe(
+            Effect.map((response) => response.success ?? true),
+            // The query can complete before the stop lands — that still
+            // proves the binding round-tripped.
+            Effect.catchTag("InvalidParameterException", () =>
+              Effect.succeed(false),
+            ),
+          );
+          return yield* HttpServerResponse.json({ ok: true, stopped });
+        }
+
+        if (request.method === "GET" && pathname === "/fields") {
+          const { logGroupFields } = yield* getLogGroupFields();
+          return yield* HttpServerResponse.json({
+            fields: (logGroupFields ?? []).map((field) => field.name),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/streams") {
+          const { logStreams } = yield* describeLogStreams({ limit: 10 });
+          return yield* HttpServerResponse.json({
+            streams: (logStreams ?? []).map((stream) => stream.logStreamName),
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/stream-lifecycle") {
+          const name = url.searchParams.get("name");
+          if (!name) {
+            return yield* HttpServerResponse.json(
+              { error: "missing name" },
+              { status: 400 },
+            );
+          }
+          yield* createLogStream({ logStreamName: name }).pipe(
+            Effect.catchTag(
+              "ResourceAlreadyExistsException",
+              () => Effect.void,
+            ),
+          );
+          const { logStreams } = yield* describeLogStreams({
+            logStreamNamePrefix: name,
+          });
+          const seen = (logStreams ?? []).some(
+            (stream) => stream.logStreamName === name,
+          );
+          yield* deleteLogStream({ logStreamName: name }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          const after = yield* describeLogStreams({
+            logStreamNamePrefix: name,
+          });
+          const gone = !(after.logStreams ?? []).some(
+            (stream) => stream.logStreamName === name,
+          );
+          return yield* HttpServerResponse.json({ seen, gone });
         }
 
         return yield* HttpServerResponse.json(
@@ -134,6 +230,12 @@ export default LogsTestFunction.make(
         Logs.GetLogEventsHttp,
         Logs.StartQueryHttp,
         Logs.GetQueryResultsHttp,
+        Logs.StopQueryHttp,
+        Logs.GetLogRecordHttp,
+        Logs.GetLogGroupFieldsHttp,
+        Logs.DescribeLogStreamsHttp,
+        Logs.CreateLogStreamHttp,
+        Logs.DeleteLogStreamHttp,
       ),
     ),
   ),

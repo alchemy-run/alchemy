@@ -32,13 +32,9 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
  * `lex:RecognizeText` policy propagates eventually, surfacing as 502
  * AccessDeniedException for the first seconds.
  */
-const recognize = (text: string, sessionId: string) =>
+const call = (request: HttpClientRequest.HttpClientRequest) =>
   Effect.gen(function* () {
-    const response = yield* HttpClient.execute(
-      HttpClientRequest.post(`${baseUrl}/recognize`).pipe(
-        HttpClientRequest.bodyJsonUnsafe({ text, sessionId }),
-      ),
-    );
+    const response = yield* HttpClient.execute(request);
     const body = yield* response.text;
     if (response.status >= 500) {
       return yield* Effect.fail(
@@ -46,10 +42,7 @@ const recognize = (text: string, sessionId: string) =>
       );
     }
     expect(response.status).toBe(200);
-    return JSON.parse(body) as {
-      intent: string | null;
-      interpretations: (string | undefined)[];
-    };
+    return JSON.parse(body) as Record<string, any>;
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
@@ -58,6 +51,13 @@ const recognize = (text: string, sessionId: string) =>
         Schedule.recurs(8),
       ]),
     }),
+  );
+
+const recognize = (text: string, sessionId: string) =>
+  call(
+    HttpClientRequest.post(`${baseUrl}/recognize`).pipe(
+      HttpClientRequest.bodyJsonUnsafe({ text, sessionId }),
+    ),
   );
 
 describe.skipIf(gated)("LexV2 Bindings", () => {
@@ -117,6 +117,87 @@ describe.skipIf(gated)("LexV2 Bindings", () => {
             "alchemy-e2e-fallback",
           );
           expect(body.intent).toBe("FallbackIntent");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("CodeHookEventSource", () => {
+    test.provider(
+      "fulfillment code hook closes the intent with the handler's message",
+      () =>
+        Effect.gen(function* () {
+          const body = yield* recognize("order a pizza", "alchemy-e2e-order");
+          expect(body.intent).toBe("OrderPizza");
+          expect(body.state).toBe("Fulfilled");
+          expect(body.messages).toContain(
+            "Order placed for alchemy-e2e-order!",
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("Sessions", () => {
+    test.provider(
+      "put, get, and delete a session",
+      () =>
+        Effect.gen(function* () {
+          const sessionId = "alchemy-e2e-session";
+
+          // PutSession seeds attributes.
+          const put = yield* call(
+            HttpClientRequest.post(`${baseUrl}/session`).pipe(
+              HttpClientRequest.bodyJsonUnsafe({
+                sessionId,
+                attributes: { favorite: "pepperoni" },
+              }),
+            ),
+          );
+          expect(put.sessionId).toBe(sessionId);
+
+          // GetSession reads them back.
+          const got = yield* call(
+            HttpClientRequest.get(`${baseUrl}/session?sessionId=${sessionId}`),
+          );
+          expect(got.attributes).toMatchObject({ favorite: "pepperoni" });
+
+          // DeleteSession ends the conversation ...
+          const deleted = yield* call(
+            HttpClientRequest.delete(
+              `${baseUrl}/session?sessionId=${sessionId}`,
+            ),
+          );
+          expect(deleted.sessionId).toBe(sessionId);
+
+          // ... so a fresh GetSession reports the typed not-found tag.
+          const response = yield* HttpClient.get(
+            `${baseUrl}/session?sessionId=${sessionId}`,
+          );
+          const body = (yield* response.json) as { error?: string };
+          expect(body.error).toBe("ResourceNotFoundException");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("RecognizeUtterance", () => {
+    test.provider(
+      "recognizes a text utterance and returns the transcript",
+      () =>
+        Effect.gen(function* () {
+          const body = yield* call(
+            HttpClientRequest.post(`${baseUrl}/utterance`).pipe(
+              HttpClientRequest.bodyJsonUnsafe({
+                text: "hello",
+                sessionId: "alchemy-e2e-utterance",
+              }),
+            ),
+          );
+          expect(body.sessionId).toBe("alchemy-e2e-utterance");
+          // gzip+base64 on the wire — presence proves the round trip.
+          expect(typeof body.inputTranscript).toBe("string");
+          expect(String(body.inputTranscript).length).toBeGreaterThan(0);
         }),
       { timeout: 120_000 },
     );

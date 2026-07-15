@@ -209,4 +209,105 @@ describe("Logs Bindings", () => {
       { timeout: 90_000 },
     );
   });
+
+  describe("StopQuery", () => {
+    test.provider(
+      "stops (or observes completion of) a started query",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/stop-query`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as any).ok).toBe(true);
+          expect(typeof (response as any).stopped).toBe("boolean");
+        }),
+      { timeout: 90_000 },
+    );
+  });
+
+  describe("GetLogRecord", () => {
+    test.provider(
+      "fetches the full record behind a query-result @ptr",
+      (_stack) =>
+        Effect.gen(function* () {
+          const marker = `record-${crypto.randomUUID()}`;
+          yield* putMarker(marker);
+          // Insights sees freshly-ingested events after a short delay —
+          // poll the query route until it returns rows (bounded, ~60s).
+          const ptr = yield* send(
+            HttpClientRequest.get(`${baseUrl}/query`),
+          ).pipe(
+            Effect.flatMap((r) => r.json),
+            Effect.flatMap((body) => {
+              const found = (body as { ptr: string | null }).ptr;
+              return found
+                ? Effect.succeed(found)
+                : Effect.fail(new MarkerNotVisible({ marker }));
+            }),
+            Effect.retry({
+              while: (e) => e._tag === "MarkerNotVisible",
+              schedule: Schedule.max([
+                Schedule.fixed("5 seconds"),
+                Schedule.recurs(10),
+              ]),
+            }),
+          );
+
+          const record = yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/record?ptr=${encodeURIComponent(ptr)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((record as any).message).toBeTruthy();
+        }),
+      { timeout: 180_000 },
+    );
+  });
+
+  describe("GetLogGroupFields", () => {
+    test.provider(
+      "discovers fields present in the bound group",
+      (_stack) =>
+        Effect.gen(function* () {
+          const marker = `fields-${crypto.randomUUID()}`;
+          yield* putMarker(marker);
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/fields`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect(Array.isArray((response as any).fields)).toBe(true);
+        }),
+      { timeout: 90_000 },
+    );
+  });
+
+  describe("DescribeLogStreams", () => {
+    test.provider(
+      "lists the streams of the bound group",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${baseUrl}/streams`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          const streams = (response as { streams: string[] }).streams;
+          expect(streams).toContain("alchemy-test-bindings-stream");
+        }),
+      { timeout: 90_000 },
+    );
+  });
+
+  describe("CreateLogStream + DeleteLogStream", () => {
+    test.provider(
+      "creates and deletes a dynamic stream through the bindings",
+      (_stack) =>
+        Effect.gen(function* () {
+          const name = `dynamic-${crypto.randomUUID()}`;
+          const response = yield* send(
+            HttpClientRequest.post(`${baseUrl}/stream-lifecycle?name=${name}`),
+          ).pipe(Effect.flatMap((r) => r.json));
+          expect((response as any).seen).toBe(true);
+          expect((response as any).gone).toBe(true);
+        }),
+      { timeout: 90_000 },
+    );
+  });
 });

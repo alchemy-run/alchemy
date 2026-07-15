@@ -124,6 +124,28 @@ export interface FunctionBuildOptions extends Partial<rolldown.InputOptions> {
 
 export type FunctionArchitecture = "x86_64" | "arm64";
 
+/**
+ * Reference to an EFS access point: a raw access point ARN or anything
+ * exposing an `accessPointArn` attribute (e.g. an `AWS.EFS.AccessPoint`
+ * resource).
+ */
+export type AccessPointRef = string | { accessPointArn: string };
+
+/**
+ * Resolve an {@link AccessPointRef} (or the legacy raw-`arn` field) on a
+ * `fileSystemConfigs` entry to the access point ARN.
+ */
+const accessPointArnOf = (config: {
+  accessPoint?: AccessPointRef;
+  arn?: string;
+}): string | undefined =>
+  typeof config.accessPoint === "string"
+    ? config.accessPoint
+    : typeof (config.accessPoint as { accessPointArn?: unknown } | undefined)
+          ?.accessPointArn === "string"
+      ? (config.accessPoint as { accessPointArn: string }).accessPointArn
+      : config.arn;
+
 export interface FunctionUrlConfig {
   /**
    * Authentication type for the Lambda function URL.
@@ -182,19 +204,31 @@ export interface FunctionProps extends PlatformProps {
   };
   /**
    * EFS file systems to mount into the function's execution environment.
-   * Each entry mounts an EFS access point (e.g.
-   * `accessPoint.accessPointArn`) at a local path that must begin with
+   * Each entry mounts an EFS access point — pass the `AWS.EFS.AccessPoint`
+   * resource itself (or its ARN) — at a local path that must begin with
    * `/mnt/`. Requires `vpc`: the function must be attached to a VPC that can
    * reach an available EFS mount target for the file system. The execution
    * role is automatically granted EFS client access
    * (`AmazonElasticFileSystemClientReadWriteAccess`).
+   *
+   * Prefer the host-agnostic `AWS.EFS.Mount` binding
+   * (`yield* AWS.EFS.mount(accessPoint, { path: "/mnt/data" })` inside the
+   * function body with the `AWS.EFS.MountLive` layer) — it wires the same
+   * config plus least-privilege IAM through the binding channel and also
+   * works on ECS.
    */
   fileSystemConfigs?: {
     /**
-     * ARN of the EFS access point to mount
-     * (e.g. `accessPoint.accessPointArn`).
+     * The EFS access point to mount — an `AWS.EFS.AccessPoint` resource or
+     * its ARN. Exactly one of `accessPoint` or `arn` is required.
      */
-    arn: string;
+    accessPoint?: AccessPointRef;
+    /**
+     * ARN of the EFS access point to mount
+     * (e.g. `accessPoint.accessPointArn`). Alias of {@link accessPoint} for
+     * raw-string configs.
+     */
+    arn?: string;
     /**
      * Local mount path inside the function. Must begin with `/mnt/`
      * (e.g. `/mnt/files`).
@@ -301,6 +335,17 @@ export interface Function extends Resource<
       subnetIds: string[];
       securityGroupIds: string[];
     };
+    /**
+     * EFS mounts requested through the binding channel (e.g. `EFS.Mount`).
+     * Merged (deduped by `localMountPath`) with the Function's own
+     * `fileSystemConfigs` prop.
+     */
+    fileSystemConfigs?: {
+      /** ARN of the EFS access point to mount. */
+      arn: string;
+      /** Local mount path inside the function (must begin with `/mnt/`). */
+      localMountPath: string;
+    }[];
   },
   Providers
 > {}
@@ -874,6 +919,16 @@ export const FunctionProvider = () =>
                 ],
               }
             : undefined;
+        // EFS mounts requested through the binding channel (`EFS.Mount`) —
+        // deduped by mount path; merged with the `fileSystemConfigs` prop in
+        // `reconcile`.
+        const fileSystemConfigs = [
+          ...new Map(
+            activeBindings
+              .flatMap((binding) => binding?.data?.fileSystemConfigs ?? [])
+              .map((config) => [config.localMountPath, config] as const),
+          ).values(),
+        ];
 
         if (policyStatements.length > 0) {
           yield* iam.putRolePolicy({
@@ -893,7 +948,7 @@ export const FunctionProvider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         }
 
-        return { env, vpc };
+        return { env, vpc, fileSystemConfigs };
       });
 
       const xrayWriteAccessPolicyArn =
@@ -1906,7 +1961,11 @@ export default handler;
             (yield* createRoleIfNotExists({ id, roleName, vpc: news.vpc })).Role
               .Arn;
 
-          const { env, vpc: bindingVpc } = yield* attachBindings({
+          const {
+            env,
+            vpc: bindingVpc,
+            fileSystemConfigs: bindingFileSystemConfigs,
+          } = yield* attachBindings({
             roleName,
             policyName,
             functionArn,
@@ -1957,11 +2016,34 @@ export default handler;
               (olds === undefined && output !== undefined),
           });
 
+          // Desired EFS mounts: the `fileSystemConfigs` prop (access-point
+          // references resolved to ARNs) merged with binding-channel
+          // requests (`EFS.Mount`), deduped by mount path.
+          const desiredFileSystemConfigs = [
+            ...new Map(
+              [
+                ...(news.fileSystemConfigs ?? []).map((c) => {
+                  const arn = accessPointArnOf(c);
+                  if (arn === undefined) {
+                    throw new Error(
+                      `Function(${id}): fileSystemConfigs entry for ${c.localMountPath} needs an access point — set \`accessPoint\` (an AWS.EFS.AccessPoint resource or its ARN) or \`arn\``,
+                    );
+                  }
+                  return { Arn: arn, LocalMountPath: c.localMountPath };
+                }),
+                ...bindingFileSystemConfigs.map((c) => ({
+                  Arn: c.arn,
+                  LocalMountPath: c.localMountPath,
+                })),
+              ].map((config) => [config.LocalMountPath, config] as const),
+            ).values(),
+          ];
+
           // EFS mounts authenticate the execution role against the access
           // point at sandbox start — grant client access before the function
           // configuration references the file system. Attaching is
           // idempotent; the policy is detached with the rest on delete.
-          if (news.fileSystemConfigs && news.fileSystemConfigs.length > 0) {
+          if (desiredFileSystemConfigs.length > 0) {
             yield* iam.attachRolePolicy({
               RoleName: roleName,
               PolicyArn:

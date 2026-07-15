@@ -5,6 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { retryWhileInvalidPrincipal } from "./internal.ts";
 import {
   type LakeFormationResourceSpec,
   toWireResource,
@@ -71,9 +72,11 @@ export const OptInProvider = () =>
           .pipe(
             Stream.runCollect,
             // a deleted resource (e.g. the Glue database is already gone)
-            // means the opt-in no longer exists either
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed([]),
+            // means the opt-in no longer exists either; a deleted/not-yet-
+            // propagated IAM principal likewise has no visible opt-ins
+            Effect.catchTag(
+              ["EntityNotFoundException", "InvalidLakeFormationPrincipal"],
+              () => Effect.succeed([]),
             ),
           );
         return Array.from(pages)
@@ -136,12 +139,16 @@ export const OptInProvider = () =>
           // 1. OBSERVE
           const found = yield* observe(news.principal, resource);
 
-          // 2. ENSURE — existence-only resource, nothing to sync.
+          // 2. ENSURE — existence-only resource, nothing to sync. A freshly
+          //    created IAM principal takes ~10s to propagate before Lake
+          //    Formation accepts it, so retry through the typed rejection.
           if (found === undefined) {
-            yield* lf.createLakeFormationOptIn({
-              Principal: { DataLakePrincipalIdentifier: news.principal },
-              Resource: resource,
-            });
+            yield* lf
+              .createLakeFormationOptIn({
+                Principal: { DataLakePrincipalIdentifier: news.principal },
+                Resource: resource,
+              })
+              .pipe(retryWhileInvalidPrincipal);
           }
 
           yield* session.note(news.principal);
@@ -157,7 +164,11 @@ export const OptInProvider = () =>
               Resource: output.resource,
             })
             .pipe(
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
+              // the opt-in (or its principal) is already gone
+              Effect.catchTag(
+                ["EntityNotFoundException", "InvalidLakeFormationPrincipal"],
+                () => Effect.void,
+              ),
             );
         }),
       });

@@ -87,8 +87,20 @@ export default KinesisVideoTestFunction.make(
 
         if (request.method === "GET" && pathname === "/fragments") {
           // ListFragments on an empty (but retained) stream succeeds with an
-          // empty page — a full data-plane round-trip.
-          const result = yield* Effect.result(listFragments());
+          // empty page — a full data-plane round-trip. A FragmentSelector is
+          // required whenever no NextToken is passed.
+          const now = yield* Effect.sync(() => Date.now());
+          const result = yield* Effect.result(
+            listFragments({
+              FragmentSelector: {
+                FragmentSelectorType: "SERVER_TIMESTAMP",
+                TimestampRange: {
+                  StartTimestamp: new Date(now - 60_000),
+                  EndTimestamp: new Date(now),
+                },
+              },
+            }),
+          );
           if (Result.isSuccess(result)) {
             return yield* HttpServerResponse.json({
               ok: true,

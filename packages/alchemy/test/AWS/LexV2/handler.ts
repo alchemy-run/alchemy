@@ -3,6 +3,7 @@ import * as Lambda from "@/AWS/Lambda";
 import * as LexV2 from "@/AWS/LexV2";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -14,6 +15,36 @@ export class LexTestFunction extends Lambda.Function<Lambda.Function>()(
   "LexTestFunction",
 ) {}
 
+const contentOf = (
+  content: string | Redacted.Redacted<string> | undefined,
+): string | undefined =>
+  content === undefined
+    ? undefined
+    : typeof content === "string"
+      ? content
+      : Redacted.value(content);
+
+/** Surface a typed failure as a 502 JSON body the test can retry on. */
+const respond = <A, E extends { readonly _tag: string }>(
+  self: Effect.Effect<A, E>,
+  onSuccess: (a: A) => Record<string, unknown>,
+) =>
+  Effect.gen(function* () {
+    const result = yield* Effect.result(self);
+    if (Result.isFailure(result)) {
+      return yield* HttpServerResponse.json(
+        {
+          error: result.failure._tag,
+          message: String(
+            (result.failure as { message?: string }).message ?? "",
+          ),
+        },
+        { status: 502 },
+      );
+    }
+    return yield* HttpServerResponse.json(onSuccess(result.success));
+  });
+
 export default LexTestFunction.make(
   {
     main,
@@ -21,7 +52,7 @@ export default LexTestFunction.make(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    // The whole Lex chain: role -> bot -> DRAFT locale -> intent -> built
+    // The whole Lex chain: role -> bot -> DRAFT locale -> intents -> built
     // version -> alias. BotVersion builds the locale before snapshotting.
     const role = yield* IAM.Role("LexBotRole", {
       assumeRolePolicyDocument: {
@@ -49,9 +80,17 @@ export default LexTestFunction.make(
       intentName: "Greet",
       sampleUtterances: ["hello", "hi", "hey there"],
     });
-    const version = yield* LexV2.BotVersion("V1", {
+    // Slotless intent fulfilled by this function's code hook.
+    const order = yield* LexV2.Intent("Order", {
       botId: greet.botId,
-      localeIds: [greet.localeId],
+      localeId: greet.localeId,
+      intentName: "OrderPizza",
+      sampleUtterances: ["order a pizza", "I want to order a pizza"],
+      fulfillmentCodeHook: true,
+    });
+    const version = yield* LexV2.BotVersion("V1", {
+      botId: order.botId,
+      localeIds: [order.localeId],
     });
     const alias = yield* LexV2.BotAlias("Live", {
       botId: version.botId,
@@ -59,44 +98,104 @@ export default LexTestFunction.make(
     });
 
     const recognizeText = yield* LexV2.RecognizeText(alias);
+    const recognizeUtterance = yield* LexV2.RecognizeUtterance(alias);
+    const getSession = yield* LexV2.GetSession(alias);
+    const putSession = yield* LexV2.PutSession(alias);
+    const deleteSession = yield* LexV2.DeleteSession(alias);
+
+    // Fulfillment code hook: Lex invokes this same function while
+    // /recognize awaits the RecognizeText response.
+    yield* LexV2.onCodeHook(alias, { localeId: "en_US" }, (event) =>
+      Effect.succeed(
+        LexV2.fulfillIntent(event, {
+          message: `Order placed for ${event.sessionId}!`,
+        }),
+      ),
+    );
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.originalUrl);
+        const sessionId = url.searchParams.get("sessionId") ?? "missing";
 
         if (request.method === "POST" && url.pathname === "/recognize") {
           const body = (yield* request.json) as unknown as {
             text: string;
             sessionId: string;
           };
-          const result = yield* Effect.result(
+          return yield* respond(
             recognizeText({
               localeId: "en_US",
               sessionId: body.sessionId,
               text: body.text,
             }),
+            (reply) => ({
+              intent: reply.sessionState?.intent?.name ?? null,
+              state: reply.sessionState?.intent?.state ?? null,
+              messages: (reply.messages ?? []).map((message) =>
+                contentOf(message.content),
+              ),
+              interpretations: (reply.interpretations ?? []).map(
+                (interpretation) => interpretation.intent?.name,
+              ),
+            }),
           );
-          if (Result.isFailure(result)) {
-            // Surface the typed tag so the test can distinguish IAM
-            // propagation (retryable) from a real defect.
-            return yield* HttpServerResponse.json(
-              {
-                error: result.failure._tag,
-                message: String(
-                  (result.failure as { message?: string }).message ?? "",
-                ),
+        }
+
+        if (request.method === "POST" && url.pathname === "/utterance") {
+          const body = (yield* request.json) as unknown as {
+            text: string;
+            sessionId: string;
+          };
+          return yield* respond(
+            recognizeUtterance({
+              localeId: "en_US",
+              sessionId: body.sessionId,
+              requestContentType: "text/plain; charset=utf-8",
+              inputStream: new TextEncoder().encode(body.text),
+            }),
+            (reply) => ({
+              // gzip+base64 on the wire — the test asserts presence only.
+              inputTranscript: reply.inputTranscript ?? null,
+              sessionId: reply.sessionId ?? null,
+            }),
+          );
+        }
+
+        if (request.method === "POST" && url.pathname === "/session") {
+          const body = (yield* request.json) as unknown as {
+            sessionId: string;
+            attributes: Record<string, string>;
+          };
+          return yield* respond(
+            putSession({
+              localeId: "en_US",
+              sessionId: body.sessionId,
+              sessionState: {
+                dialogAction: { type: "ElicitIntent" },
+                sessionAttributes: body.attributes,
               },
-              { status: 502 },
-            );
-          }
-          const reply = result.success;
-          return yield* HttpServerResponse.json({
-            intent: reply.sessionState?.intent?.name ?? null,
-            interpretations: (reply.interpretations ?? []).map(
-              (interpretation) => interpretation.intent?.name,
-            ),
-          });
+            }),
+            (reply) => ({ sessionId: reply.sessionId ?? null }),
+          );
+        }
+
+        if (request.method === "GET" && url.pathname === "/session") {
+          return yield* respond(
+            getSession({ localeId: "en_US", sessionId }),
+            (reply) => ({
+              sessionId: reply.sessionId ?? null,
+              attributes: reply.sessionState?.sessionAttributes ?? {},
+            }),
+          );
+        }
+
+        if (request.method === "DELETE" && url.pathname === "/session") {
+          return yield* respond(
+            deleteSession({ localeId: "en_US", sessionId }),
+            (reply) => ({ sessionId: reply.sessionId ?? null }),
+          );
         }
 
         if (request.method === "GET" && url.pathname === "/health") {
@@ -113,5 +212,14 @@ export default LexTestFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(LexV2.RecognizeTextHttp)),
+  }).pipe(
+    Effect.provide([
+      LexV2.RecognizeTextHttp,
+      LexV2.RecognizeUtteranceHttp,
+      LexV2.GetSessionHttp,
+      LexV2.PutSessionHttp,
+      LexV2.DeleteSessionHttp,
+      LexV2.LambdaCodeHookEventSource,
+    ]),
+  ),
 );

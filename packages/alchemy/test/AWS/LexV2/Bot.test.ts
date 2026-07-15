@@ -173,6 +173,8 @@ test.provider(
             localeId: size.localeId,
             sampleUtterances: ["hello", "hi", "good morning"],
             description: "greets the user politely",
+            dialogCodeHook: true,
+            fulfillmentCodeHook: true,
           });
           const alias = yield* BotAlias("Staging", {
             botId: greet.botId,
@@ -207,6 +209,9 @@ test.provider(
       expect(
         (updatedIntent.sampleUtterances ?? []).map((u) => u.utterance),
       ).toContain("good morning");
+      // Code hook flags synced onto the DRAFT intent by the update.
+      expect(updatedIntent.dialogCodeHook?.enabled).toBe(true);
+      expect(updatedIntent.fulfillmentCodeHook?.enabled).toBe(true);
       const updatedTags = yield* lexm.listTagsForResource({
         resourceARN: updated.bot.botArn,
       });
