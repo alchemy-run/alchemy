@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Accelerator } from "./Accelerator.ts";
 import { withGaRegion } from "./common.ts";
@@ -83,6 +84,13 @@ export const makeGaEndpointGroupHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the endpoint group ARN. */
   actions: readonly string[];
+  /**
+   * Additional statements granted alongside the group-scoped one (e.g. the
+   * `ec2:Describe*` / `elasticloadbalancing:DescribeLoadBalancers` reads
+   * Global Accelerator performs on the caller's behalf when endpoints are
+   * added).
+   */
+  extraStatements?: readonly PolicyStatement[];
 }) =>
   Effect.gen(function* () {
     const op = yield* withGaRegion(options.operation);
@@ -99,6 +107,7 @@ export const makeGaEndpointGroupHttpBinding = <
                 Action: [...options.actions],
                 Resource: [endpointGroup.endpointGroupArn],
               },
+              ...(options.extraStatements ?? []),
             ],
           });
         }

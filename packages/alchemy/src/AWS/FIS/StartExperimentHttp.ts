@@ -13,5 +13,7 @@ export const StartExperimentHttp = Layer.effect(
     actions: ["fis:StartExperiment", "fis:TagResource"],
     requestKey: "experimentTemplateId",
     grantExperimentWildcard: true,
+    // The first StartExperiment in an account creates AWSServiceRoleForFIS.
+    grantServiceLinkedRole: true,
   }),
 );

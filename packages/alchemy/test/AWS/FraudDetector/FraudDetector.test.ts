@@ -12,6 +12,7 @@ import FraudDetectorTestFunctionLive, {
   FRAUD_EMAIL,
   FraudDetectorTestFunction,
   REVIEW_OUTCOME,
+  SEED_BLOCKED_IP,
 } from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -60,6 +61,26 @@ test.provider(
         ),
       ).toBe(true);
     }),
+);
+
+// Ungated typed-error probe for the list data plane: updateList on a
+// nonexistent list decodes to a typed tag (ResourceNotFoundException in an
+// entitled account, AccessDeniedException in an ungranted one).
+test.provider("updateList on a nonexistent list fails with a typed error", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      frauddetector.updateList({
+        name: "does_not_exist_list",
+        elements: ["203.0.113.1"],
+        updateMode: "REPLACE",
+      }),
+    );
+    expect(
+      ["ResourceNotFoundException", "AccessDeniedException"].includes(
+        error._tag,
+      ),
+    ).toBe(true);
+  }),
 );
 
 const sharedStack = Core.scratchStack(testOptions, "FraudDetectorPrediction");
@@ -251,6 +272,173 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
           }),
         );
         expect(gone.found).toBe(false);
+      }),
+    { timeout: 180_000 },
+  );
+
+  test.provider.skipIf(!RUN_LIVE)(
+    "the deny-list is readable and appendable at runtime",
+    () =>
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const readList = client
+          .get(`${baseUrl}/list`)
+          .pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.flatMap(res.json, (body) =>
+                    Effect.succeed(body as { elements: string[] }),
+                  )
+                : Effect.fail(new Error(`get list failed: ${res.status}`)),
+            ),
+          );
+
+        // The seeded element from the List resource is readable.
+        const seeded = yield* readList.pipe(
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.exponential("2 seconds"),
+              Schedule.recurs(6),
+            ]),
+          }),
+        );
+        expect(seeded.elements).toContain(SEED_BLOCKED_IP);
+
+        // Append a new element at runtime, then observe it on read-back.
+        const appended = "198.51.100.77";
+        const post = yield* client.execute(
+          HttpClientRequest.post(`${baseUrl}/list/append`).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ element: appended }),
+          ),
+        );
+        expect(post.status).toBe(200);
+        const after = yield* readList.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (body): boolean => body.elements.includes(appended),
+            times: 10,
+          }),
+        );
+        expect(after.elements).toContain(appended);
+        expect(after.elements).toContain(SEED_BLOCKED_IP);
+      }),
+    { timeout: 180_000 },
+  );
+
+  test.provider.skipIf(!RUN_LIVE)(
+    "past predictions can be listed and audited",
+    () =>
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const eventId = "alchemy-e2e-audited-prediction-1";
+
+        // Make a prediction with a known event id.
+        yield* client
+          .execute(
+            HttpClientRequest.post(`${baseUrl}/predict`).pipe(
+              HttpClientRequest.bodyJsonUnsafe({
+                email: FRAUD_EMAIL,
+                eventId,
+              }),
+            ),
+          )
+          .pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.succeed(res)
+                : Effect.fail(new Error(`predict failed: ${res.status}`)),
+            ),
+            Effect.retry({
+              schedule: Schedule.max([
+                Schedule.exponential("2 seconds"),
+                Schedule.recurs(6),
+              ]),
+            }),
+          );
+
+        // The prediction shows up in ListEventPredictions eventually.
+        const listed = yield* client
+          .get(`${baseUrl}/predictions?eventId=${eventId}`)
+          .pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.flatMap(res.json, (body) =>
+                    Effect.succeed(body as { summaries: unknown[] }),
+                  )
+                : Effect.fail(
+                    new Error(`list predictions failed: ${res.status}`),
+                  ),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (body): boolean => body.summaries.length > 0,
+              times: 10,
+            }),
+          );
+        expect(listed.summaries.length).toBeGreaterThan(0);
+
+        // Its full evaluation metadata is auditable.
+        const audit = yield* client
+          .get(`${baseUrl}/prediction-metadata?eventId=${eventId}`)
+          .pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.flatMap(res.json, (body) =>
+                    Effect.succeed(
+                      body as {
+                        found: boolean;
+                        outcomes: string[];
+                        ruleCount: number;
+                      },
+                    ),
+                  )
+                : Effect.fail(new Error(`audit failed: ${res.status}`)),
+            ),
+          );
+        expect(audit.found).toBe(true);
+        expect(audit.outcomes).toContain(REVIEW_OUTCOME);
+        expect(audit.ruleCount).toBeGreaterThan(0);
+      }),
+    { timeout: 180_000 },
+  );
+
+  // Runs LAST — the purge deletes all stored events for the event type.
+  test.provider.skipIf(!RUN_LIVE)(
+    "stored events can be bulk purged by event type",
+    () =>
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+
+        const purged = yield* client
+          .post(`${baseUrl}/events/purge`)
+          .pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.flatMap(res.json, (body) =>
+                    Effect.succeed(body as { status?: string }),
+                  )
+                : Effect.fail(new Error(`purge failed: ${res.status}`)),
+            ),
+          );
+        expect(purged.status).toBeTruthy();
+
+        // The companion status call reports the async deletion job.
+        const status = yield* client.get(`${baseUrl}/events/purge-status`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.flatMap(res.json, (body) =>
+                  Effect.succeed(body as { status?: string }),
+                )
+              : Effect.fail(new Error(`purge status failed: ${res.status}`)),
+          ),
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.exponential("2 seconds"),
+              Schedule.recurs(6),
+            ]),
+          }),
+        );
+        expect(status.status).toBeTruthy();
       }),
     { timeout: 180_000 },
   );

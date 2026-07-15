@@ -46,8 +46,15 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
           )
         : Effect.succeed(response),
     ),
+    Effect.tapError((e) =>
+      e._tag === "TransientUpstream"
+        ? Effect.logWarning(
+            `transient upstream ${e.status}: ${e.body.slice(0, 500)}`,
+          )
+        : Effect.void,
+    ),
     Effect.retry({
-      while: (e) => e._tag === "TransientUpstream",
+      while: (e): boolean => e._tag === "TransientUpstream",
       schedule: Schedule.max([
         Schedule.exponential("500 millis"),
         Schedule.recurs(8),
@@ -150,6 +157,20 @@ describe.sequential("GlobalAccelerator Bindings", () => {
       "registers and deregisters an Elastic IP endpoint at runtime",
       (_stack) =>
         Effect.gen(function* () {
+          // Global Accelerator serializes changes per accelerator: mutating
+          // while the create/update transaction from the deploy is still
+          // IN_PROGRESS fails with TransactionInProgressException. Wait for
+          // DEPLOYED (bounded) before driving Add/RemoveEndpoints.
+          const accelerator = yield* getJson("/accelerator").pipe(
+            Effect.map((a) => a as { status: string }),
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (a): boolean => a.status === "DEPLOYED",
+              times: 36,
+            }),
+          );
+          expect(accelerator.status).toEqual("DEPLOYED");
+
           const { allocationId } = (yield* getJson("/context")) as {
             allocationId: string;
           };
@@ -159,7 +180,7 @@ describe.sequential("GlobalAccelerator Bindings", () => {
           const added = (yield* postJson("/endpoints/add")) as {
             added: string[];
           };
-          expect(added.added).toContain(allocationId);
+          expect(added.added, JSON.stringify(added)).toContain(allocationId);
 
           // The group's observed state now includes the Elastic IP.
           const group = yield* getJson("/group").pipe(
@@ -181,7 +202,9 @@ describe.sequential("GlobalAccelerator Bindings", () => {
           const removed = (yield* postJson("/endpoints/remove")) as {
             removed: string;
           };
-          expect(removed.removed).toEqual(allocationId);
+          expect(removed.removed, JSON.stringify(removed)).toEqual(
+            allocationId,
+          );
 
           const drained = yield* getJson("/group").pipe(
             Effect.map((g) => g as { endpoints: { endpointId: string }[] }),
@@ -198,7 +221,9 @@ describe.sequential("GlobalAccelerator Bindings", () => {
             drained.endpoints.map((endpoint) => endpoint.endpointId),
           ).not.toContain(allocationId);
         }),
-      { timeout: 120_000 },
+      // Covers the (bounded) wait for the accelerator's deploy transaction
+      // to reach DEPLOYED plus the add/observe/remove/observe cycle.
+      { timeout: 300_000 },
     );
   });
 });

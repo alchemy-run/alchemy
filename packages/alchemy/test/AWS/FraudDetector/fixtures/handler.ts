@@ -4,6 +4,7 @@ import * as Output from "@/Output";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -14,6 +15,8 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 export const FRAUD_EMAIL = "fraud@example.com";
 /** The outcome the sample rule returns on a match. */
 export const REVIEW_OUTCOME = "alchemy_test_review";
+/** The deny-list element the List resource seeds. */
+export const SEED_BLOCKED_IP = "203.0.113.7";
 
 export class FraudDetectorTestFunction extends Lambda.Function<Lambda.Function>()(
   "FraudDetectorTestFunction",
@@ -67,6 +70,11 @@ export default FraudDetectorTestFunction.make(
       eventTypeName: eventType.name,
       description: "rule-based checkout fraud detector",
     });
+    const blockedIps = yield* FraudDetector.List("BlockedIps", {
+      variableType: "IP_ADDRESS",
+      description: "known-fraud source addresses",
+      elements: [SEED_BLOCKED_IP],
+    });
 
     // Runtime needs the resolved names to build the prediction request. The
     // yields return Accessors that resolve to strings inside the handler.
@@ -99,6 +107,16 @@ export default FraudDetectorTestFunction.make(
     const getEvent = yield* FraudDetector.GetEvent(eventType);
     const updateEventLabel = yield* FraudDetector.UpdateEventLabel(eventType);
     const deleteEvent = yield* FraudDetector.DeleteEvent(eventType);
+    const getListElements = yield* FraudDetector.GetListElements(blockedIps);
+    const updateList = yield* FraudDetector.UpdateList(blockedIps);
+    const listEventPredictions =
+      yield* FraudDetector.ListEventPredictions(detector);
+    const getEventPredictionMetadata =
+      yield* FraudDetector.GetEventPredictionMetadata(detector);
+    const deleteEventsByEventType =
+      yield* FraudDetector.DeleteEventsByEventType(eventType);
+    const getDeleteEventsByEventTypeStatus =
+      yield* FraudDetector.GetDeleteEventsByEventTypeStatus(eventType);
 
     return {
       fetch: Effect.gen(function* () {
@@ -115,13 +133,14 @@ export default FraudDetectorTestFunction.make(
             email: string;
             ip?: string;
             entityId?: string;
+            eventId?: string;
           };
           const resolvedEventTypeName = yield* eventTypeName;
           const resolvedEntityTypeName = yield* entityTypeName;
           const emailVarName = yield* emailVar;
           const ipVarName = yield* ipVar;
           const result = yield* getEventPrediction({
-            eventId: `evt-${Date.now()}`,
+            eventId: body.eventId ?? `evt-${Date.now()}`,
             eventTypeName: resolvedEventTypeName,
             eventTimestamp: new Date().toISOString(),
             entities: [
@@ -201,6 +220,72 @@ export default FraudDetectorTestFunction.make(
           return yield* HttpServerResponse.json({ ok: true });
         }
 
+        if (request.method === "GET" && pathname === "/list") {
+          const { elements } = yield* getListElements({});
+          return yield* HttpServerResponse.json({
+            elements: (elements ?? []).map((e) =>
+              typeof e === "string" ? e : Redacted.value(e),
+            ),
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/list/append") {
+          const body = (yield* request.json) as { element: string };
+          yield* updateList({
+            elements: [body.element],
+            updateMode: "APPEND",
+          });
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
+        if (request.method === "GET" && pathname === "/predictions") {
+          const eventId = url.searchParams.get("eventId")!;
+          const { eventPredictionSummaries } = yield* listEventPredictions({
+            eventId: { value: eventId },
+          });
+          return yield* HttpServerResponse.json({
+            summaries: eventPredictionSummaries ?? [],
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/prediction-metadata") {
+          const eventId = url.searchParams.get("eventId")!;
+          // Find the prediction summary first, then audit its full metadata.
+          const { eventPredictionSummaries } = yield* listEventPredictions({
+            eventId: { value: eventId },
+          });
+          const summary = eventPredictionSummaries?.[0];
+          if (summary === undefined) {
+            return yield* HttpServerResponse.json({ found: false });
+          }
+          const metadata = yield* getEventPredictionMetadata({
+            eventId,
+            eventTypeName: summary.eventTypeName!,
+            detectorVersionId: summary.detectorVersionId!,
+            predictionTimestamp: summary.predictionTimestamp!,
+          });
+          return yield* HttpServerResponse.json({
+            found: true,
+            outcomes: metadata.outcomes ?? [],
+            ruleCount: (metadata.rules ?? []).length,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/events/purge") {
+          const { eventsDeletionStatus } = yield* deleteEventsByEventType({});
+          return yield* HttpServerResponse.json({
+            status: eventsDeletionStatus,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/events/purge-status") {
+          const { eventsDeletionStatus } =
+            yield* getDeleteEventsByEventTypeStatus({});
+          return yield* HttpServerResponse.json({
+            status: eventsDeletionStatus,
+          });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -215,6 +300,12 @@ export default FraudDetectorTestFunction.make(
         FraudDetector.GetEventHttp,
         FraudDetector.UpdateEventLabelHttp,
         FraudDetector.DeleteEventHttp,
+        FraudDetector.GetListElementsHttp,
+        FraudDetector.UpdateListHttp,
+        FraudDetector.ListEventPredictionsHttp,
+        FraudDetector.GetEventPredictionMetadataHttp,
+        FraudDetector.DeleteEventsByEventTypeHttp,
+        FraudDetector.GetDeleteEventsByEventTypeStatusHttp,
       ),
     ),
   ),

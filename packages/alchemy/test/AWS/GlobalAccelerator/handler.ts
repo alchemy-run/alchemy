@@ -4,6 +4,8 @@ import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -14,11 +16,25 @@ export class GaTestFunction extends Lambda.Function<Lambda.Function>()(
   "GaTestFunction",
 ) {}
 
+// Global Accelerator serializes config changes per accelerator; a mutation
+// racing an in-flight transaction is rejected with
+// TransactionInProgressException. Retry briefly inside the Lambda (bounded
+// well under the function timeout).
+const retryGaTransaction = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e): boolean =>
+      e._tag === "TransactionInProgressException" ||
+      e._tag === "ConflictException",
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+  });
+
 export default GaTestFunction.make(
   {
     main,
     url: true,
-    timeout: Duration.seconds(30),
+    timeout: Duration.seconds(60),
   },
   Effect.gen(function* () {
     // The accelerator/listener/endpoint group the bindings are bound to. The
@@ -99,14 +115,28 @@ export default GaTestFunction.make(
           });
         }
 
-        // Register the Elastic IP as an endpoint at runtime.
+        // Register the Elastic IP as an endpoint at runtime. Failures are
+        // surfaced as a 400 JSON body (with the typed tag) so the test fails
+        // fast and diagnostically instead of retrying an opaque 5xx.
         if (request.method === "POST" && pathname === "/endpoints/add") {
           const allocationId = yield* AllocationId;
-          const { EndpointDescriptions } = yield* addEndpoints({
-            EndpointConfigurations: [{ EndpointId: allocationId, Weight: 64 }],
-          });
+          const added = yield* Effect.result(
+            retryGaTransaction(
+              addEndpoints({
+                EndpointConfigurations: [
+                  { EndpointId: allocationId, Weight: 64 },
+                ],
+              }),
+            ),
+          );
+          if (Result.isFailure(added)) {
+            return yield* HttpServerResponse.json(
+              { error: "addEndpoints", failure: JSON.stringify(added.failure) },
+              { status: 400 },
+            );
+          }
           return yield* HttpServerResponse.json({
-            added: (EndpointDescriptions ?? []).map(
+            added: (added.success.EndpointDescriptions ?? []).map(
               (endpoint) => endpoint.EndpointId,
             ),
           });
@@ -115,9 +145,22 @@ export default GaTestFunction.make(
         // Deregister the Elastic IP endpoint.
         if (request.method === "POST" && pathname === "/endpoints/remove") {
           const allocationId = yield* AllocationId;
-          yield* removeEndpoints({
-            EndpointIdentifiers: [{ EndpointId: allocationId }],
-          });
+          const removed = yield* Effect.result(
+            retryGaTransaction(
+              removeEndpoints({
+                EndpointIdentifiers: [{ EndpointId: allocationId }],
+              }),
+            ),
+          );
+          if (Result.isFailure(removed)) {
+            return yield* HttpServerResponse.json(
+              {
+                error: "removeEndpoints",
+                failure: JSON.stringify(removed.failure),
+              },
+              { status: 400 },
+            );
+          }
           return yield* HttpServerResponse.json({ removed: allocationId });
         }
 

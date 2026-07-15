@@ -2,6 +2,8 @@ export * from "./CancelDataRepositoryTask.ts";
 export * from "./CancelDataRepositoryTaskHttp.ts";
 export * from "./CopyBackup.ts";
 export * from "./CopyBackupHttp.ts";
+export * from "./CopySnapshotAndUpdateVolume.ts";
+export * from "./CopySnapshotAndUpdateVolumeHttp.ts";
 export * from "./CreateBackup.ts";
 export * from "./CreateBackupHttp.ts";
 export * from "./CreateDataRepositoryTask.ts";

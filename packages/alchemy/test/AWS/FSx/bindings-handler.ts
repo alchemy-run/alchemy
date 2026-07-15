@@ -15,6 +15,12 @@ const MISSING_BACKUP_ID = "backup-00000000000000000";
 const MISSING_SNAPSHOT_ID = "fsvolsnap-00000000000000000";
 const MISSING_VOLUME_ID = "fsvol-00000000000000000";
 const MISSING_TASK_ID = "task-00000000000000000";
+// Well-formed FSx snapshot ARN pointing at a nonexistent snapshot. FSx
+// reports the missing source snapshot as "SourceSnapshotARN provided is not
+// a valid ARN" — the distilled patch carves the typed SourceSnapshotNotFound
+// out of that BadRequest by message predicate.
+const MISSING_SNAPSHOT_ARN =
+  "arn:aws:fsx:us-west-2:000000000000:snapshot/fsvolsnap-00000000000000000";
 
 export class FSxBindingsFunction extends Lambda.Function<Lambda.Function>()(
   "FSxBindingsFunction",
@@ -39,6 +45,8 @@ export default FSxBindingsFunction.make(
     const createSnapshot = yield* FSx.CreateSnapshot();
     const deleteSnapshot = yield* FSx.DeleteSnapshot();
     const restoreVolumeFromSnapshot = yield* FSx.RestoreVolumeFromSnapshot();
+    const copySnapshotAndUpdateVolume =
+      yield* FSx.CopySnapshotAndUpdateVolume();
     const describeVolumes = yield* FSx.DescribeVolumes();
     const describeStorageVirtualMachines =
       yield* FSx.DescribeStorageVirtualMachines();
@@ -57,6 +65,7 @@ export default FSxBindingsFunction.make(
       createSnapshot,
       deleteSnapshot,
       restoreVolumeFromSnapshot,
+      copySnapshotAndUpdateVolume,
       describeVolumes,
       describeStorageVirtualMachines,
       describeDataRepositoryTasks,
@@ -199,6 +208,19 @@ export default FSxBindingsFunction.make(
 
         if (
           request.method === "POST" &&
+          pathname === "/volume/copy-snapshot-missing"
+        ) {
+          const tag = yield* probeTag(
+            copySnapshotAndUpdateVolume({
+              VolumeId: MISSING_VOLUME_ID,
+              SourceSnapshotARN: MISSING_SNAPSHOT_ARN,
+            }),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (
+          request.method === "POST" &&
           pathname === "/dr-task/cancel-missing"
         ) {
           const tag = yield* probeTag(
@@ -224,6 +246,7 @@ export default FSxBindingsFunction.make(
         FSx.CreateSnapshotHttp,
         FSx.DeleteSnapshotHttp,
         FSx.RestoreVolumeFromSnapshotHttp,
+        FSx.CopySnapshotAndUpdateVolumeHttp,
         FSx.DescribeVolumesHttp,
         FSx.DescribeStorageVirtualMachinesHttp,
         FSx.DescribeDataRepositoryTasksHttp,

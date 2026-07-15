@@ -167,11 +167,12 @@ describe("EventBridge Bindings", () => {
   );
 
   afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    // Teardown deletes ~10 resources serially (invoke permissions,
-    // event-source rules, the Lambda fixture, ToggleRule, TestArchive,
-    // both sinks, then the buses); each delete is individually bounded
-    // but the sum can exceed two minutes on a slow AWS day.
-    timeout: 240_000,
+    // Teardown deletes ~30 resources (invoke permissions, event-source
+    // rules, the Lambda fixture + role, ToggleRule, TestArchive, both
+    // sinks, then the buses); each delete is individually bounded but
+    // TestArchive can spend minutes retrying while the replay test's
+    // replay drains, so budget generously.
+    timeout: 360_000,
   });
 
   describe("PutEvents", () => {

@@ -39,6 +39,13 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
    * experiment it creates.
    */
   grantExperimentWildcard?: boolean;
+  /**
+   * Additionally grant `iam:CreateServiceLinkedRole` scoped to FIS — the
+   * first `fis:StartExperiment` in an account creates the
+   * `AWSServiceRoleForFIS` service-linked role on the caller's behalf and is
+   * denied without it.
+   */
+  grantServiceLinkedRole?: boolean;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -68,6 +75,22 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
                     : []),
                 ],
               },
+              ...(options.grantServiceLinkedRole
+                ? [
+                    {
+                      Effect: "Allow" as const,
+                      Action: ["iam:CreateServiceLinkedRole"],
+                      Resource: [
+                        "arn:aws:iam::*:role/aws-service-role/fis.amazonaws.com/AWSServiceRoleForFIS",
+                      ],
+                      Condition: {
+                        StringEquals: {
+                          "iam:AWSServiceName": "fis.amazonaws.com",
+                        },
+                      },
+                    },
+                  ]
+                : []),
             ],
           });
         }

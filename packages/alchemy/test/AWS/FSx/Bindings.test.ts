@@ -107,10 +107,10 @@ describe.sequential("FSx Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 240_000 });
 
   describe("binding registration", () => {
-    test.provider("all 13 capabilities initialize in the runtime", (_stack) =>
+    test.provider("all 14 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = (yield* getJson("/bindings")) as any;
-        expect(response.bound).toHaveLength(13);
+        expect(response.bound).toHaveLength(14);
       }),
     );
   });
@@ -244,6 +244,23 @@ describe.sequential("FSx Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* postJson("/volume/restore-missing")) as any;
           expect(response.tag).toBe("RestoreSnapshotNotFound");
+        }),
+    );
+  });
+
+  describe("CopySnapshotAndUpdateVolume", () => {
+    // FSx reports a nonexistent source snapshot as a wire `BadRequest` with
+    // "SourceSnapshotARN provided is not a valid ARN"; the distilled patch
+    // (patches/fsx.json) carves the typed SourceSnapshotNotFound out of it
+    // by message predicate.
+    test.provider(
+      "returns the typed SourceSnapshotNotFound for a missing source snapshot",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* postJson(
+            "/volume/copy-snapshot-missing",
+          )) as any;
+          expect(response.tag).toBe("SourceSnapshotNotFound");
         }),
     );
   });
