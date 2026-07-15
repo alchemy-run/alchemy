@@ -193,7 +193,7 @@ You rarely call this directly because resources already act like
 `Output`s, but it's how the conversion happens internally:
 
 ```typescript
-const bucketOut = Output.of(bucket);          // Output<R2BucketAttrs>
+const bucketOut = Output.of(bucket);          // Output<Bucket>
 const refOut    = Output.of(Ref({ id: "B" })); // for cross-stack refs
 ```
 

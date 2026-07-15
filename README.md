@@ -21,13 +21,13 @@
 A Worker bound to a R2 bucket and serving objects from it:
 
 ```typescript
-const Bucket = Cloudflare.R2Bucket("bucket");
+const Bucket = Cloudflare.R2.Bucket("bucket");
 
 export default Cloudflare.Worker(
   "api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -35,11 +35,11 @@ export default Cloudflare.Worker(
         return HttpServerResponse.stream(object!.body);
       })
     };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
 ```
 
-One `bind()` wires the binding, env var, and typed connection — at deploy time and at runtime.
+One `ReadWriteBucket(Bucket)` call wires the binding, env var, and typed client — at deploy time and at runtime.
 
 ---
 
