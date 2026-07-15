@@ -4,6 +4,7 @@ import * as Textract from "@/AWS/Textract";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -76,6 +77,21 @@ export default TextractTestFunction.make(
 
     const lineTexts = (blocks: { BlockType?: string; Text?: string }[]) =>
       blocks.filter((b) => b.BlockType === "LINE").map((b) => b.Text);
+
+    // Textract's adapter management APIs throttle at ~1 TPS; bounded backoff
+    // absorbs the bursts the adapter routes emit.
+    const throttleRetry = <A, E extends { readonly _tag: string }>(
+      effect: Effect.Effect<A, E>,
+    ) =>
+      effect.pipe(
+        Effect.retry({
+          while: (e): boolean =>
+            e._tag === "ProvisionedThroughputExceededException" ||
+            e._tag === "ThrottlingException",
+          schedule: Schedule.exponential("1 second"),
+          times: 5,
+        }),
+      );
 
     return {
       fetch: Effect.gen(function* () {
@@ -207,9 +223,9 @@ export default TextractTestFunction.make(
 
         // --- adapter management ---
         if (request.method === "GET" && pathname === "/adapters") {
-          const info = yield* getAdapter();
-          const listed = yield* listAdapters();
-          const versions = yield* listAdapterVersions();
+          const info = yield* throttleRetry(getAdapter());
+          const listed = yield* throttleRetry(listAdapters());
+          const versions = yield* throttleRetry(listAdapterVersions());
           return yield* HttpServerResponse.json({
             adapterName: info.AdapterName,
             featureTypes: info.FeatureTypes,
@@ -226,19 +242,21 @@ export default TextractTestFunction.make(
           request.method === "GET" &&
           pathname === "/adapter-version-probes"
         ) {
-          const getVersionProbe = yield* getAdapterVersion({
-            AdapterVersion: "999",
-          }).pipe(
+          const getVersionProbe = yield* throttleRetry(
+            getAdapterVersion({ AdapterVersion: "999" }),
+          ).pipe(
             Effect.map(() => "unexpected-success"),
             Effect.catchTag(
               ["ResourceNotFoundException", "ValidationException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
-          const deleteVersionProbe = yield* deleteAdapterVersion({
-            AdapterVersion: "999",
-          }).pipe(
-            Effect.map(() => "unexpected-success"),
+          // DeleteAdapterVersion is idempotent — deleting a nonexistent
+          // version returns success, which proves the grant just as well.
+          const deleteVersionProbe = yield* throttleRetry(
+            deleteAdapterVersion({ AdapterVersion: "999" }),
+          ).pipe(
+            Effect.map(() => "success"),
             Effect.catchTag(
               [
                 "ResourceNotFoundException",
@@ -248,18 +266,20 @@ export default TextractTestFunction.make(
               (e) => Effect.succeed(e._tag),
             ),
           );
-          const createVersionProbe = yield* createAdapterVersion({
-            DatasetConfig: {
-              ManifestS3Object: {
-                Bucket,
-                Name: "missing-manifest.jsonl",
+          const createVersionProbe = yield* throttleRetry(
+            createAdapterVersion({
+              DatasetConfig: {
+                ManifestS3Object: {
+                  Bucket,
+                  Name: "missing-manifest.jsonl",
+                },
               },
-            },
-            OutputConfig: {
-              S3Bucket: Bucket,
-              S3Prefix: "adapter-training/",
-            },
-          }).pipe(
+              OutputConfig: {
+                S3Bucket: Bucket,
+                S3Prefix: "adapter-training/",
+              },
+            }),
+          ).pipe(
             Effect.map(() => "unexpected-success"),
             Effect.catchTag(
               [

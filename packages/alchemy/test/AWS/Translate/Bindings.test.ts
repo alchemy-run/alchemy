@@ -105,20 +105,20 @@ describe.sequential("Translate Bindings", () => {
       "translates text and applies the fixture terminology",
       (_stack) =>
         Effect.gen(function* () {
-          // A freshly imported terminology takes a little while to propagate
-          // to TranslateText — poll the route (bounded) until the custom
-          // term lands in the translation.
+          // A freshly imported terminology can take a moment to propagate to
+          // TranslateText — poll the route (bounded) until the custom term
+          // lands in the translation.
           const response = (yield* send(
             HttpClientRequest.get(`${baseUrl}/translate`),
           ).pipe(
             Effect.flatMap((r) => r.json),
             Effect.repeat({
-              schedule: Schedule.spaced("10 seconds"),
+              schedule: Schedule.spaced("5 seconds"),
               until: (r): boolean =>
                 (r as { withTerminology?: string }).withTerminology?.includes(
                   "Alquimia",
                 ) === true,
-              times: 10,
+              times: 8,
             }),
           )) as {
             error?: string;

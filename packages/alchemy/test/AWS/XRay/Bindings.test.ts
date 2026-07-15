@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
@@ -27,6 +28,7 @@ const readinessPolicy = Schedule.max([
 
 let baseUrl: string;
 let functionName: string;
+let functionArn: string;
 let roleName: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
@@ -75,6 +77,7 @@ describe("XRay Bindings", () => {
       expect(attrs.functionUrl).toBeTruthy();
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
       functionName = attrs.functionName;
+      functionArn = attrs.functionArn;
       roleName = attrs.roleName;
 
       const readinessUrl = `${baseUrl}/ping`;
@@ -162,6 +165,195 @@ describe("XRay Bindings", () => {
         };
         expect(body.traces).toEqual([]);
       }),
+    );
+  });
+
+  describe("PutTraceSegments", () => {
+    test.provider("uploads a custom segment through the binding", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.post(`${baseUrl}/put-trace-segments`),
+        );
+        expect(response.status).toBe(200);
+        const body = (yield* response.json) as {
+          traceId: string;
+          unprocessed: unknown[];
+        };
+        expect(body.traceId).toMatch(/^1-[0-9a-f]{8}-[0-9a-f]{24}$/);
+        expect(body.unprocessed).toEqual([]);
+      }),
+    );
+  });
+
+  describe("PutTelemetryRecords", () => {
+    test.provider("uploads telemetry through the binding", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.post(`${baseUrl}/telemetry`),
+        );
+        expect(response.status).toBe(200);
+        const body = (yield* response.json) as { ok: boolean };
+        expect(body.ok).toBe(true);
+      }),
+    );
+  });
+
+  describe("Sampling (GetSamplingRules, GetSamplingTargets, GetSamplingStatisticSummaries)", () => {
+    test.provider("exercises the sampling protocol bindings", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.get(`${baseUrl}/sampling`),
+        );
+        expect(response.status).toBe(200);
+        const body = (yield* response.json) as {
+          ruleNames: string[];
+          statisticSummaries: number;
+          targets: { outcome: string; documents: number | null };
+        };
+        // The built-in fallback rule always exists.
+        expect(body.ruleNames).toContain("Default");
+        expect(body.statisticSummaries).toBeGreaterThanOrEqual(0);
+        // Reporting statistics for the Default rule yields its target.
+        expect(body.targets.outcome).toBe("ok");
+        expect(body.targets.documents).toBeGreaterThanOrEqual(1);
+      }),
+    );
+  });
+
+  describe("Service graphs (GetServiceGraph, GetTraceGraph, GetTimeSeriesServiceStatistics)", () => {
+    test.provider("queries the service graph bindings", (_stack) =>
+      Effect.gen(function* () {
+        const graph = (yield* send(
+          HttpClientRequest.get(`${baseUrl}/service-graph`),
+        ).pipe(Effect.flatMap((r) => r.json))) as { services: number };
+        expect(graph.services).toBeGreaterThanOrEqual(0);
+
+        const epochHex = yield* Effect.sync(() =>
+          Math.floor(Date.now() / 1000).toString(16),
+        );
+        const traceGraph = (yield* send(
+          HttpClientRequest.get(
+            `${baseUrl}/trace-graph?ids=1-${epochHex}-abcdef0123456789abcdef01`,
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as { services: number };
+        expect(traceGraph.services).toBe(0);
+
+        const timeSeries = (yield* send(
+          HttpClientRequest.get(
+            `${baseUrl}/time-series?service=${functionName}`,
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          points: number | null;
+          error: string | null;
+        };
+        // A typed validation error (e.g. the entity selector needing
+        // Transaction Search) still proves the IAM grant.
+        if (timeSeries.error !== null) {
+          expect(["InvalidRequestException", "ValidationException"]).toContain(
+            timeSeries.error,
+          );
+        } else {
+          expect(timeSeries.points).toBeGreaterThanOrEqual(0);
+        }
+      }),
+    );
+  });
+
+  describe("Insights (GetInsight, GetInsightEvents, GetInsightImpactGraph, GetInsightSummaries)", () => {
+    test.provider("queries insight summaries for the Default group", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.get(`${baseUrl}/insight-summaries?group=Default`),
+        );
+        expect(response.status).toBe(200);
+        const body = (yield* response.json) as {
+          insights: number | null;
+          error: string | null;
+        };
+        // Insights may not be enabled on the Default group — a typed
+        // validation error still proves the IAM grant (an IAM failure
+        // would surface as AccessDeniedException).
+        if (body.error !== null) {
+          expect(body.error).toBe("InvalidRequestException");
+        } else {
+          expect(body.insights).toBeGreaterThanOrEqual(0);
+        }
+      }),
+    );
+
+    test.provider(
+      "insight lookups answer with typed validation errors (not access denials)",
+      (_stack) =>
+        Effect.gen(function* () {
+          // No insight can be provisioned on demand — each binding's IAM
+          // grant is proven by the API answering with its typed validation
+          // error for a nonexistent insight id.
+          const body = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/insight`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            getInsight: string;
+            getInsightEvents: string;
+            getInsightImpactGraph: string;
+          };
+          for (const outcome of [
+            body.getInsight,
+            body.getInsightEvents,
+            body.getInsightImpactGraph,
+          ]) {
+            // ValidationException is a typed CommonErrors member — X-Ray
+            // answers with it for a nonexistent insight id.
+            expect([
+              "ok",
+              "InvalidRequestException",
+              "ValidationException",
+            ]).toContain(outcome);
+          }
+        }),
+    );
+  });
+
+  describe("Transaction Search (GetTraceSegmentDestination, StartTraceRetrieval, ListRetrievedTraces, GetRetrievedTracesGraph, CancelTraceRetrieval)", () => {
+    test.provider("exercises the trace retrieval bindings", (_stack) =>
+      Effect.gen(function* () {
+        const body = (yield* send(
+          HttpClientRequest.get(`${baseUrl}/trace-retrieval`),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          destination: string;
+          startTraceRetrieval: string;
+          listRetrievedTraces: string;
+          getRetrievedTracesGraph: string;
+          cancelTraceRetrieval: string;
+        };
+        expect(["XRay", "CloudWatchLogs"]).toContain(body.destination);
+        // On the default X-Ray destination the retrieval workflow answers
+        // with typed errors; with Transaction Search enabled it succeeds.
+        // Either way each call went through its granted IAM action.
+        const accepted = [
+          "ok",
+          "InvalidRequestException",
+          "ResourceNotFoundException",
+        ];
+        expect(accepted).toContain(body.startTraceRetrieval);
+        expect(accepted).toContain(body.listRetrievedTraces);
+        expect(accepted).toContain(body.getRetrievedTracesGraph);
+        expect(accepted).toContain(body.cancelTraceRetrieval);
+      }),
+    );
+  });
+
+  describe("consumeInsightEvents", () => {
+    test.provider(
+      "the deploy created an EventBridge rule targeting the function",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeInsightEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
     );
   });
 

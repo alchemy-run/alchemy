@@ -1,5 +1,6 @@
 import * as textract from "@distilled.cloud/aws/textract";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -119,6 +120,22 @@ const toAttributes = (
   creationTime: adapter.CreationTime?.toISOString(),
 });
 
+// Textract's adapter management APIs have very low default rates (~1 TPS);
+// bounded backoff absorbs the short bursts the engine's read/diff/reconcile
+// sequence emits.
+const throttleRetry = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e): boolean =>
+        e._tag === "ProvisionedThroughputExceededException" ||
+        e._tag === "ThrottlingException",
+      schedule: Schedule.exponential("1 second"),
+      times: 5,
+    }),
+  );
+
 const normalizeTags = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
@@ -148,7 +165,7 @@ export const AdapterProvider = () =>
         });
 
       const getOne = (adapterId: string) =>
-        textract.getAdapter({ AdapterId: adapterId }).pipe(
+        throttleRetry(textract.getAdapter({ AdapterId: adapterId })).pipe(
           Effect.map((adapter) => ({ ...adapter, AdapterId: adapterId })),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed(undefined),
@@ -161,7 +178,9 @@ export const AdapterProvider = () =>
         Effect.gen(function* () {
           let nextToken: string | undefined;
           for (let page = 0; page < 25; page++) {
-            const res = yield* textract.listAdapters({ NextToken: nextToken });
+            const res = yield* throttleRetry(
+              textract.listAdapters({ NextToken: nextToken }),
+            );
             const match = (res.Adapters ?? []).find(
               (a) => a.AdapterName === name,
             );
@@ -201,9 +220,9 @@ export const AdapterProvider = () =>
             const attrs: ReturnType<typeof toAttributes>[] = [];
             let nextToken: string | undefined;
             for (let page = 0; page < 25; page++) {
-              const res = yield* textract.listAdapters({
-                NextToken: nextToken,
-              });
+              const res = yield* throttleRetry(
+                textract.listAdapters({ NextToken: nextToken }),
+              );
               for (const overview of res.Adapters ?? []) {
                 if (overview.AdapterId) {
                   const found = yield* getOne(overview.AdapterId);
@@ -235,19 +254,19 @@ export const AdapterProvider = () =>
           // Ensure — create when missing; a ConflictException means another
           // writer won the race, so fall through to the name lookup.
           if (!observed) {
-            const created = yield* textract
-              .createAdapter({
+            const created = yield* throttleRetry(
+              textract.createAdapter({
                 AdapterName: name,
                 FeatureTypes: news.featureTypes,
                 Description: news.description,
                 AutoUpdate: news.autoUpdate,
                 Tags: desiredTags,
-              })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              }),
+            ).pipe(
+              Effect.catchTag("ConflictException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
             adapterId = created?.AdapterId ?? (yield* findByName(name));
             if (!adapterId) {
               return yield* Effect.die(
@@ -287,7 +306,7 @@ export const AdapterProvider = () =>
             dirty = true;
           }
           if (dirty) {
-            yield* textract.updateAdapter(update);
+            yield* throttleRetry(textract.updateAdapter(update));
           }
 
           // Sync tags — diff against the OBSERVED cloud tags (adoption may
@@ -297,16 +316,20 @@ export const AdapterProvider = () =>
             desiredTags,
           );
           if (upsert.length > 0) {
-            yield* textract.tagResource({
-              ResourceARN: arn,
-              Tags: Object.fromEntries(upsert.map((t) => [t.Key, t.Value])),
-            });
+            yield* throttleRetry(
+              textract.tagResource({
+                ResourceARN: arn,
+                Tags: Object.fromEntries(upsert.map((t) => [t.Key, t.Value])),
+              }),
+            );
           }
           if (removed.length > 0) {
-            yield* textract.untagResource({
-              ResourceARN: arn,
-              TagKeys: removed,
-            });
+            yield* throttleRetry(
+              textract.untagResource({
+                ResourceARN: arn,
+                TagKeys: removed,
+              }),
+            );
           }
 
           const final = yield* getOne(adapterId!);
@@ -317,11 +340,11 @@ export const AdapterProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the adapter may already be gone.
-          yield* textract
-            .deleteAdapter({ AdapterId: output.adapterId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* throttleRetry(
+            textract.deleteAdapter({ AdapterId: output.adapterId }),
+          ).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       };
     }),

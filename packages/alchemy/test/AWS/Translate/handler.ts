@@ -135,8 +135,11 @@ export default TranslateTestFunction.make(
             SourceLanguageCode: "en",
             TargetLanguageCode: "es",
           });
+          // NOTE: with "Alchemy" as the sentence-initial subject the model
+          // treats it as a brand name and declines to substitute the term;
+          // mid-sentence it applies reliably (verified with the raw API).
           const withTerminology = yield* translateText({
-            Text: "Alchemy deploys infrastructure.",
+            Text: "I love Alchemy so much.",
             SourceLanguageCode: "en",
             TargetLanguageCode: "es",
             TerminologyNames: [TERMINOLOGY_NAME],

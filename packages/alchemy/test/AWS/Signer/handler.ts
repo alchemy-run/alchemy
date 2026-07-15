@@ -44,6 +44,9 @@ export default SignerTestFunction.make(
     main,
     url: true,
     timeout: Duration.seconds(60),
+    // The default 128 MB pins at the ceiling (~123 MB used) once the S3 +
+    // Signer clients are warm and 500s under load — give it headroom.
+    memorySize: 512,
   },
   Effect.gen(function* () {
     // The profile under test: AWS-managed Lambda code-signing material.
@@ -235,11 +238,19 @@ export default SignerTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/job") {
-          const job = yield* describeSigningJob({ jobId: id });
-          return yield* HttpServerResponse.json({
-            status: job.status,
-            signedKey: job.signedObject?.s3?.key,
-          });
+          // A freshly-started job can 404 for a few seconds (eventual
+          // consistency) — report the typed tag so the test keeps polling.
+          const job = yield* describeSigningJob({ jobId: id }).pipe(
+            Effect.result,
+          );
+          return yield* HttpServerResponse.json(
+            job._tag === "Success"
+              ? {
+                  status: job.success.status,
+                  signedKey: job.success.signedObject?.s3?.key,
+                }
+              : { status: "Pending", tag: job.failure._tag },
+          );
         }
 
         if (request.method === "POST" && pathname === "/revoke-job") {

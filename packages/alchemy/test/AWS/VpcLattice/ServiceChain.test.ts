@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { Vpc } from "@/AWS/EC2";
+import { Subnet, Vpc } from "@/AWS/EC2";
 import {
   Listener,
   Rule,
@@ -61,6 +61,11 @@ test.provider(
       }) =>
         Effect.gen(function* () {
           const vpc = yield* Vpc("ChainVpc", { cidrBlock: "10.31.0.0/16" });
+          // IP targets must fall inside a subnet of the VPC.
+          const subnet = yield* Subnet("ChainSubnet", {
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.31.0.0/24",
+          });
           const network = yield* ServiceNetwork("ChainNetwork", {});
           const service = yield* Service("ChainService", {});
           const association = yield* ServiceNetworkServiceAssociation(
@@ -74,7 +79,10 @@ test.provider(
             type: "IP",
             port: 80,
             protocol: "HTTP",
-            vpcIdentifier: vpc.vpcId,
+            // Reference the VPC through the subnet so target registration
+            // (which requires a subnet covering the target IP) is ordered
+            // after the subnet exists.
+            vpcIdentifier: subnet.vpcId,
             healthCheck: {
               enabled: options.healthCheckEnabled,
               protocol: "HTTP",

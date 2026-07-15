@@ -323,12 +323,20 @@ export const TargetGroupProvider = () =>
           });
         }
         if (toAdd.length > 0) {
-          yield* retryOnConflict(
+          // Partial failures are reported in `unsuccessful`, not thrown.
+          const result = yield* retryOnConflict(
             vpclattice.registerTargets({
               targetGroupIdentifier: targetGroupId,
               targets: toAdd,
             }),
           );
+          if ((result.unsuccessful ?? []).length > 0) {
+            return yield* Effect.fail(
+              new Error(
+                `Failed to register targets: ${JSON.stringify(result.unsuccessful)}`,
+              ),
+            );
+          }
         }
       });
 

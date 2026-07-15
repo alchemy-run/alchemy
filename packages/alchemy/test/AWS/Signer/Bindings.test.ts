@@ -162,12 +162,15 @@ describe.sequential("Signer Bindings", () => {
           const jobId = started.jobId!;
           const query = `?id=${encodeURIComponent(jobId)}`;
 
-          // Describe: poll (bounded) until the async signing job lands.
+          // Describe: poll (bounded) until the async signing job lands. A
+          // just-started job can 404 briefly ("Pending") before it appears.
           const job = (yield* getJson(`/job${query}`).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
-              until: (r): boolean =>
-                (r as { status: string }).status !== "InProgress",
+              until: (r): boolean => {
+                const status = (r as { status: string }).status;
+                return status !== "InProgress" && status !== "Pending";
+              },
               times: 20,
             }),
           )) as { status: string; signedKey?: string };

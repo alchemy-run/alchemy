@@ -265,7 +265,10 @@ describe("Textract Bindings", () => {
             "ResourceNotFoundException",
             "ValidationException",
           ]).toContain(probes.getVersionProbe);
+          // DeleteAdapterVersion is idempotent — deleting a nonexistent
+          // version succeeds (verified live), which proves the grant.
           expect([
+            "success",
             "ResourceNotFoundException",
             "ValidationException",
             "ConflictException",
