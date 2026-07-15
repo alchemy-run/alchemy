@@ -115,12 +115,12 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
   afterAll(sharedStack.destroy(), { timeout: 180_000 });
 
   describe("binding registration", () => {
-    test.provider("all 5 capabilities initialize in the runtime", (_stack) =>
+    test.provider("all 14 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = yield* send(
           HttpClientRequest.get(`${baseUrl}/bindings`),
         ).pipe(Effect.flatMap((r) => r.json));
-        expect((response as any).bound).toHaveLength(5);
+        expect((response as any).bound).toHaveLength(14);
       }),
     );
   });
@@ -166,6 +166,142 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
             "ServiceError",
             "ClientError",
           ]).toContain(status.status);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("Library ingestion jobs + entities", () => {
+    test.provider(
+      "starts an inline ingestion job, polls it, and lists jobs + entities",
+      (_stack) =>
+        Effect.gen(function* () {
+          // InvokeDataAutomationLibraryIngestionJob — inline vocabulary
+          // upsert against the bound library.
+          const ingested = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/library-ingest`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            jobArn?: string;
+            error?: string;
+            message?: string;
+          };
+          expect(
+            ingested.error === undefined
+              ? "none"
+              : `${ingested.error}: ${ingested.message}`,
+          ).toBe("none");
+          expect(ingested.jobArn).toBeTruthy();
+
+          // GetDataAutomationLibraryIngestionJob — any lifecycle status
+          // proves the grant + library injection.
+          const job = (yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/library-ingestion-job?jobArn=${encodeURIComponent(ingested.jobArn!)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as { status?: string };
+          expect([
+            "IN_PROGRESS",
+            "COMPLETED",
+            "COMPLETED_WITH_ERRORS",
+            "FAILED",
+          ]).toContain(job.status);
+
+          // ListDataAutomationLibraryIngestionJobs — the job we just
+          // started must be visible.
+          const jobs = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/library-ingestion-jobs`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+          expect(jobs.count).toBeGreaterThanOrEqual(1);
+
+          // ListDataAutomationLibraryEntities — entity visibility lags the
+          // async job, so only the successful (authorized) empty-or-more
+          // page is asserted.
+          const entities = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/library-entities`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+          expect(entities.count).toBeGreaterThanOrEqual(0);
+
+          // GetDataAutomationLibraryEntity — typed not-found path proves
+          // the grant (an IAM gap would surface AccessDeniedException).
+          const missing = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/library-entity-missing`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
+          expect([
+            "ResourceNotFoundException",
+            "ValidationException",
+          ]).toContain(missing.tag);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("Blueprint management", () => {
+    test.provider(
+      "creates a blueprint version and drives copy-stage's typed error path",
+      (_stack) =>
+        Effect.gen(function* () {
+          // CreateBlueprintVersion — snapshots the fixture blueprint.
+          const version = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/blueprint-version`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            version?: string;
+            error?: string;
+            message?: string;
+          };
+          expect(
+            version.error === undefined
+              ? "none"
+              : `${version.error}: ${version.message}`,
+          ).toBe("none");
+          expect(version.version).toBeTruthy();
+
+          // CopyBlueprintStage — the fixture blueprint has no DEVELOPMENT
+          // stage, so the typed error tag proves the grant + injection
+          // without creating a stage copy.
+          const copied = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/copy-stage-validation`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
+          expect([
+            "ResourceNotFoundException",
+            "ValidationException",
+          ]).toContain(copied.tag);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("Blueprint optimization", () => {
+    test.provider(
+      "drives the typed error paths of optimize + status polling",
+      (_stack) =>
+        Effect.gen(function* () {
+          // InvokeBlueprintOptimizationAsync — an empty samples list is
+          // invalid, so the typed ValidationException proves the grant +
+          // blueprint injection without paying for a real optimization job.
+          const arn = yield* getProfileArn;
+          const optimize = (yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/optimize-validation?profileArn=${encodeURIComponent(arn)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
+          expect(optimize.tag).toBe("ValidationException");
+
+          // GetBlueprintOptimizationStatus — typed not-found on a
+          // well-formed but nonexistent invocation ARN.
+          const { Account } = yield* sts.getCallerIdentity({});
+          const region = yield* Effect.sync(
+            () => process.env.AWS_REGION ?? "us-west-2",
+          );
+          const missingArn = `arn:aws:bedrock:${region}:${Account}:blueprint-optimization-invocation/00000000-0000-0000-0000-000000000000`;
+          const status = (yield* send(
+            HttpClientRequest.get(
+              `${baseUrl}/optimization-status-missing?invocationArn=${encodeURIComponent(missingArn)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
+          expect([
+            "ResourceNotFoundException",
+            "ValidationException",
+          ]).toContain(status.tag);
         }),
       { timeout: 120_000 },
     );

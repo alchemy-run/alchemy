@@ -122,10 +122,19 @@ export const JobQueueProvider = () =>
           ? Effect.succeed(props.jobQueueName)
           : createPhysicalName({ id, maxLength: 128 });
 
+      // A deleted queue lingers as a DELETED record for a while and the name
+      // is immediately reusable, so a describe-by-name can briefly return
+      // both the tombstone and the live queue — prefer the live one.
       const describeOne = (name: string) =>
         batch
           .describeJobQueues({ jobQueues: [name] })
-          .pipe(Effect.map((res) => res.jobQueues?.[0]));
+          .pipe(
+            Effect.map(
+              (res) =>
+                res.jobQueues?.find((q) => q.status !== "DELETED") ??
+                res.jobQueues?.[0],
+            ),
+          );
 
       /** Wait until any CREATING/UPDATING/DELETING transition settles. */
       const awaitSettled = (name: string) =>
@@ -188,19 +197,33 @@ export const JobQueueProvider = () =>
           // still be settling to VALID (its own reconcile waits, but adoption
           // or manual drift can race) — retry through that window, and treat
           // a concurrent create as a race to observe.
+          const create = retryBatch(
+            batch.createJobQueue({
+              jobQueueName: name,
+              state: desiredState,
+              priority: desiredPriority,
+              computeEnvironmentOrder: desiredOrder,
+              tags: desiredTags,
+            }),
+            (e) => e._tag === "ComputeEnvironmentNotValid",
+          ).pipe(Effect.catchTag("JobQueueAlreadyExists", () => Effect.void));
+
+          if (queue?.jobQueueArn && queue.status === "DELETING") {
+            // An interrupted destroy left the queue mid-deletion — let it
+            // finish, then fall through to a fresh create below.
+            queue = yield* awaitSettled(name);
+            if (queue?.status === "DELETED") queue = undefined;
+          }
           if (!queue?.jobQueueArn) {
-            yield* retryBatch(
-              batch.createJobQueue({
-                jobQueueName: name,
-                state: desiredState,
-                priority: desiredPriority,
-                computeEnvironmentOrder: desiredOrder,
-                tags: desiredTags,
-              }),
-              (e) => e._tag === "ComputeEnvironmentNotValid",
-            ).pipe(Effect.catchTag("JobQueueAlreadyExists", () => Effect.void));
+            yield* create;
             queue = yield* awaitSettled(name);
           } else if (queue.status !== "VALID" && queue.status !== "INVALID") {
+            queue = yield* awaitSettled(name);
+          }
+          if (queue?.status === "DELETED") {
+            // The settle above can still land on a tombstone (deletion that
+            // completed between observe and settle) — one more create pass.
+            yield* create;
             queue = yield* awaitSettled(name);
           }
 

@@ -13,10 +13,14 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 const NONEXISTENT_SLACK_TEAM = "T0000000000";
 const NONEXISTENT_SLACK_USER = "U0000000000";
 const NONEXISTENT_TEAMS_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-const NONEXISTENT_CONFIGURATION_ARN =
-  "arn:aws:chatbot::000000000000:chat-configuration/slack-channel/alchemy-probe-nonexistent";
-const NONEXISTENT_TEAMS_CONFIGURATION_ARN =
-  "arn:aws:chatbot::000000000000:chat-configuration/microsoft-teams-channel/alchemy-probe-nonexistent";
+
+// The delete-identity operations validate the configuration ARN against the
+// caller's account, so the test passes its account id as `?account=` and the
+// fixture builds well-formed same-account (but nonexistent) ARNs.
+const nonexistentSlackConfigurationArn = (account: string) =>
+  `arn:aws:chatbot::${account}:chat-configuration/slack-channel/alchemy-probe-nonexistent`;
+const nonexistentTeamsConfigurationArn = (account: string) =>
+  `arn:aws:chatbot::${account}:chat-configuration/microsoft-teams-channel/alchemy-probe-nonexistent`;
 
 export class ChatbotTestFunction extends Lambda.Function<Lambda.Function>()(
   "ChatbotTestFunction",
@@ -156,7 +160,9 @@ export default ChatbotTestFunction.make(
           pathname === "/delete-slack-user-identity"
         ) {
           const result = yield* deleteSlackUserIdentity({
-            ChatConfigurationArn: NONEXISTENT_CONFIGURATION_ARN,
+            ChatConfigurationArn: nonexistentSlackConfigurationArn(
+              url.searchParams.get("account") ?? "",
+            ),
             SlackTeamId: NONEXISTENT_SLACK_TEAM,
             SlackUserId: NONEXISTENT_SLACK_USER,
           }).pipe(
@@ -197,7 +203,9 @@ export default ChatbotTestFunction.make(
           pathname === "/delete-teams-user-identity"
         ) {
           const result = yield* deleteMicrosoftTeamsUserIdentity({
-            ChatConfigurationArn: NONEXISTENT_TEAMS_CONFIGURATION_ARN,
+            ChatConfigurationArn: nonexistentTeamsConfigurationArn(
+              url.searchParams.get("account") ?? "",
+            ),
             UserId: NONEXISTENT_TEAMS_ID,
           }).pipe(
             Effect.map(() => ({ ok: true as const })),
@@ -221,10 +229,14 @@ export default ChatbotTestFunction.make(
             TeamId: NONEXISTENT_TEAMS_ID,
           }).pipe(
             Effect.map(() => ({ ok: true as const })),
+            // ResourceNotFoundException ("No Team found for the team id")
+            // is outside the Smithy model's union for this operation and is
+            // added via patches/chatbot.json.
             Effect.catchTag(
               [
                 "DeleteTeamsConfiguredTeamException",
                 "InvalidParameterException",
+                "ResourceNotFoundException",
               ],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),

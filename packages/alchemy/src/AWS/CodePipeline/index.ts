@@ -1,3 +1,5 @@
+export * from "./AcknowledgeJob.ts";
+export * from "./AcknowledgeJobHttp.ts";
 export * from "./DisableStageTransition.ts";
 export * from "./DisableStageTransitionHttp.ts";
 export * from "./EnableStageTransition.ts";
@@ -20,6 +22,8 @@ export * from "./OverrideStageCondition.ts";
 export * from "./OverrideStageConditionHttp.ts";
 export * from "./Pipeline.ts";
 export * from "./PipelineEventSource.ts";
+export * from "./PollForJobs.ts";
+export * from "./PollForJobsHttp.ts";
 export * from "./PutActionRevision.ts";
 export * from "./PutActionRevisionHttp.ts";
 export * from "./PutApprovalResult.ts";

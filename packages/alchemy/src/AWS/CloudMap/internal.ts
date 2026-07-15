@@ -77,8 +77,51 @@ export const retryWhileResourceInUse = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ResourceInUse",
-    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(20)]),
   });
+
+/**
+ * Deregister every instance still registered on a service and await the
+ * async deregistration operations. Instances registered at runtime (via the
+ * `RegisterInstance` binding) are data-plane ephemera owned by the service —
+ * they would otherwise block `DeleteService` with `ResourceInUse` forever.
+ * Deregistrations already in flight surface as `DuplicateRequest` and are
+ * tolerated; `DeleteService`'s own `ResourceInUse` retry rides out the
+ * remaining visibility window.
+ */
+export const deregisterAllInstances = Effect.fn(
+  "AWS.CloudMap.deregisterAllInstances",
+)(function* (serviceId: string) {
+  const operationIds: string[] = [];
+  let nextToken: string | undefined;
+  do {
+    const page = yield* sd.listInstances({
+      ServiceId: serviceId,
+      NextToken: nextToken,
+    });
+    for (const instance of page.Instances ?? []) {
+      if (instance.Id === undefined) {
+        continue;
+      }
+      const response = yield* sd
+        .deregisterInstance({ ServiceId: serviceId, InstanceId: instance.Id })
+        .pipe(
+          // already gone / a deregistration already in flight — both mean
+          // the instance is on its way out
+          Effect.catchTag(["InstanceNotFound", "DuplicateRequest"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      if (response?.OperationId !== undefined) {
+        operationIds.push(response.OperationId);
+      }
+    }
+    nextToken = page.NextToken;
+  } while (nextToken !== undefined);
+  for (const operationId of operationIds) {
+    yield* awaitOperation(operationId);
+  }
+});
 
 export type NamespaceKind = "DNS_PRIVATE" | "DNS_PUBLIC" | "HTTP";
 

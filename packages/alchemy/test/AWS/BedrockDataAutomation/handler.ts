@@ -29,6 +29,22 @@ trailer<</Size 6/Root 1 0 R>>
 %%EOF
 `;
 
+// A deterministic, valid BDA blueprint schema (checked-in constant fixture).
+const INVOICE_SCHEMA = JSON.stringify({
+  $schema: "http://json-schema.org/draft-07/schema#",
+  description: "Extract invoice fields",
+  class: "invoice",
+  type: "object",
+  definitions: {},
+  properties: {
+    invoice_number: {
+      type: "string",
+      inferenceType: "explicit",
+      instruction: "The invoice number",
+    },
+  },
+});
+
 export class BdaTestFunction extends Lambda.Function<Lambda.Function>()(
   "BdaTestFunction",
 ) {}
@@ -56,6 +72,13 @@ export default BdaTestFunction.make(
         },
       },
     });
+    const blueprint = yield* BDA.Blueprint("BindingsBlueprint", {
+      type: "DOCUMENT",
+      schema: INVOICE_SCHEMA,
+    });
+    const library = yield* BDA.DataAutomationLibrary("BindingsLibrary", {
+      libraryDescription: "alchemy bindings test library",
+    });
     // Bedrock Data Automation reads the input and writes the output with the
     // CALLER's S3 permissions (forward access sessions), so the Lambda role
     // needs GetObject + PutObject on the working bucket.
@@ -68,6 +91,21 @@ export default BdaTestFunction.make(
       yield* BDA.InvokeDataAutomationAsync(project);
     const invokeDataAutomation = yield* BDA.InvokeDataAutomation(project);
     const getDataAutomationStatus = yield* BDA.GetDataAutomationStatus();
+    const ingestLibraryEntities =
+      yield* BDA.InvokeDataAutomationLibraryIngestionJob(library);
+    const getLibraryIngestionJob =
+      yield* BDA.GetDataAutomationLibraryIngestionJob(library);
+    const listLibraryIngestionJobs =
+      yield* BDA.ListDataAutomationLibraryIngestionJobs(library);
+    const getLibraryEntity = yield* BDA.GetDataAutomationLibraryEntity(library);
+    const listLibraryEntities =
+      yield* BDA.ListDataAutomationLibraryEntities(library);
+    const createBlueprintVersion = yield* BDA.CreateBlueprintVersion(blueprint);
+    const copyBlueprintStage = yield* BDA.CopyBlueprintStage(blueprint);
+    const invokeBlueprintOptimizationAsync =
+      yield* BDA.InvokeBlueprintOptimizationAsync(blueprint);
+    const getBlueprintOptimizationStatus =
+      yield* BDA.GetBlueprintOptimizationStatus();
 
     // Deploy-time: creates the EventBridge rule (default bus, source
     // aws.bedrock) targeting this Function. Runtime firing needs a settled
@@ -89,6 +127,15 @@ export default BdaTestFunction.make(
       invokeDataAutomationAsync,
       invokeDataAutomation,
       getDataAutomationStatus,
+      ingestLibraryEntities,
+      getLibraryIngestionJob,
+      listLibraryIngestionJobs,
+      getLibraryEntity,
+      listLibraryEntities,
+      createBlueprintVersion,
+      copyBlueprintStage,
+      invokeBlueprintOptimizationAsync,
+      getBlueprintOptimizationStatus,
     };
 
     return {
@@ -171,6 +218,186 @@ export default BdaTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
+        if (request.method === "POST" && pathname === "/library-ingest") {
+          // Starts an inline UPSERT ingestion job against the bound library.
+          // Results land in the fixture bucket with the caller's S3
+          // permissions.
+          const physicalBucket = yield* bucketName;
+          const result = yield* ingestLibraryEntities({
+            entityType: "VOCABULARY",
+            operationType: "UPSERT",
+            inputConfiguration: {
+              inlinePayload: {
+                upsertEntitiesInfo: [
+                  {
+                    vocabulary: {
+                      language: "EN",
+                      phrases: [{ text: "Alchemy", displayAsText: "Alchemy" }],
+                    },
+                  },
+                ],
+              },
+            },
+            outputConfiguration: {
+              s3Uri: `s3://${physicalBucket}/library-results/`,
+            },
+          }).pipe(
+            Effect.map((r) => ({ jobArn: r.jobArn })),
+            // Surface the FULL cause (typed failure or defect) to the test —
+            // the assertion prints it on mismatch.
+            Effect.catchCause((cause) =>
+              Effect.succeed({
+                jobArn: undefined,
+                error: "Cause",
+                message: String(cause),
+              }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (request.method === "GET" && pathname === "/library-ingestion-job") {
+          const jobArn = url.searchParams.get("jobArn")!;
+          const result = yield* getLibraryIngestionJob({ jobArn });
+          return yield* HttpServerResponse.json({
+            status: result.job?.jobStatus,
+          });
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/library-ingestion-jobs"
+        ) {
+          const result = yield* listLibraryIngestionJobs({ maxResults: 25 });
+          return yield* HttpServerResponse.json({
+            count: (result.jobs ?? []).length,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/library-entities") {
+          const result = yield* listLibraryEntities({
+            entityType: "VOCABULARY",
+            maxResults: 25,
+          });
+          return yield* HttpServerResponse.json({
+            count: (result.entities ?? []).length,
+          });
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/library-entity-missing"
+        ) {
+          // Proves bedrock:GetDataAutomationLibraryEntity + library injection
+          // via the typed not-found path — an IAM gap would surface
+          // AccessDeniedException (a 500 through orDie) instead of the tag.
+          const tag = yield* getLibraryEntity({
+            entityType: "VOCABULARY",
+            entityId: "nonexistent-alchemy-probe",
+          }).pipe(
+            Effect.map(() => "Found"),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "ValidationException"],
+              (e) => Effect.succeed(e._tag),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.succeed(`Cause: ${String(cause)}`),
+            ),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (request.method === "POST" && pathname === "/blueprint-version") {
+          const result = yield* createBlueprintVersion({}).pipe(
+            Effect.map((r) => ({
+              version: r.blueprint.blueprintVersion,
+              arn: r.blueprint.blueprintArn,
+            })),
+            Effect.catch((e) =>
+              Effect.succeed({
+                version: undefined,
+                arn: undefined,
+                error: e._tag,
+                message: String((e as { message?: unknown }).message ?? ""),
+              }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (
+          request.method === "POST" &&
+          pathname === "/copy-stage-validation"
+        ) {
+          // The fixture blueprint only exists in LIVE, so copying from the
+          // (absent) DEVELOPMENT stage drives the typed error path without
+          // creating a second stage copy the stack would have to clean up.
+          const tag = yield* copyBlueprintStage({
+            sourceStage: "DEVELOPMENT",
+            targetStage: "LIVE",
+          }).pipe(
+            Effect.map(() => "Copied"),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "ValidationException"],
+              (e) => Effect.succeed(e._tag),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.succeed(`Cause: ${String(cause)}`),
+            ),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (request.method === "POST" && pathname === "/optimize-validation") {
+          // An empty samples list is invalid (min 1 labeled pair), so this
+          // drives the typed ValidationException path — proving IAM +
+          // blueprint injection without starting (and paying for) a real
+          // optimization job.
+          const profileArn = url.searchParams.get("profileArn")!;
+          const physicalBucket = yield* bucketName;
+          const tag = yield* invokeBlueprintOptimizationAsync({
+            samples: [],
+            outputConfiguration: {
+              s3Object: {
+                s3Uri: `s3://${physicalBucket}/optimization-results/`,
+              },
+            },
+            dataAutomationProfileArn: profileArn,
+          }).pipe(
+            Effect.map(() => "Invoked"),
+            Effect.catchTag("ValidationException", (e) =>
+              Effect.succeed(e._tag),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.succeed(`Cause: ${String(cause)}`),
+            ),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/optimization-status-missing"
+        ) {
+          // Proves bedrock:GetBlueprintOptimizationStatus via the typed
+          // not-found path on a well-formed but nonexistent invocation ARN
+          // supplied by the test.
+          const invocationArn = url.searchParams.get("invocationArn")!;
+          const tag = yield* getBlueprintOptimizationStatus({
+            invocationArn,
+          }).pipe(
+            Effect.map((r) => r.status ?? "Unknown"),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "ValidationException"],
+              (e) => Effect.succeed(e._tag),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.succeed(`Cause: ${String(cause)}`),
+            ),
+          );
+          return yield* HttpServerResponse.json({ tag });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -186,6 +413,15 @@ export default BdaTestFunction.make(
         BDA.InvokeDataAutomationAsyncHttp,
         BDA.InvokeDataAutomationHttp,
         BDA.GetDataAutomationStatusHttp,
+        BDA.InvokeDataAutomationLibraryIngestionJobHttp,
+        BDA.GetDataAutomationLibraryIngestionJobHttp,
+        BDA.ListDataAutomationLibraryIngestionJobsHttp,
+        BDA.GetDataAutomationLibraryEntityHttp,
+        BDA.ListDataAutomationLibraryEntitiesHttp,
+        BDA.CreateBlueprintVersionHttp,
+        BDA.CopyBlueprintStageHttp,
+        BDA.InvokeBlueprintOptimizationAsyncHttp,
+        BDA.GetBlueprintOptimizationStatusHttp,
       ),
     ),
   ),

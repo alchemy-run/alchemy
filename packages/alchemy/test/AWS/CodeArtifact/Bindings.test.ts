@@ -46,11 +46,13 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      // Bounded well under the test timeouts (~31s of sleeps) so a
+      // Bounded well under the test timeouts (~63s of sleeps) so a
       // persistent 500 surfaces its body instead of an opaque timeout.
+      // Fresh-role AccessDenied propagation has been observed to outlive
+      // a 31s budget on cold deploys.
       schedule: Schedule.max([
         Schedule.exponential("1 second"),
-        Schedule.recurs(5),
+        Schedule.recurs(6),
       ]),
     }),
   );

@@ -272,7 +272,12 @@ describe.sequential("CodePipeline Bindings", () => {
         })) as any;
         expect(disabled.errorTag).toBeUndefined();
 
-        const frozen = (yield* getJson(`${baseUrl}/state`)) as any;
+        // GetPipelineState reflects the transition change eventually — poll
+        // (bounded) until the disabled transition is observed.
+        const frozen = (yield* untilExecutionVisible(
+          getJson(`${baseUrl}/state`),
+          (body: any) => body.inboundTransitionEnabled === false,
+        )) as any;
         expect(frozen.inboundTransitionEnabled).toBe(false);
 
         const enabled = (yield* postJson(`${baseUrl}/transition/enable`, {
@@ -280,7 +285,10 @@ describe.sequential("CodePipeline Bindings", () => {
         })) as any;
         expect(enabled.errorTag).toBeUndefined();
 
-        const open = (yield* getJson(`${baseUrl}/state`)) as any;
+        const open = (yield* untilExecutionVisible(
+          getJson(`${baseUrl}/state`),
+          (body: any) => body.inboundTransitionEnabled === true,
+        )) as any;
         expect(open.inboundTransitionEnabled).toBe(true);
       }),
     );
@@ -338,7 +346,7 @@ describe.sequential("CodePipeline Bindings", () => {
     );
   });
 
-  describe("GetJobDetails + PutJobSuccessResult + PutJobFailureResult", () => {
+  describe("GetJobDetails + PutJobSuccessResult + PutJobFailureResult + PollForJobs + AcknowledgeJob", () => {
     test.provider(
       "job-worker bindings answer typed for unknown jobs",
       (_stack) =>
@@ -357,6 +365,17 @@ describe.sequential("CodePipeline Bindings", () => {
             jobId: FAKE_UUID,
           })) as any;
           expectTypedNonAuthz(failure);
+
+          // No custom action type exists — typed ActionTypeNotFoundException.
+          const polled = (yield* post(`${baseUrl}/job/poll`)) as any;
+          expectTypedNonAuthz(polled);
+
+          // Unknown job/nonce — typed JobNotFound / InvalidNonce rejection.
+          const acked = (yield* postJson(`${baseUrl}/job/ack`, {
+            jobId: FAKE_UUID,
+            nonce: FAKE_UUID,
+          })) as any;
+          expectTypedNonAuthz(acked);
         }),
     );
   });

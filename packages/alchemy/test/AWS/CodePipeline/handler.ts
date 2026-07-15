@@ -162,6 +162,8 @@ export default CodePipelineTestFunction.make(
     const getJobDetails = yield* CodePipeline.GetJobDetails();
     const putJobSuccess = yield* CodePipeline.PutJobSuccessResult();
     const putJobFailure = yield* CodePipeline.PutJobFailureResult();
+    const pollForJobs = yield* CodePipeline.PollForJobs();
+    const acknowledgeJob = yield* CodePipeline.AcknowledgeJob();
 
     // Deploy-time: creates the EventBridge rule (default bus, source
     // aws.codepipeline) targeting this Function. Runtime firing rides on the
@@ -471,6 +473,39 @@ export default CodePipelineTestFunction.make(
             );
           }
 
+          case "POST /job/poll": {
+            // The fixture declares no custom action type — a typed
+            // ActionTypeNotFoundException proves wiring + grant.
+            const result = yield* errorTagged(
+              pollForJobs({
+                actionTypeId: {
+                  category: "Build",
+                  owner: "Custom",
+                  provider: "AlchemyBindingsTest",
+                  version: "1",
+                },
+                maxBatchSize: 1,
+              }),
+            );
+            return yield* HttpServerResponse.json(
+              "errorTag" in result
+                ? result
+                : { count: (result.jobs ?? []).length },
+            );
+          }
+          case "POST /job/ack": {
+            const body = (yield* request.json) as unknown as {
+              jobId: string;
+              nonce: string;
+            };
+            const result = yield* errorTagged(
+              acknowledgeJob({ jobId: body.jobId, nonce: body.nonce }),
+            );
+            return yield* HttpServerResponse.json(
+              "errorTag" in result ? result : { status: result.status },
+            );
+          }
+
           default:
             return yield* HttpServerResponse.json(
               { error: "Not found", route },
@@ -502,6 +537,8 @@ export default CodePipelineTestFunction.make(
         CodePipeline.GetJobDetailsHttp,
         CodePipeline.PutJobSuccessResultHttp,
         CodePipeline.PutJobFailureResultHttp,
+        CodePipeline.PollForJobsHttp,
+        CodePipeline.AcknowledgeJobHttp,
       ),
     ),
   ),

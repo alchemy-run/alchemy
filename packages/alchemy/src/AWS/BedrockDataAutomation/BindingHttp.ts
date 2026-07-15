@@ -98,8 +98,14 @@ export const makeBdaLibraryHttpBinding = <
   tag: string;
   /** The distilled operation; `libraryArn` is injected from the library. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
-  /** IAM actions granted on the library ARN. */
+  /** IAM actions granted on the library ARN (+ `additionalResources`). */
   actions: readonly string[];
+  /**
+   * Extra resource ARNs the actions authorize against — the ingestion-job
+   * APIs check `…:data-automation-library-ingestion-job/{id}` (minted at
+   * runtime), not the library ARN.
+   */
+  additionalResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -114,7 +120,10 @@ export const makeBdaLibraryHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [Output.interpolate`${library.libraryArn}`],
+                Resource: [
+                  Output.interpolate`${library.libraryArn}`,
+                  ...(options.additionalResources ?? []),
+                ],
               },
             ],
           });
@@ -168,6 +177,9 @@ export const makeBdaBlueprintOptimizationHttpBinding = <
                 Resource: [
                   Output.interpolate`${blueprint.blueprintArn}`,
                   "arn:aws:bedrock:*:*:data-automation-profile/*",
+                  // The invoke authorizes against the invocation resource
+                  // (minted at runtime), not the blueprint ARN.
+                  "arn:aws:bedrock:*:*:blueprint-optimization-invocation/*",
                 ],
               },
             ],

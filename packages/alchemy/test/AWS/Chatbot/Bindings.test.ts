@@ -201,7 +201,10 @@ describe.sequential("Chatbot Bindings", () => {
   describe("DeleteSlackUserIdentity", () => {
     test.provider("answers a typed tag for a nonexistent identity", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* postJson("/delete-slack-user-identity")) as {
+        const { accountId } = yield* AWS.AWSEnvironment.current;
+        const response = (yield* postJson(
+          `/delete-slack-user-identity?account=${accountId}`,
+        )) as {
           ok: boolean;
           tag?: string;
         };
@@ -236,7 +239,10 @@ describe.sequential("Chatbot Bindings", () => {
   describe("DeleteMicrosoftTeamsUserIdentity", () => {
     test.provider("answers a typed tag for a nonexistent identity", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* postJson("/delete-teams-user-identity")) as {
+        const { accountId } = yield* AWS.AWSEnvironment.current;
+        const response = (yield* postJson(
+          `/delete-teams-user-identity?account=${accountId}`,
+        )) as {
           ok: boolean;
           tag?: string;
         };
@@ -252,9 +258,11 @@ describe.sequential("Chatbot Bindings", () => {
 
   describe("DeleteMicrosoftTeamsConfiguredTeam", () => {
     test.provider(
-      "answers idempotently or with a typed tag for a team that was never onboarded",
+      "answers the typed not-found tag for a team that was never onboarded",
       (_stack) =>
         Effect.gen(function* () {
+          // ResourceNotFoundException is outside the Smithy model's union
+          // for this operation — patched in distilled patches/chatbot.json.
           const response = (yield* postJson(
             "/delete-teams-configured-team",
           )) as { ok: boolean; tag?: string };
@@ -262,6 +270,7 @@ describe.sequential("Chatbot Bindings", () => {
             expect([
               "DeleteTeamsConfiguredTeamException",
               "InvalidParameterException",
+              "ResourceNotFoundException",
             ]).toContain(response.tag);
           }
         }),

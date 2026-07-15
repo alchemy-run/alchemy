@@ -457,6 +457,22 @@ export const ProjectProvider = () =>
             tags: toWireTags(desiredTags),
           };
 
+          // 3. Sync — updateProject is a full upsert of the definition and
+          // tags; apply the desired spec (project updates are instant). A
+          // delete→redeploy race can leave batchGetProjects returning the
+          // just-deleted project; updateProject then reports the truth with
+          // a typed ResourceNotFoundException — treat it as missing.
+          if (observed !== undefined) {
+            observed = yield* retryIamPropagation(
+              codebuild.updateProject({ name, ...spec }),
+            ).pipe(
+              Effect.map((updated) => updated.project),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+
           // 2. Ensure — create if missing; tolerate the create/create race.
           if (observed === undefined) {
             const created = yield* retryIamPropagation(
@@ -467,13 +483,6 @@ export const ProjectProvider = () =>
               ),
             );
             observed = created.project;
-          } else {
-            // 3. Sync — updateProject is a full upsert of the definition and
-            // tags; apply the desired spec (project updates are instant).
-            const updated = yield* retryIamPropagation(
-              codebuild.updateProject({ name, ...spec }),
-            );
-            observed = updated.project;
           }
 
           if (observed === undefined || observed.arn === undefined) {

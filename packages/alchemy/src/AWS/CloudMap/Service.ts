@@ -12,6 +12,7 @@ import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   awaitOperation,
+  deregisterAllInstances,
   fetchObservedTags,
   retryWhileResourceInUse,
   syncTags,
@@ -532,8 +533,14 @@ export const ServiceProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // instances deregistering in flight surface as ResourceInUse —
-          // retry through the window (bounded)
+          // OBSERVE — instances registered at runtime (RegisterInstance
+          // binding) block DeleteService; deregister any that remain and
+          // await the async operations before deleting.
+          yield* deregisterAllInstances(output.serviceId).pipe(
+            Effect.catchTag("ServiceNotFound", () => Effect.void),
+          );
+          // deregistrations still propagating surface as ResourceInUse —
+          // retry through the visibility window (bounded)
           yield* retryWhileResourceInUse(
             sd.deleteService({ Id: output.serviceId }),
           ).pipe(Effect.catchTag("ServiceNotFound", () => Effect.void));

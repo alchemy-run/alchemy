@@ -213,6 +213,31 @@ export const ReportGroupProvider = () =>
           // 1. Observe — cloud state is authoritative.
           let observed = yield* getReportGroup(arn);
 
+          // 3. Sync — diff observed export config + tags against desired
+          // and skip the API entirely on a no-op. updateReportGroup is a
+          // full upsert of both mutable aspects. A delete→redeploy race can
+          // leave batchGetReportGroups returning the just-deleted group;
+          // updateReportGroup then reports the truth with a typed
+          // ResourceNotFoundException — treat it as missing.
+          if (
+            observed !== undefined &&
+            (!sameExportConfig(observed.exportConfig, desiredExport) ||
+              !sameTags(toTagRecord(observed.tags), desiredTags))
+          ) {
+            observed = yield* codebuild
+              .updateReportGroup({
+                arn,
+                exportConfig: desiredExport,
+                tags: toWireTags(desiredTags),
+              })
+              .pipe(
+                Effect.map((res) => res.reportGroup),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+          }
+
           // 2. Ensure — create if missing; tolerate the create/create race.
           if (observed === undefined) {
             observed = yield* codebuild
@@ -228,20 +253,6 @@ export const ReportGroupProvider = () =>
                   getReportGroup(arn),
                 ),
               );
-          } else if (
-            // 3. Sync — diff observed export config + tags against desired
-            // and skip the API entirely on a no-op. updateReportGroup is a
-            // full upsert of both mutable aspects.
-            !sameExportConfig(observed.exportConfig, desiredExport) ||
-            !sameTags(toTagRecord(observed.tags), desiredTags)
-          ) {
-            observed = yield* codebuild
-              .updateReportGroup({
-                arn,
-                exportConfig: desiredExport,
-                tags: toWireTags(desiredTags),
-              })
-              .pipe(Effect.map((res) => res.reportGroup));
           }
 
           if (observed === undefined || observed.arn === undefined) {

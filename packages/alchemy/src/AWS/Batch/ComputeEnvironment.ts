@@ -191,10 +191,20 @@ export const ComputeEnvironmentProvider = () =>
           ? Effect.succeed(props.computeEnvironmentName)
           : createPhysicalName({ id, maxLength: 128 });
 
+      // A deleted environment lingers as a DELETED record for a while and the
+      // name is immediately reusable, so a describe-by-name can briefly
+      // return both the tombstone and the live one — prefer the live one.
       const describeOne = (name: string) =>
         batch
           .describeComputeEnvironments({ computeEnvironments: [name] })
-          .pipe(Effect.map((res) => res.computeEnvironments?.[0]));
+          .pipe(
+            Effect.map(
+              (res) =>
+                res.computeEnvironments?.find(
+                  (ce) => ce.status !== "DELETED",
+                ) ?? res.computeEnvironments?.[0],
+            ),
+          );
 
       /** Wait until any CREATING/UPDATING/DELETING transition settles. */
       const awaitSettled = (name: string) =>
@@ -259,7 +269,7 @@ export const ComputeEnvironmentProvider = () =>
 
           // Ensure — create if missing, then wait until the environment
           // settles to VALID (Fargate CEs settle in seconds).
-          if (!ce?.computeEnvironmentArn) {
+          const create = Effect.gen(function* () {
             const network = yield* Effect.gen(function* () {
               if (news.subnets && news.securityGroupIds) {
                 return {
@@ -287,9 +297,25 @@ export const ComputeEnvironmentProvider = () =>
               serviceRole: news.serviceRole,
               tags: desiredTags,
             });
+          });
+
+          if (ce?.computeEnvironmentArn && ce.status === "DELETING") {
+            // An interrupted destroy left the environment mid-deletion — let
+            // it finish, then fall through to a fresh create below.
+            ce = yield* awaitSettled(name);
+            if (ce?.status === "DELETED") ce = undefined;
+          }
+          if (!ce?.computeEnvironmentArn) {
+            yield* create;
             ce = yield* awaitSettled(name);
           } else if (ce.status !== "VALID" && ce.status !== "INVALID") {
             // A prior modification is still settling — wait before diffing.
+            ce = yield* awaitSettled(name);
+          }
+          if (ce?.status === "DELETED") {
+            // The settle above can still land on a tombstone (deletion that
+            // completed between observe and settle) — one more create pass.
+            yield* create;
             ce = yield* awaitSettled(name);
           }
 
