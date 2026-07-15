@@ -138,12 +138,27 @@ describe.sequential("MemoryDB Bindings", () => {
   });
 
   describe("BatchUpdateCluster", () => {
-    test.provider("returns a nonexistent cluster as unprocessed", () =>
+    test.provider("rejects a nonexistent cluster with a typed outcome", () =>
       Effect.gen(function* () {
         const response = yield* getJson(
           `/batch-probe?name=${NONEXISTENT_NAME}`,
         );
-        expect((response as any).unprocessed).toBeGreaterThanOrEqual(0);
+        const { unprocessed, tag } = response as {
+          unprocessed: number;
+          tag: string;
+        };
+        // Either the cluster comes back unprocessed or the call is rejected
+        // with a typed tag — an IAM gap would have 500'd the route instead.
+        // Observed live: InvalidParameterCombinationException ("No
+        // modifications were requested"), typed via the distilled patch.
+        expect(
+          unprocessed >= 1 ||
+            [
+              "InvalidParameterCombinationException",
+              "InvalidParameterValueException",
+              "ServiceUpdateNotFoundFault",
+            ].includes(tag),
+        ).toBe(true);
       }),
     );
   });

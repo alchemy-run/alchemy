@@ -67,9 +67,17 @@ export default MediaTailorTestFunction.make(
             Retrieval: { EndTime: new Date(now + 60 * 60 * 1000) },
             Consumption: { EndTime: new Date(now + 2 * 60 * 60 * 1000) },
           }).pipe(
-            Effect.map((r) => ({ arn: r.Arn, error: undefined })),
+            Effect.map((r) => ({
+              arn: r.Arn,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ arn: undefined, error: e._tag }),
+              Effect.succeed({
+                arn: undefined,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -78,9 +86,17 @@ export default MediaTailorTestFunction.make(
         if (request.method === "GET" && pathname === "/prefetch/get") {
           const name = url.searchParams.get("name")!;
           const result = yield* getPrefetchSchedule({ Name: name }).pipe(
-            Effect.map((r) => ({ name: r.Name, error: undefined })),
+            Effect.map((r) => ({
+              name: r.Name,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ name: undefined, error: e._tag }),
+              Effect.succeed({
+                name: undefined,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -91,9 +107,14 @@ export default MediaTailorTestFunction.make(
             Effect.map((r) => ({
               names: (r.Items ?? []).map((item) => item.Name),
               error: undefined,
+              detail: undefined,
             })),
             Effect.catch((e) =>
-              Effect.succeed({ names: [] as string[], error: e._tag }),
+              Effect.succeed({
+                names: [] as string[],
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -104,9 +125,17 @@ export default MediaTailorTestFunction.make(
           const result = yield* deletePrefetchSchedule({
             Name: body.name,
           }).pipe(
-            Effect.map(() => ({ deleted: true, error: undefined })),
+            Effect.map(() => ({
+              deleted: true,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ deleted: false, error: e._tag }),
+              Effect.succeed({
+                deleted: false,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -118,8 +147,11 @@ export default MediaTailorTestFunction.make(
             Effect.map((r) => ({
               count: r.Items?.length ?? 0,
               error: undefined,
+              detail: undefined,
             })),
-            Effect.catch((e) => Effect.succeed({ count: 0, error: e._tag })),
+            Effect.catch((e) =>
+              Effect.succeed({ count: 0, error: e._tag, detail: String(e) }),
+            ),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -130,8 +162,11 @@ export default MediaTailorTestFunction.make(
             Effect.map((r) => ({
               count: r.Items?.length ?? 0,
               error: undefined,
+              detail: undefined,
             })),
-            Effect.catch((e) => Effect.succeed({ count: 0, error: e._tag })),
+            Effect.catch((e) =>
+              Effect.succeed({ count: 0, error: e._tag, detail: String(e) }),
+            ),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -139,9 +174,17 @@ export default MediaTailorTestFunction.make(
         if (request.method === "POST" && pathname === "/channel/start") {
           const body = (yield* request.json) as unknown as { name: string };
           const result = yield* startChannel({ ChannelName: body.name }).pipe(
-            Effect.map(() => ({ started: true, error: undefined })),
+            Effect.map(() => ({
+              started: true,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ started: false, error: e._tag }),
+              Effect.succeed({
+                started: false,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -150,9 +193,17 @@ export default MediaTailorTestFunction.make(
         if (request.method === "POST" && pathname === "/channel/stop") {
           const body = (yield* request.json) as unknown as { name: string };
           const result = yield* stopChannel({ ChannelName: body.name }).pipe(
-            Effect.map(() => ({ stopped: true, error: undefined })),
+            Effect.map(() => ({
+              stopped: true,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ stopped: false, error: e._tag }),
+              Effect.succeed({
+                stopped: false,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -171,9 +222,17 @@ export default MediaTailorTestFunction.make(
               },
             },
           }).pipe(
-            Effect.map(() => ({ created: true, error: undefined })),
+            Effect.map(() => ({
+              created: true,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ created: false, error: e._tag }),
+              Effect.succeed({
+                created: false,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -184,9 +243,17 @@ export default MediaTailorTestFunction.make(
             ChannelName: NONEXISTENT_CHANNEL,
             ProgramName: NONEXISTENT_PROGRAM,
           }).pipe(
-            Effect.map((r) => ({ name: r.ProgramName, error: undefined })),
+            Effect.map((r) => ({
+              name: r.ProgramName,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ name: undefined, error: e._tag }),
+              Effect.succeed({
+                name: undefined,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -198,9 +265,17 @@ export default MediaTailorTestFunction.make(
             ProgramName: NONEXISTENT_PROGRAM,
             ScheduleConfiguration: {},
           }).pipe(
-            Effect.map(() => ({ updated: true, error: undefined })),
+            Effect.map(() => ({
+              updated: true,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ updated: false, error: e._tag }),
+              Effect.succeed({
+                updated: false,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -211,9 +286,17 @@ export default MediaTailorTestFunction.make(
             ChannelName: NONEXISTENT_CHANNEL,
             ProgramName: NONEXISTENT_PROGRAM,
           }).pipe(
-            Effect.map(() => ({ deleted: true, error: undefined })),
+            Effect.map(() => ({
+              deleted: true,
+              error: undefined,
+              detail: undefined,
+            })),
             Effect.catch((e) =>
-              Effect.succeed({ deleted: false, error: e._tag }),
+              Effect.succeed({
+                deleted: false,
+                error: e._tag,
+                detail: String(e),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);

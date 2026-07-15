@@ -27,6 +27,7 @@ export default NetworkFirewallBindingsFunction.make(
       capacity: 10,
       rules:
         'pass tcp any any -> any 443 (msg:"allow https"; sid:100001; rev:1;)',
+      summaryConfiguration: { RuleOptions: ["SID", "MSG"] },
     });
     const policy = yield* NetworkFirewall.FirewallPolicy("BindingsPolicy", {
       firewallPolicy: {

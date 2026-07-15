@@ -136,8 +136,13 @@ export const SinkProvider = () =>
   Provider.effect(
     Sink,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (id: string, props: SinkProps) {
-        return props.sinkName ?? (yield* createPhysicalName({ id }));
+      // `props` may be undefined at runtime — all SinkProps fields are
+      // optional, so callers can omit the props object entirely.
+      const createName = Effect.fn(function* (
+        id: string,
+        props: SinkProps | undefined,
+      ) {
+        return props?.sinkName ?? (yield* createPhysicalName({ id }));
       });
 
       // Find a sink by name via the (small — quota is 1/region) list API.
@@ -214,7 +219,7 @@ export const SinkProvider = () =>
           // created the same-named sink concurrently, so re-observe.
           if (live?.Arn == null) {
             live = yield* oam
-              .createSink({ Name: sinkName, Tags: news.tags })
+              .createSink({ Name: sinkName, Tags: news?.tags })
               .pipe(
                 Effect.catchTag("ConflictException", () =>
                   findByName(sinkName),
@@ -227,8 +232,9 @@ export const SinkProvider = () =>
           // SYNC policy — diff the OBSERVED sink policy against the desired
           // document and put only on change. There is no delete-policy API,
           // so an absent `policy` prop leaves the current policy untouched.
-          if (news.policy !== undefined) {
-            const desired = toPolicyString(news.policy);
+          const desiredPolicy = news?.policy;
+          if (desiredPolicy !== undefined) {
+            const desired = toPolicyString(desiredPolicy);
             const observed = yield* oam
               .getSinkPolicy({ SinkIdentifier: sinkArn })
               .pipe(
@@ -246,7 +252,7 @@ export const SinkProvider = () =>
           }
 
           // SYNC tags — against observed cloud tags (adoption-safe).
-          yield* syncOamTags(sinkArn, id, news.tags);
+          yield* syncOamTags(sinkArn, id, news?.tags);
 
           yield* session.note(sinkArn);
           return { sinkName, sinkArn, sinkId };

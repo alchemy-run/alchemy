@@ -47,6 +47,12 @@ export interface RuleGroupProps {
    */
   rules?: string;
   /**
+   * Which rule attributes (`SID`, `MSG`, `METADATA`) DescribeRuleGroupSummary
+   * includes in per-rule summaries. Only valid for `STATEFUL` groups; when
+   * omitted, summaries are not generated.
+   */
+  summaryConfiguration?: NFW.SummaryConfiguration;
+  /**
    * Human-readable description of the rule group.
    */
   description?: string;
@@ -253,6 +259,7 @@ export const RuleGroupProvider = () =>
               RuleGroup: news.ruleGroup,
               Rules: news.rules,
               Description: news.description,
+              SummaryConfiguration: news.summaryConfiguration,
               Tags: recordToNfwTags(desiredTags),
             });
             observed = yield* nfw
@@ -268,6 +275,11 @@ export const RuleGroupProvider = () =>
               news.rules !== observed.RuleGroup?.RulesSource?.RulesString) ||
             (news.ruleGroup !== undefined &&
               !deepEqual(news.ruleGroup, observed.RuleGroup)) ||
+            (news.summaryConfiguration !== undefined &&
+              !deepEqual(
+                news.summaryConfiguration,
+                observed.RuleGroupResponse.SummaryConfiguration,
+              )) ||
             (news.description ?? undefined) !== observedDescription;
           if (definitionDiffers) {
             yield* nfw.updateRuleGroup({
@@ -277,6 +289,7 @@ export const RuleGroupProvider = () =>
               Rules: news.rules,
               Type: news.type,
               Description: news.description,
+              SummaryConfiguration: news.summaryConfiguration,
             });
           }
 

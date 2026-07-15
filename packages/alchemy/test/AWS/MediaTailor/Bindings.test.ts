@@ -54,17 +54,34 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     }),
   );
 
+// The fixture's IAM policies are attached moments before the first request;
+// IAM propagation surfaces as a typed AccessDeniedException in the JSON body.
+// Repeat (bounded) until the grant has propagated.
+const untilAuthorized = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("3 seconds"),
+      until: (body): boolean =>
+        (body as { error?: string }).error !== "AccessDeniedException",
+      times: 20,
+    }),
+  );
+
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
+  untilAuthorized(
+    send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
+      Effect.flatMap((r) => r.json),
+    ),
   );
 
 const postJson = (path: string, body: object) =>
-  send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
-  ).pipe(Effect.flatMap((r) => r.json));
+  untilAuthorized(
+    send(
+      HttpClientRequest.post(`${baseUrl}${path}`).pipe(
+        HttpClientRequest.bodyJsonUnsafe(body),
+      ),
+    ).pipe(Effect.flatMap((r) => r.json)),
+  );
 
 // Out-of-band: find the playback configuration the fixture deployed (its
 // physical name is generated) by its alchemy ownership tags. Runs inside
@@ -129,11 +146,14 @@ describe.sequential("MediaTailor Bindings", () => {
         Effect.gen(function* () {
           yield* resolveConfig;
 
+          // pre-clean: a previous partial run may have left the schedule
+          yield* postJson("/prefetch/delete", { name: PREFETCH_NAME });
+
           // create
           const created = (yield* postJson("/prefetch/create", {
             name: PREFETCH_NAME,
-          })) as { arn?: string; error?: string };
-          expect(created.error).toBeUndefined();
+          })) as { arn?: string; error?: string; detail?: string };
+          expect(created.error, created.detail).toBeUndefined();
           expect(created.arn).toContain(":prefetchSchedule/");
 
           // out-of-band verification via distilled
@@ -146,23 +166,24 @@ describe.sequential("MediaTailor Bindings", () => {
           // get through the binding
           const got = (yield* getJson(
             `/prefetch/get?name=${PREFETCH_NAME}`,
-          )) as { name?: string; error?: string };
-          expect(got.error).toBeUndefined();
+          )) as { name?: string; error?: string; detail?: string };
+          expect(got.error, got.detail).toBeUndefined();
           expect(got.name).toBe(PREFETCH_NAME);
 
           // list through the binding
           const listed = (yield* getJson("/prefetch/list")) as {
             names: string[];
             error?: string;
+            detail?: string;
           };
-          expect(listed.error).toBeUndefined();
+          expect(listed.error, listed.detail).toBeUndefined();
           expect(listed.names).toContain(PREFETCH_NAME);
 
           // delete through the binding
           const deleted = (yield* postJson("/prefetch/delete", {
             name: PREFETCH_NAME,
-          })) as { deleted: boolean; error?: string };
-          expect(deleted.error).toBeUndefined();
+          })) as { deleted: boolean; error?: string; detail?: string };
+          expect(deleted.error, deleted.detail).toBeUndefined();
           expect(deleted.deleted).toBe(true);
 
           // get after delete surfaces the typed synthetic tag
@@ -184,11 +205,11 @@ describe.sequential("MediaTailor Bindings", () => {
 
           const body = (yield* getJson(
             `/alerts?arn=${encodeURIComponent(configArn!)}`,
-          )) as { count: number; error?: string };
-          expect(body.error).toBeUndefined();
+          )) as { count: number; error?: string; detail?: string };
+          expect(body.error, body.detail).toBeUndefined();
           expect(typeof body.count).toBe("number");
         }),
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     );
   });
 
@@ -199,12 +220,12 @@ describe.sequential("MediaTailor Bindings", () => {
         Effect.gen(function* () {
           const body = (yield* getJson(
             "/channel/schedule?name=alchemy-nonexistent-mediatailor-channel",
-          )) as { count: number; error?: string };
+          )) as { count: number; error?: string; detail?: string };
           // A typed not-found (never AccessDenied) proves the
           // mediatailor:GetChannelSchedule grant reached the API.
-          expect(body.error).toBe("ChannelNotFound");
+          expect(body.error, body.detail).toBe("ChannelNotFound");
         }),
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     );
   });
 
@@ -215,21 +236,23 @@ describe.sequential("MediaTailor Bindings", () => {
         Effect.gen(function* () {
           const started = (yield* postJson("/channel/start", {
             name: "alchemy-nonexistent-mediatailor-channel",
-          })) as { started: boolean; error?: string };
+          })) as { started: boolean; error?: string; detail?: string };
           expect(started.started).toBe(false);
-          expect(["ChannelNotFound", "BadRequestException"]).toContain(
-            started.error,
-          );
+          expect(
+            ["ChannelNotFound", "BadRequestException"],
+            started.detail,
+          ).toContain(started.error);
 
           const stopped = (yield* postJson("/channel/stop", {
             name: "alchemy-nonexistent-mediatailor-channel",
-          })) as { stopped: boolean; error?: string };
+          })) as { stopped: boolean; error?: string; detail?: string };
           expect(stopped.stopped).toBe(false);
-          expect(["ChannelNotFound", "BadRequestException"]).toContain(
-            stopped.error,
-          );
+          expect(
+            ["ChannelNotFound", "BadRequestException"],
+            stopped.detail,
+          ).toContain(stopped.error);
         }),
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     );
   });
 
@@ -241,40 +264,48 @@ describe.sequential("MediaTailor Bindings", () => {
           const created = (yield* postJson("/program/create", {})) as {
             created: boolean;
             error?: string;
+            detail?: string;
           };
           expect(created.created).toBe(false);
-          expect(["ChannelNotFound", "BadRequestException"]).toContain(
-            created.error,
-          );
+          expect(
+            ["ChannelNotFound", "BadRequestException"],
+            created.detail,
+          ).toContain(created.error);
 
           const described = (yield* getJson("/program")) as {
             name?: string;
             error?: string;
+            detail?: string;
           };
           expect(described.name).toBeUndefined();
-          expect(["ProgramNotFound", "BadRequestException"]).toContain(
-            described.error,
-          );
+          expect(
+            ["ProgramNotFound", "BadRequestException"],
+            described.detail,
+          ).toContain(described.error);
 
           const updated = (yield* postJson("/program/update", {})) as {
             updated: boolean;
             error?: string;
+            detail?: string;
           };
           expect(updated.updated).toBe(false);
-          expect(["ProgramNotFound", "BadRequestException"]).toContain(
-            updated.error,
-          );
+          expect(
+            ["ProgramNotFound", "BadRequestException"],
+            updated.detail,
+          ).toContain(updated.error);
 
           const deleted = (yield* postJson("/program/delete", {})) as {
             deleted: boolean;
             error?: string;
+            detail?: string;
           };
           expect(deleted.deleted).toBe(false);
-          expect(["ProgramNotFound", "BadRequestException"]).toContain(
-            deleted.error,
-          );
+          expect(
+            ["ProgramNotFound", "BadRequestException"],
+            deleted.detail,
+          ).toContain(deleted.error);
         }),
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     );
   });
 });

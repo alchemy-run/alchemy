@@ -121,12 +121,27 @@ export default MemoryDBBindingsTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/batch-probe") {
-          // A nonexistent cluster is returned in UnprocessedClusters rather
-          // than failing the call — proves the grant and response decode.
-          const result = yield* batchUpdateCluster({ ClusterNames: [name] });
-          return yield* HttpServerResponse.json({
-            unprocessed: (result.UnprocessedClusters ?? []).length,
-          });
+          // A call without a ServiceUpdate is rejected with the typed
+          // InvalidParameterCombinationException ("No modifications were
+          // requested") — proving the grant and the (patched) typed union.
+          // An IAM gap would surface AccessDeniedException and 500 the route.
+          const result = yield* batchUpdateCluster({
+            ClusterNames: [name],
+          }).pipe(
+            Effect.map((r) => ({
+              unprocessed: (r.UnprocessedClusters ?? []).length,
+              tag: "Ok",
+            })),
+            Effect.catchTag(
+              [
+                "InvalidParameterCombinationException",
+                "InvalidParameterValueException",
+                "ServiceUpdateNotFoundFault",
+              ],
+              (e) => Effect.succeed({ unprocessed: 0, tag: e._tag }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (request.method === "GET" && pathname === "/copy-probe") {

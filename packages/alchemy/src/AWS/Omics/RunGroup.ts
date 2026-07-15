@@ -1,5 +1,5 @@
 import * as omics from "@distilled.cloud/aws/omics";
-import * as Duration from "effect/Duration";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireMinutes } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { fetchOmicsTags, syncOmicsTags } from "./internal.ts";
 
@@ -91,10 +92,6 @@ export interface RunGroup extends Resource<
  * ```
  */
 export const RunGroup = Resource<RunGroup>("AWS.Omics.RunGroup");
-
-/** Wire unit for the run-group max duration is whole minutes. */
-const toWireMinutes = (input: Duration.Input | undefined): number | undefined =>
-  input !== undefined ? Math.round(Duration.toMinutes(input)) : undefined;
 
 export const RunGroupProvider = () =>
   Provider.effect(
