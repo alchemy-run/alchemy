@@ -37,7 +37,10 @@ export interface MetricDefinition {
   dimensionKeys?: Record<string, string>;
   /**
    * JSON event-pattern filter — only events matching the pattern contribute
-   * to the metric.
+   * to the metric. Required for extended metrics, where it must match the
+   * metric's event type (e.g.
+   * `{"event_type":["com.amazon.rum.session_start_event"]}` for
+   * `SessionCount`).
    */
   eventPattern?: string;
   /**
@@ -119,7 +122,15 @@ export interface MetricsDestination extends Resource<
  * const metrics = yield* RUM.MetricsDestination("SiteMetrics", {
  *   appMonitorName: monitor.appMonitorName,
  *   destination: "CloudWatch",
- *   metricDefinitions: [{ name: "SessionCount" }, { name: "JsErrorCount" }],
+ *   // extended metrics require the event pattern matching the metric
+ *   metricDefinitions: [
+ *     {
+ *       name: "SessionCount",
+ *       eventPattern: JSON.stringify({
+ *         event_type: ["com.amazon.rum.session_start_event"],
+ *       }),
+ *     },
+ *   ],
  * });
  * ```
  *

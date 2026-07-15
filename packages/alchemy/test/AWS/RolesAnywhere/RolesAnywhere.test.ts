@@ -71,11 +71,13 @@ test.provider(
       const stackProgram = (props: {
         anchorABundle: string;
         anchorAEnabled: boolean;
+        anchorANotificationThreshold?: Duration.Input;
         crlData: string;
         crlEnabled: boolean;
         crlOnAnchorB: boolean;
-        durationSeconds: Duration.Input;
+        duration: Duration.Input;
         sessionPolicy?: string;
+        subjectSpecifiers?: string[];
       }) =>
         Effect.gen(function* () {
           const role = yield* Role("RolesAnywhereRole", {
@@ -84,6 +86,15 @@ test.provider(
           const anchorA = yield* TrustAnchor("AnchorA", {
             certificateBundle: props.anchorABundle,
             enabled: props.anchorAEnabled,
+            notificationSettings:
+              props.anchorANotificationThreshold === undefined
+                ? undefined
+                : [
+                    {
+                      event: "CA_CERTIFICATE_EXPIRY",
+                      threshold: props.anchorANotificationThreshold,
+                    },
+                  ],
             tags: { fixture: "rolesanywhere" },
           });
           const anchorB = yield* TrustAnchor("AnchorB", {
@@ -91,8 +102,19 @@ test.provider(
           });
           const profile = yield* Profile("Profile", {
             roleArns: [role.roleArn],
-            durationSeconds: props.durationSeconds,
+            duration: props.duration,
             sessionPolicy: props.sessionPolicy,
+            attributeMappings:
+              props.subjectSpecifiers === undefined
+                ? undefined
+                : [
+                    {
+                      certificateField: "x509Subject",
+                      mappingRules: props.subjectSpecifiers.map(
+                        (specifier) => ({ specifier }),
+                      ),
+                    },
+                  ],
             tags: { fixture: "rolesanywhere" },
           });
           const crl = yield* Crl("Crl", {
@@ -111,10 +133,12 @@ test.provider(
         stackProgram({
           anchorABundle: CA1_CERTIFICATE_PEM,
           anchorAEnabled: true,
+          anchorANotificationThreshold: "40 days",
           crlData: CRL1_PEM,
           crlEnabled: true,
           crlOnAnchorB: false,
-          durationSeconds: "1 hour",
+          duration: "1 hour",
+          subjectSpecifiers: ["CN"],
         }),
       );
 
@@ -145,17 +169,33 @@ test.provider(
       });
       expect(observedProfile.profile?.durationSeconds).toBe(3600);
       expect(observedProfile.profile?.roleArns).toEqual([first.role.roleArn]);
+      // The custom attribute mapping landed (create-time put).
+      const firstSubjectMapping =
+        observedProfile.profile?.attributeMappings?.find(
+          (mapping) => mapping.certificateField === "x509Subject",
+        );
+      expect(
+        firstSubjectMapping?.mappingRules?.map((rule) => rule.specifier),
+      ).toEqual(["CN"]);
+      // The custom notification setting landed (create-time settings).
+      const firstNotification =
+        observedAnchor.trustAnchor.notificationSettings?.find(
+          (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
+        );
+      expect(firstNotification?.threshold).toBe(40);
 
       // ── Step 2: in-place updates on every mutable aspect ──────────────
       const second = yield* stack.deploy(
         stackProgram({
           anchorABundle: CA2_CERTIFICATE_PEM, // updateTrustAnchor source
           anchorAEnabled: false, // disableTrustAnchor
+          anchorANotificationThreshold: "30 days", // putNotificationSettings
           crlData: CRL2_PEM, // updateCrl data
           crlEnabled: false, // disableCrl
           crlOnAnchorB: false,
-          durationSeconds: "2 hours", // updateProfile
+          duration: "2 hours", // updateProfile
           sessionPolicy, // updateProfile
+          subjectSpecifiers: ["CN", "OU"], // putAttributeMapping
         }),
       );
 
@@ -170,6 +210,12 @@ test.provider(
         trustAnchorId: second.anchorA.trustAnchorId,
       });
       expect(updatedAnchor.trustAnchor.enabled).toBe(false);
+      // putNotificationSettings converged the threshold.
+      const updatedNotification =
+        updatedAnchor.trustAnchor.notificationSettings?.find(
+          (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
+        );
+      expect(updatedNotification?.threshold).toBe(30);
       expect(
         updatedAnchor.trustAnchor.source?.sourceData !== undefined &&
           "x509CertificateData" in updatedAnchor.trustAnchor.source.sourceData
@@ -181,6 +227,16 @@ test.provider(
       });
       expect(updatedProfile.profile?.durationSeconds).toBe(7200);
       expect(updatedProfile.profile?.sessionPolicy).toBe(sessionPolicy);
+      // putAttributeMapping converged the mapping rules.
+      const updatedSubjectMapping =
+        updatedProfile.profile?.attributeMappings?.find(
+          (mapping) => mapping.certificateField === "x509Subject",
+        );
+      expect(
+        updatedSubjectMapping?.mappingRules
+          ?.map((rule) => rule.specifier)
+          .sort(),
+      ).toEqual(["CN", "OU"]);
       const updatedCrl = yield* rolesanywhere.getCrl({
         crlId: second.crl.crlId,
       });
@@ -192,7 +248,9 @@ test.provider(
       ).toBe(CRL2_PEM.trim());
 
       // ── Step 3: moving the CRL to another trust anchor replaces it ────
-      // (both anchors stay deployed across the replacement step)
+      // (both anchors stay deployed across the replacement step). Dropping
+      // the attribute mapping / notification setting exercises
+      // deleteAttributeMapping and resetNotificationSettings.
       const third = yield* stack.deploy(
         stackProgram({
           anchorABundle: CA2_CERTIFICATE_PEM,
@@ -200,13 +258,33 @@ test.provider(
           crlData: CRL2_PEM,
           crlEnabled: false,
           crlOnAnchorB: true,
-          durationSeconds: "2 hours",
+          duration: "2 hours",
           sessionPolicy,
         }),
       );
 
       expect(third.crl.crlId).not.toBe(second.crl.crlId);
       expect(third.crl.trustAnchorArn).toBe(third.anchorB.trustAnchorArn);
+
+      // The previously managed attribute mapping was deleted.
+      const finalProfile = yield* rolesanywhere.getProfile({
+        profileId: third.profile.profileId,
+      });
+      const finalSubjectMapping = finalProfile.profile?.attributeMappings?.find(
+        (mapping) => mapping.certificateField === "x509Subject",
+      );
+      expect(
+        finalSubjectMapping?.mappingRules?.map((rule) => rule.specifier) ?? [],
+      ).not.toContain("OU");
+      // The previously managed notification setting was reset to defaults.
+      const finalAnchor = yield* rolesanywhere.getTrustAnchor({
+        trustAnchorId: third.anchorA.trustAnchorId,
+      });
+      const finalNotification =
+        finalAnchor.trustAnchor.notificationSettings?.find(
+          (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
+        );
+      expect(finalNotification?.threshold).not.toBe(30);
       // The replaced CRL was deleted.
       yield* untilGone(
         rolesanywhere.getCrl({ crlId: second.crl.crlId }).pipe(

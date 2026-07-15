@@ -9,7 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
-import { durationToSeconds } from "../IAM/common.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readRolesAnywhereTags,
@@ -24,6 +24,33 @@ import {
 export class ProfileMissing extends Data.TaggedError("ProfileMissing")<{
   readonly name: string;
 }> {}
+
+/**
+ * A single rule extracting a value from the certificate field, e.g.
+ * `{ specifier: "CN" }` to map the common name.
+ */
+export interface ProfileMappingRule {
+  /**
+   * The specifier within the certificate field to map, e.g. `CN` or `OU`
+   * for `x509Subject`.
+   */
+  specifier: string;
+}
+
+/**
+ * A mapping from a certificate field to the session tags IAM Roles Anywhere
+ * attaches to the vended session.
+ */
+export interface ProfileAttributeMapping {
+  /**
+   * The certificate field to map: `x509Subject`, `x509Issuer` or `x509SAN`.
+   */
+  certificateField: string;
+  /**
+   * The rules extracting specifiers from the certificate field.
+   */
+  mappingRules: ProfileMappingRule[];
+}
 
 export interface ProfileProps {
   /**
@@ -50,10 +77,10 @@ export interface ProfileProps {
   /**
    * How long vended session credentials are valid for, e.g. `"1 hour"` or
    * `Duration.minutes(15)` (a bare number is milliseconds). Rounded to whole
-   * seconds on the wire (900-43200).
-   * @default 3600 seconds
+   * seconds on the wire (900-43200 seconds).
+   * @default "1 hour"
    */
-  durationSeconds?: Duration.Input;
+  duration?: Duration.Input;
   /**
    * Whether temporary credential requests must include instance properties.
    * Immutable after creation — changing it replaces the profile.
@@ -66,6 +93,13 @@ export interface ProfileProps {
    * @default false
    */
   acceptRoleSessionName?: boolean;
+  /**
+   * Mappings from certificate fields (`x509Subject`, `x509Issuer`,
+   * `x509SAN`) to the session tags attached to the vended session. Fields
+   * omitted here keep their AWS default mapping; a field previously managed
+   * by this resource and later removed has its custom mapping deleted.
+   */
+  attributeMappings?: ProfileAttributeMapping[];
   /**
    * Whether the profile is enabled. When disabled, temporary credential
    * requests with this profile fail.
@@ -138,13 +172,27 @@ export interface Profile extends Resource<
  * ```typescript
  * const profile = yield* RolesAnywhere.Profile("Profile", {
  *   roleArns: [role.roleArn],
- *   durationSeconds: "15 minutes",
+ *   duration: "15 minutes",
  *   sessionPolicy: JSON.stringify({
  *     Version: "2012-10-17",
  *     Statement: [
  *       { Effect: "Allow", Action: "s3:GetObject", Resource: "*" },
  *     ],
  *   }),
+ * });
+ * ```
+ *
+ * @section Mapping Certificate Attributes
+ * @example Session Tags from the Certificate Subject
+ * ```typescript
+ * const profile = yield* RolesAnywhere.Profile("Profile", {
+ *   roleArns: [role.roleArn],
+ *   attributeMappings: [
+ *     {
+ *       certificateField: "x509Subject",
+ *       mappingRules: [{ specifier: "CN" }],
+ *     },
+ *   ],
  * });
  * ```
  */
@@ -222,14 +270,12 @@ export const ProfileProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           const name = output?.profileName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredEnabled = news.enabled ?? true;
-          const desiredDurationSeconds = durationToSeconds(
-            news.durationSeconds,
-          );
+          const desiredDurationSeconds = toWireSeconds(news.duration);
 
           // 1. Observe — cloud state is authoritative; output caches the id.
           let live = output?.profileId
@@ -255,7 +301,7 @@ export const ProfileProvider = () =>
             }
           } else {
             // 3. Sync — converge the mutable aspects (name, roleArns,
-            // sessionPolicy, managedPolicyArns, durationSeconds,
+            // sessionPolicy, managedPolicyArns, duration,
             // acceptRoleSessionName) by diffing observed against desired.
             const desiredName = news.profileName ?? live.name!;
             const drift =
@@ -280,6 +326,61 @@ export const ProfileProvider = () =>
                 acceptRoleSessionName: news.acceptRoleSessionName,
               });
               live = updated.profile ?? live;
+            }
+          }
+
+          // 3a. Sync attribute mappings — diff the OBSERVED mappings against
+          // the desired set. A fresh profile carries AWS default mappings
+          // that must not be touched unless the user manages that field, so
+          // deletions are driven by the fields previously declared in `olds`
+          // rather than full replacement of observed state.
+          const desiredMappings = news.attributeMappings ?? [];
+          const observedMappings = new Map(
+            (live.attributeMappings ?? []).map((m) => [
+              m.certificateField,
+              (m.mappingRules ?? []).map((r) => r.specifier),
+            ]),
+          );
+          for (const mapping of desiredMappings) {
+            const observedSpecifiers = observedMappings.get(
+              mapping.certificateField,
+            );
+            const desiredSpecifiers = mapping.mappingRules.map(
+              (r) => r.specifier,
+            );
+            if (
+              observedSpecifiers === undefined ||
+              !sameMembers(observedSpecifiers, desiredSpecifiers)
+            ) {
+              const mapped = yield* rolesanywhere.putAttributeMapping({
+                profileId: live.profileId!,
+                certificateField: mapping.certificateField,
+                mappingRules: mapping.mappingRules.map((r) => ({
+                  specifier: r.specifier,
+                })),
+              });
+              live = mapped.profile;
+            }
+          }
+          const desiredFields = new Set(
+            desiredMappings.map((m) => m.certificateField),
+          );
+          for (const previous of olds?.attributeMappings ?? []) {
+            if (
+              !desiredFields.has(previous.certificateField) &&
+              observedMappings.has(previous.certificateField)
+            ) {
+              const cleaned = yield* rolesanywhere
+                .deleteAttributeMapping({
+                  profileId: live.profileId!,
+                  certificateField: previous.certificateField,
+                })
+                .pipe(
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                );
+              live = cleaned?.profile ?? live;
             }
           }
 

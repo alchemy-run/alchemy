@@ -45,7 +45,6 @@ test.provider(
       const error = yield* Effect.flip(
         repostspace.listChannels({ spaceId: BOGUS_SPACE_ID }),
       );
-      console.log("RAW ERROR:", JSON.stringify(error, null, 2), error);
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
 );

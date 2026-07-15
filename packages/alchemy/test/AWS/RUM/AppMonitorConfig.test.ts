@@ -77,9 +77,20 @@ test.provider(
           return { monitor, metrics, policy };
         });
 
+      // Extended metrics require the event pattern that matches the metric.
+      const sessionCountPattern = JSON.stringify({
+        event_type: ["com.amazon.rum.session_start_event"],
+      });
+      const jsErrorCountPattern = JSON.stringify({
+        event_type: ["com.amazon.rum.js_error_event"],
+      });
+
       // Create: one extended metric definition + a PutRumEvents policy.
       const created = yield* stack.deploy(
-        program([{ name: "SessionCount" }], "rum:PutRumEvents"),
+        program(
+          [{ name: "SessionCount", eventPattern: sessionCountPattern }],
+          "rum:PutRumEvents",
+        ),
       );
       expect(created.metrics.appMonitorName).toBe(MONITOR_NAME);
       expect(created.metrics.destination).toBe("CloudWatch");
@@ -103,9 +114,10 @@ test.provider(
           [
             {
               name: "SessionCount",
+              eventPattern: sessionCountPattern,
               dimensionKeys: { "metadata.browserName": "BrowserName" },
             },
-            { name: "JsErrorCount" },
+            { name: "JsErrorCount", eventPattern: jsErrorCountPattern },
           ],
           "rum:PutRumEvents",
         ),
@@ -124,7 +136,10 @@ test.provider(
       // Update: drop SessionCount (batch delete) and rotate the policy to a
       // different action (revision changes).
       const rotated = yield* stack.deploy(
-        program([{ name: "JsErrorCount" }], "rum:GetAppMonitorData"),
+        program(
+          [{ name: "JsErrorCount", eventPattern: jsErrorCountPattern }],
+          "rum:GetAppMonitorData",
+        ),
       );
       expect(rotated.policy.policyRevisionId).not.toBe(firstRevision);
 

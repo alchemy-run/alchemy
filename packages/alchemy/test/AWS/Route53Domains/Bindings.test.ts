@@ -115,6 +115,75 @@ test.provider(
   { timeout: 60_000 },
 );
 
+test.provider(
+  "retrieveDomainAuthCode on a domain not in the account fails with typed DomainNotFound",
+  (_stack) =>
+    Effect.gen(function* () {
+      // example.com is never registered in the test account. The overloaded
+      // InvalidInput ("Domain example.com not found in account.") is
+      // specialized to DomainNotFound by the distilled patch.
+      const tag = yield* withRoute53DomainsRegion(
+        route53domains.retrieveDomainAuthCode({ DomainName: "example.com" }),
+      ).pipe(
+        Effect.map(() => "success" as const),
+        Effect.catchTag("DomainNotFound", (error) =>
+          Effect.succeed(error._tag),
+        ),
+      );
+      expect(tag).toBe("DomainNotFound");
+    }),
+  { timeout: 60_000 },
+);
+
+test.provider(
+  "updateDomainNameservers on a domain not in the account fails with typed DomainNotFound",
+  (_stack) =>
+    Effect.gen(function* () {
+      const tag = yield* withRoute53DomainsRegion(
+        route53domains.updateDomainNameservers({
+          DomainName: "example.com",
+          Nameservers: [{ Name: "ns-1.awsdns-01.org" }],
+        }),
+      ).pipe(
+        Effect.map(() => "success" as const),
+        Effect.catchTag("DomainNotFound", (error) =>
+          Effect.succeed(error._tag),
+        ),
+      );
+      expect(tag).toBe("DomainNotFound");
+    }),
+  { timeout: 60_000 },
+);
+
+test.provider(
+  "getDomainSuggestions returns suggestions for a seed name",
+  (_stack) =>
+    Effect.gen(function* () {
+      const result = yield* withRoute53DomainsRegion(
+        route53domains.getDomainSuggestions({
+          DomainName: "example.com",
+          SuggestionCount: 5,
+          OnlyAvailable: false,
+        }),
+      );
+      expect(Array.isArray(result.SuggestionsList ?? [])).toBe(true);
+    }),
+  { timeout: 60_000 },
+);
+
+test.provider(
+  "listPrices returns registration pricing for the com TLD",
+  (_stack) =>
+    Effect.gen(function* () {
+      const result = yield* withRoute53DomainsRegion(
+        route53domains.listPrices({ Tld: "com" }),
+      );
+      expect((result.Prices ?? []).length).toBeGreaterThan(0);
+      expect(result.Prices?.[0]?.RegistrationPrice?.Price).toBeGreaterThan(0);
+    }),
+  { timeout: 60_000 },
+);
+
 describe("Route53Domains Bindings", () => {
   beforeAll(
     Effect.gen(function* () {

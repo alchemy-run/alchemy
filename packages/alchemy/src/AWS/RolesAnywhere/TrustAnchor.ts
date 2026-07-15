@@ -1,5 +1,6 @@
 import * as rolesanywhere from "@distilled.cloud/aws/rolesanywhere";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -7,6 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readRolesAnywhereTags,
@@ -21,6 +23,37 @@ import {
 export class TrustAnchorSourceConflict extends Data.TaggedError(
   "TrustAnchorSourceConflict",
 )<{ readonly message: string }> {}
+
+/**
+ * A customized expiry notification for the trust anchor. AWS installs
+ * default notifications (45 days before CA and end-entity certificate
+ * expiry); declaring a setting for the same event/channel overrides the
+ * default, and removing it resets the event back to the AWS default.
+ */
+export interface TrustAnchorNotificationSetting {
+  /**
+   * The expiry event to notify on: `CA_CERTIFICATE_EXPIRY` or
+   * `END_ENTITY_CERTIFICATE_EXPIRY`.
+   */
+  event: string;
+  /**
+   * Whether the notification is enabled.
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * How far ahead of the expiry event to notify, e.g. `"30 days"` (a bare
+   * number is milliseconds). Rounded to whole days on the wire.
+   * @default "45 days"
+   */
+  threshold?: Duration.Input;
+  /**
+   * The notification channel. `ALL` (the only channel today) sends through
+   * both AWS Health Dashboard and email.
+   * @default "ALL"
+   */
+  channel?: string;
+}
 
 export interface TrustAnchorProps {
   /**
@@ -45,6 +78,12 @@ export interface TrustAnchorProps {
    * @default true
    */
   enabled?: boolean;
+  /**
+   * Customized certificate-expiry notifications. Events omitted here keep
+   * their AWS default notification; a setting previously managed by this
+   * resource and later removed is reset to the AWS default.
+   */
+  notificationSettings?: TrustAnchorNotificationSetting[];
   /**
    * User-defined tags for the trust anchor.
    */
@@ -106,6 +145,17 @@ export interface TrustAnchor extends Resource<
  *   enabled: false,
  * });
  * ```
+ *
+ * @section Expiry Notifications
+ * @example Custom Notification Threshold
+ * ```typescript
+ * const anchor = yield* RolesAnywhere.TrustAnchor("Anchor", {
+ *   certificateBundle: CA_CERTIFICATE_PEM,
+ *   notificationSettings: [
+ *     { event: "CA_CERTIFICATE_EXPIRY", threshold: "30 days" },
+ *   ],
+ * });
+ * ```
  */
 export const TrustAnchor = Resource<TrustAnchor>(
   "AWS.RolesAnywhere.TrustAnchor",
@@ -137,6 +187,20 @@ const desiredSource = Effect.fn(function* (props: TrustAnchorProps) {
         sourceData: { acmPcaArn: props.acmPcaArn! },
       };
 });
+
+/** The key AWS uses to identify a notification setting. */
+const notificationKey = (setting: { event: string; channel?: string }) =>
+  `${setting.event}|${setting.channel ?? "ALL"}`;
+
+const toWireNotificationSettings = (
+  settings: ReadonlyArray<TrustAnchorNotificationSetting>,
+): rolesanywhere.NotificationSetting[] =>
+  settings.map((setting) => ({
+    enabled: setting.enabled ?? true,
+    event: setting.event,
+    threshold: toWireDays(setting.threshold),
+    channel: setting.channel,
+  }));
 
 const sourceDrift = (
   observed: rolesanywhere.Source | undefined,
@@ -204,12 +268,15 @@ export const TrustAnchorProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           const name = output?.trustAnchorName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const source = yield* desiredSource(news);
           const desiredEnabled = news.enabled ?? true;
+          const desiredNotifications = toWireNotificationSettings(
+            news.notificationSettings ?? [],
+          );
 
           // 1. Observe — cloud state is authoritative; output caches the id.
           let live = output?.trustAnchorId
@@ -223,6 +290,10 @@ export const TrustAnchorProvider = () =>
               source,
               enabled: desiredEnabled,
               tags: toWireTags(desiredTags),
+              notificationSettings:
+                desiredNotifications.length > 0
+                  ? desiredNotifications
+                  : undefined,
             });
             live = created.trustAnchor;
           } else {
@@ -236,6 +307,61 @@ export const TrustAnchorProvider = () =>
               });
               live = updated.trustAnchor;
             }
+          }
+
+          // 3a. Sync notification settings — diff the OBSERVED settings
+          // against the desired set. AWS installs default settings that must
+          // not be touched unless the user manages that event/channel, so
+          // resets are driven by the settings previously declared in `olds`
+          // rather than full replacement of observed state.
+          const observedNotifications = new Map(
+            (live.notificationSettings ?? []).map((setting) => [
+              notificationKey(setting),
+              setting,
+            ]),
+          );
+          const notificationDrift = desiredNotifications.some((desired) => {
+            const observed = observedNotifications.get(
+              notificationKey(desired),
+            );
+            return (
+              observed === undefined ||
+              observed.enabled !== desired.enabled ||
+              (desired.threshold !== undefined &&
+                observed.threshold !== desired.threshold)
+            );
+          });
+          if (notificationDrift) {
+            const updated = yield* rolesanywhere.putNotificationSettings({
+              trustAnchorId: live.trustAnchorId!,
+              notificationSettings: desiredNotifications,
+            });
+            live = updated.trustAnchor;
+          }
+          const desiredNotificationKeys = new Set(
+            desiredNotifications.map(notificationKey),
+          );
+          const resetKeys = (olds?.notificationSettings ?? [])
+            .filter(
+              (previous) =>
+                !desiredNotificationKeys.has(notificationKey(previous)),
+            )
+            .map((previous) => ({
+              event: previous.event,
+              channel: previous.channel,
+            }));
+          if (resetKeys.length > 0) {
+            const reset = yield* rolesanywhere
+              .resetNotificationSettings({
+                trustAnchorId: live.trustAnchorId!,
+                notificationSettingKeys: resetKeys,
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            live = reset?.trustAnchor ?? live;
           }
 
           if ((live.enabled ?? false) !== desiredEnabled) {

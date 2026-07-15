@@ -41,7 +41,7 @@ interface TagResponse {
 // the first request — IAM propagation can lag ~10-30s, surfacing as
 // AccessDeniedException. Retry (bounded) until the grant lands; any other
 // tag surfaces immediately for assertion.
-const untilGranted = (request: Effect.Effect<unknown, unknown>) =>
+const untilGranted = <E, R>(request: Effect.Effect<unknown, E, R>) =>
   request.pipe(
     Effect.map((r) => r as TagResponse),
     Effect.repeat({
@@ -107,8 +107,9 @@ describe.sequential("RUM Bindings", () => {
             `/events response: ${JSON.stringify(response)}`,
           );
           // "ok" proves the dataplane host prefix, the id/details injection,
-          // and the rum:PutRumEvents grant all round-tripped.
-          expect(response.tag).toBe("ok");
+          // and the rum:PutRumEvents grant all round-tripped. On failure the
+          // route's error string surfaces in the assertion diff.
+          expect(response.error ?? response.tag).toBe("ok");
         }),
       { timeout: 120_000 },
     );
@@ -123,7 +124,7 @@ describe.sequential("RUM Bindings", () => {
             getJson("/data"),
           )) as TagResponse;
           yield* Effect.logInfo(`/data response: ${JSON.stringify(response)}`);
-          expect(response.tag).toBe("ok");
+          expect(response.error ?? response.tag).toBe("ok");
           // Ingested events surface asynchronously (minutes) — a zero count
           // still proves the grant + monitor-name injection round-tripped.
           expect(response.count).toBeGreaterThanOrEqual(0);
