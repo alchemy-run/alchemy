@@ -12,7 +12,7 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { retryThroughEnablement } from "./Enablement.ts";
+import { retryThroughEnablement } from "./common.ts";
 
 export interface AllowListProps {
   /**
