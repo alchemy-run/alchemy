@@ -16,6 +16,7 @@ export * from "./DescribeMountTargetsHttp.ts";
 export * from "./DescribeReplicationConfigurations.ts";
 export * from "./DescribeReplicationConfigurationsHttp.ts";
 export * from "./FileSystem.ts";
+export * from "./Mount.ts";
 export * from "./MountTarget.ts";
 export * from "./PutBackupPolicy.ts";
 export * from "./PutBackupPolicyHttp.ts";

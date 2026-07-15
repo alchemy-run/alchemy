@@ -81,7 +81,8 @@ const infra = (marker: string) =>
       timeout: Duration.seconds(30),
       vpc: { subnetIds: [subnetId], securityGroupIds: [securityGroupId] },
       fileSystemConfigs: [
-        { arn: accessPoint.accessPointArn, localMountPath: "/mnt/test" },
+        // pass the AccessPoint resource itself — the provider resolves its ARN
+        { accessPoint, localMountPath: "/mnt/test" },
       ],
       env: {
         // Depend on the mount target so the function is only created once

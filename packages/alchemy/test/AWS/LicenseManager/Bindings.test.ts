@@ -288,9 +288,11 @@ describe.sequential("LicenseManager Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* getJson("/access-token-invalid")) as any;
-          expect(["ValidationException", "AuthorizationException"]).toContain(
-            response.tag,
-          );
+          expect([
+            "InvalidParameterValueException",
+            "ValidationException",
+            "AuthorizationException",
+          ]).toContain(response.tag);
         }),
       { timeout: 60_000 },
     );

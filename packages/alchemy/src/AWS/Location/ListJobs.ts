@@ -17,7 +17,7 @@ import * as Binding from "../../Binding.ts";
  * const listJobs = yield* Location.ListJobs();
  *
  * const page = yield* listJobs();
- * // page.Jobs → [{ JobId, Status, Action }, …]
+ * // page.Entries → [{ JobId, Status, Action }, …]
  * ```
  */
 export interface ListJobs extends Binding.Service<

@@ -5,38 +5,34 @@ import type { Role } from "../IAM/Role.ts";
 
 /**
  * `StartJob` request with `ExecutionRoleArn` injected from the bound
- * execution role (an explicit `ExecutionRoleArn` overrides it).
+ * execution role.
  */
 export interface StartJobRequest extends Omit<
   location.StartJobRequest,
   "ExecutionRoleArn"
-> {
-  ExecutionRoleArn?: string;
-}
+> {}
 
 /**
- * Starts a Location batch metadata job (e.g. batch address validation) that
- * reads its input from and writes its results to S3.
+ * Starts a Location batch metadata job (e.g. batch address validation over
+ * an S3 input file).
  *
  * Runtime binding for the `StartJob` operation (IAM action `geo:StartJob`).
- * The binding is constructed with the **execution role** Location assumes to
- * read/write the S3 locations (its trust policy must allow
- * `location.amazonaws.com`); the role's ARN is injected as
- * `ExecutionRoleArn` and the deploy-time half additionally grants
- * `iam:PassRole` on the role — without it, `StartJob` fails only at runtime
- * with an access-denied error. Provide the implementation with
+ * Bind the IAM {@link Role} Location assumes to read the S3 input and write
+ * the S3 output — its ARN is injected as `ExecutionRoleArn` and the host is
+ * additionally granted `iam:PassRole` on it. Jobs are named at runtime so
+ * the `geo:StartJob` grant is on `*`. Provide the implementation with
  * `Effect.provide(AWS.Location.StartJobHttp)`.
  *
  * @binding
  * @section Managing Batch Jobs
- * @example Start a Batch Address Validation Job
+ * @example Start a Batch Job
  * ```typescript
- * const startJob = yield* Location.StartJob(executionRole);
+ * const startJob = yield* Location.StartJob(jobsRole);
  *
  * const job = yield* startJob({
  *   Action: "ValidateAddress",
- *   InputOptions: { Format: "CSV", Location: "s3://my-bucket/input.csv" },
- *   OutputOptions: { Format: "CSV", Location: "s3://my-bucket/output/" },
+ *   InputOptions: { Format: "CSV", Location: "s3://my-bucket/addresses.csv" },
+ *   OutputOptions: { Format: "CSV", Location: "s3://my-bucket/results/" },
  * });
  * // job.JobId → poll with Location.GetJob
  * ```

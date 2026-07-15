@@ -222,12 +222,31 @@ export interface FileSystem extends Resource<
  *   main: "./src/handler.ts",
  *   vpc: { subnetIds: [subnetId], securityGroupIds: [securityGroupId] },
  *   fileSystemConfigs: [
- *     { arn: accessPoint.accessPointArn, localMountPath: "/mnt/files" },
+ *     // pass the AccessPoint resource itself (or its ARN)
+ *     { accessPoint, localMountPath: "/mnt/files" },
  *   ],
  *   // depend on the mount target so the function is created only after
  *   // the network endpoint is available
  *   env: { EFS_MOUNT_TARGET: target.mountTargetId },
  * });
+ * ```
+ *
+ * @example Host-agnostic mount binding (Lambda or ECS)
+ * `EFS.mount` wires the mount config + least-privilege IAM through the
+ * host's binding channel — the same code works inside a Lambda Function or
+ * an ECS Task body (provide `AWS.EFS.MountLive` on the host Effect).
+ * ```typescript
+ * export default class Api extends AWS.Lambda.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, vpc: { subnetIds, securityGroupIds } },
+ *   Effect.gen(function* () {
+ *     const files = yield* AWS.EFS.mount(accessPoint, { path: "/mnt/files" });
+ *     return Effect.fn(function* (event: unknown) {
+ *       // read/write under files.path at runtime
+ *       return { mountedAt: files.path };
+ *     });
+ *   }).pipe(Effect.provide(AWS.EFS.MountLive)),
+ * ) {}
  * ```
  */
 export const FileSystem = Resource<FileSystem>("AWS.EFS.FileSystem");

@@ -242,6 +242,16 @@ export interface Task extends Resource<
     env?: Record<string, any>;
     /** IAM policy statements attached to the task role. */
     policyStatements?: PolicyStatement[];
+    /**
+     * Task-level volumes requested through the binding channel (e.g.
+     * `EFS.Mount`). Merged with the Task's own `volumes` prop.
+     */
+    volumes?: ecs.Volume[];
+    /**
+     * Container mount points for binding-requested volumes, applied to the
+     * primary container.
+     */
+    mountPoints?: ecs.MountPoint[];
   },
   Providers
 > {}
@@ -527,6 +537,24 @@ export const TaskProvider = () =>
             })) ?? [],
         );
 
+        // Volumes/mount points requested through the binding channel (e.g.
+        // `EFS.Mount`) — deduped by volume name / container path; merged
+        // with the `volumes` prop and primary container in `reconcile`.
+        const volumes = [
+          ...new Map(
+            activeBindings
+              .flatMap((binding) => binding?.data?.volumes ?? [])
+              .map((volume) => [volume.name, volume] as const),
+          ).values(),
+        ];
+        const mountPoints = [
+          ...new Map(
+            activeBindings
+              .flatMap((binding) => binding?.data?.mountPoints ?? [])
+              .map((point) => [point.containerPath, point] as const),
+          ).values(),
+        ];
+
         if (policyStatements.length > 0) {
           yield* iam.putRolePolicy({
             RoleName: roleName,
@@ -545,7 +573,7 @@ export const TaskProvider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         }
 
-        return env;
+        return { env, volumes, mountPoints };
       });
 
       const bundleProgram = Effect.fn(function* (id: string, props: TaskProps) {
@@ -752,6 +780,8 @@ await Effect.runPromise(program).catch((err) => {
         executionRoleArn,
         logGroupName,
         tags,
+        bindingVolumes = [],
+        bindingMountPoints = [],
       }: {
         props: TaskProps;
         family: string;
@@ -760,6 +790,10 @@ await Effect.runPromise(program).catch((err) => {
         executionRoleArn: string;
         logGroupName: string;
         tags: Record<string, string>;
+        /** Task-level volumes requested through the binding channel. */
+        bindingVolumes?: ecs.Volume[];
+        /** Primary-container mount points for binding-requested volumes. */
+        bindingMountPoints?: ecs.MountPoint[];
       }) {
         const { region } = yield* AWSEnvironment.current;
         const containerName = props.container?.name ?? family;
@@ -790,6 +824,16 @@ await Effect.runPromise(program).catch((err) => {
             },
           },
           ...props.container,
+          // Merge binding-requested mount points (e.g. `EFS.Mount`) with any
+          // the user configured on the primary container.
+          ...(bindingMountPoints.length > 0
+            ? {
+                mountPoints: [
+                  ...(props.container?.mountPoints ?? []),
+                  ...bindingMountPoints,
+                ],
+              }
+            : {}),
         };
         const response = yield* ecs.registerTaskDefinition({
           family,
@@ -799,7 +843,10 @@ await Effect.runPromise(program).catch((err) => {
           requiresCompatibilities: props.requiresCompatibilities ?? ["FARGATE"],
           cpu: String(props.cpu ?? 256),
           memory: String(props.memory ?? 512),
-          volumes: props.volumes,
+          volumes:
+            bindingVolumes.length > 0
+              ? [...(props.volumes ?? []), ...bindingVolumes]
+              : props.volumes,
           placementConstraints: props.placementConstraints,
           runtimePlatform: props.runtimePlatform,
           ephemeralStorage: props.ephemeralStorage,
@@ -975,7 +1022,11 @@ await Effect.runPromise(program).catch((err) => {
               );
           }
 
-          const bindingEnv = yield* attachBindings({
+          const {
+            env: bindingEnv,
+            volumes: bindingVolumes,
+            mountPoints: bindingMountPoints,
+          } = yield* attachBindings({
             roleName: taskRoleName,
             policyName: taskPolicyName,
             bindings,
@@ -1032,6 +1083,8 @@ await Effect.runPromise(program).catch((err) => {
             executionRoleArn,
             logGroupName,
             tags,
+            bindingVolumes,
+            bindingMountPoints,
           });
 
           // Sync tags — task definition revisions carry tags at register

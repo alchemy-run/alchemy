@@ -41,7 +41,10 @@ const call = (request: HttpClientRequest.HttpClientRequest) =>
         new TransientUpstream({ status: response.status, body }),
       );
     }
-    expect(response.status).toBe(200);
+    if (response.status !== 200) {
+      // Terminal — fail fast with the typed tag in the message.
+      return yield* Effect.die(new Error(`status ${response.status}: ${body}`));
+    }
     return JSON.parse(body) as Record<string, any>;
   }).pipe(
     Effect.retry({

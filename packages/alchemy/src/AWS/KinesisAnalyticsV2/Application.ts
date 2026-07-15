@@ -1063,60 +1063,71 @@ export const ApplicationProvider = () =>
           // already-exists race (`ResourceInUseException`), retry through the
           // fresh role's IAM propagation window, and retry
           // `ConcurrentModificationException` — recreating an application
-          // under a recently-deleted name briefly fails with "Tags are
-          // already registered for this resource ARN ... please retry later".
+          // under a recently-deleted name fails with "Tags are already
+          // registered for this resource ARN ... please retry later".
           if (observed === undefined) {
-            yield* retryWhileInUse(
-              retryThroughRolePropagation(
-                analytics
-                  .createApplication({
-                    ApplicationName: applicationName,
-                    ApplicationDescription: news.description,
-                    RuntimeEnvironment: news.runtimeEnvironment,
-                    ApplicationMode: news.applicationMode,
-                    ServiceExecutionRole: serviceExecutionRole,
-                    ApplicationConfiguration: {
-                      ApplicationCodeConfiguration: {
-                        CodeContentType: "ZIPFILE",
-                        CodeContent: {
-                          S3ContentLocation: {
-                            BucketARN: news.code.bucketArn,
-                            FileKey: news.code.fileKey,
-                            ObjectVersion: news.code.objectVersion,
-                          },
-                        },
-                      },
-                      EnvironmentProperties: news.environmentProperties
-                        ? {
-                            PropertyGroups: toWirePropertyGroups(
-                              news.environmentProperties,
-                            ),
-                          }
-                        : undefined,
-                      FlinkApplicationConfiguration: toFlinkConfiguration(
-                        news.flinkConfiguration,
-                      ),
-                      ApplicationSnapshotConfiguration:
-                        news.snapshotsEnabled !== undefined
-                          ? { SnapshotsEnabled: news.snapshotsEnabled }
-                          : undefined,
-                      VpcConfigurations: news.vpc
-                        ? [
-                            {
-                              SubnetIds: news.vpc.subnetIds,
-                              SecurityGroupIds: news.vpc.securityGroupIds,
-                            },
-                          ]
-                        : undefined,
+            const createRequest: analytics.CreateApplicationRequest = {
+              ApplicationName: applicationName,
+              ApplicationDescription: news.description,
+              RuntimeEnvironment: news.runtimeEnvironment,
+              ApplicationMode: news.applicationMode,
+              ServiceExecutionRole: serviceExecutionRole,
+              ApplicationConfiguration: {
+                ApplicationCodeConfiguration: {
+                  CodeContentType: "ZIPFILE",
+                  CodeContent: {
+                    S3ContentLocation: {
+                      BucketARN: news.code.bucketArn,
+                      FileKey: news.code.fileKey,
+                      ObjectVersion: news.code.objectVersion,
                     },
-                    Tags: createTagsList(desiredTags),
-                  })
-                  .pipe(
-                    Effect.catchTag(
-                      "ResourceInUseException",
-                      () => Effect.void,
+                  },
+                },
+                EnvironmentProperties: news.environmentProperties
+                  ? {
+                      PropertyGroups: toWirePropertyGroups(
+                        news.environmentProperties,
+                      ),
+                    }
+                  : undefined,
+                FlinkApplicationConfiguration: toFlinkConfiguration(
+                  news.flinkConfiguration,
+                ),
+                ApplicationSnapshotConfiguration:
+                  news.snapshotsEnabled !== undefined
+                    ? { SnapshotsEnabled: news.snapshotsEnabled }
+                    : undefined,
+                VpcConfigurations: news.vpc
+                  ? [
+                      {
+                        SubnetIds: news.vpc.subnetIds,
+                        SecurityGroupIds: news.vpc.securityGroupIds,
+                      },
+                    ]
+                  : undefined,
+              },
+              Tags: createTagsList(desiredTags),
+            };
+            const create = (request: analytics.CreateApplicationRequest) =>
+              retryWhileInUse(
+                retryThroughRolePropagation(
+                  analytics
+                    .createApplication(request)
+                    .pipe(
+                      Effect.catchTag(
+                        "ResourceInUseException",
+                        () => Effect.void,
+                      ),
                     ),
-                  ),
+                ),
+              );
+            yield* create(createRequest).pipe(
+              // The lingering tag registration on a recently-deleted name can
+              // outlive the bounded retry window. AWS's own guidance in the
+              // error text: create without tags, then TagResource — the tag
+              // sync below applies the desired tags right after.
+              Effect.catchTag("ConcurrentModificationException", () =>
+                create({ ...createRequest, Tags: undefined }),
               ),
             );
             yield* session.note(`Creating application ${applicationName}...`);

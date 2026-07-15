@@ -216,14 +216,18 @@ describe.sequential("LakeFormation Bindings", () => {
 
   describe("GetEffectivePermissionsForPath", () => {
     test.provider(
-      "typed rejection for an unregistered path",
+      "empty permissions (or typed rejection) for an unregistered path",
       (_stack) =>
         Effect.gen(function* () {
           const response = (yield* getJson("/effective-permissions")) as any;
+          // verified live: an unregistered path returns an empty permission
+          // list rather than EntityNotFound
           expect([
+            "Ok",
             "EntityNotFoundException",
             "InvalidInputException",
           ]).toContain(response.tag);
+          expect(response.count).toBe(0);
         }),
       { timeout: 60_000 },
     );

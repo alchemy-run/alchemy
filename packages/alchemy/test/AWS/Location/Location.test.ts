@@ -4,6 +4,7 @@ import * as Test from "@/Test/Vitest";
 import * as location from "@distilled.cloud/aws/location";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -172,6 +173,95 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
           location.describeGeofenceCollection({
             CollectionName: collection.collectionName,
           }),
+        );
+      }),
+    { timeout: 180_000 },
+  );
+
+  test.provider(
+    "ApiKey: create, update description, delete",
+    (stack) =>
+      Effect.gen(function* () {
+        const key = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Location.ApiKey("TestKey", {
+              restrictions: {
+                allowActions: ["geo:GetMap*"],
+                allowResources: ["arn:aws:geo:*:*:map/*"],
+              },
+            });
+          }),
+        );
+
+        expect(key.keyArn).toContain(":api-key/");
+        expect(Redacted.value(key.key)).toMatch(/^v1\.public\./);
+        expect(key.restrictions.allowActions).toEqual(["geo:GetMap*"]);
+
+        const described = yield* location.describeKey({
+          KeyName: key.keyName,
+        });
+        expect(described.Tags?.["alchemy::id"]).toEqual("TestKey");
+
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Location.ApiKey("TestKey", {
+              restrictions: {
+                allowActions: ["geo:GetMap*"],
+                allowResources: ["arn:aws:geo:*:*:map/*"],
+                allowReferers: ["https://example.com/*"],
+              },
+              description: "updated key",
+            });
+          }),
+        );
+        expect(updated.keyName).toEqual(key.keyName);
+        expect(updated.description).toEqual("updated key");
+        expect(updated.restrictions.allowReferers).toEqual([
+          "https://example.com/*",
+        ]);
+        expect(Redacted.value(updated.key)).toEqual(Redacted.value(key.key));
+
+        yield* stack.destroy();
+        yield* assertGone(location.describeKey({ KeyName: key.keyName }));
+      }),
+    { timeout: 180_000 },
+  );
+
+  test.provider(
+    "TrackerConsumer: link tracker to geofence collection, delete",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* stack.deploy(
+          Effect.gen(function* () {
+            const tracker = yield* Location.Tracker("ConsumerTracker", {});
+            const collection = yield* Location.GeofenceCollection(
+              "ConsumerFences",
+              {},
+            );
+            const link = yield* Location.TrackerConsumer("Link", {
+              trackerName: tracker.trackerName,
+              consumerArn: collection.collectionArn,
+            });
+            return {
+              trackerName: tracker.trackerName,
+              collectionArn: collection.collectionArn,
+              linkTracker: link.trackerName,
+              linkConsumer: link.consumerArn,
+            };
+          }),
+        );
+
+        expect(out.linkTracker).toEqual(out.trackerName);
+        expect(out.linkConsumer).toEqual(out.collectionArn);
+
+        const consumers = yield* location.listTrackerConsumers({
+          TrackerName: out.trackerName,
+        });
+        expect(consumers.ConsumerArns).toContain(out.collectionArn);
+
+        yield* stack.destroy();
+        yield* assertGone(
+          location.describeTracker({ TrackerName: out.trackerName }),
         );
       }),
     { timeout: 180_000 },

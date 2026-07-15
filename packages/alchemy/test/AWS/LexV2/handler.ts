@@ -24,7 +24,11 @@ const contentOf = (
       ? content
       : Redacted.value(content);
 
-/** Surface a typed failure as a 502 JSON body the test can retry on. */
+/**
+ * Surface a typed failure as JSON. Only `AccessDeniedException` (fresh IAM
+ * policy propagation) maps to a retryable 502 — any other tag is terminal
+ * and returns 400 so the test fails fast with the tag visible.
+ */
 const respond = <A, E extends { readonly _tag: string }>(
   self: Effect.Effect<A, E>,
   onSuccess: (a: A) => Record<string, unknown>,
@@ -39,7 +43,9 @@ const respond = <A, E extends { readonly _tag: string }>(
             (result.failure as { message?: string }).message ?? "",
           ),
         },
-        { status: 502 },
+        {
+          status: result.failure._tag === "AccessDeniedException" ? 502 : 400,
+        },
       );
     }
     return yield* HttpServerResponse.json(onSuccess(result.success));
@@ -153,6 +159,8 @@ export default LexTestFunction.make(
               localeId: "en_US",
               sessionId: body.sessionId,
               requestContentType: "text/plain; charset=utf-8",
+              // Default is speech — the test locale has no voice configured.
+              responseContentType: "text/plain; charset=utf-8",
               inputStream: new TextEncoder().encode(body.text),
             }),
             (reply) => ({
@@ -176,6 +184,8 @@ export default LexTestFunction.make(
                 dialogAction: { type: "ElicitIntent" },
                 sessionAttributes: body.attributes,
               },
+              // Default is speech — the test locale has no voice configured.
+              responseContentType: "text/plain; charset=utf-8",
             }),
             (reply) => ({ sessionId: reply.sessionId ?? null }),
           );

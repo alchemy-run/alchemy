@@ -121,7 +121,9 @@ describe("Logs Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 120_000,
+  });
 
   describe("PutLogEvents", () => {
     test.provider("writes a log event through the binding", (_stack) =>
@@ -218,8 +220,20 @@ describe("Logs Bindings", () => {
           const response = yield* send(
             HttpClientRequest.get(`${baseUrl}/stop-query`),
           ).pipe(Effect.flatMap((r) => r.json));
-          expect((response as any).ok).toBe(true);
-          expect(typeof (response as any).stopped).toBe("boolean");
+          const body = response as {
+            ok: boolean;
+            stopped: boolean;
+            error: string | null;
+          };
+          expect(body.ok).toBe(true);
+          // Either the stop landed, or a benign completion/registration race
+          // surfaced as one of the two typed tags — anything else (e.g.
+          // AccessDenied) dies in the fixture and fails the request.
+          expect(
+            body.stopped === true ||
+              body.error === "InvalidParameterException" ||
+              body.error === "ResourceNotFoundException",
+          ).toBe(true);
         }),
       { timeout: 90_000 },
     );

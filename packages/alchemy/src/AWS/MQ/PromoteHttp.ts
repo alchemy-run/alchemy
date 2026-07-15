@@ -5,7 +5,11 @@ import { Promote } from "./Promote.ts";
 
 export const PromoteHttp = Layer.effect(
   Promote,
-  makeMqBrokerHttpBinding({
+  makeMqBrokerHttpBinding<
+    Omit<mq.PromoteRequest, "BrokerId">,
+    mq.PromoteResponse,
+    mq.PromoteError
+  >({
     capability: "Promote",
     operation: mq.promote,
     iamActions: ["mq:Promote"],

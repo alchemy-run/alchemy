@@ -1,5 +1,6 @@
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -137,10 +138,15 @@ export interface EnvironmentProps {
   endpointManagement?: string;
   /**
    * Apache Airflow configuration overrides, keyed by
-   * `section.option`, e.g. `{ "core.default_task_retries": "3" }`. Updateable
-   * in place.
+   * `section.option`, e.g. `{ "core.default_task_retries": "3" }`. Values
+   * carrying secrets (SMTP passwords, connection URIs, …) may be passed as
+   * `Redacted.Redacted<string>` so they never appear in logs. Updateable in
+   * place.
    */
-  airflowConfigurationOptions?: Record<string, string>;
+  airflowConfigurationOptions?: Record<
+    string,
+    string | Redacted.Redacted<string>
+  >;
   /**
    * Relative path to the plugins `.zip` in the source bucket. Updateable in
    * place.
@@ -296,14 +302,25 @@ const sameStringSet = (a: string[], b: string[]): boolean => {
   return a.every((v) => setB.has(v));
 };
 
-const sameRecord = (
-  a: Record<string, string> | undefined,
-  b: Record<string, string> | undefined,
+const configValue = (
+  v: string | Redacted.Redacted<string> | undefined,
+): string | undefined => (Redacted.isRedacted(v) ? Redacted.value(v) : v);
+
+// Compare desired Airflow configuration options against the observed ones.
+// Both sides may carry Redacted values (the props by choice, the observed
+// options because distilled decodes them as SensitiveString) — unwrap for the
+// comparison only.
+const sameConfigOptions = (
+  a: Record<string, string | Redacted.Redacted<string>> | undefined,
+  b:
+    | { [key: string]: string | Redacted.Redacted<string> | undefined }
+    | undefined,
 ): boolean => {
   const ea = Object.entries(a ?? {});
-  const eb = Object.entries(b ?? {});
+  const eb = Object.entries(b ?? {}).filter(([, v]) => v !== undefined);
   if (ea.length !== eb.length) return false;
-  return ea.every(([k, v]) => (b ?? {})[k] === v);
+  const bMap = b ?? {};
+  return ea.every(([k, v]) => configValue(bMap[k]) === configValue(v));
 };
 
 export const EnvironmentProvider = () =>
@@ -613,11 +630,9 @@ export const EnvironmentProvider = () =>
           }
           if (
             props.airflowConfigurationOptions !== undefined &&
-            !sameRecord(
+            !sameConfigOptions(
               props.airflowConfigurationOptions,
-              observed.AirflowConfigurationOptions as
-                | Record<string, string>
-                | undefined,
+              observed.AirflowConfigurationOptions,
             )
           ) {
             update.AirflowConfigurationOptions =

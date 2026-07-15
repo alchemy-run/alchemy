@@ -552,6 +552,44 @@ const matchesConfiguredExternal = (
  * });
  * ```
  *
+ * @section EFS File Systems
+ * Mount an EFS access point into the function's `/mnt/…` file system. The
+ * function must be attached to a VPC that can reach an EFS mount target for
+ * the file system.
+ *
+ * @example Mount an EFS access point via props
+ * ```typescript
+ * const accessPoint = yield* AWS.EFS.AccessPoint("FilesAccess", {
+ *   fileSystemId: fileSystem.fileSystemId,
+ *   posixUser: { uid: 1000, gid: 1000 },
+ * });
+ *
+ * const func = yield* AWS.Lambda.Function("FilesFunction", {
+ *   main: "./src/handler.ts",
+ *   vpc: { subnetIds, securityGroupIds },
+ *   fileSystemConfigs: [
+ *     // pass the AccessPoint resource itself (or its ARN via `arn`)
+ *     { accessPoint, localMountPath: "/mnt/files" },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Mount via the host-agnostic EFS.mount binding
+ * `EFS.mount` wires the same mount config plus least-privilege IAM through
+ * the binding channel and works on both Lambda and ECS hosts.
+ * ```typescript
+ * export default class FilesFunction extends AWS.Lambda.Function<FilesFunction>()(
+ *   "FilesFunction",
+ *   { main: import.meta.url, vpc: { subnetIds, securityGroupIds } },
+ *   Effect.gen(function* () {
+ *     const files = yield* AWS.EFS.mount(accessPoint, { path: "/mnt/files" });
+ *     return Effect.fn(function* (event: unknown) {
+ *       return { mountedAt: files.path };
+ *     });
+ *   }).pipe(Effect.provide(AWS.EFS.MountLive)),
+ * ) {}
+ * ```
+ *
  * @section S3 Bindings
  * Bind S3 operations in the init phase to give the function IAM
  * permissions and inject the bucket name as an environment variable.
@@ -2067,17 +2105,15 @@ export default handler;
             functionName,
             vpc,
             preferUpdate: output !== undefined,
-            // `[]` (when the prop was removed on a function that previously
-            // had mounts) explicitly clears the file-system config;
-            // `undefined` when it never had any leaves it untouched.
-            fileSystemConfigs: news.fileSystemConfigs
-              ? news.fileSystemConfigs.map((c) => ({
-                  Arn: c.arn,
-                  LocalMountPath: c.localMountPath,
-                }))
-              : olds?.fileSystemConfigs
-                ? []
-                : undefined,
+            // `[]` (when the prop/bindings were removed on a function that
+            // previously had mounts) explicitly clears the file-system
+            // config; `undefined` when it never had any leaves it untouched.
+            fileSystemConfigs:
+              desiredFileSystemConfigs.length > 0
+                ? desiredFileSystemConfigs
+                : olds?.fileSystemConfigs || output !== undefined
+                  ? []
+                  : undefined,
             session,
           });
 

@@ -17,3 +17,5 @@ export * from "./Promote.ts";
 export * from "./PromoteHttp.ts";
 export * from "./RebootBroker.ts";
 export * from "./RebootBrokerHttp.ts";
+export * from "./UpdateUser.ts";
+export * from "./UpdateUserHttp.ts";

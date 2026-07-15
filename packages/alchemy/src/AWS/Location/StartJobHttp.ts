@@ -5,12 +5,17 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { Role } from "../IAM/Role.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import { StartJob } from "./StartJob.ts";
+import { StartJob, type StartJobRequest } from "./StartJob.ts";
 
+/**
+ * Bespoke (not via `BindingHttp.ts`): StartJob is the one Location binding
+ * that injects an identifier from a *foreign* resource (the IAM execution
+ * role) and needs a second `iam:PassRole` grant alongside the `geo:` action.
+ */
 export const StartJobHttp = Layer.effect(
   StartJob,
   Effect.gen(function* () {
-    const op = yield* location.startJob;
+    const startJob = yield* location.startJob;
 
     return Effect.fn(function* (executionRole: Role) {
       const RoleArn = yield* executionRole.roleArn;
@@ -20,11 +25,11 @@ export const StartJobHttp = Layer.effect(
           yield* host.bind`Allow(${host}, AWS.Location.StartJob(${executionRole}))`(
             {
               policyStatements: [
+                // Jobs are named at runtime, so their ARNs are unknowable at
+                // deploy time.
                 {
                   Effect: "Allow",
                   Action: ["geo:StartJob"],
-                  // Jobs are created by the call itself — their ARNs are
-                  // unknowable at deploy time.
                   Resource: ["*"],
                 },
                 // CRITICAL: without iam:PassRole on the execution role,
@@ -33,6 +38,11 @@ export const StartJobHttp = Layer.effect(
                   Effect: "Allow",
                   Action: ["iam:PassRole"],
                   Resource: [Output.interpolate`${executionRole.roleArn}`],
+                  Condition: {
+                    StringEquals: {
+                      "iam:PassedToService": "location.amazonaws.com",
+                    },
+                  },
                 },
               ],
             },
@@ -40,14 +50,10 @@ export const StartJobHttp = Layer.effect(
         }
       }
       return Effect.fn(`AWS.Location.StartJob(${executionRole.LogicalId})`)(
-        function* (
-          request: Omit<location.StartJobRequest, "ExecutionRoleArn"> & {
-            ExecutionRoleArn?: string;
-          },
-        ) {
-          return yield* op({
+        function* (request: StartJobRequest) {
+          return yield* startJob({
             ...request,
-            ExecutionRoleArn: request.ExecutionRoleArn ?? (yield* RoleArn),
+            ExecutionRoleArn: yield* RoleArn,
           });
         },
       );

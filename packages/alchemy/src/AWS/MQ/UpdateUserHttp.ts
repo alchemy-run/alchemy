@@ -5,7 +5,11 @@ import { UpdateUser } from "./UpdateUser.ts";
 
 export const UpdateUserHttp = Layer.effect(
   UpdateUser,
-  makeMqBrokerHttpBinding({
+  makeMqBrokerHttpBinding<
+    Omit<mq.UpdateUserRequest, "BrokerId">,
+    mq.UpdateUserResponse,
+    mq.UpdateUserError
+  >({
     capability: "UpdateUser",
     operation: mq.updateUser,
     iamActions: ["mq:UpdateUser"],

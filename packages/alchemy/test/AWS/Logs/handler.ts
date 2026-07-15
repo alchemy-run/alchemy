@@ -159,15 +159,23 @@ export default LogsTestFunction.make(
               { status: 500 },
             );
           }
-          const stopped = yield* stopQuery({ queryId }).pipe(
-            Effect.map((response) => response.success ?? true),
-            // The query can complete before the stop lands — that still
-            // proves the binding round-tripped.
-            Effect.catchTag("InvalidParameterException", () =>
-              Effect.succeed(false),
+          // Give the query registration a beat to propagate before stopping.
+          yield* Effect.sleep("500 millis");
+          const outcome = yield* stopQuery({ queryId }).pipe(
+            Effect.map((response) => ({
+              stopped: response.success ?? true,
+              error: null as string | null,
+            })),
+            // Benign races: the query can complete before the stop lands
+            // (InvalidParameterException) or the stop can outrun the query's
+            // registration (ResourceNotFoundException). Both still prove the
+            // binding round-tripped with valid credentials.
+            Effect.catchTag(
+              ["InvalidParameterException", "ResourceNotFoundException"],
+              (error) => Effect.succeed({ stopped: false, error: error._tag }),
             ),
           );
-          return yield* HttpServerResponse.json({ ok: true, stopped });
+          return yield* HttpServerResponse.json({ ok: true, ...outcome });
         }
 
         if (request.method === "GET" && pathname === "/fields") {

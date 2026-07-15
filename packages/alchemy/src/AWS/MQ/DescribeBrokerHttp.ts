@@ -5,7 +5,11 @@ import { DescribeBroker } from "./DescribeBroker.ts";
 
 export const DescribeBrokerHttp = Layer.effect(
   DescribeBroker,
-  makeMqBrokerHttpBinding({
+  makeMqBrokerHttpBinding<
+    {},
+    mq.DescribeBrokerResponse,
+    mq.DescribeBrokerError
+  >({
     capability: "DescribeBroker",
     operation: mq.describeBroker,
     iamActions: ["mq:DescribeBroker"],

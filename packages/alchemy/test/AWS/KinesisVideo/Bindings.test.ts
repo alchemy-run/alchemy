@@ -181,8 +181,8 @@ describe("KinesisVideo Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const body = yield* fetchOutcome(`${baseUrl}/fragments`);
-          expect(body.ok).toBe(true);
-          expect(body.count).toBe(0);
+          // toMatchObject so a failure diff surfaces the errorTag
+          expect(body).toMatchObject({ ok: true, count: 0 });
         }),
       { timeout: 120_000 },
     );

@@ -223,13 +223,20 @@ export default LicenseManagerTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/access-token-invalid") {
-          // A malformed refresh token must surface a typed rejection.
+          // A malformed refresh token must surface a typed rejection —
+          // "Invalid token." arrives as InvalidParameterValueException
+          // (verified by probe; patched into distilled's GetAccessToken
+          // union, which the Smithy model omits).
           const result = yield* getAccessToken({
             Token: "not-a-valid-refresh-token",
           }).pipe(
             Effect.map(() => "Ok"),
             Effect.catchTag(
-              ["ValidationException", "AuthorizationException"],
+              [
+                "InvalidParameterValueException",
+                "ValidationException",
+                "AuthorizationException",
+              ],
               (e) => Effect.succeed(e._tag),
             ),
           );

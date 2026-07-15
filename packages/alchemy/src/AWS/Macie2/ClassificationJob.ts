@@ -1,6 +1,5 @@
 import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -13,6 +12,8 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
+import { retryThroughEnablement } from "./common.ts";
+import { retryThroughEnablement } from "./Enablement.ts";
 
 /**
  * Whether the classification job runs once (`ONE_TIME`) or on a recurring
@@ -149,20 +150,6 @@ const fingerprint = (props: Partial<ClassificationJobProps>) =>
     bucketDefinitions: (props.bucketDefinitions ?? [])
       .map((b) => ({ accountId: b.accountId, buckets: [...b.buckets].sort() }))
       .sort((a, b) => a.accountId.localeCompare(b.accountId)),
-  });
-
-// Macie enablement is eventually consistent — job creation can briefly reject
-// with `MacieNotEnabled` right after the session is enabled. Retry on a bounded
-// schedule (< 30s total). The explicit `Effect.Effect<A, E, R>` return
-// annotation keeps `Retry.Return`'s conditional type out of declaration emit,
-// which would otherwise widen the provider layer's `R` to `unknown` and poison
-// every consumer of `AWS.providers()`.
-const retryThroughEnablement = <A, E extends { _tag: string }, R>(
-  self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  Effect.retry(self, {
-    while: (e) => e._tag === "MacieNotEnabled",
-    schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
   });
 
 const buildAttrs = (
