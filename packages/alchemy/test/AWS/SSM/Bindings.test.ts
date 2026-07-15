@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -24,6 +25,7 @@ const readinessPolicy = Schedule.max([
 ]);
 
 let baseUrl: string;
+let functionArn: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -55,21 +57,32 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     }),
   );
 
-describe("SSM Bindings", () => {
+const getJson = (path: string) =>
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
+    Effect.flatMap((r) => r.json),
+  );
+
+const postJson = (path: string) =>
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
+    Effect.flatMap((r) => r.json),
+  );
+
+describe.sequential("SSM Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* Effect.logInfo("SSM test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("SSM test setup: deploying fixture");
-      const { functionUrl } = yield* sharedStack.deploy(
+      const attrs = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* SSMTestFunction;
         }).pipe(Effect.provide(SSMTestFunctionLive)),
       );
 
-      expect(functionUrl).toBeTruthy();
-      baseUrl = functionUrl!.replace(/\/+$/, "");
+      expect(attrs.functionUrl).toBeTruthy();
+      baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
+      functionArn = attrs.functionArn;
       const readinessUrl = `${baseUrl}/get-string`;
 
       yield* Effect.logInfo(
@@ -97,9 +110,7 @@ describe("SSM Bindings", () => {
   describe("GetParameter", () => {
     test.provider("reads a String parameter through the binding", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/get-string`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* getJson("/get-string");
 
         expect((response as any).type).toBe("String");
         expect((response as any).value).toBe("plain-config-value");
@@ -110,9 +121,7 @@ describe("SSM Bindings", () => {
       "decrypts a SecureString parameter through the binding",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/get-secure`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* getJson("/get-secure");
 
           expect((response as any).type).toBe("SecureString");
           expect((response as any).value).toBe("bound-secret-value");
@@ -125,9 +134,7 @@ describe("SSM Bindings", () => {
       "reads String and SecureString parameters in one call",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/get-many`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* getJson("/get-many");
 
           const parameters = (response as any).parameters as Array<{
             name: string;
@@ -140,6 +147,86 @@ describe("SSM Bindings", () => {
           expect(values).toEqual(
             ["bound-secret-value", "plain-config-value"].sort(),
           );
+        }),
+    );
+  });
+
+  describe("GetParameterHistory", () => {
+    test.provider(
+      "reads the deployed version from the parameter's history",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/history")) as {
+            count: number;
+            values: string[];
+          };
+          expect(response.count).toBeGreaterThanOrEqual(1);
+          expect(response.values).toContain("v1");
+        }),
+    );
+  });
+
+  describe("PutParameter", () => {
+    test.provider(
+      "writes a new version of the bound parameter at runtime",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* postJson("/put")) as {
+            version: number;
+            latest: string;
+          };
+          expect(response.version).toBeGreaterThanOrEqual(2);
+          expect(response.latest).toBe("v2-runtime");
+        }),
+    );
+  });
+
+  describe("Label/UnlabelParameterVersion", () => {
+    test.provider(
+      "labels the latest version and removes the label again",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* postJson("/label-cycle")) as {
+            labeledVersion: number;
+            invalidLabels: string[];
+            removedLabels: string[];
+          };
+          expect(response.labeledVersion).toBeGreaterThanOrEqual(1);
+          expect(response.invalidLabels).toEqual([]);
+          expect(response.removedLabels).toContain("current");
+        }),
+    );
+  });
+
+  describe("GetParametersByPath", () => {
+    test.provider(
+      "reads the subtree under the bound path-root parameter",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/by-path")) as {
+            parameters: Array<{ name: string; value: string }>;
+          };
+          const child = response.parameters.find(
+            (parameter) =>
+              parameter.name === "/alchemy-test/ssm-bindings/root/child",
+          );
+          expect(child?.value).toBe("child-value");
+        }),
+    );
+  });
+
+  describe("consumeParameterEvents", () => {
+    test.provider(
+      "the deploy created an EventBridge rule targeting the function",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeParameterEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
         }),
     );
   });

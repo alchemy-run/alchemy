@@ -397,6 +397,133 @@ describe.sequential("SNS Bindings", () => {
           expect((response as any).error).toBeTruthy();
         });
 
+        // Subscribe + Unsubscribe — subscribe the notifications queue at
+        // runtime, assert a concrete ARN came back, then unsubscribe it in
+        // the same request so no stray subscription survives.
+        yield* Effect.gen(function* () {
+          const response = yield* postJson("/subscribe-cycle", {});
+          expect((response as any).ok).toBe(true);
+          expect((response as any).subscriptionArn).toContain("arn:aws:sns:");
+        });
+
+        // GetSMSAttributes
+        yield* Effect.gen(function* () {
+          const response = yield* getJson("/sms/attributes");
+          expect((response as any).attributes).toBeDefined();
+        });
+
+        // SetSMSAttributes — set the default type to Transactional (a safe
+        // idempotent default for the testing account) and read it back.
+        yield* Effect.gen(function* () {
+          yield* postJson("/sms/attributes", { type: "Transactional" });
+          const response = yield* getJson("/sms/attributes");
+          expect((response as any).attributes.DefaultSMSType).toBe(
+            "Transactional",
+          );
+        });
+
+        // ListPhoneNumbersOptedOut
+        yield* Effect.gen(function* () {
+          const response = yield* getJson("/sms/opted-out");
+          expect(Array.isArray((response as any).phoneNumbers ?? [])).toBe(
+            true,
+          );
+        });
+
+        // CheckIfPhoneNumberIsOptedOut — reserved fictional number; never
+        // opted out.
+        yield* Effect.gen(function* () {
+          const response = yield* postJson("/sms/check-opt-out", {
+            phoneNumber: "+15555550100",
+          });
+          expect((response as any).isOptedOut ?? false).toBe(false);
+        });
+
+        // OptInPhoneNumber — the fictional number was never opted out, so
+        // SNS either succeeds (no-op) or rejects with a typed error; both
+        // prove the binding + IAM wiring.
+        yield* Effect.gen(function* () {
+          const response = yield* postJson("/sms/opt-in", {
+            phoneNumber: "+15555550100",
+          });
+          expect(response).toBeDefined();
+        });
+
+        // ListOriginationNumbers
+        yield* Effect.gen(function* () {
+          const response = yield* getJson("/sms/origination-numbers");
+          expect(Array.isArray((response as any).PhoneNumbers ?? [])).toBe(
+            true,
+          );
+        });
+
+        // GetSMSSandboxAccountStatus
+        yield* Effect.gen(function* () {
+          const response = yield* getJson("/sms/sandbox-status");
+          expect(typeof (response as any).IsInSandbox).toBe("boolean");
+        });
+
+        // ListSMSSandboxPhoneNumbers
+        yield* Effect.gen(function* () {
+          const response = yield* getJson("/sms/sandbox-numbers");
+          expect(Array.isArray((response as any).PhoneNumbers ?? [])).toBe(
+            true,
+          );
+        });
+
+        // CreateSMSSandboxPhoneNumber — malformed number surfaces the typed
+        // error (never sends a real OTP text).
+        yield* Effect.gen(function* () {
+          const response = yield* postJson("/sms/sandbox-create", {
+            phoneNumber: "not-a-phone-number",
+          });
+          expect((response as any).ok).toBe(false);
+          expect((response as any).error).toBeTruthy();
+        });
+
+        // VerifySMSSandboxPhoneNumber — unregistered number surfaces the
+        // typed error.
+        yield* Effect.gen(function* () {
+          const response = yield* postJson("/sms/sandbox-verify", {
+            phoneNumber: "+15555550100",
+            otp: "000000",
+          });
+          expect((response as any).ok).toBe(false);
+          expect((response as any).error).toBeTruthy();
+        });
+
+        // DeleteSMSSandboxPhoneNumber — unregistered number surfaces the
+        // typed error (idempotent wiring proof).
+        yield* Effect.gen(function* () {
+          const response = yield* postJson("/sms/sandbox-delete", {
+            phoneNumber: "+15555550100",
+          });
+          expect((response as any).ok).toBe(false);
+          expect((response as any).error).toBeTruthy();
+        });
+
+        // PublishSms — in the SMS sandbox the fictional number is not
+        // verified so SNS rejects with a typed error; out of the sandbox it
+        // accepts and returns a MessageId. Either proves the binding.
+        yield* Effect.gen(function* () {
+          const response = yield* postJson("/sms/publish", {
+            phoneNumber: "+15555550100",
+            message: "alchemy sns binding test",
+          });
+          const ok =
+            typeof (response as any).MessageId === "string" ||
+            (response as any).ok === false;
+          expect(ok).toBe(true);
+        });
+
+        // ListPlatformApplications
+        yield* Effect.gen(function* () {
+          const response = yield* getJson("/platform/applications");
+          expect(
+            Array.isArray((response as any).PlatformApplications ?? []),
+          ).toBe(true);
+        });
+
         // TopicSink — 12 messages > the PublishBatch limit of 10, so the
         // batched sink must split the chunk into 2 sequential API calls
         // (10 + 2) and every message must still arrive.

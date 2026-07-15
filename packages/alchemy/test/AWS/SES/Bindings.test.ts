@@ -267,7 +267,55 @@ describe("SES Bindings", () => {
 
   describe("Suppression List", () => {
     test.provider(
-      "put, get, list, and delete a suppressed destination",
+      "sandbox: reads work and the write surfaces the typed BadRequestException",
+      (_stack) =>
+        Effect.gen(function* () {
+          const email = encodeURIComponent(SUPPRESSED_ADDRESS);
+
+          // put — sandbox accounts cannot write to the suppression list;
+          // SES rejects with the typed BadRequestException ("Your account
+          // is still in the sandbox."). That proves the binding wires IAM
+          // and marshalling into the deployed Lambda.
+          const put = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/suppress?email=${email}`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            error?: string;
+            message?: string;
+          };
+          if (put.error === undefined) {
+            // Production account: the write succeeded — clean up and let
+            // the gated lifecycle test below cover the full flow.
+            yield* send(
+              HttpClientRequest.post(`${baseUrl}/unsuppress?email=${email}`),
+            );
+          } else {
+            expect(put.error).toBe("BadRequestException");
+            expect(put.message).toContain("sandbox");
+
+            // get of a never-suppressed address — typed NotFoundException.
+            const missing = (yield* send(
+              HttpClientRequest.get(`${baseUrl}/suppressed?email=${email}`),
+            ).pipe(Effect.flatMap((r) => r.json))) as { error?: string };
+            expect(missing.error).toBe("NotFoundException");
+          }
+
+          // list — the read plane works even in the sandbox.
+          const list = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/suppressed-list`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            emails?: string[];
+            error?: string;
+          };
+          expect(list.error).toBeUndefined();
+          expect(Array.isArray(list.emails)).toBe(true);
+        }),
+    );
+
+    // Full write lifecycle needs production access (the sandbox blocks
+    // PutSuppressedDestination with BadRequestException: "Your account is
+    // still in the sandbox.") — gated with the same env var as real sends.
+    test.provider.skipIf(!VERIFIED_FROM)(
+      "put, get, list, and delete a suppressed destination (AWS_TEST_SES_FROM)",
       (_stack) =>
         Effect.gen(function* () {
           const email = encodeURIComponent(SUPPRESSED_ADDRESS);

@@ -111,7 +111,10 @@ describe("Rekognition Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 180_000 });
+  // NO_DESTROY=1 keeps the deployment alive between runs while iterating.
+  if (!process.env.NO_DESTROY) {
+    afterAll(sharedStack.destroy(), { timeout: 180_000 });
+  }
 
   describe("image analysis (DetectLabels, DetectFaces, DetectModerationLabels, DetectText, DetectProtectiveEquipment, RecognizeCelebrities, CompareFaces, GetCelebrityInfo)", () => {
     test.provider(

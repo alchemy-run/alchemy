@@ -26,6 +26,7 @@ const readinessPolicy = Schedule.max([
 
 let baseUrl: string;
 let queueUrl: string;
+let dlqUrl: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -173,18 +174,24 @@ describe.sequential("SQS Bindings", () => {
       );
 
       // A freshly-deployed function can briefly serve a 200 before its
-      // captured env vars (the queue URL) finish propagating; keep polling
-      // until the queue URL is populated.
+      // captured env vars (the queue URLs) finish propagating; keep polling
+      // until both queue URLs are populated.
       const ready = yield* HttpClient.get(`${baseUrl}/ready`).pipe(
         Effect.flatMap((response) =>
           response.status === 200
-            ? (response.json as Effect.Effect<{ queueUrl?: string }>)
+            ? (response.json as Effect.Effect<{
+                queueUrl?: string;
+                dlqUrl?: string;
+              }>)
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.flatMap((body) =>
-          typeof body?.queueUrl === "string" && body.queueUrl.length > 0
-            ? Effect.succeed(body as { queueUrl: string })
-            : Effect.fail(new Error("Function returned empty queue URL")),
+          typeof body?.queueUrl === "string" &&
+          body.queueUrl.length > 0 &&
+          typeof body?.dlqUrl === "string" &&
+          body.dlqUrl.length > 0
+            ? Effect.succeed(body as { queueUrl: string; dlqUrl: string })
+            : Effect.fail(new Error("Function returned empty queue URLs")),
         ),
         Effect.tapError((error) =>
           Effect.logWarning(
@@ -194,6 +201,7 @@ describe.sequential("SQS Bindings", () => {
         Effect.retry({ schedule: readinessPolicy }),
       );
       queueUrl = ready.queueUrl;
+      dlqUrl = ready.dlqUrl;
 
       yield* Effect.logInfo(
         `SQS test setup: fixture ready (queueUrl: ${queueUrl})`,
@@ -364,6 +372,193 @@ describe.sequential("SQS Bindings", () => {
           expect(response.failed).toHaveLength(0);
           expect(response.successful.sort()).toEqual(["entry-0", "entry-1"]);
         }),
+    );
+  });
+
+  describe("ChangeMessageVisibility", () => {
+    test.provider("releases an in-flight message back to the queue", (_stack) =>
+      Effect.gen(function* () {
+        const messageBody = `visibility-${crypto.randomUUID()}`;
+
+        yield* SQS.sendMessage({
+          QueueUrl: queueUrl,
+          MessageBody: messageBody,
+        });
+
+        // Receive with a long visibility timeout so the message stays
+        // hidden unless the binding releases it.
+        const found = yield* receiveViaBindingUntil([messageBody], {
+          visibilityTimeout: 120,
+        });
+        const message = found.get(messageBody)!;
+
+        const response = (yield* post("/change-visibility", {
+          receiptHandle: message.receiptHandle,
+          visibilityTimeout: 0,
+        })) as { success: boolean };
+        expect(response.success).toBe(true);
+
+        // The message must reappear well before the 120s timeout —
+        // observable only if the binding actually reset visibility.
+        yield* receiveAndDeleteViaDistilled([messageBody]);
+      }),
+    );
+  });
+
+  describe("ChangeMessageVisibilityBatch", () => {
+    test.provider(
+      "releases a batch of in-flight messages back to the queue",
+      (_stack) =>
+        Effect.gen(function* () {
+          const bodies = [
+            `visibility-batch-${crypto.randomUUID()}`,
+            `visibility-batch-${crypto.randomUUID()}`,
+          ];
+
+          yield* SQS.sendMessageBatch({
+            QueueUrl: queueUrl,
+            Entries: bodies.map((body, index) => ({
+              Id: `entry-${index}`,
+              MessageBody: body,
+            })),
+          });
+
+          const found = yield* receiveViaBindingUntil(bodies, {
+            visibilityTimeout: 120,
+          });
+
+          const response = (yield* post("/change-visibility-batch", {
+            entries: bodies.map((body, index) => ({
+              id: `entry-${index}`,
+              receiptHandle: found.get(body)!.receiptHandle,
+              visibilityTimeout: 0,
+            })),
+          })) as {
+            successful: string[];
+            failed: { id: string; code: string }[];
+          };
+          expect(response.failed).toHaveLength(0);
+          expect(response.successful.sort()).toEqual(["entry-0", "entry-1"]);
+
+          // Both messages reappear well before the 120s timeout.
+          yield* receiveAndDeleteViaDistilled(bodies);
+        }),
+    );
+  });
+
+  describe("GetQueueAttributes", () => {
+    test.provider("reads live queue attributes", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* post("/attributes", {
+          attributeNames: ["QueueArn", "ApproximateNumberOfMessages"],
+        })) as {
+          attributes: {
+            QueueArn?: string;
+            ApproximateNumberOfMessages?: string;
+          };
+        };
+
+        const queueName = queueUrl.split("/").pop()!;
+        expect(response.attributes.QueueArn).toMatch(/^arn:aws:sqs:/);
+        expect(response.attributes.QueueArn!.endsWith(queueName)).toBe(true);
+        expect(
+          Number(response.attributes.ApproximateNumberOfMessages),
+        ).toBeGreaterThanOrEqual(0);
+      }),
+    );
+  });
+
+  describe("MessageMoveTasks", () => {
+    test.provider(
+      "lists DLQ sources and redrives a message via a move task",
+      (_stack) =>
+        Effect.gen(function* () {
+          // ListDeadLetterSourceQueues on the DLQ sees the main queue, whose
+          // redrivePolicy targets it.
+          const sources = (yield* post("/dlq-sources", {})) as {
+            queueUrls: string[];
+          };
+          expect(sources.queueUrls).toContain(queueUrl);
+
+          // Land a message directly in the DLQ (out-of-band), then redrive
+          // it into the main queue through the StartMessageMoveTask binding.
+          const messageBody = `redrive-${crypto.randomUUID()}`;
+          yield* SQS.sendMessage({
+            QueueUrl: dlqUrl,
+            MessageBody: messageBody,
+          });
+
+          const started = (yield* post("/move/start", {})) as {
+            taskHandle?: string;
+          };
+          expect(started.taskHandle).toBeTruthy();
+
+          // The task is visible via the ListMessageMoveTasks binding.
+          const listed = (yield* post("/move/list", {})) as {
+            tasks: { taskHandle?: string; status?: string }[];
+          };
+          expect(listed.tasks.length).toBeGreaterThanOrEqual(1);
+          expect(["RUNNING", "COMPLETED", "COMPLETING"]).toContain(
+            listed.tasks[0]!.status,
+          );
+
+          // Out-of-band: the message arrives in the destination queue.
+          yield* receiveAndDeleteViaDistilled([messageBody]);
+
+          // Cancelling the (by now finished) task exercises the
+          // CancelMessageMoveTask binding end-to-end; a completed task
+          // surfaces the typed ResourceNotFoundException as canceled:false.
+          const canceled = (yield* post("/move/cancel", {
+            taskHandle: started.taskHandle,
+          })) as { canceled: boolean };
+          expect(typeof canceled.canceled).toBe("boolean");
+        }),
+    );
+  });
+
+  // PurgeQueue runs LAST: it wipes the shared queue, and SQS allows only one
+  // purge per queue per 60 seconds.
+  describe("PurgeQueue", () => {
+    test.provider("purges every message in the queue", (_stack) =>
+      Effect.gen(function* () {
+        const bodies = [
+          `purge-${crypto.randomUUID()}`,
+          `purge-${crypto.randomUUID()}`,
+        ];
+        yield* SQS.sendMessageBatch({
+          QueueUrl: queueUrl,
+          Entries: bodies.map((body, index) => ({
+            Id: `entry-${index}`,
+            MessageBody: body,
+          })),
+        });
+
+        const response = (yield* post("/purge", {})) as { success: boolean };
+        expect(response.success).toBe(true);
+
+        // The purge deletes messages within up to 60s; poll until neither
+        // body is receivable anymore (bounded).
+        yield* Effect.gen(function* () {
+          const result = yield* SQS.receiveMessage({
+            QueueUrl: queueUrl,
+            MaxNumberOfMessages: 10,
+            WaitTimeSeconds: 1,
+            VisibilityTimeout: 1,
+          });
+          const received = (result.Messages ?? []).map((m) => m.Body);
+          if (bodies.some((body) => received.includes(body))) {
+            return yield* Effect.fail(new MessageNotReceived());
+          }
+        }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "MessageNotReceived",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(15),
+            ]),
+          }),
+        );
+      }),
     );
   });
 });

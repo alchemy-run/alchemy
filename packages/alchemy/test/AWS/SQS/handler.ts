@@ -26,14 +26,37 @@ export default SQSTestFunction.make(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    const queue = yield* SQS.Queue("BindingsQueue");
+    // BindingsDLQ doubles as the redrive source for the message-move-task
+    // bindings; BindingsQueue's redrivePolicy is what makes it a valid DLQ.
+    const dlq = yield* SQS.Queue("BindingsDLQ");
+    const queue = yield* SQS.Queue("BindingsQueue", {
+      redrivePolicy: {
+        deadLetterTargetArn: dlq.queueArn,
+        // High enough that test polling (bounded re-receives) never trips a
+        // real redrive; the DLQ only receives messages sent to it directly.
+        maxReceiveCount: 1000,
+      },
+    });
 
     const sendMessage = yield* SQS.SendMessage(queue);
     const sendMessageBatch = yield* SQS.SendMessageBatch(queue);
     const receiveMessage = yield* SQS.ReceiveMessage(queue);
     const deleteMessage = yield* SQS.DeleteMessage(queue);
     const deleteMessageBatch = yield* SQS.DeleteMessageBatch(queue);
+    const changeMessageVisibility = yield* SQS.ChangeMessageVisibility(queue);
+    const changeMessageVisibilityBatch =
+      yield* SQS.ChangeMessageVisibilityBatch(queue);
+    const getQueueAttributes = yield* SQS.GetQueueAttributes(queue);
+    const purgeQueue = yield* SQS.PurgeQueue(queue);
+    const listDeadLetterSourceQueues =
+      yield* SQS.ListDeadLetterSourceQueues(dlq);
+    const startMessageMoveTask = yield* SQS.StartMessageMoveTask(dlq, {
+      destination: queue,
+    });
+    const cancelMessageMoveTask = yield* SQS.CancelMessageMoveTask(dlq);
+    const listMessageMoveTasks = yield* SQS.ListMessageMoveTasks(dlq);
     const queueUrl = yield* queue.queueUrl;
+    const dlqUrl = yield* dlq.queueUrl;
 
     return {
       fetch: Effect.gen(function* () {
@@ -47,6 +70,7 @@ export default SQSTestFunction.make(
           return yield* HttpServerResponse.json({
             ok: true,
             queueUrl: yield* queueUrl,
+            dlqUrl: yield* dlqUrl,
           });
         }
 
@@ -133,6 +157,115 @@ export default SQSTestFunction.make(
           });
         }
 
+        if (request.method === "POST" && pathname === "/change-visibility") {
+          const body = (yield* request.json) as unknown as {
+            receiptHandle: string;
+            visibilityTimeout: number;
+          };
+          yield* changeMessageVisibility({
+            ReceiptHandle: body.receiptHandle,
+            VisibilityTimeout: body.visibilityTimeout,
+          });
+          return yield* HttpServerResponse.json({ success: true });
+        }
+
+        if (
+          request.method === "POST" &&
+          pathname === "/change-visibility-batch"
+        ) {
+          const body = (yield* request.json) as unknown as {
+            entries: {
+              id: string;
+              receiptHandle: string;
+              visibilityTimeout: number;
+            }[];
+          };
+          const result = yield* changeMessageVisibilityBatch({
+            Entries: body.entries.map((entry) => ({
+              Id: entry.id,
+              ReceiptHandle: entry.receiptHandle,
+              VisibilityTimeout: entry.visibilityTimeout,
+            })),
+          });
+          return yield* HttpServerResponse.json({
+            successful: (result.Successful ?? []).map((s) => s.Id),
+            failed: (result.Failed ?? []).map((f) => ({
+              id: f.Id,
+              code: f.Code,
+            })),
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/attributes") {
+          const body = (yield* request.json) as unknown as {
+            attributeNames?: string[];
+          };
+          const result = yield* getQueueAttributes({
+            AttributeNames: body.attributeNames ?? ["All"],
+          });
+          return yield* HttpServerResponse.json({
+            attributes: result.Attributes ?? {},
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/purge") {
+          yield* purgeQueue();
+          return yield* HttpServerResponse.json({ success: true });
+        }
+
+        if (request.method === "POST" && pathname === "/dlq-sources") {
+          const result = yield* listDeadLetterSourceQueues();
+          return yield* HttpServerResponse.json({
+            queueUrls: result.queueUrls,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/move/start") {
+          const body = (yield* request.json) as unknown as {
+            maxNumberOfMessagesPerSecond?: number;
+          };
+          const result = yield* startMessageMoveTask({
+            ...(body.maxNumberOfMessagesPerSecond !== undefined
+              ? {
+                  MaxNumberOfMessagesPerSecond:
+                    body.maxNumberOfMessagesPerSecond,
+                }
+              : {}),
+          });
+          return yield* HttpServerResponse.json({
+            taskHandle: result.TaskHandle,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/move/list") {
+          const result = yield* listMessageMoveTasks({ MaxResults: 10 });
+          return yield* HttpServerResponse.json({
+            tasks: (result.Results ?? []).map((task) => ({
+              taskHandle: task.TaskHandle,
+              status: task.Status,
+              moved: task.ApproximateNumberOfMessagesMoved,
+            })),
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/move/cancel") {
+          const body = (yield* request.json) as unknown as {
+            taskHandle: string;
+          };
+          // A task that already finished cancels with the typed
+          // ResourceNotFoundException — surface that as canceled:false so the
+          // test can accept the benign race.
+          const canceled = yield* cancelMessageMoveTask({
+            TaskHandle: body.taskHandle,
+          }).pipe(
+            Effect.map(() => true),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(false),
+            ),
+          );
+          return yield* HttpServerResponse.json({ canceled });
+        }
+
         return yield* HttpServerResponse.json(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
@@ -147,6 +280,14 @@ export default SQSTestFunction.make(
         SQS.ReceiveMessageHttp,
         SQS.DeleteMessageHttp,
         SQS.DeleteMessageBatchHttp,
+        SQS.ChangeMessageVisibilityHttp,
+        SQS.ChangeMessageVisibilityBatchHttp,
+        SQS.GetQueueAttributesHttp,
+        SQS.PurgeQueueHttp,
+        SQS.ListDeadLetterSourceQueuesHttp,
+        SQS.StartMessageMoveTaskHttp,
+        SQS.CancelMessageMoveTaskHttp,
+        SQS.ListMessageMoveTasksHttp,
       ),
     ),
   ),

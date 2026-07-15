@@ -120,7 +120,24 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
       yield* AWS.SNS.SetSubscriptionAttributes(queueSubscription);
     const confirmSubscription =
       yield* AWS.SNS.ConfirmSubscription(subscription);
+    const subscribeToTopic = yield* AWS.SNS.Subscribe(topic);
+    const unsubscribe = yield* AWS.SNS.Unsubscribe();
+    const publishSms = yield* AWS.SNS.PublishSms();
+    const checkIfPhoneNumberIsOptedOut =
+      yield* AWS.SNS.CheckIfPhoneNumberIsOptedOut();
+    const optInPhoneNumber = yield* AWS.SNS.OptInPhoneNumber();
+    const listPhoneNumbersOptedOut = yield* AWS.SNS.ListPhoneNumbersOptedOut();
+    const getSmsAttributes = yield* AWS.SNS.GetSMSAttributes();
+    const setSmsAttributes = yield* AWS.SNS.SetSMSAttributes();
+    const listOriginationNumbers = yield* AWS.SNS.ListOriginationNumbers();
+    const getSandboxStatus = yield* AWS.SNS.GetSMSSandboxAccountStatus();
+    const listSandboxNumbers = yield* AWS.SNS.ListSMSSandboxPhoneNumbers();
+    const createSandboxNumber = yield* AWS.SNS.CreateSMSSandboxPhoneNumber();
+    const verifySandboxNumber = yield* AWS.SNS.VerifySMSSandboxPhoneNumber();
+    const deleteSandboxNumber = yield* AWS.SNS.DeleteSMSSandboxPhoneNumber();
+    const listPlatformApplications = yield* AWS.SNS.ListPlatformApplications();
     const sink = yield* AWS.SNS.TopicSink(topic);
+    const QueueArn = yield* queue.queueArn;
     const TopicArn = yield* topic.topicArn;
     const accountId = TopicArn.pipe(
       Effect.map((topicArn) => topicArn.split(":")[4] ?? ""),
@@ -308,6 +325,129 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           );
         }
 
+        if (request.method === "POST" && pathname === "/subscribe-cycle") {
+          // Subscribe the (otherwise unsubscribed) notifications queue to the
+          // topic at runtime and immediately unsubscribe it — proves both the
+          // `Subscribe` and `Unsubscribe` bindings against the live API
+          // without leaving a subscription behind that would double-deliver
+          // later publishes.
+          const subscribed = yield* subscribeToTopic({
+            Protocol: "sqs",
+            Endpoint: yield* QueueArn,
+            ReturnSubscriptionArn: true,
+          });
+          if (!subscribed.SubscriptionArn) {
+            return yield* HttpServerResponse.json(
+              { ok: false, error: "no SubscriptionArn" },
+              { status: 500 },
+            );
+          }
+          yield* unsubscribe({ SubscriptionArn: subscribed.SubscriptionArn });
+          return yield* HttpServerResponse.json({
+            ok: true,
+            subscriptionArn: subscribed.SubscriptionArn,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/sms/attributes") {
+          return yield* HttpServerResponse.json(yield* getSmsAttributes());
+        }
+
+        if (request.method === "POST" && pathname === "/sms/attributes") {
+          const body = (yield* request.json) as { type: string };
+          return yield* HttpServerResponse.json(
+            yield* setSmsAttributes({
+              attributes: { DefaultSMSType: body.type },
+            }),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/sms/opted-out") {
+          return yield* HttpServerResponse.json(
+            yield* listPhoneNumbersOptedOut(),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/sms/check-opt-out") {
+          const body = (yield* request.json) as { phoneNumber: string };
+          return yield* HttpServerResponse.json(
+            yield* checkIfPhoneNumberIsOptedOut({
+              phoneNumber: body.phoneNumber,
+            }),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/sms/opt-in") {
+          const body = (yield* request.json) as { phoneNumber: string };
+          const response = yield* optInPhoneNumber({
+            phoneNumber: body.phoneNumber,
+          }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/sms/origination-numbers"
+        ) {
+          return yield* HttpServerResponse.json(
+            yield* listOriginationNumbers(),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/sms/sandbox-status") {
+          return yield* HttpServerResponse.json(yield* getSandboxStatus());
+        }
+
+        if (request.method === "GET" && pathname === "/sms/sandbox-numbers") {
+          return yield* HttpServerResponse.json(yield* listSandboxNumbers());
+        }
+
+        if (request.method === "POST" && pathname === "/sms/sandbox-create") {
+          const body = (yield* request.json) as { phoneNumber: string };
+          const response = yield* createSandboxNumber({
+            PhoneNumber: body.phoneNumber,
+          }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (request.method === "POST" && pathname === "/sms/sandbox-verify") {
+          const body = (yield* request.json) as {
+            phoneNumber: string;
+            otp: string;
+          };
+          const response = yield* verifySandboxNumber({
+            PhoneNumber: body.phoneNumber,
+            OneTimePassword: body.otp,
+          }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (request.method === "POST" && pathname === "/sms/sandbox-delete") {
+          const body = (yield* request.json) as { phoneNumber: string };
+          const response = yield* deleteSandboxNumber({
+            PhoneNumber: body.phoneNumber,
+          }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (request.method === "POST" && pathname === "/sms/publish") {
+          const body = (yield* request.json) as {
+            phoneNumber: string;
+            message: string;
+          };
+          const response = yield* publishSms({
+            PhoneNumber: body.phoneNumber,
+            Message: body.message,
+          }).pipe(Effect.catch((error) => Effect.succeed(formatError(error))));
+          return yield* HttpServerResponse.json(response);
+        }
+
+        if (request.method === "GET" && pathname === "/platform/applications") {
+          return yield* HttpServerResponse.json(
+            yield* listPlatformApplications(),
+          );
+        }
+
         if (request.method === "POST" && pathname === "/confirm-subscription") {
           const body = (yield* request.json) as { token: string };
           const response = yield* confirmSubscription({
@@ -333,7 +473,22 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
         ),
         Layer.mergeAll(
           AWS.SNS.AddPermissionHttp,
+          AWS.SNS.CheckIfPhoneNumberIsOptedOutHttp,
           AWS.SNS.ConfirmSubscriptionHttp,
+          AWS.SNS.CreateSMSSandboxPhoneNumberHttp,
+          AWS.SNS.DeleteSMSSandboxPhoneNumberHttp,
+          AWS.SNS.GetSMSAttributesHttp,
+          AWS.SNS.GetSMSSandboxAccountStatusHttp,
+          AWS.SNS.ListOriginationNumbersHttp,
+          AWS.SNS.ListPhoneNumbersOptedOutHttp,
+          AWS.SNS.ListPlatformApplicationsHttp,
+          AWS.SNS.ListSMSSandboxPhoneNumbersHttp,
+          AWS.SNS.OptInPhoneNumberHttp,
+          AWS.SNS.PublishSmsHttp,
+          AWS.SNS.SetSMSAttributesHttp,
+          AWS.SNS.SubscribeHttp,
+          AWS.SNS.UnsubscribeHttp,
+          AWS.SNS.VerifySMSSandboxPhoneNumberHttp,
           AWS.SNS.GetDataProtectionPolicyHttp,
           AWS.SNS.GetSubscriptionAttributesHttp,
           AWS.SNS.GetTopicAttributesHttp,

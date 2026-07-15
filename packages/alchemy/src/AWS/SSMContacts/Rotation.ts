@@ -129,13 +129,16 @@ export const RotationProvider = () =>
       });
 
       const getRotation = (arn: string) =>
-        contacts
-          .getRotation({ RotationId: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        contacts.getRotation({ RotationId: arn }).pipe(
+          // A rotation ARN that does not resolve surfaces as either a plain
+          // ResourceNotFoundException or the "Invalid resource Arn"
+          // ValidationException (typed as InvalidRotationArn) — both mean
+          // "missing" to the reconciler.
+          Effect.catchTag(
+            ["ResourceNotFoundException", "InvalidRotationArn"],
+            () => Effect.succeed(undefined),
+          ),
+        );
 
       const readTags = (arn: string) =>
         contacts.listTagsForResource({ ResourceARN: arn }).pipe(

@@ -53,6 +53,14 @@ export interface ContactProps {
   plan?: contacts.Plan;
 
   /**
+   * The contact's resource policy as a JSON policy document (string or
+   * object) — shares the contact and its engagements with other accounts.
+   * When omitted, any existing policy is left untouched (SSM Contacts has
+   * no delete-policy API).
+   */
+  policy?: string | Record<string, unknown>;
+
+  /**
    * Tags applied to the contact. Alchemy ownership tags are merged in
    * automatically.
    */
@@ -135,6 +143,15 @@ const normalize = (value: unknown): unknown => {
 };
 const same = (l: unknown, r: unknown) =>
   JSON.stringify(normalize(l)) === JSON.stringify(normalize(r));
+
+/** Parse a policy JSON string for structural comparison; fall back to the raw string. */
+const parsePolicy = (policy: string): unknown => {
+  try {
+    return JSON.parse(policy);
+  } catch {
+    return policy;
+  }
+};
 
 /** Builds the ARN of a contact from its alias in the ambient account/region. */
 export const contactArn = Effect.fn(function* (alias: string) {
@@ -267,7 +284,33 @@ export const ContactProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC resource policy — observed vs desired. Only managed
+          //     when the prop is provided; there is no delete-policy API.
+          if (news.policy !== undefined) {
+            const desiredPolicy =
+              typeof news.policy === "string"
+                ? news.policy
+                : JSON.stringify(news.policy);
+            const observedPolicy = yield* contacts
+              .getContactPolicy({ ContactArn: contact.ContactArn })
+              .pipe(
+                Effect.map((r) => r.Policy),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            if (
+              observedPolicy === undefined ||
+              !same(parsePolicy(observedPolicy), parsePolicy(desiredPolicy))
+            ) {
+              yield* contacts.putContactPolicy({
+                ContactArn: contact.ContactArn,
+                Policy: desiredPolicy,
+              });
+            }
+          }
+
+          // 3c. SYNC tags — diff against OBSERVED cloud tags.
           const currentTags = yield* readTags(contact.ContactArn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {

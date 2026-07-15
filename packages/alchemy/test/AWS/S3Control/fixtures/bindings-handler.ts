@@ -192,39 +192,73 @@ export default S3ControlBindingsFunction.make(
               const jobId = created.JobId!;
 
               // 2. DESCRIBE — poll (bounded) until the job settles out of
-              //    New/Preparing into Suspended (awaiting confirmation).
+              //    New/Preparing into a stable state.
+              const settledStates = [
+                "Suspended",
+                "Failed",
+                "Complete",
+                "Cancelled",
+                "Ready",
+                "Active",
+              ];
               const settled = yield* describeJob({ JobId: jobId }).pipe(
                 Effect.map((r) => ({ status: r.Job?.Status as string })),
                 Effect.repeat({
                   schedule: Schedule.spaced("2 seconds"),
-                  until: (r): boolean =>
-                    r.status === "Suspended" || r.status === "Failed",
+                  until: (r): boolean => settledStates.includes(r.status),
                   times: 25,
                 }),
               );
 
-              // 3. PRIORITY — bump the suspended job's priority.
-              const reprioritized = yield* updateJobPriority({
+              // 3. PRIORITY — a settled ConfirmationRequired job refuses
+              //    priority changes with the typed
+              //    JobStatusTransitionForbidden tag; either outcome proves
+              //    the binding (and the distilled patch) end-to-end.
+              const priorityOutcome = yield* updateJobPriority({
                 JobId: jobId,
                 Priority: 5,
-              });
+              }).pipe(
+                Effect.map(() => "updated" as const),
+                Effect.catchTag("JobStatusTransitionForbidden", () =>
+                  Effect.succeed("JobStatusTransitionForbidden" as const),
+                ),
+              );
 
-              // 4. CANCEL — terminal state; the job never runs.
-              const cancelled = yield* updateJobStatus({
+              // 4. CANCEL — a suspended job cancels; a job that already
+              //    settled terminally (Failed/Complete) refuses with the
+              //    typed tag. Both prove the UpdateJobStatus binding.
+              const cancelOutcome = yield* updateJobStatus({
                 JobId: jobId,
                 RequestedJobStatus: "Cancelled",
                 StatusUpdateReason: "alchemy sweep test",
-              });
+              }).pipe(
+                Effect.map((r) => (r.Status ?? "Cancelled") as string),
+                Effect.catchTag("JobStatusTransitionForbidden", () =>
+                  Effect.succeed("JobStatusTransitionForbidden" as const),
+                ),
+              );
 
-              // 5. LIST — the cancelled job is observable in the account listing.
-              const listed = yield* listJobs({ JobStatuses: ["Cancelled"] });
+              // Observe the job's final state after the cancel attempt.
+              const final = yield* describeJob({ JobId: jobId });
+
+              // 5. LIST — the job is observable in the account listing.
+              const listed = yield* listJobs({
+                JobStatuses: [
+                  "Cancelled",
+                  "Suspended",
+                  "Failed",
+                  "Complete",
+                  "Cancelling",
+                ],
+              });
 
               return {
                 ok: true as const,
                 jobId,
                 settledStatus: settled.status,
-                updatedPriority: reprioritized.Priority,
-                cancelledStatus: cancelled.Status,
+                priorityOutcome,
+                cancelOutcome,
+                finalStatus: final.Job?.Status as string,
                 listedJobIds: (listed.Jobs ?? []).map((j) => j.JobId),
               };
             }),
@@ -234,7 +268,7 @@ export default S3ControlBindingsFunction.make(
             return yield* HttpServerResponse.json({
               ok: false as const,
               tag: outcome.failure._tag,
-              message: String(outcome.failure),
+              message: `${String(outcome.failure)} ${JSON.stringify(outcome.failure)}`,
             });
           }
           return yield* HttpServerResponse.json(outcome.success);

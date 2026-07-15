@@ -173,12 +173,29 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       expect(liveRotation.Recurrence.DailySettings?.[0]?.HourOfDay).toBe(9);
 
       // Update — display name, channel address, plan stage duration, and
-      // rotation hand-off time all update in place.
+      // rotation hand-off time all update in place; a resource policy is
+      // attached (put/getContactPolicy sync).
+      const { accountId } = yield* AWSEnvironment.current;
+      const sharePolicy = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: accountId },
+            Action: ["ssm-contacts:GetContact"],
+            Resource: [
+              deployed.oncall.contactArn,
+              `${deployed.oncall.contactArn.replace(":contact/", ":engagement/")}/*`,
+            ],
+          },
+        ],
+      };
       yield* stack.deploy(
         Effect.gen(function* () {
           const oncall = yield* Contact("Oncall", {
             type: "PERSONAL",
             displayName: "Secondary On-Call",
+            policy: sharePolicy,
             tags: { fixture: "ssm-contacts", env: "test" },
           });
           const email = yield* ContactChannel("Email", {
@@ -239,6 +256,10 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       expect(
         updatedTags.Tags?.some((t) => t.Key === "env" && t.Value === "test"),
       ).toBe(true);
+      const updatedPolicy = yield* contacts.getContactPolicy({
+        ContactArn: deployed.oncall.contactArn,
+      });
+      expect(updatedPolicy.Policy).toContain("ssm-contacts:GetContact");
 
       // Destroy — everything but the account-singleton replication set.
       yield* stack.destroy();

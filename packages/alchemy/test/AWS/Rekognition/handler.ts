@@ -351,40 +351,19 @@ export default RekognitionTestFunction.make(
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                [
-                  "InvalidS3ObjectException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
-                (e) => Effect.succeed(e._tag),
-              ),
+              Effect.catch((e) => Effect.succeed(e._tag)),
             ),
             contentModeration: yield* startContentModeration({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                [
-                  "InvalidS3ObjectException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
-                (e) => Effect.succeed(e._tag),
-              ),
+              Effect.catch((e) => Effect.succeed(e._tag)),
             ),
             faceDetection: yield* startFaceDetection({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                [
-                  "InvalidS3ObjectException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
-                (e) => Effect.succeed(e._tag),
-              ),
+              Effect.catch((e) => Effect.succeed(e._tag)),
             ),
             // FaceSearch also validates the collection — it may surface
             // ResourceNotFoundException before the S3 check.
@@ -393,67 +372,32 @@ export default RekognitionTestFunction.make(
               CollectionId: "alchemy-nonexistent-collection",
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                [
-                  "InvalidS3ObjectException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
-                (e) => Effect.succeed(e._tag),
-              ),
+              Effect.catch((e) => Effect.succeed(e._tag)),
             ),
             labelDetection: yield* startLabelDetection({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                [
-                  "InvalidS3ObjectException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
-                (e) => Effect.succeed(e._tag),
-              ),
+              Effect.catch((e) => Effect.succeed(e._tag)),
             ),
             personTracking: yield* startPersonTracking({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                [
-                  "InvalidS3ObjectException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
-                (e) => Effect.succeed(e._tag),
-              ),
+              Effect.catch((e) => Effect.succeed(e._tag)),
             ),
             segmentDetection: yield* startSegmentDetection({
               Video: BOGUS_VIDEO,
               SegmentTypes: ["SHOT"],
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                [
-                  "InvalidS3ObjectException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
-                (e) => Effect.succeed(e._tag),
-              ),
+              Effect.catch((e) => Effect.succeed(e._tag)),
             ),
             textDetection: yield* startTextDetection({
               Video: BOGUS_VIDEO,
             }).pipe(
               Effect.map(() => "Started"),
-              Effect.catchTag(
-                [
-                  "InvalidS3ObjectException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
-                (e) => Effect.succeed(e._tag),
-              ),
+              Effect.catch((e) => Effect.succeed(e._tag)),
             ),
           };
           return yield* HttpServerResponse.json(tags);

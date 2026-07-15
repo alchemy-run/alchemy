@@ -33,3 +33,44 @@ test.provider(
     }),
   { timeout: 60_000 },
 );
+
+test.provider(
+  "async-invoking a nonexistent endpoint returns a typed ValidationError",
+  (_stack) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        sagemaker.invokeEndpointAsync({
+          EndpointName: "alchemy-nonexistent-endpoint-probe",
+          ContentType: "application/json",
+          InputLocation:
+            "s3://alchemy-nonexistent-bucket-probe/input/request.json",
+        }),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("ValidationError");
+      }
+    }),
+  { timeout: 60_000 },
+);
+
+test.provider(
+  "stream-invoking a nonexistent endpoint returns a typed ValidationError",
+  (_stack) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        sagemaker.invokeEndpointWithResponseStream({
+          EndpointName: "alchemy-nonexistent-endpoint-probe",
+          ContentType: "application/json",
+          Body: JSON.stringify({ inputs: "hello" }),
+        }),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("ValidationError");
+      }
+    }),
+  { timeout: 60_000 },
+);
