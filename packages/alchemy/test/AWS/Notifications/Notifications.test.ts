@@ -1,9 +1,11 @@
 import * as AWS from "@/AWS";
 import {
+  ChannelAssociation,
   EventRule,
   NotificationConfiguration,
   NotificationHub,
 } from "@/AWS/Notifications";
+import { EmailContact } from "@/AWS/NotificationsContacts";
 import { pinNotificationsRegion } from "@/AWS/Notifications/internal.ts";
 import * as Test from "@/Test/Vitest";
 import * as notifications from "@distilled.cloud/aws/notifications";
@@ -183,6 +185,59 @@ describe("AWS.Notifications", () => {
         // DESTROY — everything gone, verified out-of-band.
         yield* stack.destroy();
         yield* assertRuleGone(replaced.ruleArn);
+        yield* assertConfigGone(created.configArn);
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider(
+    "channel association lifecycle",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deploy = () =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const config = yield* NotificationConfiguration("ChannelConfig", {
+                name: "alchemy-test-notif-channel-config",
+                description: "channel association test",
+              });
+              const contact = yield* EmailContact("Contact", {
+                name: "alchemy-test-notif-contact",
+                emailAddress: "alchemy-test-notif-channel@example.com",
+              });
+              const association = yield* ChannelAssociation("Assoc", {
+                notificationConfigurationArn:
+                  config.notificationConfigurationArn,
+                channelArn: contact.emailContactArn,
+              });
+              return {
+                configArn: config.notificationConfigurationArn,
+                contactArn: contact.emailContactArn,
+                associatedChannel: association.channelArn,
+              };
+            }),
+          );
+
+        // CREATE — the association's channel is the contact.
+        const created = yield* deploy();
+        expect(created.associatedChannel).toBe(created.contactArn);
+
+        // Out-of-band: the channel is associated with the configuration.
+        const channels = yield* pinNotificationsRegion(
+          notifications.listChannels({
+            notificationConfigurationArn: created.configArn,
+          }),
+        );
+        expect(channels.channels).toContain(created.contactArn);
+
+        // Idempotent re-deploy (no change).
+        const again = yield* deploy();
+        expect(again.associatedChannel).toBe(created.contactArn);
+
+        // DESTROY — association, contact and configuration all gone.
+        yield* stack.destroy();
         yield* assertConfigGone(created.configArn);
       }),
     { timeout: 240_000 },

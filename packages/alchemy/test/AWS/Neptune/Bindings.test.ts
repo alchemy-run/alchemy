@@ -9,7 +9,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { describe } from "vitest";
 
-import NeptuneTestFunctionLive, { NeptuneTestFunction } from "./handler";
+import NeptuneBindingsTestFunctionLive, {
+  NeptuneBindingsTestFunction,
+} from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -51,8 +53,8 @@ describe.sequential("Neptune Bindings", () => {
       yield* Effect.logInfo("Neptune test setup: deploying fixture");
       const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
-          return yield* NeptuneTestFunction;
-        }).pipe(Effect.provide(NeptuneTestFunctionLive)),
+          return yield* NeptuneBindingsTestFunction;
+        }).pipe(Effect.provide(NeptuneBindingsTestFunctionLive)),
       );
 
       expect(functionUrl).toBeTruthy();
@@ -123,13 +125,11 @@ describe.sequential("Neptune Bindings", () => {
   });
 
   describe("DescribeDBClusterEndpoints", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent cluster",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/endpoints");
-          expect((response as any).tag).toBe("DBClusterNotFoundFault");
-        }),
+    test.provider("lists the account's cluster endpoints", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/endpoints");
+        expect((response as any).count).toBeGreaterThanOrEqual(0);
+      }),
     );
   });
 

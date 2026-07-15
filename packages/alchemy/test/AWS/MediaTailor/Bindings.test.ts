@@ -22,8 +22,8 @@ const sharedStack = Core.scratchStack(testOptions, "MediaTailorBindings");
 const PREFETCH_NAME = "alchemy-test-prefetch-schedule";
 
 let baseUrl: string;
-let configName: string;
-let configArn: string;
+let configName: string | undefined;
+let configArn: string | undefined;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -66,6 +66,24 @@ const postJson = (path: string, body: object) =>
     ),
   ).pipe(Effect.flatMap((r) => r.json));
 
+// Out-of-band: find the playback configuration the fixture deployed (its
+// physical name is generated) by its alchemy ownership tags. Runs inside
+// `test.provider` so distilled has credentials; memoized across tests.
+const resolveConfig = Effect.gen(function* () {
+  if (configName !== undefined) return;
+  const configs = yield* mediatailor.listPlaybackConfigurations
+    .items({})
+    .pipe(Stream.runCollect);
+  const config = Array.from(configs).find(
+    (candidate) =>
+      candidate.Tags?.["alchemy::id"] === "BindingsConfig" &&
+      candidate.Tags?.["alchemy::stack"] === "MediaTailorBindings",
+  );
+  expect(config).toBeDefined();
+  configName = config!.Name!;
+  configArn = config!.PlaybackConfigurationArn!;
+});
+
 describe.sequential("MediaTailor Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
@@ -83,20 +101,6 @@ describe.sequential("MediaTailor Bindings", () => {
 
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
-
-      // Out-of-band: find the playback configuration the fixture deployed
-      // (its physical name is generated) by its alchemy ownership tags.
-      const configs = yield* mediatailor.listPlaybackConfigurations
-        .items({})
-        .pipe(Stream.runCollect);
-      const config = Array.from(configs).find(
-        (candidate) =>
-          candidate.Tags?.["alchemy::id"] === "BindingsConfig" &&
-          candidate.Tags?.["alchemy::stack"] === "MediaTailorBindings",
-      );
-      expect(config).toBeDefined();
-      configName = config!.Name!;
-      configArn = config!.PlaybackConfigurationArn!;
 
       // Readiness probe — fresh function URLs take seconds (sometimes over a
       // minute) to serve 200s.
@@ -123,6 +127,8 @@ describe.sequential("MediaTailor Bindings", () => {
       "full prefetch-schedule lifecycle against the deployed configuration",
       () =>
         Effect.gen(function* () {
+          yield* resolveConfig;
+
           // create
           const created = (yield* postJson("/prefetch/create", {
             name: PREFETCH_NAME,
@@ -133,7 +139,7 @@ describe.sequential("MediaTailor Bindings", () => {
           // out-of-band verification via distilled
           const fetched = yield* mediatailor.getPrefetchSchedule({
             Name: PREFETCH_NAME,
-            PlaybackConfigurationName: configName,
+            PlaybackConfigurationName: configName!,
           });
           expect(fetched.Name).toBe(PREFETCH_NAME);
 
@@ -174,8 +180,10 @@ describe.sequential("MediaTailor Bindings", () => {
       "lists alerts for the configuration ARN from the runtime",
       () =>
         Effect.gen(function* () {
+          yield* resolveConfig;
+
           const body = (yield* getJson(
-            `/alerts?arn=${encodeURIComponent(configArn)}`,
+            `/alerts?arn=${encodeURIComponent(configArn!)}`,
           )) as { count: number; error?: string };
           expect(body.error).toBeUndefined();
           expect(typeof body.count).toBe("number");
