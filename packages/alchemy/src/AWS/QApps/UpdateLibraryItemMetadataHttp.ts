@@ -5,11 +5,7 @@ import { UpdateLibraryItemMetadata } from "./UpdateLibraryItemMetadata.ts";
 
 export const UpdateLibraryItemMetadataHttp = Layer.effect(
   UpdateLibraryItemMetadata,
-  makeQAppsInstanceHttpBinding<
-    qapps.UpdateLibraryItemMetadataInput,
-    qapps.UpdateLibraryItemMetadataResponse,
-    qapps.UpdateLibraryItemMetadataError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "UpdateLibraryItemMetadata",
     iamActions: ["qapps:UpdateLibraryItemMetadata"],
     operation: qapps.updateLibraryItemMetadata,

@@ -5,11 +5,7 @@ import { ListCostCategoryResourceAssociations } from "./ListCostCategoryResource
 
 export const ListCostCategoryResourceAssociationsHttp = Layer.effect(
   ListCostCategoryResourceAssociations,
-  makeCostCategoryHttpBinding<
-    ce.ListCostCategoryResourceAssociationsRequest,
-    ce.ListCostCategoryResourceAssociationsResponse,
-    ce.ListCostCategoryResourceAssociationsError
-  >({
+  makeCostCategoryHttpBinding({
     capability: "ListCostCategoryResourceAssociations",
     iamActions: ["ce:ListCostCategoryResourceAssociations"],
     operation: ce.listCostCategoryResourceAssociations,

@@ -5,11 +5,7 @@ import { UpdateDomainNameservers } from "./UpdateDomainNameservers.ts";
 
 export const UpdateDomainNameserversHttp = Layer.effect(
   UpdateDomainNameservers,
-  makeRoute53DomainsHttpBinding<
-    route53domains.UpdateDomainNameserversRequest,
-    route53domains.UpdateDomainNameserversResponse,
-    route53domains.UpdateDomainNameserversError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "UpdateDomainNameservers",
     iamActions: ["route53domains:UpdateDomainNameservers"],
     operation: route53domains.updateDomainNameservers,

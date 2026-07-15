@@ -5,11 +5,7 @@ import { CheckDomainTransferability } from "./CheckDomainTransferability.ts";
 
 export const CheckDomainTransferabilityHttp = Layer.effect(
   CheckDomainTransferability,
-  makeRoute53DomainsHttpBinding<
-    route53domains.CheckDomainTransferabilityRequest,
-    route53domains.CheckDomainTransferabilityResponse,
-    route53domains.CheckDomainTransferabilityError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "CheckDomainTransferability",
     iamActions: ["route53domains:CheckDomainTransferability"],
     operation: route53domains.checkDomainTransferability,

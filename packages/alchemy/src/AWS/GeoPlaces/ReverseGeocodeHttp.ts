@@ -5,11 +5,7 @@ import { ReverseGeocode } from "./ReverseGeocode.ts";
 
 export const ReverseGeocodeHttp = Layer.effect(
   ReverseGeocode,
-  makeGeoPlacesHttpBinding<
-    geoPlaces.ReverseGeocodeRequest,
-    geoPlaces.ReverseGeocodeResponse,
-    geoPlaces.ReverseGeocodeError
-  >({
+  makeGeoPlacesHttpBinding({
     capability: "ReverseGeocode",
     iamActions: ["geo-places:ReverseGeocode"],
     operation: geoPlaces.reverseGeocode,

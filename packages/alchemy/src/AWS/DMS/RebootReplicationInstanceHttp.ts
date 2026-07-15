@@ -5,11 +5,7 @@ import { RebootReplicationInstance } from "./RebootReplicationInstance.ts";
 
 export const RebootReplicationInstanceHttp = Layer.effect(
   RebootReplicationInstance,
-  makeDmsInstanceScopedHttpBinding<
-    dms.RebootReplicationInstanceMessage,
-    dms.RebootReplicationInstanceResponse,
-    dms.RebootReplicationInstanceError
-  >({
+  makeDmsInstanceScopedHttpBinding({
     tag: "AWS.DMS.RebootReplicationInstance",
     actions: ["dms:RebootReplicationInstance"],
     operation: dms.rebootReplicationInstance,

@@ -5,11 +5,7 @@ import { ListHosts } from "./ListHosts.ts";
 
 export const ListHostsHttp = Layer.effect(
   ListHosts,
-  makeCodeConnectionsAccountHttpBinding<
-    codeconnections.ListHostsInput,
-    codeconnections.ListHostsOutput,
-    codeconnections.ListHostsError
-  >({
+  makeCodeConnectionsAccountHttpBinding({
     tag: "AWS.CodeConnections.ListHosts",
     actions: ["codeconnections:ListHosts"],
     operation: codeconnections.listHosts,

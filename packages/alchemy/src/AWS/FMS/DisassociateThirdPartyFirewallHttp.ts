@@ -5,11 +5,7 @@ import { DisassociateThirdPartyFirewall } from "./DisassociateThirdPartyFirewall
 
 export const DisassociateThirdPartyFirewallHttp = Layer.effect(
   DisassociateThirdPartyFirewall,
-  makeFmsHttpBinding<
-    fms.DisassociateThirdPartyFirewallRequest,
-    fms.DisassociateThirdPartyFirewallResponse,
-    fms.DisassociateThirdPartyFirewallError
-  >({
+  makeFmsHttpBinding({
     capability: "DisassociateThirdPartyFirewall",
     iamActions: ["fms:DisassociateThirdPartyFirewall"],
     operation: fms.disassociateThirdPartyFirewall,

@@ -5,11 +5,7 @@ import { ExportQAppSessionData } from "./ExportQAppSessionData.ts";
 
 export const ExportQAppSessionDataHttp = Layer.effect(
   ExportQAppSessionData,
-  makeQAppHttpBinding<
-    qapps.ExportQAppSessionDataInput,
-    qapps.ExportQAppSessionDataOutput,
-    qapps.ExportQAppSessionDataError
-  >({
+  makeQAppHttpBinding({
     capability: "ExportQAppSessionData",
     iamActions: ["qapps:ExportQAppSessionData"],
     operation: qapps.exportQAppSessionData,

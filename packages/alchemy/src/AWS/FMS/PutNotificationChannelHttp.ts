@@ -5,11 +5,7 @@ import { PutNotificationChannel } from "./PutNotificationChannel.ts";
 
 export const PutNotificationChannelHttp = Layer.effect(
   PutNotificationChannel,
-  makeFmsHttpBinding<
-    fms.PutNotificationChannelRequest,
-    fms.PutNotificationChannelResponse,
-    fms.PutNotificationChannelError
-  >({
+  makeFmsHttpBinding({
     capability: "PutNotificationChannel",
     iamActions: ["fms:PutNotificationChannel"],
     operation: fms.putNotificationChannel,

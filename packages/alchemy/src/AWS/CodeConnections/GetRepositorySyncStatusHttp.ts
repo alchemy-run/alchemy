@@ -5,11 +5,7 @@ import { GetRepositorySyncStatus } from "./GetRepositorySyncStatus.ts";
 
 export const GetRepositorySyncStatusHttp = Layer.effect(
   GetRepositorySyncStatus,
-  makeRepositoryLinkScopedHttpBinding<
-    codeconnections.GetRepositorySyncStatusInput,
-    codeconnections.GetRepositorySyncStatusOutput,
-    codeconnections.GetRepositorySyncStatusError
-  >({
+  makeRepositoryLinkScopedHttpBinding({
     tag: "AWS.CodeConnections.GetRepositorySyncStatus",
     actions: ["codeconnections:GetRepositorySyncStatus"],
     operation: codeconnections.getRepositorySyncStatus,

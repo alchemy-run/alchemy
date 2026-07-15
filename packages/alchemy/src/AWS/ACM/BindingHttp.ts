@@ -54,7 +54,7 @@ export interface AcmHttpBindingConfig<Req extends object, Out, Err> {
 
 /**
  * Build the implementation effect for a certificate-scoped ACM capability:
- * `Layer.effect(Cap, makeAcmCertificateHttpBinding<Req, Out, Err>({ ... }))`.
+ * `Layer.effect(Cap, makeAcmCertificateHttpBinding({ ... }))`.
  *
  * The runtime callable injects the bound certificate's ARN, so `Req` is the
  * operation's request type without `CertificateArn`.

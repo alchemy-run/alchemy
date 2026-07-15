@@ -5,11 +5,7 @@ import { makeFmsHttpBinding } from "./BindingHttp.ts";
 
 export const AssociateThirdPartyFirewallHttp = Layer.effect(
   AssociateThirdPartyFirewall,
-  makeFmsHttpBinding<
-    fms.AssociateThirdPartyFirewallRequest,
-    fms.AssociateThirdPartyFirewallResponse,
-    fms.AssociateThirdPartyFirewallError
-  >({
+  makeFmsHttpBinding({
     capability: "AssociateThirdPartyFirewall",
     iamActions: ["fms:AssociateThirdPartyFirewall"],
     operation: fms.associateThirdPartyFirewall,

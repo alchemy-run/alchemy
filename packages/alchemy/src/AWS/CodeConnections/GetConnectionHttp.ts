@@ -5,11 +5,7 @@ import { GetConnection } from "./GetConnection.ts";
 
 export const GetConnectionHttp = Layer.effect(
   GetConnection,
-  makeConnectionScopedHttpBinding<
-    codeconnections.GetConnectionInput,
-    codeconnections.GetConnectionOutput,
-    codeconnections.GetConnectionError
-  >({
+  makeConnectionScopedHttpBinding({
     tag: "AWS.CodeConnections.GetConnection",
     actions: ["codeconnections:GetConnection"],
     operation: codeconnections.getConnection,

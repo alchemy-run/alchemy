@@ -5,11 +5,7 @@ import { GetRequestedServiceQuotaChange } from "./GetRequestedServiceQuotaChange
 
 export const GetRequestedServiceQuotaChangeHttp = Layer.effect(
   GetRequestedServiceQuotaChange,
-  makeServiceQuotasHttpBinding<
-    servicequotas.GetRequestedServiceQuotaChangeRequest,
-    servicequotas.GetRequestedServiceQuotaChangeResponse,
-    servicequotas.GetRequestedServiceQuotaChangeError
-  >({
+  makeServiceQuotasHttpBinding({
     capability: "GetRequestedServiceQuotaChange",
     iamActions: ["servicequotas:GetRequestedServiceQuotaChange"],
     operation: servicequotas.getRequestedServiceQuotaChange,

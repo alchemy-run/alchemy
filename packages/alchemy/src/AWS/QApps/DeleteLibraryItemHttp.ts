@@ -5,11 +5,7 @@ import { DeleteLibraryItem } from "./DeleteLibraryItem.ts";
 
 export const DeleteLibraryItemHttp = Layer.effect(
   DeleteLibraryItem,
-  makeQAppsInstanceHttpBinding<
-    qapps.DeleteLibraryItemInput,
-    qapps.DeleteLibraryItemResponse,
-    qapps.DeleteLibraryItemError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "DeleteLibraryItem",
     iamActions: ["qapps:DeleteLibraryItem"],
     operation: qapps.deleteLibraryItem,

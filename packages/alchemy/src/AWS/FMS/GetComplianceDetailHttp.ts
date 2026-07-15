@@ -5,11 +5,7 @@ import { GetComplianceDetail } from "./GetComplianceDetail.ts";
 
 export const GetComplianceDetailHttp = Layer.effect(
   GetComplianceDetail,
-  makeFmsHttpBinding<
-    fms.GetComplianceDetailRequest,
-    fms.GetComplianceDetailResponse,
-    fms.GetComplianceDetailError
-  >({
+  makeFmsHttpBinding({
     capability: "GetComplianceDetail",
     iamActions: ["fms:GetComplianceDetail"],
     operation: fms.getComplianceDetail,

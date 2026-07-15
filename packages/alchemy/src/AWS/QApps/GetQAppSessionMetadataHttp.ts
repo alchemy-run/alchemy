@@ -5,11 +5,7 @@ import { GetQAppSessionMetadata } from "./GetQAppSessionMetadata.ts";
 
 export const GetQAppSessionMetadataHttp = Layer.effect(
   GetQAppSessionMetadata,
-  makeQAppHttpBinding<
-    qapps.GetQAppSessionMetadataInput,
-    qapps.GetQAppSessionMetadataOutput,
-    qapps.GetQAppSessionMetadataError
-  >({
+  makeQAppHttpBinding({
     capability: "GetQAppSessionMetadata",
     iamActions: ["qapps:GetQAppSessionMetadata"],
     operation: qapps.getQAppSessionMetadata,

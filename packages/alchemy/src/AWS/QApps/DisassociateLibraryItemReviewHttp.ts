@@ -5,11 +5,7 @@ import { DisassociateLibraryItemReview } from "./DisassociateLibraryItemReview.t
 
 export const DisassociateLibraryItemReviewHttp = Layer.effect(
   DisassociateLibraryItemReview,
-  makeQAppsInstanceHttpBinding<
-    qapps.DisassociateLibraryItemReviewInput,
-    qapps.DisassociateLibraryItemReviewResponse,
-    qapps.DisassociateLibraryItemReviewError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "DisassociateLibraryItemReview",
     iamActions: ["qapps:DisassociateLibraryItemReview"],
     operation: qapps.disassociateLibraryItemReview,

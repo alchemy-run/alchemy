@@ -5,11 +5,7 @@ import { GetTable } from "./GetTable.ts";
 
 export const GetTableHttp = Layer.effect(
   GetTable,
-  makeDataExportsAccountHttpBinding<
-    bcm.GetTableRequest,
-    bcm.GetTableResponse,
-    bcm.GetTableError
-  >({
+  makeDataExportsAccountHttpBinding({
     capability: "GetTable",
     iamActions: ["bcm-data-exports:GetTable"],
     operation: bcm.getTable,

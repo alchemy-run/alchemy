@@ -5,11 +5,7 @@ import { DescribeVoices } from "./DescribeVoices.ts";
 
 export const DescribeVoicesHttp = Layer.effect(
   DescribeVoices,
-  makePollyHttpBinding<
-    polly.DescribeVoicesInput,
-    polly.DescribeVoicesOutput,
-    polly.DescribeVoicesError
-  >({
+  makePollyHttpBinding({
     capability: "DescribeVoices",
     iamActions: ["polly:DescribeVoices"],
     operation: polly.describeVoices,

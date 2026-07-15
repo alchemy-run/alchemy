@@ -5,11 +5,7 @@ import { ExecuteBudgetAction } from "./ExecuteBudgetAction.ts";
 
 export const ExecuteBudgetActionHttp = Layer.effect(
   ExecuteBudgetAction,
-  makeBudgetActionHttpBinding<
-    budgets.ExecuteBudgetActionRequest,
-    budgets.ExecuteBudgetActionResponse,
-    budgets.ExecuteBudgetActionError
-  >({
+  makeBudgetActionHttpBinding({
     tag: "AWS.Budgets.ExecuteBudgetAction",
     actions: ["budgets:ExecuteBudgetAction"],
     operation: budgets.executeBudgetAction,

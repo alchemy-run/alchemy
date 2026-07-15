@@ -5,11 +5,7 @@ import { ReloadTables } from "./ReloadTables.ts";
 
 export const ReloadTablesHttp = Layer.effect(
   ReloadTables,
-  makeDmsAccountHttpBinding<
-    dms.ReloadTablesMessage,
-    dms.ReloadTablesResponse,
-    dms.ReloadTablesError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.ReloadTables",
     actions: ["dms:ReloadTables"],
     operation: dms.reloadTables,

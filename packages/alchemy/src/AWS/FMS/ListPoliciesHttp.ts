@@ -5,11 +5,7 @@ import { ListPolicies } from "./ListPolicies.ts";
 
 export const ListPoliciesHttp = Layer.effect(
   ListPolicies,
-  makeFmsHttpBinding<
-    fms.ListPoliciesRequest,
-    fms.ListPoliciesResponse,
-    fms.ListPoliciesError
-  >({
+  makeFmsHttpBinding({
     capability: "ListPolicies",
     iamActions: ["fms:ListPolicies"],
     operation: fms.listPolicies,

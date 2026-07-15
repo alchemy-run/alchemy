@@ -5,11 +5,7 @@ import { ListDomains } from "./ListDomains.ts";
 
 export const ListDomainsHttp = Layer.effect(
   ListDomains,
-  makeRoute53DomainsHttpBinding<
-    route53domains.ListDomainsRequest,
-    route53domains.ListDomainsResponse,
-    route53domains.ListDomainsError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "ListDomains",
     iamActions: ["route53domains:ListDomains"],
     operation: route53domains.listDomains,

@@ -5,11 +5,7 @@ import { GetManagedNotificationConfiguration } from "./GetManagedNotificationCon
 
 export const GetManagedNotificationConfigurationHttp = Layer.effect(
   GetManagedNotificationConfiguration,
-  makeNotificationsHttpBinding<
-    notifications.GetManagedNotificationConfigurationRequest,
-    notifications.GetManagedNotificationConfigurationResponse,
-    notifications.GetManagedNotificationConfigurationError
-  >({
+  makeNotificationsHttpBinding({
     capability: "GetManagedNotificationConfiguration",
     iamActions: ["notifications:GetManagedNotificationConfiguration"],
     operation: notifications.getManagedNotificationConfiguration,

@@ -8,11 +8,7 @@ import { SynthesizeSpeech } from "./SynthesizeSpeech.ts";
 // (which also covers any LexiconNames in the request).
 export const SynthesizeSpeechHttp = Layer.effect(
   SynthesizeSpeech,
-  makePollyHttpBinding<
-    polly.SynthesizeSpeechInput,
-    polly.SynthesizeSpeechOutput,
-    polly.SynthesizeSpeechError
-  >({
+  makePollyHttpBinding({
     capability: "SynthesizeSpeech",
     iamActions: ["polly:SynthesizeSpeech"],
     operation: polly.synthesizeSpeech,

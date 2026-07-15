@@ -5,11 +5,7 @@ import { SearchText } from "./SearchText.ts";
 
 export const SearchTextHttp = Layer.effect(
   SearchText,
-  makeGeoPlacesHttpBinding<
-    geoPlaces.SearchTextRequest,
-    geoPlaces.SearchTextResponse,
-    geoPlaces.SearchTextError
-  >({
+  makeGeoPlacesHttpBinding({
     capability: "SearchText",
     iamActions: ["geo-places:SearchText"],
     operation: geoPlaces.searchText,

@@ -5,11 +5,7 @@ import { StartCostAllocationTagBackfill } from "./StartCostAllocationTagBackfill
 
 export const StartCostAllocationTagBackfillHttp = Layer.effect(
   StartCostAllocationTagBackfill,
-  makeCostExplorerHttpBinding<
-    ce.StartCostAllocationTagBackfillRequest,
-    ce.StartCostAllocationTagBackfillResponse,
-    ce.StartCostAllocationTagBackfillError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "StartCostAllocationTagBackfill",
     iamActions: ["ce:StartCostAllocationTagBackfill"],
     operation: ce.startCostAllocationTagBackfill,

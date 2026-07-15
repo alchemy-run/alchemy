@@ -5,11 +5,7 @@ import { ListServiceQuotas } from "./ListServiceQuotas.ts";
 
 export const ListServiceQuotasHttp = Layer.effect(
   ListServiceQuotas,
-  makeServiceQuotasHttpBinding<
-    servicequotas.ListServiceQuotasRequest,
-    servicequotas.ListServiceQuotasResponse,
-    servicequotas.ListServiceQuotasError
-  >({
+  makeServiceQuotasHttpBinding({
     capability: "ListServiceQuotas",
     iamActions: ["servicequotas:ListServiceQuotas"],
     operation: servicequotas.listServiceQuotas,

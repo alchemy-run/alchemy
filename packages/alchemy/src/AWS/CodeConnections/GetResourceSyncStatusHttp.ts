@@ -5,11 +5,7 @@ import { GetResourceSyncStatus } from "./GetResourceSyncStatus.ts";
 
 export const GetResourceSyncStatusHttp = Layer.effect(
   GetResourceSyncStatus,
-  makeSyncConfigurationScopedHttpBinding<
-    codeconnections.GetResourceSyncStatusInput,
-    codeconnections.GetResourceSyncStatusOutput,
-    codeconnections.GetResourceSyncStatusError
-  >({
+  makeSyncConfigurationScopedHttpBinding({
     tag: "AWS.CodeConnections.GetResourceSyncStatus",
     actions: ["codeconnections:GetResourceSyncStatus"],
     operation: codeconnections.getResourceSyncStatus,

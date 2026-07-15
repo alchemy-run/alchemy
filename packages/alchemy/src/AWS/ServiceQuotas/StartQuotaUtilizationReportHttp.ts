@@ -5,11 +5,7 @@ import { StartQuotaUtilizationReport } from "./StartQuotaUtilizationReport.ts";
 
 export const StartQuotaUtilizationReportHttp = Layer.effect(
   StartQuotaUtilizationReport,
-  makeServiceQuotasHttpBinding<
-    servicequotas.StartQuotaUtilizationReportRequest,
-    servicequotas.StartQuotaUtilizationReportResponse,
-    servicequotas.StartQuotaUtilizationReportError
-  >({
+  makeServiceQuotasHttpBinding({
     capability: "StartQuotaUtilizationReport",
     iamActions: ["servicequotas:StartQuotaUtilizationReport"],
     operation: servicequotas.startQuotaUtilizationReport,

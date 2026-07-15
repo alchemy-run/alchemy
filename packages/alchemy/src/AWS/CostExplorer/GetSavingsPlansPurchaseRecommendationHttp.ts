@@ -5,11 +5,7 @@ import { GetSavingsPlansPurchaseRecommendation } from "./GetSavingsPlansPurchase
 
 export const GetSavingsPlansPurchaseRecommendationHttp = Layer.effect(
   GetSavingsPlansPurchaseRecommendation,
-  makeCostExplorerHttpBinding<
-    ce.GetSavingsPlansPurchaseRecommendationRequest,
-    ce.GetSavingsPlansPurchaseRecommendationResponse,
-    ce.GetSavingsPlansPurchaseRecommendationError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetSavingsPlansPurchaseRecommendation",
     iamActions: ["ce:GetSavingsPlansPurchaseRecommendation"],
     operation: ce.getSavingsPlansPurchaseRecommendation,

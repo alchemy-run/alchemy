@@ -5,11 +5,7 @@ import { UpdateQAppSessionMetadata } from "./UpdateQAppSessionMetadata.ts";
 
 export const UpdateQAppSessionMetadataHttp = Layer.effect(
   UpdateQAppSessionMetadata,
-  makeQAppHttpBinding<
-    qapps.UpdateQAppSessionMetadataInput,
-    qapps.UpdateQAppSessionMetadataOutput,
-    qapps.UpdateQAppSessionMetadataError
-  >({
+  makeQAppHttpBinding({
     capability: "UpdateQAppSessionMetadata",
     iamActions: ["qapps:UpdateQAppSessionMetadata"],
     operation: qapps.updateQAppSessionMetadata,

@@ -5,11 +5,7 @@ import { GetSpeechSynthesisTask } from "./GetSpeechSynthesisTask.ts";
 
 export const GetSpeechSynthesisTaskHttp = Layer.effect(
   GetSpeechSynthesisTask,
-  makePollyHttpBinding<
-    polly.GetSpeechSynthesisTaskInput,
-    polly.GetSpeechSynthesisTaskOutput,
-    polly.GetSpeechSynthesisTaskError
-  >({
+  makePollyHttpBinding({
     capability: "GetSpeechSynthesisTask",
     iamActions: ["polly:GetSpeechSynthesisTask"],
     operation: polly.getSpeechSynthesisTask,

@@ -5,11 +5,7 @@ import { GetDomainDetail } from "./GetDomainDetail.ts";
 
 export const GetDomainDetailHttp = Layer.effect(
   GetDomainDetail,
-  makeRoute53DomainsHttpBinding<
-    route53domains.GetDomainDetailRequest,
-    route53domains.GetDomainDetailResponse,
-    route53domains.GetDomainDetailError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "GetDomainDetail",
     iamActions: ["route53domains:GetDomainDetail"],
     operation: route53domains.getDomainDetail,

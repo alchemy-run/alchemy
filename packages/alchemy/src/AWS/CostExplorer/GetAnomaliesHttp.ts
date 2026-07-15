@@ -5,11 +5,7 @@ import { GetAnomalies } from "./GetAnomalies.ts";
 
 export const GetAnomaliesHttp = Layer.effect(
   GetAnomalies,
-  makeAnomalyMonitorHttpBinding<
-    ce.GetAnomaliesRequest,
-    ce.GetAnomaliesResponse,
-    ce.GetAnomaliesError
-  >({
+  makeAnomalyMonitorHttpBinding({
     capability: "GetAnomalies",
     iamActions: ["ce:GetAnomalies"],
     operation: ce.getAnomalies,

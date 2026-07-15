@@ -5,11 +5,7 @@ import { GetTile } from "./GetTile.ts";
 
 export const GetTileHttp = Layer.effect(
   GetTile,
-  makeGeoMapsHttpBinding<
-    geoMaps.GetTileRequest,
-    geoMaps.GetTileResponse,
-    geoMaps.GetTileError
-  >({
+  makeGeoMapsHttpBinding({
     capability: "GetTile",
     iamActions: ["geo-maps:GetTile"],
     operation: geoMaps.getTile,

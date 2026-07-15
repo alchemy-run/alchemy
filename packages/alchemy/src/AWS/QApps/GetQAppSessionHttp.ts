@@ -5,11 +5,7 @@ import { GetQAppSession } from "./GetQAppSession.ts";
 
 export const GetQAppSessionHttp = Layer.effect(
   GetQAppSession,
-  makeQAppHttpBinding<
-    qapps.GetQAppSessionInput,
-    qapps.GetQAppSessionOutput,
-    qapps.GetQAppSessionError
-  >({
+  makeQAppHttpBinding({
     capability: "GetQAppSession",
     iamActions: ["qapps:GetQAppSession"],
     operation: qapps.getQAppSession,

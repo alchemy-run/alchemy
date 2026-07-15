@@ -5,11 +5,7 @@ import { BatchUpdateCategory } from "./BatchUpdateCategory.ts";
 
 export const BatchUpdateCategoryHttp = Layer.effect(
   BatchUpdateCategory,
-  makeQAppsInstanceHttpBinding<
-    qapps.BatchUpdateCategoryInput,
-    qapps.BatchUpdateCategoryResponse,
-    qapps.BatchUpdateCategoryError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "BatchUpdateCategory",
     iamActions: ["qapps:BatchUpdateCategory"],
     operation: qapps.batchUpdateCategory,

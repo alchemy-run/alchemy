@@ -5,11 +5,7 @@ import { ListResourceSetResources } from "./ListResourceSetResources.ts";
 
 export const ListResourceSetResourcesHttp = Layer.effect(
   ListResourceSetResources,
-  makeFmsHttpBinding<
-    fms.ListResourceSetResourcesRequest,
-    fms.ListResourceSetResourcesResponse,
-    fms.ListResourceSetResourcesError
-  >({
+  makeFmsHttpBinding({
     capability: "ListResourceSetResources",
     iamActions: ["fms:ListResourceSetResources"],
     operation: fms.listResourceSetResources,

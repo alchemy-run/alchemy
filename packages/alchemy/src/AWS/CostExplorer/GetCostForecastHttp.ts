@@ -5,11 +5,7 @@ import { GetCostForecast } from "./GetCostForecast.ts";
 
 export const GetCostForecastHttp = Layer.effect(
   GetCostForecast,
-  makeCostExplorerHttpBinding<
-    ce.GetCostForecastRequest,
-    ce.GetCostForecastResponse,
-    ce.GetCostForecastError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetCostForecast",
     iamActions: ["ce:GetCostForecast"],
     operation: ce.getCostForecast,

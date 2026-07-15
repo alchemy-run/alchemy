@@ -5,11 +5,7 @@ import { DescribeConnections } from "./DescribeConnections.ts";
 
 export const DescribeConnectionsHttp = Layer.effect(
   DescribeConnections,
-  makeDmsAccountHttpBinding<
-    dms.DescribeConnectionsMessage,
-    dms.DescribeConnectionsResponse,
-    dms.DescribeConnectionsError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.DescribeConnections",
     actions: ["dms:DescribeConnections"],
     operation: dms.describeConnections,

@@ -5,11 +5,7 @@ import { GetStaticMap } from "./GetStaticMap.ts";
 
 export const GetStaticMapHttp = Layer.effect(
   GetStaticMap,
-  makeGeoMapsHttpBinding<
-    geoMaps.GetStaticMapRequest,
-    geoMaps.GetStaticMapResponse,
-    geoMaps.GetStaticMapError
-  >({
+  makeGeoMapsHttpBinding({
     capability: "GetStaticMap",
     iamActions: ["geo-maps:GetStaticMap"],
     operation: geoMaps.getStaticMap,

@@ -5,11 +5,7 @@ import { UpdateLibraryItem } from "./UpdateLibraryItem.ts";
 
 export const UpdateLibraryItemHttp = Layer.effect(
   UpdateLibraryItem,
-  makeQAppsInstanceHttpBinding<
-    qapps.UpdateLibraryItemInput,
-    qapps.UpdateLibraryItemOutput,
-    qapps.UpdateLibraryItemError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "UpdateLibraryItem",
     iamActions: ["qapps:UpdateLibraryItem"],
     operation: qapps.updateLibraryItem,

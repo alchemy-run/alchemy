@@ -5,11 +5,7 @@ import { BatchCreateCategory } from "./BatchCreateCategory.ts";
 
 export const BatchCreateCategoryHttp = Layer.effect(
   BatchCreateCategory,
-  makeQAppsInstanceHttpBinding<
-    qapps.BatchCreateCategoryInput,
-    qapps.BatchCreateCategoryResponse,
-    qapps.BatchCreateCategoryError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "BatchCreateCategory",
     iamActions: ["qapps:BatchCreateCategory"],
     operation: qapps.batchCreateCategory,

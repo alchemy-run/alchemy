@@ -5,11 +5,7 @@ import { GetResourceSet } from "./GetResourceSet.ts";
 
 export const GetResourceSetHttp = Layer.effect(
   GetResourceSet,
-  makeFmsHttpBinding<
-    fms.GetResourceSetRequest,
-    fms.GetResourceSetResponse,
-    fms.GetResourceSetError
-  >({
+  makeFmsHttpBinding({
     capability: "GetResourceSet",
     iamActions: ["fms:GetResourceSet"],
     operation: fms.getResourceSet,

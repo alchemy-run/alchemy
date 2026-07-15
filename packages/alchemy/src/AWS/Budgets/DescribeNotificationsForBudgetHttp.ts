@@ -5,11 +5,7 @@ import { DescribeNotificationsForBudget } from "./DescribeNotificationsForBudget
 
 export const DescribeNotificationsForBudgetHttp = Layer.effect(
   DescribeNotificationsForBudget,
-  makeBudgetHttpBinding<
-    budgets.DescribeNotificationsForBudgetRequest,
-    budgets.DescribeNotificationsForBudgetResponse,
-    budgets.DescribeNotificationsForBudgetError
-  >({
+  makeBudgetHttpBinding({
     tag: "AWS.Budgets.DescribeNotificationsForBudget",
     actions: ["budgets:ViewBudget"],
     operation: budgets.describeNotificationsForBudget,

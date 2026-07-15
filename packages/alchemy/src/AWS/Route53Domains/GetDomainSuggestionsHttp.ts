@@ -5,11 +5,7 @@ import { GetDomainSuggestions } from "./GetDomainSuggestions.ts";
 
 export const GetDomainSuggestionsHttp = Layer.effect(
   GetDomainSuggestions,
-  makeRoute53DomainsHttpBinding<
-    route53domains.GetDomainSuggestionsRequest,
-    route53domains.GetDomainSuggestionsResponse,
-    route53domains.GetDomainSuggestionsError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "GetDomainSuggestions",
     iamActions: ["route53domains:GetDomainSuggestions"],
     operation: route53domains.getDomainSuggestions,

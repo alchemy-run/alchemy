@@ -5,11 +5,7 @@ import { GetAppsList } from "./GetAppsList.ts";
 
 export const GetAppsListHttp = Layer.effect(
   GetAppsList,
-  makeFmsHttpBinding<
-    fms.GetAppsListRequest,
-    fms.GetAppsListResponse,
-    fms.GetAppsListError
-  >({
+  makeFmsHttpBinding({
     capability: "GetAppsList",
     iamActions: ["fms:GetAppsList"],
     operation: fms.getAppsList,

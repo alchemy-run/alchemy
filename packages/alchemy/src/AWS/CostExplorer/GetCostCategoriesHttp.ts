@@ -5,11 +5,7 @@ import { GetCostCategories } from "./GetCostCategories.ts";
 
 export const GetCostCategoriesHttp = Layer.effect(
   GetCostCategories,
-  makeCostExplorerHttpBinding<
-    ce.GetCostCategoriesRequest,
-    ce.GetCostCategoriesResponse,
-    ce.GetCostCategoriesError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetCostCategories",
     iamActions: ["ce:GetCostCategories"],
     operation: ce.getCostCategories,

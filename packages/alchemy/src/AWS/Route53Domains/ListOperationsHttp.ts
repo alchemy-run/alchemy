@@ -5,11 +5,7 @@ import { ListOperations } from "./ListOperations.ts";
 
 export const ListOperationsHttp = Layer.effect(
   ListOperations,
-  makeRoute53DomainsHttpBinding<
-    route53domains.ListOperationsRequest,
-    route53domains.ListOperationsResponse,
-    route53domains.ListOperationsError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "ListOperations",
     iamActions: ["route53domains:ListOperations"],
     operation: route53domains.listOperations,

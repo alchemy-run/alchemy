@@ -5,11 +5,7 @@ import { GetExport } from "./GetExport.ts";
 
 export const GetExportHttp = Layer.effect(
   GetExport,
-  makeExportHttpBinding<
-    bcm.GetExportRequest,
-    bcm.GetExportResponse,
-    bcm.GetExportError
-  >({
+  makeExportHttpBinding({
     capability: "GetExport",
     iamActions: ["bcm-data-exports:GetExport"],
     operation: bcm.getExport,

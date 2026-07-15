@@ -5,11 +5,7 @@ import { ListComplianceStatus } from "./ListComplianceStatus.ts";
 
 export const ListComplianceStatusHttp = Layer.effect(
   ListComplianceStatus,
-  makeFmsHttpBinding<
-    fms.ListComplianceStatusRequest,
-    fms.ListComplianceStatusResponse,
-    fms.ListComplianceStatusError
-  >({
+  makeFmsHttpBinding({
     capability: "ListComplianceStatus",
     iamActions: ["fms:ListComplianceStatus"],
     operation: fms.listComplianceStatus,

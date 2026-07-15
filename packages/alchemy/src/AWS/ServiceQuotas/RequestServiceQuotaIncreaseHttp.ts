@@ -5,11 +5,7 @@ import { RequestServiceQuotaIncrease } from "./RequestServiceQuotaIncrease.ts";
 
 export const RequestServiceQuotaIncreaseHttp = Layer.effect(
   RequestServiceQuotaIncrease,
-  makeServiceQuotasHttpBinding<
-    servicequotas.RequestServiceQuotaIncreaseRequest,
-    servicequotas.RequestServiceQuotaIncreaseResponse,
-    servicequotas.RequestServiceQuotaIncreaseError
-  >({
+  makeServiceQuotasHttpBinding({
     capability: "RequestServiceQuotaIncrease",
     iamActions: ["servicequotas:RequestServiceQuotaIncrease"],
     operation: servicequotas.requestServiceQuotaIncrease,

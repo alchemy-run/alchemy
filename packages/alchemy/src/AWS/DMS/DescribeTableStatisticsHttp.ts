@@ -5,11 +5,7 @@ import { DescribeTableStatistics } from "./DescribeTableStatistics.ts";
 
 export const DescribeTableStatisticsHttp = Layer.effect(
   DescribeTableStatistics,
-  makeDmsAccountHttpBinding<
-    dms.DescribeTableStatisticsMessage,
-    dms.DescribeTableStatisticsResponse,
-    dms.DescribeTableStatisticsError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.DescribeTableStatistics",
     actions: ["dms:DescribeTableStatistics"],
     operation: dms.describeTableStatistics,

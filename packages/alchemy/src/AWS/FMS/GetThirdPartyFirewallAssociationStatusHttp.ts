@@ -5,11 +5,7 @@ import { GetThirdPartyFirewallAssociationStatus } from "./GetThirdPartyFirewallA
 
 export const GetThirdPartyFirewallAssociationStatusHttp = Layer.effect(
   GetThirdPartyFirewallAssociationStatus,
-  makeFmsHttpBinding<
-    fms.GetThirdPartyFirewallAssociationStatusRequest,
-    fms.GetThirdPartyFirewallAssociationStatusResponse,
-    fms.GetThirdPartyFirewallAssociationStatusError
-  >({
+  makeFmsHttpBinding({
     capability: "GetThirdPartyFirewallAssociationStatus",
     iamActions: ["fms:GetThirdPartyFirewallAssociationStatus"],
     operation: fms.getThirdPartyFirewallAssociationStatus,

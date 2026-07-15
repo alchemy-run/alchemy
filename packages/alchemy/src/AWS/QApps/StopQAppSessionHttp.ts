@@ -5,11 +5,7 @@ import { StopQAppSession } from "./StopQAppSession.ts";
 
 export const StopQAppSessionHttp = Layer.effect(
   StopQAppSession,
-  makeQAppHttpBinding<
-    qapps.StopQAppSessionInput,
-    qapps.StopQAppSessionResponse,
-    qapps.StopQAppSessionError
-  >({
+  makeQAppHttpBinding({
     capability: "StopQAppSession",
     iamActions: ["qapps:StopQAppSession"],
     operation: qapps.stopQAppSession,

@@ -5,11 +5,7 @@ import { GetProtectionStatus } from "./GetProtectionStatus.ts";
 
 export const GetProtectionStatusHttp = Layer.effect(
   GetProtectionStatus,
-  makeFmsHttpBinding<
-    fms.GetProtectionStatusRequest,
-    fms.GetProtectionStatusResponse,
-    fms.GetProtectionStatusError
-  >({
+  makeFmsHttpBinding({
     capability: "GetProtectionStatus",
     iamActions: ["fms:GetProtectionStatus"],
     operation: fms.getProtectionStatus,

@@ -5,11 +5,7 @@ import { GetCostAndUsageWithResources } from "./GetCostAndUsageWithResources.ts"
 
 export const GetCostAndUsageWithResourcesHttp = Layer.effect(
   GetCostAndUsageWithResources,
-  makeCostExplorerHttpBinding<
-    ce.GetCostAndUsageWithResourcesRequest,
-    ce.GetCostAndUsageWithResourcesResponse,
-    ce.GetCostAndUsageWithResourcesError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetCostAndUsageWithResources",
     iamActions: ["ce:GetCostAndUsageWithResources"],
     operation: ce.getCostAndUsageWithResources,

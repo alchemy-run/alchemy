@@ -5,11 +5,7 @@ import { DescribeReplicationTasks } from "./DescribeReplicationTasks.ts";
 
 export const DescribeReplicationTasksHttp = Layer.effect(
   DescribeReplicationTasks,
-  makeDmsAccountHttpBinding<
-    dms.DescribeReplicationTasksMessage,
-    dms.DescribeReplicationTasksResponse,
-    dms.DescribeReplicationTasksError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.DescribeReplicationTasks",
     actions: ["dms:DescribeReplicationTasks"],
     operation: dms.describeReplicationTasks,

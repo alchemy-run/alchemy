@@ -5,11 +5,7 @@ import { UpdateQAppSession } from "./UpdateQAppSession.ts";
 
 export const UpdateQAppSessionHttp = Layer.effect(
   UpdateQAppSession,
-  makeQAppHttpBinding<
-    qapps.UpdateQAppSessionInput,
-    qapps.UpdateQAppSessionOutput,
-    qapps.UpdateQAppSessionError
-  >({
+  makeQAppHttpBinding({
     capability: "UpdateQAppSession",
     iamActions: ["qapps:UpdateQAppSession"],
     operation: qapps.updateQAppSession,

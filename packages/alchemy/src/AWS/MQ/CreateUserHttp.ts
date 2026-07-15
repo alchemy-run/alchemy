@@ -5,11 +5,7 @@ import { CreateUser } from "./CreateUser.ts";
 
 export const CreateUserHttp = Layer.effect(
   CreateUser,
-  makeMqBrokerHttpBinding<
-    Omit<mq.CreateUserRequest, "BrokerId">,
-    mq.CreateUserResponse,
-    mq.CreateUserError
-  >({
+  makeMqBrokerHttpBinding({
     capability: "CreateUser",
     operation: mq.createUser,
     iamActions: ["mq:CreateUser"],

@@ -5,11 +5,7 @@ import { GetSavingsPlansUtilizationDetails } from "./GetSavingsPlansUtilizationD
 
 export const GetSavingsPlansUtilizationDetailsHttp = Layer.effect(
   GetSavingsPlansUtilizationDetails,
-  makeCostExplorerHttpBinding<
-    ce.GetSavingsPlansUtilizationDetailsRequest,
-    ce.GetSavingsPlansUtilizationDetailsResponse,
-    ce.GetSavingsPlansUtilizationDetailsError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetSavingsPlansUtilizationDetails",
     iamActions: ["ce:GetSavingsPlansUtilizationDetails"],
     operation: ce.getSavingsPlansUtilizationDetails,

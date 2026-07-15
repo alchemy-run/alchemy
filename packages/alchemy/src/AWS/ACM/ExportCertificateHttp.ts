@@ -8,11 +8,7 @@ import {
 
 export const ExportCertificateHttp = Layer.effect(
   ExportCertificate,
-  makeAcmCertificateHttpBinding<
-    ExportCertificateRequest,
-    acm.ExportCertificateResponse,
-    acm.ExportCertificateError
-  >({
+  makeAcmCertificateHttpBinding({
     capability: "ExportCertificate",
     iamActions: ["acm:ExportCertificate"],
     operation: acm.exportCertificate,

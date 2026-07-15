@@ -5,11 +5,7 @@ import { ListRepositorySyncDefinitions } from "./ListRepositorySyncDefinitions.t
 
 export const ListRepositorySyncDefinitionsHttp = Layer.effect(
   ListRepositorySyncDefinitions,
-  makeRepositoryLinkScopedHttpBinding<
-    codeconnections.ListRepositorySyncDefinitionsInput,
-    codeconnections.ListRepositorySyncDefinitionsOutput,
-    codeconnections.ListRepositorySyncDefinitionsError
-  >({
+  makeRepositoryLinkScopedHttpBinding({
     tag: "AWS.CodeConnections.ListRepositorySyncDefinitions",
     actions: ["codeconnections:ListRepositorySyncDefinitions"],
     operation: codeconnections.listRepositorySyncDefinitions,

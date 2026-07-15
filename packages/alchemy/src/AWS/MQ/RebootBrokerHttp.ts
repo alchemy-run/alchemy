@@ -5,7 +5,7 @@ import { RebootBroker } from "./RebootBroker.ts";
 
 export const RebootBrokerHttp = Layer.effect(
   RebootBroker,
-  makeMqBrokerHttpBinding<{}, mq.RebootBrokerResponse, mq.RebootBrokerError>({
+  makeMqBrokerHttpBinding({
     capability: "RebootBroker",
     operation: mq.rebootBroker,
     iamActions: ["mq:RebootBroker"],

@@ -5,11 +5,7 @@ import { CreatePresignedUrl } from "./CreatePresignedUrl.ts";
 
 export const CreatePresignedUrlHttp = Layer.effect(
   CreatePresignedUrl,
-  makeQAppHttpBinding<
-    qapps.CreatePresignedUrlInput,
-    qapps.CreatePresignedUrlOutput,
-    qapps.CreatePresignedUrlError
-  >({
+  makeQAppHttpBinding({
     capability: "CreatePresignedUrl",
     iamActions: ["qapps:CreatePresignedUrl"],
     operation: qapps.createPresignedUrl,

@@ -5,11 +5,7 @@ import { ListLexicons } from "./ListLexicons.ts";
 
 export const ListLexiconsHttp = Layer.effect(
   ListLexicons,
-  makePollyHttpBinding<
-    polly.ListLexiconsInput,
-    polly.ListLexiconsOutput,
-    polly.ListLexiconsError
-  >({
+  makePollyHttpBinding({
     capability: "ListLexicons",
     iamActions: ["polly:ListLexicons"],
     operation: polly.listLexicons,

@@ -5,11 +5,7 @@ import { GetSavingsPlansCoverage } from "./GetSavingsPlansCoverage.ts";
 
 export const GetSavingsPlansCoverageHttp = Layer.effect(
   GetSavingsPlansCoverage,
-  makeCostExplorerHttpBinding<
-    ce.GetSavingsPlansCoverageRequest,
-    ce.GetSavingsPlansCoverageResponse,
-    ce.GetSavingsPlansCoverageError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetSavingsPlansCoverage",
     iamActions: ["ce:GetSavingsPlansCoverage"],
     operation: ce.getSavingsPlansCoverage,

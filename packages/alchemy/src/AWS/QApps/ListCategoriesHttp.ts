@@ -5,11 +5,7 @@ import { ListCategories } from "./ListCategories.ts";
 
 export const ListCategoriesHttp = Layer.effect(
   ListCategories,
-  makeQAppsInstanceHttpBinding<
-    qapps.ListCategoriesInput,
-    qapps.ListCategoriesOutput,
-    qapps.ListCategoriesError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "ListCategories",
     iamActions: ["qapps:ListCategories"],
     operation: qapps.listCategories,

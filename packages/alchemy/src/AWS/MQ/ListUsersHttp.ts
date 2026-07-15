@@ -5,11 +5,7 @@ import { ListUsers } from "./ListUsers.ts";
 
 export const ListUsersHttp = Layer.effect(
   ListUsers,
-  makeMqBrokerHttpBinding<
-    Omit<mq.ListUsersRequest, "BrokerId">,
-    mq.ListUsersResponse,
-    mq.ListUsersError
-  >({
+  makeMqBrokerHttpBinding({
     capability: "ListUsers",
     operation: mq.listUsers,
     iamActions: ["mq:ListUsers"],

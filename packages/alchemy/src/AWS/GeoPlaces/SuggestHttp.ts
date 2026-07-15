@@ -5,11 +5,7 @@ import { Suggest } from "./Suggest.ts";
 
 export const SuggestHttp = Layer.effect(
   Suggest,
-  makeGeoPlacesHttpBinding<
-    geoPlaces.SuggestRequest,
-    geoPlaces.SuggestResponse,
-    geoPlaces.SuggestError
-  >({
+  makeGeoPlacesHttpBinding({
     capability: "Suggest",
     iamActions: ["geo-places:Suggest"],
     operation: geoPlaces.suggest,

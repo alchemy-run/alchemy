@@ -5,11 +5,7 @@ import { SnapToRoads } from "./SnapToRoads.ts";
 
 export const SnapToRoadsHttp = Layer.effect(
   SnapToRoads,
-  makeGeoRoutesHttpBinding<
-    geoRoutes.SnapToRoadsRequest,
-    geoRoutes.SnapToRoadsResponse,
-    geoRoutes.SnapToRoadsError
-  >({
+  makeGeoRoutesHttpBinding({
     capability: "SnapToRoads",
     iamActions: ["geo-routes:SnapToRoads"],
     operation: geoRoutes.snapToRoads,

@@ -5,11 +5,7 @@ import { ListAWSDefaultServiceQuotas } from "./ListAWSDefaultServiceQuotas.ts";
 
 export const ListAWSDefaultServiceQuotasHttp = Layer.effect(
   ListAWSDefaultServiceQuotas,
-  makeServiceQuotasHttpBinding<
-    servicequotas.ListAWSDefaultServiceQuotasRequest,
-    servicequotas.ListAWSDefaultServiceQuotasResponse,
-    servicequotas.ListAWSDefaultServiceQuotasError
-  >({
+  makeServiceQuotasHttpBinding({
     capability: "ListAWSDefaultServiceQuotas",
     iamActions: ["servicequotas:ListAWSDefaultServiceQuotas"],
     operation: servicequotas.listAWSDefaultServiceQuotas,

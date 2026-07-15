@@ -5,11 +5,7 @@ import { SendActivationCode } from "./SendActivationCode.ts";
 
 export const SendActivationCodeHttp = Layer.effect(
   SendActivationCode,
-  makeEmailContactHttpBinding<
-    contacts.SendActivationCodeRequest,
-    contacts.SendActivationCodeResponse,
-    contacts.SendActivationCodeError
-  >({
+  makeEmailContactHttpBinding({
     tag: "AWS.NotificationsContacts.SendActivationCode",
     actions: ["notifications-contacts:SendActivationCode"],
     operation: contacts.sendActivationCode,

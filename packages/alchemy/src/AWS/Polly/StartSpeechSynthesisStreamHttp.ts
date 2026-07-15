@@ -5,11 +5,7 @@ import { StartSpeechSynthesisStream } from "./StartSpeechSynthesisStream.ts";
 
 export const StartSpeechSynthesisStreamHttp = Layer.effect(
   StartSpeechSynthesisStream,
-  makePollyHttpBinding<
-    polly.StartSpeechSynthesisStreamInput,
-    polly.StartSpeechSynthesisStreamOutput,
-    polly.StartSpeechSynthesisStreamError
-  >({
+  makePollyHttpBinding({
     capability: "StartSpeechSynthesisStream",
     iamActions: ["polly:StartSpeechSynthesisStream"],
     operation: polly.startSpeechSynthesisStream,

@@ -5,11 +5,7 @@ import { DescribeOrderableReplicationInstances } from "./DescribeOrderableReplic
 
 export const DescribeOrderableReplicationInstancesHttp = Layer.effect(
   DescribeOrderableReplicationInstances,
-  makeDmsAccountHttpBinding<
-    dms.DescribeOrderableReplicationInstancesMessage,
-    dms.DescribeOrderableReplicationInstancesResponse,
-    dms.DescribeOrderableReplicationInstancesError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.DescribeOrderableReplicationInstances",
     actions: ["dms:DescribeOrderableReplicationInstances"],
     operation: dms.describeOrderableReplicationInstances,

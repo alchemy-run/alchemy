@@ -5,11 +5,7 @@ import { makeGeoPlacesHttpBinding } from "./BindingHttp.ts";
 
 export const AutocompleteHttp = Layer.effect(
   Autocomplete,
-  makeGeoPlacesHttpBinding<
-    geoPlaces.AutocompleteRequest,
-    geoPlaces.AutocompleteResponse,
-    geoPlaces.AutocompleteError
-  >({
+  makeGeoPlacesHttpBinding({
     capability: "Autocomplete",
     iamActions: ["geo-places:Autocomplete"],
     operation: geoPlaces.autocomplete,

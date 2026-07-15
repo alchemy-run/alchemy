@@ -5,11 +5,7 @@ import { ListChannels } from "./ListChannels.ts";
 
 export const ListChannelsHttp = Layer.effect(
   ListChannels,
-  makeNotificationConfigurationHttpBinding<
-    notifications.ListChannelsRequest,
-    notifications.ListChannelsResponse,
-    notifications.ListChannelsError
-  >({
+  makeNotificationConfigurationHttpBinding({
     capability: "ListChannels",
     iamActions: ["notifications:ListChannels"],
     operation: notifications.listChannels,

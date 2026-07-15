@@ -5,11 +5,7 @@ import { ListBrokers } from "./ListBrokers.ts";
 
 export const ListBrokersHttp = Layer.effect(
   ListBrokers,
-  makeMqAccountHttpBinding<
-    mq.ListBrokersRequest,
-    mq.ListBrokersResponse,
-    mq.ListBrokersError
-  >({
+  makeMqAccountHttpBinding({
     capability: "ListBrokers",
     operation: mq.listBrokers,
     iamActions: ["mq:ListBrokers"],

@@ -5,11 +5,7 @@ import { GetReservationPurchaseRecommendation } from "./GetReservationPurchaseRe
 
 export const GetReservationPurchaseRecommendationHttp = Layer.effect(
   GetReservationPurchaseRecommendation,
-  makeCostExplorerHttpBinding<
-    ce.GetReservationPurchaseRecommendationRequest,
-    ce.GetReservationPurchaseRecommendationResponse,
-    ce.GetReservationPurchaseRecommendationError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetReservationPurchaseRecommendation",
     iamActions: ["ce:GetReservationPurchaseRecommendation"],
     operation: ce.getReservationPurchaseRecommendation,

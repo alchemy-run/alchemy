@@ -5,11 +5,7 @@ import { BatchDeleteCategory } from "./BatchDeleteCategory.ts";
 
 export const BatchDeleteCategoryHttp = Layer.effect(
   BatchDeleteCategory,
-  makeQAppsInstanceHttpBinding<
-    qapps.BatchDeleteCategoryInput,
-    qapps.BatchDeleteCategoryResponse,
-    qapps.BatchDeleteCategoryError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "BatchDeleteCategory",
     iamActions: ["qapps:BatchDeleteCategory"],
     operation: qapps.batchDeleteCategory,

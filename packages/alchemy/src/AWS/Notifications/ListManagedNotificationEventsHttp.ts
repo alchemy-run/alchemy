@@ -5,11 +5,7 @@ import { ListManagedNotificationEvents } from "./ListManagedNotificationEvents.t
 
 export const ListManagedNotificationEventsHttp = Layer.effect(
   ListManagedNotificationEvents,
-  makeNotificationsHttpBinding<
-    notifications.ListManagedNotificationEventsRequest,
-    notifications.ListManagedNotificationEventsResponse,
-    notifications.ListManagedNotificationEventsError
-  >({
+  makeNotificationsHttpBinding({
     capability: "ListManagedNotificationEvents",
     iamActions: ["notifications:ListManagedNotificationEvents"],
     operation: notifications.listManagedNotificationEvents,

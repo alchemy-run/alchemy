@@ -5,11 +5,7 @@ import { GetReservationCoverage } from "./GetReservationCoverage.ts";
 
 export const GetReservationCoverageHttp = Layer.effect(
   GetReservationCoverage,
-  makeCostExplorerHttpBinding<
-    ce.GetReservationCoverageRequest,
-    ce.GetReservationCoverageResponse,
-    ce.GetReservationCoverageError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetReservationCoverage",
     iamActions: ["ce:GetReservationCoverage"],
     operation: ce.getReservationCoverage,

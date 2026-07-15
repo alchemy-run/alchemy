@@ -5,11 +5,7 @@ import { OptimizeWaypoints } from "./OptimizeWaypoints.ts";
 
 export const OptimizeWaypointsHttp = Layer.effect(
   OptimizeWaypoints,
-  makeGeoRoutesHttpBinding<
-    geoRoutes.OptimizeWaypointsRequest,
-    geoRoutes.OptimizeWaypointsResponse,
-    geoRoutes.OptimizeWaypointsError
-  >({
+  makeGeoRoutesHttpBinding({
     capability: "OptimizeWaypoints",
     iamActions: ["geo-routes:OptimizeWaypoints"],
     operation: geoRoutes.optimizeWaypoints,

@@ -5,11 +5,7 @@ import { DescribeUser } from "./DescribeUser.ts";
 
 export const DescribeUserHttp = Layer.effect(
   DescribeUser,
-  makeMqBrokerHttpBinding<
-    Omit<mq.DescribeUserRequest, "BrokerId">,
-    mq.DescribeUserResponse,
-    mq.DescribeUserError
-  >({
+  makeMqBrokerHttpBinding({
     capability: "DescribeUser",
     operation: mq.describeUser,
     iamActions: ["mq:DescribeUser"],

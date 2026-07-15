@@ -5,11 +5,7 @@ import { GetCostComparisonDrivers } from "./GetCostComparisonDrivers.ts";
 
 export const GetCostComparisonDriversHttp = Layer.effect(
   GetCostComparisonDrivers,
-  makeCostExplorerHttpBinding<
-    ce.GetCostComparisonDriversRequest,
-    ce.GetCostComparisonDriversResponse,
-    ce.GetCostComparisonDriversError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetCostComparisonDrivers",
     iamActions: ["ce:GetCostComparisonDrivers"],
     operation: ce.getCostComparisonDrivers,

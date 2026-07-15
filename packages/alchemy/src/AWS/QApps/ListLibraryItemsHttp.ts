@@ -5,11 +5,7 @@ import { ListLibraryItems } from "./ListLibraryItems.ts";
 
 export const ListLibraryItemsHttp = Layer.effect(
   ListLibraryItems,
-  makeQAppsInstanceHttpBinding<
-    qapps.ListLibraryItemsInput,
-    qapps.ListLibraryItemsOutput,
-    qapps.ListLibraryItemsError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "ListLibraryItems",
     iamActions: ["qapps:ListLibraryItems"],
     operation: qapps.listLibraryItems,

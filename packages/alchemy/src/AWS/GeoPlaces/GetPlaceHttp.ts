@@ -5,11 +5,7 @@ import { GetPlace } from "./GetPlace.ts";
 
 export const GetPlaceHttp = Layer.effect(
   GetPlace,
-  makeGeoPlacesHttpBinding<
-    geoPlaces.GetPlaceRequest,
-    geoPlaces.GetPlaceResponse,
-    geoPlaces.GetPlaceError
-  >({
+  makeGeoPlacesHttpBinding({
     capability: "GetPlace",
     iamActions: ["geo-places:GetPlace"],
     operation: geoPlaces.getPlace,

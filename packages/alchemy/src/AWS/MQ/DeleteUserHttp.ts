@@ -5,11 +5,7 @@ import { DeleteUser } from "./DeleteUser.ts";
 
 export const DeleteUserHttp = Layer.effect(
   DeleteUser,
-  makeMqBrokerHttpBinding<
-    Omit<mq.DeleteUserRequest, "BrokerId">,
-    mq.DeleteUserResponse,
-    mq.DeleteUserError
-  >({
+  makeMqBrokerHttpBinding({
     capability: "DeleteUser",
     operation: mq.deleteUser,
     iamActions: ["mq:DeleteUser"],

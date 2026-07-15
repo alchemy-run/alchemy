@@ -5,11 +5,7 @@ import { PutAppsList } from "./PutAppsList.ts";
 
 export const PutAppsListHttp = Layer.effect(
   PutAppsList,
-  makeFmsHttpBinding<
-    fms.PutAppsListRequest,
-    fms.PutAppsListResponse,
-    fms.PutAppsListError
-  >({
+  makeFmsHttpBinding({
     capability: "PutAppsList",
     iamActions: ["fms:PutAppsList"],
     operation: fms.putAppsList,

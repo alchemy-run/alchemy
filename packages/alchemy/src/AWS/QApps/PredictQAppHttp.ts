@@ -5,11 +5,7 @@ import { PredictQApp } from "./PredictQApp.ts";
 
 export const PredictQAppHttp = Layer.effect(
   PredictQApp,
-  makeQAppsInstanceHttpBinding<
-    qapps.PredictQAppInput,
-    qapps.PredictQAppOutput,
-    qapps.PredictQAppError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "PredictQApp",
     iamActions: ["qapps:PredictQApp"],
     operation: qapps.predictQApp,

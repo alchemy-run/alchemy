@@ -5,11 +5,7 @@ import { GetGlyphs } from "./GetGlyphs.ts";
 
 export const GetGlyphsHttp = Layer.effect(
   GetGlyphs,
-  makeGeoMapsHttpBinding<
-    geoMaps.GetGlyphsRequest,
-    geoMaps.GetGlyphsResponse,
-    geoMaps.GetGlyphsError
-  >({
+  makeGeoMapsHttpBinding({
     capability: "GetGlyphs",
     iamActions: ["geo-maps:GetGlyphs"],
     operation: geoMaps.getGlyphs,

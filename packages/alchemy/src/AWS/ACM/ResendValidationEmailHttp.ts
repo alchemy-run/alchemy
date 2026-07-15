@@ -8,11 +8,7 @@ import {
 
 export const ResendValidationEmailHttp = Layer.effect(
   ResendValidationEmail,
-  makeAcmCertificateHttpBinding<
-    ResendValidationEmailRequest,
-    acm.ResendValidationEmailResponse,
-    acm.ResendValidationEmailError
-  >({
+  makeAcmCertificateHttpBinding({
     capability: "ResendValidationEmail",
     iamActions: ["acm:ResendValidationEmail"],
     operation: acm.resendValidationEmail,

@@ -5,11 +5,7 @@ import { GetViolationDetails } from "./GetViolationDetails.ts";
 
 export const GetViolationDetailsHttp = Layer.effect(
   GetViolationDetails,
-  makeFmsHttpBinding<
-    fms.GetViolationDetailsRequest,
-    fms.GetViolationDetailsResponse,
-    fms.GetViolationDetailsError
-  >({
+  makeFmsHttpBinding({
     capability: "GetViolationDetails",
     iamActions: ["fms:GetViolationDetails"],
     operation: fms.getViolationDetails,

@@ -5,11 +5,7 @@ import { AssociateLibraryItemReview } from "./AssociateLibraryItemReview.ts";
 
 export const AssociateLibraryItemReviewHttp = Layer.effect(
   AssociateLibraryItemReview,
-  makeQAppsInstanceHttpBinding<
-    qapps.AssociateLibraryItemReviewInput,
-    qapps.AssociateLibraryItemReviewResponse,
-    qapps.AssociateLibraryItemReviewError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "AssociateLibraryItemReview",
     iamActions: ["qapps:AssociateLibraryItemReview"],
     operation: qapps.associateLibraryItemReview,

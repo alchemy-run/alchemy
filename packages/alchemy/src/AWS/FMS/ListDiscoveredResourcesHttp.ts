@@ -5,11 +5,7 @@ import { ListDiscoveredResources } from "./ListDiscoveredResources.ts";
 
 export const ListDiscoveredResourcesHttp = Layer.effect(
   ListDiscoveredResources,
-  makeFmsHttpBinding<
-    fms.ListDiscoveredResourcesRequest,
-    fms.ListDiscoveredResourcesResponse,
-    fms.ListDiscoveredResourcesError
-  >({
+  makeFmsHttpBinding({
     capability: "ListDiscoveredResources",
     iamActions: ["fms:ListDiscoveredResources"],
     operation: fms.listDiscoveredResources,

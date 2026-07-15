@@ -5,11 +5,7 @@ import { ListManagedNotificationChannelAssociations } from "./ListManagedNotific
 
 export const ListManagedNotificationChannelAssociationsHttp = Layer.effect(
   ListManagedNotificationChannelAssociations,
-  makeNotificationsHttpBinding<
-    notifications.ListManagedNotificationChannelAssociationsRequest,
-    notifications.ListManagedNotificationChannelAssociationsResponse,
-    notifications.ListManagedNotificationChannelAssociationsError
-  >({
+  makeNotificationsHttpBinding({
     capability: "ListManagedNotificationChannelAssociations",
     iamActions: ["notifications:ListManagedNotificationChannelAssociations"],
     operation: notifications.listManagedNotificationChannelAssociations,

@@ -5,11 +5,7 @@ import { ListThirdPartyFirewallFirewallPolicies } from "./ListThirdPartyFirewall
 
 export const ListThirdPartyFirewallFirewallPoliciesHttp = Layer.effect(
   ListThirdPartyFirewallFirewallPolicies,
-  makeFmsHttpBinding<
-    fms.ListThirdPartyFirewallFirewallPoliciesRequest,
-    fms.ListThirdPartyFirewallFirewallPoliciesResponse,
-    fms.ListThirdPartyFirewallFirewallPoliciesError
-  >({
+  makeFmsHttpBinding({
     capability: "ListThirdPartyFirewallFirewallPolicies",
     iamActions: ["fms:ListThirdPartyFirewallFirewallPolicies"],
     operation: fms.listThirdPartyFirewallFirewallPolicies,

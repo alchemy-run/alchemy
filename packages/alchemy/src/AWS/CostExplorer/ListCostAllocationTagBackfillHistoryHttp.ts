@@ -5,11 +5,7 @@ import { ListCostAllocationTagBackfillHistory } from "./ListCostAllocationTagBac
 
 export const ListCostAllocationTagBackfillHistoryHttp = Layer.effect(
   ListCostAllocationTagBackfillHistory,
-  makeCostExplorerHttpBinding<
-    ce.ListCostAllocationTagBackfillHistoryRequest,
-    ce.ListCostAllocationTagBackfillHistoryResponse,
-    ce.ListCostAllocationTagBackfillHistoryError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "ListCostAllocationTagBackfillHistory",
     iamActions: ["ce:ListCostAllocationTagBackfillHistory"],
     operation: ce.listCostAllocationTagBackfillHistory,

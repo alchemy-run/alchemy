@@ -5,11 +5,7 @@ import { GetApproximateUsageRecords } from "./GetApproximateUsageRecords.ts";
 
 export const GetApproximateUsageRecordsHttp = Layer.effect(
   GetApproximateUsageRecords,
-  makeCostExplorerHttpBinding<
-    ce.GetApproximateUsageRecordsRequest,
-    ce.GetApproximateUsageRecordsResponse,
-    ce.GetApproximateUsageRecordsError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetApproximateUsageRecords",
     iamActions: ["ce:GetApproximateUsageRecords"],
     operation: ce.getApproximateUsageRecords,

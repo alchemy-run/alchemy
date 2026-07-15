@@ -8,11 +8,7 @@ import {
 
 export const RevokeCertificateHttp = Layer.effect(
   RevokeCertificate,
-  makeAcmCertificateHttpBinding<
-    RevokeCertificateRequest,
-    acm.RevokeCertificateResponse,
-    acm.RevokeCertificateError
-  >({
+  makeAcmCertificateHttpBinding({
     capability: "RevokeCertificate",
     iamActions: ["acm:RevokeCertificate"],
     operation: acm.revokeCertificate,

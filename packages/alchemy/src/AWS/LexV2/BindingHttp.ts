@@ -45,7 +45,7 @@ export interface LexAliasHttpBindingConfig<Req extends object, Out, Err> {
 
 /**
  * Build the implementation effect for a bot-alias-scoped Lex V2 runtime
- * capability: `Layer.effect(Cap, makeLexAliasHttpBinding<Req, Out, Err>({ ... }))`.
+ * capability: `Layer.effect(Cap, makeLexAliasHttpBinding({ ... }))`.
  *
  * The runtime callable injects the bound alias's `botId` and `botAliasId`,
  * so `Req` is the operation's request type without those fields.

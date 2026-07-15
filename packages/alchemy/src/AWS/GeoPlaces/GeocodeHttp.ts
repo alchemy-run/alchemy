@@ -5,11 +5,7 @@ import { Geocode } from "./Geocode.ts";
 
 export const GeocodeHttp = Layer.effect(
   Geocode,
-  makeGeoPlacesHttpBinding<
-    geoPlaces.GeocodeRequest,
-    geoPlaces.GeocodeResponse,
-    geoPlaces.GeocodeError
-  >({
+  makeGeoPlacesHttpBinding({
     capability: "Geocode",
     iamActions: ["geo-places:Geocode"],
     operation: geoPlaces.geocode,

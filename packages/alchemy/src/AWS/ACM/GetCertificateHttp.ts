@@ -5,11 +5,7 @@ import { GetCertificate } from "./GetCertificate.ts";
 
 export const GetCertificateHttp = Layer.effect(
   GetCertificate,
-  makeAcmCertificateHttpBinding<
-    {},
-    acm.GetCertificateResponse,
-    acm.GetCertificateError
-  >({
+  makeAcmCertificateHttpBinding({
     capability: "GetCertificate",
     iamActions: ["acm:GetCertificate"],
     operation: acm.getCertificate,

@@ -5,11 +5,7 @@ import { GetStyleDescriptor } from "./GetStyleDescriptor.ts";
 
 export const GetStyleDescriptorHttp = Layer.effect(
   GetStyleDescriptor,
-  makeGeoMapsHttpBinding<
-    geoMaps.GetStyleDescriptorRequest,
-    geoMaps.GetStyleDescriptorResponse,
-    geoMaps.GetStyleDescriptorError
-  >({
+  makeGeoMapsHttpBinding({
     capability: "GetStyleDescriptor",
     iamActions: ["geo-maps:GetStyleDescriptor"],
     operation: geoMaps.getStyleDescriptor,

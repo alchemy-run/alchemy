@@ -5,11 +5,7 @@ import { DeletePolicy } from "./DeletePolicy.ts";
 
 export const DeletePolicyHttp = Layer.effect(
   DeletePolicy,
-  makeFmsHttpBinding<
-    fms.DeletePolicyRequest,
-    fms.DeletePolicyResponse,
-    fms.DeletePolicyError
-  >({
+  makeFmsHttpBinding({
     capability: "DeletePolicy",
     iamActions: ["fms:DeletePolicy"],
     operation: fms.deletePolicy,

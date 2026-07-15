@@ -5,11 +5,7 @@ import { UpdateSyncBlocker } from "./UpdateSyncBlocker.ts";
 
 export const UpdateSyncBlockerHttp = Layer.effect(
   UpdateSyncBlocker,
-  makeSyncConfigurationScopedHttpBinding<
-    codeconnections.UpdateSyncBlockerInput,
-    codeconnections.UpdateSyncBlockerOutput,
-    codeconnections.UpdateSyncBlockerError
-  >({
+  makeSyncConfigurationScopedHttpBinding({
     tag: "AWS.CodeConnections.UpdateSyncBlocker",
     actions: ["codeconnections:UpdateSyncBlocker"],
     operation: codeconnections.updateSyncBlocker,

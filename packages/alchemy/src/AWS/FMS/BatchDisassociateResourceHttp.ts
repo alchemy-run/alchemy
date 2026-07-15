@@ -5,11 +5,7 @@ import { BatchDisassociateResource } from "./BatchDisassociateResource.ts";
 
 export const BatchDisassociateResourceHttp = Layer.effect(
   BatchDisassociateResource,
-  makeFmsHttpBinding<
-    fms.BatchDisassociateResourceRequest,
-    fms.BatchDisassociateResourceResponse,
-    fms.BatchDisassociateResourceError
-  >({
+  makeFmsHttpBinding({
     capability: "BatchDisassociateResource",
     iamActions: ["fms:BatchDisassociateResource"],
     operation: fms.batchDisassociateResource,

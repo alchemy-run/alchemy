@@ -44,7 +44,7 @@ export interface MqBrokerHttpBindingConfig<Req extends object, Out, Err> {
 
 /**
  * Build the implementation effect for a broker-scoped MQ capability:
- * `Layer.effect(Cap, makeMqBrokerHttpBinding<Req, Out, Err>({ ... }))`.
+ * `Layer.effect(Cap, makeMqBrokerHttpBinding({ ... }))`.
  *
  * The runtime callable injects the bound broker's id, so `Req` is the
  * operation's request type without `BrokerId`.

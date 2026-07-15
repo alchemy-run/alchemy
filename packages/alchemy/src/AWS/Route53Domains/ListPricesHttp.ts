@@ -5,11 +5,7 @@ import { ListPrices } from "./ListPrices.ts";
 
 export const ListPricesHttp = Layer.effect(
   ListPrices,
-  makeRoute53DomainsHttpBinding<
-    route53domains.ListPricesRequest,
-    route53domains.ListPricesResponse,
-    route53domains.ListPricesError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "ListPrices",
     iamActions: ["route53domains:ListPrices"],
     operation: route53domains.listPrices,

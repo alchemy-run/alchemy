@@ -5,11 +5,7 @@ import { DeleteResourceSet } from "./DeleteResourceSet.ts";
 
 export const DeleteResourceSetHttp = Layer.effect(
   DeleteResourceSet,
-  makeFmsHttpBinding<
-    fms.DeleteResourceSetRequest,
-    fms.DeleteResourceSetResponse,
-    fms.DeleteResourceSetError
-  >({
+  makeFmsHttpBinding({
     capability: "DeleteResourceSet",
     iamActions: ["fms:DeleteResourceSet"],
     operation: fms.deleteResourceSet,

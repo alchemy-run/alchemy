@@ -5,11 +5,7 @@ import { ListCostAllocationTags } from "./ListCostAllocationTags.ts";
 
 export const ListCostAllocationTagsHttp = Layer.effect(
   ListCostAllocationTags,
-  makeCostExplorerHttpBinding<
-    ce.ListCostAllocationTagsRequest,
-    ce.ListCostAllocationTagsResponse,
-    ce.ListCostAllocationTagsError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "ListCostAllocationTags",
     iamActions: ["ce:ListCostAllocationTags"],
     operation: ce.listCostAllocationTags,

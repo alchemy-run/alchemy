@@ -5,11 +5,7 @@ import { RegisterDomain } from "./RegisterDomain.ts";
 
 export const RegisterDomainHttp = Layer.effect(
   RegisterDomain,
-  makeRoute53DomainsHttpBinding<
-    route53domains.RegisterDomainRequest,
-    route53domains.RegisterDomainResponse,
-    route53domains.RegisterDomainError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "RegisterDomain",
     // RegisterDomain pre-validates that the caller can create the hosted
     // zone Route 53 auto-creates during registration — without

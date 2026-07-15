@@ -8,11 +8,7 @@ import {
 
 export const ListCertificatesHttp = Layer.effect(
   ListCertificates,
-  makeAcmAccountHttpBinding<
-    ListCertificatesRequest,
-    acm.ListCertificatesResponse,
-    acm.ListCertificatesError
-  >({
+  makeAcmAccountHttpBinding({
     capability: "ListCertificates",
     iamActions: ["acm:ListCertificates"],
     operation: acm.listCertificates,

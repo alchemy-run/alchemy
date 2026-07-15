@@ -5,11 +5,7 @@ import { SearchNearby } from "./SearchNearby.ts";
 
 export const SearchNearbyHttp = Layer.effect(
   SearchNearby,
-  makeGeoPlacesHttpBinding<
-    geoPlaces.SearchNearbyRequest,
-    geoPlaces.SearchNearbyResponse,
-    geoPlaces.SearchNearbyError
-  >({
+  makeGeoPlacesHttpBinding({
     capability: "SearchNearby",
     iamActions: ["geo-places:SearchNearby"],
     operation: geoPlaces.searchNearby,

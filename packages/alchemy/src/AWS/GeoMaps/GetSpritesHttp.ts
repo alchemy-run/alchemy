@@ -5,11 +5,7 @@ import { GetSprites } from "./GetSprites.ts";
 
 export const GetSpritesHttp = Layer.effect(
   GetSprites,
-  makeGeoMapsHttpBinding<
-    geoMaps.GetSpritesRequest,
-    geoMaps.GetSpritesResponse,
-    geoMaps.GetSpritesError
-  >({
+  makeGeoMapsHttpBinding({
     capability: "GetSprites",
     iamActions: ["geo-maps:GetSprites"],
     operation: geoMaps.getSprites,

@@ -5,11 +5,7 @@ import { GetSyncBlockerSummary } from "./GetSyncBlockerSummary.ts";
 
 export const GetSyncBlockerSummaryHttp = Layer.effect(
   GetSyncBlockerSummary,
-  makeSyncConfigurationScopedHttpBinding<
-    codeconnections.GetSyncBlockerSummaryInput,
-    codeconnections.GetSyncBlockerSummaryOutput,
-    codeconnections.GetSyncBlockerSummaryError
-  >({
+  makeSyncConfigurationScopedHttpBinding({
     tag: "AWS.CodeConnections.GetSyncBlockerSummary",
     actions: ["codeconnections:GetSyncBlockerSummary"],
     operation: codeconnections.getSyncBlockerSummary,

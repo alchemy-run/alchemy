@@ -5,11 +5,7 @@ import { DescribeQAppPermissions } from "./DescribeQAppPermissions.ts";
 
 export const DescribeQAppPermissionsHttp = Layer.effect(
   DescribeQAppPermissions,
-  makeQAppHttpBinding<
-    qapps.DescribeQAppPermissionsInput,
-    qapps.DescribeQAppPermissionsOutput,
-    qapps.DescribeQAppPermissionsError
-  >({
+  makeQAppHttpBinding({
     capability: "DescribeQAppPermissions",
     iamActions: ["qapps:DescribeQAppPermissions"],
     operation: qapps.describeQAppPermissions,

@@ -5,11 +5,7 @@ import { DescribeEvents } from "./DescribeEvents.ts";
 
 export const DescribeEventsHttp = Layer.effect(
   DescribeEvents,
-  makeDmsAccountHttpBinding<
-    dms.DescribeEventsMessage,
-    dms.DescribeEventsResponse,
-    dms.DescribeEventsError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.DescribeEvents",
     actions: ["dms:DescribeEvents"],
     operation: dms.describeEvents,

@@ -5,11 +5,7 @@ import { RenewDomain } from "./RenewDomain.ts";
 
 export const RenewDomainHttp = Layer.effect(
   RenewDomain,
-  makeRoute53DomainsHttpBinding<
-    route53domains.RenewDomainRequest,
-    route53domains.RenewDomainResponse,
-    route53domains.RenewDomainError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "RenewDomain",
     iamActions: ["route53domains:RenewDomain"],
     operation: route53domains.renewDomain,

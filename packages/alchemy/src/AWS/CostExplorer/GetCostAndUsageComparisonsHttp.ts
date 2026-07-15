@@ -5,11 +5,7 @@ import { GetCostAndUsageComparisons } from "./GetCostAndUsageComparisons.ts";
 
 export const GetCostAndUsageComparisonsHttp = Layer.effect(
   GetCostAndUsageComparisons,
-  makeCostExplorerHttpBinding<
-    ce.GetCostAndUsageComparisonsRequest,
-    ce.GetCostAndUsageComparisonsResponse,
-    ce.GetCostAndUsageComparisonsError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetCostAndUsageComparisons",
     iamActions: ["ce:GetCostAndUsageComparisons"],
     operation: ce.getCostAndUsageComparisons,

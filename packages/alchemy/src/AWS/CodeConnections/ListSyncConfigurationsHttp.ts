@@ -5,11 +5,7 @@ import { ListSyncConfigurations } from "./ListSyncConfigurations.ts";
 
 export const ListSyncConfigurationsHttp = Layer.effect(
   ListSyncConfigurations,
-  makeRepositoryLinkScopedHttpBinding<
-    codeconnections.ListSyncConfigurationsInput,
-    codeconnections.ListSyncConfigurationsOutput,
-    codeconnections.ListSyncConfigurationsError
-  >({
+  makeRepositoryLinkScopedHttpBinding({
     tag: "AWS.CodeConnections.ListSyncConfigurations",
     actions: ["codeconnections:ListSyncConfigurations"],
     operation: codeconnections.listSyncConfigurations,

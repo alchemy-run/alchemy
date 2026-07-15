@@ -5,11 +5,7 @@ import { ProvideAnomalyFeedback } from "./ProvideAnomalyFeedback.ts";
 
 export const ProvideAnomalyFeedbackHttp = Layer.effect(
   ProvideAnomalyFeedback,
-  makeCostExplorerHttpBinding<
-    ce.ProvideAnomalyFeedbackRequest,
-    ce.ProvideAnomalyFeedbackResponse,
-    ce.ProvideAnomalyFeedbackError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "ProvideAnomalyFeedback",
     iamActions: ["ce:ProvideAnomalyFeedback"],
     operation: ce.provideAnomalyFeedback,

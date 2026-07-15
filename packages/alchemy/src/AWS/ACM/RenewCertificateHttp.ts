@@ -5,11 +5,7 @@ import { RenewCertificate } from "./RenewCertificate.ts";
 
 export const RenewCertificateHttp = Layer.effect(
   RenewCertificate,
-  makeAcmCertificateHttpBinding<
-    {},
-    acm.RenewCertificateResponse,
-    acm.RenewCertificateError
-  >({
+  makeAcmCertificateHttpBinding({
     capability: "RenewCertificate",
     iamActions: ["acm:RenewCertificate"],
     operation: acm.renewCertificate,

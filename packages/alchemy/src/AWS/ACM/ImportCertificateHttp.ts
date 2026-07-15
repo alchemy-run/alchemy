@@ -8,11 +8,7 @@ import {
 
 export const ImportCertificateHttp = Layer.effect(
   ImportCertificate,
-  makeAcmAccountHttpBinding<
-    ImportCertificateRequest,
-    acm.ImportCertificateResponse,
-    acm.ImportCertificateError
-  >({
+  makeAcmAccountHttpBinding({
     capability: "ImportCertificate",
     // Importing with `Tags` additionally requires `acm:AddTagsToCertificate`,
     // which ACM checks alongside the import itself.

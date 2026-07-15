@@ -5,11 +5,7 @@ import { ListConnections } from "./ListConnections.ts";
 
 export const ListConnectionsHttp = Layer.effect(
   ListConnections,
-  makeCodeConnectionsAccountHttpBinding<
-    codeconnections.ListConnectionsInput,
-    codeconnections.ListConnectionsOutput,
-    codeconnections.ListConnectionsError
-  >({
+  makeCodeConnectionsAccountHttpBinding({
     tag: "AWS.CodeConnections.ListConnections",
     actions: ["codeconnections:ListConnections"],
     operation: codeconnections.listConnections,

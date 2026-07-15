@@ -5,11 +5,7 @@ import { GetRightsizingRecommendation } from "./GetRightsizingRecommendation.ts"
 
 export const GetRightsizingRecommendationHttp = Layer.effect(
   GetRightsizingRecommendation,
-  makeCostExplorerHttpBinding<
-    ce.GetRightsizingRecommendationRequest,
-    ce.GetRightsizingRecommendationResponse,
-    ce.GetRightsizingRecommendationError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetRightsizingRecommendation",
     iamActions: ["ce:GetRightsizingRecommendation"],
     operation: ce.getRightsizingRecommendation,

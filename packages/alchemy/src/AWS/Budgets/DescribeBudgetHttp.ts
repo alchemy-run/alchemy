@@ -5,11 +5,7 @@ import { DescribeBudget } from "./DescribeBudget.ts";
 
 export const DescribeBudgetHttp = Layer.effect(
   DescribeBudget,
-  makeBudgetHttpBinding<
-    budgets.DescribeBudgetRequest,
-    budgets.DescribeBudgetResponse,
-    budgets.DescribeBudgetError
-  >({
+  makeBudgetHttpBinding({
     tag: "AWS.Budgets.DescribeBudget",
     actions: ["budgets:ViewBudget"],
     operation: budgets.describeBudget,

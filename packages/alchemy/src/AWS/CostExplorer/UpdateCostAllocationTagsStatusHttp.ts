@@ -5,11 +5,7 @@ import { UpdateCostAllocationTagsStatus } from "./UpdateCostAllocationTagsStatus
 
 export const UpdateCostAllocationTagsStatusHttp = Layer.effect(
   UpdateCostAllocationTagsStatus,
-  makeCostExplorerHttpBinding<
-    ce.UpdateCostAllocationTagsStatusRequest,
-    ce.UpdateCostAllocationTagsStatusResponse,
-    ce.UpdateCostAllocationTagsStatusError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "UpdateCostAllocationTagsStatus",
     iamActions: ["ce:UpdateCostAllocationTagsStatus"],
     operation: ce.updateCostAllocationTagsStatus,

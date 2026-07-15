@@ -5,11 +5,7 @@ import { GetExecution } from "./GetExecution.ts";
 
 export const GetExecutionHttp = Layer.effect(
   GetExecution,
-  makeExportHttpBinding<
-    bcm.GetExecutionRequest,
-    bcm.GetExecutionResponse,
-    bcm.GetExecutionError
-  >({
+  makeExportHttpBinding({
     capability: "GetExecution",
     iamActions: ["bcm-data-exports:GetExecution"],
     operation: bcm.getExecution,

@@ -5,11 +5,7 @@ import { GetNotificationChannel } from "./GetNotificationChannel.ts";
 
 export const GetNotificationChannelHttp = Layer.effect(
   GetNotificationChannel,
-  makeFmsHttpBinding<
-    fms.GetNotificationChannelRequest,
-    fms.GetNotificationChannelResponse,
-    fms.GetNotificationChannelError
-  >({
+  makeFmsHttpBinding({
     capability: "GetNotificationChannel",
     iamActions: ["fms:GetNotificationChannel"],
     operation: fms.getNotificationChannel,

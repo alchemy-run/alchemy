@@ -5,11 +5,7 @@ import { GetServiceQuota } from "./GetServiceQuota.ts";
 
 export const GetServiceQuotaHttp = Layer.effect(
   GetServiceQuota,
-  makeServiceQuotasHttpBinding<
-    servicequotas.GetServiceQuotaRequest,
-    servicequotas.GetServiceQuotaResponse,
-    servicequotas.GetServiceQuotaError
-  >({
+  makeServiceQuotasHttpBinding({
     capability: "GetServiceQuota",
     iamActions: ["servicequotas:GetServiceQuota"],
     operation: servicequotas.getServiceQuota,

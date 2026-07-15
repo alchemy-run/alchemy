@@ -5,11 +5,7 @@ import { StartReplication } from "./StartReplication.ts";
 
 export const StartReplicationHttp = Layer.effect(
   StartReplication,
-  makeDmsAccountHttpBinding<
-    dms.StartReplicationMessage,
-    dms.StartReplicationResponse,
-    dms.StartReplicationError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.StartReplication",
     actions: ["dms:StartReplication"],
     operation: dms.startReplication,

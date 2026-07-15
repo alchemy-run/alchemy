@@ -5,11 +5,7 @@ import { ImportDocument } from "./ImportDocument.ts";
 
 export const ImportDocumentHttp = Layer.effect(
   ImportDocument,
-  makeQAppHttpBinding<
-    qapps.ImportDocumentInput,
-    qapps.ImportDocumentOutput,
-    qapps.ImportDocumentError
-  >({
+  makeQAppHttpBinding({
     capability: "ImportDocument",
     iamActions: ["qapps:ImportDocument"],
     operation: qapps.importDocument,

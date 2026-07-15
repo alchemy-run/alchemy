@@ -5,11 +5,7 @@ import { ListRequestedServiceQuotaChangeHistoryByQuota } from "./ListRequestedSe
 
 export const ListRequestedServiceQuotaChangeHistoryByQuotaHttp = Layer.effect(
   ListRequestedServiceQuotaChangeHistoryByQuota,
-  makeServiceQuotasHttpBinding<
-    servicequotas.ListRequestedServiceQuotaChangeHistoryByQuotaRequest,
-    servicequotas.ListRequestedServiceQuotaChangeHistoryByQuotaResponse,
-    servicequotas.ListRequestedServiceQuotaChangeHistoryByQuotaError
-  >({
+  makeServiceQuotasHttpBinding({
     capability: "ListRequestedServiceQuotaChangeHistoryByQuota",
     iamActions: ["servicequotas:ListRequestedServiceQuotaChangeHistoryByQuota"],
     operation: servicequotas.listRequestedServiceQuotaChangeHistoryByQuota,

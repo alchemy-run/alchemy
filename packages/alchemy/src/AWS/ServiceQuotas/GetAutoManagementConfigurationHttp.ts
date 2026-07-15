@@ -5,11 +5,7 @@ import { GetAutoManagementConfiguration } from "./GetAutoManagementConfiguration
 
 export const GetAutoManagementConfigurationHttp = Layer.effect(
   GetAutoManagementConfiguration,
-  makeServiceQuotasHttpBinding<
-    servicequotas.GetAutoManagementConfigurationRequest,
-    servicequotas.GetAutoManagementConfigurationResponse,
-    servicequotas.GetAutoManagementConfigurationError
-  >({
+  makeServiceQuotasHttpBinding({
     capability: "GetAutoManagementConfiguration",
     iamActions: ["servicequotas:GetAutoManagementConfiguration"],
     operation: servicequotas.getAutoManagementConfiguration,

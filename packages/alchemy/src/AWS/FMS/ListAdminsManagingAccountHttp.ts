@@ -5,11 +5,7 @@ import { ListAdminsManagingAccount } from "./ListAdminsManagingAccount.ts";
 
 export const ListAdminsManagingAccountHttp = Layer.effect(
   ListAdminsManagingAccount,
-  makeFmsHttpBinding<
-    fms.ListAdminsManagingAccountRequest,
-    fms.ListAdminsManagingAccountResponse,
-    fms.ListAdminsManagingAccountError
-  >({
+  makeFmsHttpBinding({
     capability: "ListAdminsManagingAccount",
     iamActions: ["fms:ListAdminsManagingAccount"],
     operation: fms.listAdminsManagingAccount,

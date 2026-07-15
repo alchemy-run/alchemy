@@ -5,11 +5,7 @@ import { ListMemberAccounts } from "./ListMemberAccounts.ts";
 
 export const ListMemberAccountsHttp = Layer.effect(
   ListMemberAccounts,
-  makeFmsHttpBinding<
-    fms.ListMemberAccountsRequest,
-    fms.ListMemberAccountsResponse,
-    fms.ListMemberAccountsError
-  >({
+  makeFmsHttpBinding({
     capability: "ListMemberAccounts",
     iamActions: ["fms:ListMemberAccounts"],
     operation: fms.listMemberAccounts,

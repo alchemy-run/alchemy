@@ -5,11 +5,7 @@ import { ListAdminAccountsForOrganization } from "./ListAdminAccountsForOrganiza
 
 export const ListAdminAccountsForOrganizationHttp = Layer.effect(
   ListAdminAccountsForOrganization,
-  makeFmsHttpBinding<
-    fms.ListAdminAccountsForOrganizationRequest,
-    fms.ListAdminAccountsForOrganizationResponse,
-    fms.ListAdminAccountsForOrganizationError
-  >({
+  makeFmsHttpBinding({
     capability: "ListAdminAccountsForOrganization",
     iamActions: ["fms:ListAdminAccountsForOrganization"],
     operation: fms.listAdminAccountsForOrganization,

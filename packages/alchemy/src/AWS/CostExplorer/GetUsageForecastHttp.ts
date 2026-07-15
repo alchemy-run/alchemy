@@ -5,11 +5,7 @@ import { GetUsageForecast } from "./GetUsageForecast.ts";
 
 export const GetUsageForecastHttp = Layer.effect(
   GetUsageForecast,
-  makeCostExplorerHttpBinding<
-    ce.GetUsageForecastRequest,
-    ce.GetUsageForecastResponse,
-    ce.GetUsageForecastError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetUsageForecast",
     iamActions: ["ce:GetUsageForecast"],
     operation: ce.getUsageForecast,

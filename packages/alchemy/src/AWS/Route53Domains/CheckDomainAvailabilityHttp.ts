@@ -5,11 +5,7 @@ import { CheckDomainAvailability } from "./CheckDomainAvailability.ts";
 
 export const CheckDomainAvailabilityHttp = Layer.effect(
   CheckDomainAvailability,
-  makeRoute53DomainsHttpBinding<
-    route53domains.CheckDomainAvailabilityRequest,
-    route53domains.CheckDomainAvailabilityResponse,
-    route53domains.CheckDomainAvailabilityError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "CheckDomainAvailability",
     iamActions: ["route53domains:CheckDomainAvailability"],
     operation: route53domains.checkDomainAvailability,

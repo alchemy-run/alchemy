@@ -5,11 +5,7 @@ import { PutProtocolsList } from "./PutProtocolsList.ts";
 
 export const PutProtocolsListHttp = Layer.effect(
   PutProtocolsList,
-  makeFmsHttpBinding<
-    fms.PutProtocolsListRequest,
-    fms.PutProtocolsListResponse,
-    fms.PutProtocolsListError
-  >({
+  makeFmsHttpBinding({
     capability: "PutProtocolsList",
     iamActions: ["fms:PutProtocolsList"],
     operation: fms.putProtocolsList,

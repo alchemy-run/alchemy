@@ -5,11 +5,7 @@ import { UpdateQAppPermissions } from "./UpdateQAppPermissions.ts";
 
 export const UpdateQAppPermissionsHttp = Layer.effect(
   UpdateQAppPermissions,
-  makeQAppHttpBinding<
-    qapps.UpdateQAppPermissionsInput,
-    qapps.UpdateQAppPermissionsOutput,
-    qapps.UpdateQAppPermissionsError
-  >({
+  makeQAppHttpBinding({
     capability: "UpdateQAppPermissions",
     iamActions: ["qapps:UpdateQAppPermissions"],
     operation: qapps.updateQAppPermissions,

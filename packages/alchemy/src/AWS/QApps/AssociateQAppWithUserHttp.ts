@@ -5,11 +5,7 @@ import { AssociateQAppWithUser } from "./AssociateQAppWithUser.ts";
 
 export const AssociateQAppWithUserHttp = Layer.effect(
   AssociateQAppWithUser,
-  makeQAppHttpBinding<
-    qapps.AssociateQAppWithUserInput,
-    qapps.AssociateQAppWithUserResponse,
-    qapps.AssociateQAppWithUserError
-  >({
+  makeQAppHttpBinding({
     capability: "AssociateQAppWithUser",
     iamActions: ["qapps:AssociateQAppWithUser"],
     operation: qapps.associateQAppWithUser,

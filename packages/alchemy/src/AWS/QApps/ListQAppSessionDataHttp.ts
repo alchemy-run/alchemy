@@ -5,11 +5,7 @@ import { ListQAppSessionData } from "./ListQAppSessionData.ts";
 
 export const ListQAppSessionDataHttp = Layer.effect(
   ListQAppSessionData,
-  makeQAppHttpBinding<
-    qapps.ListQAppSessionDataInput,
-    qapps.ListQAppSessionDataOutput,
-    qapps.ListQAppSessionDataError
-  >({
+  makeQAppHttpBinding({
     capability: "ListQAppSessionData",
     iamActions: ["qapps:ListQAppSessionData"],
     operation: qapps.listQAppSessionData,

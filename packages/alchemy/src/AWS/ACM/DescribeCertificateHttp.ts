@@ -5,11 +5,7 @@ import { DescribeCertificate } from "./DescribeCertificate.ts";
 
 export const DescribeCertificateHttp = Layer.effect(
   DescribeCertificate,
-  makeAcmCertificateHttpBinding<
-    {},
-    acm.DescribeCertificateResponse,
-    acm.DescribeCertificateError
-  >({
+  makeAcmCertificateHttpBinding({
     capability: "DescribeCertificate",
     iamActions: ["acm:DescribeCertificate"],
     operation: acm.describeCertificate,

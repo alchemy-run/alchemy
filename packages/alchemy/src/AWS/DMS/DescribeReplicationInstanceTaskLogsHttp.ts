@@ -5,11 +5,7 @@ import { DescribeReplicationInstanceTaskLogs } from "./DescribeReplicationInstan
 
 export const DescribeReplicationInstanceTaskLogsHttp = Layer.effect(
   DescribeReplicationInstanceTaskLogs,
-  makeDmsInstanceScopedHttpBinding<
-    dms.DescribeReplicationInstanceTaskLogsMessage,
-    dms.DescribeReplicationInstanceTaskLogsResponse,
-    dms.DescribeReplicationInstanceTaskLogsError
-  >({
+  makeDmsInstanceScopedHttpBinding({
     tag: "AWS.DMS.DescribeReplicationInstanceTaskLogs",
     actions: ["dms:DescribeReplicationInstanceTaskLogs"],
     operation: dms.describeReplicationInstanceTaskLogs,

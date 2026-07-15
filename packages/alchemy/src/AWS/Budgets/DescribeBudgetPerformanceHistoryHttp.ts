@@ -5,11 +5,7 @@ import { DescribeBudgetPerformanceHistory } from "./DescribeBudgetPerformanceHis
 
 export const DescribeBudgetPerformanceHistoryHttp = Layer.effect(
   DescribeBudgetPerformanceHistory,
-  makeBudgetHttpBinding<
-    budgets.DescribeBudgetPerformanceHistoryRequest,
-    budgets.DescribeBudgetPerformanceHistoryResponse,
-    budgets.DescribeBudgetPerformanceHistoryError
-  >({
+  makeBudgetHttpBinding({
     tag: "AWS.Budgets.DescribeBudgetPerformanceHistory",
     actions: ["budgets:ViewBudget"],
     operation: budgets.describeBudgetPerformanceHistory,

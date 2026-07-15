@@ -5,11 +5,7 @@ import { GetDimensionValues } from "./GetDimensionValues.ts";
 
 export const GetDimensionValuesHttp = Layer.effect(
   GetDimensionValues,
-  makeCostExplorerHttpBinding<
-    ce.GetDimensionValuesRequest,
-    ce.GetDimensionValuesResponse,
-    ce.GetDimensionValuesError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetDimensionValues",
     iamActions: ["ce:GetDimensionValues"],
     operation: ce.getDimensionValues,

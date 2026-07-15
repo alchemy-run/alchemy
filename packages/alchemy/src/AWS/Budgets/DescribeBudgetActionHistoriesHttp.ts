@@ -5,11 +5,7 @@ import { DescribeBudgetActionHistories } from "./DescribeBudgetActionHistories.t
 
 export const DescribeBudgetActionHistoriesHttp = Layer.effect(
   DescribeBudgetActionHistories,
-  makeBudgetActionHttpBinding<
-    budgets.DescribeBudgetActionHistoriesRequest,
-    budgets.DescribeBudgetActionHistoriesResponse,
-    budgets.DescribeBudgetActionHistoriesError
-  >({
+  makeBudgetActionHttpBinding({
     tag: "AWS.Budgets.DescribeBudgetActionHistories",
     actions: ["budgets:DescribeBudgetActionHistories"],
     operation: budgets.describeBudgetActionHistories,

@@ -8,11 +8,7 @@ import {
 
 export const SearchCertificatesHttp = Layer.effect(
   SearchCertificates,
-  makeAcmAccountHttpBinding<
-    SearchCertificatesRequest,
-    acm.SearchCertificatesResponse,
-    acm.SearchCertificatesError
-  >({
+  makeAcmAccountHttpBinding({
     capability: "SearchCertificates",
     iamActions: ["acm:SearchCertificates"],
     operation: acm.searchCertificates,

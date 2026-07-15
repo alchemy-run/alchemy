@@ -5,11 +5,7 @@ import { RefreshSchemas } from "./RefreshSchemas.ts";
 
 export const RefreshSchemasHttp = Layer.effect(
   RefreshSchemas,
-  makeDmsConnectionScopedHttpBinding<
-    dms.RefreshSchemasMessage,
-    dms.RefreshSchemasResponse,
-    dms.RefreshSchemasError
-  >({
+  makeDmsConnectionScopedHttpBinding({
     tag: "AWS.DMS.RefreshSchemas",
     actions: ["dms:RefreshSchemas"],
     operation: dms.refreshSchemas,

@@ -5,11 +5,7 @@ import { CreateLibraryItem } from "./CreateLibraryItem.ts";
 
 export const CreateLibraryItemHttp = Layer.effect(
   CreateLibraryItem,
-  makeQAppHttpBinding<
-    qapps.CreateLibraryItemInput,
-    qapps.CreateLibraryItemOutput,
-    qapps.CreateLibraryItemError
-  >({
+  makeQAppHttpBinding({
     capability: "CreateLibraryItem",
     iamActions: ["qapps:CreateLibraryItem"],
     operation: qapps.createLibraryItem,

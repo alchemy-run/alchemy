@@ -5,11 +5,7 @@ import { CalculateRoutes } from "./CalculateRoutes.ts";
 
 export const CalculateRoutesHttp = Layer.effect(
   CalculateRoutes,
-  makeGeoRoutesHttpBinding<
-    geoRoutes.CalculateRoutesRequest,
-    geoRoutes.CalculateRoutesResponse,
-    geoRoutes.CalculateRoutesError
-  >({
+  makeGeoRoutesHttpBinding({
     capability: "CalculateRoutes",
     iamActions: ["geo-routes:CalculateRoutes"],
     operation: geoRoutes.calculateRoutes,

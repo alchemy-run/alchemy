@@ -5,11 +5,7 @@ import { ListExports } from "./ListExports.ts";
 
 export const ListExportsHttp = Layer.effect(
   ListExports,
-  makeDataExportsAccountHttpBinding<
-    bcm.ListExportsRequest,
-    bcm.ListExportsResponse,
-    bcm.ListExportsError
-  >({
+  makeDataExportsAccountHttpBinding({
     capability: "ListExports",
     iamActions: ["bcm-data-exports:ListExports"],
     operation: bcm.listExports,

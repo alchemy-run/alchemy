@@ -5,11 +5,7 @@ import { DeleteAppsList } from "./DeleteAppsList.ts";
 
 export const DeleteAppsListHttp = Layer.effect(
   DeleteAppsList,
-  makeFmsHttpBinding<
-    fms.DeleteAppsListRequest,
-    fms.DeleteAppsListResponse,
-    fms.DeleteAppsListError
-  >({
+  makeFmsHttpBinding({
     capability: "DeleteAppsList",
     iamActions: ["fms:DeleteAppsList"],
     operation: fms.deleteAppsList,

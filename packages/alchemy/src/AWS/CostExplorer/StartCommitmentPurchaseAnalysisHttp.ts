@@ -5,11 +5,7 @@ import { StartCommitmentPurchaseAnalysis } from "./StartCommitmentPurchaseAnalys
 
 export const StartCommitmentPurchaseAnalysisHttp = Layer.effect(
   StartCommitmentPurchaseAnalysis,
-  makeCostExplorerHttpBinding<
-    ce.StartCommitmentPurchaseAnalysisRequest,
-    ce.StartCommitmentPurchaseAnalysisResponse,
-    ce.StartCommitmentPurchaseAnalysisError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "StartCommitmentPurchaseAnalysis",
     iamActions: ["ce:StartCommitmentPurchaseAnalysis"],
     operation: ce.startCommitmentPurchaseAnalysis,

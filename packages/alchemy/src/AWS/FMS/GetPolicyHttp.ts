@@ -5,11 +5,7 @@ import { GetPolicy } from "./GetPolicy.ts";
 
 export const GetPolicyHttp = Layer.effect(
   GetPolicy,
-  makeFmsHttpBinding<
-    fms.GetPolicyRequest,
-    fms.GetPolicyResponse,
-    fms.GetPolicyError
-  >({
+  makeFmsHttpBinding({
     capability: "GetPolicy",
     iamActions: ["fms:GetPolicy"],
     operation: fms.getPolicy,

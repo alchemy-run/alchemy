@@ -5,11 +5,7 @@ import { GetAdminScope } from "./GetAdminScope.ts";
 
 export const GetAdminScopeHttp = Layer.effect(
   GetAdminScope,
-  makeFmsHttpBinding<
-    fms.GetAdminScopeRequest,
-    fms.GetAdminScopeResponse,
-    fms.GetAdminScopeError
-  >({
+  makeFmsHttpBinding({
     capability: "GetAdminScope",
     iamActions: ["fms:GetAdminScope"],
     operation: fms.getAdminScope,

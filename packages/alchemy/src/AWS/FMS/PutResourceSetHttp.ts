@@ -5,11 +5,7 @@ import { PutResourceSet } from "./PutResourceSet.ts";
 
 export const PutResourceSetHttp = Layer.effect(
   PutResourceSet,
-  makeFmsHttpBinding<
-    fms.PutResourceSetRequest,
-    fms.PutResourceSetResponse,
-    fms.PutResourceSetError
-  >({
+  makeFmsHttpBinding({
     capability: "PutResourceSet",
     iamActions: ["fms:PutResourceSet"],
     operation: fms.putResourceSet,

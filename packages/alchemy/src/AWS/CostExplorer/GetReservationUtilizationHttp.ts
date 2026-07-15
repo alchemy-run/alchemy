@@ -5,11 +5,7 @@ import { GetReservationUtilization } from "./GetReservationUtilization.ts";
 
 export const GetReservationUtilizationHttp = Layer.effect(
   GetReservationUtilization,
-  makeCostExplorerHttpBinding<
-    ce.GetReservationUtilizationRequest,
-    ce.GetReservationUtilizationResponse,
-    ce.GetReservationUtilizationError
-  >({
+  makeCostExplorerHttpBinding({
     capability: "GetReservationUtilization",
     iamActions: ["ce:GetReservationUtilization"],
     operation: ce.getReservationUtilization,

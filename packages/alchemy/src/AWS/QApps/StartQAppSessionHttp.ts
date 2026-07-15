@@ -5,11 +5,7 @@ import { StartQAppSession } from "./StartQAppSession.ts";
 
 export const StartQAppSessionHttp = Layer.effect(
   StartQAppSession,
-  makeQAppHttpBinding<
-    qapps.StartQAppSessionInput,
-    qapps.StartQAppSessionOutput,
-    qapps.StartQAppSessionError
-  >({
+  makeQAppHttpBinding({
     capability: "StartQAppSession",
     iamActions: ["qapps:StartQAppSession"],
     operation: qapps.startQAppSession,

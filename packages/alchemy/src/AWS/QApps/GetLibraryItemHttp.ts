@@ -5,11 +5,7 @@ import { GetLibraryItem } from "./GetLibraryItem.ts";
 
 export const GetLibraryItemHttp = Layer.effect(
   GetLibraryItem,
-  makeQAppsInstanceHttpBinding<
-    qapps.GetLibraryItemInput,
-    qapps.GetLibraryItemOutput,
-    qapps.GetLibraryItemError
-  >({
+  makeQAppsInstanceHttpBinding({
     capability: "GetLibraryItem",
     iamActions: ["qapps:GetLibraryItem"],
     operation: qapps.getLibraryItem,

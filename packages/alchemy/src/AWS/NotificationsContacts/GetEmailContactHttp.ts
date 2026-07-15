@@ -5,11 +5,7 @@ import { GetEmailContact } from "./GetEmailContact.ts";
 
 export const GetEmailContactHttp = Layer.effect(
   GetEmailContact,
-  makeEmailContactHttpBinding<
-    contacts.GetEmailContactRequest,
-    contacts.GetEmailContactResponse,
-    contacts.GetEmailContactError
-  >({
+  makeEmailContactHttpBinding({
     tag: "AWS.NotificationsContacts.GetEmailContact",
     actions: ["notifications-contacts:GetEmailContact"],
     operation: contacts.getEmailContact,

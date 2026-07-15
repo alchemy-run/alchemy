@@ -5,11 +5,7 @@ import { DisassociateQAppFromUser } from "./DisassociateQAppFromUser.ts";
 
 export const DisassociateQAppFromUserHttp = Layer.effect(
   DisassociateQAppFromUser,
-  makeQAppHttpBinding<
-    qapps.DisassociateQAppFromUserInput,
-    qapps.DisassociateQAppFromUserResponse,
-    qapps.DisassociateQAppFromUserError
-  >({
+  makeQAppHttpBinding({
     capability: "DisassociateQAppFromUser",
     iamActions: ["qapps:DisassociateQAppFromUser"],
     operation: qapps.disassociateQAppFromUser,

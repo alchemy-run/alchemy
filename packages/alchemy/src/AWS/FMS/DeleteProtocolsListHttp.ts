@@ -5,11 +5,7 @@ import { DeleteProtocolsList } from "./DeleteProtocolsList.ts";
 
 export const DeleteProtocolsListHttp = Layer.effect(
   DeleteProtocolsList,
-  makeFmsHttpBinding<
-    fms.DeleteProtocolsListRequest,
-    fms.DeleteProtocolsListResponse,
-    fms.DeleteProtocolsListError
-  >({
+  makeFmsHttpBinding({
     capability: "DeleteProtocolsList",
     iamActions: ["fms:DeleteProtocolsList"],
     operation: fms.deleteProtocolsList,

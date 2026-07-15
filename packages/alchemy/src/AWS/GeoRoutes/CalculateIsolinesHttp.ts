@@ -5,11 +5,7 @@ import { CalculateIsolines } from "./CalculateIsolines.ts";
 
 export const CalculateIsolinesHttp = Layer.effect(
   CalculateIsolines,
-  makeGeoRoutesHttpBinding<
-    geoRoutes.CalculateIsolinesRequest,
-    geoRoutes.CalculateIsolinesResponse,
-    geoRoutes.CalculateIsolinesError
-  >({
+  makeGeoRoutesHttpBinding({
     capability: "CalculateIsolines",
     iamActions: ["geo-routes:CalculateIsolines"],
     operation: geoRoutes.calculateIsolines,

@@ -5,11 +5,7 @@ import { DescribeRefreshSchemasStatus } from "./DescribeRefreshSchemasStatus.ts"
 
 export const DescribeRefreshSchemasStatusHttp = Layer.effect(
   DescribeRefreshSchemasStatus,
-  makeDmsEndpointScopedHttpBinding<
-    dms.DescribeRefreshSchemasStatusMessage,
-    dms.DescribeRefreshSchemasStatusResponse,
-    dms.DescribeRefreshSchemasStatusError
-  >({
+  makeDmsEndpointScopedHttpBinding({
     tag: "AWS.DMS.DescribeRefreshSchemasStatus",
     actions: ["dms:DescribeRefreshSchemasStatus"],
     operation: dms.describeRefreshSchemasStatus,

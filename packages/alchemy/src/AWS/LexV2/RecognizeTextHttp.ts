@@ -10,11 +10,7 @@ import { RecognizeText, type RecognizeTextRequest } from "./RecognizeText.ts";
  */
 export const RecognizeTextHttp = Layer.effect(
   RecognizeText,
-  makeLexAliasHttpBinding<
-    RecognizeTextRequest,
-    lexr.RecognizeTextResponse,
-    lexr.RecognizeTextError
-  >({
+  makeLexAliasHttpBinding({
     capability: "RecognizeText",
     iamActions: ["lex:RecognizeText"],
     operation: lexr.recognizeText,

@@ -5,11 +5,7 @@ import { GetManagedNotificationEvent } from "./GetManagedNotificationEvent.ts";
 
 export const GetManagedNotificationEventHttp = Layer.effect(
   GetManagedNotificationEvent,
-  makeNotificationsHttpBinding<
-    notifications.GetManagedNotificationEventRequest,
-    notifications.GetManagedNotificationEventResponse,
-    notifications.GetManagedNotificationEventError
-  >({
+  makeNotificationsHttpBinding({
     capability: "GetManagedNotificationEvent",
     iamActions: ["notifications:GetManagedNotificationEvent"],
     operation: notifications.getManagedNotificationEvent,

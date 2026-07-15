@@ -5,11 +5,7 @@ import { StopReplicationTask } from "./StopReplicationTask.ts";
 
 export const StopReplicationTaskHttp = Layer.effect(
   StopReplicationTask,
-  makeDmsAccountHttpBinding<
-    dms.StopReplicationTaskMessage,
-    dms.StopReplicationTaskResponse,
-    dms.StopReplicationTaskError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.StopReplicationTask",
     actions: ["dms:StopReplicationTask"],
     operation: dms.stopReplicationTask,

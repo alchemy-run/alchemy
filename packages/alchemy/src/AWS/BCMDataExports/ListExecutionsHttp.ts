@@ -5,11 +5,7 @@ import { ListExecutions } from "./ListExecutions.ts";
 
 export const ListExecutionsHttp = Layer.effect(
   ListExecutions,
-  makeExportHttpBinding<
-    bcm.ListExecutionsRequest,
-    bcm.ListExecutionsResponse,
-    bcm.ListExecutionsError
-  >({
+  makeExportHttpBinding({
     capability: "ListExecutions",
     iamActions: ["bcm-data-exports:ListExecutions"],
     operation: bcm.listExecutions,

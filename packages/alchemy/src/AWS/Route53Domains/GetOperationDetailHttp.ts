@@ -5,11 +5,7 @@ import { GetOperationDetail } from "./GetOperationDetail.ts";
 
 export const GetOperationDetailHttp = Layer.effect(
   GetOperationDetail,
-  makeRoute53DomainsHttpBinding<
-    route53domains.GetOperationDetailRequest,
-    route53domains.GetOperationDetailResponse,
-    route53domains.GetOperationDetailError
-  >({
+  makeRoute53DomainsHttpBinding({
     capability: "GetOperationDetail",
     iamActions: ["route53domains:GetOperationDetail"],
     operation: route53domains.getOperationDetail,

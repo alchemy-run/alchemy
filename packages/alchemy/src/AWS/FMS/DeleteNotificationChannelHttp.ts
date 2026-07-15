@@ -5,11 +5,7 @@ import { DeleteNotificationChannel } from "./DeleteNotificationChannel.ts";
 
 export const DeleteNotificationChannelHttp = Layer.effect(
   DeleteNotificationChannel,
-  makeFmsHttpBinding<
-    fms.DeleteNotificationChannelRequest,
-    fms.DeleteNotificationChannelResponse,
-    fms.DeleteNotificationChannelError
-  >({
+  makeFmsHttpBinding({
     capability: "DeleteNotificationChannel",
     iamActions: ["fms:DeleteNotificationChannel"],
     operation: fms.deleteNotificationChannel,

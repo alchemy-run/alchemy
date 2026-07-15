@@ -5,11 +5,7 @@ import { GetProtocolsList } from "./GetProtocolsList.ts";
 
 export const GetProtocolsListHttp = Layer.effect(
   GetProtocolsList,
-  makeFmsHttpBinding<
-    fms.GetProtocolsListRequest,
-    fms.GetProtocolsListResponse,
-    fms.GetProtocolsListError
-  >({
+  makeFmsHttpBinding({
     capability: "GetProtocolsList",
     iamActions: ["fms:GetProtocolsList"],
     operation: fms.getProtocolsList,

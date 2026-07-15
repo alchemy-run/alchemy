@@ -5,11 +5,7 @@ import { DescribeEndpointSettings } from "./DescribeEndpointSettings.ts";
 
 export const DescribeEndpointSettingsHttp = Layer.effect(
   DescribeEndpointSettings,
-  makeDmsAccountHttpBinding<
-    dms.DescribeEndpointSettingsMessage,
-    dms.DescribeEndpointSettingsResponse,
-    dms.DescribeEndpointSettingsError
-  >({
+  makeDmsAccountHttpBinding({
     tag: "AWS.DMS.DescribeEndpointSettings",
     actions: ["dms:DescribeEndpointSettings"],
     operation: dms.describeEndpointSettings,
