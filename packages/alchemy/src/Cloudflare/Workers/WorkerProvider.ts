@@ -1686,6 +1686,16 @@ export const LiveWorkerProvider = () =>
                 old.type === "durable_object_namespace" &&
                 "className" in old &&
                 old.className &&
+                // Only a *locally-owned* binding proves the class exists on
+                // this script. A cross-script binding under the same name —
+                // e.g. this worker previously referenced another host's
+                // class and now hosts its own — points at a foreign
+                // namespace and must not suppress the create migration
+                // (Cloudflare rejects a local binding for a class the
+                // script isn't configured to implement).
+                (!("scriptName" in old) ||
+                  old.scriptName === undefined ||
+                  old.scriptName === name) &&
                 old.name === binding.bindingName,
             );
             if (observed && "className" in observed && observed.className) {

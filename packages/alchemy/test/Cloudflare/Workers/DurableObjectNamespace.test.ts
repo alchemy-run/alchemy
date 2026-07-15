@@ -635,6 +635,33 @@ test.provider(
       );
       expect(afterRedeploy.value).toBe(2);
 
+      // ...and once the move has landed everywhere, the declaration can be
+      // removed entirely: the class is anchored by its alchemy:do tag, so
+      // dropping `transferredFrom` emits no migration and touches no data.
+      const v4 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter"),
+            },
+          });
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: consumerWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                scriptName: a.workerName,
+              }),
+            },
+          });
+          return { a, b };
+        }),
+      );
+      const afterRemoval = yield* fetchJsonReady<{ value: number }>(
+        `${v4.a.url}/get`,
+      );
+      expect(afterRemoval.value).toBe(2);
+
       yield* scratch.destroy();
     }).pipe(logLevel),
   { timeout: 240_000 },
@@ -1029,4 +1056,134 @@ export default { async fetch() { return new Response("v2"); } };
       yield* scratch.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
+);
+
+// #799 (idempotence): a standing `transferredFrom` declaration must never do
+// anything destructive after its job is done.
+//
+//   v1 — a FRESH stage deployed directly in the final topology, declaration
+//        present: no listed source hosts the class, so worker-a creates a
+//        fresh namespace. Same-class namespaces owned by other stacks and
+//        stages on the account must not match the declaration.
+//   v2 — worker-b later hosts its OWN Durable Object under the same name and
+//        class (the isolated-twins pattern): a fresh, separate namespace.
+//   v3 — worker-a redeploys (forced update) with the now-stale declaration
+//        while that same-name namespace exists on worker-b: the class is
+//        already anchored to worker-a by its DO tag, so the stale
+//        declaration must not steal worker-b's namespace or emit any
+//        migration. Distinct counter values prove both namespaces survive
+//        untouched.
+test.provider(
+  "standing transferredFrom is inert on fresh stages and never steals a same-name namespace",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.destroy();
+
+      // Fresh stage, final topology, declaration present from day one.
+      const v1 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                transferredFrom: "worker-b",
+              }),
+            },
+          });
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: consumerWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                scriptName: a.workerName,
+              }),
+            },
+          });
+          return { a, b };
+        }),
+      );
+
+      // Fresh namespace on worker-a; give it a distinctly non-zero count.
+      // (`/increment` is not idempotent and readiness retries can re-run
+      // it, so assertions use the idempotent `/get` instead of increment
+      // return values.)
+      yield* fetchJsonReady<{ ok: boolean }>(`${v1.a.url}/reset`);
+      yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`);
+      yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`);
+      const aBefore = (yield* fetchJsonReady<{ value: number }>(
+        `${v1.a.url}/get`,
+      )).value;
+      expect(aBefore).toBeGreaterThanOrEqual(2);
+
+      // worker-b now hosts its OWN same-name Counter — an isolated twin.
+      const v2 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                transferredFrom: "worker-b",
+              }),
+            },
+          });
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter"),
+            },
+          });
+          return { a, b };
+        }),
+      );
+
+      // The twin starts empty — its own namespace, not worker-a's. b's
+      // edge may briefly serve the previous (cross-script) version, whose
+      // /get reads worker-a's non-zero count, so poll until the fresh
+      // version answers with the twin's empty count.
+      yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`).pipe(
+        Effect.flatMap((r) =>
+          r.value === 0
+            ? Effect.void
+            : Effect.fail(new Error(`stale: twin sees ${r.value}`)),
+        ),
+        Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+      );
+
+      // Force a real reconcile of worker-a with the stale declaration while
+      // the twin exists. The class is tag-anchored to worker-a, so no
+      // migration may be emitted and neither namespace may change.
+      const v3 = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              FORCE_UPDATE: "1",
+              Counter: Cloudflare.DurableObject("Counter", {
+                transferredFrom: "worker-b",
+              }),
+            },
+          });
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter"),
+            },
+          });
+          return { a, b };
+        }),
+      );
+
+      const aAfter = yield* fetchJsonReady<{ value: number }>(
+        `${v3.a.url}/get`,
+      );
+      expect(aAfter.value).toBe(aBefore);
+      // worker-b was untouched in v3 (noop), so no version staleness here:
+      // its twin namespace must still exist and still be empty.
+      const twinAfter = yield* fetchJsonReady<{ value: number }>(
+        `${v3.b.url}/get`,
+      );
+      expect(twinAfter.value).toBe(0);
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
 );
