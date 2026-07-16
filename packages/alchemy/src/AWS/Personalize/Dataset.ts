@@ -249,7 +249,7 @@ export const DatasetProvider = () =>
                 Schedule.fixed("3 seconds"),
                 Schedule.recurs(40),
               ]),
-              until: (dataset) => dataset === undefined,
+              until: (dataset): boolean => dataset === undefined,
             }),
           );
           if (remaining !== undefined) {

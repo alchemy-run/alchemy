@@ -30,7 +30,7 @@ export const normalizeDurationInput = (
 };
 
 const wire =
-  (to: (d: Duration.Duration) => number) =>
+  (to: (input: Duration.Input) => number) =>
   (input: Duration.Input | undefined): number | undefined =>
     input === undefined
       ? undefined

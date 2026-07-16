@@ -251,7 +251,7 @@ export const EventTrackerProvider = () =>
                 Schedule.fixed("3 seconds"),
                 Schedule.recurs(40),
               ]),
-              until: (tracker) => tracker === undefined,
+              until: (tracker): boolean => tracker === undefined,
             }),
           );
           if (remaining !== undefined) {

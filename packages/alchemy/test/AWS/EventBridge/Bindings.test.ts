@@ -170,18 +170,27 @@ describe("EventBridge Bindings", () => {
   afterAll.skipIf(!!process.env.NO_DESTROY)(
     sharedStack.destroy().pipe(
       // Typed wait-until-gone: the custom bus must be deleted after teardown.
+      // The raw afterAll context has no providers layer (only `test.provider`
+      // bodies do), so the out-of-band distilled call must be wrapped in
+      // `withProviders` to satisfy Credentials/HttpClient/Region.
       Effect.andThen(
-        eventbridge.describeEventBus({ Name: "alchemy-test-eb-bindings" }).pipe(
-          Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (isGone): boolean => isGone,
-            times: 10,
-          }),
-          Effect.map((gone) => expect(gone).toBe(true)),
+        Core.withProviders(
+          eventbridge
+            .describeEventBus({ Name: "alchemy-test-eb-bindings" })
+            .pipe(
+              Effect.map(() => false),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(true),
+              ),
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (isGone): boolean => isGone,
+                times: 10,
+              }),
+              Effect.map((gone) => expect(gone).toBe(true)),
+            ),
+          testOptions,
+          "EventBridgeBindings",
         ),
       ),
     ),

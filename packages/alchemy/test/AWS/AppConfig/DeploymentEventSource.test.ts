@@ -102,7 +102,7 @@ describe("AppConfig DeploymentEventSource", () => {
         const eventUrl = `${baseUrl}/event?number=${started.deploymentNumber}&type=OnDeploymentComplete`;
         const body = yield* HttpClient.get(eventUrl).pipe(
           Effect.flatMap((response) => response.json),
-          Effect.map((json) => json as EventBody),
+          Effect.map((json) => json as unknown as EventBody),
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             until: (json): boolean => json.event !== null,

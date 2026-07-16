@@ -253,7 +253,7 @@ export const DatasetGroupProvider = () =>
                 Schedule.fixed("3 seconds"),
                 Schedule.recurs(40),
               ]),
-              until: (group) => group === undefined,
+              until: (group): boolean => group === undefined,
             }),
           );
           if (remaining !== undefined) {

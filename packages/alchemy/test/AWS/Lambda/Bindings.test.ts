@@ -61,23 +61,30 @@ describe("Lambda Bindings", () => {
   afterAll(
     Effect.gen(function* () {
       yield* sharedStack.destroy();
-      // Out-of-band proof the destroy removed the host function.
+      // Out-of-band proof the destroy removed the host function. The raw
+      // afterAll context has no providers layer (only `test.provider` bodies
+      // do), so the distilled call must be wrapped in `Core.withProviders`
+      // to satisfy Credentials/HttpClient/Region.
       if (deployedFunctionName) {
-        yield* Lambda.getFunction({
-          FunctionName: deployedFunctionName,
-        }).pipe(
-          Effect.flatMap(() =>
-            Effect.fail(
-              new Error(`Function ${deployedFunctionName} still exists`),
+        yield* Core.withProviders(
+          Lambda.getFunction({
+            FunctionName: deployedFunctionName,
+          }).pipe(
+            Effect.flatMap(() =>
+              Effect.fail(
+                new Error(`Function ${deployedFunctionName} still exists`),
+              ),
             ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              schedule: Schedule.max([
+                Schedule.exponential(500),
+                Schedule.recurs(8),
+              ]),
+            }),
           ),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential(500),
-              Schedule.recurs(8),
-            ]),
-          }),
+          testOptions,
+          "LambdaBindings",
         );
       }
     }),
