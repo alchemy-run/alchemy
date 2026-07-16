@@ -2,12 +2,23 @@
  * Interactive opentui reporter — a k9s-style live view of the run.
  *
  * Layout:
- *   header  — run stats (pass/fail/running/queued, elapsed)
- *   list    — every test with a status glyph, navigable (j/k / arrows)
- *   detail  — Enter opens the selected test's error + captured output
- *   footer  — key hints
+ *   header  — run stats (pass/fail/running/queued, elapsed, import progress)
+ *   list    — files with their tests nested inside; failing files auto-expand
+ *   detail  — Enter on a test opens its error + captured output
+ *   footer  — key hints / filter input
  *
- * Keys: j/k navigate · Enter detail · Esc back · f failures-only · q quit
+ * Keys:
+ *   j/k or arrows  navigate            /        type-to-filter
+ *   enter          open test / toggle  h / l    collapse / expand file
+ *   esc            back / clear filter f        failures only
+ *   y              copy error+output   q        quit
+ *
+ * Mouse tracking is disabled (`useMouse: false`), so the terminal's native
+ * click-drag selection and copy work as usual.
+ *
+ * Performance: the list is a fixed pool of Text rows (one per terminal
+ * line) painted from the visible window only — updates are O(window), never
+ * O(total tests).
  */
 import {
   BoxRenderable,
@@ -32,14 +43,6 @@ import {
 
 type Status = "queued" | "running" | "pass" | "fail" | "skip" | "todo";
 
-interface Entry {
-  readonly meta: TestMeta;
-  status: Status;
-  result?: TestResult;
-  /** Cached Select label — recomputed only when status/result changes. */
-  label: string;
-}
-
 const GLYPH: Record<Status, string> = {
   queued: "·",
   running: "◐",
@@ -47,6 +50,34 @@ const GLYPH: Record<Status, string> = {
   fail: "✗",
   skip: "↓",
   todo: "○",
+};
+
+const COLOR = {
+  text: "#787c99",
+  bright: "#c0caf5",
+  pass: "#9ece6a",
+  fail: "#f7768e",
+  running: "#e0af68",
+  dim: "#565f89",
+  bgRow: "#16161e",
+  bgSelected: "#283457",
+  bgChrome: "#1a1b26",
+} as const;
+
+const statusColor = (status: Status): string => {
+  switch (status) {
+    case "pass":
+      return COLOR.pass;
+    case "fail":
+      return COLOR.fail;
+    case "running":
+      return COLOR.running;
+    case "queued":
+      return COLOR.text;
+    case "skip":
+    case "todo":
+      return COLOR.dim;
+  }
 };
 
 const formatDuration = (ms: number): string =>
@@ -60,63 +91,227 @@ const formatLogs = (logs: ReadonlyArray<LogEntry>): string =>
     )
     .join("\n");
 
+// ---------------------------------------------------------------------------
+// Model: files with nested tests
+// ---------------------------------------------------------------------------
+
+interface Entry {
+  readonly meta: TestMeta;
+  readonly file: FileNode;
+  status: Status;
+  result?: TestResult;
+  /** Cached row label — recomputed only when status/result changes. */
+  label: string;
+}
+
+interface FileNode {
+  readonly file: string;
+  readonly tests: Array<Entry>;
+  readonly counts: Record<Status, number>;
+  /** Manual expand/collapse override; `undefined` = automatic. */
+  expanded: boolean | undefined;
+  label: string;
+}
+
+type Node =
+  | { readonly kind: "file"; readonly node: FileNode }
+  | { readonly kind: "test"; readonly entry: Entry };
+
+const makeCounts = (): Record<Status, number> => ({
+  queued: 0,
+  running: 0,
+  pass: 0,
+  fail: 0,
+  skip: 0,
+  todo: 0,
+});
+
 const entryLabel = (entry: Entry): string =>
-  ` ${GLYPH[entry.status]} ${entry.meta.file} > ${entry.meta.titlePath.join(" > ")}` +
+  `    ${GLYPH[entry.status]} ${entry.meta.titlePath.join(" > ")}` +
   (entry.result !== undefined && entry.status !== "queued"
     ? ` (${formatDuration(entry.result.durationMs)})`
     : "");
 
+const fileLabel = (node: FileNode, expanded: boolean): string => {
+  const c = node.counts;
+  const parts = [
+    ...(c.fail > 0 ? [`${c.fail} failed`] : []),
+    ...(c.running > 0 ? [`${c.running} running`] : []),
+    `${c.pass}/${node.tests.length - c.skip - c.todo} passed`,
+    ...(c.skip > 0 ? [`${c.skip} skipped`] : []),
+  ];
+  const glyph =
+    c.fail > 0
+      ? GLYPH.fail
+      : c.running > 0
+        ? GLYPH.running
+        : c.queued > 0
+          ? GLYPH.queued
+          : GLYPH.pass;
+  return ` ${expanded ? "▾" : "▸"} ${glyph} ${node.file}  ${parts.join(" · ")}`;
+};
+
+const fileStatus = (node: FileNode): Status => {
+  const c = node.counts;
+  if (c.fail > 0) return "fail";
+  if (c.running > 0) return "running";
+  if (c.queued > 0) return "queued";
+  if (c.pass > 0) return "pass";
+  return "skip";
+};
+
 class TuiState {
-  readonly entries: Array<Entry> = [];
   readonly byId = new Map<string, Entry>();
+  readonly files = new Map<string, FileNode>();
+  readonly fileOrder: Array<FileNode> = [];
   readonly fileLogs = new Map<string, ReadonlyArray<LogEntry>>();
   failuresOnly = false;
+  /** Active filter query ("" = none). */
+  filter = "";
+  /** True while the footer is capturing filter keystrokes. */
+  filterInput = false;
   detailOpen = false;
-  /** Index of the selected entry within the visible (filtered) list. */
   selectedIndex = 0;
-  /** First visible-list index shown in the window. */
   topIndex = 0;
   summary: RunSummary | undefined;
   startedAt = Date.now();
-  /** Collection progress — files are imported incrementally while earlier
-   * files already execute. */
   collectTotal = 0;
   collectDone = 0;
-  /** Test data changed — the list needs rebuilding on the next flush. */
   dirty = true;
-  /** Counts kept incrementally — recomputing over 1000s of entries per flush
-   * is wasteful. */
-  readonly counts: Record<Status, number> = {
-    queued: 0,
-    running: 0,
-    pass: 0,
-    fail: 0,
-    skip: 0,
-    todo: 0,
-  };
+  readonly counts = makeCounts();
+
+  fileNode(file: string): FileNode {
+    let node = this.files.get(file);
+    if (node === undefined) {
+      node = {
+        file,
+        tests: [],
+        counts: makeCounts(),
+        expanded: undefined,
+        label: "",
+      };
+      this.files.set(file, node);
+      this.fileOrder.push(node);
+    }
+    return node;
+  }
 
   upsert(meta: TestMeta, status: Status, result?: TestResult): void {
     let entry = this.byId.get(meta.id);
     if (entry === undefined) {
-      entry = { meta, status, label: "" };
+      const file = this.fileNode(meta.file);
+      entry = { meta, file, status, label: "" };
       this.byId.set(meta.id, entry);
-      this.entries.push(entry);
+      file.tests.push(entry);
     } else {
       this.counts[entry.status]--;
+      entry.file.counts[entry.status]--;
     }
     this.counts[status]++;
+    entry.file.counts[status]++;
     entry.status = status;
     if (result !== undefined) entry.result = result;
     entry.label = entryLabel(entry);
     this.dirty = true;
   }
 
-  visible(): Array<Entry> {
-    return this.failuresOnly
-      ? this.entries.filter((e) => e.status === "fail")
-      : this.entries;
+  private matches(entry: Entry): boolean {
+    if (this.failuresOnly && entry.status !== "fail") return false;
+    if (this.filter === "") return true;
+    const haystack =
+      `${entry.meta.file} ${entry.meta.titlePath.join(" ")}`.toLowerCase();
+    // Every whitespace-separated word must match somewhere (AND semantics).
+    return this.filter
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w !== "")
+      .every((word) => haystack.includes(word));
+  }
+
+  isExpanded(node: FileNode): boolean {
+    if (node.expanded !== undefined) return node.expanded;
+    // Auto: expand while filtering (matches should be visible) and when the
+    // file has failures.
+    return this.filter !== "" || node.counts.fail > 0;
+  }
+
+  /** Flattened visible tree: file rows with expanded tests nested inside. */
+  visible(): Array<Node> {
+    const out: Array<Node> = [];
+    for (const node of this.fileOrder) {
+      const tests = node.tests.filter((t) => this.matches(t));
+      if (tests.length === 0) continue;
+      const expanded = this.isExpanded(node);
+      node.label = fileLabel(node, expanded);
+      out.push({ kind: "file", node });
+      if (expanded) {
+        for (const entry of tests) out.push({ kind: "test", entry });
+      }
+    }
+    return out;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Clipboard
+// ---------------------------------------------------------------------------
+
+/** OSC52 first (works over ssh in modern terminals), then a system tool. */
+const copyToClipboard = (renderer: CliRenderer, text: string): boolean => {
+  let copied = false;
+  try {
+    copied = renderer.copyToClipboardOSC52(text);
+  } catch {
+    copied = false;
+  }
+  try {
+    const cmd =
+      process.platform === "darwin"
+        ? ["pbcopy"]
+        : process.platform === "win32"
+          ? ["clip"]
+          : ["xclip", "-selection", "clipboard"];
+    const proc = Bun.spawn(cmd, {
+      stdin: "pipe",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    proc.stdin.write(text);
+    proc.stdin.end();
+    copied = true;
+  } catch {
+    // no system clipboard tool — OSC52 result stands
+  }
+  return copied;
+};
+
+const detailContent = (state: TuiState, entry: Entry): string => {
+  const { meta, result } = entry;
+  const lines: Array<string> = [
+    `${meta.file} > ${meta.titlePath.join(" > ")}`,
+    `status: ${entry.status}${
+      result !== undefined
+        ? `  duration: ${formatDuration(result.durationMs)}  retries: ${result.retries}`
+        : ""
+    }`,
+    "",
+  ];
+  if (result?.error !== undefined) {
+    lines.push("── error ──", result.error, "");
+  }
+  if (result !== undefined && result.logs.length > 0) {
+    lines.push("── captured output ──", formatLogs(result.logs), "");
+  }
+  const hookLogs = state.fileLogs.get(meta.file);
+  if (hookLogs !== undefined && hookLogs.length > 0) {
+    lines.push("── file hooks (deploy/destroy) ──", formatLogs(hookLogs));
+  }
+  return lines.join("\n");
+};
+
+// ---------------------------------------------------------------------------
+// TUI
+// ---------------------------------------------------------------------------
 
 interface Tui {
   readonly renderer: CliRenderer;
@@ -126,48 +321,49 @@ interface Tui {
   readonly dispose: () => void;
 }
 
+const FOOTER_HINTS =
+  " j/k move · / filter · enter open/toggle · h/l fold · f failures · y copy · q quit";
+
 const makeTui = async (): Promise<Tui> => {
   const state = new TuiState();
-  const renderer = await createCliRenderer({ exitOnCtrlC: true });
+  // useMouse: false keeps the terminal's native mouse selection + copy.
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: true,
+    useMouse: false,
+  });
 
   const header = new TextRenderable(renderer, {
     id: "header",
     content: "alchemy-test — collecting…",
-    fg: "#c0caf5",
+    fg: COLOR.bright,
   });
   const headerBox = new BoxRenderable(renderer, {
     id: "header-box",
     width: "100%",
     height: 1,
-    backgroundColor: "#1a1b26",
+    backgroundColor: COLOR.bgChrome,
   });
   headerBox.add(header);
 
-  // Windowed list: a fixed pool of Text rows (one per terminal line). Every
-  // update touches only the visible window (~40 rows) — never the full list
-  // of potentially thousands of tests. (SelectRenderable was tried first:
-  // reassigning its options rebuilt internal state for EVERY row on every
-  // flush, which stuttered badly on large runs.)
   const list = new BoxRenderable(renderer, {
     id: "list",
     width: "100%",
     flexGrow: 1,
     flexDirection: "column",
-    backgroundColor: "#16161e",
+    backgroundColor: COLOR.bgRow,
   });
 
   interface Row {
     readonly text: TextRenderable;
-    /** Last-applied content/style — skip native calls when unchanged. */
     content: string;
-    selected: boolean;
+    fg: string;
+    bg: string;
   }
   let rows: Array<Row> = [];
 
   const rebuildRowPool = (): void => {
     for (const row of rows) list.remove(row.text);
     rows = [];
-    // header + footer occupy one line each.
     const count = Math.max(renderer.terminalHeight - 2, 1);
     for (let i = 0; i < count; i++) {
       const text = new TextRenderable(renderer, {
@@ -175,10 +371,10 @@ const makeTui = async (): Promise<Tui> => {
         width: "100%",
         height: 1,
         content: "",
-        fg: "#787c99",
-        bg: "#16161e",
+        fg: COLOR.text,
+        bg: COLOR.bgRow,
       });
-      rows.push({ text, content: "", selected: false });
+      rows.push({ text, content: "", fg: COLOR.text, bg: COLOR.bgRow });
       list.add(text);
     }
   };
@@ -188,25 +384,27 @@ const makeTui = async (): Promise<Tui> => {
     width: "100%",
     flexGrow: 1,
     visible: false,
-    rootOptions: { backgroundColor: "#16161e" },
+    rootOptions: { backgroundColor: COLOR.bgRow },
   });
   const detailText = new TextRenderable(renderer, {
     id: "detail-text",
     content: "",
-    fg: "#c0caf5",
+    fg: COLOR.bright,
   });
   detail.add(detailText);
+  /** Content of the open detail pane (for `y` copy). */
+  let detailRaw = "";
 
   const footer = new TextRenderable(renderer, {
     id: "footer",
-    content: " j/k navigate · enter detail · esc back · f failures · q quit",
-    fg: "#565f89",
+    content: FOOTER_HINTS,
+    fg: COLOR.dim,
   });
   const footerBox = new BoxRenderable(renderer, {
     id: "footer-box",
     width: "100%",
     height: 1,
-    backgroundColor: "#1a1b26",
+    backgroundColor: COLOR.bgChrome,
   });
   footerBox.add(footer);
 
@@ -227,10 +425,22 @@ const makeTui = async (): Promise<Tui> => {
     renderList();
   });
 
-  // Header updates are cheap (one Text content assignment) and decoupled
-  // from list repaints: the header ticks while the run is live, the list
-  // repaints only when test data actually changed or on navigation — and a
-  // repaint only ever touches the visible window.
+  /** Transient footer message (e.g. "copied"); reverts on the next tick. */
+  let flashUntil = 0;
+  const flash = (message: string): void => {
+    flashUntil = Date.now() + 1500;
+    footer.content = ` ${message}`;
+  };
+
+  const updateFooter = (): void => {
+    if (Date.now() < flashUntil) return;
+    footer.content = state.filterInput
+      ? ` /${state.filter}█   (enter keep · esc clear)`
+      : state.filter !== ""
+        ? `${FOOTER_HINTS}  │ filter: ${state.filter}`
+        : FOOTER_HINTS;
+  };
+
   const updateHeader = (): void => {
     const counts = state.counts;
     const elapsed = formatDuration(
@@ -249,17 +459,12 @@ const makeTui = async (): Promise<Tui> => {
       (state.failuresOnly ? "  │ [failures only]" : "");
   };
 
-  /**
-   * Paint the visible window into the row pool. O(window): each row's
-   * content/style is written only when it actually changed since the last
-   * paint, so a steady list costs zero native calls.
-   */
+  /** Paint the visible window into the row pool. O(window). */
   const renderList = (): void => {
     if (state.detailOpen) return;
-    const entries = state.visible();
-    const max = Math.max(entries.length - 1, 0);
+    const nodes = state.visible();
+    const max = Math.max(nodes.length - 1, 0);
     state.selectedIndex = Math.min(state.selectedIndex, max);
-    // Keep the selection inside the window.
     if (state.selectedIndex < state.topIndex) {
       state.topIndex = state.selectedIndex;
     } else if (state.selectedIndex >= state.topIndex + rows.length) {
@@ -267,71 +472,75 @@ const makeTui = async (): Promise<Tui> => {
     }
     state.topIndex = Math.max(
       0,
-      Math.min(state.topIndex, Math.max(entries.length - rows.length, 0)),
+      Math.min(state.topIndex, Math.max(nodes.length - rows.length, 0)),
     );
 
     const width = renderer.terminalWidth;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
-      const entry = entries[state.topIndex + i];
+      const node = nodes[state.topIndex + i];
       const isSelected =
-        entry !== undefined && state.topIndex + i === state.selectedIndex;
-      const content =
-        entry === undefined
-          ? ""
-          : `${isSelected ? "▶" : " "}${entry.label}`.slice(0, width);
+        node !== undefined && state.topIndex + i === state.selectedIndex;
+      let content = "";
+      let fg: string = COLOR.text;
+      if (node !== undefined) {
+        if (node.kind === "file") {
+          content = node.node.label;
+          fg = statusColor(fileStatus(node.node));
+        } else {
+          content = node.entry.label;
+          fg = statusColor(node.entry.status);
+        }
+        content = content.slice(0, width);
+      }
+      if (isSelected) fg = COLOR.bright;
+      const bg = isSelected ? COLOR.bgSelected : COLOR.bgRow;
       if (row.content !== content) {
         row.content = content;
         row.text.content = content;
       }
-      if (row.selected !== isSelected) {
-        row.selected = isSelected;
-        row.text.bg = isSelected ? "#283457" : "#16161e";
-        row.text.fg = isSelected ? "#c0caf5" : "#787c99";
+      if (row.fg !== fg) {
+        row.fg = fg;
+        row.text.fg = fg;
+      }
+      if (row.bg !== bg) {
+        row.bg = bg;
+        row.text.bg = bg;
       }
     }
   };
 
   const moveSelection = (delta: number): void => {
-    const entries = state.visible();
-    if (entries.length === 0) return;
+    const nodes = state.visible();
+    if (nodes.length === 0) return;
     state.selectedIndex = Math.max(
       0,
-      Math.min(state.selectedIndex + delta, entries.length - 1),
+      Math.min(state.selectedIndex + delta, nodes.length - 1),
     );
     renderList();
   };
 
   const refresh = (): void => {
     updateHeader();
-    // Keep `dirty` set while the detail pane hides the list, so the pending
-    // repaint happens when the list becomes visible again.
+    updateFooter();
     if (state.dirty && !state.detailOpen) {
       state.dirty = false;
       renderList();
     }
   };
 
-  const openDetail = (): void => {
-    const entry = state.visible()[state.selectedIndex];
-    if (entry === undefined) return;
-    const { meta, result } = entry;
-    const lines: Array<string> = [
-      `${meta.file} > ${meta.titlePath.join(" > ")}`,
-      `status: ${entry.status}${result !== undefined ? `  duration: ${formatDuration(result.durationMs)}  retries: ${result.retries}` : ""}`,
-      "",
-    ];
-    if (result?.error !== undefined) {
-      lines.push("── error ──", result.error, "");
-    }
-    if (result !== undefined && result.logs.length > 0) {
-      lines.push("── captured output ──", formatLogs(result.logs), "");
-    }
-    const hookLogs = state.fileLogs.get(meta.file);
-    if (hookLogs !== undefined && hookLogs.length > 0) {
-      lines.push("── file hooks (deploy/destroy) ──", formatLogs(hookLogs));
-    }
-    detailText.content = lines.join("\n");
+  const selectedNode = (): Node | undefined =>
+    state.visible()[state.selectedIndex];
+
+  const setExpanded = (node: FileNode, expanded: boolean): void => {
+    node.expanded = expanded;
+    state.dirty = true;
+    renderList();
+  };
+
+  const openDetail = (entry: Entry): void => {
+    detailRaw = detailContent(state, entry);
+    detailText.content = detailRaw;
     state.detailOpen = true;
     list.visible = false;
     detail.visible = true;
@@ -342,9 +551,31 @@ const makeTui = async (): Promise<Tui> => {
     state.detailOpen = false;
     detail.visible = false;
     list.visible = true;
-    // Repaint the window (and apply anything that changed while hidden).
     renderList();
     refresh();
+  };
+
+  const copySelection = (): void => {
+    let text: string | undefined;
+    if (state.detailOpen) {
+      text = detailRaw;
+    } else {
+      const node = selectedNode();
+      if (node?.kind === "test") {
+        text = detailContent(state, node.entry);
+      } else if (node?.kind === "file") {
+        // Copy every failure of the file plus its hook logs.
+        text = node.node.tests
+          .filter((t) => t.status === "fail")
+          .map((t) => detailContent(state, t))
+          .join("\n\n");
+        if (text === "") text = detailContent(state, node.node.tests[0]!);
+      }
+    }
+    if (text === undefined || text === "") return;
+    flash(
+      copyToClipboard(renderer, text) ? "copied to clipboard ✓" : "copy failed",
+    );
   };
 
   let resolveQuit!: () => void;
@@ -352,30 +583,97 @@ const makeTui = async (): Promise<Tui> => {
     resolveQuit = resolve;
   });
 
+  const onFilterKey = (key: KeyEvent): void => {
+    switch (key.name) {
+      case "escape":
+        state.filter = "";
+        state.filterInput = false;
+        break;
+      case "return":
+      case "enter":
+        state.filterInput = false;
+        break;
+      case "backspace":
+        state.filter = state.filter.slice(0, -1);
+        break;
+      default: {
+        // Printable, single-character inputs extend the query.
+        const seq = key.sequence ?? "";
+        if (seq.length === 1 && !key.ctrl && !key.meta && seq >= " ") {
+          state.filter += seq;
+        } else {
+          return;
+        }
+      }
+    }
+    state.selectedIndex = 0;
+    state.topIndex = 0;
+    state.dirty = true;
+    refresh();
+  };
+
   renderer.keyInput.on("keypress", (key: KeyEvent) => {
+    if (state.filterInput && !state.detailOpen) {
+      onFilterKey(key);
+      return;
+    }
     switch (key.name) {
       case "q":
         resolveQuit();
         return;
       case "escape":
-        if (state.detailOpen) closeDetail();
-        return;
-      case "return":
-      case "enter":
-        if (!state.detailOpen) openDetail();
-        return;
-      case "f":
-        if (!state.detailOpen) {
-          state.failuresOnly = !state.failuresOnly;
-          state.selectedIndex = 0;
-          state.topIndex = 0;
+        if (state.detailOpen) {
+          closeDetail();
+        } else if (state.filter !== "") {
+          state.filter = "";
           state.dirty = true;
           refresh();
         }
         return;
+      case "y":
+      case "c":
+        copySelection();
+        return;
     }
     if (state.detailOpen) return; // ScrollBox handles its own keys
     switch (key.name) {
+      case "/":
+        state.filterInput = true;
+        refresh();
+        return;
+      case "return":
+      case "enter": {
+        const node = selectedNode();
+        if (node === undefined) return;
+        if (node.kind === "file") {
+          setExpanded(node.node, !state.isExpanded(node.node));
+        } else {
+          openDetail(node.entry);
+        }
+        return;
+      }
+      case "left":
+      case "h": {
+        const node = selectedNode();
+        if (node === undefined) return;
+        // On a test row, collapse the parent file and land on it.
+        const target = node.kind === "file" ? node.node : node.entry.file;
+        setExpanded(target, false);
+        const index = state
+          .visible()
+          .findIndex((n) => n.kind === "file" && n.node === target);
+        if (index >= 0) {
+          state.selectedIndex = index;
+          renderList();
+        }
+        return;
+      }
+      case "right":
+      case "l": {
+        const node = selectedNode();
+        if (node?.kind === "file") setExpanded(node.node, true);
+        return;
+      }
       case "up":
       case "k":
         moveSelection(-1);
@@ -396,18 +694,25 @@ const makeTui = async (): Promise<Tui> => {
       case "end":
         moveSelection(Number.MAX_SAFE_INTEGER);
         return;
+      case "f":
+        state.failuresOnly = !state.failuresOnly;
+        state.selectedIndex = 0;
+        state.topIndex = 0;
+        state.dirty = true;
+        refresh();
+        return;
     }
   });
 
   // Single flush loop: repaints the visible window at most 10x/s and ONLY
   // when test data changed; otherwise it just ticks the elapsed-time header
-  // while the run is live. Once the run is done and nothing is dirty, this
-  // does no rendering work at all.
+  // while the run is live.
   const interval = setInterval(() => {
     if (state.dirty) {
       refresh();
-    } else if (state.summary === undefined) {
+    } else if (state.summary === undefined || Date.now() < flashUntil + 100) {
       updateHeader();
+      updateFooter();
     }
   }, 100);
 
@@ -418,6 +723,10 @@ const makeTui = async (): Promise<Tui> => {
 
   return { renderer, state, refresh, quit, dispose };
 };
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
 
 const onEvent = (tui: Tui, event: TestEvent): void => {
   const { state } = tui;
@@ -470,8 +779,7 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
       break;
   }
   // Everything else just marks the state dirty; the flush interval batches
-  // rebuilds (a burst of TestEnd events must not trigger a full Select
-  // re-layout per event).
+  // repaints (a burst of TestEnd events must not repaint per event).
   state.dirty = true;
 };
 
