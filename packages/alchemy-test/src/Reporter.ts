@@ -57,6 +57,17 @@ export type TestEvent =
     }
   | { readonly _tag: "FileStart"; readonly file: string }
   | {
+      /** A file-level hook (deploy/destroy) started running. */
+      readonly _tag: "HookStart";
+      readonly file: string;
+      readonly hook: "beforeAll" | "afterAll";
+    }
+  | {
+      readonly _tag: "HookEnd";
+      readonly file: string;
+      readonly hook: "beforeAll" | "afterAll";
+    }
+  | {
       readonly _tag: "FileEnd";
       readonly file: string;
       /** Buffered output of file-level hooks (deploy/destroy). */
@@ -71,6 +82,23 @@ export type TestEvent =
     }
   | { readonly _tag: "RunEnd"; readonly summary: RunSummary };
 
+/**
+ * Interactive control over a live (or finished) run. The runner hands this
+ * to the Reporter so the TUI can retry and kill tests.
+ *
+ * Retries re-run the test body as-is: for files whose state was torn down by
+ * `afterAll` (deploy-once suites) the retried body may fail on missing
+ * infrastructure — `test.provider`-style self-contained tests retry cleanly.
+ */
+export interface RunController {
+  /** Re-run a finished test. No-op while the test is still running/queued. */
+  readonly retryTest: (id: string) => void;
+  /** Re-run every finished test of a file. */
+  readonly retryFile: (file: string) => void;
+  /** Interrupt a currently-running test (reported as failed/killed). */
+  readonly killTest: (id: string) => void;
+}
+
 export interface ReporterService {
   readonly emit: (event: TestEvent) => Effect.Effect<void>;
   /**
@@ -78,6 +106,10 @@ export interface ReporterService {
    * until the user quits so results can be inspected.
    */
   readonly waitForExit: (summary: RunSummary) => Effect.Effect<void>;
+  /** Called once by the runner when interactive control becomes available. */
+  readonly attachController?: (
+    controller: RunController,
+  ) => Effect.Effect<void>;
 }
 
 export class Reporter extends Context.Service<Reporter, ReporterService>()(

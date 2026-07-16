@@ -5,19 +5,23 @@
  *   header  — run stats (pass/fail/running/queued, elapsed, import progress)
  *   list    — files with their tests nested inside; failing files auto-expand
  *   detail  — Enter on a test opens its error + captured output
- *   footer  — key hints / filter input
+ *   footer  — key hints / filter input / status toggles
  *
  * Keys (vim-style):
  *   j/k or arrows  move one line       space / ^d ^u / ^f ^b   page / half page
- *   gg / G         top / bottom        /        type-to-filter
+ *   gg / G         top / bottom        /        live type-to-filter
  *   enter          open test / toggle  h / l    collapse / expand file
- *   esc            back / clear filter f        failures only
+ *   esc            back / clear filter p f n s  toggle pass/fail/pending/skipped
+ *   r              retry test / file   x        kill running test
  *   y              copy error+output   q        quit
  *
  * Mouse: the wheel scrolls the viewable content without moving the selected
- * line (keyboard navigation re-attaches the viewport to the selection);
- * clicking a row selects it. Use `y` to copy, or the terminal's tracking
- * bypass (Shift/Option + drag) for native text selection.
+ * line; clicking a row selects it; drag-selecting text copies it to the
+ * clipboard on release (OSC52 + pbcopy).
+ *
+ * Colors follow the terminal theme: default foreground/background
+ * everywhere, ANSI palette colors only for status glyphs, and inverse video
+ * for the selected row (neovim-style).
  *
  * Performance: the list is a fixed pool of Text rows (one per terminal
  * line) painted from the visible window only — updates are O(window), never
@@ -27,11 +31,20 @@ import {
   BoxRenderable,
   CliRenderEvents,
   createCliRenderer,
+  dim,
+  green,
+  red,
   ScrollBoxRenderable,
+  StyledText,
+  stringToStyledText,
+  TextAttributes,
   TextRenderable,
+  yellow,
   type CliRenderer,
   type KeyEvent,
   type MouseEvent,
+  type Selection,
+  type TextChunk,
 } from "@opentui/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -39,6 +52,7 @@ import * as Layer from "effect/Layer";
 import type { LogEntry } from "./Model.ts";
 import {
   Reporter,
+  type RunController,
   type RunSummary,
   type TestEvent,
   type TestMeta,
@@ -46,6 +60,24 @@ import {
 } from "./Reporter.ts";
 
 type Status = "queued" | "running" | "pass" | "fail" | "skip" | "todo";
+
+/** Visibility toggle groups (`p` / `f` / `n` / `s`). */
+type StatusGroup = "pass" | "fail" | "pending" | "skipped";
+
+const groupOf = (status: Status): StatusGroup => {
+  switch (status) {
+    case "pass":
+      return "pass";
+    case "fail":
+      return "fail";
+    case "queued":
+    case "running":
+      return "pending";
+    case "skip":
+    case "todo":
+      return "skipped";
+  }
+};
 
 const GLYPH: Record<Status, string> = {
   queued: "·",
@@ -56,38 +88,26 @@ const GLYPH: Record<Status, string> = {
   todo: "○",
 };
 
-const COLOR = {
-  text: "#787c99",
-  bright: "#c0caf5",
-  pass: "#9ece6a",
-  fail: "#f7768e",
-  running: "#e0af68",
-  dim: "#565f89",
-  bgRow: "#16161e",
-  bgSelected: "#283457",
-  bgChrome: "#1a1b26",
-} as const;
-
-const statusColor = (status: Status): string => {
+/** ANSI palette chunk for a status glyph — follows the terminal theme. */
+const statusChunk = (status: Status, text: string): TextChunk => {
   switch (status) {
     case "pass":
-      return COLOR.pass;
+      return green(text);
     case "fail":
-      return COLOR.fail;
+      return red(text);
     case "running":
-      return COLOR.running;
+      return yellow(text);
     case "queued":
-      return COLOR.text;
     case "skip":
     case "todo":
-      return COLOR.dim;
+      return dim(text);
   }
 };
 
 const formatDuration = (ms: number): string =>
   ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 
-// Captured output is replayed verbatim (no timestamp/level prefixes).
+// Captured output is replayed verbatim (ANSI is stripped at capture time).
 const formatLogs = (logs: ReadonlyArray<LogEntry>): string =>
   logs.map((log) => log.message).join("\n");
 
@@ -100,7 +120,7 @@ interface Entry {
   readonly file: FileNode;
   status: Status;
   result?: TestResult;
-  /** Cached row label — recomputed only when status/result changes. */
+  /** Cached plain-text row label — recomputed only on status/result change. */
   label: string;
 }
 
@@ -110,7 +130,11 @@ interface FileNode {
   readonly counts: Record<Status, number>;
   /** Manual expand/collapse override; `undefined` = automatic. */
   expanded: boolean | undefined;
-  label: string;
+  /** FileStart seen — the file's fiber is executing. */
+  started: boolean;
+  /** Currently-running file hook ("deploying…" feedback), if any. */
+  hook: "beforeAll" | "afterAll" | undefined;
+  hookStartedAt: number;
 }
 
 type Node =
@@ -127,12 +151,12 @@ const makeCounts = (): Record<Status, number> => ({
 });
 
 const entryLabel = (entry: Entry): string =>
-  `    ${GLYPH[entry.status]} ${entry.meta.titlePath.join(" > ")}` +
+  `${entry.meta.titlePath.join(" > ")}` +
   (entry.result !== undefined && entry.status !== "queued"
     ? ` (${formatDuration(entry.result.durationMs)})`
     : "");
 
-const fileLabel = (node: FileNode, expanded: boolean): string => {
+const fileSummary = (node: FileNode): string => {
   const c = node.counts;
   const parts = [
     ...(c.fail > 0 ? [`${c.fail} failed`] : []),
@@ -140,24 +164,27 @@ const fileLabel = (node: FileNode, expanded: boolean): string => {
     `${c.pass}/${node.tests.length - c.skip - c.todo} passed`,
     ...(c.skip > 0 ? [`${c.skip} skipped`] : []),
   ];
-  const glyph =
-    c.fail > 0
-      ? GLYPH.fail
-      : c.running > 0
-        ? GLYPH.running
-        : c.queued > 0
-          ? GLYPH.queued
-          : GLYPH.pass;
-  return ` ${expanded ? "▾" : "▸"} ${glyph} ${node.file}  ${parts.join(" · ")}`;
+  return parts.join(" · ");
 };
 
 const fileStatus = (node: FileNode): Status => {
   const c = node.counts;
   if (c.fail > 0) return "fail";
-  if (c.running > 0) return "running";
+  if (node.hook !== undefined || c.running > 0) return "running";
   if (c.queued > 0) return "queued";
   if (c.pass > 0) return "pass";
   return "skip";
+};
+
+/** Why a file's tests are still gray — surfaced on the file row. */
+const filePhase = (node: FileNode): string | undefined => {
+  if (node.hook !== undefined) {
+    return `${node.hook} running (${formatDuration(Date.now() - node.hookStartedAt)})…`;
+  }
+  if (!node.started && node.counts.queued > 0) {
+    return "waiting for a worker slot…";
+  }
+  return undefined;
 };
 
 class TuiState {
@@ -165,8 +192,14 @@ class TuiState {
   readonly files = new Map<string, FileNode>();
   readonly fileOrder: Array<FileNode> = [];
   readonly fileLogs = new Map<string, ReadonlyArray<LogEntry>>();
-  failuresOnly = false;
-  /** Active filter query ("" = none). */
+  /** Independent status-group visibility toggles (all on by default). */
+  readonly show: Record<StatusGroup, boolean> = {
+    pass: true,
+    fail: true,
+    pending: true,
+    skipped: true,
+  };
+  /** Active filter query ("" = none). Applied live on every keystroke. */
   filter = "";
   /** True while the footer is capturing filter keystrokes. */
   filterInput = false;
@@ -175,12 +208,11 @@ class TuiState {
   topIndex = 0;
   /**
    * When true the viewport tracks the selection (keyboard navigation).
-   * Mouse-wheel scrolling detaches it so the wheel moves the viewable
-   * content without touching the selected line; the next keyboard move
-   * re-attaches.
+   * Mouse-wheel scrolling detaches it; the next keyboard move re-attaches.
    */
   viewportFollows = true;
   summary: RunSummary | undefined;
+  controller: RunController | undefined;
   startedAt = Date.now();
   collectTotal = 0;
   collectDone = 0;
@@ -195,7 +227,9 @@ class TuiState {
         tests: [],
         counts: makeCounts(),
         expanded: undefined,
-        label: "",
+        started: false,
+        hook: undefined,
+        hookStartedAt: 0,
       };
       this.files.set(file, node);
       this.fileOrder.push(node);
@@ -222,8 +256,35 @@ class TuiState {
     this.dirty = true;
   }
 
+  allGroupsShown(): boolean {
+    return (
+      this.show.pass && this.show.fail && this.show.pending && this.show.skipped
+    );
+  }
+
+  /**
+   * Toggle a status group. From "everything visible", the first press solos
+   * the group (that's what you almost always want); further presses toggle
+   * groups independently; hiding the last visible group resets to all.
+   */
+  toggleGroup(group: StatusGroup): void {
+    if (this.allGroupsShown()) {
+      for (const key of Object.keys(this.show) as Array<StatusGroup>) {
+        this.show[key] = key === group;
+      }
+    } else {
+      this.show[group] = !this.show[group];
+      if (!Object.values(this.show).some((on) => on)) {
+        for (const key of Object.keys(this.show) as Array<StatusGroup>) {
+          this.show[key] = true;
+        }
+      }
+    }
+    this.dirty = true;
+  }
+
   private matches(entry: Entry): boolean {
-    if (this.failuresOnly && entry.status !== "fail") return false;
+    if (!this.show[groupOf(entry.status)]) return false;
     if (this.filter === "") return true;
     const haystack =
       `${entry.meta.file} ${entry.meta.titlePath.join(" ")}`.toLowerCase();
@@ -249,13 +310,20 @@ class TuiState {
       const tests = node.tests.filter((t) => this.matches(t));
       if (tests.length === 0) continue;
       const expanded = this.isExpanded(node);
-      node.label = fileLabel(node, expanded);
       out.push({ kind: "file", node });
       if (expanded) {
         for (const entry of tests) out.push({ kind: "test", entry });
       }
     }
     return out;
+  }
+
+  visibleTestCount(): number {
+    let count = 0;
+    for (const node of this.visible()) {
+      if (node.kind === "test") count++;
+    }
+    return count;
   }
 }
 
@@ -329,16 +397,13 @@ interface Tui {
 }
 
 const FOOTER_HINTS =
-  " j/k move · space/^d/^u page · gg/G · / filter · enter open · h/l fold · f failures · y copy · q quit";
+  " j/k move · / filter · enter open · h/l fold · p/f/n/s show · r retry · x kill · y copy · q quit";
 
 const makeTui = async (): Promise<Tui> => {
   const state = new TuiState();
   /** True once the renderer is torn down — no further writes are allowed. */
   let disposed = false;
-  // Mouse tracking is enabled for wheel-scrolling and click-to-select.
-  // Text can still be copied with `y` (test details) or with the terminal's
-  // tracking bypass (Shift/Option + drag in most terminals).
-  //
+
   // Ctrl+C is handled by US (exitOnCtrlC: false): opentui's built-in handler
   // destroys the renderer while our flush timer may still be queued, which
   // crashed with "TextBuffer is destroyed". We dispose first, then exit.
@@ -346,32 +411,25 @@ const makeTui = async (): Promise<Tui> => {
     exitOnCtrlC: false,
   });
 
+  // No explicit colors on chrome — match the terminal's own theme.
   const header = new TextRenderable(renderer, {
     id: "header",
     content: "alchemy-test — collecting…",
-    fg: COLOR.bright,
-  });
-  const headerBox = new BoxRenderable(renderer, {
-    id: "header-box",
-    width: "100%",
     height: 1,
-    backgroundColor: COLOR.bgChrome,
+    width: "100%",
   });
-  headerBox.add(header);
 
   const list = new BoxRenderable(renderer, {
     id: "list",
     width: "100%",
     flexGrow: 1,
     flexDirection: "column",
-    backgroundColor: COLOR.bgRow,
   });
 
   interface Row {
     readonly text: TextRenderable;
-    content: string;
-    fg: string;
-    bg: string;
+    /** Cache key of the last-applied content/style. */
+    key: string;
   }
   let rows: Array<Row> = [];
 
@@ -386,8 +444,7 @@ const makeTui = async (): Promise<Tui> => {
         width: "100%",
         height: 1,
         content: "",
-        fg: COLOR.text,
-        bg: COLOR.bgRow,
+        selectable: true,
         // Wheel scrolls the viewable content without moving the selection;
         // a click selects the row under the cursor.
         onMouse: (event: MouseEvent) => {
@@ -397,7 +454,7 @@ const makeTui = async (): Promise<Tui> => {
         },
         onMouseDown: () => selectRow(index),
       });
-      rows.push({ text, content: "", fg: COLOR.text, bg: COLOR.bgRow });
+      rows.push({ text, key: "" });
       list.add(text);
     }
   };
@@ -407,12 +464,11 @@ const makeTui = async (): Promise<Tui> => {
     width: "100%",
     flexGrow: 1,
     visible: false,
-    rootOptions: { backgroundColor: COLOR.bgRow },
   });
   const detailText = new TextRenderable(renderer, {
     id: "detail-text",
     content: "",
-    fg: COLOR.bright,
+    selectable: true,
   });
   detail.add(detailText);
   /** Content of the open detail pane (for `y` copy). */
@@ -421,15 +477,9 @@ const makeTui = async (): Promise<Tui> => {
   const footer = new TextRenderable(renderer, {
     id: "footer",
     content: FOOTER_HINTS,
-    fg: COLOR.dim,
-  });
-  const footerBox = new BoxRenderable(renderer, {
-    id: "footer-box",
-    width: "100%",
     height: 1,
-    backgroundColor: COLOR.bgChrome,
+    width: "100%",
   });
-  footerBox.add(footer);
 
   const root = new BoxRenderable(renderer, {
     id: "root",
@@ -437,31 +487,65 @@ const makeTui = async (): Promise<Tui> => {
     height: "100%",
     flexDirection: "column",
   });
-  root.add(headerBox);
+  root.add(header);
   root.add(list);
   root.add(detail);
-  root.add(footerBox);
+  root.add(footer);
   renderer.root.add(root);
   rebuildRowPool();
   renderer.on(CliRenderEvents.RESIZE, () => {
+    if (disposed) return;
     rebuildRowPool();
     renderList();
   });
+
+  // Drag-selected text is copied automatically on release (the terminal's
+  // own CMD+C can't see the TUI's selection).
+  let lastCopiedSelection = "";
+  renderer.on(
+    CliRenderEvents.SELECTION,
+    (selection: Selection | null | undefined) => {
+      if (disposed || selection == null) return;
+      if (selection.isDragging) return;
+      const text = selection.getSelectedText();
+      if (text === "" || text === lastCopiedSelection) return;
+      lastCopiedSelection = text;
+      if (copyToClipboard(renderer, text)) {
+        flash("selection copied ✓");
+      }
+    },
+  );
 
   /** Transient footer message (e.g. "copied"); reverts on the next tick. */
   let flashUntil = 0;
   const flash = (message: string): void => {
     flashUntil = Date.now() + 1500;
-    footer.content = ` ${message}`;
+    footer.content = stringToStyledText(` ${message}`);
   };
 
   const updateFooter = (): void => {
     if (Date.now() < flashUntil) return;
-    footer.content = state.filterInput
-      ? ` /${state.filter}█   (enter keep · esc clear)`
-      : state.filter !== ""
-        ? `${FOOTER_HINTS}  │ filter: ${state.filter}`
-        : FOOTER_HINTS;
+    if (state.filterInput) {
+      footer.content = stringToStyledText(
+        ` /${state.filter}█   ${state.visibleTestCount()} matches   (enter close · esc clear)`,
+      );
+      return;
+    }
+    const shown = state.allGroupsShown()
+      ? ""
+      : `  │ showing: ${(
+          [
+            ["pass", GLYPH.pass],
+            ["fail", GLYPH.fail],
+            ["pending", GLYPH.running],
+            ["skipped", GLYPH.skip],
+          ] as Array<[StatusGroup, string]>
+        )
+          .filter(([group]) => state.show[group])
+          .map(([group, glyph]) => `${glyph} ${group}`)
+          .join(" · ")}`;
+    const filter = state.filter !== "" ? `  │ filter: ${state.filter}` : "";
+    footer.content = new StyledText([dim(`${FOOTER_HINTS}${shown}${filter}`)]);
   };
 
   const updateHeader = (): void => {
@@ -474,22 +558,29 @@ const makeTui = async (): Promise<Tui> => {
       !done && state.collectDone < state.collectTotal
         ? `  │ importing ${state.collectDone}/${state.collectTotal} files`
         : "";
-    header.content =
-      ` alchemy-test  ${GLYPH.pass} ${counts.pass}  ${GLYPH.fail} ${counts.fail}` +
-      `  ${GLYPH.running} ${counts.running}  ${GLYPH.queued} ${counts.queued}` +
-      (counts.skip > 0 ? `  ${GLYPH.skip} ${counts.skip}` : "") +
-      `  │ ${elapsed}${collecting}${done ? "  │ DONE — press q to quit" : ""}` +
-      (state.failuresOnly ? "  │ [failures only]" : "");
+    header.content = new StyledText([
+      dim(" alchemy-test  "),
+      green(`${GLYPH.pass} ${counts.pass}`),
+      dim("  "),
+      red(`${GLYPH.fail} ${counts.fail}`),
+      dim("  "),
+      yellow(`${GLYPH.running} ${counts.running}`),
+      dim(`  ${GLYPH.queued} ${counts.queued}`),
+      ...(counts.skip > 0 ? [dim(`  ${GLYPH.skip} ${counts.skip}`)] : []),
+      dim(`  │ ${elapsed}${collecting}`),
+      ...(done ? [dim("  │ DONE — press q to quit")] : []),
+    ]);
   };
 
-  /** Paint the visible window into the row pool. O(window). */
+  /**
+   * Paint the visible window into the row pool. O(window): a row's content
+   * is only written when its cache key changed since the last paint.
+   */
   const renderList = (): void => {
-    if (state.detailOpen) return;
+    if (state.detailOpen || disposed) return;
     const nodes = state.visible();
     const max = Math.max(nodes.length - 1, 0);
     state.selectedIndex = Math.min(state.selectedIndex, max);
-    // Keyboard navigation keeps the selection in view; wheel scrolling
-    // detaches the viewport and leaves the selection where it is.
     if (state.viewportFollows) {
       if (state.selectedIndex < state.topIndex) {
         state.topIndex = state.selectedIndex;
@@ -508,32 +599,52 @@ const makeTui = async (): Promise<Tui> => {
       const node = nodes[state.topIndex + i];
       const isSelected =
         node !== undefined && state.topIndex + i === state.selectedIndex;
-      let content = "";
-      let fg: string = COLOR.text;
-      if (node !== undefined) {
-        if (node.kind === "file") {
-          content = node.node.label;
-          fg = statusColor(fileStatus(node.node));
-        } else {
-          content = node.entry.label;
-          fg = statusColor(node.entry.status);
+
+      if (node === undefined) {
+        if (row.key !== "") {
+          row.key = "";
+          row.text.content = "";
+          row.text.attributes = TextAttributes.NONE;
         }
-        content = content.slice(0, width);
+        continue;
       }
-      if (isSelected) fg = COLOR.bright;
-      const bg = isSelected ? COLOR.bgSelected : COLOR.bgRow;
-      if (row.content !== content) {
-        row.content = content;
-        row.text.content = content;
+
+      let head: string;
+      let status: Status;
+      let rest: string;
+      if (node.kind === "file") {
+        const expanded = state.isExpanded(node.node);
+        status = fileStatus(node.node);
+        head = ` ${expanded ? "▾" : "▸"} ${GLYPH[status]} `;
+        const phase = filePhase(node.node);
+        rest =
+          `${node.node.file}  ${fileSummary(node.node)}` +
+          (phase !== undefined ? `  — ${phase}` : "");
+      } else {
+        status = node.entry.status;
+        head = `     ${GLYPH[status]} `;
+        rest = node.entry.label;
       }
-      if (row.fg !== fg) {
-        row.fg = fg;
-        row.text.fg = fg;
+      rest = rest.slice(0, Math.max(width - head.length, 0));
+
+      const key = `${isSelected ? "S" : "."}|${status}|${head}|${rest}`;
+      if (row.key === key) continue;
+      row.key = key;
+      const chunks = [statusChunk(status, head)];
+      if (rest !== "") {
+        // Only the glyph is colored; the label uses the terminal's default
+        // foreground (skipped rows are dimmed).
+        if (status === "skip" || status === "todo") {
+          chunks.push(dim(rest));
+        } else {
+          chunks.push(...stringToStyledText(rest).chunks);
+        }
       }
-      if (row.bg !== bg) {
-        row.bg = bg;
-        row.text.bg = bg;
-      }
+      row.text.content = new StyledText(chunks);
+      // Inverse video for the selection — uses the terminal's own colors.
+      row.text.attributes = isSelected
+        ? TextAttributes.INVERSE
+        : TextAttributes.NONE;
     }
   };
 
@@ -570,8 +681,11 @@ const makeTui = async (): Promise<Tui> => {
   };
 
   const refresh = (): void => {
+    if (disposed) return;
     updateHeader();
     updateFooter();
+    // Keep `dirty` set while the detail pane hides the list, so the pending
+    // repaint happens when the list becomes visible again.
     if (state.dirty && !state.detailOpen) {
       state.dirty = false;
       renderList();
@@ -589,7 +703,7 @@ const makeTui = async (): Promise<Tui> => {
 
   const openDetail = (entry: Entry): void => {
     detailRaw = detailContent(state, entry);
-    detailText.content = detailRaw;
+    detailText.content = stringToStyledText(detailRaw);
     state.detailOpen = true;
     list.visible = false;
     detail.visible = true;
@@ -618,13 +732,53 @@ const makeTui = async (): Promise<Tui> => {
           .filter((t) => t.status === "fail")
           .map((t) => detailContent(state, t))
           .join("\n\n");
-        if (text === "") text = detailContent(state, node.node.tests[0]!);
+        if (text === "" && node.node.tests.length > 0) {
+          text = detailContent(state, node.node.tests[0]!);
+        }
       }
     }
     if (text === undefined || text === "") return;
     flash(
       copyToClipboard(renderer, text) ? "copied to clipboard ✓" : "copy failed",
     );
+  };
+
+  const retrySelection = (): void => {
+    const controller = state.controller;
+    if (controller === undefined) return;
+    const node = state.detailOpen ? undefined : selectedNode();
+    if (node === undefined) return;
+    if (node.kind === "test") {
+      if (node.entry.status === "running" || node.entry.status === "queued") {
+        flash("still running — x to kill");
+        return;
+      }
+      controller.retryTest(node.entry.meta.id);
+      flash(`retrying ${node.entry.meta.name}`);
+    } else {
+      controller.retryFile(node.node.file);
+      flash(`retrying ${node.node.file}`);
+    }
+  };
+
+  const killSelection = (): void => {
+    const controller = state.controller;
+    if (controller === undefined) return;
+    const node = state.detailOpen ? undefined : selectedNode();
+    if (node === undefined) return;
+    if (node.kind === "test") {
+      if (node.entry.status !== "running") {
+        flash("not running — nothing to kill");
+        return;
+      }
+      controller.killTest(node.entry.meta.id);
+      flash(`killing ${node.entry.meta.name}`);
+    } else {
+      for (const entry of node.node.tests) {
+        if (entry.status === "running") controller.killTest(entry.meta.id);
+      }
+      flash(`killing running tests in ${node.node.file}`);
+    }
   };
 
   let resolveQuit!: () => void;
@@ -646,7 +800,8 @@ const makeTui = async (): Promise<Tui> => {
         state.filter = state.filter.slice(0, -1);
         break;
       default: {
-        // Printable, single-character inputs extend the query.
+        // Printable, single-character inputs extend the query; the list
+        // re-filters on every keystroke.
         const seq = key.sequence ?? "";
         if (seq.length === 1 && !key.ctrl && !key.meta && seq >= " ") {
           state.filter += seq;
@@ -691,6 +846,12 @@ const makeTui = async (): Promise<Tui> => {
         return;
       case "y":
         copySelection();
+        return;
+      case "r":
+        retrySelection();
+        return;
+      case "x":
+        killSelection();
         return;
     }
     if (state.detailOpen) return; // ScrollBox handles its own keys
@@ -793,14 +954,26 @@ const makeTui = async (): Promise<Tui> => {
       case "end":
         moveSelection(Number.MAX_SAFE_INTEGER);
         return;
+      // Independent status-group visibility toggles. From "all visible" the
+      // first press solos the group; further presses combine toggles.
+      case "p":
+        state.toggleGroup("pass");
+        break;
       case "f":
-        state.failuresOnly = !state.failuresOnly;
-        state.selectedIndex = 0;
-        state.topIndex = 0;
-        state.dirty = true;
-        refresh();
+        state.toggleGroup("fail");
+        break;
+      case "n":
+        state.toggleGroup("pending");
+        break;
+      case "s":
+        state.toggleGroup("skipped");
+        break;
+      default:
         return;
     }
+    state.selectedIndex = 0;
+    state.topIndex = 0;
+    refresh();
   });
 
   // Single flush loop: repaints the visible window at most 10x/s and ONLY
@@ -808,6 +981,10 @@ const makeTui = async (): Promise<Tui> => {
   // while the run is live.
   const interval = setInterval(() => {
     if (disposed) return;
+    // Hook phases show a live elapsed time on file rows.
+    for (const node of state.fileOrder) {
+      if (node.hook !== undefined) state.dirty = true;
+    }
     if (state.dirty) {
       refresh();
     } else if (state.summary === undefined || Date.now() < flashUntil + 100) {
@@ -855,13 +1032,27 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
       state.startedAt = Date.now();
       for (const meta of event.tests) state.upsert(meta, "queued");
       break;
+    case "FileStart":
+      state.fileNode(event.file).started = true;
+      break;
+    case "HookStart": {
+      const node = state.fileNode(event.file);
+      node.hook = event.hook;
+      node.hookStartedAt = Date.now();
+      break;
+    }
+    case "HookEnd":
+      state.fileNode(event.file).hook = undefined;
+      break;
     case "TestStart":
       state.upsert(event.test, "running");
       break;
     case "TestEnd":
       state.upsert(event.test, event.result.status, event.result);
       break;
-    case "FileEnd":
+    case "FileEnd": {
+      const node = state.fileNode(event.file);
+      node.hook = undefined;
       state.fileLogs.set(event.file, event.logs);
       if (event.error !== undefined) {
         // Surface import/hook failures as a synthetic failed entry.
@@ -883,6 +1074,7 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
         );
       }
       break;
+    }
     case "RunEnd":
       state.summary = event.summary;
       // Final state should render immediately, not on the next tick.
@@ -905,6 +1097,10 @@ export const TuiReporterLive: Layer.Layer<Reporter> = Layer.effect(Reporter)(
     return {
       emit: (event) => Effect.sync(() => onEvent(tui, event)),
       waitForExit: () => Effect.promise(() => tui.quit),
+      attachController: (controller) =>
+        Effect.sync(() => {
+          tui.state.controller = controller;
+        }),
     };
   }),
 );

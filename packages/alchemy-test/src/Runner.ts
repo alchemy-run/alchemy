@@ -12,6 +12,7 @@ import * as ConsoleModule from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
@@ -20,10 +21,11 @@ import { inspect } from "node:util";
 import { pathToFileURL } from "node:url";
 
 import type { FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
-import { containsOnly, titlePath } from "./Model.ts";
+import { containsOnly, forEachTest, titlePath } from "./Model.ts";
 import * as Registry from "./Registry.ts";
 import {
   Reporter,
+  type RunController,
   type RunSummary,
   type TestEvent,
   type TestMeta,
@@ -51,10 +53,23 @@ export interface RunOptions {
 // Log capture
 // ---------------------------------------------------------------------------
 
+/**
+ * Strip ANSI escape sequences (SGR colors, cursor movement, OSC). Captured
+ * output is re-rendered by the reporters — embedded escapes corrupt the
+ * TUI's cell-based rendering and garble plain output.
+ */
+const ANSI_RE =
+  // eslint-disable-next-line no-control-regex
+  /\u001B(?:\[[0-9;?]*[ -/]*[@-~]|\][^\u0007\u001B]*(?:\u0007|\u001B\\)|[@-Z\\-_])/g;
+
+const stripAnsi = (text: string): string => text.replace(ANSI_RE, "");
+
 const formatArg = (value: unknown): string =>
-  typeof value === "string"
-    ? value
-    : inspect(value, { depth: 4, colors: false });
+  stripAnsi(
+    typeof value === "string"
+      ? value
+      : inspect(value, { depth: 4, colors: false }),
+  );
 
 const formatArgs = (args: ReadonlyArray<unknown>): string =>
   args.map(formatArg).join(" ");
@@ -231,6 +246,10 @@ interface ExecContext {
   readonly results: Array<{ meta: TestMeta; result: TestResult }>;
   readonly file: string;
   readonly lock: Semaphore.Semaphore;
+  /** Run-global registry of currently-executing test fibers (for kill). */
+  readonly running: Map<string, Fiber.Fiber<Exit.Exit<unknown, unknown>>>;
+  /** Run-global set of tests that have finished at least once (for retry). */
+  readonly completed: Set<string>;
 }
 
 const metaOf = (file: string, test: TestCase): TestMeta => {
@@ -304,8 +323,14 @@ const runHooks = (
 
 const prettyCause = (cause: Cause.Cause<unknown>): string => {
   const rendered = Cause.pretty(cause);
-  return rendered.trim().length === 0 ? inspect(Cause.squash(cause)) : rendered;
+  return stripAnsi(
+    rendered.trim().length === 0 ? inspect(Cause.squash(cause)) : rendered,
+  );
 };
+
+const wasInterrupted = (exit: Exit.Exit<unknown, unknown>): boolean =>
+  Exit.isFailure(exit) &&
+  exit.cause.reasons.some((reason) => reason._tag === "Interrupt");
 
 const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   const meta = metaOf(ctx.file, test);
@@ -347,17 +372,44 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   let retries = 0;
   let logs: Array<LogEntry> = [];
   const withLock = ctx.lock.withPermits(test.exclusive ? EXCLUSIVE_PERMITS : 1);
-  let exit = yield* withLock(attempt(logs));
-  while (Exit.isFailure(exit) && !test.fails && retries < ctx.options.retry) {
+
+  // Each attempt runs in its own fiber, registered run-globally so the TUI's
+  // kill command can interrupt it.
+  const runAttempt = Effect.fn(function* (): Generator<
+    Effect.Effect<any>,
+    Exit.Exit<unknown, unknown>
+  > {
+    const fiber = yield* Effect.forkChild(withLock(attempt(logs)), {
+      startImmediately: true,
+    });
+    ctx.running.set(meta.id, fiber);
+    const exit: Exit.Exit<Exit.Exit<unknown, unknown>> =
+      yield* Fiber.await(fiber);
+    ctx.running.delete(meta.id);
+    // The forked attempt captures its own exit (Effect.exit); an interrupt
+    // arrives as the OUTER exit failing.
+    return Exit.isSuccess(exit) ? exit.value : exit;
+  });
+
+  let exit = yield* runAttempt();
+  while (
+    Exit.isFailure(exit) &&
+    !wasInterrupted(exit) &&
+    !test.fails &&
+    retries < ctx.options.retry
+  ) {
     retries++;
     logs = [];
-    exit = yield* withLock(attempt(logs));
+    exit = yield* runAttempt();
   }
   const durationMs = Date.now() - start;
 
   let status: TestResult["status"];
   let error: string | undefined;
-  if (test.fails) {
+  if (wasInterrupted(exit)) {
+    status = "fail";
+    error = "killed (interrupted by user)";
+  } else if (test.fails) {
     if (Exit.isFailure(exit)) {
       status = "pass";
     } else {
@@ -371,6 +423,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     error = prettyCause(exit.cause);
   }
 
+  ctx.completed.add(meta.id);
   const result: TestResult = { status, durationMs, error, logs, retries };
   ctx.results.push({ meta, result });
   yield* ctx.emit({ _tag: "TestEnd", test: meta, result });
@@ -430,12 +483,15 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
       return;
     }
 
-    // beforeAll — captured into the file-level log buffer.
+    // beforeAll — captured into the file-level log buffer. Emits hook events
+    // so the TUI can show "setting up" instead of an unexplained queue.
     if (suite.beforeAll.length > 0) {
+      yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "beforeAll" });
       const exit = yield* runHooks(suite.beforeAll, ctx.options.timeout).pipe(
         withCapture(ctx.fileLogs),
         Effect.exit,
       );
+      yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
       if (Exit.isFailure(exit)) {
         yield* failSubtree(suite, ctx, prettyCause(exit.cause));
         yield* runAfterAll(suite, ctx);
@@ -456,10 +512,12 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
 
 const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   if (suite.afterAll.length === 0) return;
+  yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "afterAll" });
   const exit = yield* runHooks(suite.afterAll, ctx.options.timeout).pipe(
     withCapture(ctx.fileLogs),
     Effect.exit,
   );
+  yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "afterAll" });
   if (Exit.isFailure(exit)) {
     ctx.fileLogs.push({
       level: "error",
@@ -556,6 +614,33 @@ export const run = Effect.fn(function* (options: RunOptions) {
   // Phase 2 — run files concurrently.
   const allResults: Array<{ meta: TestMeta; result: TestResult }> = [];
   const lock = yield* Semaphore.make(EXCLUSIVE_PERMITS);
+  const running = new Map<string, Fiber.Fiber<Exit.Exit<unknown, unknown>>>();
+  const completed = new Set<string>();
+  const testIndex = new Map<string, { test: TestCase; ctx: ExecContext }>();
+
+  // Interactive control (TUI `r` retry / `x` kill). Retried tests re-run as
+  // standalone forked fibers and re-emit TestStart/TestEnd through the same
+  // reporter; the header counters simply update in place.
+  const controller: RunController = {
+    retryTest: (id) => {
+      const entry = testIndex.get(id);
+      if (entry === undefined || running.has(id) || !completed.has(id)) return;
+      completed.delete(id);
+      Effect.runFork(runTest(entry.test, entry.ctx));
+    },
+    retryFile: (file) => {
+      for (const [id, entry] of testIndex) {
+        if (entry.ctx.file === file) controller.retryTest(id);
+      }
+    },
+    killTest: (id) => {
+      const fiber = running.get(id);
+      if (fiber !== undefined) Effect.runFork(Fiber.interrupt(fiber));
+    },
+  };
+  if (reporter.attachController !== undefined) {
+    yield* reporter.attachController(controller);
+  }
 
   const runFile = Effect.fn(function* (c: CollectedFile) {
     yield* reporter.emit({ _tag: "FileStart", file: c.file });
@@ -570,7 +655,14 @@ export const run = Effect.fn(function* (options: RunOptions) {
         results: allResults,
         file: c.file,
         lock,
+        running,
+        completed,
       };
+      forEachTest(c.suite, (test) => {
+        if (included(test, ctx) && isSkipped(test) === undefined) {
+          testIndex.set(metaOf(c.file, test).id, { test, ctx });
+        }
+      });
       const exit = yield* runSuite(c.suite, ctx).pipe(Effect.exit);
       if (Exit.isFailure(exit)) {
         fileError = prettyCause(exit.cause);
