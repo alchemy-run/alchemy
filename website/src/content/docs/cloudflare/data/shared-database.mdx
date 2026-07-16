@@ -19,7 +19,7 @@ resolved at plan time against the persisted state store. See
 The example we'll build: a Neon Postgres project that's owned by
 `staging`, with PR-preview stages (`pr-*`) referencing it instead
 of creating their own. The full file lives in
-[`examples/cloudflare-neon-drizzle/src/Db.ts`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-neon-drizzle/src/Db.ts).
+[`examples/cloudflare-neon-drizzle/src/Db.ts`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle/src/Db.ts).
 
 ## Start with the unconditional version
 
@@ -218,9 +218,9 @@ database across all PRs, use `stage: "staging"` exactly as above.
 
 The MySQL family works identically — `MySQLDatabase.ref`,
 `MySQLBranch`, `MySQLPassword`. Full files:
-[`cloudflare-planetscale-postgres-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-planetscale-postgres-drizzle/src/Db.ts)
+[`cloudflare-planetscale-postgres-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-postgres-drizzle/src/Db.ts)
 and
-[`cloudflare-planetscale-mysql-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-planetscale-mysql-drizzle/src/Db.ts).
+[`cloudflare-planetscale-mysql-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-mysql-drizzle/src/Db.ts).
 
 ## Cross-stack too
 

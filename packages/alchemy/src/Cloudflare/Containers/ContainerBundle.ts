@@ -199,8 +199,9 @@ const HttpServer = NodeHttpServer;
 `
 }
 import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer } from "alchemy/Runtime";
+import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { CloudflareEnvironment } from "alchemy/Cloudflare";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -249,6 +250,15 @@ const serverEffect = tag.pipe(
         )
       ),
       Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          // Auto-bound \`Config\` values arrive in the env as
+          // \`{"_tag":"Redacted","value":...}\` markers; reify them so a
+          // \`Config\` re-read inside a handler decodes the raw source value.
+          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
+        )
+      ),
       Layer.provideMerge(
         Layer.succeed(
           MinimumLogLevel,

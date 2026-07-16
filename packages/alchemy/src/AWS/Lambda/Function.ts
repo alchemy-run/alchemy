@@ -38,6 +38,7 @@ import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { packEnvValue, unpackEnvValue } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
@@ -585,55 +586,17 @@ export const Function: Platform<
       set: (id: string, output: Output.Output) =>
         Effect.sync(() => {
           // Key is already canonical (see RuntimeContext.sanitizeKey); store it
-          // verbatim.
+          // verbatim. `packEnvValue` marker-packs Redacted values so they
+          // survive the Output → Lambda env var round-trip.
           const key = id;
-          // Preserve `Redacted`-ness across the Output → Lambda env var
-          // round-trip. `JSON.stringify(Redacted)` would emit the literal
-          // string `"<redacted>"` and lose the value, so secrets are
-          // serialized with a `{_tag: "Redacted", value: ...}` marker
-          // that the runtime `get` path detects and rebuilds.
-          env[key] = output.pipe(
-            Output.map((value) =>
-              Redacted.isRedacted(value)
-                ? JSON.stringify({
-                    _tag: "Redacted",
-                    value: Redacted.value(value),
-                  })
-                : JSON.stringify(value),
-            ),
-          );
+          env[key] = output.pipe(Output.map(packEnvValue));
           return key;
         }),
       get: <T>(key: string) =>
-        // Read the captured value straight from `process.env`. We must NOT
-        // resolve through `Config.string` here: at runtime the ambient
-        // `ConfigProvider` is the interceptor installed in `Platform.ts`,
-        // whose runtime branch calls back into `ctx.get(key)`. Going through
-        // `Config` would re-enter that interceptor for the same key and
-        // recurse forever, allocating until the Lambda init OOMs. The Worker
-        // runtime reads from `WorkerEnvironment` for the same reason.
-        Effect.sync(() => {
-          // Key is already canonical (see RuntimeContext.sanitizeKey).
-          const val = process.env[key];
-          if (val === undefined) {
-            return undefined;
-          }
-          try {
-            const value = JSON.parse(val);
-            if (
-              typeof value === "object" &&
-              value?._tag === "Redacted" &&
-              "value" in value
-            ) {
-              return Redacted.make(
-                (value as { value: unknown }).value,
-              ) as unknown as T;
-            }
-            return value as T;
-          } catch {
-            return val as unknown as T; // assume it's just a string
-          }
-        }),
+        // Key is already canonical (see RuntimeContext.sanitizeKey). Read
+        // straight from `process.env` — see `unpackEnvValue` for why this
+        // must never resolve through `Config.string`.
+        Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         // @ts-ignore
         ctx.listen(makeFunctionHttpHandler(handler)),
@@ -940,7 +903,7 @@ export const FunctionProvider = () =>
                 (importPath) => `
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer } from "alchemy/Runtime";
+import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { registerLambdaExtension } from "alchemy/AWS/Lambda/RuntimeExtension";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -1001,7 +964,10 @@ const entryLayer = layer.pipe(
   Layer.provideMerge(
     Layer.succeed(
       ConfigProvider.ConfigProvider,
-      ConfigProvider.fromEnv()
+      // Auto-bound \`Config\` values arrive in the env as
+      // \`{"_tag":"Redacted","value":...}\` markers; reify them so a \`Config\`
+      // re-read inside a handler decodes the raw source value.
+      reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
     )
   ),
   Layer.provideMerge(

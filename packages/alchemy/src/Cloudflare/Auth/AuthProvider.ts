@@ -416,7 +416,7 @@ export const CloudflareAuth = AuthProviderLayer<
                   ? Effect.fail(
                       new AuthError({
                         message:
-                          "Cloudflare stored credentials not found. Run: alchemy-effect login --configure",
+                          "Cloudflare stored credentials not found. Run: alchemy login --configure",
                       }),
                     )
                   : Effect.gen(function* () {

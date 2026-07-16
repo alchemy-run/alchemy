@@ -1,4 +1,3 @@
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
@@ -9,7 +8,11 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
-import type { BaseRuntimeContext } from "../RuntimeContext.ts";
+import {
+  packEnvValue,
+  unpackEnvValue,
+  type BaseRuntimeContext,
+} from "../RuntimeContext.ts";
 
 export type ProcessServices =
   | ChildProcessSpawner
@@ -74,25 +77,15 @@ export const createHostRuntimeContext =
       set: (bindingId: string, output: Output.Output) =>
         Effect.sync(() => {
           const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+          // `packEnvValue` marker-packs Redacted values so they survive the
+          // Output → env round-trip.
+          env[key] = output.pipe(Output.map(packEnvValue));
           return key;
         }),
       get: <T>(key: string) =>
-        Config.string(key).pipe(
-          Effect.flatMap((value) =>
-            Effect.try({
-              try: () => JSON.parse(value) as T,
-              catch: (error) => error as Error,
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
-              }),
-            ),
-          ),
-        ),
+        // Read straight from `process.env` — see `unpackEnvValue` for why
+        // this must never resolve through `Config.string`.
+        Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
       run: (effect: Effect.Effect<void, never, any>) =>
         Effect.sync(() => {
           runners.push(effect);

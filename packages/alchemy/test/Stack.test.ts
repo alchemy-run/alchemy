@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
 // These tests are compile-time assertions: they verify that the
 // `Alchemy.Stack` effect permits a `ConfigError` in its body without
 // forcing the user to `Effect.orDie`. See
-// https://github.com/alchemy-run/alchemy-effect/issues/479
+// https://github.com/alchemy-run/alchemy/issues/479
 describe("Alchemy.Stack error channel", () => {
   it("allows ConfigError in the stack body", () => {
     // A stack body that reads from `effect/Config` fails with `ConfigError`.

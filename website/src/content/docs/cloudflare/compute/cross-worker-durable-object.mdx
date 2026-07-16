@@ -1,6 +1,6 @@
 ---
 title: Bind to another Worker's Durable Object
-description: Share a Durable Object across multiple Workers — one Worker hosts the runtime, others bind to it by scriptName for a typed RPC stub.
+description: Share a Durable Object across multiple Workers — one Worker hosts the runtime, others bind to it by scriptName for a typed RPC stub — and move the host later with the data intact.
 sidebar:
   order: 9
 ---
@@ -309,6 +309,186 @@ then `Counter.from(WorkerC)` from inside `WorkerC` binds to a
 isolated from WorkerA's. This is how you give each script its
 own private set of DO instances using the same class.
 :::
+
+## Move the Durable Object to a new host
+
+Hosting isn't forever — suppose `Counter` should now live under
+`WorkerB` instead of `WorkerA`. A Durable Object class can move
+between Workers **with its data intact**: Cloudflare's
+`transferred_classes` migration re-homes the namespace (same
+instances, same storage) onto the new host's script. Moves are
+always *declared* — a class that disappears from one Worker and
+appears on another is otherwise ambiguous between "transfer the
+data" and "delete it, start fresh" — so the class states where it
+came from.
+
+### Declare where the class came from
+
+Add `transferredFrom` to the class declaration, naming the former
+host:
+
+```diff lang="typescript"
+// src/object.ts
+ export class Counter extends Cloudflare.DurableObject<
+   Counter,
+   {
+     increment: () => Effect.Effect<number, never, RuntimeContext>;
+     get: () => Effect.Effect<number, never, RuntimeContext>;
+   }
+->()("Counter") {}
++>()("Counter", { transferredFrom: "WorkerA" }) {}
+```
+
+`"WorkerA"` is the former host's Worker **logical id**, resolved to
+its physical script through alchemy's ownership tags in the same
+stack + stage (for a cross-stack move, use the physical script name
+instead). Whichever Worker hosts `Counter` next will transfer the
+namespace from it.
+
+:::tip[Prefer a typed reference over a string]
+`transferredFrom` also accepts the Worker class or resource itself —
+or a thunk for forward references and import cycles:
+
+```typescript
+{ transferredFrom: () => WorkerA }
+```
+
+The thunk is evaluated lazily at plan time and normalized to
+WorkerA's logical id, so it stays safe in module cycles (here,
+`object.ts` referencing `workerA.ts` while `workerA.ts` imports
+`object.ts`). A reference never becomes a dependency edge — alchemy
+takes the *identity*, not the deployed value, which keeps the deploy
+order correct (the new host uploads first).
+:::
+
+### Make WorkerB the host
+
+`WorkerB` takes over the host role: it declares `Counter` in its
+`Deps`, provides `CounterLive`, and binds with `.from(Self)`:
+
+```typescript
+// src/workerB.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import CounterLive, { Counter } from "./object.ts";
+
+export class WorkerB extends Cloudflare.Worker<WorkerB, {}, Counter>()(
+  "WorkerB",
+) {}
+
+export default WorkerB.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const counters = yield* Counter.from(WorkerB);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const name = new URL(request.url, "http://x").pathname.slice(1);
+        const value = yield* counters.getByName(name).get();
+        return HttpServerResponse.json({ value });
+      }),
+    };
+  }).pipe(Effect.provide(CounterLive)),
+);
+```
+
+### Turn WorkerA into a consumer
+
+`WorkerA` stops shipping the runtime and binds the same namespace
+cross-script, now hosted by `WorkerB`:
+
+```diff lang="typescript"
+// src/workerA.ts
+-import CounterLive, { Counter } from "./object.ts";
++import { Counter } from "./object.ts";
++import { WorkerB } from "./workerB.ts";
+
+-export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
++export class WorkerA extends Cloudflare.Worker<WorkerA>()(
+   "WorkerA",
+ ) {}
+
+ export default WorkerA.make(
+   { main: import.meta.url },
+   Effect.gen(function* () {
+-    const counters = yield* Counter.from(WorkerA);
++    const counters = yield* Counter.from(WorkerB);
+     return {
+       fetch: Effect.gen(function* () { ... }),
+     };
+-  }).pipe(Effect.provide(CounterLive)),
++  }),
+ );
+```
+
+### Provide WorkerB's Layer in the Stack
+
+The Stack now provides both Layers — `WorkerBLive` carries the DO
+runtime, `WorkerALive` no longer does:
+
+```diff lang="typescript"
+// alchemy.run.ts
+ import WorkerALive, { WorkerA } from "./src/workerA.ts";
+-import WorkerB from "./src/workerB.ts";
++import WorkerBLive, { WorkerB } from "./src/workerB.ts";
+
+   Effect.gen(function* () {
+     const a = yield* WorkerA;
+     const b = yield* WorkerB;
+     return {
+       urlA: a.url.as<string>(),
+       urlB: b.url.as<string>(),
+     };
+-  }).pipe(Effect.provide(WorkerALive)),
++  }).pipe(Effect.provide([WorkerALive, WorkerBLive])),
+```
+
+### Deploy the move
+
+```sh
+bun alchemy deploy
+```
+
+`WorkerA` references `WorkerB` through `Counter.from(WorkerB)`, so
+the engine deploys `WorkerB` first. Its upload carries the
+`transferred_classes` migration — the namespace and every stored
+object move to `WorkerB`'s script — and `WorkerA`'s deploy then
+converges on its own (no delete migration is emitted for a class
+that moved away). Every counter keeps its count. Afterwards the
+`transferredFrom` declaration is inert — on fresh stages and on
+every later deploy it does nothing — so leave it in place.
+
+:::caution[Undeclared moves fail loudly]
+If you move the host without declaring `transferredFrom`, the former
+host's deploy fails **before any upload** with
+`DurableObjectTransferRequired`, telling you exactly what to declare.
+Durable Object data is never silently destroyed or forked.
+:::
+
+### Keep the host history for chained moves
+
+If the class later moves again — say `WorkerB` → `WorkerC` — append
+to the declaration rather than replacing it:
+
+```typescript
+// src/object.ts — after a second move
+>()("Counter", { transferredFrom: ["WorkerA", "WorkerB"] }) {}
+```
+
+The namespace transfers from whichever listed host currently holds
+it, so a stage that lagged behind (or skipped the intermediate
+release) still converges from wherever *its* namespace lives.
+
+Two rules for less common shapes:
+
+- **Pure moves** — the former host drops the DO entirely, keeping no
+  cross-script reference — take two deploys: first add the class to
+  the new host with `transferredFrom` and deploy, then remove it from
+  the former host and deploy.
+- **Cross-stack moves** name the former host by physical script name,
+  and the new host's stack deploys first.
 
 ## Closing
 

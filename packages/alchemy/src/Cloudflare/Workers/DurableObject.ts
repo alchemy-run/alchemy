@@ -22,7 +22,12 @@ import {
 } from "./DurableObjectState.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
-import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
+import {
+  isWorker,
+  Worker,
+  WorkerEnvironment,
+  type WorkerServices,
+} from "./Worker.ts";
 
 export interface DurableObjectExport {
   readonly kind: "durableObject";
@@ -61,6 +66,8 @@ export interface DurableObjectLike<Shape = any> {
   className?: string;
   /** @internal phantom */
   scriptName?: Input<string>;
+  /** @internal phantom */
+  transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[];
   /** @internal phantom */
   Shape?: Shape;
 }
@@ -108,6 +115,98 @@ export type DurableObjectServices =
   | WorkerEnvironment
   | PlatformServices;
 
+/**
+ * A reference to the Worker that previously hosted a Durable Object class,
+ * accepted by {@link DurableObjectProps.transferredFrom}:
+ *
+ * - the Worker's **logical id** (same stack + stage) or **physical script
+ *   name** (cross-stack) as a string
+ * - the Worker **resource** (`const b = yield* Cloudflare.Worker(...)`)
+ * - the Worker **class** (`transferredFrom: WorkerA`)
+ * - a **thunk** of any of the above (`() => WorkerA`) — use this for
+ *   forward references and import cycles; it is evaluated lazily at plan
+ *   time, after all modules have loaded
+ * - a string `Output` (e.g. a cross-stack `stackRef`'s worker name)
+ *
+ * Every form is normalized at plan time to a plain identifier: a Worker
+ * reference contributes its logical id, and a same-stack `workerName`
+ * Output contributes its source resource's logical id rather than the
+ * Output itself. Keeping the former host's *value* out of the binding data
+ * matters — consuming its Output would add a dependency edge from the new
+ * host onto the former host, inverting the deploy order the transfer
+ * requires (the new host must upload first).
+ */
+export type DurableObjectTransferSource =
+  | Input<string>
+  | Worker
+  | Effect.Effect<Worker, any, any>
+  | (() => DurableObjectTransferSource);
+
+const resolveTransferSourceRef = (
+  source: DurableObjectTransferSource,
+  depth = 0,
+): Input<string> => {
+  if (typeof source === "string") {
+    return source;
+  }
+  // A Worker resource — contribute its logical id.
+  if (isWorker(source)) {
+    return source.LogicalId;
+  }
+  // A Worker platform class — carries its logical id statically. (On an
+  // Output proxy this property access yields another Output, never a
+  // string, so the check cannot misfire there.)
+  const logicalId = (source as { LogicalId?: unknown }).LogicalId;
+  if (typeof logicalId === "string") {
+    return logicalId;
+  }
+  // A same-stack Output on a Worker (e.g. `b.workerName`): take the
+  // identity from its provenance, not the value.
+  if (Output.isPropExpr(source)) {
+    const expr = (source as Output.PropExpr<any, any>).expr;
+    if (Output.isResourceExpr(expr) && isWorker(expr.src)) {
+      return expr.src.LogicalId;
+    }
+  }
+  if (Output.isResourceExpr(source) && isWorker(source.src)) {
+    return source.src.LogicalId;
+  }
+  if (Output.isOutput(source)) {
+    // No local resource to take identity from (e.g. a cross-stack
+    // `stackRef`) — the engine resolves the string at deploy time.
+    return source as Input<string>;
+  }
+  if (typeof source === "function" && depth < 8) {
+    return resolveTransferSourceRef(
+      (source as () => DurableObjectTransferSource)(),
+      depth + 1,
+    );
+  }
+  throw new Error(
+    "Invalid transferredFrom entry: pass the former host's logical id or script name, its Worker class or resource, a thunk of one of those, or a string Output.",
+  );
+};
+
+/**
+ * Normalize a `transferredFrom` declaration to plain host identifiers at
+ * plan time. See {@link DurableObjectTransferSource} for the accepted forms
+ * and why Worker references reduce to logical ids instead of Outputs.
+ *
+ * @internal
+ */
+export const normalizeTransferredFrom = (
+  value:
+    | DurableObjectTransferSource
+    | readonly DurableObjectTransferSource[]
+    | undefined,
+): Input<string>[] | undefined =>
+  value === undefined
+    ? undefined
+    : (Array.isArray(value)
+        ? (value as readonly DurableObjectTransferSource[])
+        : [value as DurableObjectTransferSource]
+      ).map((source) => resolveTransferSourceRef(source));
+
 export interface DurableObjectProps {
   /**
    * Name of the exported `DurableObject` class.
@@ -120,6 +219,31 @@ export interface DurableObjectProps {
    * namespace is hosted by the Worker that declares the binding.
    */
   scriptName?: Input<string> | undefined;
+  /**
+   * The Worker(s) that previously hosted this Durable Object class. When one
+   * of them still holds the namespace, the deploy performs Cloudflare's
+   * data-preserving `transferred_classes` migration, moving the namespace —
+   * including all stored objects — from that script to this Worker.
+   *
+   * Each entry names a former host — see
+   * {@link DurableObjectTransferSource} for the accepted forms: a string
+   * (Worker logical id in this stack + stage, or physical script name for
+   * cross-stack moves), the Worker class or resource itself, or a thunk
+   * (`() => WorkerA`) for forward references. Moving a class is always
+   * declared this way — there is no inference. A list is a host *history*:
+   * as the class moves again, append the previous host so stages that lag
+   * behind (or skipped an intermediate release) still transfer from
+   * wherever their namespace currently lives.
+   *
+   * When no listed host holds the namespace — a fresh stage, or every
+   * transfer already completed — the property is inert and the class is
+   * created fresh (or left as-is), so it is safe to leave in place
+   * indefinitely.
+   */
+  transferredFrom?:
+    | DurableObjectTransferSource
+    | DurableObjectTransferSource[]
+    | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -133,6 +257,7 @@ export interface DurableObjectClass extends Effect.Effect<
   <Self, Shape>(): {
     <Name extends string>(
       name: Name,
+      props?: Pick<DurableObjectProps, "transferredFrom">,
     ): Effect.Effect<DurableObject<Self>, never, Worker | Self> & {
       new (_: never): Shape & {
         /** @internal */
@@ -787,6 +912,85 @@ export class DurableObjectScope extends Context.Service<
  * });
  * ```
  *
+ * @section Moving a Class Between Workers
+ * A Durable Object class can move from one Worker to another with its
+ * data intact. The move is always **declared** — a class that disappears
+ * from one worker and appears on another is otherwise ambiguous between
+ * "transfer the data" and "delete it, start fresh", so Alchemy never
+ * guesses (removing a DO deletes it; that is the default). Declare
+ * `transferredFrom` on the Durable Object at its **new host**, naming the
+ * former host, and the new host's deploy ships Cloudflare's
+ * data-preserving `transferred_classes` migration. The former host's
+ * deploy converges on its own — no delete migration is emitted for a
+ * class that moved away.
+ *
+ * Each `transferredFrom` entry is either the former host's Worker
+ * **logical id** (same stack + stage, resolved via alchemy's ownership
+ * tags) or its **physical script name** (required for cross-stack moves).
+ * When no listed host holds the namespace — a fresh stage, or the
+ * transfer already completed — the declaration is inert, so it is safe to
+ * leave in place indefinitely.
+ *
+ * @example Move a class from WorkerB to WorkerA
+ * ```typescript
+ * // BEFORE: worker-b hosts the class
+ * const b = yield* Cloudflare.Worker("WorkerB", {
+ *   main: "./src/worker-b.ts", // exports MyDOClass
+ *   bindings: {
+ *     MyDO: Cloudflare.DurableObject("MyDO", { className: "MyDOClass" }),
+ *   },
+ * });
+ *
+ * // AFTER: worker-a hosts it and declares where it came from;
+ * // worker-b keeps a cross-script reference.
+ * const a = yield* Cloudflare.Worker("WorkerA", {
+ *   main: "./src/worker-a.ts", // now exports MyDOClass
+ *   bindings: {
+ *     MyDO: Cloudflare.DurableObject("MyDO", {
+ *       className: "MyDOClass",
+ *       transferredFrom: "WorkerB", // logical id (or its script name)
+ *     }),
+ *   },
+ * });
+ * const b = yield* Cloudflare.Worker("WorkerB", {
+ *   main: "./src/worker-b.ts", // no longer exports MyDOClass
+ *   bindings: {
+ *     MyDO: Cloudflare.DurableObject("MyDO", {
+ *       className: "MyDOClass",
+ *       scriptName: a.workerName,
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * Forgetting the declaration is safe: when the former host still
+ * references the class cross-script, its deploy fails before any upload
+ * with `DurableObjectTransferRequired`, telling you exactly what to
+ * declare — data is never silently destroyed or forked.
+ *
+ * @example Chained moves keep the host history
+ * ```typescript
+ * // The class moved WorkerB → WorkerA last release and WorkerA →
+ * // WorkerC this release. Keep the full history so a stage that lagged
+ * // behind (or skipped the intermediate release) still transfers from
+ * // wherever its namespace currently lives.
+ * Cloudflare.DurableObject("MyDO", {
+ *   className: "MyDOClass",
+ *   transferredFrom: ["WorkerB", "WorkerA"],
+ * })
+ * ```
+ *
+ * Two rules for multi-worker migrations:
+ *
+ * - **Pure moves (the former host drops the DO entirely, keeping no
+ *   cross-script reference) must be two deploys**: first add the class to
+ *   the new host with `transferredFrom` and deploy; then remove it from
+ *   the former host and deploy. In a single deploy nothing orders the
+ *   transfer before the former host's delete.
+ * - **Cross-stack moves deploy the new host's stack first**, naming the
+ *   former host by physical script name; the former host's stack deploys
+ *   after and converges.
+ *
  * @section Adopting an Existing Durable Object
  * When you adopt a Worker that already exists on Cloudflare — created
  * outside Alchemy via Wrangler, the dashboard, or the raw API — its
@@ -869,18 +1073,23 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     const propsOrImpl = args[1];
     const tag = Context.Service(namespace);
 
-    const binding = (scriptName?: Input<string>) =>
+    const binding = (
+      scriptName?: Input<string>,
+      transferredFrom?:
+        | DurableObjectTransferSource
+        | DurableObjectTransferSource[],
+    ) =>
       Effect.gen(function* () {
         const worker = yield* Worker;
 
         yield* worker.bind`${namespace}`({
-          // TODO(sam): automate class migrations, probably in the provider
           bindings: [
             {
               type: "durable_object_namespace",
               name: namespace,
               className: namespace,
               scriptName,
+              transferredFrom: normalizeTransferredFrom(transferredFrom),
             },
           ],
         });
@@ -933,6 +1142,16 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         };
       });
 
+    // Class-form declarations (`DurableObject<Self>()("Name", props?)`) can
+    // carry `transferredFrom` so the host's local binding drives a
+    // data-preserving transfer migration.
+    const classProps =
+      isClassForm && !Effect.isEffect(propsOrImpl)
+        ? (propsOrImpl as
+            | Pick<DurableObjectProps, "transferredFrom">
+            | undefined)
+        : undefined;
+
     const make = Effect.fn(function* (
       impl: Effect.Effect<
         Effect.Effect<DurableObjectShape>,
@@ -945,7 +1164,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // `DurableObjectScope` to the user's constructor effect
       // and also return it so a `Layer.effect(tag, make(impl))` Layer
       // resolves the tag to a concrete namespace value.
-      const self = yield* binding();
+      const self = yield* binding(undefined, classProps?.transferredFrom);
       const phase = yield* ALCHEMY_PHASE;
       const constructor = impl.pipe(
         Effect.provide(Layer.succeed(DurableObjectScope, self as any)),
@@ -980,6 +1199,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         name: namespace,
         className: (args[1] as DurableObjectProps)?.className || namespace,
         scriptName: (args[1] as DurableObjectProps)?.scriptName,
+        transferredFrom: (args[1] as DurableObjectProps)?.transferredFrom,
       };
     } else if (Effect.isEffect(propsOrImpl)) {
       // inline Effect DO

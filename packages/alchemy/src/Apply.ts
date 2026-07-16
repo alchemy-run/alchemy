@@ -19,7 +19,7 @@ import {
   Cli,
 } from "./Cli/Cli.ts";
 import type { ApplyStatus } from "./Cli/Event.ts";
-import { havePropsChanged } from "./Diff.ts";
+import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -408,7 +408,14 @@ const executeNode = (
         stack: stackName,
         stage,
         fqn,
-        value: { ...value, namespace } as S,
+        // Early commits (`creating`/`replacing`) persist plan props that may
+        // still hold unresolved Output exprs; strip them so state stores only
+        // plain data (see stripUnresolved in Diff.ts).
+        value: {
+          ...value,
+          props: stripUnresolved(value.props),
+          namespace,
+        } as S,
       });
 
     const scopedSession = {
@@ -1602,7 +1609,13 @@ const collectGarbage = Effect.fn(function* (
             stack: stackName,
             stage,
             fqn,
-            value: { ...value, namespace } as S,
+            // Same rule as the lifecycle commit above: state only stores
+            // plain data, never unresolved Output exprs.
+            value: {
+              ...value,
+              props: stripUnresolved(value.props),
+              namespace,
+            } as S,
           });
 
         const report = (status: ApplyStatus) =>

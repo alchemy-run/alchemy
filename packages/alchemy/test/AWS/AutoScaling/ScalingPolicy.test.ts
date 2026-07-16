@@ -84,7 +84,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SCALING_POLICY_LIST)(
   { timeout: 240_000 },
 );
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // An interrupted first deploy persists the scaling policy as
 // `status: "creating"` with no attributes — and the Output-valued

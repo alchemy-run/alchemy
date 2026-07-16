@@ -152,7 +152,7 @@ durable. Pick the one that matches your platform:
 
 | Platform | Backing |
 | --- | --- |
-| Cloudflare Worker + Durable Object | `Cloudflare.AIDurableObjectChatPersistence` — bytes live in `state.storage`, one DO instance per session |
+| Cloudflare Worker + Durable Object | `Cloudflare.AI.DurableObjectChatPersistence` — bytes live in `state.storage`, one DO instance per session |
 | Any platform, in-memory (tests) | `Persistence.layerBackingMemory` — lost on restart |
 | Anything else (KV, R2, DynamoDB, …) | Implement `BackingPersistence` against your store |
 

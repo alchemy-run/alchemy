@@ -748,7 +748,7 @@ export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    const aiGateway = yield* Cloudflare.AIbind(Gateway);
+    const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
     return {
       fetch: Effect.gen(function* () {
@@ -760,7 +760,7 @@ export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.AI.GatewayBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.AI.QueryGatewayBinding)),
 ) {}
 ```
 
@@ -845,7 +845,7 @@ Notes:
 
 ## Reference implementations
 
-- Cloudflare.AI.Gateway — [worker fixture](./packages/alchemy/test/Cloudflare.AI.Gateway/worker.ts) + [test](./packages/alchemy/test/Cloudflare.AI.Gateway/AiGateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
+- Cloudflare.AI.Gateway — [worker fixture](./packages/alchemy/test/Cloudflare/AI/fixtures/TestWorker.ts) + [test](./packages/alchemy/test/Cloudflare/AI/Gateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
 - Cloudflare D1Connection — [worker fixture](./packages/alchemy/test/Cloudflare/D1/d1-worker.ts) + [test](./packages/alchemy/test/Cloudflare/D1/D1Binding.test.ts)
 - Cloudflare Workflow — [workflow fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/test-workflow.ts) + [worker fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/workflow-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts)
 - Cloudflare Cron Trigger — [worker + DO fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/cron-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) (cron handler writes to a DO; test polls a fetch route with `Effect.repeat` until the scheduled handler fires)

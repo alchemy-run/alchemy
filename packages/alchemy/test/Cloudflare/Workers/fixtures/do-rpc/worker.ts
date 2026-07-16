@@ -29,7 +29,7 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
         // Mirrors the tutorial's `/tick/:n` route verbatim — forwards the
         // Stream returned by the DO's `tick` RPC method straight onto the
         // HTTP response.
-        // https://v2.alchemy.run/tutorial/cloudflare/durable-objects/
+        // https://alchemy.run/cloudflare/compute/durable-objects
         if (request.method === "GET" && url.pathname.startsWith("/tick/")) {
           const n = Number(url.pathname.split("/").pop()!);
           const stream = objects

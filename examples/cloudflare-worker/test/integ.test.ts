@@ -39,7 +39,7 @@ test(
 );
 
 /**
- * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/172
+ * Regression guard for https://github.com/alchemy-run/alchemy/pull/172
  *
  * The stack now includes two Workers (`Api` and `SecondaryApi`) that both
  * bind the same `Agent` Durable Object, which in turn binds the `Sandbox`
@@ -67,7 +67,7 @@ test(
 );
 
 /**
- * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
+ * Regression guard for https://github.com/alchemy-run/alchemy/pull/71
  *
  * `NotifyWorkflow` accesses `Cloudflare.Workers.WorkerEnvironment` inside its body and
  * performs a KV roundtrip via `env.KV.put` / `env.KV.get`. If the fix from #71

@@ -124,7 +124,7 @@ test.provider(
   { timeout: 360_000 },
 );
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/792.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/792.
 //
 // A pure client-only Vite project (no vite.config.ts, no plugins, no worker
 // entry) resolves as `appType: "spa"`, so the Cloudflare Vite plugin declares

@@ -385,15 +385,24 @@ export const Platform = <
       // e.g.
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id);
-      return cls.Self.pipe(
-        provideClassLayer(cls.make(props, impl)),
-        effectClass,
+      return Object.assign(
+        cls.Self.pipe(provideClassLayer(cls.make(props, impl)), effectClass),
+        // Expose the logical id statically (mirrors `makeClass`) so a class
+        // reference identifies its resource without being yielded.
+        { LogicalId: id },
       );
     }
   };
 
   const makeClass = (id: string) => {
     class Platform {
+      /**
+       * Logical id of the resource this class declares. Statically readable
+       * — e.g. `DurableObjectProps.transferredFrom` accepts a Worker class
+       * and takes its identity from here without yielding it (yielding
+       * would add a dependency edge on the referenced resource).
+       */
+      static readonly LogicalId = id;
       static readonly Self = Self(`${type}<${id}>`);
       static readonly Platform = Context.Service<Platform, Platform>(
         `Platform<${type}<${id}>>`,

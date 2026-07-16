@@ -111,7 +111,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
 class CertificateNotListed extends Data.TaggedError("CertificateNotListed") {}
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // A `creating` state row persisted before upstream Outputs resolve cannot
 // round-trip Output-valued props (`domainName` from a HostedZone Output,

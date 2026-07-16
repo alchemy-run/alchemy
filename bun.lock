@@ -48,7 +48,7 @@
     },
     "distilled/packages/aws": {
       "name": "@distilled.cloud/aws",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@aws-crypto/crc32": "catalog:",
         "@aws-crypto/util": "catalog:",
@@ -79,7 +79,7 @@
     },
     "distilled/packages/axiom": {
       "name": "@distilled.cloud/axiom",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -95,7 +95,7 @@
     },
     "distilled/packages/azure": {
       "name": "@distilled.cloud/azure",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -111,7 +111,7 @@
     },
     "distilled/packages/cloudflare": {
       "name": "@distilled.cloud/cloudflare",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -121,7 +121,7 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "typescript-5": "npm:typescript@^5.9.3",
+        "typescript": "^5.9.3",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -130,7 +130,7 @@
     },
     "distilled/packages/coinbase": {
       "name": "@distilled.cloud/coinbase",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -147,7 +147,7 @@
     },
     "distilled/packages/core": {
       "name": "@distilled.cloud/core",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
@@ -160,7 +160,7 @@
     },
     "distilled/packages/expo-eas": {
       "name": "@distilled.cloud/expo-eas",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -176,7 +176,7 @@
     },
     "distilled/packages/fly-io": {
       "name": "@distilled.cloud/fly-io",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -192,7 +192,7 @@
     },
     "distilled/packages/gcp": {
       "name": "@distilled.cloud/gcp",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -208,7 +208,7 @@
     },
     "distilled/packages/kubernetes": {
       "name": "@distilled.cloud/kubernetes",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -224,7 +224,7 @@
     },
     "distilled/packages/mongodb-atlas": {
       "name": "@distilled.cloud/mongodb-atlas",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -240,7 +240,7 @@
     },
     "distilled/packages/neon": {
       "name": "@distilled.cloud/neon",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -256,7 +256,7 @@
     },
     "distilled/packages/planetscale": {
       "name": "@distilled.cloud/planetscale",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -272,7 +272,7 @@
     },
     "distilled/packages/posthog": {
       "name": "@distilled.cloud/posthog",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -290,7 +290,7 @@
     },
     "distilled/packages/prisma-postgres": {
       "name": "@distilled.cloud/prisma-postgres",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -306,7 +306,7 @@
     },
     "distilled/packages/stripe": {
       "name": "@distilled.cloud/stripe",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -322,7 +322,7 @@
     },
     "distilled/packages/supabase": {
       "name": "@distilled.cloud/supabase",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -338,7 +338,7 @@
     },
     "distilled/packages/turso": {
       "name": "@distilled.cloud/turso",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -354,7 +354,7 @@
     },
     "distilled/packages/typesense": {
       "name": "@distilled.cloud/typesense",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -371,7 +371,7 @@
     },
     "distilled/packages/workos": {
       "name": "@distilled.cloud/workos",
-      "version": "0.29.0",
+      "version": "0.28.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -4138,8 +4138,6 @@
 
     "typescript": ["typescript@7.0.2", "", { "optionalDependencies": { "@typescript/typescript-aix-ppc64": "7.0.2", "@typescript/typescript-darwin-arm64": "7.0.2", "@typescript/typescript-darwin-x64": "7.0.2", "@typescript/typescript-freebsd-arm64": "7.0.2", "@typescript/typescript-freebsd-x64": "7.0.2", "@typescript/typescript-linux-arm": "7.0.2", "@typescript/typescript-linux-arm64": "7.0.2", "@typescript/typescript-linux-loong64": "7.0.2", "@typescript/typescript-linux-mips64el": "7.0.2", "@typescript/typescript-linux-ppc64": "7.0.2", "@typescript/typescript-linux-riscv64": "7.0.2", "@typescript/typescript-linux-s390x": "7.0.2", "@typescript/typescript-linux-x64": "7.0.2", "@typescript/typescript-netbsd-arm64": "7.0.2", "@typescript/typescript-netbsd-x64": "7.0.2", "@typescript/typescript-openbsd-arm64": "7.0.2", "@typescript/typescript-openbsd-x64": "7.0.2", "@typescript/typescript-sunos-x64": "7.0.2", "@typescript/typescript-win32-arm64": "7.0.2", "@typescript/typescript-win32-x64": "7.0.2" }, "bin": { "tsc": "bin/tsc" } }, "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA=="],
 
-    "typescript-5": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
-
     "typescript-auto-import-cache": ["typescript-auto-import-cache@0.3.6", "", { "dependencies": { "semver": "^7.3.8" } }, "sha512-RpuHXrknHdVdK7wv/8ug3Fr0WNsNi5l5aB8MYYuXhq2UH5lnEB1htJ1smhtD5VeCsGr2p8mUDtd83LCQDFVgjQ=="],
 
     "ufo": ["ufo@1.6.4", "", {}, "sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA=="],
@@ -4437,6 +4435,8 @@
     "@distilled.cloud/cloudflare/@types/node": ["@types/node@26.1.1", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw=="],
 
     "@distilled.cloud/cloudflare/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/cloudflare/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "@distilled.cloud/cloudflare-runtime/workerd": ["workerd@1.20260704.1", "", { "optionalDependencies": { "@cloudflare/workerd-darwin-64": "1.20260704.1", "@cloudflare/workerd-darwin-arm64": "1.20260704.1", "@cloudflare/workerd-linux-64": "1.20260704.1", "@cloudflare/workerd-linux-arm64": "1.20260704.1", "@cloudflare/workerd-windows-64": "1.20260704.1" }, "bin": { "workerd": "bin/workerd" } }, "sha512-GDZ0jzIYDYfN7rCt/oFJv4BG3QJ+4IS2kfRvxEMY9VKIfPhzo63PH69Ir7ug8LfORCgCtmfkiQVXrqbot7pZTQ=="],
 

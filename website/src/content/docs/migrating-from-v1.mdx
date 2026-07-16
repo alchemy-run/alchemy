@@ -6,7 +6,8 @@ description: Migrate your Alchemy v1 (async/await) project to Alchemy v2.
 Alchemy v1 uses `async/await` with top-level `await` for
 orchestration. Alchemy v2 replaces this with Effect generators for
 type-safe error handling, composable retries, and declarative
-resource wiring.
+resource wiring. The v1 documentation lives at
+[v1.alchemy.run](https://v1.alchemy.run).
 
 Your existing `async fetch` handlers **do not need to change** — you
 can keep them as-is and still get all the benefits of the new engine.
@@ -291,3 +292,4 @@ export default Alchemy.Stack(
 - [Bindings](/infrastructure-as-effects/binding) — what replaced v1 `bindings:`
 - [Cloudflare](/cloudflare) — the Cloudflare provider hub
 - [AWS](/aws) — the AWS provider hub
+- [v1.alchemy.run](https://v1.alchemy.run) — the v1 documentation

@@ -1,4 +1,3 @@
-import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { InputProps } from "../../Input.ts";
@@ -26,7 +25,10 @@ import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
-import { isDurableObjectLike } from "./DurableObject.ts";
+import {
+  isDurableObjectLike,
+  normalizeTransferredFrom,
+} from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
@@ -98,9 +100,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   }
 });
 
-type BindingSpec = InputProps<
-  Exclude<PutScriptRequest["metadata"]["bindings"], undefined>[number]
->;
+type BindingSpec = InputProps<WorkerBinding>;
 
 const toBinding = (
   bindingName: string,
@@ -181,6 +181,7 @@ const toBinding = (
       name: bindingName,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
+      transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
     };
   } else if (isWorkflowLike(binding)) {
     return {
