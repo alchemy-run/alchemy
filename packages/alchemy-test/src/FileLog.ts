@@ -43,7 +43,9 @@ export const formatEvent = (event: TestEvent): string | undefined => {
         lines.push(formatLogs(event.result.logs));
         lines.push("--- end output ---");
       }
-      return `${lines.join("\n")}\n\n`;
+      // One line per plain result; a blank separator only after multi-line
+      // entries (error/output blocks) so they don't run into the next entry.
+      return lines.length === 1 ? `${lines[0]}\n` : `${lines.join("\n")}\n\n`;
     }
     case "FileEnd": {
       const lines: Array<string> = [];

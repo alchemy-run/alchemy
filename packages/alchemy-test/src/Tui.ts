@@ -412,6 +412,30 @@ const makeTui = async (): Promise<Tui> => {
     exitOnCtrlC: false,
   });
 
+  // Swallow stray JS-level stdout/stderr writes while the TUI owns the
+  // screen: anything that bypasses the per-test Effect Console (third-party
+  // libraries writing to the streams directly) would corrupt the alternate
+  // screen. opentui renders through its native library (not
+  // process.stdout.write), so patching here cannot affect the TUI itself.
+  // (Global console.* is already captured by opentui's console overlay.)
+  const realStdoutWrite = process.stdout.write.bind(process.stdout);
+  const realStderrWrite = process.stderr.write.bind(process.stderr);
+  const swallow: typeof process.stdout.write = (
+    _chunk: string | Uint8Array,
+    encodingOrCb?: BufferEncoding | ((err?: Error | null) => void),
+    cb?: (err?: Error | null) => void,
+  ): boolean => {
+    const callback = typeof encodingOrCb === "function" ? encodingOrCb : cb;
+    callback?.(null);
+    return true;
+  };
+  process.stdout.write = swallow;
+  process.stderr.write = swallow;
+  const restoreStreams = (): void => {
+    process.stdout.write = realStdoutWrite;
+    process.stderr.write = realStderrWrite;
+  };
+
   // No explicit colors on chrome — match the terminal's own theme.
   const header = new TextRenderable(renderer, {
     id: "header",
@@ -1000,6 +1024,7 @@ const makeTui = async (): Promise<Tui> => {
     if (disposed) return;
     disposed = true;
     clearInterval(interval);
+    restoreStreams();
     try {
       renderer.destroy();
     } catch {

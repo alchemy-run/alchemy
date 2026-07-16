@@ -116,6 +116,16 @@ const rootCommand = Command.make(
     tui,
   },
   Effect.fn(function* (args) {
+    // Run as CI. Interactive-detection gates (`process.env.CI`, TTY probes)
+    // make tools take "inherit the terminal" paths — e.g. drizzle-kit is
+    // spawned with stdio: "inherit" when interactive — and raw child writes
+    // to our TTY corrupt the reporter/TUI. CI=true forces every such tool
+    // down its non-interactive path; anything they print through pipes or
+    // the Console service is still captured per test.
+    yield* Effect.sync(() => {
+      process.env.CI ??= "true";
+    });
+
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
     // an interactive terminal.
     const interactive = args.tui && process.stdout.isTTY === true;
