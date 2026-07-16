@@ -52,24 +52,35 @@ interface ReporterState {
   readonly hookLogs: Map<string, ReadonlyArray<LogEntry>>;
   readonly running: Map<string, { meta: TestMeta; startedAt: number }>;
   lastEnd: number;
+  /** Running-set fingerprint of the last stall report — dedupes repeats. */
+  lastStallKey: string;
   stallTimer: ReturnType<typeof setInterval> | undefined;
 }
 
 const STALL_AFTER_MS = 10_000;
 const STALL_LIST_MAX = 25;
 
-/** Print the currently-running tests when nothing has finished for a while. */
+/**
+ * Print the currently-running tests when nothing has finished for a while.
+ * Printed AT MOST ONCE per distinct running set: while the exact same tests
+ * stay stuck, nothing is re-printed — the timestamp on the report tells the
+ * reader how long ago it was taken.
+ */
 const printStalled = (state: ReporterState): void => {
   if (state.running.size === 0) return;
   if (Date.now() - state.lastEnd < STALL_AFTER_MS) return;
-  // Throttle: at most one report per stall window.
-  state.lastEnd = Date.now();
+  const key = [...state.running.keys()].sort().join("\n");
+  if (key === state.lastStallKey) return;
+  state.lastStallKey = key;
   const now = Date.now();
+  const timestamp = new Date(now).toTimeString().slice(0, 8);
   const items = [...state.running.values()].sort(
     (a, b) => a.startedAt - b.startedAt,
   );
   const lines = [
-    dim(`⧗ no tests finished in the last 10s — ${items.length} still running:`),
+    dim(
+      `⧗ [${timestamp}] no tests finished in the last 10s — ${items.length} still running:`,
+    ),
   ];
   for (const item of items.slice(0, STALL_LIST_MAX)) {
     lines.push(
@@ -208,6 +219,7 @@ export const PlainReporterLive: Layer.Layer<Reporter> = Layer.sync(Reporter)(
       hookLogs: new Map(),
       running: new Map(),
       lastEnd: Date.now(),
+      lastStallKey: "",
       stallTimer: undefined,
     };
     return {
