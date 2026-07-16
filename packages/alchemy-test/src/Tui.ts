@@ -307,9 +307,10 @@ class TuiState {
 
   isExpanded(node: FileNode): boolean {
     if (node.expanded !== undefined) return node.expanded;
-    // Auto: expand while filtering (matches should be visible) and when the
-    // file has failures.
-    return this.filter !== "" || node.counts.fail > 0;
+    // Auto-expand only files with failures. Filtering narrows WHICH files
+    // are listed (those with matching tests) but never expands them —
+    // expansion stays a deliberate choice (enter / l).
+    return node.counts.fail > 0;
   }
 
   /** Flattened visible tree: file rows with expanded tests nested inside. */
