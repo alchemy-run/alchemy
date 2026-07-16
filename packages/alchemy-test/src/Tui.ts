@@ -427,6 +427,9 @@ const makeTui = async (logFile: string): Promise<Tui> => {
   // crashed with "TextBuffer is destroyed". We dispose first, then exit.
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
+    // Console capture is owned by StrayOutput's global patch (diverted into
+    // the run log) — don't let opentui's overlay re-patch it afterwards.
+    consoleMode: "disabled",
   });
 
   // Divert stray JS-level stdout/stderr writes into the run log while the
