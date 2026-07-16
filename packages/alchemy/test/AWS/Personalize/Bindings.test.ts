@@ -128,13 +128,13 @@ describe.sequential("Personalize Bindings", () => {
     { timeout: 480_000 },
   );
 
-  afterAll(
+  // Assert the fixture's Personalize resources are gone out-of-band after the
+  // destroy. Dataset-group deletion is asynchronous (DELETE IN_PROGRESS), so
+  // poll until no group with this suite's stack prefix remains; the datasets
+  // and the auto-created event schema disappear with it. `withProviders`
+  // supplies the AWS environment the raw distilled calls need.
+  const assertPersonalizeResourcesGone = Core.withProviders(
     Effect.gen(function* () {
-      yield* sharedStack.destroy();
-      // Assert the fixture's Personalize resources are gone out-of-band.
-      // Dataset-group deletion is asynchronous (DELETE IN_PROGRESS), so poll
-      // until no group with this suite's stack prefix remains; the datasets
-      // and the auto-created event schema disappear with it.
       const prefix = `${sharedStack.name}-`;
       const groups = yield* personalize.listDatasetGroups({}).pipe(
         Effect.repeat({
@@ -175,6 +175,12 @@ describe.sequential("Personalize Bindings", () => {
           .filter((name) => name?.startsWith(prefix)),
       ).toEqual([]);
     }),
+    testOptions,
+    sharedStack.name,
+  );
+
+  afterAll(
+    sharedStack.destroy().pipe(Effect.andThen(assertPersonalizeResourcesGone)),
     { timeout: 420_000 },
   );
 

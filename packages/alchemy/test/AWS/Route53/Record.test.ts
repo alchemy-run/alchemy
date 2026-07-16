@@ -103,7 +103,10 @@ const ensureZone = Effect.suspend(() =>
 // dies before the teardown fires, the deterministic zone name lets the next
 // run reclaim AND delete the leftover.
 const teardownZone = Effect.gen(function* () {
-  const id = yield* findZoneIdByName;
+  // Prefer the in-run cached id: a zone created moments ago by `resolveZone`
+  // may not be visible to `listHostedZones` yet (list is eventually
+  // consistent), and returning early on a lookup miss would orphan it.
+  const id = standingZoneId ?? (yield* findZoneIdByName);
   if (id === undefined) return;
   const zoneId = normalizeId(id);
   const sets = yield* route53
