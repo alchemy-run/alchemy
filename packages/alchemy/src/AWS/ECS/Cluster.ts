@@ -1,5 +1,6 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -308,20 +309,109 @@ export const ClusterProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          const cluster = output.clusterArn;
+
+          // A cluster cannot be deleted while it still contains services,
+          // running tasks, or registered container instances — empty it
+          // first so deletion actually converges instead of silently
+          // leaving the cluster behind.
+
+          // 1. Delete services (force skips the scale-to-zero dance).
+          const serviceArns = yield* ecs.listServices.pages({ cluster }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.serviceArns ?? []),
+            ),
+            Effect.catchTag("ClusterNotFoundException", () =>
+              Effect.succeed([] as string[]),
+            ),
+          );
+          yield* Effect.forEach(
+            serviceArns,
+            (service) =>
+              ecs.deleteService({ cluster, service, force: true }).pipe(
+                Effect.catchTag(
+                  ["ServiceNotFoundException", "ClusterNotFoundException"],
+                  () => Effect.succeed(undefined),
+                ),
+                Effect.asVoid,
+              ),
+            { discard: true },
+          );
+
+          // 2. Stop any remaining standalone tasks.
+          const taskArns = yield* ecs.listTasks.pages({ cluster }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.taskArns ?? []),
+            ),
+            Effect.catchTag("ClusterNotFoundException", () =>
+              Effect.succeed([] as string[]),
+            ),
+          );
+          yield* Effect.forEach(
+            taskArns,
+            (task) =>
+              ecs.stopTask({ cluster, task, reason: "alchemy delete" }).pipe(
+                Effect.catchTag("ClusterNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+                Effect.asVoid,
+              ),
+            { discard: true },
+          );
+
+          // 3. Deregister container instances (EC2 launch type).
+          const instanceArns = yield* ecs.listContainerInstances
+            .pages({ cluster })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap(
+                  (page) => page.containerInstanceArns ?? [],
+                ),
+              ),
+              Effect.catchTag("ClusterNotFoundException", () =>
+                Effect.succeed([] as string[]),
+              ),
+            );
+          yield* Effect.forEach(
+            instanceArns,
+            (containerInstance) =>
+              ecs
+                .deregisterContainerInstance({
+                  cluster,
+                  containerInstance,
+                  force: true,
+                })
+                .pipe(
+                  Effect.catchTag("ClusterNotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                  Effect.asVoid,
+                ),
+            { discard: true },
+          );
+
+          // 4. Delete the (now empty) cluster. Draining services/tasks is
+          //    asynchronous, so retry the contains-* rejections briefly.
           yield* ecs
             .deleteCluster({
-              cluster: output.clusterArn,
+              cluster,
             })
             .pipe(
+              Effect.retry({
+                while: (e): boolean =>
+                  e._tag === "ClusterContainsServicesException" ||
+                  e._tag === "ClusterContainsTasksException" ||
+                  e._tag === "ClusterContainsContainerInstancesException" ||
+                  e._tag === "UpdateInProgressException",
+                schedule: Schedule.max([
+                  Schedule.fixed("3 seconds"),
+                  Schedule.recurs(15),
+                ]),
+              }),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
-              Effect.catchTag(
-                "ClusterContainsServicesException",
-                () => Effect.void,
-              ),
-              Effect.catchTag(
-                "ClusterContainsTasksException",
-                () => Effect.void,
-              ),
             );
         }),
       };

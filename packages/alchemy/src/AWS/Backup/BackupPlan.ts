@@ -215,7 +215,12 @@ export const BackupPlanProvider = () =>
                 .filter(
                   (p) =>
                     p.BackupPlanId !== undefined &&
-                    p.BackupPlanArn !== undefined,
+                    p.BackupPlanArn !== undefined &&
+                    // Service-managed plans (e.g. EFS automatic backups'
+                    // `aws/efs/automatic-backup-plan`) reject DeleteBackupPlan
+                    // with AccessDenied (verified live) — keep them out of
+                    // enumeration for account-wide teardown (nuke).
+                    !(p.BackupPlanName ?? "").startsWith("aws/"),
                 )
                 .map((p) => ({
                   backupPlanId: p.BackupPlanId!,

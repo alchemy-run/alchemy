@@ -287,7 +287,13 @@ export const ObservabilityConfigurationProvider = () =>
                 Array.from(chunk).flatMap((page) =>
                   (page.ObservabilityConfigurationSummaryList ?? []).flatMap(
                     (s) =>
-                      s.ObservabilityConfigurationArn !== undefined
+                      s.ObservabilityConfigurationArn !== undefined &&
+                      // App Runner ships an AWS-managed `DefaultConfiguration`
+                      // revision that always exists and can never be deleted
+                      // — keep it out of enumeration for account-wide
+                      // teardown (nuke).
+                      s.ObservabilityConfigurationName !==
+                        "DefaultConfiguration"
                         ? [s.ObservabilityConfigurationArn]
                         : [],
                   ),

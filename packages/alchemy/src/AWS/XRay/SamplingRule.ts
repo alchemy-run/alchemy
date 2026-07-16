@@ -232,7 +232,12 @@ export const SamplingRuleProvider = () =>
               .items({})
               .pipe(Stream.runCollect);
             return Array.from(records).flatMap((record) =>
-              record.SamplingRule?.RuleName && record.SamplingRule.RuleARN
+              record.SamplingRule?.RuleName &&
+              record.SamplingRule.RuleARN &&
+              // The built-in `Default` sampling rule always exists and can
+              // never be deleted — keep it out of enumeration for
+              // account-wide teardown (nuke).
+              record.SamplingRule.RuleName !== "Default"
                 ? [
                     {
                       ruleName: record.SamplingRule.RuleName,

@@ -302,7 +302,12 @@ export const AutoScalingConfigurationProvider = () =>
                       AutoScalingConfigurationArn: string;
                     } =>
                       isActiveStatus(s.Status) &&
-                      s.AutoScalingConfigurationArn !== undefined,
+                      s.AutoScalingConfigurationArn !== undefined &&
+                      // App Runner ships an AWS-managed `DefaultConfiguration`
+                      // revision that always exists and can never be deleted
+                      // — keep it out of enumeration for account-wide
+                      // teardown (nuke).
+                      s.AutoScalingConfigurationName !== "DefaultConfiguration",
                   ),
                 ),
               ),

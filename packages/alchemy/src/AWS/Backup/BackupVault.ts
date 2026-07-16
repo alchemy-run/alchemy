@@ -140,7 +140,13 @@ export const BackupVaultProvider = () =>
                 .filter(
                   (v) =>
                     v.BackupVaultName !== undefined &&
-                    v.BackupVaultArn !== undefined,
+                    v.BackupVaultArn !== undefined &&
+                    // Service-managed vaults (e.g. EFS automatic backups'
+                    // `aws/efs/automatic-backup-vault`) reject
+                    // DeleteBackupVault with a 403 even when empty (verified
+                    // live) — keep them out of enumeration for account-wide
+                    // teardown (nuke).
+                    !v.BackupVaultName.startsWith("aws/"),
                 )
                 .map((v) => ({
                   backupVaultName: v.BackupVaultName!,

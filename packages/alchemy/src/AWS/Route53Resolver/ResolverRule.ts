@@ -251,7 +251,14 @@ export const ResolverRuleProvider = () =>
               Array.from(chunk)
                 .flatMap((page) => page.ResolverRules ?? [])
                 .flatMap((rule) =>
-                  rule.Id !== undefined && rule.Arn !== undefined
+                  rule.Id !== undefined &&
+                  rule.Arn !== undefined &&
+                  // Autodefined rules (e.g. the Internet Resolver rule for
+                  // `.`, id `rslvr-autodefined-rr-internet-resolver`) are
+                  // owned by Route 53 Resolver itself and can never be
+                  // deleted — keep them out of enumeration for account-wide
+                  // teardown (nuke).
+                  !rule.Id.startsWith("rslvr-autodefined")
                     ? [
                         {
                           resolverRuleId: rule.Id,
@@ -365,6 +372,44 @@ export const ResolverRuleProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // A rule associated with VPCs cannot be deleted — disassociate all
+          // associations first (idempotent: a vanished association is
+          // already gone).
+          const associations = yield* r53r.listResolverRuleAssociations
+            .pages({
+              Filters: [
+                { Name: "ResolverRuleId", Values: [output.resolverRuleId] },
+              ],
+            })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap(
+                  (page) => page.ResolverRuleAssociations ?? [],
+                ),
+              ),
+              Effect.catch(() =>
+                Effect.succeed([] as r53r.ResolverRuleAssociation[]),
+              ),
+            );
+          yield* Effect.forEach(
+            associations,
+            (assoc) =>
+              assoc.VPCId
+                ? r53r
+                    .disassociateResolverRule({
+                      ResolverRuleId: output.resolverRuleId,
+                      VPCId: assoc.VPCId,
+                    })
+                    .pipe(
+                      Effect.catchTag("ResourceNotFoundException", () =>
+                        Effect.succeed(undefined),
+                      ),
+                      Effect.asVoid,
+                    )
+                : Effect.void,
+            { discard: true },
+          );
           yield* retryRuleInUse(
             r53r.deleteResolverRule({
               ResolverRuleId: output.resolverRuleId,

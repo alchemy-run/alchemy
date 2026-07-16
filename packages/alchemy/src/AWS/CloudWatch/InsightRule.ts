@@ -270,7 +270,20 @@ export const InsightRuleProvider = () =>
                       candidate,
                     ): candidate is typeof candidate & {
                       Name: string;
-                    } => candidate.Name != null,
+                    } =>
+                      candidate.Name != null &&
+                      // Rules owned by another service reject
+                      // DeleteInsightRules with AccessDenied. DynamoDB
+                      // Contributor Insights rules are the pathological case:
+                      // they report `ManagedRule: false` yet still can only
+                      // be removed through DynamoDB (verified live), so match
+                      // both the flag and the documented name prefix. Keep
+                      // them out of enumeration for account-wide teardown
+                      // (nuke).
+                      candidate.ManagedRule !== true &&
+                      !candidate.Name.startsWith(
+                        "DynamoDBContributorInsights-",
+                      ),
                   ),
                 ),
               ),

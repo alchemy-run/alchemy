@@ -498,6 +498,12 @@ const nukeCommand = Command.make(
                     output: item.attr as never,
                     session: nukeSession,
                     bindings: [],
+                    // Nuke is an explicit, operator-confirmed account
+                    // teardown: allow destructive prerequisites (e.g.
+                    // emptying a bucket) that normal destroys gate behind
+                    // props such as `forceDestroy` — `olds` here is cloud
+                    // Attributes, not the originally-deployed Props.
+                    force: true,
                   })
                   .pipe(
                     Effect.timeout(`${timeout} seconds`),

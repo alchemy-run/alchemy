@@ -187,10 +187,17 @@ export const OptOutListProvider = () =>
           smsvoice.describeOptOutLists.items({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).map((l) => ({
-                optOutListName: l.OptOutListName,
-                optOutListArn: l.OptOutListArn,
-              })),
+              Array.from(chunk)
+                // The `Default` opt-out list is service-managed: End User
+                // Messaging recreates it automatically and then rejects
+                // DeleteOptOutList with ConflictException
+                // RESOURCE_MODIFICATION_NOT_ALLOWED (verified live) — keep
+                // it out of enumeration for account-wide teardown (nuke).
+                .filter((l) => l.OptOutListName !== "Default")
+                .map((l) => ({
+                  optOutListName: l.OptOutListName,
+                  optOutListArn: l.OptOutListArn,
+                })),
             ),
           ),
       };
