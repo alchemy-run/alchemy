@@ -3,9 +3,10 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
 /**
- * Runtime binding for the `ListHostedZonesByVPC` operation (IAM action
- * `route53:ListHostedZonesByVPC`; list actions do not support resource-level
- * permissions, so it is granted on `*`).
+ * Runtime binding for the `ListHostedZonesByVPC` operation (IAM actions
+ * `route53:ListHostedZonesByVPC` + `ec2:DescribeVpcs` — Route 53 verifies the
+ * VPC on the caller's behalf; list actions do not support resource-level
+ * permissions, so both are granted on `*`).
  *
  * Lists the private hosted zones associated with a VPC — discovery for
  * compute that audits or wires up split-horizon DNS at runtime. Provide the

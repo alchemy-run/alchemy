@@ -148,13 +148,23 @@ describe.sequential("Route53 Bindings", () => {
 
   describe("ListHostedZonesByVPC", () => {
     test.provider(
-      "returns an empty summary list for an unassociated VPC",
+      "round-trips the VPC ownership rejection for a foreign VPC id",
       (_stack) =>
         Effect.gen(function* () {
+          // Route 53 rejects VPC ids the account doesn't own with the typed
+          // AccessDeniedException ("not owned by you") — reaching that
+          // ownership check proves the grant + query encoding end-to-end.
+          // notOwned=false would mean a genuine IAM denial: fail loudly.
           const response = (yield* send(
             HttpClientRequest.get(`${baseUrl}/zones/by-vpc`),
           ).pipe(Effect.flatMap((r) => r.json))) as any;
           expect(response.count).toBe(0);
+          if (response.rejected && !response.notOwned) {
+            // Include the upstream rejection detail in the failure output.
+            expect.fail(
+              `unexpected rejection (genuine IAM denial?): ${response.detail}`,
+            );
+          }
         }),
     );
   });

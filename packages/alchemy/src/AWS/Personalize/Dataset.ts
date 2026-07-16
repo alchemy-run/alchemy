@@ -240,6 +240,25 @@ export const DatasetProvider = () =>
                 ]),
               }),
             );
+          // Deletion is asynchronous (DELETE PENDING) — wait until the dataset
+          // is actually gone so the schema and dataset group it references can
+          // delete without exhausting their ResourceInUse retries.
+          const remaining = yield* describe(output.datasetArn).pipe(
+            Effect.repeat({
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(40),
+              ]),
+              until: (dataset) => dataset === undefined,
+            }),
+          );
+          if (remaining !== undefined) {
+            return yield* Effect.fail(
+              new Error(
+                `Personalize dataset ${output.datasetArn} was not deleted (status: ${remaining.status})`,
+              ),
+            );
+          }
         }),
 
         // Datasets are keyed by their parent dataset group (ListDatasets

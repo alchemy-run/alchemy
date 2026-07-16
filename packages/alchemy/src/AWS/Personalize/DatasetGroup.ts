@@ -244,6 +244,25 @@ export const DatasetGroupProvider = () =>
                 ]),
               }),
             );
+          // Deletion is asynchronous (DELETE IN_PROGRESS) — wait until the
+          // group is actually gone so the run leaves no lingering resources
+          // (the group's auto-created event schema is removed with it).
+          const remaining = yield* describe(output.datasetGroupArn).pipe(
+            Effect.repeat({
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(40),
+              ]),
+              until: (group) => group === undefined,
+            }),
+          );
+          if (remaining !== undefined) {
+            return yield* Effect.fail(
+              new Error(
+                `Personalize dataset group ${output.datasetGroupArn} was not deleted (status: ${remaining.status})`,
+              ),
+            );
+          }
         }),
 
         list: () =>

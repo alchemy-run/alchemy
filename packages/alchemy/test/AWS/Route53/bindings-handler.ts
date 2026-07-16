@@ -139,12 +139,27 @@ export default Route53BindingsFunction.make(
           }).pipe(
             Effect.map((r) => ({
               count: (r.HostedZoneSummaries ?? []).length,
-              invalidInput: false,
+              rejected: false,
+              notOwned: false,
             })),
-            // Some partitions validate VPC existence — the typed InvalidInput
-            // still proves the grant + query encoding end-to-end.
-            Effect.catchTag("InvalidInput", () =>
-              Effect.succeed({ count: 0, invalidInput: true }),
+            // Route 53 validates VPC ownership before listing: a VPC id the
+            // account doesn't own comes back as the typed AccessDeniedException
+            // ("The VPC ... is not owned by you"), NOT an empty list. That
+            // rejection still proves the grant + query encoding end-to-end —
+            // but only when the message is the ownership check. A genuine IAM
+            // denial ("not authorized to perform") sets notOwned=false and the
+            // test fails loudly instead of being masked.
+            Effect.catchTag(["InvalidInput", "AccessDeniedException"], (e) =>
+              Effect.succeed({
+                count: 0,
+                rejected: true,
+                notOwned:
+                  e._tag === "AccessDeniedException"
+                    ? (e.message ?? "").includes("not owned by you")
+                    : true,
+                // Surfaced so a failing assertion shows the real rejection.
+                detail: `${e._tag}: ${e.message ?? ""}`.slice(0, 300),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(response);

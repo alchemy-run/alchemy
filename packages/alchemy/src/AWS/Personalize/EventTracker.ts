@@ -243,6 +243,24 @@ export const EventTrackerProvider = () =>
                 ]),
               }),
             );
+          // Deletion is asynchronous — wait until the tracker is actually gone
+          // so its dataset group can delete without ResourceInUse churn.
+          const remaining = yield* describe(output.eventTrackerArn).pipe(
+            Effect.repeat({
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(40),
+              ]),
+              until: (tracker) => tracker === undefined,
+            }),
+          );
+          if (remaining !== undefined) {
+            return yield* Effect.fail(
+              new Error(
+                `Personalize event tracker ${output.eventTrackerArn} was not deleted (status: ${remaining.status})`,
+              ),
+            );
+          }
         }),
 
         list: () =>

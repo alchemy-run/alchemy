@@ -202,5 +202,5 @@ test.provider(
       );
       expect(trackerError._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 420_000 },
+  { timeout: 480_000 },
 );
