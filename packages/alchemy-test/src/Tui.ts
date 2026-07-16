@@ -59,6 +59,7 @@ import {
   type TestMeta,
   type TestResult,
 } from "./Reporter.ts";
+import { captureStrayOutput } from "./StrayOutput.ts";
 
 type Status = "queued" | "running" | "pass" | "fail" | "skip" | "todo";
 
@@ -415,7 +416,7 @@ interface Tui {
 const FOOTER_HINTS =
   "j/k · enter open · / filter · h/l fold · r retry · x kill · y copy · q quit";
 
-const makeTui = async (): Promise<Tui> => {
+const makeTui = async (logFile: string): Promise<Tui> => {
   const state = new TuiState();
   /** True once the renderer is torn down — no further writes are allowed. */
   let disposed = false;
@@ -427,29 +428,14 @@ const makeTui = async (): Promise<Tui> => {
     exitOnCtrlC: false,
   });
 
-  // Swallow stray JS-level stdout/stderr writes while the TUI owns the
-  // screen: anything that bypasses the per-test Effect Console (third-party
-  // libraries writing to the streams directly) would corrupt the alternate
-  // screen. opentui renders through its native library (not
-  // process.stdout.write), so patching here cannot affect the TUI itself.
-  // (Global console.* is already captured by opentui's console overlay.)
-  const realStdoutWrite = process.stdout.write.bind(process.stdout);
-  const realStderrWrite = process.stderr.write.bind(process.stderr);
-  const swallow: typeof process.stdout.write = (
-    _chunk: string | Uint8Array,
-    encodingOrCb?: BufferEncoding | ((err?: Error | null) => void),
-    cb?: (err?: Error | null) => void,
-  ): boolean => {
-    const callback = typeof encodingOrCb === "function" ? encodingOrCb : cb;
-    callback?.(null);
-    return true;
-  };
-  process.stdout.write = swallow;
-  process.stderr.write = swallow;
-  const restoreStreams = (): void => {
-    process.stdout.write = realStdoutWrite;
-    process.stderr.write = realStderrWrite;
-  };
+  // Divert stray JS-level stdout/stderr writes into the run log while the
+  // TUI owns the screen: anything that bypasses the per-test Effect Console
+  // (third-party bridges writing to the streams directly, e.g. miniflare
+  // forwarding workerd's console) would corrupt the alternate screen.
+  // Installed AFTER the renderer is created — opentui captures the real
+  // stream methods at construction and renders through its native library,
+  // so the diversion cannot affect the TUI itself.
+  const restoreStreams = captureStrayOutput(logFile);
 
   // No explicit colors on chrome — match the terminal's own theme.
   const header = new TextRenderable(renderer, {
@@ -1174,18 +1160,20 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
   state.dirty = true;
 };
 
-export const TuiReporterLive: Layer.Layer<Reporter> = Layer.effect(Reporter)(
-  Effect.gen(function* () {
-    const tui = yield* Effect.acquireRelease(Effect.promise(makeTui), (t) =>
-      Effect.sync(() => t.dispose()),
-    );
-    return {
-      emit: (event) => Effect.sync(() => onEvent(tui, event)),
-      waitForExit: () => Effect.promise(() => tui.quit),
-      attachController: (controller) =>
-        Effect.sync(() => {
-          tui.state.controller = controller;
-        }),
-    };
-  }),
-);
+export const TuiReporter = (logFile: string): Layer.Layer<Reporter> =>
+  Layer.effect(Reporter)(
+    Effect.gen(function* () {
+      const tui = yield* Effect.acquireRelease(
+        Effect.promise(() => makeTui(logFile)),
+        (t) => Effect.sync(() => t.dispose()),
+      );
+      return {
+        emit: (event) => Effect.sync(() => onEvent(tui, event)),
+        waitForExit: () => Effect.promise(() => tui.quit),
+        attachController: (controller) =>
+          Effect.sync(() => {
+            tui.state.controller = controller;
+          }),
+      };
+    }),
+  );

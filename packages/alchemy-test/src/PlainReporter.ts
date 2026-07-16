@@ -15,6 +15,7 @@ import {
   type TestEvent,
   type TestMeta,
 } from "./Reporter.ts";
+import { writeDirect } from "./StrayOutput.ts";
 
 const useColor =
   process.stdout.isTTY === true && process.env.NO_COLOR === undefined;
@@ -31,9 +32,11 @@ const bold = paint("1");
 const formatDuration = (ms: number): string =>
   ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 
+// Through the REAL stream — while a run is active, bare process.stdout is
+// diverted into the run log (see StrayOutput.ts).
 const write = (line: string): Effect.Effect<void> =>
   Effect.sync(() => {
-    process.stdout.write(`${line}\n`);
+    writeDirect(`${line}\n`);
   });
 
 // Captured output is replayed verbatim — no timestamp/level prefixes, no
@@ -92,7 +95,7 @@ const printStalled = (state: ReporterState): void => {
   if (items.length > STALL_LIST_MAX) {
     lines.push(dim(`    … ${items.length - STALL_LIST_MAX} more`));
   }
-  process.stdout.write(`${lines.join("\n")}\n`);
+  writeDirect(`${lines.join("\n")}\n`);
 };
 
 const onEvent = (

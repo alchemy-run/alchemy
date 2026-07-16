@@ -26,7 +26,8 @@ import packageJson from "../package.json" with { type: "json" };
 import { PlainReporterLive, printSummary } from "./PlainReporter.ts";
 import { Reporter } from "./Reporter.ts";
 import { run, type RunOptions } from "./Runner.ts";
-import { TuiReporterLive } from "./Tui.ts";
+import { captureStrayOutput } from "./StrayOutput.ts";
+import { TuiReporter } from "./Tui.ts";
 
 const paths = Argument.string("paths").pipe(
   Argument.withDescription("Test files or directories (default: ./test)"),
@@ -157,14 +158,23 @@ const rootCommand = Command.make(
       logFile,
     };
 
+    // In plain mode, divert stray JS-level stdout/stderr writes into the
+    // run log for the duration of the run (the reporter writes through the
+    // real stream); the TUI installs its own diversion after the renderer
+    // is created.
+    const restoreStrayCapture = interactive
+      ? undefined
+      : captureStrayOutput(logFile);
+
     const summary = yield* Effect.gen(function* () {
       const reporter = yield* Reporter;
       const summary = yield* run(options);
       yield* reporter.waitForExit(summary);
       return summary;
     }).pipe(
-      Effect.provide(interactive ? TuiReporterLive : PlainReporterLive),
+      Effect.provide(interactive ? TuiReporter(logFile) : PlainReporterLive),
       Effect.scoped,
+      Effect.onExit(() => Effect.sync(() => restoreStrayCapture?.())),
     );
 
     // After the TUI tears down, leave a plain record in the terminal.
