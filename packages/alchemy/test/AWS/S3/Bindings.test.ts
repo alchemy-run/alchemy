@@ -117,6 +117,23 @@ class IamNotPropagated extends Data.TaggedError("IamNotPropagated")<{
   readonly body: string;
 }> {}
 
+class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
+
+// Out-of-band assert-gone after the final destroy: retry while headBucket
+// still succeeds (S3 delete visibility is eventually consistent), settle on
+// the typed NotFound.
+const assertBucketDeleted = Effect.fn(function* (name: string) {
+  yield* S3.headBucket({ Bucket: name }).pipe(
+    Effect.flatMap(() => Effect.fail(new BucketStillExists())),
+    Effect.retry({
+      while: (e) => e._tag === "BucketStillExists",
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.catch(() => Effect.void),
+  );
+});
+
 // The Lambda role's inline policy can take a few seconds to propagate after
 // deploy — a structurally valid presigned URL answers 403 until it does.
 // Retry 403s on a bounded schedule; any other failure surfaces immediately.
@@ -187,7 +204,17 @@ describe("S3 Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Prove the trailing destroy really removed the fixture bucket
+      // (bucketName is captured in beforeAll; skip if setup never got there).
+      if (bucketName) {
+        yield* assertBucketDeleted(bucketName);
+      }
+    }),
+    { timeout: 120_000 },
+  );
 
   describe("PresignPutObject", () => {
     test.provider(

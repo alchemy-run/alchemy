@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +17,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "LambdaBindings");
 
 let baseUrl: string;
+let deployedFunctionName: string;
 
 // Fresh function URLs take a few seconds to start serving 200s; ride
 // through propagation + cold start with a bounded retry.
@@ -44,18 +46,43 @@ describe("Lambda Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* sharedStack.destroy();
-      const { functionUrl } = yield* sharedStack.deploy(
+      const { functionName, functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* LambdaBindingsTestFunction;
         }).pipe(Effect.provide(LambdaBindingsTestFunctionLive)),
       );
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
+      deployedFunctionName = functionName;
     }),
     { timeout: 300_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 180_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Out-of-band proof the destroy removed the host function.
+      if (deployedFunctionName) {
+        yield* Lambda.getFunction({
+          FunctionName: deployedFunctionName,
+        }).pipe(
+          Effect.flatMap(() =>
+            Effect.fail(
+              new Error(`Function ${deployedFunctionName} still exists`),
+            ),
+          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.exponential(500),
+              Schedule.recurs(8),
+            ]),
+          }),
+        );
+      }
+    }),
+    { timeout: 180_000 },
+  );
 
   test.provider(
     "InvokeFunction invokes the target function",

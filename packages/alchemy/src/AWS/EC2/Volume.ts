@@ -521,7 +521,10 @@ const waitForVolumeDeleted = (
       while: (e) => e instanceof VolumeStillExists,
       schedule: Schedule.max([
         Schedule.fixed(2000),
-        Schedule.recurs(15), // max ~30s
+        // deleteVolume already succeeded at this point, but describeVolumes
+        // can keep reporting the volume (e.g. while a pending snapshot of it
+        // finishes) for well over 30s — give propagation ~60s.
+        Schedule.recurs(30),
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session.note(

@@ -1,6 +1,7 @@
 import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -129,6 +130,19 @@ export const DatasetProvider = () =>
         return dataset;
       });
 
+      /** Find an existing dataset's ARN by name within its dataset group. */
+      const findArnByName = Effect.fn(function* (
+        name: string,
+        datasetGroupArn: string,
+      ) {
+        const pages = yield* personalize.listDatasets
+          .pages({ datasetGroupArn })
+          .pipe(Stream.runCollect);
+        return Array.from(pages)
+          .flatMap((page) => page.datasets ?? [])
+          .find((summary) => summary.name === name)?.datasetArn;
+      });
+
       const toAttrs = (dataset: personalize.Dataset) => ({
         datasetArn: dataset.datasetArn!,
         name: dataset.name!,
@@ -175,21 +189,39 @@ export const DatasetProvider = () =>
               ? yield* describe(output.datasetArn)
               : undefined;
 
+          // Ensure — create if missing. A crashed prior run may have left a
+          // same-named dataset behind with no persisted state — adopt it by
+          // name and converge.
           if (dataset === undefined) {
-            const created = yield* personalize.createDataset({
-              name,
-              schemaArn: news.schemaArn,
-              datasetGroupArn: news.datasetGroupArn,
-              datasetType: news.datasetType,
-              tags: Object.entries(desiredTags).map(([tagKey, tagValue]) => ({
-                tagKey,
-                tagValue,
-              })),
-            });
-            dataset = yield* waitActive(created.datasetArn!);
-          } else {
-            yield* syncPersonalizeTags(dataset.datasetArn!, desiredTags);
+            const arn = yield* personalize
+              .createDataset({
+                name,
+                schemaArn: news.schemaArn,
+                datasetGroupArn: news.datasetGroupArn,
+                datasetType: news.datasetType,
+                tags: Object.entries(desiredTags).map(([tagKey, tagValue]) => ({
+                  tagKey,
+                  tagValue,
+                })),
+              })
+              .pipe(
+                Effect.map((created) => created.datasetArn!),
+                Effect.catchTag("ResourceAlreadyExistsException", (error) =>
+                  findArnByName(name, news.datasetGroupArn).pipe(
+                    Effect.flatMap((existing) =>
+                      existing === undefined
+                        ? Effect.fail(error)
+                        : Effect.succeed(existing),
+                    ),
+                  ),
+                ),
+              );
+            dataset = yield* waitActive(arn);
           }
+
+          // Sync tags — diff against OBSERVED cloud tags (no-op after a fresh
+          // create; converges an adopted leftover).
+          yield* syncPersonalizeTags(dataset.datasetArn!, desiredTags);
 
           yield* session.note(dataset.datasetArn!);
           return toAttrs(dataset);

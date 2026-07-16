@@ -34,6 +34,8 @@ const topicArnFor = Effect.fn(function* (topicName: string) {
 describe("AWS.SNS.Topic", () => {
   test.provider("create and delete topic with default props", (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const topic = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Topic("DefaultTopic");
@@ -55,6 +57,8 @@ describe("AWS.SNS.Topic", () => {
 
   test.provider("create, update, delete topic attributes and tags", (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const topic = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Topic("ManagedTopic", {
@@ -111,6 +115,8 @@ describe("AWS.SNS.Topic", () => {
 
   test.provider("create and delete fifo topic", (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const topic = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Topic("FifoTopic", {

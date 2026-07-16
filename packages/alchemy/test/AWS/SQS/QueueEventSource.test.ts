@@ -115,6 +115,10 @@ describe.sequential("AWS.SQS.QueueEventSource", () => {
         expect(received).toEqual(messageBody);
 
         yield* stack.destroy();
+
+        // Out-of-band: both queues are actually gone after the destroy.
+        yield* assertQueueDeleted(sourceQueueUrl);
+        yield* assertQueueDeleted(resultQueueUrl);
       }),
     { timeout: 240_000 },
   );
@@ -142,6 +146,28 @@ const waitForEventSourceMappingEnabled = Effect.fn(function* (
         Schedule.recurs(30),
       ]),
     }),
+  );
+});
+
+class QueueStillExists extends Data.TaggedError("QueueStillExists") {}
+
+/** Poll (bounded) until GetQueueAttributes reports the queue gone. */
+const assertQueueDeleted = Effect.fn(function* (queueUrl: string) {
+  yield* SQS.getQueueAttributes({
+    QueueUrl: queueUrl,
+    AttributeNames: ["All"],
+  }).pipe(
+    Effect.flatMap(() => Effect.fail(new QueueStillExists())),
+    Effect.retry({
+      // SQS DeleteQueue propagation is documented at ~60s; poll on a fixed
+      // cadence with a bounded budget.
+      while: (e) => e._tag === "QueueStillExists",
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(45),
+      ]),
+    }),
+    Effect.catchTag("QueueDoesNotExist", () => Effect.void),
   );
 });
 

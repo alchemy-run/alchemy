@@ -30,6 +30,8 @@ const provider: typeof test.provider = ((name, fn, opts) =>
 
 provider("create and delete queue with default props", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("DefaultQueue");
@@ -54,6 +56,8 @@ provider("create and delete queue with default props", (stack) =>
 
 provider("create, update, delete standard queue", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
@@ -108,6 +112,8 @@ provider("create, update, delete standard queue", (stack) =>
 
 provider("create, update, delete fifo queue", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestFifoQueue", {
@@ -156,6 +162,8 @@ provider("create, update, delete fifo queue", (stack) =>
 
 provider("create queue with custom name", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("CustomNameQueue", {
@@ -184,7 +192,7 @@ provider(
   "QueueSink writes arbitrary messages through a deployed Lambda",
   (stack) =>
     Effect.gen(function* () {
-      // yield* stack.destroy();
+      yield* stack.destroy();
 
       const apiFunction = yield* stack.deploy(
         QueueSinkFunction.pipe(Effect.provide(QueueSinkFunctionLive)),
@@ -373,6 +381,8 @@ provider(
   "DLQ redrive policy round-trips and can be removed",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       // Create the DLQ and source together, keeping both deployed across
       // steps to avoid the engine replace+remove-dependency deadlock.
       const deployBoth = (withRedrive: boolean) =>
@@ -422,6 +432,8 @@ provider(
   "redriveAllowPolicy is set on the dead-letter queue",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { dlq } = yield* stack.deploy(
         Effect.gen(function* () {
           const source = yield* Queue("AllowSource");
@@ -452,6 +464,8 @@ provider(
 
 provider("SSE-SQS encryption enables sqs-managed key", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("SseSqsQueue", { sqsManagedSseEnabled: true });
@@ -469,6 +483,8 @@ provider("SSE-SQS encryption enables sqs-managed key", (stack) =>
 
 provider("SSE-KMS encryption with AWS-managed key", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("KmsQueue", {
@@ -492,6 +508,8 @@ provider(
   "kmsMasterKeyId and sqsManagedSseEnabled together fail fast",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const result = yield* stack
         .deploy(
           Effect.gen(function* () {
@@ -514,6 +532,8 @@ provider(
   "user tags coexist with internal tags and can be removed",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const withTags = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Queue("TaggedQueue", {
@@ -564,6 +584,8 @@ provider(
   "FIFO source with FIFO dead-letter queue (no type mismatch)",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { source } = yield* stack.deploy(
         Effect.gen(function* () {
           const dlq = yield* Queue("FifoDLQ", { fifo: true });

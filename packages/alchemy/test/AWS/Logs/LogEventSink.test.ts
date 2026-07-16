@@ -115,6 +115,11 @@ test.provider(
   "LogEventSink streams events through a deployed Lambda and drops rejected events",
   (stack) =>
     Effect.gen(function* () {
+      // Leading destroy reconciles away any partial deployment left behind by
+      // a previous crashed run (physical names are deterministic, so the
+      // re-deploy adopts and the trailing destroy cleans up).
+      yield* stack.destroy();
+
       const fn = yield* stack.deploy(
         LogEventSinkFunction.pipe(Effect.provide(LogEventSinkFunctionLive)),
       );
@@ -165,6 +170,17 @@ test.provider(
       );
 
       yield* stack.destroy();
+
+      // Assert the sink's log group is gone after the final destroy.
+      const remaining = yield* logs.describeLogGroups({
+        logGroupNamePrefix: logGroupName,
+        limit: 1,
+      });
+      expect(
+        (remaining.logGroups ?? []).some(
+          (group) => group.logGroupName === logGroupName,
+        ),
+      ).toBe(false);
     }),
   { timeout: 240_000 },
 );

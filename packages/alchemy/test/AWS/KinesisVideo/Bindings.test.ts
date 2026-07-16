@@ -163,6 +163,8 @@ describe("KinesisVideo Bindings", () => {
             Schedule.recurs(10),
           ]),
         }),
+        (effect) =>
+          Core.withProviders(effect, testOptions, "KinesisVideoBindings"),
       );
     }),
     {

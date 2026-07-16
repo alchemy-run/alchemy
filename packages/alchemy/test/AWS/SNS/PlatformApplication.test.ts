@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Test from "@/Test/Vitest";
 import * as sns from "@distilled.cloud/aws/sns";
 import { describe, expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -87,8 +88,32 @@ describe.sequential("SNS PlatformApplication", () => {
 
         if (!process.env.NO_DESTROY) {
           yield* stack.destroy();
+          yield* assertPlatformApplicationGone(
+            deployed.application.platformApplicationArn,
+          );
         }
       }),
     { timeout: 300_000 },
   );
+});
+
+class PlatformApplicationStillExists extends Data.TaggedError(
+  "PlatformApplicationStillExists",
+) {}
+
+// Out-of-band proof the trailing destroy left nothing behind: the platform
+// application must be observably gone (typed NotFoundException) after destroy.
+const assertPlatformApplicationGone = Effect.fn(function* (arn: string) {
+  yield* sns
+    .getPlatformApplicationAttributes({ PlatformApplicationArn: arn })
+    .pipe(
+      Effect.flatMap(() => Effect.fail(new PlatformApplicationStillExists())),
+      Effect.retry({
+        while: (error) => error._tag === "PlatformApplicationStillExists",
+        schedule: Schedule.exponential(100),
+        times: 8,
+      }),
+      Effect.catchTag("NotFoundException", () => Effect.void),
+      Effect.catchTag("InvalidParameterException", () => Effect.void),
+    );
 });

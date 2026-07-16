@@ -115,6 +115,16 @@ export const SchemaProvider = () =>
         return response?.schema;
       });
 
+      /** Find an existing schema's ARN by its (deterministic) name. */
+      const findArnByName = Effect.fn(function* (name: string) {
+        const pages = yield* personalize.listSchemas
+          .pages({})
+          .pipe(Stream.runCollect);
+        return Array.from(pages)
+          .flatMap((page) => page.schemas ?? [])
+          .find((summary) => summary.name === name)?.schemaArn;
+      });
+
       return {
         stables: ["schemaArn", "name"],
 
@@ -154,13 +164,28 @@ export const SchemaProvider = () =>
               : undefined;
 
           // 2. Ensure — schemas are immutable, so only create when missing.
+          //    A crashed prior run may have left a same-named schema behind
+          //    with no persisted state — adopt it by name.
           if (schema === undefined) {
-            const created = yield* personalize.createSchema({
-              name,
-              schema: news.schema,
-              domain: news.domain,
-            });
-            schema = yield* describe(created.schemaArn!);
+            const arn = yield* personalize
+              .createSchema({
+                name,
+                schema: news.schema,
+                domain: news.domain,
+              })
+              .pipe(
+                Effect.map((created) => created.schemaArn!),
+                Effect.catchTag("ResourceAlreadyExistsException", (error) =>
+                  findArnByName(name).pipe(
+                    Effect.flatMap((existing) =>
+                      existing === undefined
+                        ? Effect.fail(error)
+                        : Effect.succeed(existing),
+                    ),
+                  ),
+                ),
+              );
+            schema = yield* describe(arn);
           }
 
           yield* session.note(schema!.schemaArn!);

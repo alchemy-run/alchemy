@@ -48,6 +48,7 @@ test.provider(
         Effect.retry({
           while: (error) => error._tag === "NotFoundException",
           schedule: Schedule.fixed(300),
+          times: 10,
         }),
       );
       expect(attributes.Attributes?.Protocol).toBe("lambda");
@@ -114,6 +115,7 @@ const assertSubscriptionDeleted = Effect.fn(function* (
     Effect.retry({
       while: (error) => error._tag === "SubscriptionStillExists",
       schedule: Schedule.exponential(100),
+      times: 8,
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.catchTag("InvalidParameterException", () => Effect.void),

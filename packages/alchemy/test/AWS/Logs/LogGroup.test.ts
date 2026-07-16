@@ -43,6 +43,8 @@ test.provider("list enumerates the deployed log group", (stack) =>
     );
 
     yield* stack.destroy();
+    // Assert the log group is gone after the final destroy.
+    expect(yield* describeLogGroup(logGroup.logGroupName)).toBeUndefined();
   }),
 );
 

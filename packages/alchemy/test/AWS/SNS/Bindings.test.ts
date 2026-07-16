@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Vitest";
+import * as SNS from "@distilled.cloud/aws/sns";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -548,9 +549,27 @@ describe.sequential("SNS Bindings", () => {
 
         if (!process.env.NO_DESTROY) {
           yield* stack.destroy();
+          yield* assertTopicGone(topicArn);
         }
       }),
     { timeout: 360_000 },
+  );
+});
+
+class TopicStillExists extends Data.TaggedError("TopicStillExists") {}
+
+// Out-of-band proof the trailing destroy left nothing behind: the fixture
+// topic must be observably gone (typed NotFoundException) after destroy.
+const assertTopicGone = Effect.fn(function* (topicArn: string) {
+  yield* SNS.getTopicAttributes({ TopicArn: topicArn }).pipe(
+    Effect.flatMap(() => Effect.fail(new TopicStillExists())),
+    Effect.retry({
+      while: (error) => error._tag === "TopicStillExists",
+      schedule: Schedule.exponential(100),
+      times: 8,
+    }),
+    Effect.catchTag("NotFoundException", () => Effect.void),
+    Effect.catchTag("InvalidParameterException", () => Effect.void),
   );
 });
 

@@ -75,6 +75,27 @@ interface ReceivedMessage {
 
 class MessageNotReceived extends Data.TaggedError("MessageNotReceived") {}
 
+class QueueStillExists extends Data.TaggedError("QueueStillExists") {}
+
+/** Poll (bounded) until GetQueueAttributes reports the queue gone. */
+const assertQueueDeleted = (url: string) =>
+  SQS.getQueueAttributes({
+    QueueUrl: url,
+    AttributeNames: ["All"],
+  }).pipe(
+    Effect.flatMap(() => Effect.fail(new QueueStillExists())),
+    Effect.retry({
+      // SQS DeleteQueue propagation is documented at ~60s; poll on a fixed
+      // cadence with a bounded budget.
+      while: (e) => e._tag === "QueueStillExists",
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(45),
+      ]),
+    }),
+    Effect.catchTag("QueueDoesNotExist", () => Effect.void),
+  );
+
 // Poll the fixture's /receive route (the ReceiveMessage binding) until every
 // body in `bodies` has been observed; returns a map body -> received message.
 // Bounded: ~20 polls, each an SQS long-poll of 2s.
@@ -210,7 +231,15 @@ describe.sequential("SQS Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 60_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Out-of-band: the shared queue and DLQ are actually gone.
+      if (queueUrl) yield* assertQueueDeleted(queueUrl);
+      if (dlqUrl) yield* assertQueueDeleted(dlqUrl);
+    }),
+    { timeout: 240_000 },
+  );
 
   describe("SendMessage", () => {
     test.provider("sends a message through the bound queue", (_stack) =>

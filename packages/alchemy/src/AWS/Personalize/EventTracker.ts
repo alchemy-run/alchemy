@@ -137,6 +137,19 @@ export const EventTrackerProvider = () =>
         return tracker;
       });
 
+      /** Find an existing tracker's ARN by name within its dataset group. */
+      const findArnByName = Effect.fn(function* (
+        name: string,
+        datasetGroupArn: string,
+      ) {
+        const pages = yield* personalize.listEventTrackers
+          .pages({ datasetGroupArn })
+          .pipe(Stream.runCollect);
+        return Array.from(pages)
+          .flatMap((page) => page.eventTrackers ?? [])
+          .find((summary) => summary.name === name)?.eventTrackerArn;
+      });
+
       const toAttrs = (tracker: personalize.EventTracker) => ({
         eventTrackerArn: tracker.eventTrackerArn!,
         trackingId: tracker.trackingId!,
@@ -181,21 +194,37 @@ export const EventTrackerProvider = () =>
               ? yield* describe(output.eventTrackerArn)
               : undefined;
 
-          // 2. Ensure — create if missing, then wait for ACTIVE.
+          // 2. Ensure — create if missing, then wait for ACTIVE. A crashed
+          //    prior run may have left a same-named tracker behind with no
+          //    persisted state — adopt it by name and converge.
           if (tracker === undefined) {
-            const created = yield* personalize.createEventTracker({
-              name,
-              datasetGroupArn: news.datasetGroupArn,
-              tags: Object.entries(desiredTags).map(([tagKey, tagValue]) => ({
-                tagKey,
-                tagValue,
-              })),
-            });
-            tracker = yield* waitActive(created.eventTrackerArn!);
-          } else {
-            // 3. Sync tags — diff against OBSERVED cloud tags.
-            yield* syncPersonalizeTags(tracker.eventTrackerArn!, desiredTags);
+            const arn = yield* personalize
+              .createEventTracker({
+                name,
+                datasetGroupArn: news.datasetGroupArn,
+                tags: Object.entries(desiredTags).map(([tagKey, tagValue]) => ({
+                  tagKey,
+                  tagValue,
+                })),
+              })
+              .pipe(
+                Effect.map((created) => created.eventTrackerArn!),
+                Effect.catchTag("ResourceAlreadyExistsException", (error) =>
+                  findArnByName(name, news.datasetGroupArn).pipe(
+                    Effect.flatMap((existing) =>
+                      existing === undefined
+                        ? Effect.fail(error)
+                        : Effect.succeed(existing),
+                    ),
+                  ),
+                ),
+              );
+            tracker = yield* waitActive(arn);
           }
+
+          // 3. Sync tags — diff against OBSERVED cloud tags (no-op after a
+          //    fresh create; converges an adopted leftover).
+          yield* syncPersonalizeTags(tracker.eventTrackerArn!, desiredTags);
 
           yield* session.note(tracker.eventTrackerArn!);
           return toAttrs(tracker);

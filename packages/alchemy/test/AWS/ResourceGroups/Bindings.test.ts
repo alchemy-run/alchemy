@@ -219,8 +219,9 @@ describe.sequential("ResourceGroups Bindings", () => {
           // wiring, including the iam:PassRole grant path.
           const started = (yield* postJson("/start-tag-sync", {})) as {
             errorTag?: string;
+            message?: string;
           };
-          expect(started.errorTag).toBe("BadRequestException");
+          expect(started.errorTag, started.message).toBe("BadRequestException");
 
           const got = (yield* getJson(
             "/tag-sync-task?arn=arn:aws:resource-groups:us-west-2:000000000000:group/none/00000000-0000-0000-0000-000000000000",

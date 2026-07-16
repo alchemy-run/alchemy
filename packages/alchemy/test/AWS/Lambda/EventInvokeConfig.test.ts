@@ -162,6 +162,25 @@ test.provider(
       );
 
       yield* stack.destroy();
+
+      // Out-of-band proof the destroy removed the host function (and with it
+      // the event invoke configs) from the cloud.
+      yield* Lambda.getFunction({
+        FunctionName: aliasCleared.fn.functionName,
+      }).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(
+            new Error(`Function ${aliasCleared.fn.functionName} still exists`),
+          ),
+        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(8),
+          ]),
+        }),
+      );
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),

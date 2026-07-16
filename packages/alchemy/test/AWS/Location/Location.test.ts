@@ -31,6 +31,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
     "Map: create, update description, delete",
     (stack) =>
       Effect.gen(function* () {
+        yield* stack.destroy();
         const map = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Location.Map("TestMap", {
@@ -75,6 +76,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
     "PlaceIndex: create, update, delete",
     (stack) =>
       Effect.gen(function* () {
+        yield* stack.destroy();
         const index = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Location.PlaceIndex("TestIndex", {
@@ -115,6 +117,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
     "RouteCalculator: create and delete",
     (stack) =>
       Effect.gen(function* () {
+        yield* stack.destroy();
         const calc = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Location.RouteCalculator("TestCalc", {
@@ -146,6 +149,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
     "GeofenceCollection: create, update, delete",
     (stack) =>
       Effect.gen(function* () {
+        yield* stack.destroy();
         const collection = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Location.GeofenceCollection("TestFences", {});
@@ -217,6 +221,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
     "ApiKey: create, update description, delete",
     (stack) =>
       Effect.gen(function* () {
+        yield* stack.destroy();
         const key = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Location.ApiKey("TestKey", {
@@ -266,6 +271,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
     "TrackerConsumer: link tracker to geofence collection, delete",
     (stack) =>
       Effect.gen(function* () {
+        yield* stack.destroy();
         const out = yield* stack.deploy(
           Effect.gen(function* () {
             const tracker = yield* Location.Tracker("ConsumerTracker", {});
@@ -306,6 +312,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
     "Tracker: create, update filtering, delete",
     (stack) =>
       Effect.gen(function* () {
+        yield* stack.destroy();
         const tracker = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Location.Tracker("TestTracker", {});

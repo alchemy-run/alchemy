@@ -1,11 +1,22 @@
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
+import type { Credentials } from "@distilled.cloud/aws/Credentials";
+import type { Region } from "@distilled.cloud/aws/Region";
 import * as Layer from "effect/Layer";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { makeLogGroupHttpBinding } from "./BindingHttp.ts";
 import { StopQuery } from "./StopQuery.ts";
 
 export const StopQueryHttp = Layer.effect(
   StopQuery,
-  makeLogGroupHttpBinding({
+  // Explicit type args: the request has a required `queryId`, so the compiler
+  // must not fall back to the `{ logGroupName?: string }` constraint when
+  // inferring `I` from the OperationMethod intersection.
+  makeLogGroupHttpBinding<
+    Logs.StopQueryRequest,
+    Logs.StopQueryResponse,
+    Logs.StopQueryError,
+    Credentials | Region | HttpClient.HttpClient
+  >({
     tag: "AWS.Logs.StopQuery",
     operation: Logs.stopQuery,
     actions: ["logs:StopQuery"],
