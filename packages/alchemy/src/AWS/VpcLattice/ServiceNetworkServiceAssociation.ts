@@ -229,6 +229,13 @@ export const ServiceNetworkServiceAssociationProvider = () =>
           }
           const associationId = assoc.id;
           const associationArn = assoc.arn;
+          if (!associationId || !associationArn) {
+            return yield* Effect.fail(
+              new Error(
+                "Service network service association is missing its id/arn",
+              ),
+            );
+          }
 
           // Wait for the association to leave CREATE_IN_PROGRESS so
           // dependents observe a routable service.

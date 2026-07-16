@@ -209,8 +209,14 @@ describe("S3 Bindings", () => {
       yield* sharedStack.destroy();
       // Prove the trailing destroy really removed the fixture bucket
       // (bucketName is captured in beforeAll; skip if setup never got there).
+      // afterAll lacks the providers layer test bodies get, so provide it for
+      // the out-of-band distilled call.
       if (bucketName) {
-        yield* assertBucketDeleted(bucketName);
+        yield* Core.withProviders(
+          assertBucketDeleted(bucketName),
+          testOptions,
+          "S3Bindings",
+        );
       }
     }),
     { timeout: 120_000 },

@@ -141,7 +141,9 @@ const assertVolumeGone = Effect.fn(function* (volumeId: string) {
   yield* EC2.describeVolumes({ VolumeIds: [volumeId] }).pipe(
     Effect.flatMap((result) => {
       const state = result.Volumes?.[0]?.State;
-      return state === undefined || state === "deleted"
+      // `deleting` is terminal — EC2 can keep a deleted volume visible in
+      // this state for many minutes of internal bookkeeping.
+      return state === undefined || state === "deleted" || state === "deleting"
         ? Effect.void
         : Effect.fail(new StillExists());
     }),

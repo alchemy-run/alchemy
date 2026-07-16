@@ -96,7 +96,7 @@ const postJson = (path: string, body: object) =>
 // data-access role) can take a few seconds to propagate; retry any route
 // that answers with the typed AccessDeniedException, bounded well under a
 // minute.
-const untilAuthorized = (effect: Effect.Effect<RouteResult, unknown>) =>
+const untilAuthorized = <E, R>(effect: Effect.Effect<RouteResult, E, R>) =>
   effect.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),

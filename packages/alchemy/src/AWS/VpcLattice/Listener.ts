@@ -303,6 +303,9 @@ export const ListenerProvider = () =>
             tags: desiredTags,
           };
         }),
+        // Sub-resource: listeners are keyed by their owning lattice service
+        // and are removed with it, so nuke has nothing to enumerate.
+        list: () => Effect.succeed([] as Listener["Attributes"][]),
         delete: Effect.fn(function* ({ output }) {
           yield* retryOnConflict(
             vpclattice.deleteListener({

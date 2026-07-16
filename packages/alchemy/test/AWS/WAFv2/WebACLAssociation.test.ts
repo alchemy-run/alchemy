@@ -92,6 +92,9 @@ test.provider.skipIf(!process.env.AWS_TEST_WAF_ASSOCIATION)(
   "associate a web ACL with an AppSync API, re-point, disassociate",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       // create API + ACL + association in one deploy
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {

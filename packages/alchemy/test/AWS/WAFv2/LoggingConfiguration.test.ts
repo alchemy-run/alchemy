@@ -32,6 +32,9 @@ test.provider(
   "enable logging to CloudWatch Logs, add a filter, delete",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       // Destinations must be named aws-waf-logs-*.
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {

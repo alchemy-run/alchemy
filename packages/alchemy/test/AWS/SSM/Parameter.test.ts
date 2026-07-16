@@ -37,6 +37,9 @@ test.provider(
   "create, update value, update tags, delete String parameter",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const parameter = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Parameter("ConfigParam", {
@@ -131,6 +134,9 @@ test.provider(
   "SecureString parameter lifecycle",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const parameter = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Parameter("SecureParam", {
@@ -176,6 +182,9 @@ test.provider(
   "type change String -> SecureString updates in place",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const parameter = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Parameter("TypeChangeParam", {
@@ -216,6 +225,9 @@ test.provider(
   "custom hierarchical name and replacement on rename",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const first = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Parameter("PathParam", {

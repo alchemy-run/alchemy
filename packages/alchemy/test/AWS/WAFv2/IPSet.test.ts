@@ -27,6 +27,9 @@ test.provider(
   "create, update addresses and tags, replace on ip version change, delete",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const ipSet = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* IPSet("LifecycleIpSet", {

@@ -101,9 +101,14 @@ describe("S3 Bucket Event Source", () => {
     Effect.gen(function* () {
       yield* sharedStack.destroy();
       // Prove the trailing destroy removed the fixture bucket (skip if
-      // setup never captured the name).
+      // setup never captured the name). afterAll lacks the providers layer
+      // test bodies get, so provide it for the out-of-band distilled call.
       if (fixtureBucketName) {
-        yield* assertBucketDeleted(fixtureBucketName);
+        yield* Core.withProviders(
+          assertBucketDeleted(fixtureBucketName),
+          testOptions,
+          "S3EventSource",
+        );
       }
     }),
     { timeout: 120_000 },

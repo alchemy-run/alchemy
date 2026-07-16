@@ -1,4 +1,5 @@
 import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -239,6 +240,22 @@ const toWireHealthCheck = (
 const targetKey = (t: { id?: string; port?: number }) =>
   `${t.id ?? ""}#${t.port ?? ""}`;
 
+/**
+ * RegisterTargets reports per-target failures in `unsuccessful` instead of
+ * throwing. Tagged so callers (e.g. `delete`'s not-found tolerance) can keep
+ * using `Effect.catchTag` on the fully typed error union.
+ */
+class TargetRegistrationFailed extends Data.TaggedError(
+  "AWS.VpcLattice.TargetRegistrationFailed",
+)<{
+  targetGroupId: string;
+  unsuccessful: vpclattice.TargetFailure[];
+}> {
+  override get message() {
+    return `Failed to register targets with target group ${this.targetGroupId}: ${JSON.stringify(this.unsuccessful)}`;
+  }
+}
+
 export const TargetGroupProvider = () =>
   Provider.effect(
     TargetGroup,
@@ -331,11 +348,10 @@ export const TargetGroupProvider = () =>
               targets: toAdd,
             }),
           );
-          if ((result.unsuccessful ?? []).length > 0) {
+          const unsuccessful = result.unsuccessful ?? [];
+          if (unsuccessful.length > 0) {
             return yield* Effect.fail(
-              new Error(
-                `Failed to register targets: ${JSON.stringify(result.unsuccessful)}`,
-              ),
+              new TargetRegistrationFailed({ targetGroupId, unsuccessful }),
             );
           }
         }
@@ -433,6 +449,11 @@ export const TargetGroupProvider = () =>
           }
           const targetGroupId = group.id;
           const targetGroupArn = group.arn;
+          if (!targetGroupId || !targetGroupArn) {
+            return yield* Effect.fail(
+              new Error(`Target group ${name} is missing its id/arn`),
+            );
+          }
 
           // Target groups reject updates while CREATE_IN_PROGRESS.
           const stable = yield* waitUntilStable(observe(targetGroupId));

@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as personalize from "@distilled.cloud/aws/personalize";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -66,9 +67,19 @@ const getJson = (path: string) =>
     Effect.flatMap((r) => r.json),
   );
 
+// IAM policy statements on a freshly-created role can take up to ~a minute to
+// propagate to the Personalize data plane, surfacing as a transient
+// AccessDeniedException tag. Retry (bounded) until a different tag appears —
+// a genuine IAM gap still fails the assertion with the AccessDeniedException
+// tag after the retries are exhausted.
 const routeTag = (path: string) =>
   getJson(path).pipe(
     Effect.map((response) => (response as { tag: string }).tag),
+    Effect.repeat({
+      schedule: Schedule.spaced("3 seconds"),
+      until: (tag: string): boolean => tag !== "AccessDeniedException",
+      times: 20,
+    }),
   );
 
 const probeTag = (path: string, arn: string) =>
@@ -117,7 +128,55 @@ describe.sequential("Personalize Bindings", () => {
     { timeout: 480_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 240_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Assert the fixture's Personalize resources are gone out-of-band.
+      // Dataset-group deletion is asynchronous (DELETE IN_PROGRESS), so poll
+      // until no group with this suite's stack prefix remains; the datasets
+      // and the auto-created event schema disappear with it.
+      const prefix = `${sharedStack.name}-`;
+      const groups = yield* personalize.listDatasetGroups({}).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (response): boolean =>
+            !(response.datasetGroups ?? []).some((group) =>
+              group.name?.startsWith(prefix),
+            ),
+          times: 24,
+        }),
+      );
+      expect(
+        (groups.datasetGroups ?? [])
+          .map((group) => group.name)
+          .filter((name) => name?.startsWith(prefix)),
+      ).toEqual([]);
+      const trackers = yield* personalize.listEventTrackers({});
+      expect(
+        (trackers.eventTrackers ?? [])
+          .map((tracker) => tracker.name)
+          .filter((name) => name?.startsWith(prefix)),
+      ).toEqual([]);
+      // The user-defined schemas are deleted synchronously by the destroy;
+      // the group's auto-created event schema goes with the group deletion.
+      const schemas = yield* personalize.listSchemas({}).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (response): boolean =>
+            !(response.schemas ?? []).some((schema) =>
+              schema.name?.startsWith(prefix),
+            ),
+          times: 12,
+        }),
+      );
+      expect(
+        (schemas.schemas ?? [])
+          .map((schema) => schema.name)
+          .filter((name) => name?.startsWith(prefix)),
+      ).toEqual([]);
+    }),
+    { timeout: 420_000 },
+  );
 
   describe("binding registration", () => {
     test.provider("all nineteen capabilities initialize in the runtime", () =>

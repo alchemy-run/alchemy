@@ -29,6 +29,9 @@ test.provider(
   "create, update expressions and tags, delete",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const set = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* RegexPatternSet("LifecycleRegexSet", {

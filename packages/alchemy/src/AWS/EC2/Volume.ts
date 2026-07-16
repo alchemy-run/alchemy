@@ -512,7 +512,11 @@ const waitForVolumeDeleted = (
         ),
       );
     const volume = result.Volumes?.[0];
-    if (!volume || volume.State === "deleted") {
+    // `deleting` is terminal and irreversible — deleteVolume has been
+    // accepted and EC2 can keep the volume visible in `deleting` for many
+    // minutes of internal bookkeeping. Waiting for it to disappear entirely
+    // makes destroy flaky for no benefit.
+    if (!volume || volume.State === "deleted" || volume.State === "deleting") {
       return;
     }
     return yield* new VolumeStillExists({ volumeId });
@@ -521,9 +525,7 @@ const waitForVolumeDeleted = (
       while: (e) => e instanceof VolumeStillExists,
       schedule: Schedule.max([
         Schedule.fixed(2000),
-        // deleteVolume already succeeded at this point, but describeVolumes
-        // can keep reporting the volume (e.g. while a pending snapshot of it
-        // finishes) for well over 30s — give propagation ~60s.
+        // give the delete call ~60s to be reflected by describeVolumes
         Schedule.recurs(30),
       ]).pipe(
         Schedule.tap(({ attempt }) =>

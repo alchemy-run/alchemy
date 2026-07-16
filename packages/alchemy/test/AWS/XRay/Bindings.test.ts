@@ -36,6 +36,10 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly body: string;
 }> {}
 
+class FunctionStillExists extends Data.TaggedError("FunctionStillExists")<{
+  readonly functionName: string;
+}> {}
+
 // The shared Lambda fixture occasionally answers a transient 5xx under
 // parallel load (cold re-init, IAM propagation). Retry 5xx only; a genuine
 // 4xx/assertion failure surfaces immediately.
@@ -101,7 +105,34 @@ describe("XRay Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // assert the fixture Lambda is really gone (typed not-found only)
+      if (functionName) {
+        yield* Core.withProviders(
+          Lambda.getFunctionConfiguration({
+            FunctionName: functionName,
+          }).pipe(
+            Effect.flatMap(() =>
+              Effect.fail(new FunctionStillExists({ functionName })),
+            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "FunctionStillExists",
+              schedule: Schedule.max([
+                Schedule.exponential(500),
+                Schedule.recurs(8),
+              ]),
+            }),
+          ),
+          testOptions,
+          "XRayBindings",
+        );
+      }
+    }),
+    { timeout: 120_000 },
+  );
 
   describe("Function tracing", () => {
     test.provider(

@@ -49,6 +49,9 @@ test.provider(
   "create, update rules, replace on capacity change, delete",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const group = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* RuleGroup("LifecycleRuleGroup", {

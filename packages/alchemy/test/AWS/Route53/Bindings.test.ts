@@ -50,10 +50,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(9)]),
     }),
   );
 
@@ -75,7 +72,11 @@ describe.sequential("Route53 Bindings", () => {
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
-      const readinessUrl = `${baseUrl}/bindings`;
+      // Probe /zone (not /bindings): it exercises the route53:GetHostedZone
+      // grant, so the readiness loop also absorbs IAM propagation on the
+      // freshly attached policy — otherwise the first real test can hit a
+      // 500 (AccessDenied via orDie) before the policy is live.
+      const readinessUrl = `${baseUrl}/zone`;
       yield* Effect.logInfo(
         `Route53 test setup: probing readiness at ${readinessUrl}`,
       );

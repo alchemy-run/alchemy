@@ -342,6 +342,9 @@ export const RuleProvider = () =>
             tags: desiredTags,
           };
         }),
+        // Sub-resource: rules are keyed by their owning service/listener and
+        // are removed with them, so nuke has nothing to enumerate.
+        list: () => Effect.succeed([] as Rule["Attributes"][]),
         delete: Effect.fn(function* ({ output }) {
           yield* retryOnConflict(
             vpclattice.deleteRule({

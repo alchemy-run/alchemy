@@ -234,9 +234,17 @@ describe.sequential("SQS Bindings", () => {
   afterAll(
     Effect.gen(function* () {
       yield* sharedStack.destroy();
-      // Out-of-band: the shared queue and DLQ are actually gone.
-      if (queueUrl) yield* assertQueueDeleted(queueUrl);
-      if (dlqUrl) yield* assertQueueDeleted(dlqUrl);
+      // Out-of-band: the shared queue and DLQ are actually gone. The hook
+      // context has no provider environment (unlike `test.provider` bodies),
+      // so provide it explicitly for the distilled SQS calls.
+      yield* Core.withProviders(
+        Effect.gen(function* () {
+          if (queueUrl) yield* assertQueueDeleted(queueUrl);
+          if (dlqUrl) yield* assertQueueDeleted(dlqUrl);
+        }),
+        testOptions,
+        sharedStack.name,
+      );
     }),
     { timeout: 240_000 },
   );

@@ -231,8 +231,18 @@ export const AccessLogSubscriptionProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
 
           // Observe — prefer the stable id cache, fall back to discovering
-          // the resource's subscription for our destination type.
-          let subscription = output?.accessLogSubscriptionId
+          // the resource's subscription for our destination type. The create
+          // response carries the same identifying fields but no timestamps,
+          // so keep the local shape to the fields we actually use.
+          let subscription:
+            | {
+                id: string;
+                arn: string;
+                resourceId: string;
+                resourceArn: string;
+                destinationArn: string;
+              }
+            | undefined = output?.accessLogSubscriptionId
             ? yield* observe(output.accessLogSubscriptionId)
             : yield* findByDestinationType(
                 news.resourceIdentifier,
@@ -289,6 +299,9 @@ export const AccessLogSubscriptionProvider = () =>
             tags: desiredTags,
           };
         }),
+        // Sub-resource: subscriptions are keyed by their service network /
+        // service and are removed with it, so nuke has nothing to enumerate.
+        list: () => Effect.succeed([] as AccessLogSubscription["Attributes"][]),
         delete: Effect.fn(function* ({ output }) {
           yield* retryOnConflict(
             vpclattice.deleteAccessLogSubscription({

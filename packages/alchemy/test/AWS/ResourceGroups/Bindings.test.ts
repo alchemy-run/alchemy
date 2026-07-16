@@ -107,7 +107,9 @@ describe.sequential("ResourceGroups Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 120_000,
+  });
 
   describe("binding registration", () => {
     test.provider("all ten capabilities initialize in the runtime", (_stack) =>
@@ -216,11 +218,18 @@ describe.sequential("ResourceGroups Bindings", () => {
         Effect.gen(function* () {
           // Tag-sync requires an application group (myApplications-only, not
           // creatable via CreateGroup) — the typed rejection proves IAM +
-          // wiring, including the iam:PassRole grant path.
-          const started = (yield* postJson("/start-tag-sync", {})) as {
-            errorTag?: string;
-            message?: string;
-          };
+          // wiring, including the iam:PassRole grant path. Retry while the
+          // freshly attached role policy is still propagating (AccessDenied
+          // instead of the service-side validation error).
+          const started = (yield* postJson("/start-tag-sync", {}).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (r: unknown) =>
+                (r as { errorTag?: string }).errorTag !==
+                "AccessDeniedException",
+              times: 8,
+            }),
+          )) as { errorTag?: string; message?: string };
           expect(started.errorTag, started.message).toBe("BadRequestException");
 
           const got = (yield* getJson(

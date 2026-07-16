@@ -81,6 +81,9 @@ test.provider(
   "create with managed + rate-based + byte-match rules, update, delete",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const acl = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* WebACL("LifecycleAcl", {
@@ -165,6 +168,9 @@ test.provider(
   "explicit name change replaces the web ACL",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const first = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* WebACL("RenamedAcl", {
@@ -204,6 +210,9 @@ test.provider.skipIf(!process.env.AWS_TEST_WAF_CLOUDFRONT)(
   "CLOUDFRONT scope provisions in us-east-1",
   (stack) =>
     Effect.gen(function* () {
+      // reconcile away any prior partial/crashed deployment
+      yield* stack.destroy();
+
       const acl = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* WebACL("EdgeAcl", { scope: "CLOUDFRONT" });

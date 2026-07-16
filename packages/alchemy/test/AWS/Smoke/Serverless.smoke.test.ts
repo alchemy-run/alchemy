@@ -58,6 +58,7 @@ interface StackOutputs {
   resultsQueueUrl: string;
   machineArn: string;
   workerFunctionName: string;
+  apiFunctionName: string;
 }
 
 let outputs: StackOutputs;
@@ -204,6 +205,7 @@ const deployProgram = Effect.gen(function* () {
     resultsQueueUrl: resultsQueue.queueUrl,
     machineArn: machine.stateMachineArn,
     workerFunctionName: worker.functionName,
+    apiFunctionName: apiFn.functionName,
   };
 }).pipe(
   Effect.provide(Layer.mergeAll(SmokeApiFunctionLive, SmokeWorkerFunctionLive)),
@@ -530,6 +532,38 @@ describe.sequential("Serverless smoke", () => {
               Effect.map(() => false),
               Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
             ),
+        );
+
+        yield* waitUntilGone(
+          "results queue",
+          sqs
+            .getQueueUrl({
+              QueueName: queueNameFromUrl(outputs.resultsQueueUrl),
+            })
+            .pipe(
+              Effect.map(() => false),
+              Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+            ),
+        );
+
+        yield* waitUntilGone(
+          "api lambda",
+          lambda.getFunction({ FunctionName: outputs.apiFunctionName }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(true),
+            ),
+          ),
+        );
+
+        yield* waitUntilGone(
+          "worker lambda",
+          lambda.getFunction({ FunctionName: outputs.workerFunctionName }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(true),
+            ),
+          ),
         );
 
         yield* waitUntilGone(

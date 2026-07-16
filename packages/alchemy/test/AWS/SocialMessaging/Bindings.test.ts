@@ -1,8 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as lambda from "@distilled.cloud/aws/lambda";
 import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -128,6 +130,9 @@ test.provider(
 const sharedStack = Core.scratchStack(testOptions, "SocialMessagingBindings");
 
 let baseUrl: string;
+let functionArn: string | undefined;
+
+class FunctionStillExists extends Data.TaggedError("FunctionStillExists") {}
 
 const get = (path: string) =>
   HttpClient.get(`${baseUrl}${path}`).pipe(Effect.flatMap((r) => r.json));
@@ -146,14 +151,15 @@ describe("SocialMessaging Bindings (E2E)", () => {
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("SocialMessaging E2E setup: deploying Lambda");
-      const { functionUrl } = yield* sharedStack.deploy(
+      const deployed = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* SocialMessagingBindingsFunction;
         }).pipe(Effect.provide(SocialMessagingBindingsFunctionLive)),
       );
+      functionArn = deployed.functionArn;
 
-      expect(functionUrl).toBeTruthy();
-      baseUrl = functionUrl!.replace(/\/+$/, "");
+      expect(deployed.functionUrl).toBeTruthy();
+      baseUrl = deployed.functionUrl!.replace(/\/+$/, "");
 
       // Readiness probe — fresh function URLs take seconds to serve 200s.
       yield* HttpClient.get(`${baseUrl}/bindings`).pipe(
@@ -176,6 +182,25 @@ describe("SocialMessaging Bindings (E2E)", () => {
     Effect.gen(function* () {
       if (!RUN_LIVE) return;
       yield* sharedStack.destroy();
+      // Assert gone (skipped when beforeAll never got far enough to deploy):
+      // the fixture Lambda answers with the typed not-found tag out-of-band.
+      // afterAll runs outside `test.provider`'s layer, so raw distilled calls
+      // need the provider layer (credentials, region) supplied explicitly.
+      if (functionArn) {
+        yield* Core.withProviders(
+          lambda.getFunction({ FunctionName: functionArn }).pipe(
+            Effect.flatMap(() => Effect.fail(new FunctionStillExists())),
+            Effect.retry({
+              while: (error) => error._tag === "FunctionStillExists",
+              schedule: Schedule.exponential("500 millis"),
+              times: 8,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          ),
+          testOptions,
+          sharedStack.name,
+        );
+      }
     }),
     { timeout: 300_000 },
   );

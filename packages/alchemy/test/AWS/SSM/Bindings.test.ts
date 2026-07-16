@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
+import * as ssm from "@distilled.cloud/aws/ssm";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -26,6 +27,20 @@ const readinessPolicy = Schedule.max([
 
 let baseUrl: string;
 let functionArn: string;
+
+class ParameterStillExists extends Data.TaggedError("ParameterStillExists")<{
+  readonly name: string;
+}> {}
+
+const assertParameterDeleted = (name: string) =>
+  ssm.getParameter({ Name: name }).pipe(
+    Effect.flatMap(() => Effect.fail(new ParameterStillExists({ name }))),
+    Effect.catchTag("ParameterNotFound", () => Effect.void),
+    Effect.retry({
+      while: (e) => e._tag === "ParameterStillExists",
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+    }),
+  );
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -105,6 +120,8 @@ describe.sequential("SSM Bindings", () => {
     { timeout: 240_000 },
   );
 
+  // Idempotent backstop — the "destroy leaves nothing behind" test below is
+  // the primary teardown; this reclaims resources if that test never ran.
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
 
   describe("GetParameter", () => {
@@ -228,6 +245,24 @@ describe.sequential("SSM Bindings", () => {
           });
           expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
         }),
+    );
+  });
+
+  // Runs last (describe.sequential): tear the shared stack down and prove
+  // out-of-band that the destroy left nothing behind. The afterAll destroy
+  // stays registered as an idempotent backstop for crashes before this test.
+  describe("teardown", () => {
+    test.provider(
+      "destroy leaves no parameters behind",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* sharedStack.destroy();
+          yield* assertParameterDeleted("/alchemy-test/ssm-bindings/root");
+          yield* assertParameterDeleted(
+            "/alchemy-test/ssm-bindings/root/child",
+          );
+        }),
+      { timeout: 120_000 },
     );
   });
 });

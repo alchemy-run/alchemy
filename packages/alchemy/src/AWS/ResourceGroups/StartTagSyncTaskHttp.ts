@@ -32,6 +32,15 @@ export const StartTagSyncTaskHttp = Layer.effect(
                   Action: ["resource-groups:StartTagSyncTask"],
                   Resource: [group.groupArn],
                 },
+                // Tag-sync maintains group membership, and the service
+                // authorizes that as CreateGroup against the bare group
+                // namespace (`arn:…:group/` — no name), which a specific
+                // group ARN can never match. Scope to the namespace instead.
+                {
+                  Effect: "Allow",
+                  Action: ["resource-groups:CreateGroup"],
+                  Resource: ["arn:aws:resource-groups:*:*:group/*"],
+                },
                 // CRITICAL: without iam:PassRole on the sync role,
                 // StartTagSyncTask fails only at runtime with AccessDenied.
                 {
