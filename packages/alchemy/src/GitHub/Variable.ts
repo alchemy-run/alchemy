@@ -24,6 +24,12 @@ export interface VariableProps {
    * Variable value.
    */
   value: string;
+
+  /**
+   * Optional environment name. When set the variable is scoped to that
+   * GitHub Actions environment instead of the whole repository.
+   */
+  environment?: string;
 }
 
 export interface Variable extends Resource<
@@ -67,6 +73,22 @@ export interface Variable extends Resource<
  * });
  * ```
  *
+ * @section Environment Variables
+ * Scope a variable to a specific GitHub Actions environment (e.g.
+ * `production`, `staging`). Use `GitHub.Environment` to manage the
+ * environment itself.
+ *
+ * @example Create an Environment Variable
+ * ```typescript
+ * yield* GitHub.Variable("region", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   environment: "production",
+ *   name: "AWS_REGION",
+ *   value: "us-east-1",
+ * });
+ * ```
+ *
  * @section Wiring with Other Resources
  * Pass output attributes from other resources into GitHub variables so
  * that CI workflows can reference them.
@@ -104,54 +126,32 @@ export const Variable = Resource<Variable>("GitHub.Variable");
 
 export const VariableProvider = () =>
   Provider.succeed(Variable, {
-    reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* Octokit;
+    reconcile: Effect.fn(function* ({ news, olds }) {
+      // A variable is keyed by its location (repo vs. environment). When the
+      // location changed, the previous variable is orphaned: delete it before
+      // converging the new one, otherwise it stays in GitHub as dead state.
+      if (
+        olds !== undefined &&
+        (olds.environment ?? undefined) !== (news.environment ?? undefined)
+      ) {
+        yield* deleteVariable(olds);
+      }
 
-      // Observe — `name` is the path identifier for repo variables; ask
-      // GitHub directly for the live row. A 404 means it doesn't exist
-      // (deleted out-of-band, or never created), so we converge by
-      // creating it; otherwise we PATCH the value.
-      const observed = yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            const { data } = await octokit.rest.actions.getRepoVariable({
-              owner: news.owner,
-              repo: news.repository,
-              name: news.name,
-            });
-            return data;
-          } catch (error: any) {
-            if (error.status === 404) return undefined;
-            throw error;
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      // Observe — `name` is the path identifier; ask GitHub directly for the
+      // live row. A 404 means it doesn't exist (deleted out-of-band, or never
+      // created), so we converge by creating it; otherwise we PATCH the value.
+      const observed = yield* getVariable(news);
 
       // Ensure — POST creates the variable.
       if (observed === undefined) {
-        yield* Effect.tryPromise(() =>
-          octokit.rest.actions.createRepoVariable({
-            owner: news.owner,
-            repo: news.repository,
-            name: news.name,
-            value: news.value,
-          }),
-        );
+        yield* createVariable(news);
         return { updatedAt: new Date().toISOString() };
       }
 
       // Sync — PATCH the value if it drifted; skip the call when the
       // observed value already matches to keep the API quiet.
       if (observed.value !== news.value) {
-        yield* Effect.tryPromise(() =>
-          octokit.rest.actions.updateRepoVariable({
-            owner: news.owner,
-            repo: news.repository,
-            name: news.name,
-            value: news.value,
-          }),
-        );
+        yield* updateVariable(news);
       }
       return { updatedAt: new Date().toISOString() };
     }),
@@ -211,20 +211,105 @@ export const VariableProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* Octokit;
-
-      yield* Effect.tryPromise(async () => {
-        try {
-          await octokit.rest.actions.deleteRepoVariable({
-            owner: olds.owner,
-            repo: olds.repository,
-            name: olds.name,
-          });
-        } catch (error: any) {
-          if (error.status !== 404) {
-            throw error;
-          }
-        }
-      });
+      yield* deleteVariable(olds);
     }),
   });
+
+const getVariable = Effect.fn(function* (props: VariableProps) {
+  const octokit = yield* Octokit;
+  return yield* Effect.tryPromise({
+    try: async () => {
+      try {
+        if (props.environment) {
+          const { data } = await octokit.rest.actions.getEnvironmentVariable({
+            owner: props.owner,
+            repo: props.repository,
+            environment_name: props.environment,
+            name: props.name,
+          });
+          return data;
+        }
+        const { data } = await octokit.rest.actions.getRepoVariable({
+          owner: props.owner,
+          repo: props.repository,
+          name: props.name,
+        });
+        return data;
+      } catch (error: any) {
+        if (error.status === 404) return undefined;
+        throw error;
+      }
+    },
+    catch: (e) => e as Error,
+  });
+});
+
+const createVariable = Effect.fn(function* (props: VariableProps) {
+  const octokit = yield* Octokit;
+  yield* Effect.tryPromise(async () => {
+    if (props.environment) {
+      await octokit.rest.actions.createEnvironmentVariable({
+        owner: props.owner,
+        repo: props.repository,
+        environment_name: props.environment,
+        name: props.name,
+        value: props.value,
+      });
+    } else {
+      await octokit.rest.actions.createRepoVariable({
+        owner: props.owner,
+        repo: props.repository,
+        name: props.name,
+        value: props.value,
+      });
+    }
+  });
+});
+
+const updateVariable = Effect.fn(function* (props: VariableProps) {
+  const octokit = yield* Octokit;
+  yield* Effect.tryPromise(async () => {
+    if (props.environment) {
+      await octokit.rest.actions.updateEnvironmentVariable({
+        owner: props.owner,
+        repo: props.repository,
+        environment_name: props.environment,
+        name: props.name,
+        value: props.value,
+      });
+    } else {
+      await octokit.rest.actions.updateRepoVariable({
+        owner: props.owner,
+        repo: props.repository,
+        name: props.name,
+        value: props.value,
+      });
+    }
+  });
+});
+
+const deleteVariable = Effect.fn(function* (props: VariableProps) {
+  const octokit = yield* Octokit;
+  yield* Effect.tryPromise(async () => {
+    try {
+      if (props.environment) {
+        await octokit.rest.actions.deleteEnvironmentVariable({
+          owner: props.owner,
+          repo: props.repository,
+          environment_name: props.environment,
+          name: props.name,
+        });
+      } else {
+        await octokit.rest.actions.deleteRepoVariable({
+          owner: props.owner,
+          repo: props.repository,
+          name: props.name,
+        });
+      }
+    } catch (error: any) {
+      if (error.status !== 404) {
+        throw error;
+      }
+    }
+  });
+});

@@ -15,6 +15,12 @@ export interface VariablesProps {
   repository: string;
 
   /**
+   * Optional environment name. When set every variable is scoped to that
+   * GitHub Actions environment instead of the whole repository.
+   */
+  environment?: string;
+
+  /**
    * Map of variable name to value. Each entry becomes one
    * `GitHub.Variable` resource, using the map key as both the alchemy
    * logical id and the variable name.
@@ -41,12 +47,18 @@ export interface VariablesProps {
  * });
  * ```
  */
-export const Variables = ({ owner, repository, variables }: VariablesProps) =>
+export const Variables = ({
+  owner,
+  repository,
+  environment,
+  variables,
+}: VariablesProps) =>
   Effect.all(
     Object.entries(variables).map(([name, value]) =>
       Variable(name, {
         owner,
         repository,
+        environment,
         name,
         value,
       }),
