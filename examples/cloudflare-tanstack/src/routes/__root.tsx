@@ -1,11 +1,10 @@
-import * as r2 from "@distilled.cloud/cloudflare/r2";
+import type { ReactNode } from "react";
 import {
   HeadContent,
   Outlet,
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
-import type { ReactNode } from "react";
 
 export const Route = createRootRoute({
   head: () => ({
