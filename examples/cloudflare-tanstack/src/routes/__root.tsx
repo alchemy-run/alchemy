@@ -26,7 +26,6 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
-  console.log(r2.getBucket);
   return (
     <Document>
       <Outlet />
