@@ -11,10 +11,9 @@
  */
 import {
   BoxRenderable,
+  CliRenderEvents,
   createCliRenderer,
   ScrollBoxRenderable,
-  SelectRenderable,
-  SelectRenderableEvents,
   TextRenderable,
   type CliRenderer,
   type KeyEvent,
@@ -73,6 +72,10 @@ class TuiState {
   readonly fileLogs = new Map<string, ReadonlyArray<LogEntry>>();
   failuresOnly = false;
   detailOpen = false;
+  /** Index of the selected entry within the visible (filtered) list. */
+  selectedIndex = 0;
+  /** First visible-list index shown in the window. */
+  topIndex = 0;
   summary: RunSummary | undefined;
   startedAt = Date.now();
   /** Collection progress — files are imported incrementally while earlier
@@ -140,18 +143,45 @@ const makeTui = async (): Promise<Tui> => {
   });
   headerBox.add(header);
 
-  const list = new SelectRenderable(renderer, {
+  // Windowed list: a fixed pool of Text rows (one per terminal line). Every
+  // update touches only the visible window (~40 rows) — never the full list
+  // of potentially thousands of tests. (SelectRenderable was tried first:
+  // reassigning its options rebuilt internal state for EVERY row on every
+  // flush, which stuttered badly on large runs.)
+  const list = new BoxRenderable(renderer, {
     id: "list",
     width: "100%",
     flexGrow: 1,
-    options: [],
-    showDescription: false,
-    showScrollIndicator: true,
+    flexDirection: "column",
     backgroundColor: "#16161e",
-    selectedBackgroundColor: "#283457",
-    selectedTextColor: "#c0caf5",
-    textColor: "#787c99",
   });
+
+  interface Row {
+    readonly text: TextRenderable;
+    /** Last-applied content/style — skip native calls when unchanged. */
+    content: string;
+    selected: boolean;
+  }
+  let rows: Array<Row> = [];
+
+  const rebuildRowPool = (): void => {
+    for (const row of rows) list.remove(row.text);
+    rows = [];
+    // header + footer occupy one line each.
+    const count = Math.max(renderer.terminalHeight - 2, 1);
+    for (let i = 0; i < count; i++) {
+      const text = new TextRenderable(renderer, {
+        id: `list-row-${i}`,
+        width: "100%",
+        height: 1,
+        content: "",
+        fg: "#787c99",
+        bg: "#16161e",
+      });
+      rows.push({ text, content: "", selected: false });
+      list.add(text);
+    }
+  };
 
   const detail = new ScrollBoxRenderable(renderer, {
     id: "detail",
@@ -191,13 +221,16 @@ const makeTui = async (): Promise<Tui> => {
   root.add(detail);
   root.add(footerBox);
   renderer.root.add(root);
-  list.focus();
+  rebuildRowPool();
+  renderer.on(CliRenderEvents.RESIZE, () => {
+    rebuildRowPool();
+    renderList();
+  });
 
-  // Header updates are cheap (one Text content assignment); rebuilding the
-  // Select's options array is NOT (full re-layout of the list). They are
-  // deliberately decoupled: the header ticks while the run is live, the list
-  // rebuilds only when test data actually changed — never on a timer and
-  // never in response to plain navigation keystrokes.
+  // Header updates are cheap (one Text content assignment) and decoupled
+  // from list repaints: the header ticks while the run is live, the list
+  // repaints only when test data actually changed or on navigation — and a
+  // repaint only ever touches the visible window.
   const updateHeader = (): void => {
     const counts = state.counts;
     const elapsed = formatDuration(
@@ -216,39 +249,71 @@ const makeTui = async (): Promise<Tui> => {
       (state.failuresOnly ? "  │ [failures only]" : "");
   };
 
-  const rebuildList = (): void => {
-    // The list is hidden while the detail pane is open; rebuilding it there
-    // is wasted work. `closeDetail` flushes any pending rebuild.
+  /**
+   * Paint the visible window into the row pool. O(window): each row's
+   * content/style is written only when it actually changed since the last
+   * paint, so a steady list costs zero native calls.
+   */
+  const renderList = (): void => {
     if (state.detailOpen) return;
-    const selected = list.getSelectedIndex();
-    list.options = state.visible().map((entry) => ({
-      name: entry.label,
-      description: "",
-      value: entry.meta.id,
-    }));
-    // Restore the selection the options setter may have reset, clamped in
-    // case the failures filter shrank the list. Rebuilds only happen when
-    // test data changes, so this never fights arrow-key navigation.
-    const max = Math.max(list.options.length - 1, 0);
-    if (selected >= 0) {
-      list.setSelectedIndex(Math.min(selected, max));
+    const entries = state.visible();
+    const max = Math.max(entries.length - 1, 0);
+    state.selectedIndex = Math.min(state.selectedIndex, max);
+    // Keep the selection inside the window.
+    if (state.selectedIndex < state.topIndex) {
+      state.topIndex = state.selectedIndex;
+    } else if (state.selectedIndex >= state.topIndex + rows.length) {
+      state.topIndex = state.selectedIndex - rows.length + 1;
     }
+    state.topIndex = Math.max(
+      0,
+      Math.min(state.topIndex, Math.max(entries.length - rows.length, 0)),
+    );
+
+    const width = renderer.terminalWidth;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]!;
+      const entry = entries[state.topIndex + i];
+      const isSelected =
+        entry !== undefined && state.topIndex + i === state.selectedIndex;
+      const content =
+        entry === undefined
+          ? ""
+          : `${isSelected ? "▶" : " "}${entry.label}`.slice(0, width);
+      if (row.content !== content) {
+        row.content = content;
+        row.text.content = content;
+      }
+      if (row.selected !== isSelected) {
+        row.selected = isSelected;
+        row.text.bg = isSelected ? "#283457" : "#16161e";
+        row.text.fg = isSelected ? "#c0caf5" : "#787c99";
+      }
+    }
+  };
+
+  const moveSelection = (delta: number): void => {
+    const entries = state.visible();
+    if (entries.length === 0) return;
+    state.selectedIndex = Math.max(
+      0,
+      Math.min(state.selectedIndex + delta, entries.length - 1),
+    );
+    renderList();
   };
 
   const refresh = (): void => {
     updateHeader();
     // Keep `dirty` set while the detail pane hides the list, so the pending
-    // rebuild happens when the list becomes visible again.
+    // repaint happens when the list becomes visible again.
     if (state.dirty && !state.detailOpen) {
       state.dirty = false;
-      rebuildList();
+      renderList();
     }
   };
 
   const openDetail = (): void => {
-    const option = list.getSelectedOption();
-    if (option === null || option === undefined) return;
-    const entry = state.byId.get(option.value as string);
+    const entry = state.visible()[state.selectedIndex];
     if (entry === undefined) return;
     const { meta, result } = entry;
     const lines: Array<string> = [
@@ -277,8 +342,8 @@ const makeTui = async (): Promise<Tui> => {
     state.detailOpen = false;
     detail.visible = false;
     list.visible = true;
-    list.focus();
-    // Apply any rebuild that was skipped while the detail pane was open.
+    // Repaint the window (and apply anything that changed while hidden).
+    renderList();
     refresh();
   };
 
@@ -286,8 +351,6 @@ const makeTui = async (): Promise<Tui> => {
   const quit = new Promise<void>((resolve) => {
     resolveQuit = resolve;
   });
-
-  list.on(SelectRenderableEvents.ITEM_SELECTED, () => openDetail());
 
   renderer.keyInput.on("keypress", (key: KeyEvent) => {
     switch (key.name) {
@@ -304,18 +367,42 @@ const makeTui = async (): Promise<Tui> => {
       case "f":
         if (!state.detailOpen) {
           state.failuresOnly = !state.failuresOnly;
+          state.selectedIndex = 0;
+          state.topIndex = 0;
           state.dirty = true;
           refresh();
         }
         return;
     }
+    if (state.detailOpen) return; // ScrollBox handles its own keys
+    switch (key.name) {
+      case "up":
+      case "k":
+        moveSelection(-1);
+        return;
+      case "down":
+      case "j":
+        moveSelection(1);
+        return;
+      case "pageup":
+        moveSelection(-rows.length);
+        return;
+      case "pagedown":
+        moveSelection(rows.length);
+        return;
+      case "home":
+        moveSelection(-Number.MAX_SAFE_INTEGER);
+        return;
+      case "end":
+        moveSelection(Number.MAX_SAFE_INTEGER);
+        return;
+    }
   });
 
-  // Single flush loop: rebuilds the list at most 10x/s and ONLY when test
-  // data changed; otherwise it just ticks the elapsed-time header while the
-  // run is live. Once the run is done and nothing is dirty, this does no
-  // rendering work at all — arrow-key navigation is handled entirely by the
-  // Select and stays smooth.
+  // Single flush loop: repaints the visible window at most 10x/s and ONLY
+  // when test data changed; otherwise it just ticks the elapsed-time header
+  // while the run is live. Once the run is done and nothing is dirty, this
+  // does no rendering work at all.
   const interval = setInterval(() => {
     if (state.dirty) {
       refresh();
