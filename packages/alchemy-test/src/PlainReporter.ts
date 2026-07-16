@@ -60,8 +60,20 @@ const onEvent = (
       switch (event.result.status) {
         case "pass":
           return write(`${green("✓")} ${title} ${duration}${retries}`);
-        case "fail":
-          return write(`${red("✗")} ${title} ${duration}${retries}`);
+        case "fail": {
+          // Show the failure's details immediately so it can be inspected
+          // while the run continues (passed tests stay silent). The end-of-run
+          // Failures section repeats them consolidated, with file hook logs.
+          const lines = [`${red("✗")} ${title} ${duration}${retries}`];
+          if (event.result.error !== undefined) {
+            lines.push(indent(red(event.result.error)));
+          }
+          if (event.result.logs.length > 0) {
+            lines.push(dim("  --- captured output ---"));
+            lines.push(formatLogs(event.result.logs));
+          }
+          return write(lines.join("\n"));
+        }
         case "skip":
           return write(`${yellow("↓")} ${title} ${dim("[skipped]")}`);
         case "todo":
