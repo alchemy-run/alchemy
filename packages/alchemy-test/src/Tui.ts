@@ -7,14 +7,17 @@
  *   detail  — Enter on a test opens its error + captured output
  *   footer  — key hints / filter input
  *
- * Keys:
- *   j/k or arrows  navigate            /        type-to-filter
+ * Keys (vim-style):
+ *   j/k or arrows  move one line       space / ^d ^u / ^f ^b   page / half page
+ *   gg / G         top / bottom        /        type-to-filter
  *   enter          open test / toggle  h / l    collapse / expand file
  *   esc            back / clear filter f        failures only
  *   y              copy error+output   q        quit
  *
- * Mouse tracking is disabled (`useMouse: false`), so the terminal's native
- * click-drag selection and copy work as usual.
+ * Mouse: the wheel scrolls the viewable content without moving the selected
+ * line (keyboard navigation re-attaches the viewport to the selection);
+ * clicking a row selects it. Use `y` to copy, or the terminal's tracking
+ * bypass (Shift/Option + drag) for native text selection.
  *
  * Performance: the list is a fixed pool of Text rows (one per terminal
  * line) painted from the visible window only — updates are O(window), never
@@ -28,6 +31,7 @@ import {
   TextRenderable,
   type CliRenderer,
   type KeyEvent,
+  type MouseEvent,
 } from "@opentui/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -169,6 +173,13 @@ class TuiState {
   detailOpen = false;
   selectedIndex = 0;
   topIndex = 0;
+  /**
+   * When true the viewport tracks the selection (keyboard navigation).
+   * Mouse-wheel scrolling detaches it so the wheel moves the viewable
+   * content without touching the selected line; the next keyboard move
+   * re-attaches.
+   */
+  viewportFollows = true;
   summary: RunSummary | undefined;
   startedAt = Date.now();
   collectTotal = 0;
@@ -318,14 +329,15 @@ interface Tui {
 }
 
 const FOOTER_HINTS =
-  " j/k move · / filter · enter open/toggle · h/l fold · f failures · y copy · q quit";
+  " j/k move · space/^d/^u page · gg/G · / filter · enter open · h/l fold · f failures · y copy · q quit";
 
 const makeTui = async (): Promise<Tui> => {
   const state = new TuiState();
-  // useMouse: false keeps the terminal's native mouse selection + copy.
+  // Mouse tracking is enabled for wheel-scrolling and click-to-select.
+  // Text can still be copied with `y` (test details) or with the terminal's
+  // tracking bypass (Shift/Option + drag in most terminals).
   const renderer = await createCliRenderer({
     exitOnCtrlC: true,
-    useMouse: false,
   });
 
   const header = new TextRenderable(renderer, {
@@ -362,6 +374,7 @@ const makeTui = async (): Promise<Tui> => {
     rows = [];
     const count = Math.max(renderer.terminalHeight - 2, 1);
     for (let i = 0; i < count; i++) {
+      const index = i;
       const text = new TextRenderable(renderer, {
         id: `list-row-${i}`,
         width: "100%",
@@ -369,6 +382,14 @@ const makeTui = async (): Promise<Tui> => {
         content: "",
         fg: COLOR.text,
         bg: COLOR.bgRow,
+        // Wheel scrolls the viewable content without moving the selection;
+        // a click selects the row under the cursor.
+        onMouse: (event: MouseEvent) => {
+          if (event.type === "scroll" && event.scroll !== undefined) {
+            scrollViewport(event.scroll.direction === "up" ? -3 : 3);
+          }
+        },
+        onMouseDown: () => selectRow(index),
       });
       rows.push({ text, content: "", fg: COLOR.text, bg: COLOR.bgRow });
       list.add(text);
@@ -461,10 +482,14 @@ const makeTui = async (): Promise<Tui> => {
     const nodes = state.visible();
     const max = Math.max(nodes.length - 1, 0);
     state.selectedIndex = Math.min(state.selectedIndex, max);
-    if (state.selectedIndex < state.topIndex) {
-      state.topIndex = state.selectedIndex;
-    } else if (state.selectedIndex >= state.topIndex + rows.length) {
-      state.topIndex = state.selectedIndex - rows.length + 1;
+    // Keyboard navigation keeps the selection in view; wheel scrolling
+    // detaches the viewport and leaves the selection where it is.
+    if (state.viewportFollows) {
+      if (state.selectedIndex < state.topIndex) {
+        state.topIndex = state.selectedIndex;
+      } else if (state.selectedIndex >= state.topIndex + rows.length) {
+        state.topIndex = state.selectedIndex - rows.length + 1;
+      }
     }
     state.topIndex = Math.max(
       0,
@@ -509,10 +534,32 @@ const makeTui = async (): Promise<Tui> => {
   const moveSelection = (delta: number): void => {
     const nodes = state.visible();
     if (nodes.length === 0) return;
+    state.viewportFollows = true;
     state.selectedIndex = Math.max(
       0,
       Math.min(state.selectedIndex + delta, nodes.length - 1),
     );
+    renderList();
+  };
+
+  /** Scroll the viewable content without moving the selection (wheel). */
+  const scrollViewport = (delta: number): void => {
+    const nodes = state.visible();
+    if (nodes.length === 0) return;
+    state.viewportFollows = false;
+    state.topIndex = Math.max(
+      0,
+      Math.min(state.topIndex + delta, Math.max(nodes.length - rows.length, 0)),
+    );
+    renderList();
+  };
+
+  /** Click on a visible row selects it (without scrolling). */
+  const selectRow = (rowIndex: number): void => {
+    const nodes = state.visible();
+    const index = state.topIndex + rowIndex;
+    if (index >= nodes.length) return;
+    state.selectedIndex = index;
     renderList();
   };
 
@@ -608,6 +655,9 @@ const makeTui = async (): Promise<Tui> => {
     refresh();
   };
 
+  // Vim `gg` prefix: true after a bare `g`, cleared by any other key.
+  let pendingG = false;
+
   renderer.keyInput.on("keypress", (key: KeyEvent) => {
     if (state.filterInput && !state.detailOpen) {
       onFilterKey(key);
@@ -627,15 +677,55 @@ const makeTui = async (): Promise<Tui> => {
         }
         return;
       case "y":
-      case "c":
         copySelection();
         return;
     }
     if (state.detailOpen) return; // ScrollBox handles its own keys
+
+    // gg — jump to top (vim)
+    if (key.name === "g" && !key.shift && !key.ctrl) {
+      if (pendingG) {
+        pendingG = false;
+        moveSelection(-Number.MAX_SAFE_INTEGER);
+      } else {
+        pendingG = true;
+      }
+      return;
+    }
+    pendingG = false;
+
+    // vim paging: ctrl-d/u half page, ctrl-f/b full page
+    if (key.ctrl) {
+      switch (key.name) {
+        case "d":
+          moveSelection(Math.max(Math.floor(rows.length / 2), 1));
+          return;
+        case "u":
+          moveSelection(-Math.max(Math.floor(rows.length / 2), 1));
+          return;
+        case "f":
+          moveSelection(rows.length);
+          return;
+        case "b":
+          moveSelection(-rows.length);
+          return;
+      }
+      return;
+    }
+    // G — jump to bottom (vim)
+    if (key.name === "g" && key.shift) {
+      moveSelection(Number.MAX_SAFE_INTEGER);
+      return;
+    }
     switch (key.name) {
       case "/":
         state.filterInput = true;
         refresh();
+        return;
+      case "space":
+      case " ":
+        // space pages forward (less/vim style)
+        moveSelection(rows.length);
         return;
       case "return":
       case "enter": {
