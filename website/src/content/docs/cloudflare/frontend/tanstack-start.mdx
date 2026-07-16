@@ -29,9 +29,9 @@ export default defineConfig({
 
 :::caution[Remove @cloudflare/vite-plugin if present]
 The TanStack CLI adds `@cloudflare/vite-plugin` to `vite.config.ts`
-automatically when scaffolding a new app. Alchemy appends its own fork
-of the Cloudflare Vite plugin and is **not compatible** with the
-upstream `@cloudflare/vite-plugin` — remove it:
+automatically when scaffolding a new app. Alchemy appends its own
+Cloudflare Vite plugin and is **not compatible** with
+`@cloudflare/vite-plugin` — remove it:
 
 ```diff lang="typescript"
 // vite.config.ts
