@@ -512,45 +512,53 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const absoluteFiles = yield* discover(options).pipe(Effect.orDie);
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* reporter.emit({ _tag: "CollectStart", files: relative });
-  yield* reporter.emit({ _tag: "RunStart", files: absoluteFiles.length });
 
+  // Phase 1 — import EVERY file before running anything. Imports are lazy
+  // and pure (registration only), and must be serial anyway because the
+  // registration state is global. Collecting fully up-front keeps run
+  // semantics simple: `.only` applies across the whole run, and the full
+  // test list is known before the first test starts.
   const collected: Array<CollectedFile> = [];
+  for (let i = 0; i < absoluteFiles.length; i++) {
+    // collectFile never fails — import errors are captured on the result.
+    const c = yield* collectFile(absoluteFiles[i]!, relative[i]!);
+    collected.push(c);
+    yield* reporter.emit({ _tag: "FileCollected", file: relative[i]! });
+  }
+
+  const onlyMode = collected.some(
+    (c) => c.suite !== undefined && containsOnly(c.suite),
+  );
+
+  // Announce the full test list before execution starts (drives the TUI).
+  const allMetas: Array<TestMeta> = [];
+  for (const c of collected) {
+    if (c.suite === undefined) continue;
+    const walk = (suite: Suite) => {
+      for (const child of suite.children) {
+        if (child.type === "test") {
+          if (included(child, { onlyMode, options })) {
+            allMetas.push(metaOf(c.file, child));
+          }
+        } else {
+          walk(child);
+        }
+      }
+    };
+    walk(c.suite);
+  }
+  yield* reporter.emit({
+    _tag: "RunStart",
+    files: collected.length,
+    tests: allMetas,
+  });
+
+  // Phase 2 — run files concurrently.
   const allResults: Array<{ meta: TestMeta; result: TestResult }> = [];
   const lock = yield* Semaphore.make(EXCLUSIVE_PERMITS);
-  // Registration state is global, so only one file may import at a time.
-  // Everything else about a file (its tests, hooks, deploys) runs while the
-  // NEXT file is importing: `import()` is synchronous transpile/evaluate CPU
-  // that blocks the event loop, so collecting all files up-front would
-  // freeze the UI for the entire collection (~5s for the full suite) before
-  // a single test ran.
-  const collectLock = yield* Semaphore.make(1);
 
-  const processFile = Effect.fn(function* (absolute: string, rel: string) {
-    // collectFile never fails — import errors are captured on the result.
-    const c = yield* collectLock.withPermits(1)(collectFile(absolute, rel));
-    collected.push(c);
-
-    // `.only` scopes to its own file. A run-wide only-pass would require
-    // collecting every file before running any (defeating the interleaving
-    // above) — and matches vitest's per-worker behavior anyway.
-    const onlyMode = c.suite !== undefined && containsOnly(c.suite);
-    const ctxLite = { onlyMode, options };
-    const metas: Array<TestMeta> = [];
-    if (c.suite !== undefined) {
-      const walk = (suite: Suite) => {
-        for (const child of suite.children) {
-          if (child.type === "test") {
-            if (included(child, ctxLite)) metas.push(metaOf(rel, child));
-          } else {
-            walk(child);
-          }
-        }
-      };
-      walk(c.suite);
-    }
-    yield* reporter.emit({ _tag: "FileCollected", file: rel, tests: metas });
-
-    yield* reporter.emit({ _tag: "FileStart", file: rel });
+  const runFile = Effect.fn(function* (c: CollectedFile) {
+    yield* reporter.emit({ _tag: "FileStart", file: c.file });
     const fileLogs: Array<LogEntry> = [];
     let fileError = c.error;
     if (c.suite !== undefined) {
@@ -560,7 +568,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
         emit: reporter.emit,
         fileLogs,
         results: allResults,
-        file: rel,
+        file: c.file,
         lock,
       };
       const exit = yield* runSuite(c.suite, ctx).pipe(Effect.exit);
@@ -570,17 +578,16 @@ export const run = Effect.fn(function* (options: RunOptions) {
     }
     yield* reporter.emit({
       _tag: "FileEnd",
-      file: rel,
+      file: c.file,
       logs: fileLogs,
       error: fileError,
     });
   });
 
-  yield* Effect.forEach(
-    absoluteFiles,
-    (absolute, i) => processFile(absolute, relative[i]!),
-    { concurrency: options.concurrency, discard: true },
-  );
+  yield* Effect.forEach(collected, runFile, {
+    concurrency: options.concurrency,
+    discard: true,
+  });
 
   const failures = allResults.filter((r) => r.result.status === "fail");
   const importFailures = collected.filter((c) => c.error !== undefined);

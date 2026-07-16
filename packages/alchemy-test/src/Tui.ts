@@ -730,11 +730,11 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
     case "CollectStart":
       state.collectTotal = event.files.length;
       break;
-    case "RunStart":
-      state.startedAt = Date.now();
-      break;
     case "FileCollected":
       state.collectDone++;
+      break;
+    case "RunStart":
+      state.startedAt = Date.now();
       for (const meta of event.tests) state.upsert(meta, "queued");
       break;
     case "TestStart":

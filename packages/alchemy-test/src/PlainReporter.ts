@@ -92,7 +92,9 @@ const onEvent = (
     case "CollectStart":
       return write(dim(`collecting ${event.files.length} test files...`));
     case "RunStart":
-      return write(dim(`running tests from ${event.files} files\n`));
+      return write(
+        dim(`running ${event.tests.length} tests from ${event.files} files\n`),
+      );
     case "TestStart":
       return Effect.sync(() => {
         state.running.set(event.test.id, {
