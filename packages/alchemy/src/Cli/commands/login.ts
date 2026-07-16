@@ -1,17 +1,22 @@
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
+import * as Argument from "effect/unstable/cli/Argument";
+import * as CliError from "effect/unstable/cli/CliError";
 
+import type { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { AlchemyProfile } from "../../Auth/Profile.ts";
 
 import {
+  buildBuiltinAuthProviders,
   buildStackProviders,
   envFile,
   instrumentCommand,
   printProfile,
   profile,
-  script,
 } from "./_shared.ts";
 
 const loginConfigure = Flag.boolean("configure").pipe(
@@ -21,30 +26,78 @@ const loginConfigure = Flag.boolean("configure").pipe(
   Flag.withDefault(false),
 );
 
+/**
+ * Stack entrypoint whose `providers()` layer selects which auth providers
+ * to log in with. Optional: when omitted and no `alchemy.run.ts` exists in
+ * the current folder, `alchemy login` falls back to every built-in auth
+ * provider, so logging in (and refreshing credentials) works from any
+ * folder.
+ */
+const loginMain = Argument.file("main").pipe(
+  Argument.withDescription(
+    "Stack entrypoint whose providers() to log in with, defaults to alchemy.run.ts (falls back to all built-in providers when absent)",
+  ),
+  Argument.optional,
+);
+
 export const loginCommand = Command.make(
   "login",
   {
-    main: script,
+    main: loginMain,
     envFile,
     profile,
     configure: loginConfigure,
   },
   instrumentCommand(
     "login",
-    (a: { main: string; profile: string; configure: boolean }) => ({
+    (a: {
+      main: Option.Option<string>;
+      profile: string;
+      configure: boolean;
+    }) => ({
       "alchemy.profile": a.profile,
-      "alchemy.main": a.main,
+      "alchemy.main": Option.getOrElse(a.main, () => "alchemy.run.ts"),
       "alchemy.configure": a.configure,
     }),
   )(
     Effect.fn(function* ({ main, envFile, profile, configure }) {
-      // Build the user's providers() (+ state) layer to capture the auth
-      // providers their stack wires up.
-      const { authProviders } = yield* buildStackProviders({
-        main,
-        envFile,
-        profile,
-      });
+      const fs = yield* FileSystem.FileSystem;
+      const explicitMain = Option.getOrUndefined(main);
+      const mainPath = explicitMain ?? "alchemy.run.ts";
+      const mainExists = yield* fs
+        .exists(mainPath)
+        .pipe(Effect.catch(() => Effect.succeed(false)));
+
+      // An explicitly-passed entrypoint must exist; only the default may
+      // fall back to the built-in providers.
+      if (explicitMain != null && !mainExists) {
+        return yield* Effect.fail(
+          new CliError.InvalidValue({
+            option: "main",
+            value: explicitMain,
+            expected: "an existing stack entrypoint file",
+            kind: "argument",
+          }),
+        );
+      }
+
+      let authProviders: AuthProviders["Service"];
+      if (mainExists) {
+        // Build the user's providers() (+ state) layer to capture the auth
+        // providers their stack wires up.
+        ({ authProviders } = yield* buildStackProviders({
+          main: mainPath,
+          envFile,
+          profile,
+        }));
+      } else {
+        // No stack entrypoint — register every built-in auth provider so
+        // `alchemy login` works from any folder.
+        yield* Console.log(
+          "No alchemy.run.ts found — logging in with all built-in providers.",
+        );
+        authProviders = yield* buildBuiltinAuthProviders({ envFile, profile });
+      }
 
       const profiles = yield* AlchemyProfile;
 
