@@ -109,7 +109,7 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 ```
 
 1. **Catalog** — fan out research agents over the provider's distilled service modules (one batch per thematic group). Each agent reads the generated SDK (`distilled/packages/{cloud}/src/services/{service}.ts`), cross-references the vendor API docs, and writes a self-contained design spec to `processes/{Cloud}/catalog/{service}.md`: resources, namespaces, props/attrs with replacement rules, lifecycle-to-operation mapping, scope (account/zone), testability, priority. The coordinator aggregates a machine-readable `summary.json` + human `INDEX.md` that tracks `implemented | partial | missing` per resource — this is the factory's order book.
-2. **Implement + test** in waves (below). Tests run against the real cloud (`ALCHEMY_PROFILE=testing`); zone-scoped tests use the standing test zone (`alchemy-test-2.us` via `findZoneByName`).
+2. **Implement + test** in waves (below). Tests run against the real cloud (`bun run test --profile testing`); zone-scoped tests use the standing test zone (`alchemy-test-2.us` via `findZoneByName`).
 3. **Patch the SDK, never the consumer** — every `UnknownCloudflareError`, out-of-union status error, or wrong request/response schema found by a test becomes a patch under `distilled/packages/{cloud}/patches/{service}/{op}.json` (see the Typed Error Doctrine section). Regenerate only that service. The typed union improves for every future consumer of the SDK — that is the flywheel's output.
 4. **Update the catalog** statuses after each wave and pick the next batch from the order book. Repeat until everything left is documented as out of scope (deprecated APIs, billing/data-only endpoints, closed-beta, needs-external-systems).
 
@@ -132,7 +132,7 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 
 ## Speed doctrine: never wait on a hang
 
-- Run tests from `packages/alchemy` (suite paths are relative to it, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `cd packages/alchemy && timeout 240 bash -c 'ALCHEMY_PROFILE=testing bun alchemy-test <suite>'`. Hitting the wall **is** the failure — read the partial output (and the run's log under `.alchemy/log/test/`), find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping. The runner also prints the currently-running tests whenever nothing finishes for 10s — use that list to identify the hang.
+- Run tests with `bun run test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `timeout 240 bun run test <suite> --profile testing`. Hitting the wall **is** the failure — read the partial output (and the run's log under `.alchemy/log/test/`), find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping. The runner also prints the currently-running tests whenever nothing finishes for 10s — use that list to identify the hang.
 - Per-test timeout ≤ 90–120s (`{ timeout: ... }` on the test, or `--timeout` for the whole run). A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
@@ -880,22 +880,25 @@ This runs the TypeScript compiler in build mode, which checks all projects in th
 
 ## Running tests
 
-`packages/alchemy/test` runs on **alchemy-test** (`packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way. Run from `packages/alchemy` — suite paths are relative to it:
+`packages/alchemy/test` runs on **alchemy-test** (`packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way.
+
+There is exactly ONE entry point: `bun run test <options>`. It works identically from the repo root and from `packages/alchemy` (the root script just cds into `packages/alchemy`); suite paths are always relative to `packages/alchemy`. Compose the flags you need — there are no per-variant package scripts. NOTE: `bun run test`, not `bun test` — the latter invokes bun's own built-in test runner.
 
 ```bash
-# a suite
-cd packages/alchemy && ALCHEMY_PROFILE=testing bun alchemy-test test/Cloudflare/{Service}/{Resource}.test.ts
+# a suite, against the real cloud
+bun run test test/Cloudflare/{Service}/{Resource}.test.ts --profile testing
 
 # a directory, filtered by test name
-cd packages/alchemy && ALCHEMY_PROFILE=testing bun alchemy-test test/Cloudflare/Workers -t "cron"
+bun run test test/Cloudflare/Workers -t "cron" --profile testing
 
 # positional args that aren't real paths are file-name substring filters
-cd packages/alchemy && ALCHEMY_PROFILE=testing bun alchemy-test Bucket   # every *Bucket* test file
+bun run test Bucket --profile testing   # every *Bucket* test file
 
-# via package scripts (root or packages/alchemy). NOTE: `bun run test`, not
-# `bun test` — the latter invokes bun's own built-in test runner.
-bun run test        # = alchemy-test (plain output)
-bun run test:tui    # interactive TUI (humans only — never in an agent shell)
+# skip the slow tests (replaces the old FAST=1 env prefix)
+bun run test --fast --profile testing
+
+# interactive TUI (humans only — never in an agent shell)
+bun run test --tui
 ```
 
 (`examples/` still use plain `bun test`.)
@@ -905,6 +908,8 @@ Additional flags beyond vitest:
 | Flag              | Default | Purpose                                                       |
 | ----------------- | ------- | ------------------------------------------------------------- |
 | `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
+| `--profile <name>` | —      | Sets `ALCHEMY_PROFILE` before any test module is imported. Use `--profile testing` for live-cloud suites instead of an `ALCHEMY_PROFILE=testing` env prefix |
+| `--fast`          | off     | Sets `FAST=1` before imports — suites `skipIf(process.env.FAST)` their slow tests (long-provisioning resources, smoke tests). Replaces the `FAST=1` env prefix |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |
 | `--concurrency <n\|unbounded>` | unbounded | Files running concurrently (one bun process, no forks) |

@@ -51,10 +51,7 @@
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test:cross-version": "bun run test/cross-version-test/run.ts",
     "test:examples": "bun scripts/test-examples.ts",
-    "test": "cd ./packages/alchemy && bun alchemy-test",
-    "test:tui": "cd ./packages/alchemy && bun alchemy-test --tui",
-    "test:vitest": "cd ./packages/alchemy && bun vitest run",
-    "test:fast": "bun run --filter alchemy test:fast"
+    "test": "cd ./packages/alchemy && bun alchemy-test"
   },
   "workspaces": {
     "packages": [

@@ -3,7 +3,8 @@
  *
  * ```sh
  * alchemy-test [paths...] [-t pattern] [--timeout ms] [--retry n]
- *              [--concurrency n] [--sequential] [--tui|--no-tui]
+ *              [--concurrency n] [--sequential] [--tui]
+ *              [--profile name] [--fast]
  * ```
  *
  * Runs every `*.test.ts` under the given paths (default `./test`) in a single
@@ -83,6 +84,20 @@ const tui = Flag.boolean("tui").pipe(
   Flag.withDefault(false),
 );
 
+const profile = Flag.string("profile").pipe(
+  Flag.withDescription(
+    'Set ALCHEMY_PROFILE for the run (e.g. "testing") before any test module is imported',
+  ),
+  Flag.optional,
+);
+
+const fast = Flag.boolean("fast").pipe(
+  Flag.withDescription(
+    "Set FAST=1 — suites skip their slow tests (long-provisioning resources, smoke tests)",
+  ),
+  Flag.withDefault(false),
+);
+
 /**
  * Build the `-t` matcher — bun/vitest semantics: the pattern is a regex
  * tested against the full nested title (`file > describe chain > name`).
@@ -116,9 +131,15 @@ const rootCommand = Command.make(
     concurrency,
     sequential,
     tui,
+    profile,
+    fast,
   },
   Effect.fn(function* (args) {
-    // Run as CI. Interactive-detection gates (`process.env.CI`, TTY probes)
+    // Environment knobs — set BEFORE any test module is imported (imports
+    // happen inside `run` during collection), so `skipIf(process.env.FAST)`
+    // gates and profile-dependent layers see the final values.
+    //
+    // CI=true: interactive-detection gates (`process.env.CI`, TTY probes)
     // make tools take "inherit the terminal" paths — e.g. drizzle-kit is
     // spawned with stdio: "inherit" when interactive — and raw child writes
     // to our TTY corrupt the reporter/TUI. CI=true forces every such tool
@@ -126,6 +147,12 @@ const rootCommand = Command.make(
     // the Console service is still captured per test.
     yield* Effect.sync(() => {
       process.env.CI ??= "true";
+      if (Option.isSome(args.profile)) {
+        process.env.ALCHEMY_PROFILE = args.profile.value;
+      }
+      if (args.fast) {
+        process.env.FAST = "1";
+      }
     });
 
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
