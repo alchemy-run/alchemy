@@ -98,9 +98,10 @@ const toDeleteRequest = (
   };
 };
 
-const detectorReadinessSchedule = Schedule.exponential(200).pipe(
-  Schedule.both(Schedule.recurs(8)),
-);
+const detectorReadinessSchedule = Schedule.max([
+  Schedule.exponential(200),
+  Schedule.recurs(8),
+]);
 
 const describeDetector = Effect.fn(function* (
   props: cloudwatch.PutAnomalyDetectorInput,

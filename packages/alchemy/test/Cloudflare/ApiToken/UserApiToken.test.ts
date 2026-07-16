@@ -120,9 +120,7 @@ describe.skip("UserApiToken", () => {
       Effect.flatMap(() => Effect.fail(new TokenStillExists())),
       Effect.retry({
         while: (e): e is TokenStillExists => e instanceof TokenStillExists,
-        schedule: Schedule.exponential(200).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
       }),
       Effect.catchTag("TokenStillExists", () =>
         Effect.die(

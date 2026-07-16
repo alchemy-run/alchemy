@@ -27,9 +27,10 @@ const expectAppGone = (accountId: string, appId: string) =>
     Effect.flatMap(() => Effect.fail(new AppStillExists())),
     Effect.retry({
       while: (e): e is AppStillExists => e instanceof AppStillExists,
-      schedule: Schedule.exponential("250 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("250 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag("FlagshipAppNotFound", () => Effect.void),
   );
@@ -165,9 +166,10 @@ test.provider("list enumerates the deployed Flagship app", (stack) =>
       ),
       Effect.retry({
         while: (e): e is AppNotListedYet => e instanceof AppNotListedYet,
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential("500 millis"),
+          Schedule.recurs(8),
+        ]),
       }),
     );
 

@@ -1,10 +1,11 @@
 import type { NonEmptyArray } from "effect/Array";
 import * as Cause from "effect/Cause";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import type * as vite from "vite";
+import { cachedFunction } from "../Util/cached-function.ts";
 import { sha256 } from "../Util/index.ts";
 import {
   BundleError,
@@ -18,6 +19,7 @@ export interface ViteBuildOutput {
   readonly clientDirectory: string | undefined;
   // This is emitted as an Effect instead of a value so we can process it in parallel with reading the client assets.
   readonly serverBundle: Effect.Effect<BundleOutput | undefined, BundleError>;
+  readonly externalWorkspaces: Effect.Effect<Set<string>, PlatformError>;
 }
 
 // `@vitejs/plugin-rsc` writes these modules separately after build completes instead of emitting them as chunks.
@@ -45,15 +47,68 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     string,
     Effect.Effect<BundleFile, BundleError>
   >();
-  const deferred = yield* Deferred.make<ViteBuildOutput, BundleError>();
+  const maybeExternalWorkspaces = new Set<string>();
 
+  const findUp = yield* cachedFunction(
+    (
+      dir: string,
+      filenames: Array<string>,
+    ): Effect.Effect<string | undefined, PlatformError> =>
+      Effect.filter(
+        filenames.map((filename) => path.join(dir, filename)),
+        fs.exists,
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.flatMap(([match]) => {
+          if (match) {
+            return Effect.succeed(match);
+          }
+          const parent = path.dirname(dir);
+          if (parent === dir) {
+            return Effect.undefined;
+          }
+          return findUp(parent, filenames);
+        }),
+      ),
+  );
+  const collectExternalWorkspaces = (): Effect.Effect<
+    Set<string>,
+    PlatformError
+  > =>
+    Effect.forEach(maybeExternalWorkspaces, (directory) =>
+      findUp(directory, ["package.json"]),
+    ).pipe(
+      Effect.map(
+        (paths) =>
+          new Set(paths.filter((file) => file !== undefined).map(path.dirname)),
+      ),
+    );
   const plugin: vite.Plugin = {
     name: "alchemy:build-output",
     sharedDuringBuild: true,
+    // Collect the client output directory and server chunks as each
+    // environment writes its bundle. We deliberately do NOT resolve the build
+    // result from a `buildApp` hook: on Vite 8, when a project declares no
+    // `builder.buildApp` (e.g. a plain client-only SPA), `builder.buildApp()`
+    // runs post-order `buildApp` hooks *before* the default environment builds,
+    // so a hook fires while the output is still empty (issue #792). Instead,
+    // `viteBuild` reads `output` *after* `builder.buildApp()` resolves — by
+    // which point every environment that actually built has run `writeBundle`.
     async writeBundle(_, bundle) {
+      const root = path.resolve(this.environment.config.root);
+      for (const id of this.getModuleIds()) {
+        if (
+          !path.isAbsolute(id) ||
+          id.includes("node_modules") ||
+          id.startsWith(root)
+        ) {
+          continue;
+        }
+        maybeExternalWorkspaces.add(path.dirname(id));
+      }
       if (this.environment.name === "client") {
         clientDirectory = path.resolve(
-          this.environment.config.root,
+          root,
           this.environment.config.build.outDir,
         );
         return;
@@ -106,18 +161,6 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
           );
         }),
       );
-    },
-    buildApp: {
-      order: "post",
-      async handler() {
-        Deferred.doneUnsafe(
-          deferred,
-          Effect.succeed({
-            clientDirectory,
-            serverBundle: makeServerBundle(),
-          }),
-        );
-      },
     },
   };
 
@@ -199,6 +242,14 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
 
   return {
     plugin,
-    output: Deferred.await(deferred),
+    // Read lazily so callers observe the state collected during the build.
+    // Only safe to await *after* `builder.buildApp()` has resolved.
+    output: Effect.sync(
+      (): ViteBuildOutput => ({
+        clientDirectory,
+        serverBundle: makeServerBundle(),
+        externalWorkspaces: collectExternalWorkspaces(),
+      }),
+    ),
   };
 });

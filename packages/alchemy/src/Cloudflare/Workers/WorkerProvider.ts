@@ -12,7 +12,7 @@ import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
+import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -26,7 +26,12 @@ import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
-import { Worker, type WorkerProps, type WorkerRouteConfig } from "./Worker.ts";
+import {
+  Worker,
+  type ViteOptions,
+  type WorkerProps,
+  type WorkerRouteConfig,
+} from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
@@ -125,7 +130,7 @@ const isBindingTargetNotFound = (
   e._tag === "MtlsCertificateNotFound";
 
 const bindingTargetNotFoundRetrySchedule = () =>
-  Schedule.fixed("2 seconds").pipe(Schedule.both(Schedule.recurs(10)));
+  Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 /**
  * Upsert a Worker script, routing to the dispatch-namespace endpoint when
@@ -488,9 +493,10 @@ export const LiveWorkerProvider = () =>
             .pipe(
               Effect.retry({
                 while: (error) => error._tag === "WorkerNotFound",
-                schedule: Schedule.exponential(200).pipe(
-                  Schedule.both(Schedule.recurs(15)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.exponential(200),
+                  Schedule.recurs(15),
+                ]),
               }),
             );
           return normalizeCrons(
@@ -640,9 +646,10 @@ export const LiveWorkerProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (error) => error._tag === "WorkerNotFound",
-                  schedule: Schedule.exponential(200).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential(200),
+                    Schedule.recurs(15),
+                  ]),
                 }),
               );
             return {
@@ -841,9 +848,10 @@ export const LiveWorkerProvider = () =>
                 // typed as `RouteScriptNotFound` via the createRoute patch.
                 Effect.retry({
                   while: (error) => error._tag === "RouteScriptNotFound",
-                  schedule: Schedule.exponential(200).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential(200),
+                    Schedule.recurs(15),
+                  ]),
                 }),
                 Effect.catchTag("InvalidRoute", (originalError) =>
                   Effect.gen(function* () {
@@ -968,9 +976,10 @@ export const LiveWorkerProvider = () =>
               error._tag === "WorkerNotFound" ||
               error._tag === "DispatchNamespaceScriptNotFound" ||
               error._tag === "DispatchNamespaceNotFound",
-            schedule: Schedule.exponential(100).pipe(
-              Schedule.both(Schedule.recurs(20)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential(100),
+              Schedule.recurs(20),
+            ]),
           }),
         );
       });
@@ -1027,41 +1036,42 @@ export const LiveWorkerProvider = () =>
         // (~0.5s), which is only needed for vite-based workers at build time —
         // not for every Worker definition at module-load time.
         const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const { clientDirectory, serverBundle } = yield* Vite.viteBuild(
-          props.vite?.rootDir,
-          Object.fromEntries(
-            (yield* Effect.all(
-              Object.entries(props.env ?? {}).map(
-                Effect.fn(function* ([key, value]) {
-                  return [
-                    key,
-                    typeof value === "string"
-                      ? value
-                      : Redacted.isRedacted(value) &&
-                          typeof Redacted.value(value) === "string"
-                        ? Redacted.value(value)
-                        : // A `WorkerLoader` is a real Effect that also carries
-                          // the `~alchemy/Kind` marker — it is a binding, not a
-                          // runnable env value. Check it before `Effect.isEffect`
-                          // so we don't execute it as an inlined env entry.
-                          isWorkerLoader(value)
-                          ? undefined
-                          : Effect.isEffect(value)
-                            ? yield* value as any as Effect.Effect<any>
-                            : undefined,
-                  ];
-                }),
-              ),
-            )).filter(([_, value]) => value !== undefined),
-          ),
-          {
-            main: props.vite?.main,
-            compatibilityDate: compatibility.date,
-            compatibilityFlags: compatibility.flags,
-            viteEnvironments: props.vite?.viteEnvironments,
-          },
-        );
-        const [assets, bundle] = yield* Effect.all(
+        const { clientDirectory, serverBundle, externalWorkspaces } =
+          yield* Vite.viteBuild(
+            props.vite?.rootDir,
+            Object.fromEntries(
+              (yield* Effect.all(
+                Object.entries(props.env ?? {}).map(
+                  Effect.fn(function* ([key, value]) {
+                    return [
+                      key,
+                      typeof value === "string"
+                        ? value
+                        : Redacted.isRedacted(value) &&
+                            typeof Redacted.value(value) === "string"
+                          ? Redacted.value(value)
+                          : // A `WorkerLoader` is a real Effect that also carries
+                            // the `~alchemy/Kind` marker — it is a binding, not a
+                            // runnable env value. Check it before `Effect.isEffect`
+                            // so we don't execute it as an inlined env entry.
+                            isWorkerLoader(value)
+                            ? undefined
+                            : Effect.isEffect(value)
+                              ? yield* value as any as Effect.Effect<any>
+                              : undefined,
+                    ];
+                  }),
+                ),
+              )).filter(([_, value]) => value !== undefined),
+            ),
+            {
+              main: props.vite?.main,
+              compatibilityDate: compatibility.date,
+              compatibilityFlags: compatibility.flags,
+              viteEnvironments: props.vite?.viteEnvironments,
+            },
+          );
+        const [assets, bundle, input] = yield* Effect.all(
           [
             clientDirectory
               ? readAssets({
@@ -1075,6 +1085,11 @@ export const LiveWorkerProvider = () =>
                 })
               : Effect.undefined,
             serverBundle,
+            hashViteInput(
+              props.vite?.rootDir,
+              props.vite?.memo,
+              externalWorkspaces,
+            ),
           ],
           { concurrency: "unbounded" },
         );
@@ -1083,7 +1098,56 @@ export const LiveWorkerProvider = () =>
             new Error("Vite build produced neither assets nor server output"),
           );
         }
-        return { assets, bundle };
+        return {
+          assets,
+          bundle,
+          input: input.hash,
+          additionalWorkspaces: input.workspaces,
+        };
+      });
+
+      const hashViteInput = Effect.fn(function* <E>(
+        rootDir: string = process.cwd(),
+        options: ViteOptions["memo"],
+        additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
+      ) {
+        const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
+          hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
+            Effect.map((hash) => `${path.relative(rootDir, cwd)}:${hash}`),
+          );
+        const hashRoot = hashWorkspaceDirectory(rootDir, options);
+        if (Array.isArray(options?.workspaces)) {
+          return yield* Effect.all(
+            [
+              hashRoot,
+              ...options.workspaces.map(({ cwd, ...options }) =>
+                hashWorkspaceDirectory(cwd, options),
+              ),
+            ],
+            { concurrency: "unbounded" },
+          ).pipe(
+            Effect.flatMap(([root, ...workspaces]) =>
+              sha256Object([root, ...workspaces.sort()]),
+            ),
+            Effect.map((hash) => ({ hash, workspaces: undefined })),
+          );
+        }
+        const [root, workspaces] = yield* Effect.all(
+          [hashRoot, additionalWorkspaces],
+          { concurrency: "unbounded" },
+        );
+        const workspaceHashes = yield* Effect.forEach(
+          workspaces,
+          (cwd) => hashWorkspaceDirectory(cwd),
+          { concurrency: "unbounded" },
+        );
+        const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
+        return {
+          hash,
+          workspaces: Array.from(workspaces).map((cwd) =>
+            path.relative(rootDir, cwd),
+          ),
+        };
       });
 
       const prepareAssetsAndBundle = (
@@ -1108,27 +1172,12 @@ export const LiveWorkerProvider = () =>
                 files: [{ path: "main.js", content: props.script }],
                 hash: bundleHash,
               },
+              input: undefined,
+              additionalWorkspaces: undefined,
             };
           }
           if (props.vite) {
-            const [{ assets, bundle }, input] = yield* Effect.all(
-              [
-                viteBuild(props),
-                // hashDirectory expects `{ cwd, memo }`. The vite props
-                // store the project root under `rootDir`, so map it
-                // here. Without this, `cwd` falls back to
-                // `process.cwd()` and the input hash is computed over
-                // the wrong directory tree (often the entire monorepo
-                // root), making it both slow and unable to detect
-                // changes scoped to the actual Vite project.
-                hashDirectory({
-                  cwd: props.vite.rootDir,
-                  memo: props.vite.memo,
-                }),
-              ],
-              { concurrency: "unbounded" },
-            );
-            return { assets, bundle, input };
+            return yield* viteBuild(props);
           }
           const [assets, bundle] = yield* Effect.all(
             [
@@ -1139,9 +1188,14 @@ export const LiveWorkerProvider = () =>
             ],
             { concurrency: "unbounded" },
           );
-          return { assets, bundle };
+          return {
+            assets,
+            bundle,
+            input: undefined,
+            additionalWorkspaces: undefined,
+          };
         }).pipe(
-          Effect.map(({ assets, bundle, input }) => ({
+          Effect.map(({ assets, bundle, input, additionalWorkspaces }) => ({
             assets,
             bundle: {
               main: bundle?.files[0].path,
@@ -1156,6 +1210,7 @@ export const LiveWorkerProvider = () =>
               assets: assets?.hash,
               bundle: bundle?.hash,
               input,
+              additionalWorkspaces,
             } satisfies Worker["Attributes"]["hash"],
           })),
         );
@@ -1351,7 +1406,8 @@ export const LiveWorkerProvider = () =>
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
 
-        // Parse alchemy:do:{logicalId}:{className} tags
+        // Parse the DO logical-id→class mapping from script tags (packed
+        // `alchemy:dos:` and legacy per-DO `alchemy:do:` formats)
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
         const currentDoClassNameByLogicalId = Object.fromEntries(
@@ -1417,14 +1473,14 @@ export const LiveWorkerProvider = () =>
           let previousClassName: string | undefined =
             oldDoClassNameByLogicalId[binding.logicalId];
           if (!previousClassName) {
-            // No `alchemy:do:` tag maps this logical id to a class — the
+            // No DO metadata tag maps this logical id to a class — the
             // worker was created outside Alchemy (raw API / Wrangler) or
             // before these tags existed. Fall back to matching the observed
             // cloud binding by binding name so adoption reuses the existing
             // class instead of asking Cloudflare to create one that already
             // exists (which fails the migration). This is the "first deploy
             // must match the existing class name" path; once we write the
-            // `alchemy:do:` tag, subsequent renames are driven by logical id.
+            // `alchemy:dos:` tag, subsequent renames are driven by logical id.
             const observed = oldBindings.find(
               (old) =>
                 old.type === "durable_object_namespace" &&
@@ -1461,24 +1517,22 @@ export const LiveWorkerProvider = () =>
           )}`,
         );
 
-        // Build alchemy:do:{logicalId}:{className} tags for each DO binding
-        const alchemyDoTags: string[] = [];
-        for (const binding of currentDoBindings) {
-          alchemyDoTags.push(
-            `alchemy:do:${binding.logicalId}:${binding.className}`,
-          );
-        }
+        // Pack every DO logical-id→class mapping into as few `alchemy:dos:`
+        // tags as possible — one tag per DO blows Cloudflare's 10-tag limit
+        // at 7+ bindings (#811).
+        const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
+        const alchemyTags = [
+          ...createAlchemyWorkerTags(id),
+          ...alchemyDoTags,
+          ...(newMigrationTag
+            ? [`alchemy:migration-tag:${newMigrationTag}`]
+            : []),
+        ];
         const metadataTags = Array.from(
-          new Set([
-            ...createAlchemyWorkerTags(id),
-            ...alchemyDoTags,
-            ...(newMigrationTag
-              ? [`alchemy:migration-tag:${newMigrationTag}`]
-              : []),
-            ...(news.tags ?? []),
-          ]),
+          new Set([...alchemyTags, ...(news.tags ?? [])]),
         );
+        yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
         const migrations = {
           oldTag: oldMigrationTag,
@@ -1631,9 +1685,10 @@ export const LiveWorkerProvider = () =>
                 error._tag === "WorkerNotFound" ||
                 error._tag === "InternalServerError" ||
                 error._tag === "UnknownCloudflareError",
-              schedule: Schedule.exponential(200).pipe(
-                Schedule.both(Schedule.recurs(15)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential(200),
+                Schedule.recurs(15),
+              ]),
             }),
           );
         }
@@ -1728,11 +1783,12 @@ export const LiveWorkerProvider = () =>
           return assetsHash !== output.hash?.assets;
         }
         if (props.vite) {
-          const input = yield* hashDirectory({
-            cwd: props.vite.rootDir,
-            memo: props.vite.memo,
-          });
-          return input !== output.hash?.input;
+          const { hash } = yield* hashViteInput(
+            props.vite.rootDir,
+            props.vite.memo,
+            Effect.succeed(output.hash?.additionalWorkspaces ?? []),
+          );
+          return hash !== output.hash?.input;
         }
         const bundleHash = yield* prepareBundle(id, props).pipe(
           Effect.map((b) => b.hash),
@@ -2020,17 +2076,15 @@ export const LiveWorkerProvider = () =>
               ),
             ),
           ).map((className) => ({ className }));
-          const alchemyDoTags = durableObjects.map(
-            ({ logicalId, className }) =>
-              `alchemy:do:${logicalId}:${className}`,
-          );
+          const alchemyDoTags = encodeDurableObjectTags(durableObjects);
+          const alchemyTags = [
+            ...createAlchemyWorkerTags(id),
+            ...alchemyDoTags,
+          ];
           const tags = Array.from(
-            new Set([
-              ...createAlchemyWorkerTags(id),
-              ...alchemyDoTags,
-              ...(news.tags ?? []),
-            ]),
+            new Set([...alchemyTags, ...(news.tags ?? [])]),
           );
+          yield* validateWorkerTags(name, tags, alchemyTags.length);
           yield* Effect.logInfo(
             `Cloudflare Worker precreate: starting ${name}`,
           );
@@ -2135,9 +2189,10 @@ export const LiveWorkerProvider = () =>
                 while: (e) =>
                   e._tag === "InternalServerError" ||
                   e._tag === "UnknownCloudflareError",
-                schedule: Schedule.exponential(1000).pipe(
-                  Schedule.both(Schedule.recurs(5)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.exponential(1000),
+                  Schedule.recurs(5),
+                ]),
               }),
             );
             if (doClasses.length > 0) {
@@ -2371,16 +2426,12 @@ export const LiveWorkerProvider = () =>
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(
-              (existingSettings?.tags ?? []).filter((tag) =>
-                tag.startsWith("alchemy:do:"),
-              ),
+              (existingSettings?.tags ?? []).filter(isDurableObjectTag),
             )}`,
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: previous durable object tags ${JSON.stringify(
-              (output?.tags ?? []).filter((tag) =>
-                tag.startsWith("alchemy:do:"),
-              ),
+              (output?.tags ?? []).filter(isDurableObjectTag),
             )}`,
           );
 
@@ -2527,7 +2578,7 @@ function bumpMigrationTagVersion(
 /**
  * Merges a worker's export-derived and binding-derived Durable Object class
  * lists for the precreate placeholder, deduping by class name. The
- * binding-derived entry wins on a collision so the `alchemy:do:` tag keys off
+ * binding-derived entry wins on a collision so the `alchemy:dos:` tag keys off
  * the same logical id (the binding sid) that `reconcile` writes.
  */
 function mergeDurableObjectClasses(
@@ -2582,16 +2633,166 @@ function getDurableObjectBindings(
   );
 }
 
-function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
-  return Object.fromEntries(
-    tags.flatMap((tag) => {
-      if (!tag.startsWith("alchemy:do:")) {
-        return [];
-      }
+/**
+ * Cloudflare Worker script-tag limits, verified empirically against the live
+ * API (2026-07):
+ *
+ * - at most **10 tags** per Worker (the 11th is rejected with `Forbidden`)
+ * - each tag is at most **1024 bytes** (`BadRequest: Tag is too large`)
+ * - tags may not contain `,` or `&`; everything else (`:`, `;`, `=`, `/`,
+ *   spaces, unicode) is accepted and round-trips intact
+ *
+ * Alchemy reserves 3 ownership tags (`alchemy:stack/stage/id`) and 1
+ * migration tag, so the Durable Object logical-id→class mapping must not
+ * spend one tag per DO (#811). Instead all mappings are packed into as few
+ * `alchemy:dos:` tags as possible.
+ */
+const MAX_TAGS_PER_WORKER = 10;
+const MAX_TAG_BYTES = 1024;
+const LEGACY_DO_TAG_PREFIX = "alchemy:do:";
+const PACKED_DO_TAG_PREFIX = "alchemy:dos:";
+
+class InvalidWorkerTags extends Data.TaggedError("InvalidWorkerTags")<{
+  scriptName: string;
+  reason: string;
+}> {}
+
+/**
+ * Pack Durable Object logical-id→class mappings into `alchemy:dos:` tags.
+ *
+ * Each mapping is encoded as `logicalId=className` — elided to just
+ * `className` when the two are equal (the common case for export-derived
+ * classes) — with both components `encodeURIComponent`-escaped so the `;`
+ * pair separator, the `=` delimiter, and Cloudflare's forbidden tag
+ * characters (`,`, `&`) can never collide with user identifiers. Pairs are
+ * sorted for deterministic output and greedily packed so each tag stays
+ * within Cloudflare's 1024-byte tag limit; workers with more DOs than fit in
+ * one tag spill into additional `alchemy:dos:` tags.
+ *
+ * `encodeURIComponent` output is pure ASCII, so `String.length` equals the
+ * tag's byte length.
+ *
+ * @internal exported for unit testing.
+ */
+export function encodeDurableObjectTags(
+  durableObjects: ReadonlyArray<{ logicalId: string; className: string }>,
+): string[] {
+  const pairs = [...durableObjects]
+    .sort((a, b) => a.logicalId.localeCompare(b.logicalId))
+    .map(({ logicalId, className }) =>
+      logicalId === className
+        ? encodeURIComponent(className)
+        : `${encodeURIComponent(logicalId)}=${encodeURIComponent(className)}`,
+    );
+  const tags: string[] = [];
+  let payload = "";
+  for (const pair of pairs) {
+    const appended = payload === "" ? pair : `${payload};${pair}`;
+    if (
+      PACKED_DO_TAG_PREFIX.length + appended.length > MAX_TAG_BYTES &&
+      payload !== ""
+    ) {
+      tags.push(`${PACKED_DO_TAG_PREFIX}${payload}`);
+      payload = pair;
+    } else {
+      payload = appended;
+    }
+  }
+  if (payload !== "") {
+    tags.push(`${PACKED_DO_TAG_PREFIX}${payload}`);
+  }
+  return tags;
+}
+
+/**
+ * Parse the Durable Object logical-id→class mapping from a worker's script
+ * tags. Reads both formats so workers deployed before the packed format roll
+ * forward transparently:
+ *
+ * - legacy: one `alchemy:do:{logicalId}:{className}` tag per DO
+ * - packed: `alchemy:dos:{pair};{pair};…` (see {@link encodeDurableObjectTags})
+ *
+ * A packed entry wins over a legacy entry for the same logical id.
+ *
+ * @internal exported for unit testing.
+ */
+export function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
+  const map: Record<string, string> = {};
+  for (const tag of tags) {
+    if (tag.startsWith(LEGACY_DO_TAG_PREFIX)) {
       const parts = tag.split(":");
       const logicalId = parts[2];
       const className = parts.slice(3).join(":");
-      return logicalId && className ? [[logicalId, className]] : [];
-    }),
-  );
+      if (logicalId && className && !(logicalId in map)) {
+        map[logicalId] = className;
+      }
+    }
+  }
+  for (const tag of tags) {
+    if (tag.startsWith(PACKED_DO_TAG_PREFIX)) {
+      for (const pair of tag.slice(PACKED_DO_TAG_PREFIX.length).split(";")) {
+        if (pair === "") continue;
+        const eq = pair.indexOf("=");
+        const logicalId = decodeURIComponent(
+          eq === -1 ? pair : pair.slice(0, eq),
+        );
+        const className = decodeURIComponent(
+          eq === -1 ? pair : pair.slice(eq + 1),
+        );
+        if (logicalId && className) {
+          map[logicalId] = className;
+        }
+      }
+    }
+  }
+  return map;
 }
+
+const isDurableObjectTag = (tag: string) =>
+  tag.startsWith(LEGACY_DO_TAG_PREFIX) || tag.startsWith(PACKED_DO_TAG_PREFIX);
+
+/**
+ * Fail fast — before the script upload — when a worker's tag set violates
+ * Cloudflare's limits, instead of surfacing the raw `Forbidden`/`BadRequest`
+ * at PUT time (#811). `alchemyTagCount` is the number of tags alchemy itself
+ * generated (ownership + migration + packed DO tags) so the message can tell
+ * the user how much of the budget is theirs.
+ */
+const validateWorkerTags = (
+  scriptName: string,
+  tags: ReadonlyArray<string>,
+  alchemyTagCount: number,
+) =>
+  Effect.gen(function* () {
+    if (tags.length > MAX_TAGS_PER_WORKER) {
+      return yield* Effect.fail(
+        new InvalidWorkerTags({
+          scriptName,
+          reason:
+            `worker "${scriptName}" needs ${tags.length} script tags but Cloudflare allows at most ${MAX_TAGS_PER_WORKER}. ` +
+            `Alchemy reserves ${alchemyTagCount} (ownership, migration and durable-object metadata); ` +
+            `${tags.length - alchemyTagCount} user tags were passed via \`tags\`. Remove ${tags.length - MAX_TAGS_PER_WORKER} tag(s).`,
+        }),
+      );
+    }
+    const encoder = new TextEncoder();
+    for (const tag of tags) {
+      if (tag.includes(",") || tag.includes("&")) {
+        return yield* Effect.fail(
+          new InvalidWorkerTags({
+            scriptName,
+            reason: `worker "${scriptName}" tag ${JSON.stringify(tag)} contains ',' or '&', which Cloudflare rejects.`,
+          }),
+        );
+      }
+      const bytes = yield* Effect.sync(() => encoder.encode(tag).length);
+      if (bytes > MAX_TAG_BYTES) {
+        return yield* Effect.fail(
+          new InvalidWorkerTags({
+            scriptName,
+            reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
+          }),
+        );
+      }
+    }
+  });

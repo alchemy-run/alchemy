@@ -517,9 +517,9 @@ export const QueueProvider = () =>
                 Effect.retry({
                   while: (e) => e._tag === "QueueDeletedRecently",
                   schedule: Schedule.fixed(1000).pipe(
-                    Schedule.tapOutput((i) =>
+                    Schedule.tap(({ attempt }) =>
                       session.note(
-                        `Queue was deleted recently, retrying... ${i + 1}s`,
+                        `Queue was deleted recently, retrying... ${attempt}s`,
                       ),
                     ),
                   ),
@@ -531,9 +531,10 @@ export const QueueProvider = () =>
                 // genuine validation failure, so retry on a bounded schedule.
                 Effect.retry({
                   while: (e) => e._tag === "InvalidParameterValueException",
-                  schedule: Schedule.fixed(1000).pipe(
-                    Schedule.both(Schedule.recurs(30)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed(1000),
+                    Schedule.recurs(30),
+                  ]),
                 }),
                 Effect.catchTag("QueueNameExists", () =>
                   sqs.getQueueUrl({ QueueName: queueName }),
@@ -558,9 +559,10 @@ export const QueueProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "QueueDoesNotExist",
-                schedule: Schedule.fixed(1000).pipe(
-                  Schedule.both(Schedule.recurs(30)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(1000),
+                  Schedule.recurs(30),
+                ]),
               }),
               Effect.map((r) => r.Attributes ?? {}),
             );
@@ -588,9 +590,10 @@ export const QueueProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "QueueDoesNotExist",
-                  schedule: Schedule.fixed(1000).pipe(
-                    Schedule.both(Schedule.recurs(30)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed(1000),
+                    Schedule.recurs(30),
+                  ]),
                 }),
               );
           }
@@ -603,9 +606,10 @@ export const QueueProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "QueueDoesNotExist",
-                schedule: Schedule.fixed(1000).pipe(
-                  Schedule.both(Schedule.recurs(30)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(1000),
+                  Schedule.recurs(30),
+                ]),
               }),
               Effect.map((r) => r.Tags ?? {}),
               Effect.catch(() => Effect.succeed({} as Record<string, string>)),
@@ -631,9 +635,10 @@ export const QueueProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "QueueDoesNotExist",
-                  schedule: Schedule.fixed(1000).pipe(
-                    Schedule.both(Schedule.recurs(30)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed(1000),
+                    Schedule.recurs(30),
+                  ]),
                 }),
               );
           }
@@ -643,9 +648,10 @@ export const QueueProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "QueueDoesNotExist",
-                  schedule: Schedule.fixed(1000).pipe(
-                    Schedule.both(Schedule.recurs(30)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed(1000),
+                    Schedule.recurs(30),
+                  ]),
                 }),
               );
           }

@@ -456,9 +456,10 @@ export const BucketEventNotificationProvider = () =>
 // R2 can make a freshly-created bucket/queue visible to its own endpoints
 // before the event-notification endpoints accept it. Retry only that narrow
 // not-found lag with a bounded budget.
-const r2EventNotificationConsistencySchedule = Schedule.exponential(250).pipe(
-  Schedule.both(Schedule.recurs(6)),
-);
+const r2EventNotificationConsistencySchedule = Schedule.max([
+  Schedule.exponential(250),
+  Schedule.recurs(6),
+]);
 
 type ObservedBucket = NonNullable<r2.ListBucketsResponse["buckets"]>[number];
 

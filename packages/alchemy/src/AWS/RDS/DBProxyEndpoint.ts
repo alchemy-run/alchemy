@@ -119,9 +119,10 @@ export const DBProxyEndpointProvider = () =>
         dbProxyName: string;
         dbProxyEndpointName: string;
       }) {
-        const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(30)),
-        );
+        const readinessPolicy = Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(30),
+        ]);
         return yield* readEndpoint(props).pipe(
           Effect.flatMap((endpoint) =>
             endpoint?.DBProxyEndpointArn

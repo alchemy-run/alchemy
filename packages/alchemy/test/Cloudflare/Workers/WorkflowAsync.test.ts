@@ -51,9 +51,10 @@ const runWorkflowToCompletion = (url: string) =>
       Effect.retry({
         // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
         // sleep after only six attempts and blow the test timeout.
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.either(Schedule.spaced("3 seconds")),
-        ),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
         times: 15,
       }),
     );

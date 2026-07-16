@@ -45,9 +45,10 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // Cap exponential backoff at 3s so retries stay bounded when the CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 // `filterStatusOk` turns a cold-start non-200 (e.g. a 500 HTML error page)
 // into a retryable failure, and `catchDefect` promotes any cold-start defect

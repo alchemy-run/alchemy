@@ -342,21 +342,25 @@ export const TableProvider = () =>
         error._tag === "ProvisionedThroughputExceededException" ||
         error._tag === "RequestLimitExceeded";
 
-      const waitForControlPlaneConvergence = Schedule.fixed("1 second").pipe(
-        Schedule.both(Schedule.recurs(120)),
-      );
+      const waitForControlPlaneConvergence = Schedule.max([
+        Schedule.fixed("1 second"),
+        Schedule.recurs(120),
+      ]);
 
-      const waitForTableActivationConvergence = Schedule.fixed(
-        "10 seconds",
-      ).pipe(Schedule.both(Schedule.recurs(180)));
+      const waitForTableActivationConvergence = Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(180),
+      ]);
 
-      const waitForGlobalSecondaryIndexesConvergence = Schedule.fixed(
-        "10 seconds",
-      ).pipe(Schedule.both(Schedule.recurs(180)));
+      const waitForGlobalSecondaryIndexesConvergence = Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(180),
+      ]);
 
-      const waitForDeletionConvergence = Schedule.fixed("1 second").pipe(
-        Schedule.both(Schedule.recurs(90)),
-      );
+      const waitForDeletionConvergence = Schedule.max([
+        Schedule.fixed("1 second"),
+        Schedule.recurs(90),
+      ]);
 
       const formatPollingElapsed = (elapsedSeconds: number) =>
         `${elapsedSeconds}s elapsed`;
@@ -386,9 +390,10 @@ export const TableProvider = () =>
           .pipe(
             Effect.retry({
               while: isRetryableControlPlaneError,
-              schedule: Schedule.exponential(100).pipe(
-                Schedule.both(Schedule.recurs(30)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential(100),
+                Schedule.recurs(30),
+              ]),
             }),
           );
 
@@ -406,9 +411,10 @@ export const TableProvider = () =>
               while: (e) =>
                 e._tag === "ContinuousBackupsUnavailableException" ||
                 isRetryableControlPlaneError(e),
-              schedule: Schedule.exponential(250).pipe(
-                Schedule.both(Schedule.recurs(30)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential(250),
+                Schedule.recurs(30),
+              ]),
             }),
           );
 
@@ -439,8 +445,8 @@ export const TableProvider = () =>
               error._tag === "TableNotActive" ||
               isRetryableControlPlaneError(error),
             schedule: waitForTableActivationConvergence.pipe(
-              Schedule.tapOutput(([, attempt]) => {
-                elapsedSeconds = (attempt + 1) * 10;
+              Schedule.tap(({ attempt }) => {
+                elapsedSeconds = attempt * 10;
                 return session.note(
                   `${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`,
                 );
@@ -491,8 +497,8 @@ export const TableProvider = () =>
               error._tag === "TableIndexesNotStable" ||
               isRetryableControlPlaneError(error),
             schedule: waitForGlobalSecondaryIndexesConvergence.pipe(
-              Schedule.tapOutput(([, attempt]) => {
-                elapsedSeconds = (attempt + 1) * 10;
+              Schedule.tap(({ attempt }) => {
+                elapsedSeconds = attempt * 10;
                 return session.note(
                   `${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`,
                 );
@@ -528,8 +534,8 @@ export const TableProvider = () =>
               error._tag === "TableStillDeleting" ||
               isRetryableControlPlaneError(error),
             schedule: waitForDeletionConvergence.pipe(
-              Schedule.tapOutput(([, attempt]) => {
-                elapsedSeconds = attempt + 1;
+              Schedule.tap(({ attempt }) => {
+                elapsedSeconds = attempt;
                 return session.note(
                   `${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`,
                 );
@@ -628,8 +634,8 @@ export const TableProvider = () =>
                     return false;
                   },
                   schedule: waitForGlobalSecondaryIndexesConvergence.pipe(
-                    Schedule.tapOutput(([, attempt]) => {
-                      elapsedSeconds = (attempt + 1) * 10;
+                    Schedule.tap(({ attempt }) => {
+                      elapsedSeconds = attempt * 10;
                       return session.note(
                         `${progressMessage} (${formatPollingElapsed(elapsedSeconds)})`,
                       );
@@ -672,9 +678,10 @@ export const TableProvider = () =>
             .pipe(
               Effect.retry({
                 while: isRetryableReadError,
-                schedule: Schedule.exponential(250).pipe(
-                  Schedule.both(Schedule.recurs(30)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.exponential(250),
+                  Schedule.recurs(30),
+                ]),
               }),
             );
           const table = response.Table;
@@ -693,9 +700,10 @@ export const TableProvider = () =>
                 .pipe(
                   Effect.retry({
                     while: isRetryableReadError,
-                    schedule: Schedule.exponential(250).pipe(
-                      Schedule.both(Schedule.recurs(30)),
-                    ),
+                    schedule: Schedule.max([
+                      Schedule.exponential(250),
+                      Schedule.recurs(30),
+                    ]),
                   }),
                 ),
               dynamodb
@@ -705,9 +713,10 @@ export const TableProvider = () =>
                 .pipe(
                   Effect.retry({
                     while: (e) => e._tag === "InternalServerError",
-                    schedule: Schedule.exponential(250).pipe(
-                      Schedule.both(Schedule.recurs(30)),
-                    ),
+                    schedule: Schedule.max([
+                      Schedule.exponential(250),
+                      Schedule.recurs(30),
+                    ]),
                   }),
                   Effect.catchTag("TableNotFoundException", () =>
                     Effect.succeed({ ContinuousBackupsDescription: undefined }),
@@ -720,9 +729,10 @@ export const TableProvider = () =>
                 .pipe(
                   Effect.retry({
                     while: isRetryableReadError,
-                    schedule: Schedule.exponential(250).pipe(
-                      Schedule.both(Schedule.recurs(30)),
-                    ),
+                    schedule: Schedule.max([
+                      Schedule.exponential(250),
+                      Schedule.recurs(30),
+                    ]),
                   }),
                   Effect.catchTag("ResourceNotFoundException", () =>
                     Effect.succeed({ TimeToLiveDescription: undefined }),
@@ -969,10 +979,10 @@ export const TableProvider = () =>
                     while: (e) =>
                       e._tag === "ThrottlingException" ||
                       e._tag === "ValidationException",
-                    schedule: Schedule.exponential(250).pipe(
-                      Schedule.jittered,
-                      Schedule.both(Schedule.recurs(12)),
-                    ),
+                    schedule: Schedule.max([
+                      Schedule.exponential(250).pipe(Schedule.jittered),
+                      Schedule.recurs(12),
+                    ]),
                   }),
                   // Last resort: if a foreign table never settles within the
                   // retry budget (e.g. a peer is still mid-create/delete when
@@ -1374,9 +1384,9 @@ export const TableProvider = () =>
                     error._tag === "InternalServerError" ||
                     error._tag === "TimeoutError",
                   schedule: waitForDeletionConvergence.pipe(
-                    Schedule.tapOutput(([, attempt]) =>
+                    Schedule.tap(({ attempt }) =>
                       session.note(
-                        `DynamoDB Table provider: deleteTable transient failure for ${output.tableName} on attempt ${deleteAttempt} (${formatPollingElapsed(attempt + 1)})`,
+                        `DynamoDB Table provider: deleteTable transient failure for ${output.tableName} on attempt ${deleteAttempt} (${formatPollingElapsed(attempt)})`,
                       ),
                     ),
                   ),

@@ -54,9 +54,7 @@ export const bootstrap = Effect.fn(function* () {
 
   yield* s3.headBucket({ Bucket: bucketName }).pipe(
     Effect.retry({
-      schedule: Schedule.exponential(100).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
     }),
   );
 
@@ -75,9 +73,10 @@ export const destroyBootstrap = Effect.fn(function* () {
       Effect.retry({
         while: (e) =>
           e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(10)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential(100),
+          Schedule.recurs(10),
+        ]),
       }),
     );
   }

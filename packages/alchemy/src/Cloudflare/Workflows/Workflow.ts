@@ -2,9 +2,9 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import { ExecutionContext } from "../../ExecutionContext.ts";
 import type { Input } from "../../Input.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
@@ -18,6 +18,7 @@ import {
   WorkerEnvironment,
   type WorkerServices,
 } from "../Workers/Worker.ts";
+import { makeWorkflowName } from "./WorkflowName.ts";
 
 type TypeId = "Cloudflare.Workflow";
 const TypeId = "Cloudflare.Workflow" as const;
@@ -243,17 +244,17 @@ export const waitForEvent = <T = unknown>(
  * reflect that or `yield* WorkerEnvironment` fails to type-check inside a
  * body even though it succeeds at runtime.
  *
- * `ExecutionContext` (scope + cache) is provided per run-invocation by
- * `WorkflowBridge.run` and threaded into every `task` via the surrounding
- * body context, so `@binding` helpers that need it (e.g. `Drizzle.postgres`)
- * resolve their per-run resources inside workflow steps just as they do in a
- * Worker `fetch`/`queue` handler.
+ * A fresh `Scope` is provided per run-invocation by `WorkflowBridge.run` and
+ * threaded into every `task` via the surrounding body context, so `@binding`
+ * helpers that acquire per-run resources against the ambient scope (e.g.
+ * `Drizzle.postgres`) resolve them inside workflow steps just as they do in
+ * a Worker `fetch`/`queue` handler.
  */
 export type WorkflowRunServices =
   | WorkflowEvent
   | WorkflowStep
   | WorkerServices
-  | ExecutionContext;
+  | Scope;
 
 export type WorkflowServices =
   | WorkflowRunServices
@@ -759,7 +760,6 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
     return {
       kind: TypeId,
       name,
-      workflowName: name,
       className: props?.className ?? name,
       scriptName: props?.scriptName,
     } satisfies WorkflowLike;
@@ -769,23 +769,25 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
     Effect.gen(function* () {
       const worker = yield* Worker;
 
+      // Workflow names are account-global, so derive the physical name from
+      // the already-unique host Worker name and exported class name.
+      const workflowName = makeWorkflowName(worker.workerName, name);
+      const workflow = yield* WorkflowResource(name, {
+        workflowName,
+        className: name,
+        scriptName: worker.workerName,
+      });
+
       // Add the workflow binding to the Worker metadata
       yield* worker.bind`${name}`({
         bindings: [
           {
             type: "workflow",
             name,
-            workflowName: name,
+            workflowName: workflow.workflowName,
             className: name,
           },
         ],
-      });
-
-      // Create the Workflow API resource (putWorkflow / deleteWorkflow)
-      yield* WorkflowResource(name, {
-        workflowName: name,
-        className: name,
-        scriptName: worker.workerName,
       });
 
       const services = yield* Effect.context<Effect.Services<typeof impl>>();
@@ -854,6 +856,9 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
 // ---------------------------------------------------------------------------
 
 export interface WorkflowResourceProps {
+  /**
+   * Account-global Workflow name.
+   */
   workflowName: string;
   className: string;
   scriptName: string;
@@ -887,7 +892,7 @@ export const WorkflowProvider = () =>
 
       return WorkflowResource.Provider.of({
         // The `workflowId` is no longer marked as stable because if you start in dev mode, the ID will change on first deploy.
-        stables: ["accountId"],
+        stables: ["accountId", "workflowName"],
         // Workflows are account-scoped. Enumerate every workflow in the account
         // via the paginated list API and hydrate each into the same Attributes
         // shape `reconcile` returns (id/name/className/scriptName are all on the
@@ -918,17 +923,46 @@ export const WorkflowProvider = () =>
             return { action: "update" };
           }
         }),
+        read: Effect.fn(function* ({ output, olds }) {
+          // Dev workflows only exist in local state; there is no account-level
+          // Workflow API resource to observe until the first real deploy.
+          if (ctx.dev) return output;
+
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const workflowName = output?.workflowName ?? olds?.workflowName;
+          if (workflowName === undefined) return undefined;
+
+          const acct = output?.accountId ?? accountId;
+          return yield* workflows
+            .getWorkflow({
+              accountId: acct,
+              workflowName,
+            })
+            .pipe(
+              Effect.map((workflow) => ({
+                workflowId: workflow.id,
+                workflowName: workflow.name,
+                className: workflow.className,
+                scriptName: workflow.scriptName,
+                accountId: acct,
+              })),
+              Effect.catchTag("WorkflowNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+        }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           const acct = output?.accountId ?? accountId;
+          const workflowName = news.workflowName;
           yield* Effect.logInfo(
-            `Cloudflare Workflow reconcile: ${news.workflowName}`,
+            `Cloudflare Workflow reconcile: ${workflowName}`,
           );
           if (ctx.dev) {
             return {
               workflowId: output?.workflowId ?? `dev:${crypto.randomUUID()}`,
               accountId,
-              workflowName: news.workflowName,
+              workflowName,
               className: news.className,
               scriptName: news.scriptName,
             };
@@ -939,7 +973,7 @@ export const WorkflowProvider = () =>
           // — the API is naturally reconciler-shaped.
           const result = yield* workflows.putWorkflow({
             accountId: acct,
-            workflowName: news.workflowName,
+            workflowName,
             className: news.className,
             scriptName: news.scriptName,
           });

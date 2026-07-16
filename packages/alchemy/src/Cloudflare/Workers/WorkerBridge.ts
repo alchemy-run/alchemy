@@ -6,14 +6,13 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { ExecutionContext } from "../../ExecutionContext.ts";
+import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import { makeEntrypointLayer } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
@@ -38,6 +37,17 @@ import {
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
 /**
+ * The isolate-lifetime artifacts produced by a single layer build: the built
+ * service Context, the resolved export for this entrypoint, and the user's
+ * RPC shape (a thunk — the shape is only populated once `serve` has run).
+ */
+export interface WorkerBuild<Export = any> {
+  readonly context: Context.Context<any>;
+  readonly export: Export;
+  readonly shape: () => Record<string, any>;
+}
+
+/**
  * Makes the WorkerEntrypoint class and bridges to Effect fetch and RPC calls.
  */
 export const makeWorkerBridge = (
@@ -53,51 +63,55 @@ export const makeWorkerBridge = (
     entrypoint: any;
   },
 ) => {
-  const { globalContext, exported, shape } = getWorkerExport({
+  const { build } = getWorkerExport({
     entrypoint,
     stack,
     exportName: "default",
   });
 
-  const processEvent = (
-    eff: Effect.Effect<
-      readonly [Effect.Effect<any, any, any>, Context.Context<never>],
-      any,
-      any
-    >,
+  const processEvent = <T>(
+    makeEffect: (
+      build: WorkerBuild,
+    ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>],
     ctx: cf.ExecutionContext,
-  ) => {
+    onExit: (
+      exit: Exit.Exit<any, any>,
+      scope: Scope.Closeable,
+    ) => T | Promise<T>,
+  ): Promise<T> => {
     const scope = Scope.makeUnsafe();
-    return eff
-      .pipe(
-        Effect.flatMap(([eff, context]) =>
-          eff.pipe(
-            // Per-event services take precedence over the captured init
-            // context: the init context carries the *deferred*
-            // WorkerExecutionContext (yieldable in the top-level closure)
-            // and the isolate-lifetime instance Scope, both of which must
-            // be shadowed by the real per-event ones here so that
-            // `Effect.addFinalizer` in a handler attaches to the request
-            // scope (closed into `ctx.waitUntil` below).
+    return build((promise) => ctx.waitUntil(promise as Promise<any>))
+      .then(
+        (built) => {
+          const [eff, services] = makeEffect(built);
+          return eff.pipe(
+            // Per-event services take precedence over the captured services
+            // and the built isolate context: the isolate context carries the
+            // *deferred* WorkerExecutionContext (yieldable in the top-level
+            // closure), which must be shadowed by the real per-event one
+            // here, and the fresh request `Scope` so `Effect.addFinalizer`
+            // in a handler attaches to the request scope (closed into
+            // `ctx.waitUntil` below).
             Effect.provide(
               Layer.mergeAll(
                 Layer.succeed(
                   WorkerExecutionContext,
                   fromExecutionContext(ctx),
                 ),
-                Layer.succeed(ExecutionContext, {
-                  scope,
-                  cache: {},
-                }),
                 Layer.succeed(Scope.Scope, scope),
+              ).pipe(
+                Layer.provideMerge(Layer.succeedContext(services)),
+                Layer.provideMerge(Layer.succeedContext(built.context)),
               ),
             ),
-            Effect.provide(Layer.succeedContext(context)),
-          ),
-        ),
-        Effect.provide(globalContext),
-        Effect.runPromiseExit,
+            Effect.runPromiseExit,
+          );
+        },
+        // A failed isolate build reaches callers as a defect exit so the RPC
+        // path can envelope-encode it like any other handler defect.
+        (error) => Exit.die(error),
       )
+      .then((exit) => onExit(exit, scope))
       .finally(() =>
         isScopeEjected(scope)
           ? undefined
@@ -115,23 +129,18 @@ export const makeWorkerBridge = (
 
       for (const methodName of ExportedHandlerMethods) {
         (this as any)[methodName] = async (input: any) =>
-          exported
-            .pipe(
-              Effect.map((_default) => _default[methodName]),
-              Effect.map(
-                (f) =>
-                  f(input, this.env, this.ctx) as [
-                    Effect.Effect<any>,
-                    Context.Context<never>,
-                  ],
-              ),
-              (eff) => processEvent(eff, this.ctx),
-            )
-            .then((exit) =>
+          processEvent(
+            (built) =>
+              built.export[methodName](input, this.env, this.ctx) as [
+                Effect.Effect<any>,
+                Context.Context<never>,
+              ],
+            this.ctx,
+            (exit) =>
               exit._tag === "Success"
                 ? Promise.resolve(exit.value)
                 : Promise.reject(Cause.squash(exit.cause)),
-            );
+          );
       }
 
       return new Proxy(this, {
@@ -139,37 +148,39 @@ export const makeWorkerBridge = (
           if (typeof prop !== "string") return (target as any)[prop];
           if (prop in target) return (target as any)[prop];
           return (...args: unknown[]) =>
-            shape
-              .pipe(
-                Effect.map((shape: any) => shape[prop]),
-                Effect.flatMap((dispatcher) => {
-                  if (typeof dispatcher !== "function") {
-                    return Effect.die(
+            processEvent(
+              (built) => {
+                const dispatcher = built.shape()?.[prop];
+                if (typeof dispatcher !== "function") {
+                  return [
+                    Effect.die(
                       new Error(
                         `Method "${prop}" not found on worker. ` +
                           `Make sure it's returned from the worker's default export.`,
                       ),
-                    );
-                  }
-                  const result = dispatcher(...args);
-                  // Effects (including nested-RPC values built by
-                  // `asEffectOrStream`, which are Effects *branded* as Streams)
-                  // must be run as effects — their resolved value may itself be
-                  // a `Stream`, which `handleRpcExit` then encodes. Only a
-                  // *genuine* `Stream` (not an Effect) is lifted into the
-                  // success channel so `handleRpcExit` encodes it directly.
-                  return Effect.succeed([
-                    Effect.isEffect(result)
-                      ? (result as Effect.Effect<any>)
-                      : Stream.isStream(result)
-                        ? Effect.succeed(result)
-                        : (result as Effect.Effect<any>),
+                    ),
                     Context.empty(),
-                  ] as const);
-                }),
-                (eff) => processEvent(eff, this.ctx),
-              )
-              .then(handleRpcExit);
+                  ] as const;
+                }
+                const result = dispatcher(...args);
+                // Effects (including nested-RPC values built by
+                // `asEffectOrStream`, which are Effects *branded* as Streams)
+                // must be run as effects — their resolved value may itself be
+                // a `Stream`, which `handleRpcExit` then encodes. Only a
+                // *genuine* `Stream` (not an Effect) is lifted into the
+                // success channel so `handleRpcExit` encodes it directly.
+                return [
+                  Effect.isEffect(result)
+                    ? (result as Effect.Effect<any>)
+                    : Stream.isStream(result)
+                      ? Effect.succeed(result)
+                      : (result as Effect.Effect<any>),
+                  Context.empty(),
+                ] as const;
+              },
+              this.ctx,
+              handleRpcExit,
+            );
         },
       });
     }
@@ -193,32 +204,33 @@ export const makeWorkerBridge = (
   return WorkerBridge;
 };
 
-export const getWorkerExport = <Export = any>({
-  entrypoint,
-  stack,
-  exportName,
-}: {
-  entrypoint: any;
-  stack: { name: string; stage: string };
-  exportName: string;
-}) => {
+/**
+ * One isolate-lifetime layer build per entrypoint module. The generated
+ * entry passes the same `meta.entrypoint` object to `makeWorkerBridge`,
+ * `makeDurableObjectBridge`, and `makeWorkflowBridge`, so keying on it
+ * shares a single build (one run of the user's init closure) across the
+ * default worker and every Durable Object / Workflow class in the isolate.
+ */
+const sharedBuilds = new WeakMap<
+  object,
+  (pin: (promise: Promise<unknown>) => unknown) => Promise<Context.Context<any>>
+>();
+
+const getSharedBuild = (
+  entrypoint: any,
+  stack: { name: string; stage: string },
+) => {
+  let shared = sharedBuilds.get(entrypoint);
+  if (shared !== undefined) {
+    return shared;
+  }
+
   const tag = Self as any as Context.Service<
     never,
     Worker & {
       RuntimeContext: WorkerRuntimeContext;
     }
   >;
-
-  const runtimeContext = tag.pipe(Effect.map((func) => func.RuntimeContext));
-  const shape = runtimeContext.pipe(Effect.map((context) => context.shape()));
-  const exported = runtimeContext.pipe(
-    Effect.flatMap((context) => context.exports),
-    Effect.flatMap((exports) =>
-      Effect.isEffect(exports[exportName])
-        ? exports[exportName]
-        : Effect.succeed(exports[exportName]),
-    ),
-  ) as Effect.Effect<Export>;
 
   const layer = makeEntrypointLayer(tag, entrypoint);
 
@@ -229,15 +241,15 @@ export const getWorkerExport = <Export = any>({
     Logger.layer([Logger.consolePretty()]),
   );
 
-  // Fallback Scope for init-phase code paths where the Layer machinery
-  // doesn't provide a build scope of its own. Never closed (workerd has no
-  // isolate-teardown hook). Note the entrypoint layer is rebuilt per event
-  // (each event runs in a fresh runtime with its own memo map), and a layer
-  // build provides its own scope to the init effect — so init-level
-  // finalizers actually attach to that build scope and fire at the end of
-  // each event, not here. Handlers get the request scope from
-  // `processEvent`, which closes into `ctx.waitUntil` after the response.
+  // Private scope for the isolate-lifetime layer build. Never closed —
+  // workerd has no isolate-teardown hook, so finalizers attached here can
+  // never run. It exists only because `Layer.buildWithMemoMap` requires a
+  // scope argument (`Layer.scoped`-style layers attach their finalizers to
+  // it). It is deliberately NOT provided as the ambient `Scope.Scope` of the
+  // init context: request-coupled resources are acquired inside handlers
+  // against the per-event scope that `processEvent` provides.
   const instanceScope = Scope.makeUnsafe();
+  const memoMap = Layer.makeMemoMapUnsafe();
 
   const globalContext = Layer.unwrap(
     cloudflare_workers.pipe(
@@ -286,17 +298,111 @@ export const getWorkerExport = <Export = any>({
               (env as any).DEBUG ? "Debug" : "Info",
             ),
           ),
-          Layer.provideMerge(Layer.succeed(Scope.Scope, instanceScope)),
         ),
       ),
     ),
   );
 
-  return {
-    globalContext,
-    exported,
-    shape,
+  let built: Promise<Context.Context<any>> | undefined;
+
+  /**
+   * Build the isolate-lifetime layer stack exactly once; every subsequent
+   * event (and every export sharing this entrypoint) reuses the memoized
+   * Context.
+   *
+   * `pin` registers the in-flight build promise with the calling event
+   * (`ctx.waitUntil` / `state.waitUntil`). Every awaiting event must pin:
+   * workerd schedules a promise's continuations back into its origin request
+   * context and *drops* them if that context has ended
+   * (`handle_cross_request_promise_resolution`), so the origin event must be
+   * kept alive until the build settles or concurrent cold-start requests
+   * would hang.
+   *
+   * Only success is memoized — a transient init failure (e.g. a flaky
+   * `Config` read in user init) resets the memo and heals on the next event.
+   */
+  shared = (pin) => {
+    const promise = (built ??= Effect.runPromise(
+      Layer.buildWithMemoMap(globalContext, memoMap, instanceScope).pipe(
+        // Strip the build's memo map from the exposed context so a Layer the
+        // user `Effect.provide`s *inside a handler* builds per event instead
+        // of sharing one instance (pinned to the first request's IoContext)
+        // across concurrent events.
+        Effect.map(Context.omit(Layer.CurrentMemoMap)),
+      ),
+    ).catch((error) => {
+      built = undefined;
+      throw error;
+    }));
+    pin(promise.catch(() => {}));
+    return promise;
   };
+  sharedBuilds.set(entrypoint, shared);
+  return shared;
+};
+
+export const getWorkerExport = <Export = any>({
+  entrypoint,
+  stack,
+  exportName,
+}: {
+  entrypoint: any;
+  stack: { name: string; stage: string };
+  exportName: string;
+}) => {
+  const tag = Self as any as Context.Service<
+    never,
+    Worker & {
+      RuntimeContext: WorkerRuntimeContext;
+    }
+  >;
+
+  const runtimeContext = tag.pipe(Effect.map((func) => func.RuntimeContext));
+  const exported = runtimeContext.pipe(
+    Effect.flatMap((context) => context.exports),
+    Effect.flatMap((exports) =>
+      Effect.isEffect(exports[exportName])
+        ? exports[exportName]
+        : Effect.succeed(exports[exportName]),
+    ),
+  ) as Effect.Effect<Export>;
+
+  const sharedBuild = getSharedBuild(entrypoint, stack);
+
+  let built: Promise<WorkerBuild<Export>> | undefined;
+
+  /**
+   * Resolve this export against the shared isolate build; memoized so
+   * listener assembly and the captured services context resolve once per
+   * export. Same success-only memoization contract as the shared build.
+   */
+  const build = (
+    pin: (promise: Promise<unknown>) => unknown,
+  ): Promise<WorkerBuild<Export>> => {
+    const promise = (built ??= sharedBuild(pin)
+      .then((context) =>
+        Effect.runPromise(
+          Effect.all([exported, runtimeContext]).pipe(
+            Effect.map(
+              ([exp, rc]): WorkerBuild<Export> => ({
+                context,
+                export: exp,
+                shape: rc.shape,
+              }),
+            ),
+            Effect.provideContext(context),
+          ),
+        ),
+      )
+      .catch((error) => {
+        built = undefined;
+        throw error;
+      }));
+    pin(promise.catch(() => {}));
+    return promise;
+  };
+
+  return { build };
 };
 
 export const makeRpcProxy = (
@@ -338,15 +444,30 @@ export const makeRpcProxy = (
             }),
             processEvent,
           )
-          .then(handleRpcExit);
+          .then((exit) => handleRpcExit(exit));
     },
   });
 
-export const handleRpcExit = async (exit: Exit.Exit<any, any>) => {
+export const handleRpcExit = async (
+  exit: Exit.Exit<any, any>,
+  scope?: Scope.Closeable,
+) => {
   if (exit._tag === "Success") {
     if (Stream.isStream(exit.value)) {
+      let stream = exit.value as Stream.Stream<any, any, any>;
+      if (scope !== undefined && !isScopeEjected(scope)) {
+        // The RPC transport drains the encoded ReadableStream *after* this
+        // function returns, so the request scope must outlive the handler:
+        // eject it from the bridge's close-on-return path and close it when
+        // the stream settles instead — mirroring `scopeTransferToStream` on
+        // the fetch path.
+        EffectHttp.scopeDisableClose(scope);
+        stream = stream.pipe(
+          Stream.onExit((streamExit) => Scope.close(scope, streamExit)),
+        );
+      }
       return await Effect.runPromise(
-        toRpcStream(exit.value) as Effect.Effect<RpcStreamEnvelope>,
+        toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>,
       );
     }
     return exit.value;

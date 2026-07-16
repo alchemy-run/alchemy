@@ -133,9 +133,10 @@ export const DBProxyProvider = () =>
       });
 
       const waitForProxy = Effect.fn(function* (name: string) {
-        const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(30)),
-        );
+        const readinessPolicy = Schedule.max([
+          Schedule.fixed("2 seconds"),
+          Schedule.recurs(30),
+        ]);
         return yield* readProxy(name).pipe(
           Effect.flatMap((proxy) =>
             proxy?.DBProxyArn

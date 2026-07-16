@@ -154,8 +154,9 @@ const assertResponseHeadersPolicyDeleted = (id: string) =>
       while: (error) =>
         error instanceof Error &&
         error.message === "ResponseHeadersPolicyStillExists",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );

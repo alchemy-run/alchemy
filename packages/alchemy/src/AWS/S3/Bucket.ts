@@ -543,7 +543,7 @@ export const BucketProvider = () =>
         // Wait for bucket to exist (eventual consistency)
         yield* Effect.retry(
           s3.headBucket({ Bucket: bucketName }),
-          Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(10))),
+          Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
         );
         yield* Effect.logInfo(
           `S3 Bucket create: bucket is available ${bucketName}`,
@@ -1544,9 +1544,10 @@ export const BucketProvider = () =>
                 Effect.catchTag("NoSuchBucket", () => Effect.void),
                 Effect.retry({
                   while: (e) => e._tag === "BucketNotEmpty",
-                  schedule: Schedule.exponential(100).pipe(
-                    Schedule.both(Schedule.recurs(5)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential(100),
+                    Schedule.recurs(5),
+                  ]),
                 }),
               );
           });

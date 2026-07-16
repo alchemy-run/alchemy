@@ -34,9 +34,10 @@ const listUntilCount = <A>(
           ),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.either(Schedule.spaced("3 seconds")),
-      ),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("3 seconds"),
+      ]),
       times: 12,
     }),
   );

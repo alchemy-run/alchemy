@@ -487,9 +487,10 @@ export const RecordProvider = () =>
             Effect.map((response) => response.ChangeInfo.Status),
             Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
             Effect.repeat({
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(60)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(60),
+              ]),
               until: (status) => status === "INSYNC",
             }),
           );

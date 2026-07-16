@@ -367,9 +367,10 @@ export const StreamProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "StreamInUse",
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(8),
+            ]),
           }),
           Effect.catchTag("StreamNotFound", () => Effect.void),
           Effect.catchTag("InvalidStreamId", () => Effect.void),

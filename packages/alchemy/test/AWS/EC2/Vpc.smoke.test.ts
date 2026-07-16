@@ -2266,7 +2266,7 @@ const assertVpcTags = Effect.fn(function* (
     Effect.tapError(Effect.log),
     Effect.retry({
       while: (e) => e._tag === "TagsNotPropagated",
-      schedule: Schedule.fixed(1000).pipe(Schedule.both(Schedule.recurs(10))),
+      schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(10)]),
     }),
   );
 });

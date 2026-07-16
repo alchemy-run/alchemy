@@ -322,9 +322,10 @@ export const VariantProvider = () =>
       // Bounded — if it never clears we stop polling and proceed.
       yield* getVariant(output.accountId, output.variantName).pipe(
         Effect.repeat({
-          schedule: Schedule.exponential("500 millis").pipe(
-            Schedule.both(Schedule.recurs(12)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential("500 millis"),
+            Schedule.recurs(12),
+          ]),
           until: (observed) => observed === undefined,
         }),
       );
