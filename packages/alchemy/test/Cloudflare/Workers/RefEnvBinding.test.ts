@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { expectUrlContains } from "../Utils/Http.ts";
 

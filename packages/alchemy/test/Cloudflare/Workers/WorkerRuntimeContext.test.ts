@@ -1,6 +1,6 @@
 import { makeWorkerRuntimeContext } from "@/Cloudflare/Workers/WorkerRuntimeContext.ts";
 import * as Effect from "effect/Effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "alchemy-test";
 
 describe("WorkerRuntimeContext", () => {
   it("dispatches an event to every listener for that event type", async () => {

@@ -3,7 +3,7 @@ import {
   getDurableObjectTagMap,
   normalizeStateDomains,
 } from "@/Cloudflare/Workers/WorkerProvider";
-import { describe, expect, test } from "@effect/vitest";
+import { describe, expect, test } from "alchemy-test";
 
 describe("WorkerProvider", () => {
   describe("normalizeStateDomains", () => {

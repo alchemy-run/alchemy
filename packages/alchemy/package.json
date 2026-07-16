@@ -28,6 +28,7 @@
     "publish:npm": "cp ../README.md . && bun publish && rm README.md",
     "test": "vitest run",
     "test:fast": "FAST=1 vitest run",
+    "alchemy:test": "alchemy-test",
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts",
     "nuke": "cd ../../ && bun nuke"
   },
@@ -348,6 +349,7 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "alchemy-test": "workspace:*",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",

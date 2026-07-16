@@ -1,0 +1,591 @@
+/**
+ * Single-process test runner.
+ *
+ * Discovers `*.test.ts` files, imports them one at a time (registration is
+ * global), then executes every collected test as an Effect — files run
+ * concurrently up to a limit, tests within a file run concurrently unless
+ * their suite is `describe.sequential`. Each test gets a buffering Effect
+ * Logger + Console so its output can be shown in isolation.
+ */
+import * as Cause from "effect/Cause";
+import * as ConsoleModule from "effect/Console";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Logger from "effect/Logger";
+import * as Path from "effect/Path";
+import * as Semaphore from "effect/Semaphore";
+import { inspect } from "node:util";
+import { pathToFileURL } from "node:url";
+
+import type { FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
+import { containsOnly, titlePath } from "./Model.ts";
+import * as Registry from "./Registry.ts";
+import {
+  Reporter,
+  type RunSummary,
+  type TestEvent,
+  type TestMeta,
+  type TestResult,
+} from "./Reporter.ts";
+
+export interface RunOptions {
+  /** Directory the run is rooted at (usually `packages/alchemy`). */
+  readonly root: string;
+  /** Positional path filters (files or directories). Defaults to `test`. */
+  readonly paths: ReadonlyArray<string>;
+  /** `-t` test-name filter. */
+  readonly filter?: RegExp | undefined;
+  /** Default per-test timeout in ms. */
+  readonly timeout: number;
+  /** Times a failing test body is re-run before being reported as failed. */
+  readonly retry: number;
+  /** Maximum number of files executing concurrently. */
+  readonly concurrency: number;
+  /** Force sequential execution within every file. */
+  readonly sequential: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Log capture
+// ---------------------------------------------------------------------------
+
+const formatArg = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+    : inspect(value, { depth: 4, colors: false });
+
+const formatArgs = (args: ReadonlyArray<unknown>): string =>
+  args.map(formatArg).join(" ");
+
+const bufferingConsole = (logs: Array<LogEntry>): ConsoleModule.Console => {
+  const push = (level: string, args: ReadonlyArray<unknown>) => {
+    logs.push({ level, message: formatArgs(args), time: new Date() });
+  };
+  const times = new Map<string, number>();
+  return {
+    assert: (condition, ...args) => {
+      if (!condition) push("error", ["Assertion failed:", ...args]);
+    },
+    clear: () => {},
+    count: (label) => push("info", [`count: ${label ?? "default"}`]),
+    countReset: () => {},
+    debug: (...args) => push("debug", args),
+    dir: (item) => push("info", [item]),
+    dirxml: (...args) => push("info", args),
+    error: (...args) => push("error", args),
+    group: (...args) => push("info", args),
+    groupCollapsed: (...args) => push("info", args),
+    groupEnd: () => {},
+    info: (...args) => push("info", args),
+    log: (...args) => push("info", args),
+    table: (data) => push("info", [data]),
+    time: (label) => {
+      times.set(label ?? "default", Date.now());
+    },
+    timeEnd: (label) => {
+      const start = times.get(label ?? "default");
+      push("info", [
+        `${label ?? "default"}: ${start === undefined ? "?" : Date.now() - start}ms`,
+      ]);
+    },
+    timeLog: (label, ...args) => push("info", [label, ...args]),
+    trace: (...args) => push("debug", args),
+    warn: (...args) => push("warn", args),
+  };
+};
+
+/** Provide a buffering Logger + Console around an effect. */
+const withCapture =
+  (logs: Array<LogEntry>) =>
+  <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+    effect.pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make((options) => {
+            logs.push({
+              level: options.logLevel,
+              message:
+                formatArg(options.message) +
+                (options.cause.reasons.length === 0
+                  ? ""
+                  : `\n${Cause.pretty(options.cause)}`),
+              time: options.date,
+            });
+          }),
+        ]),
+      ),
+      Effect.provideService(ConsoleModule.Console, bufferingConsole(logs)),
+    );
+
+// ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+const isTestFile = (name: string): boolean =>
+  name.endsWith(".test.ts") || name.endsWith(".test.tsx");
+
+export const discover = Effect.fn(function* (options: RunOptions) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const files: Array<string> = [];
+
+  const walk: (
+    dir: string,
+  ) => Effect.Effect<void, unknown, FileSystem.FileSystem> = Effect.fn(
+    function* (dir: string) {
+      const entries = yield* fs.readDirectory(dir);
+      entries.sort();
+      for (const entry of entries) {
+        if (entry === "node_modules" || entry.startsWith(".")) continue;
+        const full = path.join(dir, entry);
+        const stat = yield* fs.stat(full);
+        if (stat.type === "Directory") {
+          yield* walk(full);
+        } else if (isTestFile(entry)) {
+          files.push(full);
+        }
+      }
+    },
+  );
+
+  const roots = options.paths.length > 0 ? options.paths : ["test"];
+  for (const p of roots) {
+    const abs = path.isAbsolute(p) ? p : path.resolve(options.root, p);
+    const stat = yield* fs
+      .stat(abs)
+      .pipe(
+        Effect.mapError(
+          () => new Error(`alchemy-test: path not found: ${abs}`),
+        ),
+      );
+    if (stat.type === "Directory") {
+      yield* walk(abs);
+    } else {
+      files.push(abs);
+    }
+  }
+  return [...new Set(files)].sort();
+});
+
+// ---------------------------------------------------------------------------
+// Collection
+// ---------------------------------------------------------------------------
+
+export interface CollectedFile {
+  readonly file: string;
+  readonly suite: FileSuite | undefined;
+  readonly error?: string | undefined;
+}
+
+const collectFile = (
+  absolute: string,
+  relative: string,
+): Effect.Effect<CollectedFile> =>
+  Effect.promise(async (): Promise<CollectedFile> => {
+    const root = Registry.beginFile(relative);
+    try {
+      await import(pathToFileURL(absolute).href);
+      // Flush microtasks + one macrotask so registrations deferred with
+      // queueMicrotask (e.g. Test.make's fallback afterAll) land in the tree.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { file: relative, suite: root };
+    } catch (error) {
+      return {
+        file: relative,
+        suite: undefined,
+        error:
+          error instanceof Error
+            ? (error.stack ?? error.message)
+            : String(error),
+      };
+    } finally {
+      Registry.endFile();
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// Execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Whole-process read/write lock. Normal tests hold a read permit; tests
+ * registered with `{ exclusive: true }` (they mutate process-global state
+ * like `process.env`) take every permit, so they never overlap with any
+ * other test in the run.
+ */
+const EXCLUSIVE_PERMITS = 100_000;
+
+interface ExecContext {
+  readonly options: RunOptions;
+  readonly onlyMode: boolean;
+  readonly emit: (event: TestEvent) => Effect.Effect<void>;
+  readonly fileLogs: Array<LogEntry>;
+  readonly results: Array<{ meta: TestMeta; result: TestResult }>;
+  readonly file: string;
+  readonly lock: Semaphore.Semaphore;
+}
+
+const metaOf = (file: string, test: TestCase): TestMeta => {
+  const parts = titlePath(test);
+  return {
+    id: `${file} > ${parts.join(" > ")}`,
+    file,
+    titlePath: parts,
+    name: test.name,
+  };
+};
+
+/** Should this test run at all given only-mode and the -t filter? */
+const included = (
+  test: TestCase,
+  ctx: Pick<ExecContext, "onlyMode" | "options">,
+): boolean => {
+  if (ctx.options.filter !== undefined) {
+    const full = titlePath(test).join(" ");
+    if (!ctx.options.filter.test(full) && !ctx.options.filter.test(test.name)) {
+      return false;
+    }
+  }
+  if (ctx.onlyMode) {
+    let node: Suite | TestCase | undefined = test;
+    while (node !== undefined) {
+      if (node.mode === "only") return true;
+      node = node.parent;
+    }
+    return false;
+  }
+  return true;
+};
+
+const isSkipped = (test: TestCase): "skip" | "todo" | undefined => {
+  if (test.mode === "todo" || test.body === undefined) return "todo";
+  let node: Suite | TestCase | undefined = test;
+  while (node !== undefined) {
+    if (node.mode === "skip") return "skip";
+    node = node.parent;
+  }
+  return undefined;
+};
+
+const hookChain = (
+  test: TestCase,
+  kind: "beforeEach" | "afterEach",
+): Array<Hook> => {
+  const chain: Array<Array<Hook>> = [];
+  let suite: Suite | undefined = test.parent;
+  while (suite !== undefined) {
+    chain.unshift(suite[kind]);
+    suite = suite.parent;
+  }
+  const flat = chain.flat();
+  return kind === "afterEach" ? flat.reverse() : flat;
+};
+
+const runHooks = (
+  hooks: ReadonlyArray<Hook>,
+  defaultTimeout: number,
+): Effect.Effect<void, unknown> =>
+  Effect.forEach(
+    hooks,
+    (hook) =>
+      Effect.suspend(hook.body).pipe(
+        Effect.timeout(Duration.millis(hook.timeout ?? defaultTimeout)),
+      ),
+    { discard: true },
+  );
+
+const prettyCause = (cause: Cause.Cause<unknown>): string => {
+  const rendered = Cause.pretty(cause);
+  return rendered.trim().length === 0 ? inspect(Cause.squash(cause)) : rendered;
+};
+
+const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
+  const meta = metaOf(ctx.file, test);
+  const skipped = isSkipped(test);
+  if (skipped !== undefined) {
+    const result: TestResult = {
+      status: skipped,
+      durationMs: 0,
+      logs: [],
+      retries: 0,
+    };
+    ctx.results.push({ meta, result });
+    yield* ctx.emit({ _tag: "TestEnd", test: meta, result });
+    return;
+  }
+
+  yield* ctx.emit({ _tag: "TestStart", test: meta });
+
+  const timeoutMs = test.timeout ?? ctx.options.timeout;
+  const before = hookChain(test, "beforeEach");
+  const after = hookChain(test, "afterEach");
+
+  const attempt = (
+    logs: Array<LogEntry>,
+  ): Effect.Effect<Exit.Exit<unknown, unknown>> =>
+    runHooks(before, timeoutMs).pipe(
+      Effect.andThen(Effect.suspend(test.body!)),
+      Effect.timeout(Duration.millis(timeoutMs)),
+      // afterEach must run on success, failure and interruption alike.
+      (body) =>
+        Effect.onExit(body, () =>
+          runHooks(after, timeoutMs).pipe(Effect.ignore),
+        ),
+      withCapture(logs),
+      Effect.exit,
+    ) as Effect.Effect<Exit.Exit<unknown, unknown>>;
+
+  const start = Date.now();
+  let retries = 0;
+  let logs: Array<LogEntry> = [];
+  const withLock = ctx.lock.withPermits(test.exclusive ? EXCLUSIVE_PERMITS : 1);
+  let exit = yield* withLock(attempt(logs));
+  while (Exit.isFailure(exit) && !test.fails && retries < ctx.options.retry) {
+    retries++;
+    logs = [];
+    exit = yield* withLock(attempt(logs));
+  }
+  const durationMs = Date.now() - start;
+
+  let status: TestResult["status"];
+  let error: string | undefined;
+  if (test.fails) {
+    if (Exit.isFailure(exit)) {
+      status = "pass";
+    } else {
+      status = "fail";
+      error = "expected test to fail, but it passed";
+    }
+  } else if (Exit.isSuccess(exit)) {
+    status = "pass";
+  } else {
+    status = "fail";
+    error = prettyCause(exit.cause);
+  }
+
+  const result: TestResult = { status, durationMs, error, logs, retries };
+  ctx.results.push({ meta, result });
+  yield* ctx.emit({ _tag: "TestEnd", test: meta, result });
+});
+
+/** Fail every (non-skipped) test in a subtree without running it. */
+const failSubtree = Effect.fn(function* (
+  suite: Suite,
+  ctx: ExecContext,
+  error: string,
+) {
+  const tests: Array<TestCase> = [];
+  const collect = (s: Suite) => {
+    for (const child of s.children) {
+      if (child.type === "test") tests.push(child);
+      else collect(child);
+    }
+  };
+  collect(suite);
+  for (const test of tests) {
+    const meta = metaOf(ctx.file, test);
+    if (!included(test, ctx)) continue;
+    const skipped = isSkipped(test);
+    const result: TestResult =
+      skipped !== undefined
+        ? { status: skipped, durationMs: 0, logs: [], retries: 0 }
+        : {
+            status: "fail",
+            durationMs: 0,
+            error: `beforeAll hook failed:\n${error}`,
+            logs: [],
+            retries: 0,
+          };
+    ctx.results.push({ meta, result });
+    yield* ctx.emit({ _tag: "TestEnd", test: meta, result });
+  }
+});
+
+const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
+  Effect.fn(function* (suite: Suite, ctx: ExecContext) {
+    const runnable = suite.children.filter((child) =>
+      child.type === "test"
+        ? included(child, ctx)
+        : suiteHasIncludedTests(child, ctx),
+    );
+    if (runnable.length === 0) return;
+
+    // If every included test below is skipped (e.g. describe.skip), report
+    // them without running any hooks.
+    if (!suiteHasRunnableTests(suite, ctx)) {
+      yield* Effect.forEach(
+        runnable,
+        (child) =>
+          child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx),
+        { discard: true },
+      );
+      return;
+    }
+
+    // beforeAll — captured into the file-level log buffer.
+    if (suite.beforeAll.length > 0) {
+      const exit = yield* runHooks(suite.beforeAll, ctx.options.timeout).pipe(
+        withCapture(ctx.fileLogs),
+        Effect.exit,
+      );
+      if (Exit.isFailure(exit)) {
+        yield* failSubtree(suite, ctx, prettyCause(exit.cause));
+        yield* runAfterAll(suite, ctx);
+        return;
+      }
+    }
+
+    const sequential = suite.sequential || ctx.options.sequential;
+    yield* Effect.forEach(
+      runnable,
+      (child) =>
+        child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx),
+      { concurrency: sequential ? 1 : "unbounded", discard: true },
+    );
+
+    yield* runAfterAll(suite, ctx);
+  });
+
+const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
+  if (suite.afterAll.length === 0) return;
+  const exit = yield* runHooks(suite.afterAll, ctx.options.timeout).pipe(
+    withCapture(ctx.fileLogs),
+    Effect.exit,
+  );
+  if (Exit.isFailure(exit)) {
+    ctx.fileLogs.push({
+      level: "error",
+      message: `afterAll hook failed:\n${prettyCause(exit.cause)}`,
+      time: new Date(),
+    });
+  }
+});
+
+const suiteHasIncludedTests = (
+  suite: Suite,
+  ctx: Pick<ExecContext, "onlyMode" | "options">,
+): boolean => {
+  for (const child of suite.children) {
+    if (child.type === "test" && included(child, ctx)) return true;
+    if (child.type === "suite" && suiteHasIncludedTests(child, ctx))
+      return true;
+  }
+  return false;
+};
+
+/** True if the subtree has at least one included test that will actually run. */
+const suiteHasRunnableTests = (
+  suite: Suite,
+  ctx: Pick<ExecContext, "onlyMode" | "options">,
+): boolean => {
+  for (const child of suite.children) {
+    if (
+      child.type === "test" &&
+      included(child, ctx) &&
+      isSkipped(child) === undefined
+    ) {
+      return true;
+    }
+    if (child.type === "suite" && suiteHasRunnableTests(child, ctx))
+      return true;
+  }
+  return false;
+};
+
+// ---------------------------------------------------------------------------
+// run
+// ---------------------------------------------------------------------------
+
+export const run = Effect.fn(function* (options: RunOptions) {
+  const reporter = yield* Reporter;
+  const path = yield* Path.Path;
+  const startedAt = Date.now();
+
+  const absoluteFiles = yield* discover(options).pipe(Effect.orDie);
+  const relative = absoluteFiles.map((f) => path.relative(options.root, f));
+  yield* reporter.emit({ _tag: "CollectStart", files: relative });
+
+  // Collection is serial: registration state is global.
+  const collected: Array<CollectedFile> = [];
+  for (let i = 0; i < absoluteFiles.length; i++) {
+    collected.push(yield* collectFile(absoluteFiles[i]!, relative[i]!));
+  }
+
+  const onlyMode = collected.some(
+    (c) => c.suite !== undefined && containsOnly(c.suite),
+  );
+
+  // Announce the full test list up-front (drives the TUI).
+  const allMetas: Array<TestMeta> = [];
+  for (const c of collected) {
+    if (c.suite === undefined) continue;
+    const walk = (suite: Suite) => {
+      for (const child of suite.children) {
+        if (child.type === "test") {
+          if (included(child, { onlyMode, options })) {
+            allMetas.push(metaOf(c.file, child));
+          }
+        } else {
+          walk(child);
+        }
+      }
+    };
+    walk(c.suite);
+  }
+  yield* reporter.emit({
+    _tag: "RunStart",
+    files: collected.length,
+    tests: allMetas,
+  });
+
+  const allResults: Array<{ meta: TestMeta; result: TestResult }> = [];
+  const lock = yield* Semaphore.make(EXCLUSIVE_PERMITS);
+
+  const runFile = Effect.fn(function* (c: CollectedFile) {
+    yield* reporter.emit({ _tag: "FileStart", file: c.file });
+    const fileLogs: Array<LogEntry> = [];
+    let fileError = c.error;
+    if (c.suite !== undefined) {
+      const ctx: ExecContext = {
+        options,
+        onlyMode,
+        emit: reporter.emit,
+        fileLogs,
+        results: allResults,
+        file: c.file,
+        lock,
+      };
+      const exit = yield* runSuite(c.suite, ctx).pipe(Effect.exit);
+      if (Exit.isFailure(exit)) {
+        fileError = prettyCause(exit.cause);
+      }
+    }
+    yield* reporter.emit({
+      _tag: "FileEnd",
+      file: c.file,
+      logs: fileLogs,
+      error: fileError,
+    });
+  });
+
+  yield* Effect.forEach(collected, runFile, {
+    concurrency: options.concurrency,
+    discard: true,
+  });
+
+  const failures = allResults.filter((r) => r.result.status === "fail");
+  const importFailures = collected.filter((c) => c.error !== undefined);
+  const summary: RunSummary = {
+    files: collected.length,
+    passed: allResults.filter((r) => r.result.status === "pass").length,
+    failed: failures.length + importFailures.length,
+    skipped: allResults.filter((r) => r.result.status === "skip").length,
+    todo: allResults.filter((r) => r.result.status === "todo").length,
+    durationMs: Date.now() - startedAt,
+    failures,
+  };
+  yield* reporter.emit({ _tag: "RunEnd", summary });
+  return summary;
+});

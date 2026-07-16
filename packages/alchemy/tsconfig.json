@@ -37,6 +37,9 @@
   },
   "references": [
     {
+      "path": "../alchemy-test/tsconfig.json"
+    },
+    {
       "path": "../../distilled/packages/aws/tsconfig.json"
     },
     {

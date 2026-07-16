@@ -2,10 +2,10 @@ import * as AWS from "@/AWS";
 import { AutoScalingGroup, LaunchTemplate } from "@/AWS/AutoScaling";
 import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
