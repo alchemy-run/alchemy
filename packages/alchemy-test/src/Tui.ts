@@ -535,20 +535,33 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     renderList();
   });
 
+  /**
+   * Drop any active text selection. The list is a recycled pool of row
+   * renderables, so a lingering selection highlight would stick to screen
+   * positions while the content underneath changes (ghost highlights after
+   * a click, glyphs staying inverted through repaints).
+   */
+  const clearTextSelection = (): void => {
+    if (!disposed && renderer.hasSelection) renderer.clearSelection();
+  };
+
   // Drag-selected text is copied automatically on release (the terminal's
   // own CMD+C can't see the TUI's selection).
-  let lastCopiedSelection = "";
   renderer.on(
     CliRenderEvents.SELECTION,
     (selection: Selection | null | undefined) => {
       if (disposed || selection == null) return;
       if (selection.isDragging) return;
       const text = selection.getSelectedText();
-      if (text === "" || text === lastCopiedSelection) return;
-      lastCopiedSelection = text;
-      if (copyToClipboard(renderer, text)) {
+      // A plain click anchors a zero-width selection — nothing to copy.
+      if (text.trim().length > 1 && copyToClipboard(renderer, text)) {
         flash("selection copied ✓");
       }
+      // Clear either way: the copy already happened, and a selection left
+      // behind turns into ghost highlighting as the row pool repaints under
+      // it. Deferred — this event is emitted from inside finishSelection,
+      // which still touches the selection after the emit.
+      setTimeout(clearTextSelection, 0);
     },
   );
 
@@ -903,6 +916,9 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       process.exit(130);
     }
     if (disposed) return;
+    // Keyboard input takes over from the mouse: drop any live text
+    // selection so its highlight can't linger over rows that repaint.
+    clearTextSelection();
     if (state.filterInput && !state.detailOpen) {
       onFilterKey(key);
       return;
