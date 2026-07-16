@@ -26,6 +26,28 @@ environment-variables method automatically.
 See [Profiles](/environments/profiles) for how credentials are stored
 and switched.
 
+## GitHub Enterprise
+
+All three methods work against GitHub Enterprise Server and GitHub
+Enterprise Cloud with data residency. `alchemy login --configure`
+prompts for the host — leave it blank for github.com, or enter your
+enterprise host (e.g. `github.example.com` or `acme.ghe.com`).
+
+The host is normalized into the REST API base URL automatically:
+
+- `github.example.com` → `https://github.example.com/api/v3` (GHES)
+- `acme.ghe.com` → `https://api.acme.ghe.com` (data residency)
+- an explicit URL like `https://github.example.com/api/v3` is used as-is
+
+Alternatively, set the host in the environment — `GITHUB_BASE_URL`,
+`GITHUB_API_URL` (set automatically on GitHub Actions runners), or
+`GH_HOST` — and every method picks it up without reconfiguring. On an
+enterprise host, the environment-variables method also honors the `gh`
+CLI's `GH_ENTERPRISE_TOKEN` / `GITHUB_ENTERPRISE_TOKEN` before falling
+back to `GITHUB_ACCESS_TOKEN` / `GITHUB_TOKEN`, and the `gh` CLI method
+runs `gh auth token --hostname <host>` (run
+`gh auth login --hostname <host>` once first).
+
 ## Token scopes
 
 - `repo` — always required.
@@ -43,9 +65,17 @@ you already have in hand — useful in tests:
 Effect.provide(GitHub.fromToken(token))
 ```
 
-`fromToken` accepts a plain string or a `Redacted` value. To read from
-the environment instead, `GitHub.fromEnv()` builds the same layer from
-`GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN`.
+`fromToken` accepts a plain string or a `Redacted` value, plus an
+optional `baseUrl` for GitHub Enterprise:
+
+```typescript
+Effect.provide(GitHub.fromToken(token, { baseUrl: "github.example.com" }))
+```
+
+To read from the environment instead, `GitHub.fromEnv()` builds the
+same layer from `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` (and resolves
+the enterprise host from `GITHUB_BASE_URL` / `GITHUB_API_URL` /
+`GH_HOST` when set).
 
 ## Next steps
 

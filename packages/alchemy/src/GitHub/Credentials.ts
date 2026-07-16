@@ -10,10 +10,19 @@ import {
   GITHUB_AUTH_PROVIDER_NAME,
   type GitHubAuthConfig,
   type GitHubResolvedCredentials,
+  readEnvCredentials,
 } from "./AuthProvider.ts";
+import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
 
 export interface GitHubCredentialsService {
   readonly token: Redacted.Redacted<string>;
+  /**
+   * REST API base URL for GitHub Enterprise (e.g.
+   * `https://github.example.com/api/v3` for GitHub Enterprise Server, or
+   * `https://api.acme.ghe.com` for GitHub Enterprise Cloud with data
+   * residency). `undefined` targets github.com.
+   */
+  readonly baseUrl?: string;
   readonly octokit: () => Octokit;
 }
 
@@ -22,49 +31,62 @@ export class GitHubCredentials extends Context.Service<
   Effect.Effect<GitHubCredentialsService>
 >()("GitHub::Credentials") {}
 
-const make = (token: Redacted.Redacted<string>): GitHubCredentialsService => ({
+const make = (
+  token: Redacted.Redacted<string>,
+  baseUrl?: string,
+): GitHubCredentialsService => ({
   token,
-  octokit: () => new Octokit({ auth: Redacted.value(token) }),
+  baseUrl,
+  octokit: () =>
+    new Octokit({
+      auth: Redacted.value(token),
+      ...(baseUrl !== undefined ? { baseUrl } : {}),
+    }),
 });
 
 /**
  * Build a `GitHubCredentials` layer from a literal token. Useful for
  * tests or when callers already have a PAT in hand.
+ *
+ * Pass `baseUrl` to target a GitHub Enterprise instance. It accepts a
+ * hostname or URL and is normalized into the REST API base URL — a GitHub
+ * Enterprise Server host gets `/api/v3` appended, a `*.ghe.com`
+ * data-residency host gets the `api.` prefix.
  */
-export const fromToken = (token: string | Redacted.Redacted<string>) =>
+export const fromToken = (
+  token: string | Redacted.Redacted<string>,
+  options?: { readonly baseUrl?: string },
+) =>
   Layer.succeed(
     GitHubCredentials,
-    Effect.succeed(
-      make(typeof token === "string" ? Redacted.make(token) : token),
-    ),
+    Effect.gen(function* () {
+      const baseUrl =
+        options?.baseUrl !== undefined
+          ? yield* normalizeGitHubBaseUrl(options.baseUrl)
+          : undefined;
+      return make(
+        typeof token === "string" ? Redacted.make(token) : token,
+        baseUrl,
+      );
+    }).pipe(Effect.orDie),
   );
 
 /**
  * Build a `GitHubCredentials` layer that reads the token from
  * `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` at layer build time.
+ *
+ * GitHub Enterprise is resolved from the environment too: `GITHUB_BASE_URL`,
+ * `GITHUB_API_URL` (set by GitHub Actions runners), or `GH_HOST` select the
+ * host, and on an enterprise host `GH_ENTERPRISE_TOKEN` /
+ * `GITHUB_ENTERPRISE_TOKEN` are checked before the standard token variables.
  */
 export const fromEnv = () =>
   Layer.succeed(
     GitHubCredentials,
-    Effect.gen(function* () {
-      const access = yield* Config.redacted("GITHUB_ACCESS_TOKEN").pipe(
-        Config.option,
-      );
-      const token = yield* Config.redacted("GITHUB_TOKEN").pipe(Config.option);
-      const value =
-        access._tag === "Some"
-          ? access.value
-          : token._tag === "Some"
-            ? token.value
-            : undefined;
-      if (value == null) {
-        return yield* new AuthError({
-          message:
-            "GitHub credentials not found. Set GITHUB_ACCESS_TOKEN or GITHUB_TOKEN.",
-        });
-      }
-      return make(value);
-    }).pipe(Effect.orDie),
+    readEnvCredentials().pipe(
+      Effect.map((creds) => make(creds.token, creds.baseUrl)),
+      Effect.orDie,
+    ),
   );
 
 /**
@@ -88,7 +110,7 @@ export const fromAuthProvider = () =>
         Effect.flatMap((config) =>
           auth.read(profileName, config as GitHubAuthConfig),
         ),
-        Effect.map((creds) => make(creds.token)),
+        Effect.map((creds) => make(creds.token, creds.baseUrl)),
         Effect.mapError(
           (e) =>
             new AuthError({
