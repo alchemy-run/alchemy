@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as backup from "@distilled.cloud/aws/backup";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,7 +10,10 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
 
-import BackupTestFunctionLive, { BackupTestFunction } from "./handler";
+import BackupTestFunctionLive, {
+  BackupTestFunction,
+  FIXTURE_VAULT_NAME,
+} from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -93,7 +97,23 @@ describe.sequential("Backup Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Out-of-band proof the fixture vault is gone (AWS Backup reports a
+      // missing vault as AccessDeniedException, not ResourceNotFoundException).
+      const vault = yield* backup
+        .describeBackupVault({ BackupVaultName: FIXTURE_VAULT_NAME })
+        .pipe(
+          Effect.catchTag(
+            ["ResourceNotFoundException", "AccessDeniedException"],
+            () => Effect.succeed(undefined),
+          ),
+        );
+      expect(vault).toBeUndefined();
+    }),
+    { timeout: 120_000 },
+  );
 
   describe("binding registration", () => {
     test.provider("all 20 capabilities initialize in the runtime", (_stack) =>

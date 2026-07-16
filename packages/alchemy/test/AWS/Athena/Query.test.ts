@@ -9,6 +9,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
 
+import * as athena from "@distilled.cloud/aws/athena";
+import * as glue from "@distilled.cloud/aws/glue";
+
 import AthenaTestFunctionLive, { AthenaTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -88,7 +91,36 @@ describe("Athena Query", () => {
   );
   // No NO_DESTROY escape hatch here: scratch-stack state is in-memory per
   // process, so a skipped destroy would orphan the whole stack forever.
-  afterAll(sharedStack.destroy(), { timeout: 300_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+
+      // Assert-gone out-of-band via the fixture's fixed-name resources —
+      // engine-named resources (bucket/workgroup/Lambda) hang off the same
+      // stack, so these two vanishing proves the destroy actually ran.
+      const db = yield* glue.getDatabase({ Name: "alchemy_athena_e2e" }).pipe(
+        Effect.map((res) => res.Database),
+        Effect.catchTag("EntityNotFoundException", () =>
+          Effect.succeed(undefined),
+        ),
+      );
+      expect(db).toBeUndefined();
+
+      const catalog = yield* athena
+        .getDataCatalog({
+          Name: "alchemy_athena_e2e_catalog",
+          WorkGroup: "primary",
+        })
+        .pipe(
+          Effect.map((res) => res.DataCatalog),
+          Effect.catchTag("DataCatalogNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      expect(catalog).toBeUndefined();
+    }),
+    { timeout: 300_000 },
+  );
 
   test.provider(
     "runs SELECT 1 through the binding (execute + poll + results)",

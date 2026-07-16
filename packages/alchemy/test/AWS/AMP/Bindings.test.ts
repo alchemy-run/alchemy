@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as amp from "@distilled.cloud/aws/amp";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -97,7 +98,24 @@ describe("AMP Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Assert gone: no workspace with the fixture's alias survives the
+      // destroy (AMP deletes asynchronously — DELETING counts as gone; a
+      // fresh run's leading destroy would reconcile any remnant anyway).
+      const { workspaces } = yield* amp.listWorkspaces({
+        alias: "alchemy-test-amp-bindings",
+      });
+      const alive = workspaces.filter(
+        (w) =>
+          w.status.statusCode !== "DELETING" &&
+          w.status.statusCode !== "DELETED",
+      );
+      expect(alive).toHaveLength(0);
+    }),
+    { timeout: 120_000 },
+  );
 
   describe("RemoteWrite", () => {
     test.provider("pushes a sample into the workspace", (_stack) =>

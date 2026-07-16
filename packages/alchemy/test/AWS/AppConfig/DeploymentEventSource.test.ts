@@ -5,7 +5,6 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
 
@@ -102,13 +101,8 @@ describe("AppConfig DeploymentEventSource", () => {
         // key, so delivery to any Lambda instance is observable here).
         const eventUrl = `${baseUrl}/event?number=${started.deploymentNumber}&type=OnDeploymentComplete`;
         const body = yield* HttpClient.get(eventUrl).pipe(
-          Effect.flatMap(
-            (response) =>
-              response.json as Effect.Effect<
-                EventBody,
-                HttpClientError.HttpClientError
-              >,
-          ),
+          Effect.flatMap((response) => response.json),
+          Effect.map((json) => json as EventBody),
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             until: (json): boolean => json.event !== null,
