@@ -1,0 +1,88 @@
+{
+  "name": "@distilled.cloud/cloudflare-rolldown-plugin",
+  "version": "0.13.5",
+  "description": "Rolldown plugin for Cloudflare Workers.",
+  "keywords": [
+    "cloudflare",
+    "rolldown",
+    "workers"
+  ],
+  "homepage": "https://github.com/alchemy-run/cloudflare-tools/tree/main/packages/cloudflare-rolldown-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/cloudflare-tools/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "John Royal",
+    "email": "john@alchemy.run",
+    "url": "https://distilled.cloud"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/cloudflare-tools.git",
+    "directory": "packages/cloudflare-rolldown-plugin"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/plugin.js",
+  "types": "./dist/plugin.d.ts",
+  "exports": {
+    ".": {
+      "bun": "./src/plugin.ts",
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "import": "./dist/plugins/index.js"
+    },
+    "./options": {
+      "types": "./dist/options.d.ts",
+      "import": "./dist/options.js"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.ts",
+      "import": "./dist/utils.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "dependencies": {
+    "@cloudflare/unenv-preset": "^2.16.0",
+    "magic-string": "^0.30.21",
+    "unenv": "^2.0.0-rc.24"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260704.1",
+    "@distilled.cloud/test-utils": "0.0.0",
+    "mysql2": "^3.22.3",
+    "vite": "^8.0.3",
+    "vitest": "^4.1.1"
+  },
+  "peerDependencies": {
+    "rolldown": "^1.0.1",
+    "vite": "^7.0.0 || ^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "rolldown": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  }
+}
