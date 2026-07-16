@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 
 import type { Input } from "../Input.ts";
+import type { Environment } from "./Environment.ts";
 import { Variable } from "./Variable.ts";
 
 export interface VariablesProps {
@@ -15,10 +16,11 @@ export interface VariablesProps {
   repository: string;
 
   /**
-   * Optional environment name. When set every variable is scoped to that
-   * GitHub Actions environment instead of the whole repository.
+   * Optional environment. When set every variable is scoped to that GitHub
+   * Actions environment instead of the whole repository. Accepts an
+   * environment name or a `GitHub.Environment` resource.
    */
-  environment?: string;
+  environment?: string | Environment;
 
   /**
    * Map of variable name to value. Each entry becomes one

@@ -82,14 +82,16 @@ const production = yield* GitHub.Environment("production", {
 yield* GitHub.Secret("deploy-key", {
   owner: "my-org",
   repository: "my-repo",
-  environment: production.name,
+  environment: production,
   name: "DEPLOY_KEY",
   value: Redacted.make("my-secret-value"),
 });
 ```
 
-Reviewers are referenced by user login and team slug — alchemy resolves
-them to the IDs GitHub's API expects. `deploymentBranchPolicy` restricts
+The `environment` prop on secrets and variables accepts either a name
+string or the `Environment` resource itself. Reviewers are referenced by
+user login and team slug — alchemy resolves them to the IDs GitHub's API
+expects. `deploymentBranchPolicy` restricts
 which branches can deploy: `{ protectedBranches: true }` or a list of
 branch name patterns via `customBranchPolicies`. Environments on private
 repositories are plan-gated (Pro/Team/Enterprise); public repositories

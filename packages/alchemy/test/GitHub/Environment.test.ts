@@ -213,10 +213,12 @@ test.provider.skipIf(!owner)(
               name,
             }).pipe(destroy());
 
+            // Pass the Environment resource itself — the `environment` prop
+            // accepts `string | Environment` and resolves the name.
             return yield* GitHub.Variable("Variable", {
               owner,
               repository: repoName(repository),
-              environment: environment.name,
+              environment,
               name: "ALCHEMY_ENV_TEST",
               value,
             }).pipe(destroy());

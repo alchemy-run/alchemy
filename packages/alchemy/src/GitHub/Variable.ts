@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { type Environment, resolveEnvironmentName } from "./Environment.ts";
 import { Octokit } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
@@ -26,10 +27,11 @@ export interface VariableProps {
   value: string;
 
   /**
-   * Optional environment name. When set the variable is scoped to that
-   * GitHub Actions environment instead of the whole repository.
+   * Optional environment. When set the variable is scoped to that GitHub
+   * Actions environment instead of the whole repository. Accepts an
+   * environment name or a `GitHub.Environment` resource.
    */
-  environment?: string;
+  environment?: string | Environment;
 }
 
 export interface Variable extends Resource<
@@ -132,7 +134,8 @@ export const VariableProvider = () =>
       // converging the new one, otherwise it stays in GitHub as dead state.
       if (
         olds !== undefined &&
-        (olds.environment ?? undefined) !== (news.environment ?? undefined)
+        resolveEnvironmentName(olds.environment) !==
+          resolveEnvironmentName(news.environment)
       ) {
         yield* deleteVariable(olds);
       }
@@ -217,14 +220,15 @@ export const VariableProvider = () =>
 
 const getVariable = Effect.fn(function* (props: VariableProps) {
   const octokit = yield* Octokit;
+  const environment = resolveEnvironmentName(props.environment);
   return yield* Effect.tryPromise({
     try: async () => {
       try {
-        if (props.environment) {
+        if (environment !== undefined) {
           const { data } = await octokit.rest.actions.getEnvironmentVariable({
             owner: props.owner,
             repo: props.repository,
-            environment_name: props.environment,
+            environment_name: environment,
             name: props.name,
           });
           return data;
@@ -246,12 +250,13 @@ const getVariable = Effect.fn(function* (props: VariableProps) {
 
 const createVariable = Effect.fn(function* (props: VariableProps) {
   const octokit = yield* Octokit;
+  const environment = resolveEnvironmentName(props.environment);
   yield* Effect.tryPromise(async () => {
-    if (props.environment) {
+    if (environment !== undefined) {
       await octokit.rest.actions.createEnvironmentVariable({
         owner: props.owner,
         repo: props.repository,
-        environment_name: props.environment,
+        environment_name: environment,
         name: props.name,
         value: props.value,
       });
@@ -268,12 +273,13 @@ const createVariable = Effect.fn(function* (props: VariableProps) {
 
 const updateVariable = Effect.fn(function* (props: VariableProps) {
   const octokit = yield* Octokit;
+  const environment = resolveEnvironmentName(props.environment);
   yield* Effect.tryPromise(async () => {
-    if (props.environment) {
+    if (environment !== undefined) {
       await octokit.rest.actions.updateEnvironmentVariable({
         owner: props.owner,
         repo: props.repository,
-        environment_name: props.environment,
+        environment_name: environment,
         name: props.name,
         value: props.value,
       });
@@ -290,13 +296,14 @@ const updateVariable = Effect.fn(function* (props: VariableProps) {
 
 const deleteVariable = Effect.fn(function* (props: VariableProps) {
   const octokit = yield* Octokit;
+  const environment = resolveEnvironmentName(props.environment);
   yield* Effect.tryPromise(async () => {
     try {
-      if (props.environment) {
+      if (environment !== undefined) {
         await octokit.rest.actions.deleteEnvironmentVariable({
           owner: props.owner,
           repo: props.repository,
-          environment_name: props.environment,
+          environment_name: environment,
           name: props.name,
         });
       } else {

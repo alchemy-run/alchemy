@@ -182,7 +182,7 @@ export interface Environment extends Resource<
  * yield* GitHub.Secret("deploy-key", {
  *   owner: "my-org",
  *   repository: "my-repo",
- *   environment: env.name!,
+ *   environment: env,
  *   name: "DEPLOY_KEY",
  *   value: Redacted.make("my-secret-value"),
  * });
@@ -190,13 +190,29 @@ export interface Environment extends Resource<
  * yield* GitHub.Variable("region", {
  *   owner: "my-org",
  *   repository: "my-repo",
- *   environment: env.name!,
+ *   environment: env,
  *   name: "AWS_REGION",
  *   value: "us-east-1",
  * });
  * ```
  */
 export const Environment = Resource<Environment>("GitHub.Environment");
+
+// At runtime, Resource references in props are resolved to their full
+// attributes — so an `Environment` passed to another resource's
+// `environment` prop arrives as `{ name: string; ... }` rather than the
+// statically-typed Resource (whose attributes are `Output<...>`). We cast
+// through the structural shape here.
+export const resolveEnvironmentName = (
+  environment: string | Environment | undefined,
+): string | undefined => {
+  const ref = environment as unknown as string | { name: string } | undefined;
+  return ref === undefined
+    ? undefined
+    : typeof ref === "string"
+      ? ref
+      : ref.name;
+};
 
 export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {

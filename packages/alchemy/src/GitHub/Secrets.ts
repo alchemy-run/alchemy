@@ -4,6 +4,7 @@ import * as Redacted from "effect/Redacted";
 
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
+import type { Environment } from "./Environment.ts";
 import { Secret } from "./Secret.ts";
 
 export interface SecretsProps {
@@ -18,10 +19,11 @@ export interface SecretsProps {
   repository: string;
 
   /**
-   * Optional environment name. When set every secret is scoped to that
-   * GitHub Actions environment instead of the whole repository.
+   * Optional environment. When set every secret is scoped to that GitHub
+   * Actions environment instead of the whole repository. Accepts an
+   * environment name or a `GitHub.Environment` resource.
    */
-  environment?: string;
+  environment?: string | Environment;
 
   /**
    * Map of secret name to value. Plain strings are wrapped with

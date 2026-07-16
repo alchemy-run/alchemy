@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { type Environment, resolveEnvironmentName } from "./Environment.ts";
 import { Octokit } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
@@ -28,10 +29,11 @@ export interface SecretProps {
   value: Redacted.Redacted;
 
   /**
-   * Optional environment name. When set the secret is scoped to that
-   * GitHub Actions environment instead of the whole repository.
+   * Optional environment. When set the secret is scoped to that GitHub
+   * Actions environment instead of the whole repository. Accepts an
+   * environment name or a `GitHub.Environment` resource.
    */
-  environment?: string;
+  environment?: string | Environment;
 }
 
 export interface Secret extends Resource<
@@ -160,12 +162,12 @@ export const SecretProvider = () =>
       // If the location changed, the previous secret is orphaned: delete
       // it before upserting the new one, otherwise it stays in GitHub as
       // dead state.
-      if (olds !== undefined) {
-        const wasEnv = !!olds.environment;
-        const isEnv = !!news.environment;
-        if (wasEnv !== isEnv || olds.environment !== news.environment) {
-          yield* deleteSecret(olds);
-        }
+      if (
+        olds !== undefined &&
+        resolveEnvironmentName(olds.environment) !==
+          resolveEnvironmentName(news.environment)
+      ) {
+        yield* deleteSecret(olds);
       }
 
       // Ensure & Sync — `createOrUpdate*Secret` is upsert-style: it
@@ -185,14 +187,14 @@ export const SecretProvider = () =>
 const upsertSecret = Effect.fn(function* (props: SecretProps) {
   const octokit = yield* Octokit;
   const plaintext = Redacted.value(props.value);
-  const isEnv = !!props.environment;
+  const environment = resolveEnvironmentName(props.environment);
 
   const publicKey = yield* Effect.tryPromise(async () => {
-    if (isEnv) {
+    if (environment !== undefined) {
       const { data } = await octokit.rest.actions.getEnvironmentPublicKey({
         owner: props.owner,
         repo: props.repository,
-        environment_name: props.environment!,
+        environment_name: environment,
       });
       return data;
     }
@@ -208,11 +210,11 @@ const upsertSecret = Effect.fn(function* (props: SecretProps) {
   );
 
   yield* Effect.tryPromise(async () => {
-    if (isEnv) {
+    if (environment !== undefined) {
       await octokit.rest.actions.createOrUpdateEnvironmentSecret({
         owner: props.owner,
         repo: props.repository,
-        environment_name: props.environment!,
+        environment_name: environment,
         secret_name: props.name,
         encrypted_value: encrypted,
         key_id: publicKey.key_id,
@@ -231,13 +233,14 @@ const upsertSecret = Effect.fn(function* (props: SecretProps) {
 
 const deleteSecret = Effect.fn(function* (props: SecretProps) {
   const octokit = yield* Octokit;
+  const environment = resolveEnvironmentName(props.environment);
   yield* Effect.tryPromise(async () => {
     try {
-      if (props.environment) {
+      if (environment !== undefined) {
         await octokit.rest.actions.deleteEnvironmentSecret({
           owner: props.owner,
           repo: props.repository,
-          environment_name: props.environment,
+          environment_name: environment,
           secret_name: props.name,
         });
       } else {
