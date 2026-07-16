@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { SAMLProvider } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -40,6 +41,11 @@ describe("AWS.IAM.SAMLProvider", () => {
       ).toBe(true);
 
       yield* stack.destroy();
+
+      const deleted = yield* IAM.getSAMLProvider({
+        SAMLProviderArn: deployed.samlProviderArn,
+      }).pipe(Effect.option);
+      expect(deleted._tag).toBe("None");
     }),
   );
 });

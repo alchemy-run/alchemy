@@ -101,6 +101,15 @@ test.provider("list enumerates the deployed service", (stack) =>
     yield* stack.destroy();
 
     yield* reclaimTaskDefinitionFamily(family);
+
+    // Out-of-band gone-proof: the cluster (deleted after its service) is
+    // INACTIVE or absent, so nothing this test created is left ACTIVE.
+    const after = yield* ecs.describeClusters({
+      clusters: ["alchemy-test-ecs-service-list"],
+    });
+    expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
+      false,
+    );
   }),
 );
 
@@ -218,6 +227,15 @@ test.provider(
 
       yield* stack.destroy();
       yield* reclaimTaskDefinitionFamily(family);
+
+      // Out-of-band gone-proof: the cluster (deleted after its service) is
+      // INACTIVE or absent.
+      const after = yield* ecs.describeClusters({
+        clusters: ["alchemy-test-ecs-service-inplace"],
+      });
+      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
+        false,
+      );
     }),
   { timeout: 240_000 },
 );

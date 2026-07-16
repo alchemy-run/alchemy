@@ -6,6 +6,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import TestInstance, { keyPair } from "./fixtures/instance.ts";
+import { assertInstanceTerminated } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,13 +24,14 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { publicIpAddress, privateKey } = yield* stack.deploy(
+      const { instanceId, publicIpAddress, privateKey } = yield* stack.deploy(
         Effect.gen(function* () {
           const instance = yield* TestInstance;
           // Resolve the same key-pair resource the instance uses and return its
           // private key from the stack (resolved to a `Redacted` value).
           const key = yield* keyPair;
           return {
+            instanceId: instance.instanceId,
             publicIpAddress: instance.publicIpAddress,
             privateKey: key.privateKey,
           };
@@ -75,6 +77,9 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(second).toBeGreaterThan(first);
 
       yield* stack.destroy();
+
+      // Zero-orphan proof: the (billed) instance reached a terminal state.
+      yield* assertInstanceTerminated(instanceId);
     }),
   { timeout: 1_200_000 },
 );

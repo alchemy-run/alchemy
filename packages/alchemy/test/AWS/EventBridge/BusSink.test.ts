@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Vitest";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -159,6 +160,10 @@ test.provider(
   "BusSink streams entries through a deployed Lambda to EventBridge",
   (stack) =>
     Effect.gen(function* () {
+      // Leading destroy: reconcile away any partial deployment left behind by
+      // a previous crashed run (physical names are deterministic constants).
+      yield* stack.destroy();
+
       const fn = yield* stack.deploy(
         BusSinkFunction.pipe(Effect.provide(BusSinkFunctionLive)),
       );
@@ -198,6 +203,22 @@ test.provider(
       yield* waitForMarkers(queueUrl, partialMarkers);
 
       yield* stack.destroy();
+
+      // Typed wait-until-gone: the sink's event bus must be deleted.
+      const gone = yield* eventbridge
+        .describeEventBus({ Name: "alchemy-test-eb-bus-sink" })
+        .pipe(
+          Effect.map(() => false),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(true),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (isGone): boolean => isGone,
+            times: 10,
+          }),
+        );
+      expect(gone).toBe(true);
     }),
   { timeout: 240_000 },
 );

@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Vitest";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -112,12 +113,49 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
         expect(received).toContain(marker);
 
         yield* stack.destroy();
+
+        // Assert the stack's observable resources are gone: the Lambda
+        // function (which hosted the event source) and the result queue.
+        yield* Lambda.getFunction({ FunctionName: fn.functionName }).pipe(
+          Effect.flatMap(() => Effect.fail(new ResourceStillExists("lambda"))),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          Effect.retry({
+            while: (e) => e._tag === "ResourceStillExists",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(10),
+            ]),
+          }),
+        );
+        // SQS DeleteQueue propagation is documented at up to ~60s.
+        yield* SQS.getQueueAttributes({
+          QueueUrl: resultQueueUrl,
+          AttributeNames: ["All"],
+        }).pipe(
+          Effect.flatMap(() => Effect.fail(new ResourceStillExists("queue"))),
+          Effect.catchTag("QueueDoesNotExist", () => Effect.void),
+          Effect.retry({
+            while: (e) => e._tag === "ResourceStillExists",
+            schedule: Schedule.max([
+              Schedule.spaced("3 seconds"),
+              Schedule.recurs(30),
+            ]),
+          }),
+        );
       }),
     { timeout: 300_000 },
   );
 });
 
 class MessageNotDelivered extends Data.TaggedError("MessageNotDelivered") {}
+
+class ResourceStillExists extends Data.TaggedError("ResourceStillExists")<{
+  what: string;
+}> {
+  constructor(what: string) {
+    super({ what });
+  }
+}
 
 class FunctionNotReady extends Data.TaggedError("FunctionNotReady")<{
   message: string;

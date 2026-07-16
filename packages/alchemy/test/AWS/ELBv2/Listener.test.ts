@@ -123,6 +123,15 @@ test.provider(
       ).toBe(true);
 
       yield* stack.destroy();
+
+      // Out-of-band: the listener is gone after destroy.
+      const after = yield* elbv2
+        .describeListeners({ ListenerArns: [deployed.listener.listenerArn] })
+        .pipe(
+          Effect.map((r) => r.Listeners?.length ?? 0),
+          Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(0)),
+        );
+      expect(after).toBe(0);
     }),
   { timeout: 240_000 },
 );

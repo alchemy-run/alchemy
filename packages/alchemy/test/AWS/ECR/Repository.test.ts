@@ -6,9 +6,27 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+class RepositoryStillExists extends Data.TaggedError("RepositoryStillExists") {}
+
+// Out-of-band proof that the trailing destroy actually removed the
+// repository: describeRepositories must settle on the typed
+// RepositoryNotFoundException.
+const assertRepositoryDeleted = Effect.fn(function* (repositoryName: string) {
+  yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
+    Effect.flatMap(() => Effect.fail(new RepositoryStillExists())),
+    Effect.retry({
+      while: (e) => e._tag === "RepositoryStillExists",
+      schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(8)]),
+    }),
+    Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
+  );
+});
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a real
 // repository, resolve the provider from context via the typed `findProvider`,
@@ -34,6 +52,7 @@ test.provider("list enumerates the deployed repository", (stack) =>
     );
 
     yield* stack.destroy();
+    yield* assertRepositoryDeleted(repo.repositoryName);
   }),
 );
 
@@ -105,6 +124,7 @@ test.provider(
       expect(yield* readRepositoryPolicy(repo.repositoryName)).toBeUndefined();
 
       yield* stack.destroy();
+      yield* assertRepositoryDeleted(repo.repositoryName);
     }),
   { timeout: 120_000 },
 );

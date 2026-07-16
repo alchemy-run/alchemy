@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -32,6 +33,9 @@ const readinessPolicy = Schedule.max([
 ]);
 
 let baseUrl: string;
+// Physical name of the Application the fixture creates — captured in
+// beforeAll so afterAll can assert it is GONE out-of-band after destroy.
+let applicationName: string | undefined;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -118,22 +122,39 @@ describe.sequential("KinesisAnalyticsV2 Bindings", () => {
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
+
+      const described = (yield* getJson("/describe")) as { name?: string };
+      applicationName = described.name;
+      expect(applicationName).toBeTruthy();
     }),
     { timeout: 300_000 },
   );
 
   afterAll(
-    sharedStack
-      .destroy()
-      .pipe(
-        Effect.ensuring(
-          Core.withProviders(
-            deleteCodeBucketIdempotent(FIXTURE_CODE_BUCKET),
-            testOptions,
-            "KinesisAnalyticsV2Bindings",
-          ),
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+
+      // Assert the fixture Application is GONE out-of-band — the trailing
+      // destroy must leave zero orphaned cloud resources.
+      if (applicationName !== undefined) {
+        const gone = yield* Core.withProviders(
+          analytics
+            .describeApplication({ ApplicationName: applicationName })
+            .pipe(Effect.flip),
+          testOptions,
+          "KinesisAnalyticsV2Bindings",
+        );
+        expect(gone._tag).toEqual("ResourceNotFoundException");
+      }
+    }).pipe(
+      Effect.ensuring(
+        Core.withProviders(
+          deleteCodeBucketIdempotent(FIXTURE_CODE_BUCKET),
+          testOptions,
+          "KinesisAnalyticsV2Bindings",
         ),
       ),
+    ),
     { timeout: 180_000 },
   );
 

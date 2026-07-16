@@ -16,6 +16,9 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
     "create DirectPut stream to S3, update destination settings, destroy",
     (stack) =>
       Effect.gen(function* () {
+        // Reconcile away any partial deployment left by a crashed prior run.
+        yield* stack.destroy();
+
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
             const bucket = yield* AWS.S3.Bucket("FirehoseTestBucket", {
@@ -184,6 +187,9 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
     "replaces the stream when a Kinesis source is added",
     (stack) =>
       Effect.gen(function* () {
+        // Reconcile away any partial deployment left by a crashed prior run.
+        yield* stack.destroy();
+
         // Keep the bucket AND the kinesis stream deployed across both steps —
         // replacing a resource while simultaneously removing a dependency
         // deadlocks the engine.

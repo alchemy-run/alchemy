@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
@@ -29,5 +30,13 @@ test.provider("list enumerates the deployed cluster", (stack) =>
     expect(all.some((c) => c.clusterArn === cluster.clusterArn)).toBe(true);
 
     yield* stack.destroy();
+
+    // Out-of-band gone-proof: a deleted cluster is INACTIVE (or absent).
+    const after = yield* ecs.describeClusters({
+      clusters: ["alchemy-test-ecs-cluster-list"],
+    });
+    expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
+      false,
+    );
   }),
 );

@@ -58,6 +58,12 @@ describe("AWS.IAM sensitive resources", () => {
         expect(loginProfile.LoginProfile.PasswordResetRequired).toBe(false);
 
         yield* stack.destroy();
+
+        // The user (and with it the access key + login profile) is gone.
+        const deletedUser = yield* IAM.getUser({
+          UserName: resources.user.userName,
+        }).pipe(Effect.option);
+        expect(deletedUser._tag).toBe("None");
       }),
   );
 });

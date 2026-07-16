@@ -61,5 +61,23 @@ test.provider("create user, group membership, and instance profile", (stack) =>
     );
 
     yield* stack.destroy();
+
+    // Everything the stack created is gone.
+    const deletedUser = yield* IAM.getUser({
+      UserName: resources.user.userName,
+    }).pipe(Effect.option);
+    expect(deletedUser._tag).toBe("None");
+    const deletedGroup = yield* IAM.getGroup({
+      GroupName: resources.group.groupName,
+    }).pipe(Effect.option);
+    expect(deletedGroup._tag).toBe("None");
+    const deletedProfile = yield* IAM.getInstanceProfile({
+      InstanceProfileName: resources.profile.instanceProfileName,
+    }).pipe(Effect.option);
+    expect(deletedProfile._tag).toBe("None");
+    const deletedRole = yield* IAM.getRole({
+      RoleName: resources.role.roleName,
+    }).pipe(Effect.option);
+    expect(deletedRole._tag).toBe("None");
   }),
 );

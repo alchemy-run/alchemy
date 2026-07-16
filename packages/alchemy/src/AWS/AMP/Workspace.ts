@@ -155,6 +155,33 @@ export const WorkspaceProvider = () =>
       });
 
       /**
+       * Find the workspace carrying this resource's alchemy ownership tags.
+       * Workspace ids are server-assigned, so when the persisted output is
+       * lost (e.g. a run crashed after create but before state persistence)
+       * this tag search is the only way to reclaim the existing workspace
+       * instead of creating an orphan-producing duplicate.
+       */
+      const findByInternalTags = Effect.fn(function* (
+        internalTags: Record<string, string>,
+      ) {
+        const pages = yield* amp.listWorkspaces
+          .pages({})
+          .pipe(Stream.runCollect);
+        const summary = Array.from(pages)
+          .flatMap((page) => page.workspaces)
+          .find(
+            (w) =>
+              w.status.statusCode !== "DELETING" &&
+              Object.entries(internalTags).every(
+                ([key, value]) => toTagRecord(w.tags)[key] === value,
+              ),
+          );
+        return summary === undefined
+          ? undefined
+          : yield* describe(summary.workspaceId);
+      });
+
+      /**
        * Canonical form of a label-set-limits list for observed-vs-desired
        * comparison: entries keyed and sorted by their sorted label set.
        */
@@ -304,9 +331,14 @@ export const WorkspaceProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, output }) {
-          // Workspace ids are server-assigned; without an output cache there
-          // is no deterministic identity to look up.
-          if (!output?.workspaceId) return undefined;
+          // Workspace ids are server-assigned; without an output cache the
+          // only recoverable identity is the alchemy ownership tags.
+          if (!output?.workspaceId) {
+            const internalTags = yield* createInternalTags(id);
+            const found = yield* findByInternalTags(internalTags);
+            // A tag match is by definition owned by this resource.
+            return found === undefined ? undefined : toAttrs(found);
+          }
           const workspace = yield* describe(output.workspaceId);
           if (workspace === undefined) return undefined;
           const attrs = toAttrs(workspace);
@@ -319,10 +351,13 @@ export const WorkspaceProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
 
           // 1. Observe — cloud state is authoritative; output is an id cache.
+          // With no cached id (greenfield OR lost state after a crash), fall
+          // back to searching by ownership tags: the id is server-assigned,
+          // so tags are the only recoverable identity.
           let workspace =
             output?.workspaceId !== undefined
               ? yield* describe(output.workspaceId)
-              : undefined;
+              : yield* findByInternalTags(internalTags);
 
           // 2. Ensure — create if missing, then wait for ACTIVE.
           if (workspace === undefined) {

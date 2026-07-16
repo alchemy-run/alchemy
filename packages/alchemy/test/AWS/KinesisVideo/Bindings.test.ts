@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as kv from "@distilled.cloud/aws/kinesis-video";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -27,6 +28,11 @@ let baseUrl: string;
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
+}> {}
+
+class FixtureStillExists extends Data.TaggedError("FixtureStillExists")<{
+  readonly streams: string[];
+  readonly channels: string[];
 }> {}
 
 // Retry transient 5xx from the shared fixture under parallel-suite load;
@@ -115,9 +121,54 @@ describe("KinesisVideo Bindings", () => {
     { timeout: 300_000 },
   );
 
-  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    timeout: 240_000,
-  });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // assert the fixture stream + channel are gone out-of-band. Physical
+      // names are deterministic: `${stackName}-${logicalId}-${stage}-…`, so a
+      // BEGINS_WITH listing pinpoints exactly the resources this suite owns.
+      // Deletion is asynchronous — DELETING counts as gone.
+      yield* Effect.gen(function* () {
+        const streams = yield* kv.listStreams({
+          StreamNameCondition: {
+            ComparisonOperator: "BEGINS_WITH",
+            ComparisonValue: "KinesisVideoBindings-FixtureStream-test-",
+          },
+        });
+        const liveStreams = (streams.StreamInfoList ?? []).filter(
+          (s) => s.Status !== "DELETING",
+        );
+        const channels = yield* kv.listSignalingChannels({
+          ChannelNameCondition: {
+            ComparisonOperator: "BEGINS_WITH",
+            ComparisonValue: "KinesisVideoBindings-FixtureChannel-test-",
+          },
+        });
+        const liveChannels = (channels.ChannelInfoList ?? []).filter(
+          (c) => c.ChannelStatus !== "DELETING",
+        );
+        if (liveStreams.length > 0 || liveChannels.length > 0) {
+          return yield* Effect.fail(
+            new FixtureStillExists({
+              streams: liveStreams.map((s) => s.StreamName ?? "?"),
+              channels: liveChannels.map((c) => c.ChannelName ?? "?"),
+            }),
+          );
+        }
+      }).pipe(
+        Effect.retry({
+          while: (e): boolean => e._tag === "FixtureStillExists",
+          schedule: Schedule.max([
+            Schedule.spaced("3 seconds"),
+            Schedule.recurs(10),
+          ]),
+        }),
+      );
+    }),
+    {
+      timeout: 240_000,
+    },
+  );
 
   describe("GetHLSStreamingSessionURL", () => {
     test.provider(

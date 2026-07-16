@@ -121,6 +121,7 @@ export default KinesisAnalyticsV2TestFunction.make(
                 : {
                     status: result.ApplicationDetail.ApplicationStatus,
                     runtime: result.ApplicationDetail.RuntimeEnvironment,
+                    name: result.ApplicationDetail.ApplicationName,
                   },
             );
           }

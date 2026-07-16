@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -166,14 +167,33 @@ describe("EventBridge Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    // Teardown deletes ~30 resources (invoke permissions, event-source
-    // rules, the Lambda fixture + role, ToggleRule, TestArchive, both
-    // sinks, then the buses). Each delete is bounded — the EventBus
-    // provider force-sweeps AWS's lingering managed archival rule — but
-    // the serial sum needs headroom on a slow AWS day.
-    timeout: 360_000,
-  });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(
+    sharedStack.destroy().pipe(
+      // Typed wait-until-gone: the custom bus must be deleted after teardown.
+      Effect.andThen(
+        eventbridge.describeEventBus({ Name: "alchemy-test-eb-bindings" }).pipe(
+          Effect.map(() => false),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(true),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (isGone): boolean => isGone,
+            times: 10,
+          }),
+          Effect.map((gone) => expect(gone).toBe(true)),
+        ),
+      ),
+    ),
+    {
+      // Teardown deletes ~30 resources (invoke permissions, event-source
+      // rules, the Lambda fixture + role, ToggleRule, TestArchive, both
+      // sinks, then the buses). Each delete is bounded — the EventBus
+      // provider force-sweeps AWS's lingering managed archival rule — but
+      // the serial sum needs headroom on a slow AWS day.
+      timeout: 360_000,
+    },
+  );
 
   describe("PutEvents", () => {
     test.provider("publishes an event to the custom bus", (_stack) =>

@@ -5,6 +5,7 @@ import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,7 +18,7 @@ test.provider("list enumerates the deployed Network ACL Entry", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const { entry } = yield* stack.deploy(
+    const { vpc, entry } = yield* stack.deploy(
       Effect.gen(function* () {
         const vpc = yield* Vpc("ListNaclEntryVpc", {
           cidrBlock: "10.0.0.0/16",
@@ -51,5 +52,9 @@ test.provider("list enumerates the deployed Network ACL Entry", (stack) =>
     ).toBe(true);
 
     yield* stack.destroy();
+
+    // The VPC cannot delete while the ACL (and its entries) exists — VPC-gone
+    // proves full teardown.
+    yield* assertVpcGone(vpc.vpcId);
   }).pipe(logLevel),
 );

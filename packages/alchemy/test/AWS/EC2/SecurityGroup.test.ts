@@ -5,6 +5,7 @@ import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertSecurityGroupGone, assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,7 +18,7 @@ test.provider("list enumerates the deployed Security Group", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const { sg } = yield* stack.deploy(
+    const { vpc, sg } = yield* stack.deploy(
       Effect.gen(function* () {
         const vpc = yield* Vpc("ListSgVpc", {
           cidrBlock: "10.0.0.0/16",
@@ -35,5 +36,8 @@ test.provider("list enumerates the deployed Security Group", (stack) =>
     expect(all.some((x) => x.groupId === sg.groupId)).toBe(true);
 
     yield* stack.destroy();
+
+    yield* assertSecurityGroupGone(sg.groupId);
+    yield* assertVpcGone(vpc.vpcId);
   }).pipe(logLevel),
 );

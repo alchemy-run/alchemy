@@ -110,21 +110,29 @@ describe.sequential("DevOpsGuru Bindings", () => {
       yield* sharedStack.destroy();
       // Assert gone (skipped when beforeAll never got far enough to deploy):
       // the fixture Lambda answers with the typed not-found tag, and the
-      // event-source's EventBridge rule no longer targets it.
+      // event-source's EventBridge rule no longer targets it. afterAll runs
+      // outside `test.provider`'s layer, so raw distilled calls need the
+      // provider layer (credentials, region) supplied explicitly.
       if (functionArn) {
-        yield* lambda.getFunction({ FunctionName: functionArn }).pipe(
-          Effect.flatMap(() => Effect.fail(new FunctionStillExists())),
-          Effect.retry({
-            while: (error) => error._tag === "FunctionStillExists",
-            schedule: Schedule.exponential("500 millis"),
-            times: 8,
+        yield* Core.withProviders(
+          Effect.gen(function* () {
+            yield* lambda.getFunction({ FunctionName: functionArn }).pipe(
+              Effect.flatMap(() => Effect.fail(new FunctionStillExists())),
+              Effect.retry({
+                while: (error) => error._tag === "FunctionStillExists",
+                schedule: Schedule.exponential("500 millis"),
+                times: 8,
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+            const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+              TargetArn: functionArn,
+            });
+            expect(RuleNames ?? []).toHaveLength(0);
           }),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          testOptions,
+          sharedStack.name,
         );
-        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-          TargetArn: functionArn,
-        });
-        expect(RuleNames ?? []).toHaveLength(0);
       }
     }),
     { timeout: 120_000 },

@@ -60,6 +60,19 @@ test.provider(
       ).toBe(true);
 
       yield* stack.destroy();
+
+      // Out-of-band: the target group is gone after destroy.
+      const after = yield* elbv2
+        .describeTargetGroups({
+          TargetGroupArns: [deployed.targetGroup.targetGroupArn],
+        })
+        .pipe(
+          Effect.map((r) => r.TargetGroups?.length ?? 0),
+          Effect.catchTag("TargetGroupNotFoundException", () =>
+            Effect.succeed(0),
+          ),
+        );
+      expect(after).toBe(0);
     }),
   { timeout: 240_000 },
 );

@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { ServiceSpecificCredential, User } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
@@ -57,6 +58,12 @@ describe("AWS.IAM.ServiceSpecificCredential", () => {
         expect(found?.serviceCredentialSecret).toBeUndefined();
 
         yield* stack.destroy();
+
+        // The user (and with it the service-specific credential) is gone.
+        const deletedUser = yield* IAM.getUser({
+          UserName: deployed.user.userName,
+        }).pipe(Effect.option);
+        expect(deletedUser._tag).toBe("None");
       }),
   );
 });

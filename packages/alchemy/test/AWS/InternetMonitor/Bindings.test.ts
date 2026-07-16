@@ -1,11 +1,14 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
+import * as im from "@distilled.cloud/aws/internetmonitor";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
@@ -27,6 +30,39 @@ const readinessPolicy = Schedule.max([
 
 let baseUrl: string;
 let functionArn: string;
+
+// beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
+// distilled calls need the provider layer (credentials, region) supplied
+// explicitly.
+const aws = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Core.withProviders(effect, testOptions, sharedStack.name);
+
+// Names of all monitors owned by this suite's scratch stack (matched by the
+// internal `alchemy::stack` ownership tag), read fresh from the cloud.
+const listStackMonitors = aws(
+  im.listMonitors.items({}).pipe(
+    Stream.runCollect,
+    Effect.flatMap((monitors) =>
+      Effect.forEach(
+        Array.from(monitors),
+        (monitor) =>
+          im.getMonitor({ MonitorName: monitor.MonitorName }).pipe(
+            Effect.map((r) =>
+              r.Tags?.["alchemy::stack"] === sharedStack.name
+                ? [monitor.MonitorName]
+                : [],
+            ),
+            // Tolerate delete races between list and get.
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed([] as string[]),
+            ),
+          ),
+        { concurrency: 4 },
+      ),
+    ),
+    Effect.map((names) => names.flat()),
+  ),
+);
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -103,9 +139,33 @@ describe.sequential("InternetMonitor Bindings", () => {
     { timeout: 300_000 },
   );
 
-  afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), {
-    timeout: 300_000,
-  });
+  afterAll(
+    Effect.gen(function* () {
+      if (process.env.NO_DESTROY) return;
+      // Capture our monitor names before destroy so the log-group reap can
+      // be verified per-monitor afterwards.
+      const owned = yield* listStackMonitors;
+      yield* sharedStack.destroy();
+      // Zero-orphan proof: no monitor tagged with this stack remains.
+      const remaining = yield* listStackMonitors;
+      expect(remaining).toEqual([]);
+      // And the auto-created /aws/internet-monitor/{name}/* log groups were
+      // reaped by the provider delete.
+      const remainingLogGroups = yield* aws(
+        Effect.forEach(owned, (name) =>
+          logs
+            .describeLogGroups({
+              logGroupNamePrefix: `/aws/internet-monitor/${name}`,
+            })
+            .pipe(
+              Effect.map((r) => (r.logGroups ?? []).map((g) => g.logGroupName)),
+            ),
+        ),
+      );
+      expect(remainingLogGroups.flat()).toEqual([]);
+    }),
+    { timeout: 300_000 },
+  );
 
   describe("binding registration", () => {
     test.provider("all 8 capabilities initialize in the runtime", (_stack) =>

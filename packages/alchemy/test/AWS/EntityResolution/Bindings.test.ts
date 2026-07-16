@@ -1,6 +1,8 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as lambda from "@distilled.cloud/aws/lambda";
+import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -11,6 +13,7 @@ import { describe } from "vitest";
 
 import EntityResolutionTestFunctionLive, {
   EntityResolutionTestFunction,
+  FIXTURE_BUCKET_NAME,
 } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -25,11 +28,15 @@ const readinessPolicy = Schedule.max([
 ]);
 
 let baseUrl: string;
+let functionArn: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
 }> {}
+
+class FunctionStillExists extends Data.TaggedError("FunctionStillExists") {}
+class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 
 // The shared Lambda fixture occasionally answers a transient 5xx under load
 // (cold re-init, IAM propagation on the freshly attached policy that the
@@ -86,6 +93,7 @@ describe.sequential("EntityResolution Bindings", () => {
 
       expect(attrs.functionUrl).toBeTruthy();
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
+      functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
       yield* Effect.logInfo(
@@ -108,9 +116,43 @@ describe.sequential("EntityResolution Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    timeout: 240_000,
-  });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Assert gone (skipped when beforeAll never got far enough to deploy):
+      // the fixture Lambda answers with the typed not-found tag and the
+      // fixed-name fixture bucket no longer heads. afterAll runs outside
+      // `test.provider`'s layer, so raw distilled calls need the provider
+      // layer (credentials, region) supplied explicitly.
+      if (functionArn) {
+        yield* Core.withProviders(
+          Effect.gen(function* () {
+            yield* lambda.getFunction({ FunctionName: functionArn }).pipe(
+              Effect.flatMap(() => Effect.fail(new FunctionStillExists())),
+              Effect.retry({
+                while: (error) => error._tag === "FunctionStillExists",
+                schedule: Schedule.exponential("500 millis"),
+                times: 8,
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+            yield* s3.headBucket({ Bucket: FIXTURE_BUCKET_NAME }).pipe(
+              Effect.flatMap(() => Effect.fail(new BucketStillExists())),
+              Effect.retry({
+                while: (error) => error._tag === "BucketStillExists",
+                schedule: Schedule.exponential("500 millis"),
+                times: 8,
+              }),
+              Effect.catchTag("NotFound", () => Effect.void),
+            );
+          }),
+          testOptions,
+          sharedStack.name,
+        );
+      }
+    }),
+    { timeout: 240_000 },
+  );
 
   describe("binding registration", () => {
     test.provider("all nine capabilities initialize in the runtime", (_stack) =>

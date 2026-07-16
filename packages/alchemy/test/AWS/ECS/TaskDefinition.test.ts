@@ -308,6 +308,14 @@ test.provider(
       expect(
         yield* describeActive("alchemy-test-ecs-taskdef-byo"),
       ).toBeUndefined();
+
+      // And the cluster is gone too (deleted clusters report INACTIVE).
+      const clustersAfter = yield* ecs.describeClusters({
+        clusters: ["alchemy-test-ecs-taskdef-byo"],
+      });
+      expect(
+        (clustersAfter.clusters ?? []).some((c) => c.status === "ACTIVE"),
+      ).toBe(false);
     }),
   { timeout: 420_000 },
 );
