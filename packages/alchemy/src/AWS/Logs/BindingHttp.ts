@@ -8,23 +8,21 @@ import type { LogGroup } from "./LogGroup.ts";
  * Shared scaffolding for CloudWatch Logs HTTP bindings.
  *
  * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, …)` over one of the two builders below.
- * Everything except the operation, the IAM action(s), and the IAM resource
- * shape is boilerplate:
+ * service is a thin `Layer.effect(Cap, makeLogGroupHttpBinding({ … }))` over
+ * this builder. Everything except the operation, the IAM action(s), and the
+ * IAM resource shape is boilerplate:
  *
  * - the deploy-time half registers `Allow(host, tag(logGroup))` with the
  *   requested actions on the bound group's ARN (and/or its `:*` log-stream
  *   wildcard, per `iamResources`);
- * - {@link makeLogGroupHttpBinding}'s runtime callable injects the resolved
- *   `logGroupName` into the request; {@link makeLogsQueryHttpBinding} is for
- *   query-id / record-pointer scoped operations (`GetQueryResults`,
- *   `StopQuery`, `GetLogRecord`) whose requests carry no `logGroupName` —
- *   it grants the same log-group-scoped IAM but passes the request through.
+ * - the runtime callable injects the resolved `logGroupName` into the request
+ *   (unless `injectLogGroupName: false` — for query-id / record-pointer
+ *   scoped operations like `GetQueryResults`, `StopQuery`, `GetLogRecord`).
  *
  * Genuinely-different bindings stay bespoke: `LogEventSink` (a batching sink
  * over the `PutLogEvents` capability).
  */
-interface LogsHttpBindingOptions<I, A, E, R> {
+export const makeLogGroupHttpBinding = <I, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Logs.FilterLogEvents`. */
   tag: string;
   /**
@@ -48,14 +46,15 @@ interface LogsHttpBindingOptions<I, A, E, R> {
    *   permissions (`StopQuery`).
    */
   iamResources?: "group-and-streams" | "streams" | "all";
-}
-
-const makeLogsHttpBindingCore = <I, A, E, R>(
-  options: LogsHttpBindingOptions<I, A, E, R>,
-  inject: boolean,
-) =>
+  /**
+   * Inject the bound group's name under `logGroupName` (default `true`).
+   * Disable for operations scoped by a query id or record pointer.
+   */
+  injectLogGroupName?: boolean;
+}) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
+    const inject = options.injectLogGroupName ?? true;
 
     return Effect.fn(function* <G extends LogGroup>(logGroup: G) {
       const LogGroupName = yield* logGroup.logGroupName;
@@ -92,28 +91,3 @@ const makeLogsHttpBindingCore = <I, A, E, R>(
       });
     });
   });
-
-/**
- * Builder for log-group-scoped operations: the runtime callable injects the
- * bound group's name under `logGroupName`, so the request type must carry
- * that property.
- */
-export const makeLogGroupHttpBinding = <
-  I extends { logGroupName?: string },
-  A,
-  E,
-  R,
->(
-  options: LogsHttpBindingOptions<I, A, E, R>,
-) => makeLogsHttpBindingCore(options, true);
-
-/**
- * Builder for operations scoped by a query id or record pointer
- * (`GetQueryResults`, `StopQuery`, `GetLogRecord`): the request carries no
- * `logGroupName`, so nothing is injected — the request is passed through
- * verbatim. IAM is still granted against the bound log group (or `*` for
- * actions without resource-level permissions).
- */
-export const makeLogsQueryHttpBinding = <I, A, E, R>(
-  options: LogsHttpBindingOptions<I, A, E, R>,
-) => makeLogsHttpBindingCore(options, false);
