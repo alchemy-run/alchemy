@@ -103,7 +103,7 @@
       "drizzle-orm": ">=1.0.0-rc.1",
       "effect": ">=4.0.0-beta.97|| >=4.0.0",
       "fast-xml-parser": "^5.3.4",
-      "rolldown": "1.0.1",
+      "rolldown": "1.1.5",
       "solid-js": "latest",
       "sonda": "^0.11.1",
       "typescript": "^7.0.2",
