@@ -13,6 +13,7 @@
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -148,9 +149,23 @@ const rootCommand = Command.make(
       yield* printSummary(summary);
     }
 
-    // Point agents/tooling at the full run log.
-    yield* Effect.sync(() => {
-      process.stdout.write(`\nFull log: ${logFile}\n`);
+    // Point agents/tooling at the full run log, with its size so the reader
+    // knows what they're getting into before opening it.
+    yield* Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const stats = yield* fs
+        .stat(logFile)
+        .pipe(Effect.orElseSucceed(() => undefined));
+      const contents = yield* fs
+        .readFileString(logFile)
+        .pipe(Effect.orElseSucceed(() => ""));
+      const lines = contents === "" ? 0 : contents.split("\n").length;
+      const kb = stats === undefined ? 0 : Number(stats.size) / 1024;
+      yield* Effect.sync(() => {
+        process.stdout.write(
+          `\nFull log: ${logFile} (${lines} lines, ${kb.toFixed(1)} KB)\n`,
+        );
+      });
     });
 
     if (summary.failed > 0) {
