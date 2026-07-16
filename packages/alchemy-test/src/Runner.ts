@@ -104,10 +104,16 @@ const withCapture =
       Effect.provide(
         Logger.layer([
           Logger.make((options) => {
+            // `Effect.log("a", "b")` delivers the message as an array —
+            // unwrap it so buffered output reads exactly like console output
+            // instead of `[ 'a', 'b' ]`.
+            const parts = Array.isArray(options.message)
+              ? options.message
+              : [options.message];
             logs.push({
               level: options.logLevel,
               message:
-                formatArg(options.message) +
+                parts.map(formatArg).join(" ") +
                 (options.cause.reasons.length === 0
                   ? ""
                   : `\n${Cause.pretty(options.cause)}`),

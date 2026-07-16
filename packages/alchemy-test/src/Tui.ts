@@ -83,13 +83,9 @@ const statusColor = (status: Status): string => {
 const formatDuration = (ms: number): string =>
   ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 
+// Captured output is replayed verbatim (no timestamp/level prefixes).
 const formatLogs = (logs: ReadonlyArray<LogEntry>): string =>
-  logs
-    .map(
-      (log) =>
-        `[${log.time.toISOString().slice(11, 23)}] ${log.level.padEnd(5)} ${log.message}`,
-    )
-    .join("\n");
+  logs.map((log) => log.message).join("\n");
 
 // ---------------------------------------------------------------------------
 // Model: files with nested tests

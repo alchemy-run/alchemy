@@ -30,13 +30,10 @@ const write = (line: string): Effect.Effect<void> =>
     process.stdout.write(`${line}\n`);
   });
 
+// Captured output is replayed verbatim (no timestamp/level prefixes) —
+// it should read exactly as it would have on a normal terminal.
 const formatLogs = (logs: ReadonlyArray<LogEntry>): string =>
-  logs
-    .map((log) => {
-      const time = log.time.toISOString().slice(11, 23);
-      return `  ${dim(`[${time}]`)} ${dim(log.level.padEnd(5))} ${log.message.replaceAll("\n", "\n         ")}`;
-    })
-    .join("\n");
+  logs.map((log) => indent(log.message)).join("\n");
 
 const indent = (text: string, prefix = "  "): string =>
   text
