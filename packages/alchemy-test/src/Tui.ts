@@ -96,10 +96,11 @@ const statusChunk = (status: Status, text: string): TextChunk => {
     case "fail":
       return red(text);
     case "running":
+    case "todo":
+      // todo is warning-colored: unimplemented coverage must not blend in.
       return yellow(text);
     case "queued":
     case "skip":
-    case "todo":
       return dim(text);
   }
 };
@@ -633,9 +634,11 @@ const makeTui = async (): Promise<Tui> => {
       const chunks = [statusChunk(status, head)];
       if (rest !== "") {
         // Only the glyph is colored; the label uses the terminal's default
-        // foreground (skipped rows are dimmed).
-        if (status === "skip" || status === "todo") {
+        // foreground (skipped rows are dimmed, todos are warning-yellow).
+        if (status === "skip") {
           chunks.push(dim(rest));
+        } else if (status === "todo") {
+          chunks.push(yellow(rest));
         } else {
           chunks.push(...stringToStyledText(rest).chunks);
         }

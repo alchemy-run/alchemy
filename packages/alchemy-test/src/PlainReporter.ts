@@ -143,7 +143,13 @@ const onEvent = (
         case "skip":
           return write(`${yellow("↓")} ${title} ${dim("[skipped]")}`);
         case "todo":
-          return write(`${dim("○")} ${title} ${dim("[todo]")}`);
+          // Warning-styled: a todo is unimplemented coverage, not a pass —
+          // it must not blend in with the dim noise around it.
+          return write(
+            yellow(
+              `○ ${event.test.file} > ${event.test.titlePath.join(" > ")} ${bold("[todo]")}`,
+            ),
+          );
       }
     }
     case "FileEnd": {
@@ -206,7 +212,7 @@ export const printSummary = (
       summary.failed > 0 ? red(`${summary.failed} failed`) : green("0 failed"),
       green(`${summary.passed} passed`),
       ...(summary.skipped > 0 ? [yellow(`${summary.skipped} skipped`)] : []),
-      ...(summary.todo > 0 ? [dim(`${summary.todo} todo`)] : []),
+      ...(summary.todo > 0 ? [yellow(`${summary.todo} todo`)] : []),
     ];
     yield* write(
       `\n${bold("Tests:")} ${parts.join(dim(" | "))} ${dim(`(${summary.files} files, ${formatDuration(summary.durationMs)})`)}`,
