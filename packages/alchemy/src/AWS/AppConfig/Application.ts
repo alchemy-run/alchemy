@@ -1,5 +1,6 @@
 import * as appconfig from "@distilled.cloud/aws/appconfig";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -171,9 +172,20 @@ export const ApplicationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          // An application cannot be deleted while environments or
+          // configuration profiles still exist under it ("Cannot delete
+          // application ..., because there are still environments existing
+          // under it" — surfaced as BadRequestException). Children are
+          // deleted first by the engine/nuke, but their deletion is
+          // eventually consistent, so absorb the window with a bounded retry.
           yield* appconfig
             .deleteApplication({ ApplicationId: output.applicationId })
             .pipe(
+              Effect.retry({
+                while: (e): boolean => e._tag === "BadRequestException",
+                schedule: Schedule.fixed("3 seconds"),
+                times: 5,
+              }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
         }),

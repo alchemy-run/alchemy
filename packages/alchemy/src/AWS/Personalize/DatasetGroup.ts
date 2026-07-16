@@ -153,6 +153,160 @@ export const DatasetGroupProvider = () =>
         domain: group.domain,
       });
 
+      /** Bounded retry schedule for ResourceInUse while async deletes drain. */
+      const inUseRetry = {
+        while: (e: { _tag: string }) => e._tag === "ResourceInUseException",
+        schedule: Schedule.max([
+          Schedule.fixed("3 seconds"),
+          Schedule.recurs(20),
+        ]),
+      };
+
+      const listChildren = Effect.fn(function* (datasetGroupArn: string) {
+        const [trackers, filters, solutions, datasets] = yield* Effect.all(
+          [
+            personalize.listEventTrackers.pages({ datasetGroupArn }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.eventTrackers ?? []),
+              ),
+            ),
+            personalize.listFilters.pages({ datasetGroupArn }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.Filters ?? []),
+              ),
+            ),
+            personalize.listSolutions.pages({ datasetGroupArn }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.solutions ?? []),
+              ),
+            ),
+            personalize.listDatasets.pages({ datasetGroupArn }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.datasets ?? []),
+              ),
+            ),
+          ],
+          { concurrency: 4 },
+        );
+        return { trackers, filters, solutions, datasets };
+      });
+
+      /**
+       * DeleteDatasetGroup requires all children (event trackers, filters,
+       * campaigns, solutions, datasets) to be deleted first. Children created
+       * out-of-band (e.g. via CreateSolution/CreateCampaign runtime bindings)
+       * are not tracked in state, so the group drains any that remain. Each
+       * child delete is idempotent (NotFound tolerated) and asynchronous, so
+       * after issuing the deletes we poll (bounded) until the group is empty.
+       */
+      const drainChildren = Effect.fn(function* (datasetGroupArn: string) {
+        const { trackers, filters, solutions, datasets } =
+          yield* listChildren(datasetGroupArn);
+
+        yield* Effect.forEach(
+          trackers,
+          (t) =>
+            personalize
+              .deleteEventTracker({ eventTrackerArn: t.eventTrackerArn! })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                Effect.retry(inUseRetry),
+              ),
+          { concurrency: 4 },
+        );
+
+        yield* Effect.forEach(
+          filters,
+          (f) =>
+            personalize.deleteFilter({ filterArn: f.filterArn! }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.retry(inUseRetry),
+            ),
+          { concurrency: 4 },
+        );
+
+        // Campaigns block their solution's deletion, so drain them per
+        // solution before deleting the solution.
+        yield* Effect.forEach(
+          solutions,
+          Effect.fn(function* (s) {
+            const campaigns = yield* personalize.listCampaigns
+              .pages({ solutionArn: s.solutionArn })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) => page.campaigns ?? []),
+                ),
+              );
+            yield* Effect.forEach(
+              campaigns,
+              (c) =>
+                personalize
+                  .deleteCampaign({ campaignArn: c.campaignArn! })
+                  .pipe(
+                    Effect.catchTag(
+                      "ResourceNotFoundException",
+                      () => Effect.void,
+                    ),
+                    Effect.retry(inUseRetry),
+                  ),
+              { concurrency: 4 },
+            );
+            yield* personalize
+              .deleteSolution({ solutionArn: s.solutionArn! })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                // Campaign deletion is async — retry while it drains.
+                Effect.retry(inUseRetry),
+              );
+          }),
+          { concurrency: 2 },
+        );
+
+        yield* Effect.forEach(
+          datasets,
+          (d) =>
+            personalize.deleteDataset({ datasetArn: d.datasetArn! }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.retry(inUseRetry),
+            ),
+          { concurrency: 4 },
+        );
+
+        // All child deletes are asynchronous — wait (bounded) until the group
+        // reports no remaining children so DeleteDatasetGroup succeeds.
+        const remaining = yield* listChildren(datasetGroupArn).pipe(
+          Effect.repeat({
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(40),
+            ]),
+            until: (children): boolean =>
+              children.trackers.length === 0 &&
+              children.filters.length === 0 &&
+              children.solutions.length === 0 &&
+              children.datasets.length === 0,
+          }),
+        );
+        if (
+          remaining.trackers.length +
+            remaining.filters.length +
+            remaining.solutions.length +
+            remaining.datasets.length >
+          0
+        ) {
+          return yield* Effect.fail(
+            new Error(
+              `Personalize dataset group ${datasetGroupArn} still has children after drain (trackers: ${remaining.trackers.length}, filters: ${remaining.filters.length}, solutions: ${remaining.solutions.length}, datasets: ${remaining.datasets.length})`,
+            ),
+          );
+        }
+      });
+
       return {
         stables: ["datasetGroupArn", "name"],
 
@@ -229,13 +383,23 @@ export const DatasetGroupProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          // DeleteDatasetGroup requires every child — event trackers, filters,
+          // campaigns, solutions, and datasets — to be deleted first, and each
+          // child delete is itself asynchronous. Deletion ordering can't
+          // guarantee children-before-parent (bindings/tests create children
+          // out-of-band that are not tracked in state), so drain the group's
+          // remaining children before deleting the group itself. Every step is
+          // idempotent and NotFound-tolerant.
+          const group = yield* describe(output.datasetGroupArn);
+          if (group !== undefined) {
+            yield* drainChildren(output.datasetGroupArn);
+          }
           yield* personalize
             .deleteDatasetGroup({ datasetGroupArn: output.datasetGroupArn })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // Datasets/solutions still attached reject deletion; the engine
-              // deletes dependents first, but tolerate the eventual-consistency
-              // race.
+              // Tolerate the eventual-consistency window while the drained
+              // children finish their own asynchronous deletions.
               Effect.retry({
                 while: (e) => e._tag === "ResourceInUseException",
                 schedule: Schedule.max([

@@ -248,7 +248,13 @@ export const ACLProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.ACLs ?? []).filter(
-                  (acl) => acl.Name !== undefined && acl.ARN !== undefined,
+                  (acl) =>
+                    acl.Name !== undefined &&
+                    acl.ARN !== undefined &&
+                    // `open-access` is the AWS-managed default ACL that
+                    // always exists and can never be deleted — keep it out
+                    // of enumeration for account-wide teardown (nuke).
+                    acl.Name !== "open-access",
                 ),
               ),
             ),

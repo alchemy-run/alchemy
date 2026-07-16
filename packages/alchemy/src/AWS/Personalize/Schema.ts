@@ -200,13 +200,16 @@ export const SchemaProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* personalize.deleteSchema({ schemaArn: output.schemaArn }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            // A schema still referenced by a dataset rejects deletion; the
-            // engine deletes dependents first, but tolerate the race.
+            // A schema still referenced by a dataset rejects deletion. The
+            // engine deletes dependent datasets first, but dataset deletion is
+            // asynchronous (DELETE PENDING) and may be draining concurrently
+            // (e.g. via a dataset group's child cascade) — retry bounded while
+            // the referencing datasets finish deleting.
             Effect.retry({
               while: (e) => e._tag === "ResourceInUseException",
               schedule: Schedule.max([
                 Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
+                Schedule.recurs(40),
               ]),
             }),
           );

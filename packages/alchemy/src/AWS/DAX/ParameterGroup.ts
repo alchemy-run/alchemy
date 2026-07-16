@@ -249,7 +249,14 @@ export const ParameterGroupProvider = () =>
               if (!nextToken) break;
             }
             return groups
-              .filter((group) => group.ParameterGroupName !== undefined)
+              .filter(
+                (group) =>
+                  group.ParameterGroupName !== undefined &&
+                  // AWS-managed default parameter groups (`default.dax1.0`,
+                  // …) always exist and can never be deleted — keep them out
+                  // of enumeration for account-wide teardown (nuke).
+                  !group.ParameterGroupName.startsWith("default."),
+              )
               .map((group) => toAttrs(group, {}, undefined));
           }),
       };

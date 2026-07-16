@@ -249,9 +249,58 @@ export const EnvironmentProvider = () =>
             );
         }),
 
-        // Environments are keyed under their parent application; enumerating
-        // every application's environments is unnecessary for reconciliation.
-        list: () => Effect.succeed([]),
+        // Environments are keyed under their parent application, so
+        // enumeration walks every application and lists its environments.
+        // An application cannot be deleted while environments exist under
+        // it, so nuke needs these enumerated as first-class resources.
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const apps = yield* appconfig.listApplications.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.Items ?? []),
+              ),
+            );
+            const results: {
+              environmentId: string;
+              environmentName: string;
+              applicationId: string;
+              environmentArn: string;
+              state: string;
+            }[] = [];
+            for (const app of apps) {
+              if (app.Id === undefined) continue;
+              const envs = yield* appconfig.listEnvironments
+                .pages({ ApplicationId: app.Id })
+                .pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) => page.Items ?? []),
+                  ),
+                  // The application may be deleted between the two calls.
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed([] as appconfig.Environment[]),
+                  ),
+                );
+              for (const env of envs) {
+                if (env.Id === undefined || env.Name === undefined) continue;
+                results.push({
+                  environmentId: env.Id,
+                  environmentName: env.Name,
+                  applicationId: app.Id,
+                  environmentArn: environmentArn(
+                    region,
+                    accountId,
+                    app.Id,
+                    env.Id,
+                  ),
+                  state: env.State ?? "",
+                });
+              }
+            }
+            return results;
+          }),
       };
     }),
   );

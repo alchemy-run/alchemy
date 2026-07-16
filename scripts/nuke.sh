@@ -1,4 +1,6 @@
+# AWS.BackupSearch.SearchJob: AWS retains search-job records ~7 days; no delete API
 bun alchemy unsafe nuke ./stacks/nuke.ts  \
+  --exclude 'AWS.BackupSearch.SearchJob' \
   --exclude 'Cloudflare.Zone*' \
   --exclude 'Cloudflare.Account*' \
   --exclude 'Cloudflare.DNS*' \

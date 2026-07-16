@@ -197,7 +197,10 @@ export const WorkGroupProvider = () =>
             return Array.from(pages)
               .flatMap((page) => page.WorkGroups ?? [])
               .flatMap((wg) =>
-                wg.Name
+                // `primary` is the account's built-in default workgroup;
+                // DeleteWorkGroup always rejects it, so keep it out of
+                // enumeration for account-wide teardown (nuke).
+                wg.Name && wg.Name !== "primary"
                   ? [
                       {
                         workGroupName: wg.Name,

@@ -336,8 +336,62 @@ export const ConfigurationProfileProvider = () =>
             );
         }),
 
-        // Configuration profiles are keyed under their parent application.
-        list: () => Effect.succeed([]),
+        // Configuration profiles are keyed under their parent application, so
+        // enumeration walks every application and lists its profiles. An
+        // application cannot be deleted while profiles exist under it, so
+        // nuke needs these enumerated as first-class resources.
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const apps = yield* appconfig.listApplications.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.Items ?? []),
+              ),
+            );
+            const results: {
+              configurationProfileId: string;
+              configurationProfileName: string;
+              applicationId: string;
+              locationUri: string;
+              configurationProfileArn: string;
+            }[] = [];
+            for (const app of apps) {
+              if (app.Id === undefined) continue;
+              const profiles = yield* appconfig.listConfigurationProfiles
+                .pages({ ApplicationId: app.Id })
+                .pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) => page.Items ?? []),
+                  ),
+                  // The application may be deleted between the two calls.
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed(
+                      [] as appconfig.ConfigurationProfileSummary[],
+                    ),
+                  ),
+                );
+              for (const profile of profiles) {
+                if (profile.Id === undefined || profile.Name === undefined) {
+                  continue;
+                }
+                results.push({
+                  configurationProfileId: profile.Id,
+                  configurationProfileName: profile.Name,
+                  applicationId: app.Id,
+                  locationUri: profile.LocationUri ?? "hosted",
+                  configurationProfileArn: configurationProfileArn(
+                    region,
+                    accountId,
+                    app.Id,
+                    profile.Id,
+                  ),
+                });
+              }
+            }
+            return results;
+          }),
       };
     }),
   );

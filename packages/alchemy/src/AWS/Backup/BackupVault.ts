@@ -1,5 +1,6 @@
 import * as backup from "@distilled.cloud/aws/backup";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -283,6 +284,43 @@ export const BackupVaultProvider = () =>
           return { backupVaultName: name, backupVaultArn };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // A vault can only be deleted when it is empty — delete any
+          // remaining recovery points first. Each delete tolerates the point
+          // already being gone or being in a state that can't be deleted
+          // right now (EXPIRED/continuous points settle on their own).
+          const recoveryPoints = yield* backup.listRecoveryPointsByBackupVault
+            .pages({ BackupVaultName: output.backupVaultName })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.RecoveryPoints ?? []),
+              ),
+              Effect.catchTag(
+                ["ResourceNotFoundException", "AccessDeniedException"],
+                () => Effect.succeed([]),
+              ),
+            );
+          yield* Effect.forEach(
+            recoveryPoints,
+            (rp) =>
+              rp.RecoveryPointArn
+                ? backup
+                    .deleteRecoveryPoint({
+                      BackupVaultName: output.backupVaultName,
+                      RecoveryPointArn: rp.RecoveryPointArn,
+                    })
+                    .pipe(
+                      Effect.catchTag(
+                        [
+                          "ResourceNotFoundException",
+                          "InvalidResourceStateException",
+                        ],
+                        () => Effect.void,
+                      ),
+                    )
+                : Effect.void,
+            { discard: true },
+          );
           // A missing vault deletes as AccessDeniedException, not
           // ResourceNotFoundException — both mean "already gone" here.
           yield* backup
@@ -292,6 +330,15 @@ export const BackupVaultProvider = () =>
                 ["ResourceNotFoundException", "AccessDeniedException"],
                 () => Effect.void,
               ),
+              // Recovery-point deletion is asynchronous; the vault delete
+              // rejects with InvalidRequestException until the vault empties.
+              Effect.retry({
+                while: (e) => e._tag === "InvalidRequestException",
+                schedule: Schedule.max([
+                  Schedule.fixed("3 seconds"),
+                  Schedule.recurs(10),
+                ]),
+              }),
             );
         }),
       });

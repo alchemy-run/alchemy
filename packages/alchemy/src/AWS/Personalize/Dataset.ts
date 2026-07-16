@@ -262,9 +262,44 @@ export const DatasetProvider = () =>
         }),
 
         // Datasets are keyed by their parent dataset group (ListDatasets
-        // requires a datasetGroupArn), so enumeration is scoped to the parent —
-        // return empty for the account-wide listing the engine performs.
-        list: () => Effect.succeed([]),
+        // requires a datasetGroupArn), so account-wide enumeration walks the
+        // dataset groups first and lists each group's datasets. Without this,
+        // orphaned datasets are invisible to nuke and permanently block both
+        // their schema and their dataset group from deleting.
+        list: () =>
+          personalize.listDatasetGroups.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.datasetGroups ?? []),
+            ),
+            Effect.flatMap(
+              Effect.forEach(
+                (group) =>
+                  personalize.listDatasets
+                    .pages({ datasetGroupArn: group.datasetGroupArn })
+                    .pipe(
+                      Stream.runCollect,
+                      Effect.map((chunk) =>
+                        Array.from(chunk).flatMap(
+                          (page) => page.datasets ?? [],
+                        ),
+                      ),
+                    ),
+                { concurrency: 4 },
+              ),
+            ),
+            Effect.map((groups) => groups.flat()),
+            Effect.flatMap(
+              Effect.forEach(
+                (summary) =>
+                  describe(summary.datasetArn!).pipe(
+                    Effect.map((d) => (d ? toAttrs(d) : undefined)),
+                  ),
+                { concurrency: 4 },
+              ),
+            ),
+            Effect.map((items) => items.filter((item) => item !== undefined)),
+          ),
       };
     }),
   );

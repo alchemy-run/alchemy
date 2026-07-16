@@ -252,7 +252,13 @@ export const DeploymentStrategyProvider = () =>
                 ),
               );
             return strategies.flatMap((s) =>
-              s.Id !== undefined && s.Name !== undefined
+              s.Id !== undefined &&
+              s.Name !== undefined &&
+              // AWS-predefined strategies (AppConfig.AllAtOnce,
+              // AppConfig.Linear50PercentEvery30Seconds, ...) are managed by
+              // AWS and cannot be deleted — deleteDeploymentStrategy rejects
+              // them with "Cannot delete predefined Deployment Strategy".
+              !s.Id.startsWith("AppConfig.")
                 ? [
                     {
                       deploymentStrategyId: s.Id,

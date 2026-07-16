@@ -406,6 +406,14 @@ export const RuleProvider = () =>
                       if (!rule.Name) {
                         continue;
                       }
+                      // Rules created and owned by another AWS service (e.g.
+                      // B2BI's DO-NOT-DELETE-* or DevOpsGuru's managed rules)
+                      // reject DeleteRule without Force and are recreated by
+                      // the owning service anyway — skip them in enumeration
+                      // for account-wide teardown (nuke).
+                      if (rule.ManagedBy) {
+                        continue;
+                      }
                       const resolvedBus = rule.EventBusName ?? busName;
                       attrs.push({
                         ruleName: rule.Name,

@@ -286,7 +286,13 @@ export const UserProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.Users ?? []).filter(
-                  (user) => user.Name !== undefined && user.ARN !== undefined,
+                  (user) =>
+                    user.Name !== undefined &&
+                    user.ARN !== undefined &&
+                    // `default` is the AWS-managed default user that always
+                    // exists and can never be deleted — keep it out of
+                    // enumeration for account-wide teardown (nuke).
+                    user.Name !== "default",
                 ),
               ),
             ),

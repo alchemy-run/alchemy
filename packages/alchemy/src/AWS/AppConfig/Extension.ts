@@ -355,7 +355,12 @@ export const ExtensionProvider = () =>
             return Array.from(latest.values()).flatMap((summary) =>
               summary.Id !== undefined &&
               summary.Name !== undefined &&
-              summary.Arn !== undefined
+              summary.Arn !== undefined &&
+              // AWS-authored extensions (AWS.AppConfig.FeatureFlags,
+              // AWS.AppConfig.DeploymentNotificationsTo*, ...) are managed by
+              // AWS and cannot be deleted; their ARNs have an empty account
+              // segment (arn:aws:appconfig:{region}::extension/...).
+              summary.Arn.split(":")[4] !== ""
                 ? [
                     {
                       extensionId: summary.Id,

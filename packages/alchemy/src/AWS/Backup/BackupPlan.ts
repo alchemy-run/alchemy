@@ -1,6 +1,7 @@
 import * as backup from "@distilled.cloud/aws/backup";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -332,10 +333,53 @@ export const BackupPlanProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // A plan cannot be deleted while it still has resource selections
+          // attached — delete those first (idempotent: a vanished selection
+          // is already gone).
+          const selections = yield* backup.listBackupSelections
+            .pages({ BackupPlanId: output.backupPlanId })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap(
+                  (page) => page.BackupSelectionsList ?? [],
+                ),
+              ),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed([]),
+              ),
+            );
+          yield* Effect.forEach(
+            selections,
+            (s) =>
+              s.SelectionId
+                ? backup
+                    .deleteBackupSelection({
+                      BackupPlanId: output.backupPlanId,
+                      SelectionId: s.SelectionId,
+                    })
+                    .pipe(
+                      Effect.catchTag(
+                        "ResourceNotFoundException",
+                        () => Effect.void,
+                      ),
+                    )
+                : Effect.void,
+            { discard: true },
+          );
           yield* backup
             .deleteBackupPlan({ BackupPlanId: output.backupPlanId })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              // Selection deletion is eventually consistent; the plan delete
+              // rejects with InvalidRequestException until it settles.
+              Effect.retry({
+                while: (e) => e._tag === "InvalidRequestException",
+                schedule: Schedule.max([
+                  Schedule.fixed("3 seconds"),
+                  Schedule.recurs(10),
+                ]),
+              }),
             );
         }),
       });

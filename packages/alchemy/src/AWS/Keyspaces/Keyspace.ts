@@ -73,6 +73,18 @@ const toTagRecord = (
 ): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.key, t.value]));
 
+/**
+ * Reserved Cassandra system keyspaces that exist in every Amazon Keyspaces
+ * account and can never be deleted. Excluded from `list()` so account-wide
+ * teardown (`alchemy unsafe nuke`) doesn't loop on undeletable resources.
+ */
+const SYSTEM_KEYSPACES = new Set([
+  "system",
+  "system_schema",
+  "system_schema_mcs",
+  "system_multiregion_info",
+]);
+
 export const KeyspaceProvider = () =>
   Provider.effect(
     Keyspace,
@@ -225,11 +237,13 @@ export const KeyspaceProvider = () =>
           keyspaces.listKeyspaces.items({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).map((k) => ({
-                keyspaceName: k.keyspaceName,
-                keyspaceArn: k.resourceArn,
-                replicationStrategy: k.replicationStrategy,
-              })),
+              Array.from(chunk)
+                .filter((k) => !SYSTEM_KEYSPACES.has(k.keyspaceName))
+                .map((k) => ({
+                  keyspaceName: k.keyspaceName,
+                  keyspaceArn: k.resourceArn,
+                  replicationStrategy: k.replicationStrategy,
+                })),
             ),
           ),
       };

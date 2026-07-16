@@ -229,7 +229,14 @@ export const QueueProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) => page.Queues ?? []),
             ),
-            Effect.map((queues) => queues.map(toAttrs)),
+            Effect.map((queues) =>
+              queues
+                // The built-in `Default` queue is an AWS SYSTEM queue that
+                // always exists and can never be deleted — keep it out of
+                // enumeration for account-wide teardown (nuke).
+                .filter((q) => q.Type !== "SYSTEM")
+                .map(toAttrs),
+            ),
           ),
       };
     }),
