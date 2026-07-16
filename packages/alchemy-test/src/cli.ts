@@ -17,6 +17,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Runtime from "effect/Runtime";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
@@ -205,5 +206,21 @@ const cli = Command.run(rootCommand, {
 cli.pipe(
   Effect.provide(Layer.mergeAll(BunServices.layer)),
   Effect.scoped,
-  (effect) => BunRuntime.runMain(effect as Effect.Effect<void>),
+  (effect) =>
+    BunRuntime.runMain(effect as Effect.Effect<void>, {
+      // ALWAYS exit once the main effect completes. runMain's default only
+      // force-exits on failure/signal — but tests can leak live handles
+      // (vite watchers, workerd sidecar sockets, keep-alive agents) that
+      // keep bun's event loop alive forever after a green run. Everything
+      // is already flushed by now (summary + log written in the main
+      // effect); the macrotask hop lets any buffered stdout drain.
+      teardown: (exit, onExit) => {
+        Runtime.defaultTeardown(exit, (code) => {
+          const finalCode =
+            code !== 0 ? code : Number(process.exitCode ?? 0) || 0;
+          setTimeout(() => process.exit(finalCode), 0);
+          onExit(finalCode);
+        });
+      },
+    }),
 );
