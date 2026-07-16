@@ -108,7 +108,7 @@ test(
   "RpcServer.toHttpEffect: unary RPC response",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    console.log("url:", url);
+    yield* Effect.log("url:", url);
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);

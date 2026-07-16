@@ -37,7 +37,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
     Effect.gen(function* () {
       const { asyncUrl } = yield* stack;
       expect(asyncUrl).toBeTypeOf("string");
-      console.log(asyncUrl);
+      yield* Effect.log(asyncUrl);
 
       const body = yield* expectUrlContains(asyncUrl, '"STR":"hello"', {
         timeout: "60 seconds",
