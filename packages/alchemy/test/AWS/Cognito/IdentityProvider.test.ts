@@ -23,6 +23,8 @@ test.provider(
   "create, update mapping, delete OIDC identity provider",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* UserPool("IdPTestPool", {});

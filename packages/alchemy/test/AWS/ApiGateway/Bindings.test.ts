@@ -88,6 +88,7 @@ test.provider.skipIf(!!process.env.FAST)(
   "ApiGateway bindings issue, meter, and manage API keys from a Lambda",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
       yield* reapApiKeys;
 
       const { functionUrl } = yield* stack.deploy(
@@ -178,6 +179,18 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(afterDelete.ids).not.toContain(created.id);
 
       yield* stack.destroy();
+
+      // Zero-orphan proof: no runtime-created API key with the constant test
+      // name survives the destroy + through-the-bindings cleanup.
+      const strays = yield* ag.getApiKeys.pages({ nameQuery: keyName }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.items ?? []).filter((key) => key.name === keyName),
+          ),
+        ),
+      );
+      expect(strays).toHaveLength(0);
     }).pipe(Effect.ensuring(reapApiKeys)),
   { timeout: 600_000 },
 );

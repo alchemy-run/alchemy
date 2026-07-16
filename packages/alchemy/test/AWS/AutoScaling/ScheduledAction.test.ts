@@ -123,6 +123,20 @@ test.provider(
         }),
       );
       expect(gone).toBeUndefined();
+
+      // The ASG itself is deleted by the stack teardown too — prove the suite
+      // left nothing behind.
+      const groupsLeft = yield* autoscaling
+        .describeAutoScalingGroups({ AutoScalingGroupNames: [asgName] } as any)
+        .pipe(
+          Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+          Effect.repeat({
+            until: (count) => count === 0,
+            schedule: Schedule.spaced("3 seconds"),
+            times: 10,
+          }),
+        );
+      expect(groupsLeft).toBe(0);
     }).pipe(Effect.ensuring(cleanupAsg)),
   { timeout: 240_000 },
 );

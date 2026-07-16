@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -103,7 +104,32 @@ describe("AutoScaling runtime bindings", () => {
     { timeout: 300_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Assert the fixture ASG is fully gone — the suite must leave nothing.
+      // The hook context has no AWS providers of its own, so provide them
+      // explicitly for the out-of-band distilled call.
+      const remaining = yield* Core.withProviders(
+        autoscaling
+          .describeAutoScalingGroups({
+            AutoScalingGroupNames: [bindingsAsgName],
+          } as any)
+          .pipe(
+            Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+            Effect.repeat({
+              until: (count) => count === 0,
+              schedule: Schedule.spaced("3 seconds"),
+              times: 10,
+            }),
+          ),
+        testOptions,
+        sharedStack.name,
+      );
+      expect(remaining).toBe(0);
+    }),
+    { timeout: 180_000 },
+  );
 
   test.provider(
     "DescribeAutoScalingGroup returns the bound group's live state",

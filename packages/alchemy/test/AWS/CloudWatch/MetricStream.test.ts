@@ -3,6 +3,7 @@ import { MetricStream } from "@/AWS/CloudWatch";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { AWSEnvironment } from "@/AWS/Environment";
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as firehose from "@distilled.cloud/aws/firehose";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -260,6 +261,18 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
         ).toBe(true);
 
         yield* stack.destroy();
+
+        // Out-of-band assert-gone: getMetricStream returns the typed
+        // ResourceNotFoundException once the stream is deleted.
+        const gone = yield* cloudwatch
+          .getMetricStream({ Name: deployed.metricStreamName })
+          .pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(true),
+            ),
+          );
+        expect(gone).toBe(true);
       }).pipe(Effect.ensuring(cleanup.pipe(Effect.orDie)));
     }),
   { timeout: 240_000 },

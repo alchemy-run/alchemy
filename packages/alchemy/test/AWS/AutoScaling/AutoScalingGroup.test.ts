@@ -7,8 +7,26 @@ import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// Out-of-band proof that an Auto Scaling Group is fully deleted after the
+// trailing stack.destroy(): describeAutoScalingGroups with a name filter
+// returns an empty list once deletion completes (bounded poll — the provider's
+// delete already waits, this is a cheap final confirmation).
+const assertGroupGone = (name: string) =>
+  autoscaling
+    .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
+    .pipe(
+      Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+      Effect.repeat({
+        until: (count) => count === 0,
+        schedule: Schedule.spaced("3 seconds"),
+        times: 10,
+      }),
+      Effect.map((count) => expect(count).toBe(0)),
+    );
 
 const launchTemplateName = "alchemy-test-asg-lt-oob";
 
@@ -67,6 +85,7 @@ test.provider(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertGroupGone("alchemy-test-asg-list");
     }).pipe(Effect.ensuring(cleanupLaunchTemplate)),
   { timeout: 240_000 },
 );
@@ -163,6 +182,7 @@ test.provider(
       expect(live?.HealthCheckGracePeriod).toEqual(120);
 
       yield* stack.destroy();
+      yield* assertGroupGone(wholeAsgName);
     }).pipe(Effect.ensuring(cleanupWholeAsg)),
   { timeout: 240_000 },
 );

@@ -13,6 +13,25 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 class FunctionNotReady extends Data.TaggedError("FunctionNotReady") {}
 
+class TableStillExists extends Data.TaggedError("TableStillExists") {}
+
+// Out-of-band proof that the trailing destroy deleted the fixture table.
+const assertTableIsDeleted = Effect.fn(function* (tableName: string) {
+  yield* DynamoDB.describeTable({
+    TableName: tableName,
+  }).pipe(
+    Effect.flatMap(() => Effect.fail(new TableStillExists())),
+    Effect.retry({
+      while: (e) => e._tag === "TableStillExists",
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(30),
+      ]),
+    }),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+  );
+});
+
 class ItemCountMismatch extends Data.TaggedError("ItemCountMismatch")<{
   readonly expected: number;
   readonly actual: number;
@@ -145,6 +164,7 @@ test.provider(
       expect([...remaining].sort()).toEqual(items.slice(30));
 
       yield* stack.destroy();
+      yield* assertTableIsDeleted(tableName);
     }),
   { timeout: 240_000 },
 );

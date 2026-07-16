@@ -104,9 +104,13 @@ describe("AMP Bindings", () => {
       // Assert gone: no workspace with the fixture's alias survives the
       // destroy (AMP deletes asynchronously — DELETING counts as gone; a
       // fresh run's leading destroy would reconcile any remnant anyway).
-      const { workspaces } = yield* amp.listWorkspaces({
-        alias: "alchemy-test-amp-bindings",
-      });
+      // The out-of-band distilled call needs the AWS providers layer
+      // (credentials), which afterAll does not provide by default.
+      const { workspaces } = yield* Core.withProviders(
+        amp.listWorkspaces({ alias: "alchemy-test-amp-bindings" }),
+        testOptions,
+        "AMPBindings",
+      );
       const alive = workspaces.filter(
         (w) =>
           w.status.statusCode !== "DELETING" &&

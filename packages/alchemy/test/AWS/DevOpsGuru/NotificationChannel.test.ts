@@ -4,8 +4,11 @@ import { Topic } from "@/AWS/SNS/Topic.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
+import * as SNS from "@distilled.cloud/aws/sns";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -33,6 +36,22 @@ const listChannels = devopsguru.listNotificationChannels.items({}).pipe(
   Stream.runCollect,
   Effect.map((chunk) => Array.from(chunk)),
 );
+
+class TopicStillExists extends Data.TaggedError("TopicStillExists") {}
+
+// Assert-gone for the SNS topic the test deploys alongside the channel:
+// getTopicAttributes converges to the typed NotFoundException after destroy.
+const assertTopicDeleted = Effect.fn(function* (topicArn: string) {
+  yield* SNS.getTopicAttributes({ TopicArn: topicArn }).pipe(
+    Effect.flatMap(() => Effect.fail(new TopicStillExists())),
+    Effect.retry({
+      while: (error) => error._tag === "TopicStillExists",
+      schedule: Schedule.exponential(100),
+      times: 8,
+    }),
+    Effect.catchTag("NotFoundException", () => Effect.void),
+  );
+});
 
 test.provider(
   "lifecycle: add channel, converge filters, remove",
@@ -110,7 +129,7 @@ test.provider(
       );
       expect(redeployed.channel.id).toBe(updated.channel.id);
 
-      // Destroy — the channel is removed.
+      // Destroy — the channel is removed and the SNS topic is gone.
       yield* stack.destroy();
       const afterDestroy = yield* listChannels;
       expect(
@@ -118,6 +137,7 @@ test.provider(
           (c) => c.Config?.Sns?.TopicArn === created.topic.topicArn,
         ),
       ).toBe(false);
+      yield* assertTopicDeleted(created.topic.topicArn);
     }),
   { timeout: 180_000 },
 );

@@ -60,7 +60,32 @@ describe("AutoScaling LifecycleHook event source + CompleteLifecycleAction", () 
     { timeout: 300_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Assert the fixture ASG is fully gone — the suite must leave nothing.
+      // The hook context has no AWS providers of its own, so provide them
+      // explicitly for the out-of-band distilled call.
+      const remaining = yield* Core.withProviders(
+        autoscaling
+          .describeAutoScalingGroups({
+            AutoScalingGroupNames: [lifecycleFleetAsgName],
+          } as any)
+          .pipe(
+            Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+            Effect.repeat({
+              until: (count) => count === 0,
+              schedule: Schedule.spaced("3 seconds"),
+              times: 10,
+            }),
+          ),
+        testOptions,
+        sharedStack.name,
+      );
+      expect(remaining).toBe(0);
+    }),
+    { timeout: 180_000 },
+  );
 
   test.provider(
     "consumeLifecycleActions creates the launch lifecycle hook on the ASG",

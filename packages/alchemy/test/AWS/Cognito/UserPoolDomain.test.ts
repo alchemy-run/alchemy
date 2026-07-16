@@ -30,6 +30,8 @@ test.provider(
   "cognito-prefix domain lifecycle",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* UserPool("DomainTestPool", {});

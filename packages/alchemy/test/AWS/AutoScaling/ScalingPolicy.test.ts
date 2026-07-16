@@ -16,6 +16,34 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+// Out-of-band proof a scaling policy is deleted: describePolicies by name
+// returns an empty list once the policy (or its group) is gone.
+const assertPolicyGone = (policyName: string) =>
+  autoscaling.describePolicies({ PolicyNames: [policyName] }).pipe(
+    Effect.map((r) => (r.ScalingPolicies ?? []).length),
+    Effect.repeat({
+      until: (count) => count === 0,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 8,
+    }),
+    Effect.map((count) => expect(count).toBe(0)),
+  );
+
+// Out-of-band proof an Auto Scaling Group is deleted after the trailing
+// stack.destroy(): the name-filtered describe returns an empty list.
+const assertGroupGone = (name: string) =>
+  autoscaling
+    .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
+    .pipe(
+      Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+      Effect.repeat({
+        until: (count) => count === 0,
+        schedule: Schedule.spaced("3 seconds"),
+        times: 10,
+      }),
+      Effect.map((count) => expect(count).toBe(0)),
+    );
+
 // `list()` enumerates every scaling policy in the account/region via the
 // paginated `autoscaling.describePolicies` op (no AutoScalingGroupName filter,
 // so it spans every group). Deploy a real ASG (sized to zero so no EC2
@@ -67,6 +95,8 @@ test.provider(
       expect(all.some((p) => p.policyName === policy.policyName)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertPolicyGone(policy.policyName);
+      yield* assertGroupGone("alchemy-test-policy-asg-list");
     }),
   { timeout: 240_000 },
 );
@@ -267,6 +297,8 @@ test.provider(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertPolicyGone(created.policyName);
+      yield* assertGroupGone(recoveryAsgName);
       yield* cleanupRecoveryLt;
     }).pipe(Effect.ensuring(cleanupRecoveryLt)),
   { timeout: 240_000 },

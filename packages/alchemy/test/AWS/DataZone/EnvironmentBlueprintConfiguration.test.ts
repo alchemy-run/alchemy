@@ -158,8 +158,15 @@ test.provider(
         "s3://alchemy-datazone-test",
       );
 
-      // 3. Destroy — the configuration is deleted (before its domain).
+      // 3. Destroy — the configuration is deleted (before its domain). The
+      //    domain delete waits until the domain is gone, so the config
+      //    lookup must observe "absent" immediately after destroy.
       yield* stack.destroy();
+      const gone = yield* findConfiguration(
+        result.domainId,
+        result.environmentBlueprintId,
+      );
+      expect(gone).toBeUndefined();
     }),
   { timeout: 480_000 },
 );

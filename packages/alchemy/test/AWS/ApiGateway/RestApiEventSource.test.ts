@@ -84,6 +84,7 @@ test.provider.skipIf(!!process.env.FAST)(
   "onRestApiRoute serves REST routes from the hosting Lambda",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
       yield* reapRestApis("AgEsApi");
       const { region } = yield* AWSEnvironment.current;
 
@@ -153,6 +154,10 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(missing.status).toBeGreaterThanOrEqual(400);
 
       yield* stack.destroy();
+
+      // Zero-orphan proof: the deterministically named REST API is gone.
+      const leftover = yield* findRestApis("AgEsApi");
+      expect(leftover).toHaveLength(0);
     }).pipe(Effect.ensuring(reapRestApis("AgEsApi"))),
   { timeout: 600_000 },
 );

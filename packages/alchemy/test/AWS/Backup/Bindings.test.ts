@@ -102,14 +102,21 @@ describe.sequential("Backup Bindings", () => {
       yield* sharedStack.destroy();
       // Out-of-band proof the fixture vault is gone (AWS Backup reports a
       // missing vault as AccessDeniedException, not ResourceNotFoundException).
-      const vault = yield* backup
-        .describeBackupVault({ BackupVaultName: FIXTURE_VAULT_NAME })
-        .pipe(
-          Effect.catchTag(
-            ["ResourceNotFoundException", "AccessDeniedException"],
-            () => Effect.succeed(undefined),
+      // The raw afterAll context has no providers layer (only `test.provider`
+      // bodies do), so the distilled call must be wrapped in `withProviders`
+      // to satisfy AWS credentials.
+      const vault = yield* Core.withProviders(
+        backup
+          .describeBackupVault({ BackupVaultName: FIXTURE_VAULT_NAME })
+          .pipe(
+            Effect.catchTag(
+              ["ResourceNotFoundException", "AccessDeniedException"],
+              () => Effect.succeed(undefined),
+            ),
           ),
-        );
+        testOptions,
+        "BackupBindings",
+      );
       expect(vault).toBeUndefined();
     }),
     { timeout: 120_000 },

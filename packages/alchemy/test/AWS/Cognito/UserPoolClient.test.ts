@@ -11,6 +11,8 @@ test.provider(
   "create, update auth flows and validity, replace on generateSecret",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* UserPool("ClientTestPool", {});

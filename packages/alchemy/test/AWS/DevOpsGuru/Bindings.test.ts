@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
+import * as lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -30,6 +31,8 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
 }> {}
+
+class FunctionStillExists extends Data.TaggedError("FunctionStillExists") {}
 
 // The shared Lambda fixture occasionally answers a transient 5xx under load
 // (cold re-init, IAM propagation on the freshly attached policy that the
@@ -102,7 +105,30 @@ describe.sequential("DevOpsGuru Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Assert gone (skipped when beforeAll never got far enough to deploy):
+      // the fixture Lambda answers with the typed not-found tag, and the
+      // event-source's EventBridge rule no longer targets it.
+      if (functionArn) {
+        yield* lambda.getFunction({ FunctionName: functionArn }).pipe(
+          Effect.flatMap(() => Effect.fail(new FunctionStillExists())),
+          Effect.retry({
+            while: (error) => error._tag === "FunctionStillExists",
+            schedule: Schedule.exponential("500 millis"),
+            times: 8,
+          }),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect(RuleNames ?? []).toHaveLength(0);
+      }
+    }),
+    { timeout: 120_000 },
+  );
 
   describe("binding registration", () => {
     test.provider("all 22 capabilities initialize in the runtime", (_stack) =>

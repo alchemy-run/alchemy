@@ -4,6 +4,7 @@ import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -11,6 +12,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "create and delete REST API",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const api = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* AWS.ApiGateway.RestApi("AgRestApiLifecycle", {
@@ -26,6 +29,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(remote.id).toEqual(api.restApiId);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -33,6 +37,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "binary media types update applies via patch",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const api = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* AWS.ApiGateway.RestApi("AgRestApiBinary", {
@@ -59,6 +65,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(remote.binaryMediaTypes?.includes("image/png")).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -66,6 +73,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "binary media types removal applies via patch",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const api = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* AWS.ApiGateway.RestApi("AgRestApiBinaryRemoval", {
@@ -91,6 +100,7 @@ test.provider.skipIf(!!process.env.FAST)(
       ).toBe(false);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -117,5 +127,6 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(all.some((a) => a.restApiId === api.restApiId)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );

@@ -3,6 +3,7 @@ import { LaunchTemplate } from "@/AWS/AutoScaling";
 import { amazonLinux2023 } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
@@ -41,5 +42,19 @@ test.provider("list enumerates the deployed launch template", (stack) =>
     ).toBe(true);
 
     yield* stack.destroy();
+
+    // Out-of-band proof the template is gone: describing the deleted name
+    // raises the typed `InvalidLaunchTemplateName.NotFoundException`.
+    const remaining = yield* ec2
+      .describeLaunchTemplates({
+        LaunchTemplateNames: ["alchemy-test-lt-list"],
+      } as any)
+      .pipe(
+        Effect.map((r) => (r.LaunchTemplates ?? []).length),
+        Effect.catchTag("InvalidLaunchTemplateName.NotFoundException", () =>
+          Effect.succeed(0),
+        ),
+      );
+    expect(remaining).toBe(0);
   }),
 );

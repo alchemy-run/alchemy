@@ -37,6 +37,13 @@ test.provider(
       expect(all.some((d) => d.detectorId === detector.detectorId)).toBe(true);
 
       yield* stack.destroy();
+
+      // Out-of-band assert-gone: the exhaustively-paginated live listing no
+      // longer contains the detector after the final destroy.
+      const after = yield* provider.list();
+      expect(after.some((d) => d.detectorId === detector.detectorId)).toBe(
+        false,
+      );
     }),
   { timeout: 240_000 },
 );

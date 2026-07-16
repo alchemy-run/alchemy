@@ -36,6 +36,8 @@ test.provider(
   "identity pool lifecycle with user pool federation and tags",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
           const identities = yield* IdentityPool("Identities", {
@@ -103,6 +105,8 @@ test.provider(
   "role attachment lifecycle",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
           const identities = yield* IdentityPool("RolesPool", {

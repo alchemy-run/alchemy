@@ -4,11 +4,14 @@ import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 test.provider.skipIf(!!process.env.FAST)("create and delete stage", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const { stage } = yield* stack.deploy(
       Effect.gen(function* () {
         const api = yield* AWS.ApiGateway.RestApi("AgStageApi", {
@@ -35,6 +38,7 @@ test.provider.skipIf(!!process.env.FAST)("create and delete stage", (stack) =>
     expect(stage.stageName).toEqual("dev");
 
     yield* stack.destroy();
+    yield* assertRestApiDeleted(stage.restApiId);
   }),
 );
 
@@ -42,6 +46,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "stage variables update in place",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { api } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgStageVarApi", {
@@ -97,6 +103,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(remote.variables?.K).toEqual("2");
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -104,6 +111,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "stage method settings update in place",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { api } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgStageMethodApi", {
@@ -170,6 +179,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(remote.methodSettings?.["*/*"]?.throttlingRateLimit).toEqual(200);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -222,5 +232,6 @@ test.provider.skipIf(!!process.env.FAST)(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(stage.restApiId);
     }),
 );

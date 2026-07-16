@@ -11,6 +11,8 @@ test.provider(
   "create, update, rename (replace), delete group",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* UserPool("GroupTestPool", {});

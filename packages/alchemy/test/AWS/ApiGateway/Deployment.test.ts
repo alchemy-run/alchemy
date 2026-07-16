@@ -6,6 +6,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -49,9 +50,10 @@ test.provider.skipIf(!!process.env.FAST)(
   "create and delete deployment",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
       yield* reapRestApis("AgDepApi");
 
-      const { deployment } = yield* stack.deploy(
+      const { api, deployment } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgDepApi", {
             endpointConfiguration: { types: ["REGIONAL"] },
@@ -73,6 +75,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(deployment.deploymentId).toBeDefined();
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }).pipe(Effect.ensuring(reapRestApis("AgDepApi"))),
 );
 
@@ -80,9 +83,10 @@ test.provider.skipIf(!!process.env.FAST)(
   "deployment trigger change creates new deployment",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
       yield* reapRestApis("AgTrigApi");
 
-      const { d1 } = yield* stack.deploy(
+      const { api, d1 } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgTrigApi", {
             endpointConfiguration: { types: ["REGIONAL"] },
@@ -125,6 +129,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(d2.deploymentId).not.toEqual(d1.deploymentId);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }).pipe(Effect.ensuring(reapRestApis("AgTrigApi"))),
 );
 
@@ -135,7 +140,7 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
       yield* reapRestApis("AgListApi");
 
-      const { deployment } = yield* stack.deploy(
+      const { api, deployment } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgListApi", {
             endpointConfiguration: { types: ["REGIONAL"] },
@@ -164,5 +169,6 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }).pipe(Effect.ensuring(reapRestApis("AgListApi"))),
 );

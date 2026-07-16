@@ -1,6 +1,6 @@
 import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -297,12 +297,12 @@ export const EventActionProvider = () =>
             // rather than fabricate a dataSetId.
             Stream.filterMap((entry) =>
               entry.Event.RevisionPublished !== undefined
-                ? Option.some({
+                ? Result.succeed({
                     eventActionId: entry.Id,
                     eventActionArn: entry.Arn,
                     dataSetId: entry.Event.RevisionPublished.DataSetId,
                   })
-                : Option.none(),
+                : Result.failVoid,
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),

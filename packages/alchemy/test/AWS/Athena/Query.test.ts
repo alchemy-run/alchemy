@@ -98,26 +98,37 @@ describe("Athena Query", () => {
       // Assert-gone out-of-band via the fixture's fixed-name resources —
       // engine-named resources (bucket/workgroup/Lambda) hang off the same
       // stack, so these two vanishing proves the destroy actually ran.
-      const db = yield* glue.getDatabase({ Name: "alchemy_athena_e2e" }).pipe(
-        Effect.map((res) => res.Database),
-        Effect.catchTag("EntityNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
-      expect(db).toBeUndefined();
+      // `afterAll` effects don't get the providers layer automatically the
+      // way `test.provider` bodies do, so wrap the distilled calls in
+      // `Core.withProviders` to supply AWS credentials.
+      yield* Core.withProviders(
+        Effect.gen(function* () {
+          const db = yield* glue
+            .getDatabase({ Name: "alchemy_athena_e2e" })
+            .pipe(
+              Effect.map((res) => res.Database),
+              Effect.catchTag("EntityNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          expect(db).toBeUndefined();
 
-      const catalog = yield* athena
-        .getDataCatalog({
-          Name: "alchemy_athena_e2e_catalog",
-          WorkGroup: "primary",
-        })
-        .pipe(
-          Effect.map((res) => res.DataCatalog),
-          Effect.catchTag("DataCatalogNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
-      expect(catalog).toBeUndefined();
+          const catalog = yield* athena
+            .getDataCatalog({
+              Name: "alchemy_athena_e2e_catalog",
+              WorkGroup: "primary",
+            })
+            .pipe(
+              Effect.map((res) => res.DataCatalog),
+              Effect.catchTag("DataCatalogNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          expect(catalog).toBeUndefined();
+        }),
+        testOptions,
+        sharedStack.name,
+      );
     }),
     { timeout: 300_000 },
   );

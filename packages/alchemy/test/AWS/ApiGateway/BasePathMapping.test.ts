@@ -4,6 +4,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -93,6 +94,7 @@ test.provider.skipIf(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(deployed.restApiId);
     }),
   { timeout: 600_000 },
 );

@@ -192,9 +192,12 @@ test.provider(
         }),
       ).pipe(
         Effect.ensuring(
-          dataexchange
-            .deleteDataSet({ DataSetId: dataSet.Id! })
-            .pipe(Effect.ignore),
+          // Cleanup tolerates ONLY the typed not-found; any other delete
+          // failure must surface rather than silently orphan the data set.
+          dataexchange.deleteDataSet({ DataSetId: dataSet.Id! }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.orDie,
+          ),
         ),
       );
       expect(error._tag).toBe("ValidationException");

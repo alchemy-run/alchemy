@@ -7,6 +7,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -19,6 +20,8 @@ test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
   "create and update Lambda TOKEN authorizer",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const uri = authorizerUri!;
 
       const { api, authorizer } = yield* stack.deploy(
@@ -59,6 +62,7 @@ test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
       expect(remote.authorizerResultTtlInSeconds).toEqual(120);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -101,6 +105,7 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(authorizer.restApiId);
     }),
   { timeout: 300_000 },
 );

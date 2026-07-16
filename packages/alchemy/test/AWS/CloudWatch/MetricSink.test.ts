@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Vitest";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
+import * as lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -83,6 +84,9 @@ test.provider(
   "MetricSink batches >1000 datums through a deployed Lambda",
   (stack) =>
     Effect.gen(function* () {
+      // Leading destroy reconciles away any prior partial/crashed deployment.
+      yield* stack.destroy();
+
       const fn = yield* stack.deploy(
         MetricSinkFunction.pipe(Effect.provide(MetricSinkFunctionLive)),
       );
@@ -125,6 +129,19 @@ test.provider(
       expect(observed).toBe(count);
 
       yield* stack.destroy();
+
+      // Out-of-band assert-gone: the deployed Lambda no longer exists after
+      // the final destroy (custom metrics themselves are not deletable and
+      // age out on their own).
+      const gone = yield* lambda
+        .getFunction({ FunctionName: fn.functionName })
+        .pipe(
+          Effect.map(() => false),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(true),
+          ),
+        );
+      expect(gone).toBe(true);
     }),
   // Deploy (~60-120s) + readiness poll (bounded ~150s) + metric visibility
   // poll (bounded ~180s) + destroy. All waits are bounded.

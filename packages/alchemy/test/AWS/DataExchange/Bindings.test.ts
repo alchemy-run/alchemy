@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -27,6 +28,13 @@ const readinessPolicy = Schedule.max([
 
 let baseUrl: string;
 let functionArn: string;
+let fixtureDataSetId: string | undefined;
+
+// beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
+// distilled calls need the provider layer (credentials, region) supplied
+// explicitly.
+const aws = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Core.withProviders(effect, testOptions, sharedStack.name);
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -105,11 +113,28 @@ describe.sequential("DataExchange Bindings", () => {
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
+
+      // Capture the fixture data set's id so afterAll can assert it is gone
+      // after the final destroy.
+      const dataSet = (yield* getJson("/data-set")) as { id: string };
+      fixtureDataSetId = dataSet.id;
     }),
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 240_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Assert the fixture's data set really is gone (zero orphans).
+      if (fixtureDataSetId !== undefined) {
+        const gone = yield* Effect.flip(
+          aws(dataexchange.getDataSet({ DataSetId: fixtureDataSetId })),
+        );
+        expect(gone._tag).toBe("ResourceNotFoundException");
+      }
+    }),
+    { timeout: 240_000 },
+  );
 
   describe("binding registration", () => {
     test.provider("all capabilities initialize in the runtime", (_stack) =>

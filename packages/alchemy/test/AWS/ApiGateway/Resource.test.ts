@@ -4,6 +4,7 @@ import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -11,6 +12,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "create and delete API Gateway resource",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { api, res } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgResApi", {
@@ -32,6 +35,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(remote.pathPart).toEqual("items");
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -41,7 +45,7 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { res } = yield* stack.deploy(
+      const { api, res } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgResListApi", {
             endpointConfiguration: { types: ["REGIONAL"] },
@@ -51,7 +55,7 @@ test.provider.skipIf(!!process.env.FAST)(
             parentId: api.rootResourceId,
             pathPart: "items",
           });
-          return { res };
+          return { api, res };
         }),
       );
 
@@ -63,5 +67,6 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(all.some((r) => r.resourceId === res.resourceId)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );

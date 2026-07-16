@@ -27,6 +27,8 @@ test.provider(
   "create, update policy and tags, no-op, delete user pool",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const pool = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* UserPool("LifecyclePool", {
@@ -113,6 +115,8 @@ test.provider(
   "custom schema attributes are added in place; sign-in change replaces",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const pool = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* UserPool("SchemaPool", {

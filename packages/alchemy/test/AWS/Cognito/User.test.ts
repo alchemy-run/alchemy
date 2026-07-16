@@ -28,6 +28,8 @@ test.provider(
   "create confirmed user, update attributes/enabled, rename (replace), delete",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* UserPool("UserTestPool", {

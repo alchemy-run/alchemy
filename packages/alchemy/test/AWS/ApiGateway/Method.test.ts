@@ -5,6 +5,7 @@ import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -12,6 +13,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "create and delete MOCK method",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { api } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgMethodApi", {
@@ -38,6 +41,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(method.httpMethod).toEqual("GET");
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -81,5 +85,6 @@ test.provider.skipIf(!!process.env.FAST)(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );

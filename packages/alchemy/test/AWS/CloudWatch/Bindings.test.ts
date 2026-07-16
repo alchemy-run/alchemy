@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
+import * as lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -41,6 +42,7 @@ const readinessPolicy = Schedule.max([
 ]);
 
 let baseUrl: string;
+let fixtureFunctionName: string | undefined;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -92,7 +94,7 @@ describe("CloudWatch Bindings", () => {
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("CloudWatch test setup: deploying fixture");
-      const { functionUrl } = yield* sharedStack.deploy(
+      const { functionUrl, functionName } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* CloudWatchTestFunction;
         }).pipe(Effect.provide(CloudWatchTestFunctionLive)),
@@ -100,6 +102,7 @@ describe("CloudWatch Bindings", () => {
 
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
+      fixtureFunctionName = functionName;
 
       yield* Effect.logInfo(
         `CloudWatch test setup: probing readiness at ${baseUrl}/health`,
@@ -116,7 +119,29 @@ describe("CloudWatch Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Out-of-band assert-gone: the fixture Lambda (root of the deployed
+      // stack) no longer exists after the trailing destroy. `afterAll`
+      // doesn't run inside `test.provider`'s environment, so provide the
+      // AWS providers (Credentials/Region) explicitly for the distilled call.
+      if (fixtureFunctionName !== undefined) {
+        const gone = yield* Core.withProviders(
+          lambda.getFunction({ FunctionName: fixtureFunctionName }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(true),
+            ),
+          ),
+          testOptions,
+          "CloudWatchBindings",
+        );
+        expect(gone).toBe(true);
+      }
+    }),
+    { timeout: 120_000 },
+  );
 
   // ── Metrics ──────────────────────────────────────────────────────────────
 
