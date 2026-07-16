@@ -122,6 +122,8 @@ interface Entry {
   readonly file: FileNode;
   status: Status;
   result?: TestResult;
+  /** Set on TestStart; drives the live elapsed timer on running rows. */
+  startedAt?: number;
   /** Cached plain-text row label — recomputed only on status/result change. */
   label: string;
 }
@@ -154,7 +156,9 @@ const makeCounts = (): Record<Status, number> => ({
 
 const entryLabel = (entry: Entry): string =>
   `${entry.meta.titlePath.join(" > ")}` +
-  (entry.result !== undefined && entry.status !== "queued"
+  (entry.result !== undefined &&
+  entry.status !== "queued" &&
+  entry.status !== "running"
     ? ` (${formatDuration(entry.result.durationMs)})`
     : "");
 
@@ -253,6 +257,12 @@ class TuiState {
     this.counts[status]++;
     entry.file.counts[status]++;
     entry.status = status;
+    if (status === "running") {
+      // (Re)started — retries included: drop the stale result so the row
+      // shows a fresh live timer instead of the previous run's duration.
+      entry.result = undefined;
+      entry.startedAt = Date.now();
+    }
     if (result !== undefined) entry.result = result;
     entry.label = entryLabel(entry);
     this.dirty = true;
@@ -652,6 +662,10 @@ const makeTui = async (): Promise<Tui> => {
         status = node.entry.status;
         head = `     ${GLYPH[status]} `;
         rest = node.entry.label;
+        // Live elapsed timer while running (resets on retry).
+        if (status === "running" && node.entry.startedAt !== undefined) {
+          rest += ` (${formatDuration(Date.now() - node.entry.startedAt)}…)`;
+        }
       }
       rest = rest.slice(0, Math.max(width - head.length, 0));
 
@@ -1011,7 +1025,8 @@ const makeTui = async (): Promise<Tui> => {
   // while the run is live.
   const interval = setInterval(() => {
     if (disposed) return;
-    // Hook phases show a live elapsed time on file rows.
+    // Live elapsed timers: hook phases on file rows and running test rows.
+    if (state.counts.running > 0) state.dirty = true;
     for (const node of state.fileOrder) {
       if (node.hook !== undefined) state.dirty = true;
     }
