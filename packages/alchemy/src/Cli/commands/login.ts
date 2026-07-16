@@ -9,6 +9,7 @@ import * as CliError from "effect/unstable/cli/CliError";
 
 import type { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { AlchemyProfile } from "../../Auth/Profile.ts";
+import * as Clank from "../../Util/Clank.ts";
 
 import {
   buildBuiltinAuthProviders,
@@ -81,7 +82,12 @@ export const loginCommand = Command.make(
         );
       }
 
+      const profiles = yield* AlchemyProfile;
+      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+
       let authProviders: AuthProviders["Service"];
+      // Providers to actually log in with; `undefined` means all registered.
+      let selected: string[] | undefined;
       if (mainExists) {
         // Build the user's providers() (+ state) layer to capture the auth
         // providers their stack wires up.
@@ -92,21 +98,38 @@ export const loginCommand = Command.make(
         }));
       } else {
         // No stack entrypoint — register every built-in auth provider so
-        // `alchemy login` works from any folder.
+        // `alchemy login` works from any folder. Interactively, let the
+        // user pick which ones to log in with; in CI, take them all.
         yield* Console.log(
-          "No alchemy.run.ts found — logging in with all built-in providers.",
+          "No alchemy.run.ts found — using Alchemy's built-in providers.",
         );
         authProviders = yield* buildBuiltinAuthProviders({ envFile, profile });
+        if (!ci) {
+          const existing = yield* profiles.getProfile(profile);
+          const names = Object.keys(authProviders).sort();
+          selected = yield* Clank.multiselect({
+            message: "Select providers to log in with",
+            options: names.map((name) => ({
+              value: name,
+              label: name,
+              hint: existing?.[name] != null ? "configured" : undefined,
+            })),
+            // Pre-select providers already in the profile so re-running
+            // login naturally refreshes/re-prints what's set up.
+            initialValues: names.filter((name) => existing?.[name] != null),
+          });
+        }
       }
 
-      const profiles = yield* AlchemyProfile;
-
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-      const providers = Object.values(authProviders);
+      const providers = Object.values(authProviders).filter(
+        (provider) => selected == null || selected.includes(provider.name),
+      );
 
       if (providers.length === 0) {
         yield* Console.log(
-          "No AuthProviders registered. Make sure the stack's providers() layer includes AuthProviderLayer entries.",
+          selected != null
+            ? "No providers selected."
+            : "No AuthProviders registered. Make sure the stack's providers() layer includes AuthProviderLayer entries.",
         );
         return;
       }
