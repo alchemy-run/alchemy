@@ -76,6 +76,14 @@ const fetchOnce = (url: string, marker: string) =>
         looksLikeCloudflarePlaceholder(body) ||
         !body.includes(marker)
       ) {
+        if (process.env.DEBUG_HTTP_ASSERT) {
+          const flat = body.replace(/\s+/g, " ");
+          const interesting =
+            flat.match(/(Error|Worker threw|exception)[^<]{0,140}/gi) ?? [];
+          console.error(
+            `[http-assert] ${res.status} ${url} :: ${interesting.length ? interesting.slice(0, 3).join(" | ") : flat.slice(0, 160)}`,
+          );
+        }
         throw new HttpAssertionFailed({
           url,
           marker,
