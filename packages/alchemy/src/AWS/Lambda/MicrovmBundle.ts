@@ -135,6 +135,7 @@ import { NodeHttpServer } from "alchemy/Http";
 const HttpServer = NodeHttpServer;`
 }
 import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -167,6 +168,9 @@ const serverEffect = tag.pipe(
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
+      // Effect-form props re-evaluate inside the running microVM, so
+      // stage-dependent props need Stage at runtime just like at plan/deploy.
+      Layer.provideMerge(Layer.succeed(Stage, ${JSON.stringify(stack.stage)})),
       Layer.provideMerge(HttpServer({ port: Number(process.env.PORT ?? ${port}) })),
       Layer.provideMerge(platform),
       Layer.provideMerge(

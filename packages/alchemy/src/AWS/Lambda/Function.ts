@@ -903,6 +903,7 @@ export const FunctionProvider = () =>
                 (importPath) => `
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { registerLambdaExtension } from "alchemy/AWS/Lambda/RuntimeExtension";
 import * as Config from "effect/Config";
@@ -958,6 +959,9 @@ const stack = Layer.effect(
 
 const entryLayer = layer.pipe(
   Layer.provideMerge(stack),
+  // Effect-form props re-evaluate inside the deployed Function, so
+  // stage-dependent props need \`Stage\` at runtime just like at plan/deploy.
+  Layer.provideMerge(Layer.effect(Stage, Config.string("ALCHEMY_STAGE"))),
   Layer.provideMerge(Credentials.fromEnv()),
   Layer.provideMerge(Region.fromEnv()),
   Layer.provideMerge(platform),

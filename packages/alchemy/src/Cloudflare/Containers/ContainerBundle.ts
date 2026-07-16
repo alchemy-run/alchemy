@@ -199,6 +199,7 @@ const HttpServer = NodeHttpServer;
 `
 }
 import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { CloudflareEnvironment } from "alchemy/Cloudflare";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -234,6 +235,9 @@ const serverEffect = tag.pipe(
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
+      // Effect-form props re-evaluate inside the running container, so
+      // stage-dependent props need \`Stage\` at runtime just like at plan/deploy.
+      Layer.provideMerge(Layer.succeed(Stage, ${JSON.stringify(stack.stage)})),
       Layer.provideMerge(HttpServer()),
       // Capability bindings that talk to Cloudflare's HTTP API from inside the
       // container (e.g. R2/KV/Queue \`*Http\` bindings) resolve their account via

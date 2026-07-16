@@ -19,6 +19,7 @@ import {
 } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import { Stage } from "../../Stage.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
@@ -267,6 +268,11 @@ const getSharedBuild = (
               actions: {},
             }),
           ),
+          // Effect-form props (`Cloudflare.Worker<W>()(id, Effect.gen(...), impl)`)
+          // re-evaluate inside the deployed Worker, so stage-dependent props
+          // (e.g. deriving a domain from the Stage) need `Stage` at runtime
+          // just like they get it at plan/deploy.
+          Layer.provideMerge(Layer.succeed(Stage, stack.stage)),
           Layer.provideMerge(platform),
           Layer.provideMerge(
             Layer.succeed(
