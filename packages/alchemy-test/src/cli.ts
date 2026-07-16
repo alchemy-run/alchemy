@@ -131,7 +131,19 @@ const rootCommand = Command.make(
     const interactive = args.tui && process.stdout.isTTY === true;
     const path = yield* Path.Path;
     const root = process.cwd();
-    const logFile = path.resolve(root, ".alchemy", "log", "test.log");
+    // Per-run log file (timestamp + pid) so concurrent runs in different
+    // terminals never trample each other's logs.
+    const timestamp = new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replaceAll(":", "-");
+    const logFile = path.resolve(
+      root,
+      ".alchemy",
+      "log",
+      "test",
+      `${timestamp}-pid${process.pid}.log`,
+    );
 
     const options: RunOptions = {
       root,

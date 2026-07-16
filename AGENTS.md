@@ -132,7 +132,7 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 
 ## Speed doctrine: never wait on a hang
 
-- Run tests from `packages/alchemy` (suite paths are relative to it, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `cd packages/alchemy && timeout 240 bash -c 'ALCHEMY_PROFILE=testing bun alchemy-test <suite>'`. Hitting the wall **is** the failure — read the partial output (and `.alchemy/log/test.log`), find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping. The runner also prints the currently-running tests whenever nothing finishes for 10s — use that list to identify the hang.
+- Run tests from `packages/alchemy` (suite paths are relative to it, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `cd packages/alchemy && timeout 240 bash -c 'ALCHEMY_PROFILE=testing bun alchemy-test <suite>'`. Hitting the wall **is** the failure — read the partial output (and the run's log under `.alchemy/log/test/`), find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping. The runner also prints the currently-running tests whenever nothing finishes for 10s — use that list to identify the hang.
 - Per-test timeout ≤ 90–120s (`{ timeout: ... }` on the test, or `--timeout` for the whole run). A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
@@ -914,7 +914,7 @@ Additional flags beyond vitest:
 Output behavior (plain mode, the default):
 
 - One line per test as it finishes; a **failing test prints its error and captured output inline** immediately.
-- Passing tests' output is swallowed on the console — but **every** test's output (passes included) is streamed to **`.alchemy/log/test.log`** (relative to the cwd, so `packages/alchemy/.alchemy/log/test.log`). The absolute path is printed at the end of every run (`Full log: /abs/path/.alchemy/log/test.log`) — read that file when you need the complete record, e.g. a passing test's deploy output or a hang's partial log. The file is truncated at run start and appended live, so it's readable mid-run.
+- Passing tests' output is swallowed on the console — but **every** test's output (passes included) is streamed to a per-run log at **`.alchemy/log/test/{timestamp}-pid{pid}.log`** (relative to the cwd), so concurrent runs in different terminals never trample each other. The absolute path (with line/KB counts) is printed at the end of every run (`Full log: …`) — read that file when you need the complete record, e.g. a passing test's deploy output or a hang's partial log. The file is appended live, so it's readable mid-run; logs older than a week are pruned automatically (by stat mtime).
 - If nothing finishes for 10s, the runner prints the list of currently-running tests with elapsed times — the first place to look when a run seems hung.
 - Exit code is non-zero if any test failed.
 

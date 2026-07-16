@@ -5,6 +5,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import type { LogEntry } from "./Model.ts";
@@ -77,6 +78,34 @@ export interface FileLog {
   readonly append: (event: TestEvent) => Effect.Effect<void>;
 }
 
+const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Delete sibling run logs whose mtime (from stat — file names are never
+ * trusted) is older than a week, so the per-run log directory can't grow
+ * unboundedly. Best-effort: failures are ignored.
+ */
+const pruneOldLogs = Effect.fn(function* (dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const entries = yield* fs
+    .readDirectory(dir)
+    .pipe(Effect.orElseSucceed(() => [] as Array<string>));
+  const cutoff = Date.now() - LOG_RETENTION_MS;
+  for (const entry of entries) {
+    if (!entry.endsWith(".log")) continue;
+    const file = path.join(dir, entry);
+    const info = yield* fs
+      .stat(file)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    const mtime =
+      info === undefined ? undefined : Option.getOrUndefined(info.mtime);
+    if (mtime !== undefined && mtime.getTime() < cutoff) {
+      yield* fs.remove(file).pipe(Effect.ignore);
+    }
+  }
+});
+
 /** Create (truncate) the log file and return an event appender. */
 export const makeFileLog = Effect.fn(function* (logFile: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -84,6 +113,7 @@ export const makeFileLog = Effect.fn(function* (logFile: string) {
   yield* fs
     .makeDirectory(path.dirname(logFile), { recursive: true })
     .pipe(Effect.ignore);
+  yield* pruneOldLogs(path.dirname(logFile));
   yield* fs.writeFileString(logFile, "").pipe(Effect.ignore);
   const append: FileLog["append"] = (event) => {
     const chunk = formatEvent(event);
