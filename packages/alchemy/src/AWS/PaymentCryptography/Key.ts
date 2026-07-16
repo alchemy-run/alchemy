@@ -306,13 +306,22 @@ export const KeyProvider = () =>
           paymentcryptography.listKeys.items({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).map((k): Key["Attributes"] => ({
-                keyArn: k.KeyArn,
-                keyState: k.KeyState,
-                keyCheckValue: k.KeyCheckValue,
-                enabled: k.Enabled,
-                exportable: k.Exportable,
-              })),
+              Array.from(chunk)
+                // Keys already inside their deletion window are as deleted
+                // as the API allows — a second DeleteKey is a no-op, so they
+                // are not orphans (mirrors KMS PendingDeletion filtering).
+                .filter(
+                  (k) =>
+                    k.KeyState !== "DELETE_PENDING" &&
+                    k.KeyState !== "DELETE_COMPLETE",
+                )
+                .map((k): Key["Attributes"] => ({
+                  keyArn: k.KeyArn,
+                  keyState: k.KeyState,
+                  keyCheckValue: k.KeyCheckValue,
+                  enabled: k.Enabled,
+                  exportable: k.Exportable,
+                })),
             ),
           ),
         read: Effect.fn(function* ({ id, output }) {
