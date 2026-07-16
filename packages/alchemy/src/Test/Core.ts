@@ -67,6 +67,8 @@ export interface MakeOptions<ROut = any> {
    * - `deploy(Stack)` forks a background tail of every tailable resource in
    *   the stack, printing logs to the test console until `destroy(Stack)`
    *   (or the file's `afterAll`) closes the shared scope.
+   *
+   * @default true
    */
   log?: boolean;
 }
@@ -124,7 +126,7 @@ export const toEffect = <A>(
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
   }).pipe(
-    Effect.provideService(TestLoggingPolicy, options.log ?? false),
+    Effect.provideService(TestLoggingPolicy, options.log ?? true),
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
     Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
