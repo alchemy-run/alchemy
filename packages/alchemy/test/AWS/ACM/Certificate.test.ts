@@ -93,9 +93,10 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 
@@ -110,7 +111,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
 class CertificateNotListed extends Data.TaggedError("CertificateNotListed") {}
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // A `creating` state row persisted before upstream Outputs resolve cannot
 // round-trip Output-valued props (`domainName` from a HostedZone Output,
@@ -174,9 +175,10 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(18)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(18),
+          ]),
         }),
       );
 

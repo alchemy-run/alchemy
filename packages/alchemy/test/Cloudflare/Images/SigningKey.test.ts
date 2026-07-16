@@ -41,9 +41,10 @@ const expectGone = (accountId: string, name: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "KeyNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

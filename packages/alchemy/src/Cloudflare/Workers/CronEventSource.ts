@@ -203,14 +203,15 @@ export const cron = <Req = never>(
   process: (
     controller: cf.ScheduledController,
   ) => Effect.Effect<void, unknown, Req>,
-) => CronEventSource.use((source) => source(expression, process));
+): Effect.Effect<void, never, CronEventSource | Exclude<Req, RuntimeContext>> =>
+  CronEventSource.use((source) => source(expression, process));
 
 export type CronEventSourceService = <Req = never>(
   expression: string,
   process: (
     controller: cf.ScheduledController,
   ) => Effect.Effect<void, unknown, Req>,
-) => Effect.Effect<void, never, never>;
+) => Effect.Effect<void, never, Exclude<Req, RuntimeContext>>;
 
 export class CronEventSource extends Context.Service<
   CronEventSource,

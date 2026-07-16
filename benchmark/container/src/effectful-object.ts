@@ -30,9 +30,7 @@ export class EffectfulObject extends Cloudflare.DurableObject<EffectfulObject>()
             const start = yield* Effect.sync(() => Date.now());
             yield* container.ping().pipe(
               Effect.retry({
-                schedule: Schedule.exponential("1 second").pipe(
-                  Schedule.either(Schedule.spaced("5 seconds")),
-                ),
+                schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
                 times: 40,
               }),
             );

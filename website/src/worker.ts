@@ -18,7 +18,7 @@ interface HTMLRewriterElement {
 /**
  * Astro bakes absolute URLs into `<meta property="og:image">`,
  * `og:url`, `twitter:image`, and `<link rel="canonical">` at build time
- * using the `site` config (`https://v2.alchemy.run`). PR previews and
+ * using the `site` config (`https://alchemy.run`). PR previews and
  * custom domains then advertise OG / canonical URLs that point back at
  * the canonical host — so a Slack/Twitter unfurl of a preview URL
  * fetches the *production* card, not the one for the page being
@@ -27,7 +27,7 @@ interface HTMLRewriterElement {
  * Rewrite those tags at the edge to match the request's actual host so
  * each deployment unfurls itself.
  */
-const CANONICAL_HOST = "v2.alchemy.run";
+const CANONICAL_HOST = "alchemy.run";
 
 /**
  * 301s for the docs restructure (guides/tutorials moved into per-cloud hubs).
@@ -235,8 +235,35 @@ export default {
         return withContentType(res, "text/markdown; charset=utf-8");
     }
     const res = await env.ASSETS.fetch(request);
-    return withUtf8Charset(rewriteCanonicalHost(request, res));
+    return withUtf8Charset(
+      await rewriteLlmsTxtOrigin(request, rewriteCanonicalHost(request, res)),
+    );
   },
+};
+
+/**
+ * `llms.txt` is generated at build time with absolute canonical URLs, so a
+ * PR preview would hand agents an index that points back at production.
+ * Rewrite the baked origin to the request's own origin — the same treatment
+ * `rewriteCanonicalHost` gives HTML meta tags.
+ */
+const rewriteLlmsTxtOrigin = async (
+  request: Request,
+  res: Response,
+): Promise<Response> => {
+  const reqUrl = new URL(request.url);
+  if (
+    reqUrl.pathname !== "/llms.txt" ||
+    reqUrl.host === CANONICAL_HOST ||
+    !res.ok
+  ) {
+    return res;
+  }
+  const body = (await res.text()).replaceAll(
+    `https://${CANONICAL_HOST}/`,
+    `${reqUrl.origin}/`,
+  );
+  return new Response(body, res);
 };
 
 /**

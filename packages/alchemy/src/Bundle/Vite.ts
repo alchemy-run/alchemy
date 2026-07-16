@@ -1,6 +1,5 @@
 import type { NonEmptyArray } from "effect/Array";
 import * as Cause from "effect/Cause";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -45,11 +44,18 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     string,
     Effect.Effect<BundleFile, BundleError>
   >();
-  const deferred = yield* Deferred.make<ViteBuildOutput, BundleError>();
 
   const plugin: vite.Plugin = {
     name: "alchemy:build-output",
     sharedDuringBuild: true,
+    // Collect the client output directory and server chunks as each
+    // environment writes its bundle. We deliberately do NOT resolve the build
+    // result from a `buildApp` hook: on Vite 8, when a project declares no
+    // `builder.buildApp` (e.g. a plain client-only SPA), `builder.buildApp()`
+    // runs post-order `buildApp` hooks *before* the default environment builds,
+    // so a hook fires while the output is still empty (issue #792). Instead,
+    // `viteBuild` reads `output` *after* `builder.buildApp()` resolves — by
+    // which point every environment that actually built has run `writeBundle`.
     async writeBundle(_, bundle) {
       if (this.environment.name === "client") {
         clientDirectory = path.resolve(
@@ -106,18 +112,6 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
           );
         }),
       );
-    },
-    buildApp: {
-      order: "post",
-      async handler() {
-        Deferred.doneUnsafe(
-          deferred,
-          Effect.succeed({
-            clientDirectory,
-            serverBundle: makeServerBundle(),
-          }),
-        );
-      },
     },
   };
 
@@ -199,6 +193,13 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
 
   return {
     plugin,
-    output: Deferred.await(deferred),
+    // Read lazily so callers observe the state collected during the build.
+    // Only safe to await *after* `builder.buildApp()` has resolved.
+    output: Effect.sync(
+      (): ViteBuildOutput => ({
+        clientDirectory,
+        serverBundle: makeServerBundle(),
+      }),
+    ),
   };
 });

@@ -1,8 +1,7 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { authorizeWith } from "../HttpClientUtils.ts";
-import { makeHttpDnsBinding, type Token } from "./DnsHttp.ts";
+import { type DnsAuth, makeHttpDnsBinding } from "./DnsHttp.ts";
 import { WriteDns, type WriteDnsClient } from "./WriteDns.ts";
 
 /** Runtime layer for {@link WriteDns}. */
@@ -16,12 +15,12 @@ export const WriteDnsHttp = Layer.effect(
   ),
 );
 
-/** Build the write client over a bound token and zone id. */
+/** Build the write client over an injectable auth and zone id. */
 export const dnsWriteClient = (
-  token: Token,
+  auth: DnsAuth,
   zoneId: Effect.Effect<string>,
 ): WriteDnsClient => {
-  const authorize = authorizeWith(token);
+  const authorize = auth.authorize;
   return {
     createDnsRecord: Effect.fn("Cloudflare.DNS.createDnsRecord")(
       function* (request) {

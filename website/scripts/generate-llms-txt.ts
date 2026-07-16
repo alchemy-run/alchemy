@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const docsDir = path.resolve(here, "../src/content/docs");
 const outFile = path.resolve(here, "../public/llms.txt");
-const siteUrl = "https://v2.alchemy.run";
+const siteUrl = "https://alchemy.run";
 
 interface Page {
   /** URL path, e.g. "/infrastructure-as-effects/binding" */

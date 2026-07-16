@@ -14,6 +14,10 @@ const CONFIG_REDACTED_VALUE = (process.env.CONFIG_REDACTED =
   "config-redacted-value");
 const CONFIG_REDACTED_INIT_VALUE = (process.env.CONFIG_REDACTED_INIT =
   "config-redacted-init-value");
+// Read via `Config.string("HOST").pipe(Config.nested("CONFIG_NESTED"))` —
+// binds under the flattened `CONFIG_NESTED_HOST` key.
+const CONFIG_NESTED_HOST_VALUE = (process.env.CONFIG_NESTED_HOST =
+  "config-nested-host-value");
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -103,6 +107,35 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
   );
 
   test(
+    "effect worker re-resolves Config.xxx at request time inside a nested effect",
+    Effect.gen(function* () {
+      const { effectUrl } = yield* stack;
+
+      const body = yield* expectUrlContains(
+        `${effectUrl}/config-runtime`,
+        '"CONFIG_STR"',
+        { timeout: "60 seconds", label: "effect env-worker /config-runtime" },
+      );
+      expect(JSON.parse(body)).toEqual({
+        CONFIG_STR: CONFIG_STR_VALUE,
+        CONFIG_NUM: Number(CONFIG_NUM_VALUE),
+        CONFIG_NUM_WITH_DEFAULT: Number(CONFIG_NUM_VALUE),
+        CONFIG_UNSET_WITH_DEFAULT: 3000,
+        CONFIG_REDACTED_INIT: CONFIG_REDACTED_INIT_VALUE,
+        CONFIG_REDACTED_INIT_IS_REDACTED: true,
+        CONFIG_ALL_OBJ: {
+          str: CONFIG_STR_VALUE,
+          num: Number(CONFIG_NUM_VALUE),
+          redacted: CONFIG_REDACTED_INIT_VALUE,
+          redactedIsRedacted: true,
+        },
+        CONFIG_ALL_TUPLE: [CONFIG_STR_VALUE, Number(CONFIG_NUM_VALUE)],
+        CONFIG_NESTED_HOST: CONFIG_NESTED_HOST_VALUE,
+      });
+    }).pipe(logLevel),
+  );
+
+  test(
     "effect worker round-trips Config.xxx bindings captured in Init",
     Effect.gen(function* () {
       const { effectUrl } = yield* stack;
@@ -118,6 +151,14 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         CONFIG_REDACTED: CONFIG_REDACTED_VALUE,
         CONFIG_REDACTED_INIT: CONFIG_REDACTED_INIT_VALUE,
         CONFIG_REDACTED_INIT_IS_REDACTED: true,
+        CONFIG_ALL_OBJ: {
+          str: CONFIG_STR_VALUE,
+          num: Number(CONFIG_NUM_VALUE),
+          redacted: CONFIG_REDACTED_INIT_VALUE,
+          redactedIsRedacted: true,
+        },
+        CONFIG_ALL_TUPLE: [CONFIG_STR_VALUE, Number(CONFIG_NUM_VALUE)],
+        CONFIG_NESTED_HOST: CONFIG_NESTED_HOST_VALUE,
       });
     }).pipe(logLevel),
   );

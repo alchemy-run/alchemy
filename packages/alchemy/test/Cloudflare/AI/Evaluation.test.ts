@@ -33,9 +33,10 @@ const expectGone = (
     Effect.retry({
       while: (e): e is EvaluationStillExists =>
         e instanceof EvaluationStillExists,
-      schedule: Schedule.exponential("250 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("250 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag("EvaluationNotFound", () => Effect.void),
   );

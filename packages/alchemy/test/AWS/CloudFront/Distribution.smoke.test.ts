@@ -216,9 +216,7 @@ const retrying = (label: string) =>
   Effect.retry({
     while: (error: unknown) =>
       error instanceof Error && error.message === label,
-    schedule: Schedule.fixed("10 seconds").pipe(
-      Schedule.both(Schedule.recurs(60)),
-    ),
+    schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
   });
 
 const assertDistributionDeleted = (id: string) =>

@@ -47,9 +47,10 @@ const expectGone = (accountId: string, monitorId: string) =>
     Effect.catchTag("MonitorNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "MonitorNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

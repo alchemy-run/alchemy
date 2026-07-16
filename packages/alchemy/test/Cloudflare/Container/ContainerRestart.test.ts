@@ -31,9 +31,10 @@ const freshConn = HttpClient.mapRequest(
   HttpClientRequest.setHeader("connection", "close"),
 );
 
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 // Retry a route until it answers 200 with a body containing `expected`,
 // rejecting transient non-200s and the pre-create deploy stub. This is how we

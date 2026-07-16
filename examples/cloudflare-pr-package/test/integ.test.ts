@@ -92,7 +92,7 @@ const pollUntilStatus = <A extends { readonly status: number }, E, R>(
   );
 
 /**
- * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/598
+ * Regression guard for https://github.com/alchemy-run/alchemy/pull/598
  *
  * Exercises the real `@alchemy.run/pr-package` Worker. The bearer token is
  * symmetric:

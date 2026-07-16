@@ -286,9 +286,10 @@ export const RuleProvider = () =>
             // config has propagated, so ride out that consistency window.
             Effect.retry({
               while: (e) => e._tag === "MnmConfigMissing",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("500 millis"),
+                Schedule.recurs(8),
+              ]),
             }),
             Effect.catchTag("DuplicateMnmRuleName", (error) =>
               findByName(accountId, name).pipe(

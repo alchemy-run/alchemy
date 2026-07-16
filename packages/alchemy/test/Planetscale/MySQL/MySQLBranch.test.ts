@@ -613,9 +613,10 @@ const waitForBackupSuccess = Effect.fn(function* (
     Effect.retry({
       while: (e): e is BackupNotReady =>
         e instanceof BackupNotReady && e.retryable,
-      schedule: Schedule.exponential(1_000).pipe(
-        Schedule.both(Schedule.recurs(120)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential(1_000),
+        Schedule.recurs(120),
+      ]),
     }),
   );
 });

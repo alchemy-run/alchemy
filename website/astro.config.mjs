@@ -228,7 +228,7 @@ function caseSensitiveLinkChecker() {
 }
 
 export default defineConfig({
-  site: "https://v2.alchemy.run",
+  site: "https://alchemy.run",
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
@@ -261,7 +261,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/alchemy-run/alchemy-effect",
+          href: "https://github.com/alchemy-run/alchemy",
         },
         {
           icon: "discord",
@@ -270,8 +270,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl:
-          "https://github.com/alchemy-run/alchemy-effect/edit/main/website",
+        baseUrl: "https://github.com/alchemy-run/alchemy/edit/main/website",
       },
       // One top-level group per docs tab (see src/docs-tabs.ts). The
       // docs-tabs-sidebar middleware swaps in the active tab's group, so
@@ -518,6 +517,15 @@ export default defineConfig({
                 {
                   label: "WebSockets",
                   link: "/cloudflare/compute/hibernatable-websockets",
+                },
+                {
+                  label: "Rate limiting",
+                  link: "/cloudflare/compute/rate-limiting",
+                },
+                { label: "Workers Cache", link: "/cloudflare/compute/cache" },
+                {
+                  label: "Worker Loader",
+                  link: "/cloudflare/compute/worker-loader",
                 },
                 {
                   label: "Workers for Platforms",

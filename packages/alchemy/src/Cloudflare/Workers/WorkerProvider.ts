@@ -1,3 +1,4 @@
+import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as zones from "@distilled.cloud/cloudflare/zones";
@@ -36,6 +37,65 @@ class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
 }> {}
+
+/**
+ * A Durable Object class is being dropped from this Worker while a binding in
+ * the same deploy still references it on another script — the class moved
+ * cross-script, but its namespace (and every stored object in it) still lives
+ * on this Worker. Cloudflare rejects a single upload that both deletes the
+ * class and ships a binding referencing it, and silently deleting would
+ * destroy the namespace's data irreversibly, so the deploy fails before any
+ * upload.
+ *
+ * Moving a Durable Object class between Workers is always declared: set
+ * `transferredFrom` on the Durable Object at its **new host** — naming the
+ * former host by Worker logical id (same stack) or physical script name — and
+ * Alchemy performs the data-preserving `transferred_classes` migration on the
+ * new host's deploy; this deploy then converges on its own. To abandon the
+ * data instead, remove the binding entirely in one deploy (which deletes the
+ * class and its data), then add the cross-script binding in a second deploy.
+ */
+export class DurableObjectTransferRequired extends Data.TaggedError(
+  "DurableObjectTransferRequired",
+)<{
+  scriptName: string;
+  className: string;
+  targetScriptName: string | undefined;
+}> {
+  override get message() {
+    return (
+      `Durable Object class '${this.className}' still lives on Worker '${this.scriptName}' but this deploy re-binds it as a cross-script reference` +
+      (this.targetScriptName ? ` to '${this.targetScriptName}'` : "") +
+      ". Durable Object data does NOT move with the class automatically. " +
+      `To move the data, set transferredFrom: "${this.scriptName}" (the former host's script name, or its Worker logical id for same-stack moves) on the Durable Object declaration in its new host Worker. ` +
+      "To abandon the data, remove the binding entirely in one deploy before re-adding it as a cross-script reference."
+    );
+  }
+}
+
+/**
+ * More than one script matches the `transferredFrom` declaration of a Durable
+ * Object (e.g. an orphaned script left behind by a `name` prop change still
+ * carries the same alchemy tags, or the host history lists several scripts
+ * that each still hold a same-class namespace). Alchemy refuses to guess
+ * which namespace's data to move — narrow the declaration to the exact
+ * physical script name that holds the data.
+ */
+export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
+  "AmbiguousDurableObjectTransfer",
+)<{
+  scriptName: string;
+  logicalId: string;
+  className: string;
+  sources: string[];
+}> {
+  override get message() {
+    return (
+      `Durable Object '${this.logicalId}' (class '${this.className}') is new to Worker '${this.scriptName}' and multiple scripts match its transferredFrom declaration: ${this.sources.join(", ")}. ` +
+      `Narrow transferredFrom to the exact physical script name that holds the data.`
+    );
+  }
+}
 
 /**
  * Resolve the Workers for Platforms dispatch-namespace *name* from a resolved
@@ -125,7 +185,7 @@ const isBindingTargetNotFound = (
   e._tag === "MtlsCertificateNotFound";
 
 const bindingTargetNotFoundRetrySchedule = () =>
-  Schedule.fixed("2 seconds").pipe(Schedule.both(Schedule.recurs(10)));
+  Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 /**
  * Upsert a Worker script, routing to the dispatch-namespace endpoint when
@@ -488,9 +548,10 @@ export const LiveWorkerProvider = () =>
             .pipe(
               Effect.retry({
                 while: (error) => error._tag === "WorkerNotFound",
-                schedule: Schedule.exponential(200).pipe(
-                  Schedule.both(Schedule.recurs(15)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.exponential(200),
+                  Schedule.recurs(15),
+                ]),
               }),
             );
           return normalizeCrons(
@@ -640,9 +701,10 @@ export const LiveWorkerProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (error) => error._tag === "WorkerNotFound",
-                  schedule: Schedule.exponential(200).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential(200),
+                    Schedule.recurs(15),
+                  ]),
                 }),
               );
             return {
@@ -841,9 +903,10 @@ export const LiveWorkerProvider = () =>
                 // typed as `RouteScriptNotFound` via the createRoute patch.
                 Effect.retry({
                   while: (error) => error._tag === "RouteScriptNotFound",
-                  schedule: Schedule.exponential(200).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential(200),
+                    Schedule.recurs(15),
+                  ]),
                 }),
                 Effect.catchTag("InvalidRoute", (originalError) =>
                   Effect.gen(function* () {
@@ -891,6 +954,79 @@ export const LiveWorkerProvider = () =>
         const actualTags = new Set(tags ?? []);
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
+
+      /**
+       * Resolve the source script of a declared Durable Object transfer for
+       * a class that is new to `selfScriptName`. `sources` is the
+       * `transferredFrom` host history: each entry names a former host either
+       * by *physical script name* or by *Worker logical id* in this stack +
+       * stage (matched via the `alchemy:id:`/stack/stage ownership tags).
+       * The namespace is transferred from whichever listed host currently
+       * holds a same-class namespace; when none does (fresh stage, or every
+       * transfer already completed) this returns `undefined` and the caller
+       * creates the class fresh — the declaration is inert and safe to keep.
+       * More than one match (e.g. an orphaned script from a `name` change)
+       * fails with {@link AmbiguousDurableObjectTransfer} rather than
+       * guessing whose data to move.
+       */
+      const resolveTransferSource = Effect.fn(function* (params: {
+        accountId: string;
+        selfScriptName: string;
+        logicalId: string;
+        className: string;
+        sources: readonly string[];
+        observedNamespaces: readonly { script: string; class: string }[];
+      }) {
+        if (params.sources.length === 0) {
+          return undefined;
+        }
+        const candidates = Array.from(
+          new Set(
+            params.observedNamespaces.flatMap((ns) =>
+              ns.class === params.className &&
+              ns.script !== params.selfScriptName
+                ? [ns.script]
+                : [],
+            ),
+          ),
+        );
+        const matched: string[] = [];
+        for (const script of candidates) {
+          if (params.sources.includes(script)) {
+            matched.push(script);
+            continue;
+          }
+          const settings = yield* getScriptSettings(
+            params.accountId,
+            script,
+            undefined,
+          ).pipe(
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("WorkerHasNoVersions", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          const tags = new Set(settings?.tags ?? []);
+          if (
+            tags.has(`alchemy:stack:${stack.name}`) &&
+            tags.has(`alchemy:stage:${stack.stage}`) &&
+            params.sources.some((source) => tags.has(`alchemy:id:${source}`))
+          ) {
+            matched.push(script);
+          }
+        }
+        if (matched.length > 1) {
+          return yield* Effect.fail(
+            new AmbiguousDurableObjectTransfer({
+              scriptName: params.selfScriptName,
+              logicalId: params.logicalId,
+              className: params.className,
+              sources: matched,
+            }),
+          );
+        }
+        return matched[0];
+      });
 
       const getDurableObjects = (
         bindings: readonly WorkerSettingsBinding[] | null | undefined,
@@ -968,9 +1104,10 @@ export const LiveWorkerProvider = () =>
               error._tag === "WorkerNotFound" ||
               error._tag === "DispatchNamespaceScriptNotFound" ||
               error._tag === "DispatchNamespaceNotFound",
-            schedule: Schedule.exponential(100).pipe(
-              Schedule.both(Schedule.recurs(20)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential(100),
+              Schedule.recurs(20),
+            ]),
           }),
         );
       });
@@ -1218,7 +1355,22 @@ export const LiveWorkerProvider = () =>
           assets: prebuiltAssets?.hash ?? preparedHash.assets,
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
-        const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
+        // `transferredFrom` is alchemy-only transfer metadata on
+        // durable_object_namespace bindings — it drives the
+        // `transferred_classes` migration below and must be stripped from the
+        // wire-shape binding before upload.
+        const metadataBindings = bindings.flatMap((b) =>
+          (b.data.bindings ?? []).map((item): WorkerBinding => {
+            if (
+              item.type === "durable_object_namespace" &&
+              item.transferredFrom !== undefined
+            ) {
+              const { transferredFrom: _, ...rest } = item;
+              return rest;
+            }
+            return item;
+          }),
+        );
         const expectedDurableObjectClassNames =
           getExpectedDurableObjectClassNames(metadataBindings, name);
         let metadataAssets:
@@ -1351,7 +1503,8 @@ export const LiveWorkerProvider = () =>
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
 
-        // Parse alchemy:do:{logicalId}:{className} tags
+        // Parse the DO logical-id→class mapping from script tags (packed
+        // `alchemy:dos:` and legacy per-DO `alchemy:do:` formats)
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
         const currentDoClassNameByLogicalId = Object.fromEntries(
@@ -1369,13 +1522,15 @@ export const LiveWorkerProvider = () =>
         )[0];
         const newMigrationTag = bumpMigrationTagVersion(oldMigrationTag);
 
-        // Compute deleted classes
-        const deletedClasses: string[] = [];
+        // Compute delete-class candidates. Candidates are validated against
+        // observed namespace ownership below — a class may already have been
+        // transferred to another script by its new host's deploy.
+        const deletedClassCandidates: string[] = [];
         for (const [logicalId, className] of Object.entries(
           oldDoClassNameByLogicalId,
         )) {
           if (!currentDoClassNameByLogicalId[logicalId]) {
-            deletedClasses.push(className);
+            deletedClassCandidates.push(className);
           }
         }
 
@@ -1397,9 +1552,105 @@ export const LiveWorkerProvider = () =>
                 (binding) => binding.bindingName === oldBinding.name,
               )
             ) {
-              deletedClasses.push(oldBinding.className);
+              deletedClassCandidates.push(oldBinding.className);
             }
           }
+        }
+
+        // Class names the current deploy references *cross-script* (mapped to
+        // the foreign script). A class that both leaves the "hosted here" set
+        // and shows up here has moved to another Worker — Cloudflare rejects
+        // deleting a class while any binding in the upload references its
+        // class name, and deleting would destroy the namespace's data.
+        const crossScriptClassTargets = new Map<string, string>();
+        for (const item of metadataBindings) {
+          if (
+            item.type === "durable_object_namespace" &&
+            item.className &&
+            typeof item.scriptName === "string" &&
+            item.scriptName !== name
+          ) {
+            crossScriptClassTargets.set(item.className, item.scriptName);
+          }
+        }
+
+        // One account-level namespace listing serves both sides of a
+        // transfer: the destination checks the source still hosts the class
+        // before emitting `transferred_classes`, and the former host checks
+        // whether a to-be-deleted class was already transferred away.
+        // Dispatch-namespace user workers keep the legacy behavior — their
+        // namespaces don't surface on the account-level list.
+        const mayTransferIn = currentDoBindings.some(
+          (binding) =>
+            !oldDoClassNameByLogicalId[binding.logicalId] &&
+            binding.transferredFrom !== undefined,
+        );
+        const observedNamespaces =
+          !dispatchNamespace &&
+          (deletedClassCandidates.length > 0 || mayTransferIn)
+            ? yield* listDurableObjectNamespaces(accountId)
+            : [];
+        const hosts = (
+          namespaces: readonly { script: string; class: string }[],
+          scriptName: string,
+          className: string,
+        ) =>
+          namespaces.some(
+            (ns) => ns.script === scriptName && ns.class === className,
+          );
+        const scriptHostsClass = (scriptName: string, className: string) =>
+          hosts(observedNamespaces, scriptName, className);
+
+        const deletedClasses: string[] = [];
+        for (const className of deletedClassCandidates) {
+          if (dispatchNamespace) {
+            deletedClasses.push(className);
+            continue;
+          }
+          const targetScriptName = crossScriptClassTargets.get(className);
+          if (targetScriptName === undefined) {
+            // Plain removal. Delete only if the namespace actually still
+            // lives here — it may have been transferred to another script by
+            // that script's deploy, or removed out-of-band. The stale
+            // alchemy:do tag drops out either way because tags are recomputed
+            // from current bindings.
+            if (scriptHostsClass(name, className)) {
+              deletedClasses.push(className);
+            }
+            continue;
+          }
+          // The class went local → cross-script. When the new host's deploy
+          // ran a `transferred_classes` migration moments ago, the account
+          // listing can briefly still attribute the namespace to this script,
+          // so re-observe with a short bounded budget until the transfer
+          // becomes visible (namespace off this script) or the state is
+          // conclusively a conflict (still here — including the case where
+          // the target created a *fresh* namespace for the same class name).
+          const namespaces = yield* listDurableObjectNamespaces(accountId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (observed) =>
+                !hosts(observed, name, className) ||
+                hosts(observed, targetScriptName, className),
+              times: 5,
+            }),
+          );
+          if (!hosts(namespaces, name, className)) {
+            // Transferred away — nothing to delete.
+            continue;
+          }
+          // local → cross-script transition without a transfer. Fail before
+          // any upload: Cloudflare would reject the combined delete + binding
+          // anyway, and silently deleting would destroy the namespace's
+          // data. See the error's docs for the two ways out
+          // (`transferredFrom` on the new host, or a two-phase removal).
+          return yield* Effect.fail(
+            new DurableObjectTransferRequired({
+              scriptName: name,
+              className,
+              targetScriptName,
+            }),
+          );
         }
 
         // Collect container-backed class names so we can send container metadata
@@ -1409,27 +1660,42 @@ export const LiveWorkerProvider = () =>
           ),
         );
 
-        // Compute new and renamed classes
+        // Compute new, renamed, and transferred classes
         const newClasses: string[] = [];
         const newSqliteClasses: string[] = [];
         const renamedClasses: { from: string; to: string }[] = [];
+        const transferredClasses: {
+          from: string;
+          fromScript: string;
+          to: string;
+        }[] = [];
         for (const binding of currentDoBindings) {
           let previousClassName: string | undefined =
             oldDoClassNameByLogicalId[binding.logicalId];
           if (!previousClassName) {
-            // No `alchemy:do:` tag maps this logical id to a class — the
+            // No DO metadata tag maps this logical id to a class — the
             // worker was created outside Alchemy (raw API / Wrangler) or
             // before these tags existed. Fall back to matching the observed
             // cloud binding by binding name so adoption reuses the existing
             // class instead of asking Cloudflare to create one that already
             // exists (which fails the migration). This is the "first deploy
             // must match the existing class name" path; once we write the
-            // `alchemy:do:` tag, subsequent renames are driven by logical id.
+            // `alchemy:dos:` tag, subsequent renames are driven by logical id.
             const observed = oldBindings.find(
               (old) =>
                 old.type === "durable_object_namespace" &&
                 "className" in old &&
                 old.className &&
+                // Only a *locally-owned* binding proves the class exists on
+                // this script. A cross-script binding under the same name —
+                // e.g. this worker previously referenced another host's
+                // class and now hosts its own — points at a foreign
+                // namespace and must not suppress the create migration
+                // (Cloudflare rejects a local binding for a class the
+                // script isn't configured to implement).
+                (!("scriptName" in old) ||
+                  old.scriptName === undefined ||
+                  old.scriptName === name) &&
                 old.name === binding.bindingName,
             );
             if (observed && "className" in observed && observed.className) {
@@ -1437,6 +1703,38 @@ export const LiveWorkerProvider = () =>
             }
           }
           if (!previousClassName) {
+            // A class new to this script is a host move when the declaration
+            // says so: `transferredFrom` lists the former host(s) — moves
+            // are always declared, never inferred, because a class deleted
+            // on one worker and created on another is otherwise ambiguous
+            // between "move the data" and "delete + fresh namespace". The
+            // declared source must be observed to still host the namespace;
+            // otherwise (fresh stage, transfer already completed) fall
+            // through to a plain create.
+            const fromScript = dispatchNamespace
+              ? undefined
+              : yield* resolveTransferSource({
+                  accountId,
+                  selfScriptName: name,
+                  logicalId: binding.logicalId,
+                  className: binding.className,
+                  sources: normalizeTransferSources(
+                    binding.transferredFrom,
+                    name,
+                  ),
+                  observedNamespaces,
+                });
+            if (fromScript !== undefined) {
+              // Data-preserving move: ship Cloudflare's
+              // `transferred_classes` migration instead of creating a
+              // fresh class.
+              transferredClasses.push({
+                from: binding.className,
+                fromScript,
+                to: binding.className,
+              });
+              continue;
+            }
             // Default all new Durable Object classes to SQLite. Cloudflare
             // recommends SQLite for new namespaces, and container-backed
             // Durable Objects require it.
@@ -1456,29 +1754,28 @@ export const LiveWorkerProvider = () =>
               currentDoClassNameByLogicalId,
               deletedClasses,
               renamedClasses,
+              transferredClasses,
               newSqliteClasses,
             },
           )}`,
         );
 
-        // Build alchemy:do:{logicalId}:{className} tags for each DO binding
-        const alchemyDoTags: string[] = [];
-        for (const binding of currentDoBindings) {
-          alchemyDoTags.push(
-            `alchemy:do:${binding.logicalId}:${binding.className}`,
-          );
-        }
+        // Pack every DO logical-id→class mapping into as few `alchemy:dos:`
+        // tags as possible — one tag per DO blows Cloudflare's 10-tag limit
+        // at 7+ bindings (#811).
+        const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
+        const alchemyTags = [
+          ...createAlchemyWorkerTags(id),
+          ...alchemyDoTags,
+          ...(newMigrationTag
+            ? [`alchemy:migration-tag:${newMigrationTag}`]
+            : []),
+        ];
         const metadataTags = Array.from(
-          new Set([
-            ...createAlchemyWorkerTags(id),
-            ...alchemyDoTags,
-            ...(newMigrationTag
-              ? [`alchemy:migration-tag:${newMigrationTag}`]
-              : []),
-            ...(news.tags ?? []),
-          ]),
+          new Set([...alchemyTags, ...(news.tags ?? [])]),
         );
+        yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
         const migrations = {
           oldTag: oldMigrationTag,
@@ -1486,7 +1783,7 @@ export const LiveWorkerProvider = () =>
           newClasses,
           deletedClasses,
           renamedClasses,
-          transferredClasses: [] as { from: string; to: string }[],
+          transferredClasses,
           newSqliteClasses,
         };
 
@@ -1631,9 +1928,10 @@ export const LiveWorkerProvider = () =>
                 error._tag === "WorkerNotFound" ||
                 error._tag === "InternalServerError" ||
                 error._tag === "UnknownCloudflareError",
-              schedule: Schedule.exponential(200).pipe(
-                Schedule.both(Schedule.recurs(15)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential(200),
+                Schedule.recurs(15),
+              ]),
             }),
           );
         }
@@ -2004,10 +2302,17 @@ export const LiveWorkerProvider = () =>
           const exportDerived = Object.keys(exportMap)
             .filter((logicalId) => isDurableObjectExport(exportMap[logicalId]))
             .map((logicalId) => ({ logicalId, className: logicalId }));
+          // Transfer-destination classes are excluded from the placeholder
+          // entirely (class list, bindings, tags): Cloudflare forbids
+          // creating the destination class of a `transferred_classes`
+          // migration ahead of the transfer, so `reconcile` must perform it
+          // with the real upload. (`transferredFrom` may still be an
+          // unresolved Output here — precreate runs on raw props — but only
+          // its presence matters.)
           const durableObjects = mergeDurableObjectClasses(
             exportDerived,
             getDurableObjectBindings(bindings, name),
-          );
+          ).filter((binding) => !binding.transferredFrom);
           const doClasses = durableObjects.map((binding) => binding.className);
           // Only attach container metadata for classes actually fronted by a
           // Container binding (mirrors reconcile's `containerClassNames`).
@@ -2020,17 +2325,15 @@ export const LiveWorkerProvider = () =>
               ),
             ),
           ).map((className) => ({ className }));
-          const alchemyDoTags = durableObjects.map(
-            ({ logicalId, className }) =>
-              `alchemy:do:${logicalId}:${className}`,
-          );
+          const alchemyDoTags = encodeDurableObjectTags(durableObjects);
+          const alchemyTags = [
+            ...createAlchemyWorkerTags(id),
+            ...alchemyDoTags,
+          ];
           const tags = Array.from(
-            new Set([
-              ...createAlchemyWorkerTags(id),
-              ...alchemyDoTags,
-              ...(news.tags ?? []),
-            ]),
+            new Set([...alchemyTags, ...(news.tags ?? [])]),
           );
+          yield* validateWorkerTags(name, tags, alchemyTags.length);
           yield* Effect.logInfo(
             `Cloudflare Worker precreate: starting ${name}`,
           );
@@ -2135,9 +2438,10 @@ export const LiveWorkerProvider = () =>
                 while: (e) =>
                   e._tag === "InternalServerError" ||
                   e._tag === "UnknownCloudflareError",
-                schedule: Schedule.exponential(1000).pipe(
-                  Schedule.both(Schedule.recurs(5)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.exponential(1000),
+                  Schedule.recurs(5),
+                ]),
               }),
             );
             if (doClasses.length > 0) {
@@ -2371,16 +2675,12 @@ export const LiveWorkerProvider = () =>
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(
-              (existingSettings?.tags ?? []).filter((tag) =>
-                tag.startsWith("alchemy:do:"),
-              ),
+              (existingSettings?.tags ?? []).filter(isDurableObjectTag),
             )}`,
           );
           yield* Effect.logInfo(
             `Cloudflare Worker reconcile: previous durable object tags ${JSON.stringify(
-              (output?.tags ?? []).filter((tag) =>
-                tag.startsWith("alchemy:do:"),
-              ),
+              (output?.tags ?? []).filter(isDurableObjectTag),
             )}`,
           );
 
@@ -2515,6 +2815,41 @@ const contentTypeFromExtension = (extension: string) => {
   }
 };
 
+/**
+ * Observe every Durable Object namespace on the account as `(script, class)`
+ * pairs. Namespace ownership is authoritative cloud state: after a
+ * `transferred_classes` migration the namespace moves to the receiving
+ * script, so this is how both sides of a transfer observe where a class
+ * currently lives — the destination checks the source still hosts the class
+ * before emitting the transfer, and the former host checks whether a class
+ * it is about to delete has already been transferred away.
+ */
+const listDurableObjectNamespaces = (accountId: string) =>
+  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((namespaces) =>
+      Array.from(namespaces).flatMap((ns) =>
+        ns.script && ns.class ? [{ script: ns.script, class: ns.class }] : [],
+      ),
+    ),
+  );
+
+/**
+ * Coerce a resolved `transferredFrom` declaration to its list form, dropping
+ * self-references (a worker naming itself as its own former host is
+ * meaningless — the class already lives there).
+ */
+const normalizeTransferSources = (
+  value: string | readonly string[] | undefined,
+  selfScriptName: string,
+): string[] =>
+  (value === undefined
+    ? []
+    : Array.isArray(value)
+      ? value
+      : [value as string]
+  ).filter((source) => source !== selfScriptName);
+
 function bumpMigrationTagVersion(
   oldTag: string | undefined,
 ): string | undefined {
@@ -2527,12 +2862,20 @@ function bumpMigrationTagVersion(
 /**
  * Merges a worker's export-derived and binding-derived Durable Object class
  * lists for the precreate placeholder, deduping by class name. The
- * binding-derived entry wins on a collision so the `alchemy:do:` tag keys off
+ * binding-derived entry wins on a collision so the `alchemy:dos:` tag keys off
  * the same logical id (the binding sid) that `reconcile` writes.
  */
 function mergeDurableObjectClasses(
-  exportDerived: ReadonlyArray<{ logicalId: string; className: string }>,
-  bindingDerived: ReadonlyArray<{ logicalId: string; className: string }>,
+  exportDerived: ReadonlyArray<{
+    logicalId: string;
+    className: string;
+    transferredFrom?: string | string[];
+  }>,
+  bindingDerived: ReadonlyArray<{
+    logicalId: string;
+    className: string;
+    transferredFrom?: string | string[];
+  }>,
 ) {
   return Array.from(
     new Map(
@@ -2576,22 +2919,180 @@ function getDurableObjectBindings(
           logicalId: binding.sid,
           bindingName: item.name,
           className: item.className,
+          // Declared host history for a data-preserving
+          // `transferred_classes` migration. Normalize an empty list to
+          // "not declared"; self-references are dropped at resolution time.
+          transferredFrom:
+            Array.isArray(item.transferredFrom) &&
+            item.transferredFrom.length === 0
+              ? undefined
+              : item.transferredFrom,
         },
       ];
     }),
   );
 }
 
-function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
-  return Object.fromEntries(
-    tags.flatMap((tag) => {
-      if (!tag.startsWith("alchemy:do:")) {
-        return [];
-      }
+/**
+ * Cloudflare Worker script-tag limits, verified empirically against the live
+ * API (2026-07):
+ *
+ * - at most **10 tags** per Worker (the 11th is rejected with `Forbidden`)
+ * - each tag is at most **1024 bytes** (`BadRequest: Tag is too large`)
+ * - tags may not contain `,` or `&`; everything else (`:`, `;`, `=`, `/`,
+ *   spaces, unicode) is accepted and round-trips intact
+ *
+ * Alchemy reserves 3 ownership tags (`alchemy:stack/stage/id`) and 1
+ * migration tag, so the Durable Object logical-id→class mapping must not
+ * spend one tag per DO (#811). Instead all mappings are packed into as few
+ * `alchemy:dos:` tags as possible.
+ */
+const MAX_TAGS_PER_WORKER = 10;
+const MAX_TAG_BYTES = 1024;
+const LEGACY_DO_TAG_PREFIX = "alchemy:do:";
+const PACKED_DO_TAG_PREFIX = "alchemy:dos:";
+
+class InvalidWorkerTags extends Data.TaggedError("InvalidWorkerTags")<{
+  scriptName: string;
+  reason: string;
+}> {}
+
+/**
+ * Pack Durable Object logical-id→class mappings into `alchemy:dos:` tags.
+ *
+ * Each mapping is encoded as `logicalId=className` — elided to just
+ * `className` when the two are equal (the common case for export-derived
+ * classes) — with both components `encodeURIComponent`-escaped so the `;`
+ * pair separator, the `=` delimiter, and Cloudflare's forbidden tag
+ * characters (`,`, `&`) can never collide with user identifiers. Pairs are
+ * sorted for deterministic output and greedily packed so each tag stays
+ * within Cloudflare's 1024-byte tag limit; workers with more DOs than fit in
+ * one tag spill into additional `alchemy:dos:` tags.
+ *
+ * `encodeURIComponent` output is pure ASCII, so `String.length` equals the
+ * tag's byte length.
+ *
+ * @internal exported for unit testing.
+ */
+export function encodeDurableObjectTags(
+  durableObjects: ReadonlyArray<{ logicalId: string; className: string }>,
+): string[] {
+  const pairs = [...durableObjects]
+    .sort((a, b) => a.logicalId.localeCompare(b.logicalId))
+    .map(({ logicalId, className }) =>
+      logicalId === className
+        ? encodeURIComponent(className)
+        : `${encodeURIComponent(logicalId)}=${encodeURIComponent(className)}`,
+    );
+  const tags: string[] = [];
+  let payload = "";
+  for (const pair of pairs) {
+    const appended = payload === "" ? pair : `${payload};${pair}`;
+    if (
+      PACKED_DO_TAG_PREFIX.length + appended.length > MAX_TAG_BYTES &&
+      payload !== ""
+    ) {
+      tags.push(`${PACKED_DO_TAG_PREFIX}${payload}`);
+      payload = pair;
+    } else {
+      payload = appended;
+    }
+  }
+  if (payload !== "") {
+    tags.push(`${PACKED_DO_TAG_PREFIX}${payload}`);
+  }
+  return tags;
+}
+
+/**
+ * Parse the Durable Object logical-id→class mapping from a worker's script
+ * tags. Reads both formats so workers deployed before the packed format roll
+ * forward transparently:
+ *
+ * - legacy: one `alchemy:do:{logicalId}:{className}` tag per DO
+ * - packed: `alchemy:dos:{pair};{pair};…` (see {@link encodeDurableObjectTags})
+ *
+ * A packed entry wins over a legacy entry for the same logical id.
+ *
+ * @internal exported for unit testing.
+ */
+export function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
+  const map: Record<string, string> = {};
+  for (const tag of tags) {
+    if (tag.startsWith(LEGACY_DO_TAG_PREFIX)) {
       const parts = tag.split(":");
       const logicalId = parts[2];
       const className = parts.slice(3).join(":");
-      return logicalId && className ? [[logicalId, className]] : [];
-    }),
-  );
+      if (logicalId && className && !(logicalId in map)) {
+        map[logicalId] = className;
+      }
+    }
+  }
+  for (const tag of tags) {
+    if (tag.startsWith(PACKED_DO_TAG_PREFIX)) {
+      for (const pair of tag.slice(PACKED_DO_TAG_PREFIX.length).split(";")) {
+        if (pair === "") continue;
+        const eq = pair.indexOf("=");
+        const logicalId = decodeURIComponent(
+          eq === -1 ? pair : pair.slice(0, eq),
+        );
+        const className = decodeURIComponent(
+          eq === -1 ? pair : pair.slice(eq + 1),
+        );
+        if (logicalId && className) {
+          map[logicalId] = className;
+        }
+      }
+    }
+  }
+  return map;
 }
+
+const isDurableObjectTag = (tag: string) =>
+  tag.startsWith(LEGACY_DO_TAG_PREFIX) || tag.startsWith(PACKED_DO_TAG_PREFIX);
+
+/**
+ * Fail fast — before the script upload — when a worker's tag set violates
+ * Cloudflare's limits, instead of surfacing the raw `Forbidden`/`BadRequest`
+ * at PUT time (#811). `alchemyTagCount` is the number of tags alchemy itself
+ * generated (ownership + migration + packed DO tags) so the message can tell
+ * the user how much of the budget is theirs.
+ */
+const validateWorkerTags = (
+  scriptName: string,
+  tags: ReadonlyArray<string>,
+  alchemyTagCount: number,
+) =>
+  Effect.gen(function* () {
+    if (tags.length > MAX_TAGS_PER_WORKER) {
+      return yield* Effect.fail(
+        new InvalidWorkerTags({
+          scriptName,
+          reason:
+            `worker "${scriptName}" needs ${tags.length} script tags but Cloudflare allows at most ${MAX_TAGS_PER_WORKER}. ` +
+            `Alchemy reserves ${alchemyTagCount} (ownership, migration and durable-object metadata); ` +
+            `${tags.length - alchemyTagCount} user tags were passed via \`tags\`. Remove ${tags.length - MAX_TAGS_PER_WORKER} tag(s).`,
+        }),
+      );
+    }
+    const encoder = new TextEncoder();
+    for (const tag of tags) {
+      if (tag.includes(",") || tag.includes("&")) {
+        return yield* Effect.fail(
+          new InvalidWorkerTags({
+            scriptName,
+            reason: `worker "${scriptName}" tag ${JSON.stringify(tag)} contains ',' or '&', which Cloudflare rejects.`,
+          }),
+        );
+      }
+      const bytes = yield* Effect.sync(() => encoder.encode(tag).length);
+      if (bytes > MAX_TAG_BYTES) {
+        return yield* Effect.fail(
+          new InvalidWorkerTags({
+            scriptName,
+            reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
+          }),
+        );
+      }
+    }
+  });

@@ -313,9 +313,10 @@ export const HealthCheckProvider = () =>
                 // Optimistic-lock retry: re-read for the latest version.
                 Effect.retry({
                   while: (e) => e._tag === "HealthCheckVersionMismatch",
-                  schedule: Schedule.fixed("1 second").pipe(
-                    Schedule.both(Schedule.recurs(5)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed("1 second"),
+                    Schedule.recurs(5),
+                  ]),
                 }),
               );
             check = updated;
@@ -337,9 +338,10 @@ export const HealthCheckProvider = () =>
             // Still referenced by a record whose delete is propagating.
             Effect.retry({
               while: (e) => e._tag === "HealthCheckInUse",
-              schedule: Schedule.fixed("3 seconds").pipe(
-                Schedule.both(Schedule.recurs(10)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(10),
+              ]),
             }),
             Effect.catchTag("HealthCheckInUse", () => Effect.void),
           );

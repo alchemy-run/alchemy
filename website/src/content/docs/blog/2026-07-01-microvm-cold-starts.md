@@ -138,7 +138,7 @@ the last user as well as the first.
 
 (The full 16-variant matrix — a Python image, the Node
 baselines, the remaining Worker-driven rows — lives in the
-[full report](https://github.com/alchemy-run/alchemy-effect/tree/main/benchmark/container).)
+[full report](https://github.com/alchemy-run/alchemy/tree/main/benchmark/container).)
 
 Which shape you want depends on what you're building. If a slow
 boot retries invisibly in the background, take the faster
@@ -168,7 +168,7 @@ distributing a freshly pushed image isn't mixed into the numbers.
 ## The images under test
 
 The benchmark is an ordinary Alchemy app
-([`benchmark/container`](https://github.com/alchemy-run/alchemy-effect/tree/main/benchmark/container)).
+([`benchmark/container`](https://github.com/alchemy-run/alchemy/tree/main/benchmark/container)).
 Each variant is an image resource, and the variants are chosen
 to isolate one question each.
 

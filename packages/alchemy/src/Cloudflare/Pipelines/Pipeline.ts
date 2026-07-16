@@ -175,9 +175,10 @@ export const PipelineProvider = () =>
         // race an `PipelineAlreadyExists` against the dying pipeline.
         yield* getPipeline(accountId, observed.id).pipe(
           Effect.repeat({
-            schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("250 millis"),
+              Schedule.recurs(8),
+            ]),
             until: (p) => p === undefined,
           }),
         );
@@ -196,9 +197,10 @@ export const PipelineProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "TableNotFound",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.both(Schedule.recurs(6)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("500 millis"),
+                Schedule.recurs(6),
+              ]),
             }),
             Effect.catchTag("PipelineAlreadyExists", (error) =>
               findPipelineByName(accountId, name).pipe(

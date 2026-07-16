@@ -10,7 +10,7 @@ ordinary plugins in `vite.config.ts`, so
 [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite) builds the client
 assets and the SSR server bundle in a single `vite build` pass, no
 adapter or Wrangler config required. Support is verified: the
-[examples/cloudflare-tanstack](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-tanstack)
+[examples/cloudflare-tanstack](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-tanstack)
 example is checked in, and a live test deploys it in dev mode with real
 Alchemy-managed R2 bindings.
 
@@ -152,7 +152,7 @@ hits the same bucket in dev as in production.
 
 TanStack Start's Solid flavor works the same way — swap the plugins in
 `vite.config.ts` and keep the identical `alchemy.run.ts` shape (see
-[examples/cloudflare-tanstack-start-solid](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-tanstack-start-solid)):
+[examples/cloudflare-tanstack-start-solid](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-tanstack-start-solid)):
 
 ```typescript
 // vite.config.ts

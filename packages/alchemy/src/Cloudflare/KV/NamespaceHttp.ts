@@ -1,9 +1,13 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Credentials } from "../Credentials.ts";
+import { authorizeWith } from "../HttpClientUtils.ts";
 import type { Namespace } from "./Namespace.ts";
 import { NamespaceError } from "./NamespaceTypes.ts";
 
@@ -58,6 +62,25 @@ export interface HttpScope {
   namespaceId: string;
 }
 
+/**
+ * Injectable auth for the KV HTTP client builders. Both the scoped-token
+ * (`*Http`) and current-credentials (`*Local`) variants supply an `authorize`
+ * (which provides `Credentials` + `HttpClient` to a raw SDK op) and an
+ * `accountId`, so the client builders are agnostic to how creds are obtained.
+ */
+export interface KVAuth {
+  authorize: <A, E>(
+    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ) => Effect.Effect<A, E, RuntimeContext>;
+  accountId: Effect.Effect<string>;
+}
+
+/** Build a scoped-token {@link KVAuth} from a bound {@link HttpToken}. */
+export const makeKVAuth = (token: HttpToken): KVAuth => ({
+  authorize: authorizeWith(token),
+  accountId: token.accountId,
+});
+
 const KV_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
   "Workers KV Storage Read",
   "Workers KV Storage Write",
@@ -67,11 +90,11 @@ type PermissionGroup = (typeof KV_HTTP_PERMISSION_GROUPS)[number];
 
 /** Resolve the account and namespace id once per operation. */
 export const makeKVHttpScope = (
-  token: HttpToken,
+  auth: KVAuth,
   namespaceId: Effect.Effect<string>,
 ): Effect.Effect<HttpScope> =>
   Effect.gen(function* () {
-    const accountId = yield* token.accountId;
+    const accountId = yield* auth.accountId;
     const id = yield* namespaceId;
     return { accountId, namespaceId: id };
   });

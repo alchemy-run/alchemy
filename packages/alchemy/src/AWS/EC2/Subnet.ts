@@ -604,12 +604,16 @@ export const SubnetProvider = () =>
                   // This can happen if ENIs/instances are being deleted concurrently
                   return e._tag === "DependencyViolation";
                 },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.either(Schedule.spaced("30 seconds")),
-                  Schedule.both(Schedule.recurs(30)),
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.min([
+                    Schedule.exponential(1000, 1.5),
+                    Schedule.spaced("30 seconds"),
+                  ]),
+                  Schedule.recurs(30),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                      `Waiting for dependencies to clear... (attempt ${attempt})`,
                     ),
                   ),
                 ),
@@ -700,12 +704,11 @@ const waitForSubnetAvailable = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof SubnetPending,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(30)), // Max 60 seconds
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(30)]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
-                `Waiting for subnet to be available... (${(attempt + 1) * 2}s)`,
+                `Waiting for subnet to be available... (${attempt * 2}s)`,
               )
             : Effect.void,
         ),
@@ -738,12 +741,9 @@ const waitForSubnetDeleted = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof SubnetStillExists,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(15)), // Max 30 seconds
-        Schedule.tapOutput(([, attempt]) =>
-          session.note(
-            `Waiting for subnet deletion... (${(attempt + 1) * 2}s)`,
-          ),
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for subnet deletion... (${attempt * 2}s)`),
         ),
       ),
     }),

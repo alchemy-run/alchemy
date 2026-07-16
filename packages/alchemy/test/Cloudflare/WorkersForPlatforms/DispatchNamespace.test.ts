@@ -37,9 +37,10 @@ const expectNamespaceGone = (accountId: string, name: string) =>
     Effect.catchTag("DispatchNamespaceNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "NamespaceNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -78,9 +79,10 @@ const expectScriptGone = (
     ),
     Effect.retry({
       while: (e) => e._tag === "ScriptNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -201,10 +203,10 @@ test.provider(
         effect: provider.list(),
         predicate: (all) =>
           all.some((ns) => ns.namespaceId === deployed.namespaceId),
-        schedule: Schedule.both(
+        schedule: Schedule.max([
           Schedule.spaced("2 seconds"),
           Schedule.recurs(20),
-        ),
+        ]),
       });
 
       const match = all.find((ns) => ns.namespaceId === deployed.namespaceId);

@@ -19,9 +19,10 @@ const sharedStack = Core.scratchStack(testOptions, "S3EventSource");
 
 // Lambda function URL cold-start plus IAM propagation can take well over a
 // minute on a fresh deploy under parallel-suite load. Budget ~150s.
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
 
 let baseUrl: string;
 
@@ -116,9 +117,10 @@ describe("S3 Bucket Event Source", () => {
         const processed = yield* fetchProcessed.pipe(
           Effect.retry({
             while: (error) => error._tag === "ProcessedNotReady",
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(48)), // ~4 min budget
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(48),
+            ]),
           }),
         );
 

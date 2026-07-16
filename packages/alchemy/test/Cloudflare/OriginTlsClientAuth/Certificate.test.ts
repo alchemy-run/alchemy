@@ -50,9 +50,10 @@ const resolveZoneId = Effect.gen(function* () {
 // single delay by the 8th retry (~127s total), so a token blip would sleep
 // for over a minute between attempts and blow the test budget even though the
 // blip itself clears in seconds. Capping keeps the cadence steady.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 const getCertificate = (zoneId: string, certificateId: string) =>
   originTls.getOriginTlsClientAuth({ zoneId, certificateId }).pipe(
@@ -83,9 +84,10 @@ const waitForGone = (zoneId: string, certificateId: string) =>
       // the cert was already gone. That overshoot — not genuinely-slow CF —
       // was what blew the test budget. A fixed interval detects the tombstone
       // within one poll of it actually happening.
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(45)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(45),
+      ]),
     }),
   );
 

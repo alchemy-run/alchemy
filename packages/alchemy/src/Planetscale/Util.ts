@@ -35,9 +35,10 @@ export class PlanetscaleConflict extends Data.TaggedError(
  * database creates routinely run 10-12 minutes, so a 10-minute budget
  * regularly false-positives as "stuck".
  */
-const defaultSchedule = Schedule.spaced("5 seconds").pipe(
-  Schedule.both(Schedule.recurs(360)),
-);
+const defaultSchedule = Schedule.max([
+  Schedule.spaced("5 seconds"),
+  Schedule.recurs(360),
+]);
 
 /**
  * Generic polling helper that retries until `predicate(value)` returns true

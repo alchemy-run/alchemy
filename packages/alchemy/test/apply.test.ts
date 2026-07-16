@@ -1,3 +1,4 @@
+import { adopt, Unowned } from "@/AdoptPolicy";
 import { Cli } from "@/Cli/Cli";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -414,10 +415,10 @@ describe("basic operations", () => {
 
 // Regression: a logical ID may legitimately contain the FQN separator ("/").
 // The GitHub event source registers a webhook keyed by `${owner}/${repository}`
-// (e.g. "alchemy-run/alchemy-effect"). During destroy the deletion path used to
+// (e.g. "alchemy-run/alchemy"). During destroy the deletion path used to
 // recompute the state key via `toFqn(namespace, logicalId)`, but `logicalId`
 // came from `parseFqn` which splits on "/" and keeps only the last segment
-// ("alchemy-effect"). The recomputed key missed the real state row, so the
+// ("alchemy"). The recomputed key missed the real state row, so the
 // resource was deleted from the cloud yet never removed from state — resurfacing
 // as an orphan deletion on every subsequent destroy, forever.
 describe("FQN separator in logical ID", () => {
@@ -425,7 +426,7 @@ describe("FQN separator in logical ID", () => {
     "destroy clears state for a top-level logical ID containing '/'",
     (stack) =>
       Effect.gen(function* () {
-        const fqn = "alchemy-run/alchemy-effect";
+        const fqn = "alchemy-run/alchemy";
 
         yield* stack.deploy(
           Effect.gen(function* () {
@@ -460,11 +461,11 @@ describe("FQN separator in logical ID", () => {
       Effect.gen(function* () {
         // Mirrors the GitHub webhook: a host construct (the Worker) whose
         // child resource's logical ID is "owner/repo".
-        const fqn = "ReleaseService/alchemy-run/alchemy-effect";
+        const fqn = "ReleaseService/alchemy-run/alchemy";
 
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* TestResource("alchemy-run/alchemy-effect", {
+            return yield* TestResource("alchemy-run/alchemy", {
               string: "v1",
             });
           }).pipe(Namespace.push("ReleaseService")),
@@ -4961,4 +4962,101 @@ describe("type aliases", () => {
         }),
     );
   });
+});
+
+// Regression coverage for
+// https://github.com/alchemy-run/alchemy/issues/793
+//
+// `Plan.make` used to `state.set(...)` the adopted `created` state during plan
+// construction. Because `alchemy plan` / `deploy --dry-run` build a plan the
+// exact same way a real deploy does, a read-only preview silently claimed
+// ownership of an unowned cloud resource — arming a later, unrelated deploy to
+// orphan-delete it. Plan construction must be side-effect-free: reading the
+// cloud resource is fine (needed for an accurate diff), but persisting the
+// adopted state may only happen when the plan node is applied.
+describe("engine-level adoption persists at apply, not plan (issue #793)", () => {
+  // A pre-existing, foreign-owned cloud resource that `read` always discovers
+  // — the exact shape that triggers an `--adopt` takeover.
+  const ownedAttrs: TestResource["Attributes"] = {
+    string: "hello",
+    stringArray: [],
+    stableString: "Adopted",
+    stableArray: ["Adopted"],
+    replaceString: undefined,
+    redacted: undefined,
+    redactedArray: undefined,
+  };
+
+  const adoptHooks = Layer.succeed(TestResourceHooks, {
+    read: () => Effect.succeed(Unowned(ownedAttrs)),
+  });
+
+  test.provider(
+    "a dry-run plan writes nothing to the state store; applying persists",
+    (stack) =>
+      Effect.gen(function* () {
+        // ── dry-run: build a plan that adopts the unowned cloud resource ──
+        const plan = yield* TestResource("Adopted", { string: "hello" }).pipe(
+          adopt(true),
+          stack.plan,
+          Effect.provide(adoptHooks),
+        );
+
+        // The adopted state rides on the plan node as a forced update (so the
+        // provider re-syncs ownership tags / config) — it is not persisted.
+        expect(plan.resources.Adopted!.action).toBe("update");
+        expect(plan.resources.Adopted!.state?.status).toBe("created");
+
+        // The critical invariant of #793: planning persisted nothing, so a
+        // read-only `alchemy plan` / `--dry-run` cannot arm a later deploy to
+        // orphan-delete the live resource.
+        expect(yield* getState("Adopted")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+
+        // ── apply: the same config now deploys. Because plan didn't persist,
+        // the resource is still adoptable here. ──
+        yield* TestResource("Adopted", { string: "hello" }).pipe(
+          adopt(true),
+          stack.deploy,
+          Effect.provide(adoptHooks),
+        );
+
+        // Applying DOES persist the adopted state.
+        const persisted = yield* getState("Adopted");
+        expect(["created", "updated"]).toContain(persisted?.status);
+        expect(yield* listState()).toEqual(["Adopted"]);
+      }),
+  );
+});
+
+describe("interrupted create persists no unresolved Output exprs", () => {
+  test.provider(
+    "creating-state props are plain data and destroy converges",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const a = yield* TestResource("A", { string: "a-value" });
+          const b = yield* TestResource("B", { string: a.string });
+          return { a, b };
+        });
+
+        // B's reconcile fails AFTER the engine committed its `creating`
+        // state, which snapshots the plan props — where `string` is still
+        // an unresolved PropExpr referencing A's output.
+        yield* program.pipe(stack.deploy, hook(failOn("B", "create")));
+
+        const b = yield* getState("B");
+        expect(b?.status).toEqual("creating");
+        // State only holds plain data: the unresolved expr must be
+        // stripped, never persisted as a live proxy. A later destroy plan
+        // hands these props back to `provider.read` as `olds`; a live
+        // proxy explodes on first string coercion (e.g. inside a distilled
+        // path-parameter builder).
+        expect((b?.props as TestResourceProps).string).toBeUndefined();
+
+        yield* stack.destroy();
+        expect(yield* getState("B")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
 });

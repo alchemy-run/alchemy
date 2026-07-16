@@ -391,9 +391,10 @@ const waitForAddonActive = Effect.fn(function* ({
     }),
     Effect.retry({
       while: (error) => error instanceof AddonNotReady,
-      schedule: Schedule.exponential("1 second").pipe(
-        Schedule.both(Schedule.recurs(120)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("1 second"),
+        Schedule.recurs(120),
+      ]),
     }),
   );
 });
@@ -416,9 +417,10 @@ const waitForAddonDeleted = Effect.fn(function* ({
     ),
     Effect.retry({
       while: (error) => error instanceof AddonStillExists,
-      schedule: Schedule.exponential("1 second").pipe(
-        Schedule.both(Schedule.recurs(120)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("1 second"),
+        Schedule.recurs(120),
+      ]),
     }),
   );
 });

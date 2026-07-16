@@ -46,9 +46,10 @@ const expectGone = (accountId: string, liveInputId: string, outputId: string) =>
     Effect.catchTag("LiveInputNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "OutputNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -274,9 +275,10 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
         ),
         Effect.retry({
           while: (e) => e._tag === "OutputNotListed",
-          schedule: Schedule.exponential("500 millis").pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential("500 millis"),
+            Schedule.recurs(10),
+          ]),
         }),
       );
 

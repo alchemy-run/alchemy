@@ -1,8 +1,12 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Credentials } from "../Credentials.ts";
+import { authorizeWith } from "../HttpClientUtils.ts";
 import { Worker } from "../Workers/Worker.ts";
 
 /**
@@ -16,7 +20,7 @@ import { Worker } from "../Workers/Worker.ts";
 export const makeTunnelClient = <C>(
   sid: string,
   permissionGroups: PermissionGroupRef[],
-  makeClient: (token: Token) => C,
+  makeClient: (auth: TunnelAuth) => C,
 ) =>
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
@@ -39,9 +43,29 @@ export const makeTunnelClient = <C>(
           ],
         });
       }
-      return makeClient(yield* bindTunnelToken(token));
+      return makeClient(makeTunnelAuth(yield* bindTunnelToken(token)));
     });
   });
+
+/**
+ * Injectable auth for the tunnel client builders. Both the scoped-token
+ * (`*Binding`) and current-credentials (`*Local`) variants supply an
+ * `authorize` (which provides `Credentials` + `HttpClient` to a raw SDK op)
+ * and an `accountId`, so the client builders are agnostic to how creds are
+ * obtained.
+ */
+export interface TunnelAuth {
+  authorize: <A, E>(
+    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ) => Effect.Effect<A, E, RuntimeContext>;
+  accountId: Effect.Effect<string>;
+}
+
+/** Build a scoped-token {@link TunnelAuth} from a bound {@link Token}. */
+export const makeTunnelAuth = (token: Token): TunnelAuth => ({
+  authorize: authorizeWith(token),
+  accountId: token.accountId,
+});
 
 /**
  * Runtime accessors for a tunnel binding's token, obtained by binding the

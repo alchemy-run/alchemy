@@ -79,9 +79,10 @@ const expectGone = (zoneId: string, healthcheckId: string) =>
     Effect.catchTag("HealthcheckNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "HealthcheckNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

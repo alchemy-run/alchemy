@@ -112,9 +112,10 @@ const waitForEventSourceMappingEnabled = Effect.fn(function* (
     }),
     Effect.retry({
       while: (error) => error._tag === "EventSourceMappingNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 });
@@ -145,9 +146,10 @@ const waitForTableStreamSpecification = Effect.fn(function* (
     }),
     Effect.retry({
       while: (error) => error._tag === "TableStreamConfigurationNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 });
@@ -180,9 +182,10 @@ const waitForQueueMessage = Effect.fn(function* (queueUrl: string) {
     }),
     Effect.retry({
       while: (error) => error._tag === "StreamMessageNotReady",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(72)), // 72 * (5s sleep + up to 20s poll) ~= 6min budget
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(72),
+      ]),
     }),
   );
 });

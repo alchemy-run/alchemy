@@ -438,6 +438,39 @@ describe("Apply", () => {
       }),
   );
 
+  test.provider(
+    "init captures a resource Output; body resolves it at apply",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* stack.deploy(
+          Effect.gen(function* () {
+            const bucket = yield* Bucket("Cap", { name: "cap-bucket" });
+
+            const Seed = Action(
+              "Seed",
+              Effect.gen(function* () {
+                // Capture the resource Output at init — before the bucket
+                // exists. `arn` is a deferred accessor.
+                const arn = yield* bucket.bucketArn;
+                const name = yield* bucket.name;
+                return Effect.fn(function* () {
+                  // Resolve at apply, after the bucket is materialized.
+                  return { arn: yield* arn, name: yield* name };
+                });
+              }),
+            );
+
+            return yield* Seed({});
+          }),
+        );
+
+        expect(out).toEqual({
+          arn: "arn:test:bucket:us-east-1:123456789:Cap",
+          name: "cap-bucket",
+        });
+      }),
+  );
+
   test.provider("init-effect form: deps satisfied at apply", (stack) =>
     Effect.gen(function* () {
       class Multiplier extends Context.Service<Multiplier, number>()(
@@ -463,5 +496,37 @@ describe("Apply", () => {
 
       expect(out).toEqual({ result: 63 });
     }),
+  );
+
+  test.provider(
+    "tagged .make form: init captures a resource Output; body resolves it",
+    (stack) =>
+      Effect.gen(function* () {
+        interface SeedAction extends Action<"Seed", {}, { arn: string }> {}
+        const Seed = Action<SeedAction, {}, { arn: string }>()("Seed");
+
+        const out = yield* stack.deploy(
+          Effect.gen(function* () {
+            const bucket = yield* Bucket("Cap", { name: "cap-bucket" });
+
+            // `.make` called inside the builder with `bucket` in scope, then
+            // provided locally — its init runs under the capture context.
+            const SeedLive = Seed.make(
+              Effect.gen(function* () {
+                const arn = yield* bucket.bucketArn;
+                return Effect.fn(function* () {
+                  return { arn: yield* arn };
+                });
+              }),
+            );
+
+            return yield* Seed({}).pipe(Effect.provide(SeedLive));
+          }),
+        );
+
+        expect(out).toEqual({
+          arn: "arn:test:bucket:us-east-1:123456789:Cap",
+        });
+      }),
   );
 });

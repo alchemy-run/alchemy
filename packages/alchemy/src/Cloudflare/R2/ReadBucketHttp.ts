@@ -9,7 +9,7 @@ import {
   makeR2HttpScope,
   toR2Error,
   type HttpMetadata,
-  type HttpToken,
+  type R2Auth,
 } from "./BucketHttp.ts";
 import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
 import {
@@ -29,18 +29,23 @@ export const ReadBucketHttp = Layer.effect(
   Effect.suspend(() =>
     makeHttpBucketBinding({
       permissionGroups: ["Workers R2 Storage Read"],
-      makeClient: makeReadR2HttpClient,
+      makeClient: (token, bucketName, jurisdiction) =>
+        makeReadR2HttpClient(
+          { authorize: authorizeWith(token), accountId: token.accountId },
+          bucketName,
+          jurisdiction,
+        ),
     }),
   ),
 );
 
 export const makeReadR2HttpClient = (
-  token: HttpToken,
+  auth: R2Auth,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
 ): ReadBucketClient => {
-  const authorize = authorizeWith(token);
-  const scope = makeR2HttpScope(token, bucketName, jurisdiction);
+  const authorize = auth.authorize;
+  const scope = makeR2HttpScope(auth.accountId, bucketName, jurisdiction);
 
   return {
     raw: Effect.die(

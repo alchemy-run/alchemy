@@ -7,6 +7,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as NodeUtil from "node:util";
 import * as Output from "../Output.ts";
+import { isRedactedMarker, type RedactedMarker } from "../RuntimeContext.ts";
 
 type RpcEffectHandler<Args extends Array<any>, Success, Error> = (
   ...args: Args
@@ -173,7 +174,10 @@ const unwrapRpcStreamHandler = <Args extends Array<any>, Success, Error>(
 
 const serializeRpcArgs = (value: unknown): unknown => {
   if (Redacted.isRedacted(value)) {
-    return { _tag: "Redacted", value: Redacted.value(value) };
+    return {
+      _tag: "Redacted",
+      value: Redacted.value(value),
+    } satisfies RedactedMarker;
   }
   if (Output.isOutput(value)) {
     return {
@@ -204,7 +208,7 @@ const deserializeRpcArgs = (value: unknown): unknown => {
   } else if (typeof value === "object" && value !== null) {
     // These values are serialized as `{_tag: "Redacted", value: ...}` and `{_tag: "Output", description: ...}`,
     // so we need to detect them manually - Redacted.isRedacted and Output.isOutput do not work.
-    if ("_tag" in value && value._tag === "Redacted" && "value" in value) {
+    if (isRedactedMarker(value)) {
       return Redacted.make(value.value);
     } else if (
       "_tag" in value &&

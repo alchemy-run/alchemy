@@ -302,9 +302,10 @@ export const ObservabilityDestinationProvider = () =>
             Effect.retry({
               while: (e) =>
                 e._tag === "ObservabilityDestinationPreflightFailed",
-              schedule: Schedule.exponential("1 second").pipe(
-                Schedule.either(Schedule.spaced("5 seconds")),
-              ),
+              schedule: Schedule.min([
+                Schedule.exponential("1 second"),
+                Schedule.spaced("5 seconds"),
+              ]),
               times: 8,
             }),
           );

@@ -274,9 +274,10 @@ export const RuleProvider = () =>
             // visible. Ride out the propagation window with a bounded retry.
             Effect.retry({
               while: (e) => e._tag === "RulesetNotFound",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("500 millis"),
+                Schedule.recurs(8),
+              ]),
             }),
           );
         const fresh = yield* listRules(accountId, rulesetId);

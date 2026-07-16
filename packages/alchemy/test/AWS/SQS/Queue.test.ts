@@ -195,9 +195,10 @@ provider(
         Effect.tapError(Console.log),
         Effect.retry({
           while: (error) => error === "not ready",
-          schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(75)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("2 seconds"),
+            Schedule.recurs(75),
+          ]),
         }),
         Effect.flatMap((result) => result.json),
       );
@@ -321,9 +322,10 @@ provider(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "QueueNotListed",
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 
@@ -512,9 +514,10 @@ provider(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "QueueAttributesNotReady",
-          schedule: Schedule.fixed("1 second").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("1 second"),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 
@@ -582,9 +585,10 @@ const waitForFunctionReady = (url: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(75)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(75),
+      ]),
     }),
   );
 
@@ -610,9 +614,10 @@ const waitForQueueAttributeMatch = Effect.fn(function* (
       // 400 with `QueueDoesNotExist` on getQueueAttributes before it settles.
       while: (e) =>
         e._tag === "QueueAttributesNotReady" || e._tag === "QueueDoesNotExist",
-      schedule: Schedule.fixed("500 millis").pipe(
-        Schedule.both(Schedule.recurs(40)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("500 millis"),
+        Schedule.recurs(40),
+      ]),
     }),
   );
 });
@@ -636,9 +641,7 @@ const waitForQueueAttributePredicate = Effect.fn(function* (
       // `QueueDoesNotExist` window as well as the predicate-not-yet-true case.
       while: (e) =>
         e._tag === "QueueAttributesNotReady" || e._tag === "QueueDoesNotExist",
-      schedule: Schedule.fixed("1 second").pipe(
-        Schedule.both(Schedule.recurs(40)),
-      ),
+      schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(40)]),
     }),
   );
 });
@@ -681,9 +684,10 @@ const waitForQueueMessage = (queueUrl: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "QueueMessageNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 
@@ -700,9 +704,10 @@ const assertQueueDeleted = Effect.fn(function* (queueUrl: string) {
       // fixed cadence (not exponential, whose sleeps balloon and overshoot the
       // timeout) with a ~135s budget.
       while: (e) => e._tag === "QueueStillExists",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(45)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(45),
+      ]),
     }),
     Effect.catchTag("QueueDoesNotExist", () => Effect.void),
   );

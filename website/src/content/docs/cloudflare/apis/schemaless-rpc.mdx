@@ -272,7 +272,7 @@ const api = worker.getEntrypoint<{
 const greeting = yield* api.greet("world");
 ```
 
-`getEntrypoint` wraps the loader entrypoint in the same stub proxy — a Worker loaded at runtime speaks schemaless RPC exactly like a statically bound one; here the caller supplies the Shape as a type argument, since there is no class to infer it from. See the [WorkerLoader API reference](/providers/cloudflare/workers/workerloader).
+`getEntrypoint` wraps the loader entrypoint in the same stub proxy — a Worker loaded at runtime speaks schemaless RPC exactly like a statically bound one; here the caller supplies the Shape as a type argument, since there is no class to infer it from. See the [Worker Loader guide](/cloudflare/compute/worker-loader) and the [WorkerLoader API reference](/providers/cloudflare/workers/workerloader).
 
 ## Async (non-Effect) consumers
 
