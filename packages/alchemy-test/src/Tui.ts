@@ -333,11 +333,17 @@ const FOOTER_HINTS =
 
 const makeTui = async (): Promise<Tui> => {
   const state = new TuiState();
+  /** True once the renderer is torn down — no further writes are allowed. */
+  let disposed = false;
   // Mouse tracking is enabled for wheel-scrolling and click-to-select.
   // Text can still be copied with `y` (test details) or with the terminal's
   // tracking bypass (Shift/Option + drag in most terminals).
+  //
+  // Ctrl+C is handled by US (exitOnCtrlC: false): opentui's built-in handler
+  // destroys the renderer while our flush timer may still be queued, which
+  // crashed with "TextBuffer is destroyed". We dispose first, then exit.
   const renderer = await createCliRenderer({
-    exitOnCtrlC: true,
+    exitOnCtrlC: false,
   });
 
   const header = new TextRenderable(renderer, {
@@ -659,6 +665,13 @@ const makeTui = async (): Promise<Tui> => {
   let pendingG = false;
 
   renderer.keyInput.on("keypress", (key: KeyEvent) => {
+    // Ctrl+C: tear the TUI down BEFORE exiting so no queued timer callback
+    // touches a destroyed renderer ("TextBuffer is destroyed").
+    if (key.ctrl && key.name === "c") {
+      dispose();
+      process.exit(130);
+    }
+    if (disposed) return;
     if (state.filterInput && !state.detailOpen) {
       onFilterKey(key);
       return;
@@ -794,6 +807,7 @@ const makeTui = async (): Promise<Tui> => {
   // when test data changed; otherwise it just ticks the elapsed-time header
   // while the run is live.
   const interval = setInterval(() => {
+    if (disposed) return;
     if (state.dirty) {
       refresh();
     } else if (state.summary === undefined || Date.now() < flashUntil + 100) {
@@ -803,11 +817,25 @@ const makeTui = async (): Promise<Tui> => {
   }, 100);
 
   const dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
     clearInterval(interval);
-    renderer.destroy();
+    try {
+      renderer.destroy();
+    } catch {
+      // Never let teardown mask the run's real outcome.
+    }
   };
 
-  return { renderer, state, refresh, quit, dispose };
+  return {
+    renderer,
+    state,
+    refresh: () => {
+      if (!disposed) refresh();
+    },
+    quit,
+    dispose,
+  };
 };
 
 // ---------------------------------------------------------------------------
