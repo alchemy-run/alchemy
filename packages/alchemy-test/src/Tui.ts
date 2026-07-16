@@ -35,6 +35,7 @@ import {
   green,
   red,
   ScrollBoxRenderable,
+  strikethrough,
   StyledText,
   stringToStyledText,
   TextAttributes,
@@ -264,21 +265,15 @@ class TuiState {
   }
 
   /**
-   * Toggle a status group. From "everything visible", the first press solos
-   * the group (that's what you almost always want); further presses toggle
-   * groups independently; hiding the last visible group resets to all.
+   * Toggle a status group on/off, independently of the others (pressing `p`
+   * hides passing tests and NOTHING else). Hiding the last visible group
+   * resets to all-visible.
    */
   toggleGroup(group: StatusGroup): void {
-    if (this.allGroupsShown()) {
+    this.show[group] = !this.show[group];
+    if (!Object.values(this.show).some((on) => on)) {
       for (const key of Object.keys(this.show) as Array<StatusGroup>) {
-        this.show[key] = key === group;
-      }
-    } else {
-      this.show[group] = !this.show[group];
-      if (!Object.values(this.show).some((on) => on)) {
-        for (const key of Object.keys(this.show) as Array<StatusGroup>) {
-          this.show[key] = true;
-        }
+        this.show[key] = true;
       }
     }
     this.dirty = true;
@@ -398,7 +393,7 @@ interface Tui {
 }
 
 const FOOTER_HINTS =
-  " j/k move · / filter · enter open · h/l fold · p/f/n/s show · r retry · x kill · y copy · q quit";
+  "j/k · enter open · / filter · h/l fold · r retry · x kill · y copy · q quit";
 
 const makeTui = async (): Promise<Tui> => {
   const state = new TuiState();
@@ -556,21 +551,29 @@ const makeTui = async (): Promise<Tui> => {
       );
       return;
     }
-    const shown = state.allGroupsShown()
-      ? ""
-      : `  │ showing: ${(
-          [
-            ["pass", GLYPH.pass],
-            ["fail", GLYPH.fail],
-            ["pending", GLYPH.running],
-            ["skipped", GLYPH.skip],
-          ] as Array<[StatusGroup, string]>
-        )
-          .filter(([group]) => state.show[group])
-          .map(([group, glyph]) => `${glyph} ${group}`)
-          .join(" · ")}`;
-    const filter = state.filter !== "" ? `  │ filter: ${state.filter}` : "";
-    footer.content = new StyledText([dim(`${FOOTER_HINTS}${shown}${filter}`)]);
+    // Always-visible toggle bar: each group shows its hotkey and current
+    // state — bright when shown, dim + struck-through when hidden.
+    const toggles = (
+      [
+        ["pass", "p:pass"],
+        ["fail", "f:fail"],
+        ["pending", "n:pending"],
+        ["skipped", "s:skipped"],
+      ] as Array<[StatusGroup, string]>
+    ).flatMap(([group, label], index) => [
+      ...(index > 0 ? [dim(" ")] : []),
+      state.show[group]
+        ? stringToStyledText(label).chunks[0]!
+        : strikethrough(dim(label)),
+    ]);
+    // Toggle states lead (before the hints) so they're never clipped on
+    // narrow terminals — the footer truncates at the terminal width.
+    const filter = state.filter !== "" ? ` │ filter: ${state.filter}` : "";
+    footer.content = new StyledText([
+      dim(" show: "),
+      ...toggles,
+      dim(`${filter} │ ${FOOTER_HINTS}`),
+    ]);
   };
 
   const updateHeader = (): void => {
