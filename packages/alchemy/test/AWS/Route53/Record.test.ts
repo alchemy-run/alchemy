@@ -21,13 +21,19 @@ const recordValue = '"alchemy-list-test"';
 
 const normalizeId = (id: string) => id.replace(/^\/hostedzone\//, "");
 
-const findZoneIdByName = route53.listHostedZones.pages({}).pipe(
+const listZoneIdsByName = route53.listHostedZones.pages({}).pipe(
   Stream.runCollect,
   Effect.map((chunk) =>
     Array.from(chunk).flatMap((page) => page.HostedZones ?? []),
   ),
-  Effect.map((zones) => zones.find((zone) => zone.Name === zoneName)?.Id),
+  Effect.map((zones) =>
+    zones
+      .filter((zone) => zone.Name === zoneName)
+      .flatMap((zone) => (zone.Id !== undefined ? [zone.Id] : [])),
+  ),
 );
+
+const findZoneIdByName = listZoneIdsByName.pipe(Effect.map((ids) => ids[0]));
 
 // The hosted zone is a *suite-scoped* fixture — resolved once (lookup-first,
 // create on a genuine miss) and shared by both tests in this file, then
@@ -102,42 +108,77 @@ const ensureZone = Effect.suspend(() =>
 // `resolveZone` is lookup-first with a fresh CallerReference — and if a run
 // dies before the teardown fires, the deterministic zone name lets the next
 // run reclaim AND delete the leftover.
-const teardownZone = Effect.gen(function* () {
-  // Prefer the in-run cached id: a zone created moments ago by `resolveZone`
-  // may not be visible to `listHostedZones` yet (list is eventually
-  // consistent), and returning early on a lookup miss would orphan it.
-  const id = standingZoneId ?? (yield* findZoneIdByName);
-  if (id === undefined) return;
-  const zoneId = normalizeId(id);
-  const sets = yield* route53
-    .listResourceRecordSets({ HostedZoneId: zoneId, MaxItems: 100 })
-    .pipe(
-      Effect.map((r) => r.ResourceRecordSets ?? []),
-      Effect.catchTag("NoSuchHostedZone", () => Effect.succeed([])),
-    );
-  const deletable = sets.filter((s) => s.Type !== "SOA" && s.Type !== "NS");
-  if (deletable.length > 0) {
-    yield* route53
-      .changeResourceRecordSets({
-        HostedZoneId: zoneId,
-        ChangeBatch: {
-          Comment: "Record.test.ts suite teardown",
-          Changes: deletable.map((set) => ({
-            Action: "DELETE" as const,
-            ResourceRecordSet: set,
-          })),
-        },
-      })
+const purgeAndDeleteZone = (zoneId: string) =>
+  Effect.gen(function* () {
+    const sets = yield* route53
+      .listResourceRecordSets({ HostedZoneId: zoneId, MaxItems: 100 })
       .pipe(
-        Effect.asVoid,
-        Effect.catchTag("InvalidChangeBatch", () => Effect.void),
-        Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+        Effect.map((r) => r.ResourceRecordSets ?? []),
+        Effect.catchTag("NoSuchHostedZone", () => Effect.succeed([])),
       );
-  }
-  yield* route53.deleteHostedZone({ Id: zoneId }).pipe(
-    Effect.asVoid,
-    Effect.catchTag("NoSuchHostedZone", () => Effect.void),
-  );
+    const deletable = sets.filter((s) => s.Type !== "SOA" && s.Type !== "NS");
+    if (deletable.length > 0) {
+      yield* route53
+        .changeResourceRecordSets({
+          HostedZoneId: zoneId,
+          ChangeBatch: {
+            Comment: "Record.test.ts suite teardown",
+            Changes: deletable.map((set) => ({
+              Action: "DELETE" as const,
+              ResourceRecordSet: set,
+            })),
+          },
+        })
+        .pipe(
+          Effect.asVoid,
+          Effect.catchTag("InvalidChangeBatch", () => Effect.void),
+          Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+        );
+    }
+    yield* route53.deleteHostedZone({ Id: zoneId }).pipe(
+      Effect.asVoid,
+      Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+      // Route 53 serializes changes per zone; a delete racing the record
+      // purge above can bounce with PriorRequestNotComplete.
+      Effect.retry({
+        while: (e) => e._tag === "PriorRequestNotComplete",
+        schedule: Schedule.spaced("3 seconds"),
+        times: 8,
+      }),
+    );
+    // Verify the delete actually landed (authoritative read, not the
+    // eventually-consistent list) — a silent no-op here would orphan the zone.
+    yield* route53.getHostedZone({ Id: zoneId }).pipe(
+      Effect.flatMap(() =>
+        Effect.fail(new Error(`teardown: zone ${zoneId} still exists`)),
+      ),
+      Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+      Effect.retry({
+        while: (e): boolean => e instanceof Error,
+        schedule: Schedule.spaced("2 seconds"),
+        times: 10,
+      }),
+    );
+  });
+
+const teardownZone = Effect.gen(function* () {
+  // Delete EVERY incarnation bearing the test zone name, not just one id:
+  // a transient failure (or vitest retry) between a server-side create and
+  // the caller observing it can mint a duplicate same-name zone while the
+  // eventually-consistent list still hides the sibling. Union the in-run
+  // cached id (the list may not show a moments-old zone yet) with every
+  // listed match; anything the stale list hides this run is reclaimed by
+  // the NEXT run's teardown via the same name lookup.
+  const listed = yield* listZoneIdsByName;
+  const candidates = [
+    ...new Set(
+      [
+        ...(standingZoneId !== undefined ? [standingZoneId] : []),
+        ...listed,
+      ].map(normalizeId),
+    ),
+  ];
+  yield* Effect.forEach(candidates, purgeAndDeleteZone);
   // Drop the module-scope cache so a hypothetical later user re-resolves.
   standingZoneId = undefined;
 }).pipe(Effect.orDie);
