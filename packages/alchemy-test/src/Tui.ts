@@ -549,18 +549,25 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     },
   );
 
+  /**
+   * Full-width run of spaces appended to single-line chrome (header/footer):
+   * with transparent backgrounds, a shorter repaint would otherwise leave
+   * the previous content's tail cells on screen. Overflow is clipped.
+   */
+  const padLine = (): string => " ".repeat(renderer.terminalWidth);
+
   /** Transient footer message (e.g. "copied"); reverts on the next tick. */
   let flashUntil = 0;
   const flash = (message: string): void => {
     flashUntil = Date.now() + 1500;
-    footer.content = stringToStyledText(` ${message}`);
+    footer.content = stringToStyledText(` ${message}${padLine()}`);
   };
 
   const updateFooter = (): void => {
     if (Date.now() < flashUntil) return;
     if (state.filterInput) {
       footer.content = stringToStyledText(
-        ` /${state.filter}█   ${state.visibleTestCount()} matches   (enter close · esc clear)`,
+        ` /${state.filter}█   ${state.visibleTestCount()} matches   (enter close · esc clear)${padLine()}`,
       );
       return;
     }
@@ -585,7 +592,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     footer.content = new StyledText([
       dim(" show: "),
       ...toggles,
-      dim(`${filter} │ ${FOOTER_HINTS}`),
+      dim(`${filter} │ ${FOOTER_HINTS}${padLine()}`),
     ]);
   };
 
@@ -610,6 +617,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       ...(counts.skip > 0 ? [dim(`  ${GLYPH.skip} ${counts.skip}`)] : []),
       dim(`  │ ${elapsed}${collecting}`),
       ...(done ? [dim("  │ DONE — press q to quit")] : []),
+      dim(padLine()),
     ]);
   };
 
@@ -670,7 +678,11 @@ const makeTui = async (logFile: string): Promise<Tui> => {
           rest += ` (${formatDuration(Date.now() - node.entry.startedAt)}…)`;
         }
       }
-      rest = rest.slice(0, Math.max(width - head.length, 0));
+      // Clip to the terminal width AND pad to it — with transparent
+      // backgrounds a shorter repaint would otherwise leave the previous
+      // content's tail cells on screen.
+      const restWidth = Math.max(width - head.length, 0);
+      rest = rest.slice(0, restWidth).padEnd(restWidth, " ");
 
       const key = `${isSelected ? "S" : "."}|${status}|${head}|${rest}`;
       if (row.key === key) continue;
