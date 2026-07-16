@@ -41,9 +41,15 @@ export interface RunSummary {
 
 export type TestEvent =
   | { readonly _tag: "CollectStart"; readonly files: ReadonlyArray<string> }
+  | { readonly _tag: "RunStart"; readonly files: number }
   | {
-      readonly _tag: "RunStart";
-      readonly files: number;
+      /**
+       * A file finished importing and its tests are known. Files are
+       * collected incrementally, interleaved with execution — there is no
+       * single moment where the full test list exists up-front.
+       */
+      readonly _tag: "FileCollected";
+      readonly file: string;
       readonly tests: ReadonlyArray<TestMeta>;
     }
   | { readonly _tag: "FileStart"; readonly file: string }

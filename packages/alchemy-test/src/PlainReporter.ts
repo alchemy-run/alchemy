@@ -49,9 +49,7 @@ const onEvent = (event: TestEvent): Effect.Effect<void> => {
     case "CollectStart":
       return write(dim(`collecting ${event.files.length} test files...`));
     case "RunStart":
-      return write(
-        dim(`running ${event.tests.length} tests from ${event.files} files\n`),
-      );
+      return write(dim(`running tests from ${event.files} files\n`));
     case "TestEnd": {
       const title = `${dim(event.test.file)} ${dim(">")} ${event.test.titlePath.join(` ${dim(">")} `)}`;
       const duration = dim(`(${formatDuration(event.result.durationMs)})`);

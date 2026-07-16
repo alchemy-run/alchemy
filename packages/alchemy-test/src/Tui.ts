@@ -75,6 +75,10 @@ class TuiState {
   detailOpen = false;
   summary: RunSummary | undefined;
   startedAt = Date.now();
+  /** Collection progress — files are imported incrementally while earlier
+   * files already execute. */
+  collectTotal = 0;
+  collectDone = 0;
   /** Test data changed — the list needs rebuilding on the next flush. */
   dirty = true;
   /** Counts kept incrementally — recomputing over 1000s of entries per flush
@@ -200,11 +204,15 @@ const makeTui = async (): Promise<Tui> => {
       state.summary?.durationMs ?? Date.now() - state.startedAt,
     );
     const done = state.summary !== undefined;
+    const collecting =
+      !done && state.collectDone < state.collectTotal
+        ? `  │ importing ${state.collectDone}/${state.collectTotal} files`
+        : "";
     header.content =
       ` alchemy-test  ${GLYPH.pass} ${counts.pass}  ${GLYPH.fail} ${counts.fail}` +
       `  ${GLYPH.running} ${counts.running}  ${GLYPH.queued} ${counts.queued}` +
       (counts.skip > 0 ? `  ${GLYPH.skip} ${counts.skip}` : "") +
-      `  │ ${elapsed}${done ? "  │ DONE — press q to quit" : ""}` +
+      `  │ ${elapsed}${collecting}${done ? "  │ DONE — press q to quit" : ""}` +
       (state.failuresOnly ? "  │ [failures only]" : "");
   };
 
@@ -327,8 +335,14 @@ const makeTui = async (): Promise<Tui> => {
 const onEvent = (tui: Tui, event: TestEvent): void => {
   const { state } = tui;
   switch (event._tag) {
+    case "CollectStart":
+      state.collectTotal = event.files.length;
+      break;
     case "RunStart":
       state.startedAt = Date.now();
+      break;
+    case "FileCollected":
+      state.collectDone++;
       for (const meta of event.tests) state.upsert(meta, "queued");
       break;
     case "TestStart":
