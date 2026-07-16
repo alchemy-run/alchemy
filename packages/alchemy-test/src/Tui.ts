@@ -37,6 +37,8 @@ interface Entry {
   readonly meta: TestMeta;
   status: Status;
   result?: TestResult;
+  /** Cached Select label — recomputed only when status/result changes. */
+  label: string;
 }
 
 const GLYPH: Record<Status, string> = {
@@ -59,6 +61,12 @@ const formatLogs = (logs: ReadonlyArray<LogEntry>): string =>
     )
     .join("\n");
 
+const entryLabel = (entry: Entry): string =>
+  ` ${GLYPH[entry.status]} ${entry.meta.file} > ${entry.meta.titlePath.join(" > ")}` +
+  (entry.result !== undefined && entry.status !== "queued"
+    ? ` (${formatDuration(entry.result.durationMs)})`
+    : "");
+
 class TuiState {
   readonly entries: Array<Entry> = [];
   readonly byId = new Map<string, Entry>();
@@ -67,17 +75,32 @@ class TuiState {
   detailOpen = false;
   summary: RunSummary | undefined;
   startedAt = Date.now();
+  /** Test data changed — the list needs rebuilding on the next flush. */
   dirty = true;
+  /** Counts kept incrementally — recomputing over 1000s of entries per flush
+   * is wasteful. */
+  readonly counts: Record<Status, number> = {
+    queued: 0,
+    running: 0,
+    pass: 0,
+    fail: 0,
+    skip: 0,
+    todo: 0,
+  };
 
   upsert(meta: TestMeta, status: Status, result?: TestResult): void {
     let entry = this.byId.get(meta.id);
     if (entry === undefined) {
-      entry = { meta, status };
+      entry = { meta, status, label: "" };
       this.byId.set(meta.id, entry);
       this.entries.push(entry);
+    } else {
+      this.counts[entry.status]--;
     }
+    this.counts[status]++;
     entry.status = status;
     if (result !== undefined) entry.result = result;
+    entry.label = entryLabel(entry);
     this.dirty = true;
   }
 
@@ -85,19 +108,6 @@ class TuiState {
     return this.failuresOnly
       ? this.entries.filter((e) => e.status === "fail")
       : this.entries;
-  }
-
-  counts(): Record<Status, number> {
-    const counts: Record<Status, number> = {
-      queued: 0,
-      running: 0,
-      pass: 0,
-      fail: 0,
-      skip: 0,
-      todo: 0,
-    };
-    for (const entry of this.entries) counts[entry.status]++;
-    return counts;
   }
 }
 
@@ -179,11 +189,13 @@ const makeTui = async (): Promise<Tui> => {
   renderer.root.add(root);
   list.focus();
 
-  const refresh = (): void => {
-    if (!state.dirty) return;
-    state.dirty = false;
-
-    const counts = state.counts();
+  // Header updates are cheap (one Text content assignment); rebuilding the
+  // Select's options array is NOT (full re-layout of the list). They are
+  // deliberately decoupled: the header ticks while the run is live, the list
+  // rebuilds only when test data actually changed — never on a timer and
+  // never in response to plain navigation keystrokes.
+  const updateHeader = (): void => {
+    const counts = state.counts;
     const elapsed = formatDuration(
       state.summary?.durationMs ?? Date.now() - state.startedAt,
     );
@@ -194,21 +206,34 @@ const makeTui = async (): Promise<Tui> => {
       (counts.skip > 0 ? `  ${GLYPH.skip} ${counts.skip}` : "") +
       `  │ ${elapsed}${done ? "  │ DONE — press q to quit" : ""}` +
       (state.failuresOnly ? "  │ [failures only]" : "");
+  };
 
+  const rebuildList = (): void => {
+    // The list is hidden while the detail pane is open; rebuilding it there
+    // is wasted work. `closeDetail` flushes any pending rebuild.
+    if (state.detailOpen) return;
     const selected = list.getSelectedIndex();
     list.options = state.visible().map((entry) => ({
-      name:
-        ` ${GLYPH[entry.status]} ${entry.meta.file} > ${entry.meta.titlePath.join(" > ")}` +
-        (entry.result !== undefined && entry.status !== "queued"
-          ? ` (${formatDuration(entry.result.durationMs)})`
-          : ""),
+      name: entry.label,
       description: "",
       value: entry.meta.id,
     }));
+    // Restore the selection the options setter may have reset, clamped in
+    // case the failures filter shrank the list. Rebuilds only happen when
+    // test data changes, so this never fights arrow-key navigation.
+    const max = Math.max(list.options.length - 1, 0);
     if (selected >= 0) {
-      list.setSelectedIndex(
-        Math.min(selected, Math.max(list.options.length - 1, 0)),
-      );
+      list.setSelectedIndex(Math.min(selected, max));
+    }
+  };
+
+  const refresh = (): void => {
+    updateHeader();
+    // Keep `dirty` set while the detail pane hides the list, so the pending
+    // rebuild happens when the list becomes visible again.
+    if (state.dirty && !state.detailOpen) {
+      state.dirty = false;
+      rebuildList();
     }
   };
 
@@ -245,6 +270,8 @@ const makeTui = async (): Promise<Tui> => {
     detail.visible = false;
     list.visible = true;
     list.focus();
+    // Apply any rebuild that was skipped while the detail pane was open.
+    refresh();
   };
 
   let resolveQuit!: () => void;
@@ -276,10 +303,18 @@ const makeTui = async (): Promise<Tui> => {
     }
   });
 
+  // Single flush loop: rebuilds the list at most 10x/s and ONLY when test
+  // data changed; otherwise it just ticks the elapsed-time header while the
+  // run is live. Once the run is done and nothing is dirty, this does no
+  // rendering work at all — arrow-key navigation is handled entirely by the
+  // Select and stays smooth.
   const interval = setInterval(() => {
-    state.dirty = true;
-    refresh();
-  }, 250);
+    if (state.dirty) {
+      refresh();
+    } else if (state.summary === undefined) {
+      updateHeader();
+    }
+  }, 100);
 
   const dispose = (): void => {
     clearInterval(interval);
@@ -326,12 +361,17 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
       break;
     case "RunEnd":
       state.summary = event.summary;
-      break;
+      // Final state should render immediately, not on the next tick.
+      state.dirty = true;
+      tui.refresh();
+      return;
     default:
       break;
   }
+  // Everything else just marks the state dirty; the flush interval batches
+  // rebuilds (a burst of TestEnd events must not trigger a full Select
+  // re-layout per event).
   state.dirty = true;
-  tui.refresh();
 };
 
 export const TuiReporterLive: Layer.Layer<Reporter> = Layer.effect(Reporter)(
