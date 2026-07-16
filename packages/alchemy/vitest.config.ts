@@ -16,7 +16,12 @@ export default defineConfig({
   test: {
     env: loadEnv("test", path.resolve(import.meta.dirname, "..", ".."), ""),
     pool: "forks",
-    maxWorkers: 16,
+    // Defaults to 16 for CI, which has ample RAM. Each fork loads the full
+    // distilled-from-src graph (~2-4 GB), so on a memory-constrained machine
+    // set `VITEST_MAX_WORKERS` (e.g. 4) to cap the fork pool and avoid OOM.
+    maxWorkers: process.env.VITEST_MAX_WORKERS
+      ? Number(process.env.VITEST_MAX_WORKERS)
+      : 16,
     sequence: { concurrent: true },
     testTimeout: 120_000,
     hookTimeout: 120_000,
