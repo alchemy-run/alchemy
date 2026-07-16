@@ -44,7 +44,10 @@ const indent = (text: string, prefix = "  "): string =>
     .map((line) => `${prefix}${line}`)
     .join("\n");
 
-const onEvent = (event: TestEvent): Effect.Effect<void> => {
+const onEvent = (
+  event: TestEvent,
+  hookLogs: Map<string, ReadonlyArray<LogEntry>>,
+): Effect.Effect<void> => {
   switch (event._tag) {
     case "CollectStart":
       return write(dim(`collecting ${event.files.length} test files...`));
@@ -69,24 +72,35 @@ const onEvent = (event: TestEvent): Effect.Effect<void> => {
       }
     }
     case "FileEnd": {
+      if (event.logs.length > 0) {
+        hookLogs.set(event.file, event.logs);
+      }
       if (event.error !== undefined) {
         return write(
-          `${red("✗")} ${bold(event.file)} ${red("failed to run")}\n${indent(red(event.error))}`,
+          `${red("✗")} ${bold(event.file)} ${red("failed to run")}\n${indent(red(event.error))}` +
+            (event.logs.length > 0
+              ? `\n${dim("  --- file hook output (deploy/destroy) ---")}\n${formatLogs(event.logs)}`
+              : ""),
         );
       }
       return Effect.void;
     }
     case "RunEnd":
-      return printSummary(event.summary);
+      return printSummary(event.summary, hookLogs);
     default:
       return Effect.void;
   }
 };
 
-export const printSummary = (summary: RunSummary): Effect.Effect<void> =>
+export const printSummary = (
+  summary: RunSummary,
+  /** Buffered deploy/destroy output per file, printed once per failing file. */
+  hookLogs?: ReadonlyMap<string, ReadonlyArray<LogEntry>>,
+): Effect.Effect<void> =>
   Effect.gen(function* () {
     if (summary.failures.length > 0) {
       yield* write(`\n${bold(red(`Failures (${summary.failures.length})`))}\n`);
+      const hookLogsPrinted = new Set<string>();
       for (const { meta, result } of summary.failures) {
         yield* write(
           `${red("✗")} ${bold(meta.file)} ${dim(">")} ${meta.titlePath.join(` ${dim(">")} `)}`,
@@ -97,6 +111,16 @@ export const printSummary = (summary: RunSummary): Effect.Effect<void> =>
         if (result.logs.length > 0) {
           yield* write(dim("  --- captured output ---"));
           yield* write(formatLogs(result.logs));
+        }
+        const fileHookLogs = hookLogs?.get(meta.file);
+        if (
+          fileHookLogs !== undefined &&
+          fileHookLogs.length > 0 &&
+          !hookLogsPrinted.has(meta.file)
+        ) {
+          hookLogsPrinted.add(meta.file);
+          yield* write(dim("  --- file hook output (deploy/destroy) ---"));
+          yield* write(formatLogs(fileHookLogs));
         }
         yield* write("");
       }
@@ -112,10 +136,12 @@ export const printSummary = (summary: RunSummary): Effect.Effect<void> =>
     );
   });
 
-export const PlainReporterLive: Layer.Layer<Reporter> = Layer.succeed(
-  Reporter,
-  {
-    emit: onEvent,
-    waitForExit: () => Effect.void,
+export const PlainReporterLive: Layer.Layer<Reporter> = Layer.sync(Reporter)(
+  () => {
+    const hookLogs = new Map<string, ReadonlyArray<LogEntry>>();
+    return {
+      emit: (event) => onEvent(event, hookLogs),
+      waitForExit: () => Effect.void,
+    };
   },
 );
