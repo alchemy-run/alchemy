@@ -318,6 +318,182 @@ test.provider(
   { timeout: 360_000 },
 );
 
+// ─────────────────────────────────────────────────────────────────────
+// Workspace-aware memoization
+//
+// A Vite project in a monorepo can bundle source from sibling workspace
+// packages. Those directories are discovered from the module graph at
+// build time, persisted in `hash.workspaces` (relative to the Vite
+// root), and included in the `hash.input` computation — so editing only
+// a sibling package busts the memo and triggers a rebuild.
+// ─────────────────────────────────────────────────────────────────────
+
+test.provider(
+  "Vite: edits in a sibling workspace package bust the build memo",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      // Hand-rolled two-package workspace: `app` is the Vite root and
+      // `shared` is a sibling package whose source the client bundle
+      // imports directly (escaping the Vite root).
+      yield* fs.makeDirectory(tempRoot, { recursive: true });
+      const parent = yield* fs.makeTempDirectory({
+        prefix: "alchemy-vite-ws-",
+        directory: tempRoot,
+      });
+      yield* Effect.addFinalizer(
+        Exit.match({
+          onSuccess: () =>
+            Effect.ignore(fs.remove(parent, { recursive: true })),
+          onFailure: () => Effect.void,
+        }),
+      );
+      const rootDir = path.join(parent, "app");
+      const sharedDir = path.join(parent, "shared");
+
+      const writeShared = (marker: string) =>
+        fs.writeFileString(
+          path.join(sharedDir, "src/message.ts"),
+          `export const message = ${JSON.stringify(marker)};\n`,
+        );
+
+      yield* fs.makeDirectory(path.join(rootDir, "src"), { recursive: true });
+      yield* fs.makeDirectory(path.join(sharedDir, "src"), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(
+        path.join(rootDir, "index.html"),
+        htmlPage("vite-workspace-fixture"),
+      );
+      yield* fs.writeFileString(
+        path.join(rootDir, "package.json"),
+        JSON.stringify({
+          name: "alchemy-vite-workspace-app",
+          version: "0.0.0",
+          private: true,
+          type: "module",
+        }),
+      );
+      // Same shape as vite-fixture/vite.config.ts: point the SSR build at
+      // the minimal worker entry so the cloudflare-vite-plugin can wrap it.
+      yield* fs.writeFileString(
+        path.join(rootDir, "vite.config.ts"),
+        `import { defineConfig } from "vite";
+export default defineConfig({
+  environments: {
+    ssr: { build: { rollupOptions: { input: "./src/worker.ts" } } },
+  },
+});
+`,
+      );
+      yield* fs.writeFileString(
+        path.join(rootDir, "src/worker.ts"),
+        `type Env = { ASSETS: { fetch: (req: Request) => Promise<Response> } };
+export default {
+  fetch(request: Request, env: Env): Promise<Response> {
+    return env.ASSETS.fetch(request);
+  },
+};
+`,
+      );
+      // The client entry imports across the Vite root boundary into the
+      // sibling package's source.
+      yield* fs.writeFileString(
+        path.join(rootDir, "src/main.ts"),
+        `import { message } from "../../shared/src/message.ts";
+const el = document.getElementById("app");
+if (el) {
+  el.textContent = message;
+}
+`,
+      );
+      yield* fs.writeFileString(
+        path.join(sharedDir, "package.json"),
+        JSON.stringify({
+          name: "alchemy-vite-workspace-shared",
+          version: "0.0.0",
+          private: true,
+          type: "module",
+        }),
+      );
+
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      const marker1 = `vite-ws-1-${Date.now()}`;
+      yield* writeShared(marker1);
+
+      const site1 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteWorkspace",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+
+      expect(site1.url).toBeDefined();
+      expect(site1.hash?.input).toBeDefined();
+      // The sibling package was discovered from the module graph and
+      // persisted relative to the Vite root.
+      expect(site1.hash?.additionalWorkspaces).toContain("../shared");
+      yield* expectWorkerExists(site1.workerName, accountId);
+      yield* expectBundleContains(site1.url!, marker1, {
+        label: "workspace marker v1 in client bundle",
+      });
+
+      // ── deploy 2: edit ONLY the sibling package ────────────────────────
+      const marker2 = `vite-ws-2-${Date.now()}`;
+      yield* writeShared(marker2);
+
+      const site2 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteWorkspace",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+
+      // Nothing under `rootDir` changed — only the sibling workspace did.
+      // The workspace-aware input hash must still bust the memo.
+      expect(site2.hash?.input).toBeDefined();
+      expect(site2.hash?.input).not.toEqual(site1.hash?.input);
+      expect(site2.hash?.additionalWorkspaces).toContain("../shared");
+      yield* expectBundleContains(site2.url!, marker2, {
+        label: "workspace marker v2 in client bundle",
+      });
+
+      // ── deploy 3: no changes anywhere ⇒ memo hit ───────────────────────
+      const site3 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteWorkspace",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+
+      expect(site3.hash?.input).toEqual(site2.hash?.input);
+      expect(site3.hash?.additionalWorkspaces).toEqual(
+        site2.hash?.additionalWorkspaces,
+      );
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
 test.provider(
   "Vite: `env` props are inlined and env-only changes redeploy",
   (stack) =>
