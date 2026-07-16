@@ -889,6 +889,9 @@ cd packages/alchemy && ALCHEMY_PROFILE=testing bun alchemy-test test/Cloudflare/
 # a directory, filtered by test name
 cd packages/alchemy && ALCHEMY_PROFILE=testing bun alchemy-test test/Cloudflare/Workers -t "cron"
 
+# positional args that aren't real paths are file-name substring filters
+cd packages/alchemy && ALCHEMY_PROFILE=testing bun alchemy-test Bucket   # every *Bucket* test file
+
 # via package scripts (root or packages/alchemy). NOTE: `bun run test`, not
 # `bun test` — the latter invokes bun's own built-in test runner.
 bun run test        # = alchemy-test (plain output)
@@ -901,7 +904,7 @@ Additional flags beyond vitest:
 
 | Flag              | Default | Purpose                                                       |
 | ----------------- | ------- | ------------------------------------------------------------- |
-| `-t <pattern>`    | —       | Only run tests whose title matches (regex or substring)       |
+| `-t <text>`       | —       | Plain-text test-name filter — punctuation is literal (`-t "create (default)"` just works), case-insensitive, words AND-match anywhere in the full nested title (file > describes > name). Wrap in slashes for regex: `-t "/create\|delete/"` |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |
 | `--concurrency <n>` | 16    | Files running concurrently (one bun process, no forks)        |

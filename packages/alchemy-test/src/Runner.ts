@@ -36,10 +36,17 @@ import {
 export interface RunOptions {
   /** Directory the run is rooted at (usually `packages/alchemy`). */
   readonly root: string;
-  /** Positional path filters (files or directories). Defaults to `test`. */
+  /**
+   * Positional filters. Existing files/directories are used as-is; anything
+   * else is a case-insensitive substring filter on test file paths (like
+   * vitest's positional filters). Defaults to `test`.
+   */
   readonly paths: ReadonlyArray<string>;
-  /** `-t` test-name filter. */
-  readonly filter?: RegExp | undefined;
+  /**
+   * `-t` test-name filter, applied to the full title
+   * (`file > describe chain > name`).
+   */
+  readonly filter?: ((fullTitle: string) => boolean) | undefined;
   /** Default per-test timeout in ms. */
   readonly timeout: number;
   /** Times a failing test body is re-run before being reported as failed. */
@@ -174,9 +181,27 @@ export const discover = Effect.fn(function* (options: RunOptions) {
     },
   );
 
-  const roots = options.paths.length > 0 ? options.paths : ["test"];
-  for (const p of roots) {
+  // Positional args that exist on disk are roots; anything else is a
+  // case-insensitive substring filter on discovered file paths (vitest-style:
+  // `alchemy-test Bucket` runs every *Bucket* test file).
+  const roots: Array<string> = [];
+  const nameFilters: Array<string> = [];
+  for (const p of options.paths) {
     const abs = path.isAbsolute(p) ? p : path.resolve(options.root, p);
+    const exists = yield* fs
+      .exists(abs)
+      .pipe(Effect.orElseSucceed(() => false));
+    if (exists) {
+      roots.push(abs);
+    } else {
+      nameFilters.push(p.toLowerCase());
+    }
+  }
+  if (roots.length === 0) {
+    roots.push(path.resolve(options.root, "test"));
+  }
+
+  for (const abs of roots) {
     const stat = yield* fs
       .stat(abs)
       .pipe(
@@ -190,7 +215,15 @@ export const discover = Effect.fn(function* (options: RunOptions) {
       files.push(abs);
     }
   }
-  return [...new Set(files)].sort();
+
+  let unique = [...new Set(files)];
+  if (nameFilters.length > 0) {
+    unique = unique.filter((file) => {
+      const rel = path.relative(options.root, file).toLowerCase();
+      return nameFilters.some((filter) => rel.includes(filter));
+    });
+  }
+  return unique.sort();
 });
 
 // ---------------------------------------------------------------------------
@@ -268,11 +301,13 @@ const metaOf = (file: string, test: TestCase): TestMeta => {
 /** Should this test run at all given only-mode and the -t filter? */
 const included = (
   test: TestCase,
-  ctx: Pick<ExecContext, "onlyMode" | "options">,
+  ctx: Pick<ExecContext, "onlyMode" | "options" | "file">,
 ): boolean => {
   if (ctx.options.filter !== undefined) {
-    const full = titlePath(test).join(" ");
-    if (!ctx.options.filter.test(full) && !ctx.options.filter.test(test.name)) {
+    // Match against the full nested title, so `-t` finds a test by any
+    // fragment regardless of how it's nested in describe blocks.
+    const full = `${ctx.file} > ${titlePath(test).join(" > ")}`;
+    if (!ctx.options.filter(full)) {
       return false;
     }
   }
@@ -532,7 +567,7 @@ const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
 
 const suiteHasIncludedTests = (
   suite: Suite,
-  ctx: Pick<ExecContext, "onlyMode" | "options">,
+  ctx: Pick<ExecContext, "onlyMode" | "options" | "file">,
 ): boolean => {
   for (const child of suite.children) {
     if (child.type === "test" && included(child, ctx)) return true;
@@ -545,7 +580,7 @@ const suiteHasIncludedTests = (
 /** True if the subtree has at least one included test that will actually run. */
 const suiteHasRunnableTests = (
   suite: Suite,
-  ctx: Pick<ExecContext, "onlyMode" | "options">,
+  ctx: Pick<ExecContext, "onlyMode" | "options" | "file">,
 ): boolean => {
   for (const child of suite.children) {
     if (
@@ -604,7 +639,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
     const walk = (suite: Suite) => {
       for (const child of suite.children) {
         if (child.type === "test") {
-          if (included(child, { onlyMode, options })) {
+          if (included(child, { onlyMode, options, file: c.file })) {
             allMetas.push(metaOf(c.file, child));
           }
         } else {

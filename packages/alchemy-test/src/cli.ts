@@ -67,16 +67,45 @@ const tui = Flag.boolean("tui").pipe(
   Flag.withDefault(false),
 );
 
-const toFilter = (pattern: Option.Option<string>): RegExp | undefined =>
+/**
+ * Build the `-t` matcher.
+ *
+ * Plain-text by default: punctuation is literal (`-t "create (default)"`,
+ * `-t "queue.queueUrl"`, `-t "[worker]"` all just work), matching is
+ * case-insensitive, and whitespace-separated words AND-match anywhere in the
+ * full nested title (`file > describe chain > name`) — so any fragment finds
+ * a test regardless of how it's nested in describe blocks.
+ *
+ * Regex is opt-in by slash-wrapping: `-t "/create|delete/"` (flags allowed:
+ * `/foo/i`; case-insensitive unless flags are given).
+ */
+const toFilter = (
+  pattern: Option.Option<string>,
+): ((fullTitle: string) => boolean) | undefined =>
   Option.match(pattern, {
     onNone: () => undefined,
     onSome: (source) => {
-      try {
-        return new RegExp(source);
-      } catch {
-        // Not a valid regex — treat it as a literal substring.
-        return new RegExp(source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const trimmed = source.trim();
+      const lastSlash = trimmed.lastIndexOf("/");
+      if (trimmed.startsWith("/") && lastSlash > 0) {
+        const body = trimmed.slice(1, lastSlash);
+        const flags = trimmed.slice(lastSlash + 1) || "i";
+        try {
+          const regex = new RegExp(body, flags);
+          return (fullTitle) => regex.test(fullTitle);
+        } catch {
+          // Invalid regex — fall through to substring matching.
+        }
       }
+      const words = trimmed
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((word) => word !== "");
+      if (words.length === 0) return undefined;
+      return (fullTitle) => {
+        const haystack = fullTitle.toLowerCase();
+        return words.every((word) => haystack.includes(word));
+      };
     },
   });
 
