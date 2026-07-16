@@ -49,11 +49,24 @@ const retry = Flag.integer("retry").pipe(
   Flag.withDefault(2),
 );
 
-const concurrency = Flag.integer("concurrency").pipe(
+const concurrency = Flag.string("concurrency").pipe(
   Flag.withAlias("c"),
-  Flag.withDescription("Maximum number of files running concurrently"),
-  Flag.withDefault(16),
+  Flag.withDescription(
+    'Maximum number of files running concurrently: a number or "unbounded" (default)',
+  ),
+  Flag.withDefault("unbounded"),
 );
+
+const toConcurrency = (value: string): number | "unbounded" => {
+  if (value === "unbounded") return "unbounded";
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    throw new Error(
+      `--concurrency must be a positive integer or "unbounded", got: ${value}`,
+    );
+  }
+  return parsed;
+};
 
 const sequential = Flag.boolean("sequential").pipe(
   Flag.withDescription("Run tests within each file sequentially"),
@@ -115,7 +128,7 @@ const rootCommand = Command.make(
       filter: toFilter(args.testNamePattern),
       timeout: args.timeout,
       retry: args.retry,
-      concurrency: args.concurrency,
+      concurrency: toConcurrency(args.concurrency),
       sequential: args.sequential,
       logFile,
     };

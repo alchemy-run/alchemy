@@ -907,7 +907,7 @@ Additional flags beyond vitest:
 | `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |
-| `--concurrency <n>` | 16    | Files running concurrently (one bun process, no forks)        |
+| `--concurrency <n\|unbounded>` | unbounded | Files running concurrently (one bun process, no forks) |
 | `--sequential`    | off     | Run tests within each file sequentially                       |
 | `--tui`           | off     | Opt-in interactive TUI (default is line-per-test output)      |
 

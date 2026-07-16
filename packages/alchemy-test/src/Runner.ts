@@ -51,8 +51,8 @@ export interface RunOptions {
   readonly timeout: number;
   /** Times a failing test body is re-run before being reported as failed. */
   readonly retry: number;
-  /** Maximum number of files executing concurrently. */
-  readonly concurrency: number;
+  /** Maximum number of files executing concurrently (default unbounded). */
+  readonly concurrency: number | "unbounded";
   /** Force sequential execution within every file. */
   readonly sequential: boolean;
   /** Absolute path of the persistent run log (test.log). */
