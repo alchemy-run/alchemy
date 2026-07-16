@@ -55,7 +55,16 @@ export type TestEvent =
       readonly files: number;
       readonly tests: ReadonlyArray<TestMeta>;
     }
-  | { readonly _tag: "FileStart"; readonly file: string }
+  | {
+      readonly _tag: "FileStart";
+      readonly file: string;
+      /**
+       * LIVE reference to the file's hook log buffer (deploy/destroy). The
+       * runner appends to it as hooks execute — single-process, so reporters
+       * may read it incrementally (e.g. the TUI tailing a detail pane).
+       */
+      readonly logs?: ReadonlyArray<LogEntry>;
+    }
   | {
       /** A file-level hook (deploy/destroy) started running. */
       readonly _tag: "HookStart";
@@ -74,7 +83,12 @@ export type TestEvent =
       readonly logs: ReadonlyArray<LogEntry>;
       readonly error?: string | undefined;
     }
-  | { readonly _tag: "TestStart"; readonly test: TestMeta }
+  | {
+      readonly _tag: "TestStart";
+      readonly test: TestMeta;
+      /** LIVE reference to the test's captured-output buffer (see FileStart). */
+      readonly logs?: ReadonlyArray<LogEntry>;
+    }
   | {
       readonly _tag: "TestEnd";
       readonly test: TestMeta;

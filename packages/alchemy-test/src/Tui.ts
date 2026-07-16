@@ -124,6 +124,8 @@ interface Entry {
   result?: TestResult;
   /** Set on TestStart; drives the live elapsed timer on running rows. */
   startedAt?: number;
+  /** LIVE captured-output buffer while running (runner appends in place). */
+  liveLogs?: ReadonlyArray<LogEntry>;
   /** Cached plain-text row label — recomputed only on status/result change. */
   label: string;
 }
@@ -368,20 +370,28 @@ const copyToClipboard = (renderer: CliRenderer, text: string): boolean => {
 
 const detailContent = (state: TuiState, entry: Entry): string => {
   const { meta, result } = entry;
+  const running = entry.status === "running";
   const lines: Array<string> = [
     `${meta.file} > ${meta.titlePath.join(" > ")}`,
     `status: ${entry.status}${
-      result !== undefined
+      running && entry.startedAt !== undefined
+        ? `  elapsed: ${formatDuration(Date.now() - entry.startedAt)}`
+        : ""
+    }${
+      !running && result !== undefined
         ? `  duration: ${formatDuration(result.durationMs)}  retries: ${result.retries}`
         : ""
     }`,
     "",
   ];
-  if (result?.error !== undefined) {
+  if (!running && result?.error !== undefined) {
     lines.push("── error ──", result.error, "");
   }
-  if (result !== undefined && result.logs.length > 0) {
-    lines.push("── captured output ──", formatLogs(result.logs), "");
+  // Finished tests show their result logs; running tests tail the LIVE
+  // buffer the runner appends to.
+  const logs = running ? entry.liveLogs : result?.logs;
+  if (logs !== undefined && logs.length > 0) {
+    lines.push("── captured output ──", formatLogs(logs), "");
   }
   const hookLogs = state.fileLogs.get(meta.file);
   if (hookLogs !== undefined && hookLogs.length > 0) {
@@ -494,6 +504,10 @@ const makeTui = async (): Promise<Tui> => {
     width: "100%",
     flexGrow: 1,
     visible: false,
+    // Tail semantics: pinned to the bottom while content grows (a running
+    // test's live output); scrolling up detaches, scrolling back re-pins.
+    stickyScroll: true,
+    stickyStart: "bottom",
   });
   const detailText = new TextRenderable(renderer, {
     id: "detail-text",
@@ -503,6 +517,8 @@ const makeTui = async (): Promise<Tui> => {
   detail.add(detailText);
   /** Content of the open detail pane (for `y` copy). */
   let detailRaw = "";
+  /** Entry shown in the detail pane, refreshed live while it's running. */
+  let detailEntry: Entry | undefined;
 
   const footer = new TextRenderable(renderer, {
     id: "footer",
@@ -745,17 +761,31 @@ const makeTui = async (): Promise<Tui> => {
     renderList();
   };
 
+  /** Re-render the open detail pane (no-op when its content is unchanged). */
+  const refreshDetail = (): void => {
+    if (detailEntry === undefined) return;
+    const raw = detailContent(state, detailEntry);
+    if (raw === detailRaw) return;
+    detailRaw = raw;
+    detailText.content = stringToStyledText(raw);
+  };
+
   const openDetail = (entry: Entry): void => {
+    detailEntry = entry;
     detailRaw = detailContent(state, entry);
     detailText.content = stringToStyledText(detailRaw);
     state.detailOpen = true;
     list.visible = false;
     detail.visible = true;
     detail.focus();
+    // Running test → tail the output (sticky keeps it pinned as it grows);
+    // finished test → start at the top where the error is.
+    detail.scrollTo(entry.status === "running" ? 1_000_000_000 : 0);
   };
 
   const closeDetail = (): void => {
     state.detailOpen = false;
+    detailEntry = undefined;
     detail.visible = false;
     list.visible = true;
     renderList();
@@ -1025,6 +1055,8 @@ const makeTui = async (): Promise<Tui> => {
   // while the run is live.
   const interval = setInterval(() => {
     if (disposed) return;
+    // Tail the open detail pane while its test is running.
+    if (state.detailOpen) refreshDetail();
     // Live elapsed timers: hook phases on file rows and running test rows.
     if (state.counts.running > 0) state.dirty = true;
     for (const node of state.fileOrder) {
@@ -1080,6 +1112,10 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
       break;
     case "FileStart":
       state.fileNode(event.file).started = true;
+      // Live hook-log buffer — grows in place as deploy/destroy run.
+      if (event.logs !== undefined) {
+        state.fileLogs.set(event.file, event.logs);
+      }
       break;
     case "HookStart": {
       const node = state.fileNode(event.file);
@@ -1090,9 +1126,12 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
     case "HookEnd":
       state.fileNode(event.file).hook = undefined;
       break;
-    case "TestStart":
+    case "TestStart": {
       state.upsert(event.test, "running");
+      const entry = state.byId.get(event.test.id);
+      if (entry !== undefined) entry.liveLogs = event.logs;
       break;
+    }
     case "TestEnd":
       state.upsert(event.test, event.result.status, event.result);
       break;

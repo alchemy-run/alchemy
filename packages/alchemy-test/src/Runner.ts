@@ -385,15 +385,17 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     return;
   }
 
-  yield* ctx.emit({ _tag: "TestStart", test: meta });
+  // One stable buffer for the whole runTest call (cleared in place between
+  // retry attempts) — TestStart shares the LIVE reference so the TUI can
+  // tail a running test's output.
+  const logs: Array<LogEntry> = [];
+  yield* ctx.emit({ _tag: "TestStart", test: meta, logs });
 
   const timeoutMs = test.timeout ?? ctx.options.timeout;
   const before = hookChain(test, "beforeEach");
   const after = hookChain(test, "afterEach");
 
-  const attempt = (
-    logs: Array<LogEntry>,
-  ): Effect.Effect<Exit.Exit<unknown, unknown>> =>
+  const attempt = (): Effect.Effect<Exit.Exit<unknown, unknown>> =>
     runHooks(before, timeoutMs).pipe(
       Effect.andThen(Effect.suspend(test.body!)),
       Effect.timeout(Duration.millis(timeoutMs)),
@@ -408,7 +410,6 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
 
   const start = Date.now();
   let retries = 0;
-  let logs: Array<LogEntry> = [];
   const withLock = ctx.lock.withPermits(test.exclusive ? EXCLUSIVE_PERMITS : 1);
 
   // Each attempt runs in its own fiber, registered run-globally so the TUI's
@@ -417,7 +418,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     Effect.Effect<any>,
     Exit.Exit<unknown, unknown>
   > {
-    const fiber = yield* Effect.forkChild(withLock(attempt(logs)), {
+    const fiber = yield* Effect.forkChild(withLock(attempt()), {
       startImmediately: true,
     });
     ctx.running.set(meta.id, fiber);
@@ -437,7 +438,8 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     retries < ctx.options.retry
   ) {
     retries++;
-    logs = [];
+    // Clear IN PLACE — TestStart handed this array's reference out.
+    logs.length = 0;
     exit = yield* runAttempt();
   }
   const durationMs = Date.now() - start;
@@ -687,8 +689,9 @@ export const run = Effect.fn(function* (options: RunOptions) {
   }
 
   const runFile = Effect.fn(function* (c: CollectedFile) {
-    yield* emit({ _tag: "FileStart", file: c.file });
     const fileLogs: Array<LogEntry> = [];
+    // Shares the LIVE hook-log buffer so the TUI can tail deploys.
+    yield* emit({ _tag: "FileStart", file: c.file, logs: fileLogs });
     let fileError = c.error;
     if (c.suite !== undefined) {
       const ctx: ExecContext = {
