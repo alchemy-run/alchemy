@@ -128,12 +128,12 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 `tsc -b` over the workspace is expensive; dozens of agents running it concurrently thrashes the machine (and concurrent `tsbuildinfo` writes race). Instead:
 
 - **Agents are banned** from running `tsc` or `bun run build` (root or distilled) in any form. The coordinator owns type-checking and runs a one-shot `bun tsc -b` at wave boundaries.
-- **vitest resolves distilled from `src/*.ts` directly, NOT the built `lib/`** (the `bun` export condition; see `packages/alchemy/vitest.config.ts`). So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --service {service}` (+ oxlint/oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep and do NOT gate a test re-run on a build after regenerating. This applies to response-schema patches as well as error-tag-only patches.
+- **The test runner resolves distilled from `src/*.ts` directly, NOT the built `lib/`** (`alchemy-test` runs in plain bun, which resolves the `bun` export condition natively). So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --service {service}` (+ oxlint/oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep and do NOT gate a test re-run on a build after regenerating. This applies to response-schema patches as well as error-tag-only patches.
 
 ## Speed doctrine: never wait on a hang
 
-- Run tests from `packages/alchemy` (suite paths are relative to it, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `cd packages/alchemy && timeout 240 ALCHEMY_PROFILE=testing bun vitest run <suite>`. Hitting the wall **is** the failure — read the partial output, find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping.
-- Per-test vitest timeout ≤ 90–120s. A suite needing more than ~3–5 minutes total is a bug.
+- Run tests from `packages/alchemy` (suite paths are relative to it, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `cd packages/alchemy && timeout 240 bash -c 'ALCHEMY_PROFILE=testing bun alchemy-test <suite>'`. Hitting the wall **is** the failure — read the partial output (and `.alchemy/log/test.log`), find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping. The runner also prints the currently-running tests whenever nothing finishes for 10s — use that list to identify the hang.
+- Per-test timeout ≤ 90–120s (`{ timeout: ... }` on the test, or `--timeout` for the whole run). A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
 - **Three-iteration budget**: if a suite is not green after ~3 fix iterations and the blocker is platform behavior (entitlement, slow async provisioning, beta API), implement fully, skipIf-gate with the typed tag and exact error, verify a skip-clean run, and report honestly. Do not burn an hour on one resource.
@@ -772,8 +772,8 @@ Compose a `Stack` that deploys the fixture, share one deploy across the file wit
 // Service.test.ts
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -819,7 +819,7 @@ Notes:
 - `afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack))` is the standard cleanup — set `NO_DESTROY=1` locally to keep the deployment around between runs while iterating.
 - Always retry the first request (`Schedule.exponential("500 millis")`) — fresh workers.dev URLs and Lambda function URLs take a few seconds to start serving 200s.
 - For POST: use `client.post(url)` for empty bodies, or `HttpClient.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)))` for typed bodies.
-- **Never use `while (Date.now() < deadline)` loops to poll** for an async side effect (a workflow status, a cron fire, a queue drain, eventual-consistency read, etc.). Use `Effect.repeat` with a `Schedule` and an `until` predicate so the polling participates in the Effect runtime — tracing, interruption, and error propagation work correctly, and the intent is declarative. Cap iterations with `times: N` (or a bounded schedule) so the test fails fast instead of running until the vitest timeout:
+- **Never use `while (Date.now() < deadline)` loops to poll** for an async side effect (a workflow status, a cron fire, a queue drain, eventual-consistency read, etc.). Use `Effect.repeat` with a `Schedule` and an `until` predicate so the polling participates in the Effect runtime — tracing, interruption, and error propagation work correctly, and the intent is declarative. Cap iterations with `times: N` (or a bounded schedule) so the test fails fast instead of running until the test timeout:
 
   ```ts
   // good — declarative, bounded, interruption-safe
@@ -831,7 +831,7 @@ Notes:
     }),
   );
 
-  // bad — opaque loop, ignores interruption, leaks into vitest timeout
+  // bad — opaque loop, ignores interruption, leaks into the test timeout
   let value: Value | undefined;
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
@@ -880,13 +880,47 @@ This runs the TypeScript compiler in build mode, which checks all projects in th
 
 ## Running tests
 
-Run tests from `packages/alchemy` — suite paths are relative to it:
+`packages/alchemy/test` runs on **alchemy-test** (`packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way. Run from `packages/alchemy` — suite paths are relative to it:
 
 ```bash
-cd packages/alchemy && ALCHEMY_PROFILE=testing bun vitest run test/Cloudflare/{Service}/{Resource}.test.ts
+# a suite
+cd packages/alchemy && ALCHEMY_PROFILE=testing bun alchemy-test test/Cloudflare/{Service}/{Resource}.test.ts
+
+# a directory, filtered by test name
+cd packages/alchemy && ALCHEMY_PROFILE=testing bun alchemy-test test/Cloudflare/Workers -t "cron"
+
+# via package scripts (root or packages/alchemy). NOTE: `bun run test`, not
+# `bun test` — the latter invokes bun's own built-in test runner.
+bun run test        # = alchemy-test (plain output)
+bun run test:tui    # interactive TUI (humans only — never in an agent shell)
 ```
 
-vitest resolves distilled from `src/*.ts` directly (the `bun` export condition; see `packages/alchemy/vitest.config.ts`), so a regenerated service is test-visible immediately — no `lib/` rebuild is ever required before re-running tests.
+(`examples/` still use plain `bun test`.)
+
+Additional flags beyond vitest:
+
+| Flag              | Default | Purpose                                                       |
+| ----------------- | ------- | ------------------------------------------------------------- |
+| `-t <pattern>`    | —       | Only run tests whose title matches (regex or substring)       |
+| `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
+| `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |
+| `--concurrency <n>` | 16    | Files running concurrently (one bun process, no forks)        |
+| `--sequential`    | off     | Run tests within each file sequentially                       |
+| `--tui`           | off     | Opt-in interactive TUI (default is line-per-test output)      |
+
+Output behavior (plain mode, the default):
+
+- One line per test as it finishes; a **failing test prints its error and captured output inline** immediately.
+- Passing tests' output is swallowed on the console — but **every** test's output (passes included) is streamed to **`.alchemy/log/test.log`** (relative to the cwd, so `packages/alchemy/.alchemy/log/test.log`). The absolute path is printed at the end of every run (`Full log: /abs/path/.alchemy/log/test.log`) — read that file when you need the complete record, e.g. a passing test's deploy output or a hang's partial log. The file is truncated at run start and appended live, so it's readable mid-run.
+- If nothing finishes for 10s, the runner prints the list of currently-running tests with elapsed times — the first place to look when a run seems hung.
+- Exit code is non-zero if any test failed.
+
+Runner semantics to know:
+
+- Everything runs in ONE bun process: files run concurrently (respecting `describe.sequential`), imports of all test files happen up-front (they must be lazy and pure — registration only, no top-level side effects beyond `Test.make`/`describe`/`test`).
+- Tests that mutate process-global state (e.g. `process.env.PATH`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock.
+- The harness (`alchemy-test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert` — the codemod `scripts/codemod-alchemy-test.ts` migrates vitest imports and is idempotent.
+- The runner runs in plain bun, so distilled resolves from `src/*.ts` via the `bun` export condition — a regenerated service is test-visible immediately, no `lib/` rebuild required.
 
 ## Multi-agent sessions: the coordinator owns type-checking
 
