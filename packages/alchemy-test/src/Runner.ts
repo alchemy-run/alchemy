@@ -20,6 +20,7 @@ import * as Semaphore from "effect/Semaphore";
 import { inspect } from "node:util";
 import { pathToFileURL } from "node:url";
 
+import { makeFileLog } from "./FileLog.ts";
 import type { FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
 import { containsOnly, forEachTest, titlePath } from "./Model.ts";
 import * as Registry from "./Registry.ts";
@@ -47,6 +48,8 @@ export interface RunOptions {
   readonly concurrency: number;
   /** Force sequential execution within every file. */
   readonly sequential: boolean;
+  /** Absolute path of the persistent run log (test.log). */
+  readonly logFile: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -567,9 +570,15 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const path = yield* Path.Path;
   const startedAt = Date.now();
 
+  // Every event is teed into the persistent run log (`.alchemy/log/test.log`)
+  // in addition to the active reporter.
+  const fileLog = yield* makeFileLog(options.logFile);
+  const emit = (event: TestEvent): Effect.Effect<void> =>
+    reporter.emit(event).pipe(Effect.andThen(fileLog.append(event)));
+
   const absoluteFiles = yield* discover(options).pipe(Effect.orDie);
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
-  yield* reporter.emit({ _tag: "CollectStart", files: relative });
+  yield* emit({ _tag: "CollectStart", files: relative });
 
   // Phase 1 — import EVERY file before running anything. Imports are lazy
   // and pure (registration only), and must be serial anyway because the
@@ -581,7 +590,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
     // collectFile never fails — import errors are captured on the result.
     const c = yield* collectFile(absoluteFiles[i]!, relative[i]!);
     collected.push(c);
-    yield* reporter.emit({ _tag: "FileCollected", file: relative[i]! });
+    yield* emit({ _tag: "FileCollected", file: relative[i]! });
   }
 
   const onlyMode = collected.some(
@@ -605,7 +614,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
     };
     walk(c.suite);
   }
-  yield* reporter.emit({
+  yield* emit({
     _tag: "RunStart",
     files: collected.length,
     tests: allMetas,
@@ -643,14 +652,14 @@ export const run = Effect.fn(function* (options: RunOptions) {
   }
 
   const runFile = Effect.fn(function* (c: CollectedFile) {
-    yield* reporter.emit({ _tag: "FileStart", file: c.file });
+    yield* emit({ _tag: "FileStart", file: c.file });
     const fileLogs: Array<LogEntry> = [];
     let fileError = c.error;
     if (c.suite !== undefined) {
       const ctx: ExecContext = {
         options,
         onlyMode,
-        emit: reporter.emit,
+        emit,
         fileLogs,
         results: allResults,
         file: c.file,
@@ -668,7 +677,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
         fileError = prettyCause(exit.cause);
       }
     }
-    yield* reporter.emit({
+    yield* emit({
       _tag: "FileEnd",
       file: c.file,
       logs: fileLogs,
@@ -692,6 +701,6 @@ export const run = Effect.fn(function* (options: RunOptions) {
     durationMs: Date.now() - startedAt,
     failures,
   };
-  yield* reporter.emit({ _tag: "RunEnd", summary });
+  yield* emit({ _tag: "RunEnd", summary });
   return summary;
 });

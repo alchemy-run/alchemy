@@ -15,6 +15,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
@@ -60,12 +61,9 @@ const sequential = Flag.boolean("sequential").pipe(
 );
 
 const tui = Flag.boolean("tui").pipe(
-  Flag.withDescription("Force the interactive TUI on"),
-  Flag.withDefault(false),
-);
-
-const noTui = Flag.boolean("no-tui").pipe(
-  Flag.withDescription("Force the interactive TUI off"),
+  Flag.withDescription(
+    "Opt in to the interactive TUI (default is plain line output)",
+  ),
   Flag.withDefault(false),
 );
 
@@ -92,20 +90,24 @@ const rootCommand = Command.make(
     concurrency,
     sequential,
     tui,
-    noTui,
   },
   Effect.fn(function* (args) {
-    const interactive =
-      args.tui || (!args.noTui && process.stdout.isTTY === true);
+    // Plain line output by default; the TUI is opt-in (`--tui`) and requires
+    // an interactive terminal.
+    const interactive = args.tui && process.stdout.isTTY === true;
+    const path = yield* Path.Path;
+    const root = process.cwd();
+    const logFile = path.resolve(root, ".alchemy", "log", "test.log");
 
     const options: RunOptions = {
-      root: process.cwd(),
+      root,
       paths: args.paths,
       filter: toFilter(args.testNamePattern),
       timeout: args.timeout,
       retry: args.retry,
       concurrency: args.concurrency,
       sequential: args.sequential,
+      logFile,
     };
 
     const summary = yield* Effect.gen(function* () {
@@ -122,6 +124,11 @@ const rootCommand = Command.make(
     if (interactive) {
       yield* printSummary(summary);
     }
+
+    // Point agents/tooling at the full run log.
+    yield* Effect.sync(() => {
+      process.stdout.write(`\nFull log: ${logFile}\n`);
+    });
 
     if (summary.failed > 0) {
       yield* Effect.sync(() => {
