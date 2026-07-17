@@ -48,6 +48,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import * as Otlp from "effect/unstable/observability/Otlp";
+import * as OtlpLogger from "effect/unstable/observability/OtlpLogger";
+import * as OtlpMetrics from "effect/unstable/observability/OtlpMetrics";
+import * as OtlpSerialization from "effect/unstable/observability/OtlpSerialization";
+import * as OtlpTracer from "effect/unstable/observability/OtlpTracer";
 import { CurrentRuntimeContext } from "./RuntimeContext.ts";
 
 /**
@@ -118,6 +122,38 @@ const parseOtlpHeaders = (
   return headers;
 };
 
+/**
+ * Resolve one signal's OTLP endpoint + headers from the standard env vars:
+ * `OTEL_EXPORTER_OTLP_{SIGNAL}_ENDPOINT` is used as-is; otherwise the base
+ * `OTEL_EXPORTER_OTLP_ENDPOINT` gets `/v1/{signal}` appended (matching the
+ * OpenTelemetry SDK spec). Headers fall back per-signal → base.
+ */
+const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS") =>
+  Effect.gen(function* () {
+    const specific = yield* Config.string(
+      `OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`,
+    ).pipe(Config.withDefault(undefined));
+    const base = yield* Config.string("OTEL_EXPORTER_OTLP_ENDPOINT").pipe(
+      Config.withDefault(undefined),
+    );
+    const url =
+      specific !== undefined && specific !== ""
+        ? specific
+        : base !== undefined && base !== ""
+          ? `${base.replace(/\/$/, "")}/v1/${signal.toLowerCase()}`
+          : undefined;
+    if (url === undefined) {
+      return undefined;
+    }
+    const rawHeaders = yield* Config.string(
+      `OTEL_EXPORTER_OTLP_${signal}_HEADERS`,
+    ).pipe(
+      Config.orElse(() => Config.string("OTEL_EXPORTER_OTLP_HEADERS")),
+      Config.withDefault(undefined),
+    );
+    return { url, headers: parseOtlpHeaders(rawHeaders) };
+  });
+
 const makeFromEnv = (options?: {
   exportInterval?: Duration.Input;
 }): TelemetryLayer =>
@@ -129,24 +165,49 @@ const makeFromEnv = (options?: {
       if (disabled) {
         return Layer.empty;
       }
-      const baseUrl = yield* Config.string("OTEL_EXPORTER_OTLP_ENDPOINT").pipe(
-        Config.withDefault(undefined),
-      );
-      if (baseUrl === undefined || baseUrl === "") {
+      const [traces, logs, metrics] = yield* Effect.all([
+        signalConfig("TRACES"),
+        signalConfig("LOGS"),
+        signalConfig("METRICS"),
+      ]);
+      if (traces === undefined && logs === undefined && metrics === undefined) {
         return Layer.empty;
       }
-      const rawHeaders = yield* Config.string(
-        "OTEL_EXPORTER_OTLP_HEADERS",
-      ).pipe(Config.withDefault(undefined));
       const resource = yield* defaultResource;
-      return Otlp.layerJson({
-        baseUrl,
-        headers: parseOtlpHeaders(rawHeaders),
-        resource,
-        loggerExportInterval: options?.exportInterval,
-        metricsExportInterval: options?.exportInterval,
-        tracerExportInterval: options?.exportInterval,
-      });
+      const layers: Layer.Layer<never, never, any>[] = [];
+      if (traces !== undefined) {
+        layers.push(
+          OtlpTracer.layer({
+            url: traces.url,
+            headers: traces.headers,
+            resource,
+            exportInterval: options?.exportInterval,
+          }),
+        );
+      }
+      if (logs !== undefined) {
+        layers.push(
+          OtlpLogger.layer({
+            url: logs.url,
+            headers: logs.headers,
+            resource,
+            exportInterval: options?.exportInterval,
+          }),
+        );
+      }
+      if (metrics !== undefined) {
+        layers.push(
+          OtlpMetrics.layer({
+            url: metrics.url,
+            headers: metrics.headers,
+            resource,
+            exportInterval: options?.exportInterval,
+          }),
+        );
+      }
+      return Layer.mergeAll(...(layers as [Layer.Layer<never>])).pipe(
+        Layer.provide(OtlpSerialization.layerJson),
+      );
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning(
@@ -159,10 +220,15 @@ const makeFromEnv = (options?: {
 
 /**
  * The default telemetry Layer for per-event runtimes: OTLP/HTTP JSON export
- * of traces, logs, and metrics, configured entirely from environment
- * variables. Resolves to `Layer.empty` when `OTEL_EXPORTER_OTLP_ENDPOINT`
- * is unset or `OTEL_SDK_DISABLED=true`, so telemetry is on by default but
- * free until an endpoint is configured.
+ * of traces, logs, and metrics, configured entirely from the standard
+ * OpenTelemetry environment variables. Each signal resolves independently —
+ * `OTEL_EXPORTER_OTLP_{TRACES|LOGS|METRICS}_ENDPOINT` is used as-is, or the
+ * base `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/{signal}` appended; headers
+ * come from `OTEL_EXPORTER_OTLP_{SIGNAL}_HEADERS` falling back to
+ * `OTEL_EXPORTER_OTLP_HEADERS` (`k=v,k2=v2` format). Only configured
+ * signals export. Resolves to `Layer.empty` when no endpoint is set or
+ * `OTEL_SDK_DISABLED=true`, so telemetry is on by default but free until
+ * an endpoint is configured.
  *
  * The periodic export intervals are effectively disabled: the exporter is
  * built per event and the request-scope flush delivers everything. An

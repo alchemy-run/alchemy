@@ -16,9 +16,10 @@ reviewable diff, not a dashboard click.
 This guide wires a Worker's telemetry into Axiom two ways:
 
 1. **From the Worker** — OTLP endpoints and an ingest token as env
-   vars, your exporter ships directly.
+   vars; the [built-in telemetry](/infrastructure-as-effects/telemetry)
+   exports your Effect spans, logs, and metrics directly.
 2. **From Cloudflare** — an `ObservabilityDestination` that pushes
-   Workers Logs telemetry to Axiom with zero exporter code.
+   Workers Logs telemetry to Axiom.
 
 ## Register the Axiom provider
 
@@ -98,28 +99,34 @@ identical props never rotate it.
 
 ## Wire the OTEL env vars into the Worker
 
-Pass the dataset endpoints and the token through the Worker's `env`
-prop:
+Pass each dataset's endpoint and headers through the Worker's `env`
+prop. That's the whole integration — the built-in telemetry reads
+the standard `OTEL_*` variables per signal and exports every span,
+log record, and metric your Worker produces, flushed as each request
+completes:
 
 ```typescript
 const worker = yield* Cloudflare.Worker("Api", {
   main: "./src/worker.ts",
   env: {
     OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: traces.otelTracesEndpoint,
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: Axiom.otlpHeaders(ingest, traces),
     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: logs.otelLogsEndpoint,
+    OTEL_EXPORTER_OTLP_LOGS_HEADERS: Axiom.otlpHeaders(ingest, logs),
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: metrics.otelMetricsEndpoint,
-    AXIOM_TOKEN: ingest.token,
+    OTEL_EXPORTER_OTLP_METRICS_HEADERS: Axiom.otlpHeaders(ingest, metrics),
   },
 });
 ```
 
-Values are routed by shape: the endpoint strings become `plain_text`
-vars, and `ingest.token` — a `Redacted<string>` — becomes a
-`secret_text` binding, so the bearer never appears in plaintext
-Worker config. At runtime your exporter attaches
-`Authorization: Bearer ${env.AXIOM_TOKEN}` plus the dataset header
-Axiom expects — each dataset's `otelHeaders` output carries the
-required `X-Axiom-Dataset: <name>` entry.
+`Axiom.otlpHeaders(ingest, traces)` composes the
+`Authorization=Bearer <token>,X-Axiom-Dataset=<name>` header string
+Axiom expects. Values are routed by shape: the endpoint strings
+become `plain_text` vars, and the headers — carrying the `Redacted`
+bearer — become `secret_text` bindings, so the token never appears
+in plaintext Worker config. Axiom routes ingest by the
+`X-Axiom-Dataset` header, which is why each signal needs its own
+headers var rather than one shared `OTEL_EXPORTER_OTLP_HEADERS`.
 
 ## Alternative: let Cloudflare push it
 
@@ -215,8 +222,12 @@ Two adjacent Cloudflare-native options, in brief:
 - [Axiom overview](/axiom) — dashboards, annotations, views, and the
   full resource list.
 - [Axiom setup](/axiom/setup) — credentials and profiles.
-- [Observability](/testing/observability) — the exporter-as-a-Layer
-  pattern and OTel across clouds.
+- [Telemetry](/infrastructure-as-effects/telemetry) — how the
+  built-in exporters work across every runtime.
+- [Tutorial Part 6](/cloudflare/tutorial/part-6) — the step-by-step
+  version of this setup.
+- [Observability](/testing/observability) — OTel across clouds and
+  the receiving end as resources.
 - Reference: [Dataset](/providers/axiom/dataset) ·
   [ApiToken](/providers/axiom/apitoken) ·
   [Monitor](/providers/axiom/monitor) ·

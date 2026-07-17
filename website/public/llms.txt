@@ -121,7 +121,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 ## Cloudflare — Compute
 
 - [Accept WebSockets](https://alchemy.run/cloudflare/compute/hibernatable-websockets) — Accept WebSocket connections in a Durable Object, broadcast between peers, and survive Cloudflare's hibernation.
-- [Bind to another Worker's Durable Object](https://alchemy.run/cloudflare/compute/cross-worker-durable-object) — Share a Durable Object across multiple Workers — one Worker hosts the runtime, others bind to it by scriptName for a typed RPC stub.
+- [Bind to another Worker's Durable Object](https://alchemy.run/cloudflare/compute/cross-worker-durable-object) — Share a Durable Object across multiple Workers — one Worker hosts the runtime, others bind to it by scriptName for a typed RPC stub — and move the host later with the data intact.
 - [Add a Workflow](https://alchemy.run/cloudflare/compute/add-a-workflow) — Orchestrate durable, multi-step work with Cloudflare Workflows — automatic retries, replayable steps, and at-least-once delivery.
 - [Run a Container](https://alchemy.run/cloudflare/compute/run-a-container) — Run a long-lived container alongside a Durable Object, expose RPC methods, and proxy HTTP requests to ports inside the container.
 - [Rate limiting](https://alchemy.run/cloudflare/compute/rate-limiting) — Throttle requests inside a Worker with Cloudflare's Rate Limiting binding — declare the limit on the binding, count arbitrary keys at runtime, handle failures as typed errors.
@@ -178,6 +178,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 
 ## Cloudflare — AI
 
+- [Run Workers AI models](https://alchemy.run/cloudflare/ai/workers-ai) — Bind Workers AI into your Worker with Cloudflare.Workers.AI — run inference and list models directly, or turn the binding into a typed Effect LanguageModel, no gateway required.
 - [Effect AI](https://alchemy.run/cloudflare/ai/effect-ai) — Wire Effect's LanguageModel and Chat services into a Cloudflare Worker — read API keys with effect/Config, provide the model layer to your handler, plug in persistence.
 - [Add an AI Gateway](https://alchemy.run/cloudflare/ai/ai-gateway) — Wire an AI Gateway into your Worker, turn it into a typed Effect LanguageModel, and run generations and streams through Workers AI with caching, rate limiting, and logs.
 - [Add AI Search (AutoRAG)](https://alchemy.run/cloudflare/ai/ai-search) — Stand up a Cloudflare AI Search (AutoRAG) pipeline over an R2 bucket with one Search call, bind it into your Worker as a typed Effect client, and answer questions over your own documents.
@@ -585,6 +586,7 @@ Per-resource API reference, generated from JSDoc on the source `.ts` files via `
 - [AccountSetting](https://alchemy.run/providers/cloudflare/workers/accountsetting) — The account-wide Workers settings singleton (`/accounts/{account_id}/workers/account-settings`): the default usage model for new Workers and the Green Compute flag for scheduled Workers.
 - [Address](https://alchemy.run/providers/cloudflare/email/address) — A verified destination email address on the account.
 - [AddressMap](https://alchemy.run/providers/cloudflare/addressing/addressmap) — A Cloudflare Address Map — assigns account-owned or Cloudflare-assigned static IPs to zones (BYOIP / Enterprise static IPs).
+- [AI](https://alchemy.run/providers/cloudflare/workers/ai) — The native Cloudflare Workers AI binding — run inference on Workers AI models directly from a Worker, with no AI Gateway (or any other cloud resource) required. This is the plain `{ type: \"ai\" }` Worker binding: the runtime value is the same `env.AI` handle you would declare in `wrangler.json`.
 - [AllowPolicy](https://alchemy.run/providers/cloudflare/email/allowpolicy) — A Cloudflare Email Security (Area 1) allow policy — exempts messages matching a sender/recipient pattern from detections.
 - [App](https://alchemy.run/providers/cloudflare/calls/app) — A Cloudflare Realtime (formerly \"Calls\") SFU application.
 - [App](https://alchemy.run/providers/cloudflare/flagship/app) — A Cloudflare Flagship app — a container for feature flags.
@@ -736,6 +738,7 @@ Per-resource API reference, generated from JSDoc on the source `.ts` files via `
 - [Preset](https://alchemy.run/providers/cloudflare/realtimekit/preset) — A Cloudflare RealtimeKit preset — a named participant role (e.g. `host`, `guest`) bundling permissions, media quality, and UI design tokens for a RealtimeKit app.
 - [Profile](https://alchemy.run/providers/cloudflare/dlp/profile) — A Cloudflare Zero Trust **DLP custom profile** — a named collection of detection entries (regular expressions) that Gateway HTTP policies and CASB integrations reference to detect sensitive data in transit.
 - [Project](https://alchemy.run/providers/cloudflare/pages/project) — A Cloudflare Pages project (direct-upload).
+- [ProviderKey](https://alchemy.run/providers/cloudflare/ai/providerkey) — Declares a Cloudflare AI Gateway BYOK provider key.
 - [ProxyEndpoint](https://alchemy.run/providers/cloudflare/gateway/proxyendpoint) — A Cloudflare Zero Trust Gateway proxy endpoint — an agentless HTTP proxy for forwarding traffic to Gateway without installing the WARP client, typically wired up via a PAC file pointing at the endpoint's server-assigned `subdomain`.
 - [QueryDatabase](https://alchemy.run/providers/cloudflare/d1/querydatabase) — Bind a Database to a Worker and obtain the Effect-native D1 connection client (`prepare`, `exec`, `batch`, `raw`).
 - [QueryGateway](https://alchemy.run/providers/cloudflare/ai/querygateway) — Binding service that turns a Gateway resource into a typed QueryGatewayClient for Worker runtime code. Wraps the Cloudflare.AI. Gateway runtime binding so each operation returns an Effect tagged with GatewayError, exposes the raw Workers AI handle for `ai.run(...)`, and provides a `model(options)` factory that produces an `effect/unstable/ai` `LanguageModel` `Layer`.

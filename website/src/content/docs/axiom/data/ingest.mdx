@@ -50,20 +50,25 @@ event store — for anything that isn't OTLP.
 ## OTLP endpoints as outputs
 
 Each dataset exposes Axiom's OTLP/HTTP endpoints as output
-attributes, so wiring an exporter is a matter of passing outputs
-into your runtime's env:
+attributes. Alchemy runtimes have
+[telemetry built in](/infrastructure-as-effects/telemetry) — they
+read the standard `OTEL_*` env vars per signal — so wiring an
+exporter is a matter of passing outputs into your runtime's env:
 
 ```typescript
 yield* Cloudflare.Worker("api", {
-  vars: {
+  env: {
     OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: traces.otelTracesEndpoint,
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:   logs.otelLogsEndpoint,
-    // Bearer token must come from a secret store, not the dataset state.
-    OTEL_EXPORTER_OTLP_HEADERS:
-      `Authorization=Bearer ${env.AXIOM_TOKEN},X-Axiom-Dataset=${traces.name}`,
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: Axiom.otlpHeaders(ingest, traces),
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: logs.otelLogsEndpoint,
+    OTEL_EXPORTER_OTLP_LOGS_HEADERS: Axiom.otlpHeaders(ingest, logs),
   },
 });
 ```
+
+`Axiom.otlpHeaders(ingest, traces)` composes the
+`Authorization=Bearer <token>,X-Axiom-Dataset=<name>` value Axiom
+expects, carrying the token as a `Redacted` so it binds as a secret.
 
 - `otelTracesEndpoint` / `otelLogsEndpoint` / `otelMetricsEndpoint` —
   the per-signal OTLP/HTTP URLs.
@@ -154,7 +159,7 @@ tearing down a preview stage deletes its data with it. See
   zero-exporter Cloudflare push path.
 - [Alerting](/axiom/guides/alerting) — monitors and notifiers over
   the data you just ingested.
-- [Observability](/testing/observability) — the exporter-as-a-Layer
-  pattern and OTel across clouds.
+- [Telemetry](/infrastructure-as-effects/telemetry) — the built-in
+  OTel exporters and how they flush per request.
 - Reference: [Dataset](/providers/axiom/dataset) ·
   [ApiToken](/providers/axiom/apitoken)

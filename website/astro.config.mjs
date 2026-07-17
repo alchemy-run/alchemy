@@ -347,6 +347,10 @@ export default defineConfig({
                   link: "/infrastructure-as-effects/circular-bindings",
                 },
                 {
+                  label: "Telemetry",
+                  link: "/infrastructure-as-effects/telemetry",
+                },
+                {
                   label: "Custom Runtime",
                   link: "/infrastructure-as-effects/custom-runtime",
                 },
