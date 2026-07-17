@@ -329,6 +329,7 @@
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
+    "@yarnpkg/parsers": "^3.0.3",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
     "fast-glob": "^3.3.2",

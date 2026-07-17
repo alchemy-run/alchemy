@@ -23,6 +23,45 @@ const integrationEnabled =
   process.env.ALCHEMY_TEST_LAMBDA_EXTERNAL_PACKAGES === "1" &&
   spawnSync("npm", ["--version"], { stdio: "ignore" }).status === 0;
 
+const withLockfileFixture = <A, E, R>(
+  options: {
+    readonly prefix: string;
+    readonly packageJson: unknown;
+    readonly lockfileName: string;
+    readonly lockfileContent: string;
+    readonly workspace?: string;
+  },
+  use: (context: {
+    readonly root: string;
+    readonly cwd: string;
+    readonly fs: FileSystem.FileSystem;
+    readonly path: Path.Path;
+  }) => Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectory({ prefix: options.prefix });
+    const cwd =
+      options.workspace === undefined
+        ? root
+        : path.join(root, options.workspace);
+    try {
+      if (cwd !== root) yield* fs.makeDirectory(cwd, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(cwd, "package.json"),
+        JSON.stringify(options.packageJson),
+      );
+      yield* fs.writeFileString(
+        path.join(root, options.lockfileName),
+        options.lockfileContent,
+      );
+      return yield* use({ root, cwd, fs, path });
+    } finally {
+      yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+    }
+  });
+
 describe("Lambda external packages", () => {
   it("accepts only package roots, not subpaths", () => {
     expect(parsePackageRoot("sharp")).toBe("sharp");
@@ -75,7 +114,7 @@ describe("Lambda external packages", () => {
   );
 
   it("targets Linux and the Lambda architecture", () => {
-    expect(npmInstallArgs("arm64", ["sharp"])).toEqual([
+    expect(npmInstallArgs("arm64")).toEqual([
       "ci",
       "--force",
       "--platform=linux",
@@ -84,7 +123,7 @@ describe("Lambda external packages", () => {
       "--cpu=arm64",
       "--libc=glibc",
     ]);
-    expect(npmInstallArgs("x86_64", ["other"])).toEqual([
+    expect(npmInstallArgs("x86_64")).toEqual([
       "ci",
       "--force",
       "--platform=linux",
@@ -389,7 +428,7 @@ describe("Lambda external packages", () => {
         });
         expect(installArgs).toEqual([
           npmLockfileArgs("arm64"),
-          npmInstallArgs("arm64", ["sharp"]),
+          npmInstallArgs("arm64"),
         ]);
         expect(files.map((file) => file.path)).toEqual(
           expect.arrayContaining([
@@ -817,9 +856,7 @@ describe("Lambda external packages", () => {
         try {
           yield* fs.writeFileString(
             path.join(root, "package.json"),
-            yield* Effect.sync(() =>
-              JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
-            ),
+            JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
           );
 
           const error = yield* installPackages({
@@ -831,12 +868,10 @@ describe("Lambda external packages", () => {
                 if (args[0] !== "ci") return;
                 yield* fs.writeFileString(
                   path.join(directory, "package.json"),
-                  yield* Effect.sync(() =>
-                    JSON.stringify({
-                      private: true,
-                      dependencies: { sharp: "^0.34.5" },
-                    }),
-                  ),
+                  JSON.stringify({
+                    private: true,
+                    dependencies: { sharp: "^0.34.5" },
+                  }),
                 );
                 yield* fs.writeFileString(
                   path.join(directory, "package-lock.json"),
@@ -858,129 +893,119 @@ describe("Lambda external packages", () => {
     "pins requested packages to the versions in supported lockfiles",
     () =>
       Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const fixtures = yield* Effect.sync(
-          () =>
-            [
-              {
-                name: "package-lock.json",
-                content: JSON.stringify({
-                  name: "fixture",
-                  lockfileVersion: 3,
-                  packages: {
-                    "": { dependencies: { sharp: "^0.34.0" } },
-                    "node_modules/sharp": {
-                      version: "0.34.5",
-                      dependencies: { semver: "^7.0.0" },
-                    },
-                    "node_modules/semver": { version: "7.7.3" },
-                  },
-                }),
+        const fixtures = [
+          {
+            name: "package-lock.json",
+            content: JSON.stringify({
+              name: "fixture",
+              lockfileVersion: 3,
+              packages: {
+                "": { dependencies: { sharp: "^0.34.0" } },
+                "node_modules/sharp": {
+                  version: "0.34.5",
+                  dependencies: { semver: "^7.0.0" },
+                },
+                "node_modules/semver": { version: "7.7.3" },
               },
-              {
-                name: "package-lock.json",
-                content: JSON.stringify({
-                  lockfileVersion: 1,
-                  dependencies: {
-                    sharp: {
-                      version: "0.34.5",
-                      requires: { semver: "^7.0.0" },
-                    },
-                    semver: { version: "7.7.3" },
-                  },
-                }),
+            }),
+          },
+          {
+            name: "package-lock.json",
+            content: JSON.stringify({
+              lockfileVersion: 1,
+              dependencies: {
+                sharp: {
+                  version: "0.34.5",
+                  requires: { semver: "^7.0.0" },
+                },
+                semver: { version: "7.7.3" },
               },
-              {
-                name: "pnpm-lock.yaml",
-                content: [
-                  "lockfileVersion: '9.0'",
-                  "importers:",
-                  "  .:",
-                  "    dependencies:",
-                  "      sharp:",
-                  "        specifier: ^0.34.0",
-                  "        version: 0.34.5",
-                  "snapshots:",
-                  "  sharp@0.34.5:",
-                  "    dependencies:",
-                  "      semver: 7.7.3",
-                  "  semver@7.7.3: {}",
-                ].join("\n"),
-              },
-              {
-                name: "bun.lock",
-                content: [
-                  "{",
-                  "  // Bun lockfiles use JSONC.",
-                  '  "lockfileVersion": 1,',
-                  '  "workspaces": {',
-                  '    "": { "dependencies": { "sharp": "^0.34.0" } },',
-                  "  },",
-                  '  "packages": {',
-                  '    "sharp": ["sharp@0.34.5", "", { "dependencies": { "semver": "^7.0.0" } }],',
-                  '    "semver": ["semver@7.7.3", "", {}],',
-                  "  },",
-                  "}",
-                ].join("\n"),
-              },
-              {
-                name: "yarn.lock",
-                content: [
-                  "sharp@^0.34.0:",
-                  '  version "0.34.5"',
-                  '  resolved "https://registry.yarnpkg.com/sharp/-/sharp-0.34.5.tgz"',
-                  "  dependencies:",
-                  '    semver "^7.0.0"',
-                  "semver@^7.0.0:",
-                  '  version "7.7.3"',
-                ].join("\n"),
-              },
-              {
-                name: "yarn.lock",
-                content: [
-                  '"sharp@npm:^0.34.0":',
-                  "  version: 0.34.5",
-                  '  resolution: "sharp@npm:0.34.5"',
-                  "  dependencies:",
-                  '    semver: "npm:^7.0.0"',
-                  '"semver@npm:^7.0.0":',
-                  "  version: 7.7.3",
-                  '  resolution: "semver@npm:7.7.3"',
-                ].join("\n"),
-              },
-            ] as const,
-        );
+            }),
+          },
+          {
+            name: "pnpm-lock.yaml",
+            content: [
+              "lockfileVersion: '9.0'",
+              "importers:",
+              "  .:",
+              "    dependencies:",
+              "      sharp:",
+              "        specifier: ^0.34.0",
+              "        version: 0.34.5",
+              "snapshots:",
+              "  sharp@0.34.5:",
+              "    dependencies:",
+              "      semver: 7.7.3",
+              "  semver@7.7.3: {}",
+            ].join("\n"),
+          },
+          {
+            name: "bun.lock",
+            content: [
+              "{",
+              "  // Bun lockfiles use JSONC.",
+              '  "lockfileVersion": 1,',
+              '  "workspaces": {',
+              '    "": { "dependencies": { "sharp": "^0.34.0" } },',
+              "  },",
+              '  "packages": {',
+              '    "sharp": ["sharp@0.34.5", "", { "dependencies": { "semver": "^7.0.0" } }],',
+              '    "semver": ["semver@7.7.3", "", {}],',
+              "  },",
+              "}",
+            ].join("\n"),
+          },
+          {
+            name: "yarn.lock",
+            content: [
+              "# yarn lockfile v1",
+              "",
+              "sharp@^0.34.0:",
+              '  version "0.34.5"',
+              '  resolved "https://registry.yarnpkg.com/sharp/-/sharp-0.34.5.tgz"',
+              "  dependencies:",
+              '    semver "^7.0.0"',
+              "semver@^7.0.0:",
+              '  version "7.7.3"',
+            ].join("\n"),
+          },
+          {
+            name: "yarn.lock",
+            content: [
+              '"sharp@npm:^0.34.0":',
+              "  version: 0.34.5",
+              '  resolution: "sharp@npm:0.34.5"',
+              "  dependencies:",
+              '    semver: "npm:^7.0.0"',
+              '"semver@npm:^7.0.0":',
+              "  version: 7.7.3",
+              '  resolution: "semver@npm:7.7.3"',
+            ].join("\n"),
+          },
+        ] as const;
 
         for (const fixture of fixtures) {
-          const root = yield* fs.makeTempDirectory({
-            prefix: `alchemy-external-pinned-${fixture.name}-`,
-          });
-          try {
-            yield* fs.writeFileString(
-              path.join(root, "package.json"),
-              yield* Effect.sync(() =>
-                JSON.stringify({ dependencies: { sharp: "^0.34.0" } }),
-              ),
-            );
-            yield* fs.writeFileString(
-              path.join(root, fixture.name),
-              fixture.content,
-            );
-
-            const identity = yield* resolvePackageInstallIdentity({
-              cwd: root,
-              requested: { sharp: "*" },
-            });
-            expect(identity.resolved, fixture.name).toEqual({
-              sharp: "0.34.5",
-            });
-            expect(identity.overrides, fixture.name).toEqual({
-              "sharp@0.34.5": { semver: "7.7.3" },
-            });
-          } finally {
-            yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-          }
+          yield* withLockfileFixture(
+            {
+              prefix: `alchemy-external-pinned-${fixture.name}-`,
+              packageJson: { dependencies: { sharp: "^0.34.0" } },
+              lockfileName: fixture.name,
+              lockfileContent: fixture.content,
+            },
+            ({ cwd }) =>
+              Effect.gen(function* () {
+                const identity = yield* resolvePackageInstallIdentity({
+                  cwd,
+                  requested: { sharp: "*" },
+                });
+                expect(identity.resolved, fixture.name).toEqual({
+                  sharp: "0.34.5",
+                });
+                expect(identity.overrides, fixture.name).toEqual({
+                  "sharp@0.34.5": { semver: "7.7.3" },
+                });
+              }),
+          );
         }
       }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -988,277 +1013,207 @@ describe("Lambda external packages", () => {
   it.effect(
     "does not replace an explicit install version with a different lock entry",
     () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
+      withLockfileFixture(
+        {
           prefix: "alchemy-external-explicit-version-",
-        });
-        try {
-          yield* fs.writeFileString(
-            path.join(root, "package.json"),
-            yield* Effect.sync(() =>
-              JSON.stringify({ dependencies: { sharp: "^0.34.0" } }),
-            ),
-          );
-          yield* fs.writeFileString(
-            path.join(root, "package-lock.json"),
-            yield* Effect.sync(() =>
-              JSON.stringify({
-                name: "fixture",
-                lockfileVersion: 3,
-                packages: {
-                  "": { dependencies: { sharp: "^0.34.0" } },
-                  "node_modules/sharp": { version: "0.34.5" },
-                },
+          packageJson: { dependencies: { sharp: "^0.34.0" } },
+          lockfileName: "package-lock.json",
+          lockfileContent: JSON.stringify({
+            name: "fixture",
+            lockfileVersion: 3,
+            packages: {
+              "": { dependencies: { sharp: "^0.34.0" } },
+              "node_modules/sharp": { version: "0.34.5" },
+            },
+          }),
+        },
+        ({ cwd }) =>
+          Effect.gen(function* () {
+            expect(
+              yield* resolveInstallTargets({
+                cwd,
+                requested: { sharp: "0.33.5" },
               }),
-            ),
-          );
-
-          expect(
-            yield* resolveInstallTargets({
-              cwd: root,
-              requested: { sharp: "0.33.5" },
-            }),
-          ).toEqual({ sharp: "0.33.5" });
-        } finally {
-          yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-        }
-      }).pipe(Effect.provide(NodeServices.layer)),
+            ).toEqual({ sharp: "0.33.5" });
+          }),
+      ).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect(
     "pins aliases and transitive dependency edges from package-lock.json",
     () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
+      withLockfileFixture(
+        {
           prefix: "alchemy-external-package-lock-plan-",
-        });
-        try {
-          yield* fs.writeFileString(
-            path.join(root, "package.json"),
-            yield* Effect.sync(() =>
-              JSON.stringify({
+          packageJson: {
+            dependencies: {
+              alias: "npm:real@^1.0.0",
+              parent: "^1.0.0",
+            },
+          },
+          lockfileName: "package-lock.json",
+          lockfileContent: JSON.stringify({
+            lockfileVersion: 3,
+            packages: {
+              "": {
                 dependencies: {
                   alias: "npm:real@^1.0.0",
                   parent: "^1.0.0",
                 },
-              }),
-            ),
-          );
-          yield* fs.writeFileString(
-            path.join(root, "package-lock.json"),
-            yield* Effect.sync(() =>
-              JSON.stringify({
-                lockfileVersion: 3,
-                packages: {
-                  "": {
-                    dependencies: {
-                      alias: "npm:real@^1.0.0",
-                      parent: "^1.0.0",
-                    },
-                  },
-                  "node_modules/alias": {
-                    name: "real",
-                    version: "1.2.3",
-                    dependencies: { leaf: "^2.0.0" },
-                  },
-                  "node_modules/parent": {
-                    version: "1.0.0",
-                    dependencies: { leaf: "^2.0.0" },
-                  },
-                  "node_modules/leaf": { version: "2.4.0" },
-                },
-              }),
-            ),
-          );
-
-          const identity = yield* resolvePackageInstallIdentity({
-            cwd: root,
-            requested: { alias: "*", parent: "*" },
-          });
-          expect(identity.resolved).toEqual({
-            alias: "npm:real@1.2.3",
-            parent: "1.0.0",
-          });
-          expect(identity.overrides).toEqual({
-            "real@1.2.3": { leaf: "2.4.0" },
-            "parent@1.0.0": { leaf: "2.4.0" },
-          });
-        } finally {
-          yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-        }
-      }).pipe(Effect.provide(NodeServices.layer)),
+              },
+              "node_modules/alias": {
+                name: "real",
+                version: "1.2.3",
+                dependencies: { leaf: "^2.0.0" },
+              },
+              "node_modules/parent": {
+                version: "1.0.0",
+                dependencies: { leaf: "^2.0.0" },
+              },
+              "node_modules/leaf": { version: "2.4.0" },
+            },
+          }),
+        },
+        ({ cwd }) =>
+          Effect.gen(function* () {
+            const identity = yield* resolvePackageInstallIdentity({
+              cwd,
+              requested: { alias: "*", parent: "*" },
+            });
+            expect(identity.resolved).toEqual({
+              alias: "npm:real@1.2.3",
+              parent: "1.0.0",
+            });
+            expect(identity.overrides).toEqual({
+              "real@1.2.3": { leaf: "2.4.0" },
+              "parent@1.0.0": { leaf: "2.4.0" },
+            });
+          }),
+      ).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("rejects a stale Bun importer entry", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
+    withLockfileFixture(
+      {
         prefix: "alchemy-external-stale-bun-lock-",
-      });
-      try {
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          yield* Effect.sync(() =>
-            JSON.stringify({ dependencies: { sharp: "^0.35.0" } }),
-          ),
-        );
-        yield* fs.writeFileString(
-          path.join(root, "bun.lock"),
-          yield* Effect.sync(() =>
-            JSON.stringify({
-              lockfileVersion: 1,
-              workspaces: {
-                "": { dependencies: { sharp: "^0.34.0" } },
-              },
-              packages: { sharp: ["sharp@0.34.5", "", {}] },
-            }),
-          ),
-        );
-        const error = yield* resolveInstallTargets({
-          cwd: root,
-          requested: { sharp: "*" },
-        }).pipe(Effect.flip);
-        expect(error.message).toContain("Could not resolve a locked version");
-      } finally {
-        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-      }
-    }).pipe(Effect.provide(NodeServices.layer)),
+        packageJson: { dependencies: { sharp: "^0.35.0" } },
+        lockfileName: "bun.lock",
+        lockfileContent: JSON.stringify({
+          lockfileVersion: 1,
+          workspaces: {
+            "": { dependencies: { sharp: "^0.34.0" } },
+          },
+          packages: { sharp: ["sharp@0.34.5", "", {}] },
+        }),
+      },
+      ({ cwd }) =>
+        Effect.gen(function* () {
+          const error = yield* resolveInstallTargets({
+            cwd,
+            requested: { sharp: "*" },
+          }).pipe(Effect.flip);
+          expect(error.message).toContain("Could not resolve a locked version");
+        }),
+    ).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("resolves Bun packages for the current workspace importer", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
+    withLockfileFixture(
+      {
         prefix: "alchemy-external-bun-importer-",
-      });
-      const workspace = path.join(root, "packages", "app");
-      try {
-        yield* fs.makeDirectory(workspace, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(workspace, "package.json"),
-          yield* Effect.sync(() =>
-            JSON.stringify({ dependencies: { sharp: "^0.35.0" } }),
-          ),
-        );
-        yield* fs.writeFileString(
-          path.join(root, "bun.lock"),
-          yield* Effect.sync(() =>
-            JSON.stringify({
-              lockfileVersion: 1,
-              workspaces: {
-                "packages/app": {
-                  name: "app",
-                  dependencies: { sharp: "^0.35.0" },
-                },
-              },
-              packages: {
-                sharp: ["sharp@0.34.5", "", {}],
-                "app/sharp": ["sharp@0.35.1", "", {}],
-              },
+        workspace: "packages/app",
+        packageJson: { dependencies: { sharp: "^0.35.0" } },
+        lockfileName: "bun.lock",
+        lockfileContent: JSON.stringify({
+          lockfileVersion: 1,
+          workspaces: {
+            "packages/app": {
+              name: "app",
+              dependencies: { sharp: "^0.35.0" },
+            },
+          },
+          packages: {
+            sharp: ["sharp@0.34.5", "", {}],
+            "app/sharp": ["sharp@0.35.1", "", {}],
+          },
+        }),
+      },
+      ({ cwd }) =>
+        Effect.gen(function* () {
+          expect(
+            yield* resolveInstallTargets({
+              cwd,
+              requested: { sharp: "*" },
             }),
-          ),
-        );
-        expect(
-          yield* resolveInstallTargets({
-            cwd: workspace,
-            requested: { sharp: "*" },
-          }),
-        ).toEqual({ sharp: "0.35.1" });
-      } finally {
-        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-      }
-    }).pipe(Effect.provide(NodeServices.layer)),
+          ).toEqual({ sharp: "0.35.1" });
+        }),
+    ).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("preserves context-specific Bun dependency resolutions", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
+    withLockfileFixture(
+      {
         prefix: "alchemy-external-bun-context-",
-      });
-      try {
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          yield* Effect.sync(() =>
-            JSON.stringify({ dependencies: { root: "^1.0.0" } }),
-          ),
-        );
-        yield* fs.writeFileString(
-          path.join(root, "bun.lock"),
-          yield* Effect.sync(() =>
-            JSON.stringify({
-              lockfileVersion: 1,
-              workspaces: {
-                "": { dependencies: { root: "^1.0.0" } },
-              },
-              packages: {
-                root: [
-                  "root@1.0.0",
-                  "",
-                  { dependencies: { left: "^1", right: "^1" } },
-                ],
-                "root/left": [
-                  "left@1.0.0",
-                  "",
-                  { dependencies: { shared: "^1" } },
-                ],
-                "root/right": [
-                  "right@1.0.0",
-                  "",
-                  { dependencies: { shared: "^1" } },
-                ],
-                "root/left/shared": [
-                  "shared@1.0.0",
-                  "",
-                  { dependencies: { leaf: "^1" } },
-                ],
-                "root/right/shared": [
-                  "shared@1.0.0",
-                  "",
-                  { dependencies: { leaf: "^1" } },
-                ],
-                "root/left/shared/leaf": ["leaf@1.0.0", "", {}],
-                "root/right/shared/leaf": ["leaf@2.0.0", "", {}],
-              },
-            }),
-          ),
-        );
-
-        const identity = yield* resolvePackageInstallIdentity({
-          cwd: root,
-          requested: { root: "*" },
-        });
-        expect(identity.overrides).toEqual({
-          "root@1.0.0": {
-            left: {
-              ".": "1.0.0",
-              shared: { ".": "1.0.0", leaf: "1.0.0" },
-            },
-            right: {
-              ".": "1.0.0",
-              shared: { ".": "1.0.0", leaf: "2.0.0" },
-            },
+        packageJson: { dependencies: { root: "^1.0.0" } },
+        lockfileName: "bun.lock",
+        lockfileContent: JSON.stringify({
+          lockfileVersion: 1,
+          workspaces: {
+            "": { dependencies: { root: "^1.0.0" } },
           },
-        });
-      } finally {
-        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-      }
-    }).pipe(Effect.provide(NodeServices.layer)),
+          packages: {
+            root: [
+              "root@1.0.0",
+              "",
+              { dependencies: { left: "^1", right: "^1" } },
+            ],
+            "root/left": ["left@1.0.0", "", { dependencies: { shared: "^1" } }],
+            "root/right": [
+              "right@1.0.0",
+              "",
+              { dependencies: { shared: "^1" } },
+            ],
+            "root/left/shared": [
+              "shared@1.0.0",
+              "",
+              { dependencies: { leaf: "^1" } },
+            ],
+            "root/right/shared": [
+              "shared@1.0.0",
+              "",
+              { dependencies: { leaf: "^1" } },
+            ],
+            "root/left/shared/leaf": ["leaf@1.0.0", "", {}],
+            "root/right/shared/leaf": ["leaf@2.0.0", "", {}],
+          },
+        }),
+      },
+      ({ cwd }) =>
+        Effect.gen(function* () {
+          const identity = yield* resolvePackageInstallIdentity({
+            cwd,
+            requested: { root: "*" },
+          });
+          expect(identity.overrides).toEqual({
+            "root@1.0.0": {
+              left: {
+                ".": "1.0.0",
+                shared: { ".": "1.0.0", leaf: "1.0.0" },
+              },
+              right: {
+                ".": "1.0.0",
+                shared: { ".": "1.0.0", leaf: "2.0.0" },
+              },
+            },
+          });
+        }),
+    ).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect(
     "includes package-manager lockfiles in the external package identity",
     () =>
       Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
         const lockfileContent = (
           lockfileName:
             | "bun.lock"
@@ -1266,39 +1221,43 @@ describe("Lambda external packages", () => {
             | "pnpm-lock.yaml"
             | "yarn.lock",
           version: string,
-        ) =>
-          Effect.sync(() => {
-            switch (lockfileName) {
-              case "bun.lock":
-                return JSON.stringify({
-                  lockfileVersion: 1,
-                  workspaces: {
-                    "": { dependencies: { sharp: "^0.34.5" } },
-                  },
-                  packages: { sharp: [`sharp@${version}`, "", {}] },
-                });
-              case "package-lock.json":
-                return JSON.stringify({
-                  lockfileVersion: 3,
-                  packages: {
-                    "": { dependencies: { sharp: "^0.34.5" } },
-                    "node_modules/sharp": { version },
-                  },
-                });
-              case "pnpm-lock.yaml":
-                return [
-                  "lockfileVersion: '9.0'",
-                  "importers:",
-                  "  .:",
-                  "    dependencies:",
-                  "      sharp:",
-                  "        specifier: ^0.34.5",
-                  `        version: ${version}`,
-                ].join("\n");
-              case "yarn.lock":
-                return [`sharp@^0.34.5:`, `  version "${version}"`].join("\n");
-            }
-          });
+        ) => {
+          switch (lockfileName) {
+            case "bun.lock":
+              return JSON.stringify({
+                lockfileVersion: 1,
+                workspaces: {
+                  "": { dependencies: { sharp: "^0.34.5" } },
+                },
+                packages: { sharp: [`sharp@${version}`, "", {}] },
+              });
+            case "package-lock.json":
+              return JSON.stringify({
+                lockfileVersion: 3,
+                packages: {
+                  "": { dependencies: { sharp: "^0.34.5" } },
+                  "node_modules/sharp": { version },
+                },
+              });
+            case "pnpm-lock.yaml":
+              return [
+                "lockfileVersion: '9.0'",
+                "importers:",
+                "  .:",
+                "    dependencies:",
+                "      sharp:",
+                "        specifier: ^0.34.5",
+                `        version: ${version}`,
+              ].join("\n");
+            case "yarn.lock":
+              return [
+                "# yarn lockfile v1",
+                "",
+                `sharp@^0.34.5:`,
+                `  version "${version}"`,
+              ].join("\n");
+          }
+        };
 
         for (const lockfileName of [
           "bun.lock",
@@ -1306,94 +1265,77 @@ describe("Lambda external packages", () => {
           "pnpm-lock.yaml",
           "yarn.lock",
         ] as const) {
-          const root = yield* fs.makeTempDirectory({
-            prefix: "alchemy-external-lockfile-",
-          });
+          yield* withLockfileFixture(
+            {
+              prefix: "alchemy-external-lockfile-",
+              packageJson: { dependencies: { sharp: "^0.34.5" } },
+              lockfileName,
+              lockfileContent: lockfileContent(lockfileName, "0.34.5"),
+            },
+            ({ cwd, fs, path }) =>
+              Effect.gen(function* () {
+                const first = yield* resolvePackageInstallIdentity({
+                  cwd,
+                  requested: { sharp: "*" },
+                });
+                const firstHash = yield* hashPackageInstallIdentity({
+                  bundleHash: "bundle",
+                  identity: first,
+                  architecture: "arm64",
+                });
 
-          try {
-            yield* fs.writeFileString(
-              path.join(root, "package.json"),
-              yield* Effect.sync(() =>
-                JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
-              ),
-            );
-            yield* fs.writeFileString(
-              path.join(root, lockfileName),
-              yield* lockfileContent(lockfileName, "0.34.5"),
-            );
+                yield* fs.writeFileString(
+                  path.join(cwd, lockfileName),
+                  lockfileContent(lockfileName, "0.34.6"),
+                );
 
-            const first = yield* resolvePackageInstallIdentity({
-              cwd: root,
-              requested: { sharp: "*" },
-            });
-            const firstHash = yield* hashPackageInstallIdentity({
-              bundleHash: "bundle",
-              identity: first,
-              architecture: "arm64",
-            });
+                const second = yield* resolvePackageInstallIdentity({
+                  cwd,
+                  requested: { sharp: "*" },
+                });
+                const secondHash = yield* hashPackageInstallIdentity({
+                  bundleHash: "bundle",
+                  identity: second,
+                  architecture: "arm64",
+                });
 
-            yield* fs.writeFileString(
-              path.join(root, lockfileName),
-              yield* lockfileContent(lockfileName, "0.34.6"),
-            );
-
-            const second = yield* resolvePackageInstallIdentity({
-              cwd: root,
-              requested: { sharp: "*" },
-            });
-            const secondHash = yield* hashPackageInstallIdentity({
-              bundleHash: "bundle",
-              identity: second,
-              architecture: "arm64",
-            });
-
-            expect(first.resolved).not.toEqual(second.resolved);
-            expect(first.lockfile?.name).toBe(lockfileName);
-            expect(second.lockfile?.name).toBe(lockfileName);
-            expect(first.lockfile?.hash).not.toBe(second.lockfile?.hash);
-            expect(firstHash).not.toBe(secondHash);
-          } finally {
-            yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-          }
+                expect(first.resolved).not.toEqual(second.resolved);
+                expect(first.lockfile?.name).toBe(lockfileName);
+                expect(second.lockfile?.name).toBe(lockfileName);
+                expect(first.lockfile?.hash).not.toBe(second.lockfile?.hash);
+                expect(firstHash).not.toBe(secondHash);
+              }),
+          );
         }
       }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("does not fall back to node_modules for an invalid bun.lockb", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
+    withLockfileFixture(
+      {
         prefix: "alchemy-external-invalid-lockb-",
-      });
-      try {
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          yield* Effect.sync(() =>
-            JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
-          ),
-        );
-        yield* fs.writeFileString(path.join(root, "bun.lockb"), "invalid");
-        const installedPackage = path.join(root, "node_modules", "sharp");
-        yield* fs.makeDirectory(installedPackage, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(installedPackage, "package.json"),
-          yield* Effect.sync(() =>
+        packageJson: { dependencies: { sharp: "^0.34.5" } },
+        lockfileName: "bun.lockb",
+        lockfileContent: "invalid",
+      },
+      ({ cwd, fs, path }) =>
+        Effect.gen(function* () {
+          const installedPackage = path.join(cwd, "node_modules", "sharp");
+          yield* fs.makeDirectory(installedPackage, { recursive: true });
+          yield* fs.writeFileString(
+            path.join(installedPackage, "package.json"),
             JSON.stringify({ name: "sharp", version: "999.0.0" }),
-          ),
-        );
+          );
 
-        const error = yield* resolveInstallTargets({
-          cwd: root,
-          requested: { sharp: "*" },
-        }).pipe(Effect.flip);
-        expect(error.message).toContain(
-          "Failed to inspect legacy Bun lockfile",
-        );
-      } finally {
-        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-      }
-    }).pipe(Effect.provide(NodeServices.layer)),
+          const error = yield* resolveInstallTargets({
+            cwd,
+            requested: { sharp: "*" },
+          }).pipe(Effect.flip);
+          expect(error.message).toContain(
+            "Failed to inspect legacy Bun lockfile",
+          );
+        }),
+    ).pipe(Effect.provide(NodeServices.layer)),
   );
 });
 
@@ -1422,7 +1364,7 @@ describe.skipIf(!integrationEnabled)(
           );
           expect(aliasManifest).toBeDefined();
           expect(transitiveManifest).toBeDefined();
-          const decoder = yield* Effect.sync(() => new TextDecoder());
+          const decoder = new TextDecoder();
           const alias = yield* Effect.try(() =>
             JSON.parse(decoder.decode(aliasManifest?.content)),
           );
@@ -1439,63 +1381,49 @@ describe.skipIf(!integrationEnabled)(
     it.effect(
       "npm-installs sharp with linux arm64 native binaries",
       () =>
-        Effect.gen(function* () {
-          const fs = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectory({
+        withLockfileFixture(
+          {
             prefix: "alchemy-external-sharp-",
-          });
+            packageJson: { dependencies: { sharp: "^0.33.5" } },
+            lockfileName: "package-lock.json",
+            lockfileContent: JSON.stringify({
+              lockfileVersion: 3,
+              packages: {
+                "": { dependencies: { sharp: "^0.33.5" } },
+                "node_modules/sharp": {
+                  version: "0.33.5",
+                  dependencies: { semver: "^7.5.4" },
+                },
+                "node_modules/semver": { version: "7.7.3" },
+              },
+            }),
+          },
+          ({ cwd }) =>
+            Effect.gen(function* () {
+              const files = yield* installPackages({
+                cwd,
+                install: ["sharp"],
+                architecture: "arm64",
+              });
 
-          try {
-            yield* fs.writeFileString(
-              path.join(root, "package.json"),
-              yield* Effect.sync(() =>
-                JSON.stringify({ dependencies: { sharp: "^0.33.5" } }),
-              ),
-            );
-            yield* fs.writeFileString(
-              path.join(root, "package-lock.json"),
-              yield* Effect.sync(() =>
-                JSON.stringify({
-                  lockfileVersion: 3,
-                  packages: {
-                    "": { dependencies: { sharp: "^0.33.5" } },
-                    "node_modules/sharp": {
-                      version: "0.33.5",
-                      dependencies: { semver: "^7.5.4" },
-                    },
-                    "node_modules/semver": { version: "7.7.3" },
-                  },
-                }),
-              ),
-            );
-
-            const files = yield* installPackages({
-              cwd: root,
-              install: ["sharp"],
-              architecture: "arm64",
-            });
-
-            const paths = files.map((file) => file.path);
-            expect(paths).toContain("node_modules/sharp/package.json");
-            expect(
-              paths.some((filePath) =>
-                filePath.includes(
-                  "node_modules/@img/sharp-linux-arm64/lib/sharp-linux-arm64.node",
+              const paths = files.map((file) => file.path);
+              expect(paths).toContain("node_modules/sharp/package.json");
+              expect(
+                paths.some((filePath) =>
+                  filePath.includes(
+                    "node_modules/@img/sharp-linux-arm64/lib/sharp-linux-arm64.node",
+                  ),
                 ),
-              ),
-            ).toBe(true);
-            expect(
-              paths.some((filePath) =>
-                filePath.includes(
-                  "node_modules/@img/sharp-libvips-linux-arm64/lib/libvips",
+              ).toBe(true);
+              expect(
+                paths.some((filePath) =>
+                  filePath.includes(
+                    "node_modules/@img/sharp-libvips-linux-arm64/lib/libvips",
+                  ),
                 ),
-              ),
-            ).toBe(true);
-          } finally {
-            yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-          }
-        }).pipe(Effect.provide(NodeServices.layer)),
+              ).toBe(true);
+            }),
+        ).pipe(Effect.provide(NodeServices.layer)),
       { timeout: 120_000 },
     );
   },
