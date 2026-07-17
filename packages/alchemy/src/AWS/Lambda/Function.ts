@@ -1301,10 +1301,24 @@ export const makeFunctionProvider = (options?: FunctionProviderOptions) =>
       const getAndUpdate = Lambda.getFunction({
         FunctionName: functionName,
       }).pipe(
+        // If it exists and contains these tags, we will assume it was created
+        // by alchemy but state was lost, so if it exists, let's adopt it.
+        // Some backends (e.g. local emulators) omit `Tags` on GetFunction —
+        // fall back to ListTags before concluding the function is foreign.
+        Effect.flatMap((f) =>
+          f.Tags !== undefined
+            ? Effect.succeed(hasTags(tags, f.Tags))
+            : Lambda.listTags({
+                Resource: f.Configuration?.FunctionArn ?? "",
+              }).pipe(
+                Effect.map((r) => hasTags(tags, r.Tags ?? {})),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(false),
+                ),
+              ),
+        ),
         Effect.filterOrFail(
-          // if it exists and contains these tags, we will assume it was created by alchemy
-          // but state was lost, so if it exists, let's adopt it
-          (f) => hasTags(tags, f.Tags),
+          (owned) => owned,
           () =>
             // TODO(sam): add custom
             new Error("Function tags do not match expected values"),

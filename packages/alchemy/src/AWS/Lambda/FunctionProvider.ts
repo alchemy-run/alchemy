@@ -9,6 +9,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
@@ -17,10 +18,10 @@ import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
-import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { structuralSignature } from "../../Util/StructuralSignature.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { AWS_LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
 import {
@@ -36,10 +37,21 @@ import { bridgeCodeBundle } from "./Live/BridgeBundle.ts";
 import { LiveLambdaRuntime } from "./Live/LiveRuntime.ts";
 
 export const FunctionProvider = () =>
-  ProviderLayer.select({
-    live: () => LiveFunctionProvider(),
-    local: () => LocalFunctionProvider(),
-  });
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const context = yield* AlchemyContext;
+      if (!context.dev) {
+        return LiveFunctionProvider();
+      }
+      const environment = yield* AWSEnvironment.current;
+      // A custom endpoint means a local emulator (floci/LocalStack): deploy
+      // the real bundle into the emulator's Docker Lambda. The Live Lambda
+      // bridge needs real AppSync Events, so it only runs against real AWS.
+      return environment.endpoint
+        ? LiveFunctionProvider()
+        : LocalFunctionProvider();
+    }),
+  );
 
 /**
  * Sessions crossing the RPC boundary lose their callables (functions
