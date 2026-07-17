@@ -279,16 +279,12 @@ class TuiState {
 
   /**
    * Toggle a status group on/off, independently of the others (pressing `p`
-   * hides passing tests and NOTHING else). Hiding the last visible group
-   * resets to all-visible.
+   * hides passing tests and NOTHING else). Hiding every group is allowed —
+   * the list is simply empty and the footer's struck-through toggle bar
+   * shows why.
    */
   toggleGroup(group: StatusGroup): void {
     this.show[group] = !this.show[group];
-    if (!Object.values(this.show).some((on) => on)) {
-      for (const key of Object.keys(this.show) as Array<StatusGroup>) {
-        this.show[key] = true;
-      }
-    }
     this.dirty = true;
   }
 
@@ -1058,8 +1054,8 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       case "end":
         moveSelection(Number.MAX_SAFE_INTEGER);
         return;
-      // Independent status-group visibility toggles. From "all visible" the
-      // first press solos the group; further presses combine toggles.
+      // Independent status-group visibility toggles: each key flips ONLY its
+      // own group. Hiding all four leaves the list empty (no auto-reset).
       case "p":
         state.toggleGroup("pass");
         break;
