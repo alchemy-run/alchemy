@@ -139,6 +139,62 @@ resolve — and HTTP clients must be async (`httpx`, `aiohttp`, or JS
 `fetch` via the FFI).
 :::
 
+### ASGI apps (FastAPI)
+
+The runtime ships an `asgi` module that serves any ASGI application —
+so FastAPI (with pydantic validation) works out of the box. Bindings
+and env vars reach your routes through `request.scope["env"]`:
+
+```python
+# src/worker.py
+import asgi
+from fastapi import FastAPI, Request
+from pydantic import BaseModel
+from workers import WorkerEntrypoint
+
+app = FastAPI()
+
+
+class Item(BaseModel):
+    name: str
+    quantity: int
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello from FastAPI on Workers"}
+
+
+@app.get("/env")
+async def env(request: Request):
+    return {"deployment": request.scope["env"].DEPLOYMENT}
+
+
+@app.post("/items")
+async def create_item(item: Item):
+    return {"name": item.name, "total": item.quantity * 2}
+
+
+class Default(WorkerEntrypoint):
+    async def fetch(self, request):
+        return await asgi.fetch(app, request, self.env)
+```
+
+```toml
+# src/pyproject.toml
+[project]
+name = "my-api"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["fastapi"]
+```
+
+Compiled-extension packages with Pyodide wheels (numpy, pydantic-core,
+and the rest of the
+[Pyodide package set](https://pyodide.org/en/stable/usage/packages-in-pyodide.html))
+vendor the emscripten-wasm32 binary wheel matching the runtime's ABI —
+no build step on your side.
+
 ### Bring your own python_modules
 
 If the entry's directory already contains a `python_modules/`
