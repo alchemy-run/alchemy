@@ -3,7 +3,7 @@
  *
  * Layout:
  *   header  — run stats (pass/fail/running/queued, elapsed, import progress)
- *   list    — files with their tests nested inside; failing files auto-expand
+ *   list    — files with their tests nested inside (expand with enter / l)
  *   detail  — Enter on a test opens its error + captured output
  *   footer  — key hints / filter input / status toggles
  *
@@ -135,7 +135,7 @@ interface FileNode {
   readonly file: string;
   readonly tests: Array<Entry>;
   readonly counts: Record<Status, number>;
-  /** Manual expand/collapse override; `undefined` = automatic. */
+  /** Manual expand/collapse state; collapsed until deliberately expanded. */
   expanded: boolean | undefined;
   /** FileStart seen — the file's fiber is executing. */
   started: boolean;
@@ -302,11 +302,10 @@ class TuiState {
   }
 
   isExpanded(node: FileNode): boolean {
-    if (node.expanded !== undefined) return node.expanded;
-    // Auto-expand only files with failures. Filtering narrows WHICH files
-    // are listed (those with matching tests) but never expands them —
-    // expansion stays a deliberate choice (enter / l).
-    return node.counts.fail > 0;
+    // Expansion is ALWAYS a deliberate choice (enter / l) — failures don't
+    // auto-expand their file (the red glyph + count already flag it), and
+    // filtering narrows WHICH files are listed without expanding them.
+    return node.expanded === true;
   }
 
   /** Flattened visible tree: file rows with expanded tests nested inside. */
