@@ -40,13 +40,13 @@ const collectorWorker = () =>
 
 describe("Cloudflare Worker Telemetry", () => {
   test.provider(
-    "OTLP telemetry exports per request (env default + custom Layer)",
+    "OTLP telemetry exports per request (otlp binding + custom Layer)",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
 
         // Deploy the collector first: the traced fixtures resolve
-        // `OTEL_TEST_COLLECTOR_URL` from the deployer's environment at
+        // `COLLECTOR_URL` from the deployer environment at
         // deploy time, so its URL must exist before they deploy.
         const collector = yield* stack.deploy(
           Effect.gen(function* () {
@@ -86,7 +86,6 @@ describe("Cloudflare Worker Telemetry", () => {
               ConfigProvider.ConfigProvider,
               ConfigProvider.orElse(
                 ConfigProvider.fromUnknown({
-                  OTEL_EXPORTER_OTLP_ENDPOINT: collectorUrl,
                   COLLECTOR_URL: collectorUrl,
                 }),
                 currentConfig,
@@ -114,7 +113,7 @@ describe("Cloudflare Worker Telemetry", () => {
           timeout: "180 seconds",
         });
 
-        // Default env-driven path: the request scope's finalizer flushes
+        // The otlp binding-layer path: the request scope finalizer flushes
         // the OTLP buffers via ctx.waitUntil, so everything the request
         // produced arrives at the collector shortly after the response.
         yield* expectUrlContains(collected, "otel-traced-test", {
@@ -131,7 +130,7 @@ describe("Cloudflare Worker Telemetry", () => {
         yield* expectUrlContains(collected, "alchemy.stack");
 
         // Custom exporter path: Effect.provide(Telemetry.layer(...)) on
-        // the Worker's init Effect replaces the env-driven default.
+        // the Worker init Effect replaces the built-in OTLP exporter.
         yield* expectUrlContains(collected, "otel-custom-test", {
           timeout: "120 seconds",
           label: "custom-path service.name",

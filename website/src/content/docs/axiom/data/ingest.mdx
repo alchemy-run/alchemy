@@ -50,25 +50,25 @@ event store — for anything that isn't OTLP.
 ## OTLP endpoints as outputs
 
 Each dataset exposes Axiom's OTLP/HTTP endpoints as output
-attributes. Alchemy runtimes have
-[telemetry built in](/infrastructure-as-effects/telemetry) — they
-read the standard `OTEL_*` env vars per signal — so wiring an
-exporter is a matter of passing outputs into your runtime's env:
+attributes, and alchemy runtimes have
+[telemetry built in](/infrastructure-as-effects/telemetry) — wiring
+an exporter is providing the `Axiom.Telemetry` binding layer on the
+Function/Worker:
 
 ```typescript
-yield* Cloudflare.Worker("api", {
-  env: {
-    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: traces.otelTracesEndpoint,
-    OTEL_EXPORTER_OTLP_TRACES_HEADERS: Axiom.otlpHeaders(ingest, traces),
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: logs.otelLogsEndpoint,
-    OTEL_EXPORTER_OTLP_LOGS_HEADERS: Axiom.otlpHeaders(ingest, logs),
-  },
-});
+// on the Worker's init Effect, merged with its other binding layers:
+Effect.provide(
+  Layer.mergeAll(
+    Cloudflare.R2.ReadWriteBucketBinding,
+    Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+  ),
+)
 ```
 
-`Axiom.otlpHeaders(ingest, traces)` composes the
-`Authorization=Bearer <token>,X-Axiom-Dataset=<name>` value Axiom
-expects, carrying the token as a `Redacted` so it binds as a secret.
+Building the layer binds each dataset's endpoint and the ingest
+token's `Authorization` header (as a secret) onto the host; at
+runtime the built-in exporter ships each signal to its dataset,
+flushed per request.
 
 - `otelTracesEndpoint` / `otelLogsEndpoint` / `otelMetricsEndpoint` —
   the per-signal OTLP/HTTP URLs.

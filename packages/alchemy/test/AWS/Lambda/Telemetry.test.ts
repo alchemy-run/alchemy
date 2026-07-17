@@ -54,10 +54,10 @@ describe("AWS.Lambda Telemetry", () => {
           timeout: "180 seconds",
         });
 
-        // The fixture reads the endpoint + service name via `Config` at
-        // Init. The test harness snapshots its ConfigProvider before the
-        // test body runs, so layer the just-learned collector URL on top of
-        // the current provider for this deploy only.
+        // The fixture's telemetry binding layer reads `COLLECTOR_URL` via
+        // `Config` at Init. The test harness snapshots its ConfigProvider
+        // before the test body runs, so layer the just-learned collector
+        // URL on top of the current provider for this deploy only.
         const currentConfig = yield* ConfigProvider.ConfigProvider;
         const { fn } = yield* stack
           .deploy(
@@ -74,8 +74,7 @@ describe("AWS.Lambda Telemetry", () => {
               ConfigProvider.ConfigProvider,
               ConfigProvider.orElse(
                 ConfigProvider.fromUnknown({
-                  OTEL_EXPORTER_OTLP_ENDPOINT: collector.url,
-                  OTEL_SERVICE_NAME: "otel-lambda-test",
+                  COLLECTOR_URL: collector.url,
                 }),
                 currentConfig,
               ),

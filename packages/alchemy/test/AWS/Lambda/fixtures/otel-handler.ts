@@ -1,14 +1,17 @@
 import * as Lambda from "@/AWS/Lambda";
+import { Telemetry } from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
- * Lambda fixture for Telemetry.test.ts: exercises the default env-driven
- * OTLP path. The `Config` reads during Init bind the deploy-time values
- * (provided by the test's ConfigProvider override) onto the Function's env,
- * where the runtime telemetry layer re-reads them per invocation.
+ * Lambda fixture for Telemetry.test.ts: exercises the `Telemetry.otlp`
+ * binding layer. Building it at deploy time binds the collector url
+ * (resolved from the deployer's `COLLECTOR_URL` config, provided by the
+ * test's ConfigProvider override) and the service name onto the Function;
+ * at runtime the exporter reads them back per invocation.
  *
  * `GET /work` runs a child span and a log so the test can assert traces AND
  * logs arrive at the collector after the invocation scope flushes.
@@ -23,11 +26,6 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
     url: true,
   },
   Effect.gen(function* () {
-    // Read during Init so the deploy-time Config interceptor binds the
-    // resolved values onto the Lambda's env vars of the same names.
-    yield* Config.string("OTEL_EXPORTER_OTLP_ENDPOINT");
-    yield* Config.string("OTEL_SERVICE_NAME");
-
     const doWork = Effect.fn("lambda.child-span")(function* () {
       yield* Effect.log("lambda-work-log");
       return "lambda-did-work";
@@ -47,9 +45,9 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
         // polls this route until it reports 200 before asserting on
         // exported telemetry.
         if (url.pathname === "/probe") {
-          const endpoint = yield* Config.string(
-            "OTEL_EXPORTER_OTLP_ENDPOINT",
-          ).pipe(Effect.orDie);
+          const endpoint = yield* Config.string("COLLECTOR_URL").pipe(
+            Effect.orDie,
+          );
           const result = yield* Effect.tryPromise(() =>
             fetch(`${endpoint}/v1/probe`, {
               method: "POST",
@@ -68,7 +66,19 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
         return HttpServerResponse.text("otel-lambda-ok");
       }),
     };
-  }),
+  }).pipe(
+    // The telemetry binding layer, composed like any other binding: the
+    // collector url resolves once at deploy time and binds onto the
+    // Function; nothing telemetry-specific appears in handler code.
+    Effect.provide(
+      Layer.unwrap(
+        Effect.gen(function* () {
+          const url = yield* Config.string("COLLECTOR_URL");
+          return Telemetry.otlp({ url, serviceName: "otel-lambda-test" });
+        }),
+      ),
+    ),
+  ),
 );
 
 export default OtelTestFunctionLive;

@@ -1,15 +1,17 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import { Telemetry } from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
- * Effect-native Worker exercising the *default* telemetry path: no code
- * changes, only the standard `OTEL_*` environment variables. The collector
- * URL is resolved at deploy time from the deployer's environment
- * (`OTEL_EXPORTER_OTLP_ENDPOINT`, provided by Telemetry.test.ts after the
- * collector deploys).
+ * Effect-native Worker exercising the built-in `Telemetry.otlp` binding
+ * layer: building it at deploy time binds the collector url (resolved from
+ * the deployer's `COLLECTOR_URL` config, provided by Telemetry.test.ts
+ * after the collector deploys) and the service name onto the Worker; at
+ * runtime the exporter reads them back per request.
  *
  * `GET /work` runs a child span and a log so the test can assert traces
  * AND logs arrive at the collector after the request scope flushes.
@@ -18,13 +20,6 @@ export default class OtelTracedWorker extends Cloudflare.Worker<OtelTracedWorker
   "OtelTracedWorker",
   {
     main: import.meta.url,
-    env: {
-      // Config key must equal the env key: the Worker's props re-execute
-      // inside the deployed isolate, where the same Config is re-read from
-      // the bound env var of the same name.
-      OTEL_EXPORTER_OTLP_ENDPOINT: Config.string("OTEL_EXPORTER_OTLP_ENDPOINT"),
-      OTEL_SERVICE_NAME: "otel-traced-test",
-    },
   },
   Effect.gen(function* () {
     const doWork = Effect.fn("test.child-span")(function* () {
@@ -45,9 +40,9 @@ export default class OtelTracedWorker extends Cloudflare.Worker<OtelTracedWorker
         // polls this route until it reports 200 before asserting on
         // exported telemetry.
         if (url.pathname === "/probe") {
-          const endpoint = yield* Config.string(
-            "OTEL_EXPORTER_OTLP_ENDPOINT",
-          ).pipe(Effect.orDie);
+          const endpoint = yield* Config.string("COLLECTOR_URL").pipe(
+            Effect.orDie,
+          );
           const result = yield* Effect.tryPromise(() =>
             fetch(`${endpoint}/v1/traces`, {
               method: "POST",
@@ -66,5 +61,17 @@ export default class OtelTracedWorker extends Cloudflare.Worker<OtelTracedWorker
         return HttpServerResponse.text("otel-traced-ok");
       }),
     };
-  }),
+  }).pipe(
+    // The telemetry binding layer, composed like any other binding: the
+    // collector url is resolved once at deploy time and bound onto the
+    // Worker; nothing telemetry-specific appears in handler code.
+    Effect.provide(
+      Layer.unwrap(
+        Effect.gen(function* () {
+          const url = yield* Config.string("COLLECTOR_URL");
+          return Telemetry.otlp({ url, serviceName: "otel-traced-test" });
+        }),
+      ),
+    ),
+  ),
 ) {}

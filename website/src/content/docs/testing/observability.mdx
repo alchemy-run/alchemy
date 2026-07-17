@@ -4,39 +4,42 @@ description: Effect emits OpenTelemetry natively and the exporter is a Layer. Pr
 ---
 
 Effect already emits traces, metrics, and logs, and every alchemy
-runtime ships with the OTLP exporter built in — set the standard
-`OTEL_*` env vars and signals flow. With alchemy the receiving end
-is code too: datasets, ingest tokens, monitors, notifiers, and alarms
-live in the same Stack as the Workers and Functions they observe, so
-a threshold change is a diff in the PR — reviewable, revertable,
-answered by `git blame`.
+runtime ships with the OTLP exporter built in — the exporter is a
+Layer, wired to resources through the binding infrastructure. With
+alchemy the receiving end is code too: datasets, ingest tokens,
+monitors, notifiers, and alarms live in the same Stack as the
+Workers and Functions they observe, so a threshold change is a diff
+in the PR — reviewable, revertable, answered by `git blame`.
 
 ## OTel everywhere
 
 Every `Effect.withSpan` opens a span, every `Metric` update records a
 data point, every `Effect.logInfo` ships a log line — and each fetch,
 queue message, cron fire, and invocation gets an `http.server`-style
-root span automatically. Where the signals go is decided by
-environment variables:
+root span automatically. Where the signals go is decided by a
+telemetry Layer provided on the Function/Worker:
 
 ```typescript
-const api = yield* Cloudflare.Worker("Api", {
-  main: "./src/worker.ts",
-  env: {
-    OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example.com",
-    OTEL_EXPORTER_OTLP_HEADERS: "x-api-key=...",
-  },
-});
+import * as Alchemy from "alchemy";
+
+Effect.provide(
+  Layer.mergeAll(
+    Cloudflare.R2.ReadWriteBucketBinding,
+    Alchemy.Telemetry.otlp({
+      url: "https://collector.example.com",
+      headers: { "x-api-key": apiKey },
+    }),
+  ),
+)
 ```
 
 Any OTLP endpoint works — Axiom, an OTel collector, any
-OTLP-compatible vendor. Swap the URL, ship somewhere else; the code
+OTLP-compatible vendor. Swap the layer, ship somewhere else; the code
 emitting the signals never changes. Buffered telemetry is flushed
 when each request's scope closes (via `waitUntil` on Cloudflare, so
 export never delays a response). See
 [Telemetry](/infrastructure-as-effects/telemetry) for the full
-mechanics and the `Alchemy.Telemetry` override API for installing a
-custom exporter Layer.
+mechanics.
 
 ## Provision the receiving end
 
@@ -61,13 +64,14 @@ Each dataset's `otelTracesEndpoint` / `otelLogsEndpoint` /
 `otelMetricsEndpoint` attributes are [Outputs](/infrastructure-as-code/outputs) —
 references you wire into whatever runs the exporter.
 
-## Wire endpoints into the runtime
+## Bind the datasets to the runtime
 
-Mint a least-privilege ingest token and pass each signal's endpoint
-and headers to the Worker through `env`:
+Mint a least-privilege ingest token, then provide `Axiom.Telemetry`
+on the Worker — a binding layer that wires the datasets and token in
+one line:
 
 ```typescript
-const ingest = yield* Axiom.ApiToken("ingest", {
+export const Ingest = Axiom.ApiToken("Ingest", {
   name: "prod-ingest",
   datasetCapabilities: {
     "app-traces": { ingest: ["create"] },
@@ -75,24 +79,20 @@ const ingest = yield* Axiom.ApiToken("ingest", {
   },
 });
 
-const api = yield* Cloudflare.Worker("Api", {
-  main: "./src/worker.ts",
-  env: {
-    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: traces.otelTracesEndpoint,
-    OTEL_EXPORTER_OTLP_TRACES_HEADERS: Axiom.otlpHeaders(ingest, traces),
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: logs.otelLogsEndpoint,
-    OTEL_EXPORTER_OTLP_LOGS_HEADERS: Axiom.otlpHeaders(ingest, logs),
-  },
-});
+// in the Worker's init Effect:
+Effect.provide(
+  Layer.mergeAll(
+    Cloudflare.R2.ReadWriteBucketBinding,
+    Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+  ),
+)
 ```
 
-`Axiom.otlpHeaders` composes the
-`Authorization=Bearer <token>,X-Axiom-Dataset=<name>` string Axiom
-expects. The endpoints are plain strings so they bind as
-`plain_text`; the headers carry the `Redacted` token so they bind as
-`secret_text` — see [Secrets](/environments/secrets). The built-in
-telemetry reads these per signal and starts shipping — no exporter
-code in the Worker.
+Building the layer binds each dataset's OTLP endpoint and the
+token's `Authorization` header onto the Worker — the bearer travels
+as a `secret_text` binding (see [Secrets](/environments/secrets)) and
+never appears in plaintext. At runtime the built-in exporter ships
+each signal to its dataset — no exporter code in the Worker.
 
 ## Export from the platform
 

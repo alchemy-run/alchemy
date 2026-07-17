@@ -1,6 +1,6 @@
 ---
 title: Telemetry
-description: OpenTelemetry is built into every runtime — traces, logs, and metrics export over OTLP, configured by env vars, flushed per request, and overridable as a Layer.
+description: OpenTelemetry is built into every runtime — exporters are Layers, wired to resources through the binding infrastructure, built per event, and flushed as each request completes.
 ---
 
 Every Alchemy runtime ships with OpenTelemetry export built in.
@@ -8,53 +8,77 @@ Each fetch, queue message, cron fire, RPC call, Durable Object call,
 Workflow run, and Lambda invocation is wrapped in the machinery to
 export the traces, logs, and metrics that Effect already emits —
 `Effect.withSpan` and `Effect.fn` spans, `Effect.log` records, and
-`Metric` updates. There is no exporter to write and no SDK to
-initialize.
+`Metric` updates. There is no SDK to initialize: the exporter is a
+Layer, configured like everything else in Alchemy.
 
-## Configure with env vars
+## Provide an exporter layer
 
-Telemetry is on by default and configures itself from the standard
-OpenTelemetry environment variables. Set an endpoint on the
-Function/Worker and it starts exporting:
+Telemetry is configured by providing a Layer on the Function/Worker
+init Effect, merged into the single `Effect.provide` alongside the
+other binding layers:
 
 ```typescript
-const worker = yield* Cloudflare.Worker("Api", {
-  main: "./src/worker.ts",
-  env: {
-    OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example.com",
-    OTEL_EXPORTER_OTLP_HEADERS: "x-api-key=...",
-  },
-});
+import * as Alchemy from "alchemy";
+import * as Axiom from "alchemy/Axiom";
+
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    // ...
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Cloudflare.R2.ReadWriteBucketBinding,
+        Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+      ),
+    ),
+  ),
+);
 ```
 
-Without an endpoint, telemetry resolves to an empty Layer — Effect's
-default tracer is a no-op, so all instrumentation stays free until
-you point it somewhere.
+Without a telemetry layer, nothing exports — Effect's default tracer
+is a no-op, so all instrumentation stays free.
 
-The full set of recognized variables:
+## Binding layers
 
-| Variable | Meaning |
-| --- | --- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base OTLP/HTTP URL; `/v1/{traces,logs,metrics}` is appended per signal |
-| `OTEL_EXPORTER_OTLP_{TRACES,LOGS,METRICS}_ENDPOINT` | Per-signal URL, used as-is (takes precedence over the base) |
-| `OTEL_EXPORTER_OTLP_HEADERS` | Headers in `k=v,k2=v2` form (e.g. auth tokens) |
-| `OTEL_EXPORTER_OTLP_{TRACES,LOGS,METRICS}_HEADERS` | Per-signal headers (take precedence) |
-| `OTEL_SERVICE_NAME` | The `service.name` resource attribute |
-| `OTEL_SDK_DISABLED` | `true` disables telemetry even when endpoints are set |
+`Alchemy.Telemetry.otlp` is the generic form: a *binding* layer for
+any OTLP/HTTP backend. Its url and header values accept plain values
+or resource Outputs — at deploy time, building the layer binds them
+onto the host (`Redacted` values as secret bindings), and at runtime
+the exporter reads them back:
 
-Each signal resolves independently — set only a traces endpoint and
-only traces export. Per-signal variables matter for backends like
-[Axiom](/axiom) that route by dataset: each signal gets its own URL
-and its own `X-Axiom-Dataset` header (see the
-[tutorial](/cloudflare/tutorial/part-6) for the full wiring).
+```typescript
+Alchemy.Telemetry.otlp({
+  url: "https://api.honeycomb.io",
+  headers: { "x-honeycomb-team": apiKey },
+})
+```
+
+Each signal can also be configured independently — a per-signal
+entry takes precedence over the base `url` (which gets
+`/v1/{traces,logs,metrics}` appended):
+
+```typescript
+Alchemy.Telemetry.otlp({
+  traces: { url: collector.tracesUrl, headers: { ... } },
+  logs: { url: collector.logsUrl, headers: { ... } },
+})
+```
+
+Vendor layers wrap this. [`Axiom.Telemetry`](/axiom) takes an ingest
+`ApiToken` and a `Dataset` per signal, and composes the endpoints and
+`Authorization`/`X-Axiom-Dataset` headers for you — see
+[Tutorial Part 6](/cloudflare/tutorial/part-6) for the end-to-end
+walkthrough.
 
 ## Service identity
 
-The exported `service.name` defaults to `OTEL_SERVICE_NAME`, then
-the deployed Function/Worker's physical name, then the stack name.
-Every signal also carries `alchemy.stack` and `alchemy.stage`
-resource attributes, so one collector can receive every stage and
-still tell them apart.
+The exported `service.name` defaults to the deployed Function/Worker's
+physical name, then the stack name; set `serviceName` on the layer to
+override it. Every signal also carries `alchemy.stack` and
+`alchemy.stage` resource attributes, so one backend can receive every
+stage and still tell them apart.
 
 ## Per-event scope and flushing
 
@@ -94,29 +118,10 @@ const object = yield* bucket
   .pipe(Effect.withSpan("bucket.get", { attributes: { key } }));
 ```
 
-## Override the exporter in code
+## Custom exporters
 
-The telemetry configuration is itself a value you can provide on the
-Function/Worker's init Effect:
-
-```typescript
-import * as Alchemy from "alchemy";
-
-// configure the built-in OTLP exporter explicitly:
-Effect.provide(Alchemy.Telemetry.otlp({
-  baseUrl: "https://api.honeycomb.io",
-  headers: { "x-honeycomb-team": "..." },
-}))
-
-// install any custom exporter Layer:
-Effect.provide(Alchemy.Telemetry.layer(myExporterLayer))
-
-// force-disable, ignoring OTEL_* env vars:
-Effect.provide(Alchemy.Telemetry.disabled)
-```
-
-`Telemetry.layer` accepts any Layer that provides a `Tracer`,
-loggers, or metric exporters — Effect's
+`Alchemy.Telemetry.layer` installs any Layer that provides a
+`Tracer`, loggers, or metric exporters — Effect's
 `effect/unstable/observability` modules (`OtlpTracer`, `OtlpLogger`,
 `OtlpMetrics`, protobuf serialization) compose here directly. The
 Layer is built per event into the event's request scope, so a custom
@@ -127,14 +132,24 @@ A custom Layer for per-event runtimes should disable or greatly
 lengthen its periodic export intervals (e.g.
 `exportInterval: "1 hour"`). An interval export that fires mid-event
 races the scope close — the close interrupts the in-flight batch and
-drops it. The built-in defaults already handle this; the flush on
+drops it. The built-in exporter already handles this; the flush on
 scope close delivers everything.
 :::
 
+## Under the hood
+
+The binding travels as environment bindings on the host: building
+`Telemetry.otlp` at deploy time binds the resolved urls and headers
+under the standard `OTEL_EXPORTER_OTLP_*` names (secrets through the
+secret channel), and the runtime exporter reads them back per event.
+That also means an environment that already sets those standard
+variables exports without any layer configuration — useful when the
+platform injects OTLP settings for you.
+
 ## Where next
 
-- [Tutorial Part 6](/cloudflare/tutorial/part-6) — wire a Worker's
-  telemetry into Axiom end to end
+- [Tutorial Part 6](/cloudflare/tutorial/part-6) — bind a Worker's
+  telemetry to Axiom end to end
 - [Observability](/testing/observability) — provision the receiving
   end (datasets, tokens, monitors, alarms) as resources
 - [Ship Worker telemetry to Axiom](/cloudflare/observability/axiom-observability) —

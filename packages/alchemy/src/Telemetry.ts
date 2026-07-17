@@ -1,58 +1,65 @@
 /**
  * OpenTelemetry export for deployed Functions/Workers, built on Effect's
- * OTLP exporters (`effect/unstable/observability`).
+ * OTLP exporters (`effect/unstable/observability`) and configured through
+ * alchemy's binding infrastructure — exporters are Layers, and their
+ * configuration (endpoints, tokens) is wired from resource Outputs like any
+ * other binding.
  *
- * `Telemetry` is a `Context.Reference` holding the *Layer* of telemetry
+ * Provide a telemetry Layer on the Function/Worker init Effect, composed
+ * into the single `Effect.provide` alongside the other binding layers:
+ *
+ * ```ts
+ * import * as Alchemy from "alchemy";
+ * import * as Axiom from "alchemy/Axiom";
+ *
+ * Effect.gen(function* () {
+ *   // ...
+ * }).pipe(
+ *   Effect.provide(
+ *     Layer.mergeAll(
+ *       Cloudflare.R2.ReadWriteBucketBinding,
+ *       // vendor sugar — binds dataset endpoints + ingest token:
+ *       Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+ *       // or the generic OTLP form, wired from any Inputs/Outputs:
+ *       // Alchemy.Telemetry.otlp({ url: collector.url, headers: { ... } }),
+ *       // or any custom exporter Layer:
+ *       // Alchemy.Telemetry.layer(myExporterLayer),
+ *     ),
+ *   ),
+ * );
+ * ```
+ *
+ * {@link Telemetry.otlp} is a *binding* layer: at deploy time it binds the
+ * configured endpoints/headers onto the host (Redacted values as secrets),
+ * and at runtime the exporter reads those bound values back. Telemetry is
+ * off until a layer is provided — Effect's default tracer is a no-op, so
+ * all instrumentation stays free.
+ *
+ * `Telemetry` itself is a `Context.Reference` holding the Layer of
  * exporters to install for every event (fetch, queue, cron, RPC, Durable
- * Object call, Workflow run). The runtime bridges build that Layer into the
- * event's request scope, so:
+ * Object call, Workflow run, Lambda invoke). The runtime bridges build that
+ * Layer into the event's request scope, so:
  *
  * - the exporter's batching fiber runs inside the event's I/O context
  *   (required on workerd, where timers/fetches are pinned to the request),
  * - buffered spans/logs/metrics are flushed when the request scope
  *   finalizes — registered with `ctx.waitUntil`, so flushing never delays
  *   the response.
- *
- * By default telemetry is on and configures itself from the standard
- * OpenTelemetry environment variables: set `OTEL_EXPORTER_OTLP_ENDPOINT`
- * (and optionally `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`) on the
- * Function/Worker and traces, logs, and metrics ship OTLP/HTTP JSON to it.
- * Without an endpoint the default resolves to `Layer.empty` and Effect's
- * no-op tracer keeps all instrumentation free. Set `OTEL_SDK_DISABLED=true`
- * to force it off.
- *
- * Override the exporter in code by providing the reference on the
- * Function/Worker init Effect:
- *
- * ```ts
- * import * as Alchemy from "alchemy";
- * import * as Otlp from "effect/unstable/observability/Otlp";
- *
- * // explicit OTLP endpoint (still built per event, flushed per request):
- * Effect.provide(Alchemy.Telemetry.otlp({
- *   baseUrl: "https://api.honeycomb.io",
- *   headers: { "x-honeycomb-team": "..." },
- * }))
- *
- * // any custom exporter Layer (e.g. protobuf serialization, another vendor):
- * Effect.provide(Alchemy.Telemetry.layer(Otlp.layerProtobuf({ baseUrl: "..." })))
- *
- * // force-disable, ignoring OTEL_* environment variables:
- * Effect.provide(Alchemy.Telemetry.disabled)
- * ```
  */
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import * as Otlp from "effect/unstable/observability/Otlp";
 import * as OtlpLogger from "effect/unstable/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/unstable/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/unstable/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/unstable/observability/OtlpTracer";
-import { CurrentRuntimeContext } from "./RuntimeContext.ts";
+import type { Input } from "./Input.ts";
+import * as Output from "./Output.ts";
+import { CurrentRuntimeContext, unpackEnvValue } from "./RuntimeContext.ts";
 
 /**
  * The shape of the {@link Telemetry} reference: a Layer of telemetry
@@ -63,26 +70,50 @@ import { CurrentRuntimeContext } from "./RuntimeContext.ts";
 export type TelemetryLayer = Layer.Layer<never, any, any>;
 
 /**
+ * Read one bound value back at runtime. `rc.set` packs values for the env
+ * var wire (plain values JSON-stringified, `Redacted` as a marker routed
+ * through the secret channel), so the raw env string must be unpacked with
+ * {@link unpackEnvValue} — it handles all three shapes (packed JSON,
+ * Redacted marker, and a raw string set directly in the environment).
+ */
+const readBound = (key: string): Effect.Effect<string | undefined> =>
+  Config.string(key).pipe(
+    Config.withDefault(undefined),
+    Effect.orElseSucceed(() => undefined),
+    Effect.map((raw) => {
+      if (raw === undefined || raw === "") {
+        return undefined;
+      }
+      const value = unpackEnvValue<unknown>(raw);
+      const inner = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+      return inner === undefined
+        ? undefined
+        : typeof inner === "string"
+          ? inner
+          : String(inner);
+    }),
+  );
+
+/**
  * `service.name` fallback chain for the default exporter: the standard
  * OTEL variable, then the physical Function/Worker name, then the stack
  * name. `OtlpResource.fromConfig` dies without a service name, so the
  * chain must always produce one.
  */
-const defaultServiceName = Config.string("OTEL_SERVICE_NAME").pipe(
-  Config.orElse(() => Config.string("ALCHEMY_WORKER_NAME")),
-  Config.orElse(() => Config.string("AWS_LAMBDA_FUNCTION_NAME")),
-  Config.orElse(() => Config.string("ALCHEMY_STACK_NAME")),
-  Config.withDefault("alchemy"),
-);
+const defaultServiceName = Effect.gen(function* () {
+  return (
+    (yield* readBound("OTEL_SERVICE_NAME")) ??
+    (yield* readBound("ALCHEMY_WORKER_NAME")) ??
+    (yield* readBound("AWS_LAMBDA_FUNCTION_NAME")) ??
+    (yield* readBound("ALCHEMY_STACK_NAME")) ??
+    "alchemy"
+  );
+});
 
 const defaultResource = Effect.gen(function* () {
   const serviceName = yield* defaultServiceName;
-  const stack = yield* Config.string("ALCHEMY_STACK_NAME").pipe(
-    Config.withDefault(undefined),
-  );
-  const stage = yield* Config.string("ALCHEMY_STAGE").pipe(
-    Config.withDefault(undefined),
-  );
+  const stack = yield* readBound("ALCHEMY_STACK_NAME");
+  const stage = yield* readBound("ALCHEMY_STAGE");
   return {
     serviceName,
     attributes: {
@@ -130,12 +161,8 @@ const parseOtlpHeaders = (
  */
 const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS") =>
   Effect.gen(function* () {
-    const specific = yield* Config.string(
-      `OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`,
-    ).pipe(Config.withDefault(undefined));
-    const base = yield* Config.string("OTEL_EXPORTER_OTLP_ENDPOINT").pipe(
-      Config.withDefault(undefined),
-    );
+    const specific = yield* readBound(`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`);
+    const base = yield* readBound("OTEL_EXPORTER_OTLP_ENDPOINT");
     const url =
       specific !== undefined && specific !== ""
         ? specific
@@ -145,12 +172,9 @@ const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS") =>
     if (url === undefined) {
       return undefined;
     }
-    const rawHeaders = yield* Config.string(
-      `OTEL_EXPORTER_OTLP_${signal}_HEADERS`,
-    ).pipe(
-      Config.orElse(() => Config.string("OTEL_EXPORTER_OTLP_HEADERS")),
-      Config.withDefault(undefined),
-    );
+    const rawHeaders =
+      (yield* readBound(`OTEL_EXPORTER_OTLP_${signal}_HEADERS`)) ??
+      (yield* readBound("OTEL_EXPORTER_OTLP_HEADERS"));
     return { url, headers: parseOtlpHeaders(rawHeaders) };
   });
 
@@ -159,12 +183,6 @@ const makeFromEnv = (options?: {
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
-      const disabled = yield* Config.boolean("OTEL_SDK_DISABLED").pipe(
-        Config.withDefault(false),
-      );
-      if (disabled) {
-        return Layer.empty;
-      }
       const [traces, logs, metrics] = yield* Effect.all([
         signalConfig("TRACES"),
         signalConfig("LOGS"),
@@ -219,16 +237,11 @@ const makeFromEnv = (options?: {
   );
 
 /**
- * The default telemetry Layer for per-event runtimes: OTLP/HTTP JSON export
- * of traces, logs, and metrics, configured entirely from the standard
- * OpenTelemetry environment variables. Each signal resolves independently —
- * `OTEL_EXPORTER_OTLP_{TRACES|LOGS|METRICS}_ENDPOINT` is used as-is, or the
- * base `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/{signal}` appended; headers
- * come from `OTEL_EXPORTER_OTLP_{SIGNAL}_HEADERS` falling back to
- * `OTEL_EXPORTER_OTLP_HEADERS` (`k=v,k2=v2` format). Only configured
- * signals export. Resolves to `Layer.empty` when no endpoint is set or
- * `OTEL_SDK_DISABLED=true`, so telemetry is on by default but free until
- * an endpoint is configured.
+ * The runtime half of the {@link Telemetry.otlp} binding, and the default
+ * per-event Layer: reads the bound `OTEL_EXPORTER_OTLP_*` values back and
+ * constructs the OTLP JSON exporters. Each signal resolves independently;
+ * only configured signals export; resolves to `Layer.empty` when nothing is
+ * bound, so telemetry is free until a layer is provided.
  *
  * The periodic export intervals are effectively disabled: the exporter is
  * built per event and the request-scope flush delivers everything. An
@@ -240,19 +253,19 @@ const makeFromEnv = (options?: {
  * A malformed configuration degrades to `Layer.empty` with a warning
  * instead of failing the event.
  */
-export const fromEnv: TelemetryLayer = makeFromEnv({
+const fromBoundConfig: TelemetryLayer = makeFromEnv({
   exportInterval: "1 hour",
 });
 
 /**
- * The default telemetry Layer for long-running server processes: same
- * env-driven OTLP export with the standard periodic export intervals, since
- * the process root scope only flushes at shutdown.
+ * The process-runtime half of the binding: same bound-value resolution with
+ * the standard periodic export intervals, since a server's root scope only
+ * flushes at shutdown.
  */
-export const fromEnvProcess: TelemetryLayer = makeFromEnv();
+const fromBoundConfigProcess: TelemetryLayer = makeFromEnv();
 
 const reference = Context.Reference<TelemetryLayer>("alchemy/Telemetry", {
-  defaultValue: () => fromEnv,
+  defaultValue: () => fromBoundConfig,
 });
 
 /**
@@ -282,47 +295,157 @@ const telemetryLayer = (layer: TelemetryLayer): Layer.Layer<never> =>
   );
 
 /**
- * Configure OTLP export explicitly instead of via `OTEL_*` environment
- * variables. Accepts the same options as `Otlp.layerJson`; when
- * `resource.serviceName` is omitted it falls back to the deployed
- * Function/Worker name.
+ * A header value: a plain string, a `Redacted` secret, or an Output of
+ * either (e.g. an ApiToken's `token` attribute).
  */
-const otlp = (
-  options: Parameters<typeof Otlp.layerJson>[0],
-): Layer.Layer<never> =>
-  telemetryLayer(
-    Layer.unwrap(
-      Effect.gen(function* () {
-        if (options.resource?.serviceName !== undefined) {
-          return Otlp.layerJson(options);
-        }
-        const resource = yield* defaultResource;
-        return Otlp.layerJson({
-          ...options,
-          resource: { ...resource, ...options.resource },
-        });
-      }),
-    ),
-  );
+export type OtlpHeaderValue = Input<string | Redacted.Redacted<string>>;
 
 /**
- * Disable telemetry for this Function/Worker regardless of `OTEL_*`
- * environment variables.
+ * OTLP configuration for one signal. `url` and header values accept plain
+ * values or resource Outputs — they are *bound* onto the host at deploy
+ * time like any other binding.
  */
-const disabled: Layer.Layer<never> = telemetryLayer(Layer.empty);
+export interface OtlpSignalOptions {
+  /** The OTLP/HTTP URL exports for this signal are POSTed to. */
+  url: Input<string>;
+  /**
+   * Headers sent with each export request (e.g. auth tokens). `Redacted`
+   * values bind as secrets.
+   */
+  headers?: Record<string, OtlpHeaderValue> | undefined;
+}
+
+/**
+ * Options for {@link Telemetry.otlp}. Configure a base `url` (with
+ * `/v1/{signal}` appended per signal), per-signal urls, or a mix — a
+ * per-signal entry takes precedence over the base.
+ */
+export interface OtlpOptions {
+  /** Base OTLP/HTTP URL; `/v1/{traces,logs,metrics}` is appended per signal. */
+  url?: Input<string> | undefined;
+  /** Headers for every signal; per-signal `headers` take precedence. */
+  headers?: Record<string, OtlpHeaderValue> | undefined;
+  traces?: OtlpSignalOptions | undefined;
+  logs?: OtlpSignalOptions | undefined;
+  metrics?: OtlpSignalOptions | undefined;
+  /**
+   * The exported `service.name`.
+   * @default the deployed Function/Worker's physical name
+   */
+  serviceName?: Input<string> | undefined;
+}
+
+/**
+ * Serialize a headers record into the OTLP `k=v,k2=v2` wire form as a
+ * single Output. If any value is `Redacted` the whole composed value is
+ * `Redacted`, so it binds as a secret.
+ */
+const headersValue = (
+  headers: Record<string, OtlpHeaderValue>,
+): Output.Output<string | Redacted.Redacted<string>> => {
+  const keys = Object.keys(headers);
+  return (
+    Output.all(
+      ...keys.map((key) => Output.asOutput(headers[key] as never)),
+    ) as Output.Output<(string | Redacted.Redacted<string>)[]>
+  ).pipe(
+    Output.map((values) => {
+      let secret = false;
+      const parts = keys.map((key, i) => {
+        let value = values[i];
+        if (Redacted.isRedacted(value)) {
+          secret = true;
+          value = Redacted.value(value);
+        }
+        // Escape the OTLP headers-format delimiters; the runtime read side
+        // URL-decodes values (per the OpenTelemetry spec).
+        return `${key}=${/[,=]/.test(value) ? encodeURIComponent(value) : value}`;
+      });
+      const joined = parts.join(",");
+      return secret ? Redacted.make(joined) : joined;
+    }),
+  );
+};
+
+/**
+ * The built-in OTLP exporter as a *binding* layer.
+ *
+ * At deploy time, building this layer binds the configured urls and
+ * headers onto the host Function/Worker (Redacted values as secret
+ * bindings) — url and header values accept resource Outputs, so exporter
+ * config is wired from resources like any other binding. At runtime the
+ * exporter reads the bound values back and ships traces, logs, and metrics
+ * over OTLP/HTTP JSON, flushed as each event's scope closes.
+ *
+ * Compose it into the Function/Worker's single `Effect.provide`:
+ *
+ * ```ts
+ * Effect.provide(
+ *   Layer.mergeAll(
+ *     Cloudflare.R2.ReadWriteBucketBinding,
+ *     Alchemy.Telemetry.otlp({
+ *       url: "https://api.honeycomb.io",
+ *       headers: { "x-honeycomb-team": apiKey },
+ *     }),
+ *   ),
+ * )
+ * ```
+ *
+ * Vendor sugar can wrap this — e.g. `Axiom.Telemetry({ token, traces })`
+ * binds Axiom dataset endpoints and an ingest token.
+ */
+const otlp = (options: OtlpOptions): Layer.Layer<never> =>
+  Layer.effect(
+    reference,
+    Effect.gen(function* () {
+      const rc = yield* CurrentRuntimeContext;
+      if (rc !== undefined && !globalThis.__ALCHEMY_RUNTIME__) {
+        const bind = (
+          key: string,
+          value: Input<string | Redacted.Redacted<string>> | undefined,
+        ) =>
+          value === undefined
+            ? Effect.void
+            : Effect.asVoid(rc.set(key, Output.asOutput(value as never)));
+        const bindSignal = (
+          name: "TRACES" | "LOGS" | "METRICS",
+          signal: OtlpSignalOptions | undefined,
+        ) =>
+          Effect.all([
+            bind(`OTEL_EXPORTER_OTLP_${name}_ENDPOINT`, signal?.url),
+            bind(
+              `OTEL_EXPORTER_OTLP_${name}_HEADERS`,
+              signal?.headers && headersValue(signal.headers),
+            ),
+          ]);
+        yield* Effect.all([
+          bind("OTEL_EXPORTER_OTLP_ENDPOINT", options.url),
+          bind(
+            "OTEL_EXPORTER_OTLP_HEADERS",
+            options.headers && headersValue(options.headers),
+          ),
+          bindSignal("TRACES", options.traces),
+          bindSignal("LOGS", options.logs),
+          bindSignal("METRICS", options.metrics),
+          bind("OTEL_SERVICE_NAME", options.serviceName),
+        ]);
+      }
+      // The runtime half reads the bound values back per event (or once per
+      // process via `provideProcessTelemetry`).
+      return fromBoundConfig;
+    }),
+  );
 
 /**
  * The per-event telemetry exporters, as a `Context.Reference` holding the
  * Layer the runtime bridges build into every event's request scope. See
- * the module documentation for the default behavior and override options.
+ * the module documentation for how to provide one.
  */
 export const Telemetry = Object.assign(reference, {
   /** Install a custom telemetry Layer. */
   layer: telemetryLayer,
-  /** Configure the built-in OTLP JSON exporter explicitly. */
+  /** The built-in OTLP exporter as a binding layer. */
   otlp,
-  /** Disable telemetry regardless of `OTEL_*` environment variables. */
-  disabled,
 });
 
 /**
@@ -375,8 +498,8 @@ export const buildEventTelemetry = (
  *
  * `runtimeContext` is the entrypoint's runtime context; its `telemetry`
  * field carries the override registered by {@link Telemetry.layer} during
- * init. Without an override the process default ({@link fromEnvProcess},
- * with standard periodic export intervals) applies.
+ * init. Without an override the bound-config exporter (with standard
+ * periodic export intervals) applies.
  */
 export const provideProcessTelemetry =
   (runtimeContext?: { telemetry?: TelemetryLayer | undefined }) =>
@@ -389,7 +512,7 @@ export const provideProcessTelemetry =
       const telemetry = yield* buildEventTelemetry(
         context,
         scope,
-        runtimeContext?.telemetry ?? fromEnvProcess,
+        runtimeContext?.telemetry ?? fromBoundConfigProcess,
       );
       return yield* Effect.provideContext(effect, telemetry);
     });
