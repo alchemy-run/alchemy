@@ -44,18 +44,16 @@ export class WarmObject extends Cloudflare.DurableObject<WarmObject>()(
         warmed: () =>
           Effect.gen(function* () {
             const count = (yield* state.storage.get<number>("warmed")) ?? 0;
-            const runningAtWarm =
-              (yield* state.storage.get<boolean>("runningAtWarm")) ?? false;
-            return { count, runningAtWarm };
+            return { count };
           }),
         // Any inbound call constructs the DO if it isn't resident, which is
         // where the container layer's eager start fires — this is exactly the
-        // path `warmPool` drives. Record that the wake arrived, and whether
-        // the container was up by the time it did.
+        // path `warmPool` drives. Record that the wake arrived; whether the
+        // container is up *yet* is not knowable here (the start has only just
+        // been asked for), so the test polls `running` separately.
         fetch: Effect.gen(function* () {
           const count = (yield* state.storage.get<number>("warmed")) ?? 0;
           yield* state.storage.put("warmed", count + 1);
-          yield* state.storage.put("runningAtWarm", yield* container.running);
           return HttpServerResponse.text("warmed");
         }),
       };

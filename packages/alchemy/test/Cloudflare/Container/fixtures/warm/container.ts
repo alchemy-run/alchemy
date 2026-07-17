@@ -17,7 +17,12 @@ export class WarmContainer extends Cloudflare.Container<
   }
 >()("WarmContainer") {}
 
-const bootId = crypto.randomUUID();
+// Minted on first ask rather than at module scope: this module is pulled into
+// the Worker bundle too, and workerd refuses to generate random values in
+// global scope ("Disallowed operation called within global scope") — which
+// fails the whole script at startup, not just this fixture. Either way the id
+// is per-process, which is all the test reads it for.
+let bootId: string | undefined;
 
 export default WarmContainer.make(
   {
@@ -27,7 +32,7 @@ export default WarmContainer.make(
   Effect.gen(function* () {
     return {
       ping: () => Effect.succeed("pong"),
-      boot: () => Effect.succeed(bootId),
+      boot: () => Effect.sync(() => (bootId ??= crypto.randomUUID())),
     };
   }),
 );

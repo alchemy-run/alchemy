@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -56,12 +56,24 @@ const fetchReady = (url: string, expected: string) =>
     );
   });
 
-// Fire a single GET and return its parsed JSON body.
+// GET a route and return its parsed JSON body, riding out a cold edge the same
+// way `fetchReady` does. Without the retry, a request that lands before the
+// deploy has propagated gets Cloudflare's own 404 HTML page and dies on
+// `JSON Parse error: Unrecognized token '<'` — a test failure that says
+// nothing about the code under test.
 const json = <T>(url: string) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
-    const res = yield* client.get(url);
-    return (yield* res.json) as T;
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status !== 200
+          ? Effect.fail(new Error(`not ready: ${res.status}`))
+          : (res.json as Effect.Effect<unknown, unknown>),
+      ),
+      Effect.map((body) => body as T),
+      Effect.timeout("30 seconds"),
+      Effect.retry({ schedule: readinessSchedule, times: 40 }),
+    );
   });
 
 // Poll `/running` until the reported state matches `want`. Reading the flag
@@ -153,14 +165,21 @@ describe("container warming", () => {
         // Each DO recorded the wake itself, so the fan-out demonstrably
         // reached every name (not just the first, and not only the ones the
         // concurrency window admitted first).
-        const warmed = yield* json<{ count: number; runningAtWarm: boolean }>(
+        const warmed = yield* json<{ count: number }>(
           `${url}/warmed?name=${name}`,
         );
         expect(warmed.count).toBeGreaterThanOrEqual(1);
-        // And by the time the wake landed, waking the DO had already booted
-        // its container — which is the whole point of warming ahead of the
-        // first real request.
-        expect(warmed.runningAtWarm).toBe(true);
+
+        // ...and the wake set the container booting. This is polled, not read
+        // at wake time: `ensureRunning` calls `container.start()`, which asks
+        // for a boot rather than waiting one out, so `running` is still false
+        // while the wake handler itself is on the stack. Warming ahead of the
+        // first request only promises the boot is already under way by then —
+        // so that is what this asserts.
+        //
+        // `/running` only reads a flag; no request here ever touches the
+        // container.
+        expect(yield* waitRunning(url, name, true)).toBe(true);
       }
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
