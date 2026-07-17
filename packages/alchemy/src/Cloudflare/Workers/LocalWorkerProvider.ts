@@ -47,6 +47,7 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import type * as FileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -543,7 +544,9 @@ export const LocalWorkerProvider = () =>
       const rootScope = yield* Effect.scope;
       const workerdScopes = new Map<string, Scope.Closeable>();
 
-      const context = yield* Effect.context<RuntimeServices>();
+      const context = yield* Effect.context<
+        RuntimeServices | FileSystem.FileSystem
+      >();
       const instances = new Map<
         string,
         {
