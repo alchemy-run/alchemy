@@ -8,7 +8,13 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { retryWhileMpConflict, syncMpTags, toMpTagRecord } from "./internal.ts";
+import {
+  deleteChannelWithEndpoints,
+  listGroupChannels,
+  retryWhileMpConflict,
+  syncMpTags,
+  toMpTagRecord,
+} from "./internal.ts";
 
 export interface ChannelGroupProps {
   /**
@@ -174,13 +180,24 @@ export const ChannelGroupProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          const channelGroupName = output.channelGroupName;
+          // Reap child channels (and their origin endpoints) first. A normal
+          // stack destroy deletes children before the group, so this observes
+          // nothing — but an orphan sweep can target a group whose children
+          // it never enumerated, and deleting the group would then Conflict
+          // until the retry budget ran out and leak the group.
+          const channels = yield* listGroupChannels(channelGroupName);
+          yield* Effect.forEach(
+            channels,
+            (channel) =>
+              deleteChannelWithEndpoints(channelGroupName, channel.ChannelName),
+            { concurrency: 5, discard: true },
+          );
           // MediaPackage v2 deletes are idempotent (deleting a missing group
           // succeeds), but the group transiently rejects deletion with a
           // Conflict while its just-deleted channels are cleaned up.
           yield* mediapackagev2
-            .deleteChannelGroup({
-              ChannelGroupName: output.channelGroupName,
-            })
+            .deleteChannelGroup({ ChannelGroupName: channelGroupName })
             .pipe(retryWhileMpConflict);
         }),
 

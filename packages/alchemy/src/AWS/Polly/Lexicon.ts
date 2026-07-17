@@ -1,6 +1,7 @@
 import * as polly from "@distilled.cloud/aws/polly";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -116,13 +117,33 @@ export const LexiconProvider = () =>
     Effect.gen(function* () {
       // Lexicon names must match [0-9A-Za-z]{1,20} — generate the engine
       // name, drop every non-alphanumeric character, and keep the trailing
-      // 20 characters so the unique suffix survives truncation.
+      // 20 characters so the unique suffix survives truncation. The
+      // `typeof === "string"` guard (rather than truthiness) keeps this
+      // callable from `precreate`, whose props may still hold unresolved
+      // Output expressions.
       const toName = (id: string, props: LexiconProps) =>
-        props.lexiconName
+        typeof props.lexiconName === "string"
           ? Effect.succeed(props.lexiconName)
           : createPhysicalName({ id, maxLength: 26, suffixLength: 10 }).pipe(
               Effect.map((n) => n.replace(/[^0-9A-Za-z]/g, "").slice(-20)),
             );
+
+      // Bounded retry for transient Polly control-plane failures. Under a
+      // full concurrent suite, GetLexicon/PutLexicon can answer with
+      // throttling or a transient 5xx; failing reconcile between PutLexicon
+      // and returning Attributes is exactly the window that orphans a
+      // lexicon, so ride these out instead of failing fast.
+      const retryTransient = <A, E extends { _tag: string }, R>(
+        effect: Effect.Effect<A, E, R>,
+      ): Effect.Effect<A, E, R> =>
+        Effect.retry(effect, {
+          while: (e) =>
+            e._tag === "ThrottlingException" ||
+            e._tag === "ServiceUnavailable" ||
+            e._tag === "ServiceFailureException",
+          schedule: Schedule.exponential("500 millis"),
+          times: 5,
+        });
 
       const lexiconArn = (name: string) =>
         Effect.gen(function* () {
@@ -131,13 +152,11 @@ export const LexiconProvider = () =>
         });
 
       const getOne = (name: string) =>
-        polly
-          .getLexicon({ Name: name })
-          .pipe(
-            Effect.catchTag("LexiconNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        retryTransient(polly.getLexicon({ Name: name })).pipe(
+          Effect.catchTag("LexiconNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
 
       const waitForContent = (name: string, desired: string) =>
         Effect.gen(function* () {
@@ -238,8 +257,25 @@ export const LexiconProvider = () =>
             }
             return attrs;
           }),
+        // Persist the lexicon's deterministic identity BEFORE reconcile runs.
+        // The engine commits precreate's Attributes to state ahead of any
+        // API call, so if reconcile fails (or is interrupted) after
+        // PutLexicon succeeded, destroy still has `output.lexiconName` and
+        // deletes the lexicon instead of orphaning it — the engine skips
+        // provider.delete entirely for rows whose attr was never persisted.
+        // No API call is made here; delete tolerates the not-yet-created case.
+        precreate: Effect.fn(function* ({ id, news }) {
+          const name = yield* toName(id, news);
+          return toAttributes(name, yield* lexiconArn(name), undefined);
+        }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name = output?.lexiconName ?? (yield* toName(id, news));
+          // Prefer the resolved user-supplied name; fall back to the cached
+          // output identity (which for a fresh create is the precreate stub),
+          // then to the generated name.
+          const name =
+            typeof news.lexiconName === "string"
+              ? news.lexiconName
+              : (output?.lexiconName ?? (yield* toName(id, news)));
 
           // Observe — cloud state is authoritative.
           const observed = yield* getOne(name);
@@ -248,7 +284,9 @@ export const LexiconProvider = () =>
           // single call converges both the missing and the content-drift
           // cases. Skip the API entirely when the observed content matches.
           if (contentOf(observed?.Lexicon) !== news.content) {
-            yield* polly.putLexicon({ Name: name, Content: news.content });
+            yield* retryTransient(
+              polly.putLexicon({ Name: name, Content: news.content }),
+            );
           }
 
           yield* session.note(name);
@@ -263,12 +301,14 @@ export const LexiconProvider = () =>
           );
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the lexicon may already be gone.
-          yield* polly
-            .deleteLexicon({ Name: output.lexiconName })
-            .pipe(
-              Effect.catchTag("LexiconNotFoundException", () => Effect.void),
-            );
+          // Idempotent — the lexicon may already be gone (including the case
+          // where only the precreate stub was persisted and PutLexicon never
+          // ran).
+          yield* retryTransient(
+            polly.deleteLexicon({ Name: output.lexiconName }),
+          ).pipe(
+            Effect.catchTag("LexiconNotFoundException", () => Effect.void),
+          );
           // DeleteLexicon may return before the control plane consistently
           // reports absence. Confirm deletion so nuke cannot leave a lexicon
           // behind and lose the only state that identifies it.

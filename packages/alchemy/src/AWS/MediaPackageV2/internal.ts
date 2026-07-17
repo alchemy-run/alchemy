@@ -1,6 +1,7 @@
 import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { diffTags } from "../../Tags.ts";
 
 /**
@@ -57,6 +58,92 @@ export const retryWhileMpConflict = <A, E extends { readonly _tag: string }, R>(
     while: (e) => e._tag === "ConflictException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(15)]),
   });
+
+/**
+ * Enumerate every channel group in the account/region.
+ */
+export const listAllChannelGroups = Effect.fn(function* () {
+  return yield* mediapackagev2.listChannelGroups.pages({}).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).flatMap((page) => page.Items ?? []),
+    ),
+  );
+});
+
+/**
+ * Enumerate every channel in a channel group; a missing group yields `[]`
+ * (the typed not-found), so callers can race against a concurrent delete.
+ */
+export const listGroupChannels = Effect.fn(function* (
+  channelGroupName: string,
+) {
+  return yield* mediapackagev2.listChannels
+    .pages({ ChannelGroupName: channelGroupName })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((chunk) =>
+        Array.from(chunk).flatMap((page) => page.Items ?? []),
+      ),
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed([] as mediapackagev2.ChannelListConfiguration[]),
+      ),
+    );
+});
+
+/**
+ * Enumerate every origin endpoint in a channel; a missing channel/group
+ * yields `[]` (the typed not-found).
+ */
+export const listChannelEndpoints = Effect.fn(function* (
+  channelGroupName: string,
+  channelName: string,
+) {
+  return yield* mediapackagev2.listOriginEndpoints
+    .pages({ ChannelGroupName: channelGroupName, ChannelName: channelName })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((chunk) =>
+        Array.from(chunk).flatMap((page) => page.Items ?? []),
+      ),
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed([] as mediapackagev2.OriginEndpointListConfiguration[]),
+      ),
+    );
+});
+
+/**
+ * Delete a channel after reaping its origin endpoints. MediaPackage refuses
+ * to delete a channel that still has endpoints, so an orphan sweep that
+ * targets a channel without enumerating its children would Conflict until
+ * the retry budget ran out and leak the channel. A normal stack destroy
+ * deletes the endpoints first, so the reap observes nothing and is free.
+ * Every step is idempotent (deleting a missing endpoint/channel succeeds).
+ */
+export const deleteChannelWithEndpoints = Effect.fn(function* (
+  channelGroupName: string,
+  channelName: string,
+) {
+  const endpoints = yield* listChannelEndpoints(channelGroupName, channelName);
+  yield* Effect.forEach(
+    endpoints,
+    (endpoint) =>
+      mediapackagev2.deleteOriginEndpoint({
+        ChannelGroupName: channelGroupName,
+        ChannelName: channelName,
+        OriginEndpointName: endpoint.OriginEndpointName,
+      }),
+    { concurrency: 5, discard: true },
+  );
+  // The channel transiently rejects deletion with a Conflict while its
+  // just-deleted endpoints are cleaned up.
+  yield* mediapackagev2
+    .deleteChannel({
+      ChannelGroupName: channelGroupName,
+      ChannelName: channelName,
+    })
+    .pipe(retryWhileMpConflict);
+});
 
 /**
  * Compare two IAM policy documents for semantic equality: parse both as JSON

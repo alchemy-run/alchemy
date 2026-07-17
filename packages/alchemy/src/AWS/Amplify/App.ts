@@ -166,8 +166,34 @@ export const AppProvider = () =>
       const observe = (appId: string) =>
         amplify.getApp({ appId }).pipe(
           Effect.map((r) => r.app),
+          // Amplify's API Gateway front door can time out a slow
+          // control-plane call ("Endpoint request timed out"); reads are
+          // side-effect free, so retry the typed tag with bounded backoff.
+          Effect.retry({
+            while: (e): boolean => e._tag === "TimeoutException",
+            schedule: Schedule.exponential("2 seconds"),
+            times: 3,
+          }),
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
         );
+
+      // Find an app we own (matching physical name + internal Alchemy tags).
+      // Used to recover from a timed-out CreateApp whose outcome is unknown —
+      // the backend may have created the app even though the front door gave
+      // up on the response.
+      const findOwnApp = Effect.fn(function* (id: string, name: string) {
+        const apps = yield* amplify.listApps.pages({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) => page.apps ?? []),
+          ),
+        );
+        for (const app of apps) {
+          if (app.name !== name) continue;
+          if (yield* hasAlchemyTags(id, app.tags)) return app;
+        }
+        return undefined;
+      });
 
       const syncTags = Effect.fn(function* (
         appArn: string,
@@ -217,8 +243,44 @@ export const AppProvider = () =>
             // BadRequestException with a "Rate exceeded" message rather than
             // a throttling error class) and the quota is roughly per-minute
             // account-wide — retry with bounded backoff spanning ~1 minute.
-            const created = yield* amplify
-              .createApp({
+            // Its API Gateway front door can also time out a slow CreateApp
+            // (typed TimeoutException, "Endpoint request timed out") with
+            // the outcome unknown — the backend may still have created the
+            // app. Observe by name + internal tags before every (re)try so
+            // a retry never creates a duplicate app.
+            app = yield* findOwnApp(id, name).pipe(
+              Effect.flatMap((existing) =>
+                existing
+                  ? Effect.succeed(existing)
+                  : amplify
+                      .createApp({
+                        name,
+                        description: news.description,
+                        platform: news.platform ?? "WEB",
+                        environmentVariables: news.environmentVariables,
+                        buildSpec: news.buildSpec,
+                        customRules: news.customRules,
+                        enableBasicAuth: news.enableBasicAuth,
+                        basicAuthCredentials: news.basicAuthCredentials,
+                        tags: desiredTags,
+                      })
+                      .pipe(Effect.map((r) => r.app)),
+              ),
+              Effect.retry({
+                while: (e): boolean =>
+                  e._tag === "TimeoutException" ||
+                  (e._tag === "BadRequestException" &&
+                    (e.message ?? "").includes("Rate exceeded")),
+                schedule: Schedule.exponential("2 seconds"),
+                times: 5,
+              }),
+            );
+          } else {
+            // UpdateApp is idempotent — retry front-door timeouts and the
+            // "Rate exceeded" throttle with bounded backoff.
+            yield* amplify
+              .updateApp({
+                appId: app.appId,
                 name,
                 description: news.description,
                 platform: news.platform ?? "WEB",
@@ -227,30 +289,17 @@ export const AppProvider = () =>
                 customRules: news.customRules,
                 enableBasicAuth: news.enableBasicAuth,
                 basicAuthCredentials: news.basicAuthCredentials,
-                tags: desiredTags,
               })
               .pipe(
                 Effect.retry({
                   while: (e): boolean =>
-                    e._tag === "BadRequestException" &&
-                    (e.message ?? "").includes("Rate exceeded"),
+                    e._tag === "TimeoutException" ||
+                    (e._tag === "BadRequestException" &&
+                      (e.message ?? "").includes("Rate exceeded")),
                   schedule: Schedule.exponential("2 seconds"),
                   times: 5,
                 }),
               );
-            app = created.app;
-          } else {
-            yield* amplify.updateApp({
-              appId: app.appId,
-              name,
-              description: news.description,
-              platform: news.platform ?? "WEB",
-              environmentVariables: news.environmentVariables,
-              buildSpec: news.buildSpec,
-              customRules: news.customRules,
-              enableBasicAuth: news.enableBasicAuth,
-              basicAuthCredentials: news.basicAuthCredentials,
-            });
             yield* syncTags(app.appArn, desiredTags, tagRecord(app.tags));
           }
 
@@ -282,9 +331,17 @@ export const AppProvider = () =>
             }));
           }),
         delete: Effect.fn(function* ({ output }) {
-          yield* amplify
-            .deleteApp({ appId: output.appId })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+          // DeleteApp is idempotent — retry front-door timeouts; a timed-out
+          // delete that actually landed resolves to NotFoundException on the
+          // retry, which is swallowed below.
+          yield* amplify.deleteApp({ appId: output.appId }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "TimeoutException",
+              schedule: Schedule.exponential("2 seconds"),
+              times: 3,
+            }),
+            Effect.catchTag("NotFoundException", () => Effect.void),
+          );
         }),
       };
     }),

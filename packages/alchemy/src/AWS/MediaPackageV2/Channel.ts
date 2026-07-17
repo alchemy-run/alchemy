@@ -8,9 +8,11 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  deleteChannelWithEndpoints,
+  listAllChannelGroups,
+  listGroupChannels,
   matchesDesired,
   policiesEqual,
-  retryWhileMpConflict,
   syncMpTags,
   toMpTagRecord,
 } from "./internal.ts";
@@ -313,21 +315,44 @@ export const ChannelProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // MediaPackage v2 deletes are idempotent (deleting a missing
-          // channel succeeds), but the channel transiently rejects deletion
-          // with a Conflict while its just-deleted origin endpoints are
-          // cleaned up.
-          yield* mediapackagev2
-            .deleteChannel({
-              ChannelGroupName: output.channelGroupName,
-              ChannelName: output.channelName,
-            })
-            .pipe(retryWhileMpConflict);
+          // Reap the channel's origin endpoints first (a normal stack destroy
+          // already deleted them; an orphan sweep may not have), then delete
+          // the channel. Every step is idempotent and the transient Conflict
+          // while just-deleted endpoints are cleaned up is retried.
+          yield* deleteChannelWithEndpoints(
+            output.channelGroupName,
+            output.channelName,
+          );
         }),
 
-        // Channels are keyed by their parent channel group, so there is no
-        // account-level enumeration for orphan sweeps.
-        list: () => Effect.succeed([]),
+        // Channels are keyed by their parent channel group, so enumerate
+        // the groups first and fan out.
+        list: () =>
+          Effect.gen(function* () {
+            const groups = yield* listAllChannelGroups();
+            const items = yield* Effect.forEach(
+              groups,
+              (group) => listGroupChannels(group.ChannelGroupName),
+              { concurrency: 5 },
+            ).pipe(Effect.map((nested) => nested.flat()));
+            // The list shape omits ingest endpoints, so hydrate each item
+            // via get; a channel can vanish between enumeration and
+            // hydration.
+            const channels = yield* Effect.forEach(
+              items,
+              (item) =>
+                getChannel(item.ChannelGroupName, item.ChannelName).pipe(
+                  Effect.map((channel) =>
+                    channel === undefined ? undefined : toAttrs(channel),
+                  ),
+                ),
+              { concurrency: 5 },
+            );
+            return channels.filter(
+              (channel): channel is Channel["Attributes"] =>
+                channel !== undefined,
+            );
+          }),
       };
     }),
   );

@@ -10,6 +10,9 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  listAllChannelGroups,
+  listChannelEndpoints,
+  listGroupChannels,
   matchesDesired,
   policiesEqual,
   retryWhileMpConflict,
@@ -495,9 +498,46 @@ export const OriginEndpointProvider = () =>
             .pipe(retryWhileMpConflict);
         }),
 
-        // Origin endpoints are keyed by their parent channel, so there is no
-        // account-level enumeration for orphan sweeps.
-        list: () => Effect.succeed([]),
+        // Origin endpoints are keyed by their parent channel, so enumerate
+        // groups → channels → endpoints.
+        list: () =>
+          Effect.gen(function* () {
+            const groups = yield* listAllChannelGroups();
+            const channels = yield* Effect.forEach(
+              groups,
+              (group) => listGroupChannels(group.ChannelGroupName),
+              { concurrency: 5 },
+            ).pipe(Effect.map((nested) => nested.flat()));
+            const items = yield* Effect.forEach(
+              channels,
+              (channel) =>
+                listChannelEndpoints(
+                  channel.ChannelGroupName,
+                  channel.ChannelName,
+                ),
+              { concurrency: 5 },
+            ).pipe(Effect.map((nested) => nested.flat()));
+            // Hydrate each item via get so the attributes carry the manifest
+            // URLs; an endpoint can vanish between enumeration and hydration.
+            const endpoints = yield* Effect.forEach(
+              items,
+              (item) =>
+                getEndpoint(
+                  item.ChannelGroupName,
+                  item.ChannelName,
+                  item.OriginEndpointName,
+                ).pipe(
+                  Effect.map((endpoint) =>
+                    endpoint === undefined ? undefined : toAttrs(endpoint),
+                  ),
+                ),
+              { concurrency: 5 },
+            );
+            return endpoints.filter(
+              (endpoint): endpoint is OriginEndpoint["Attributes"] =>
+                endpoint !== undefined,
+            );
+          }),
       };
     }),
   );

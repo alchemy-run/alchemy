@@ -163,6 +163,14 @@ export const BranchProvider = () =>
       const observe = (appId: string, branchName: string) =>
         amplify.getBranch({ appId, branchName }).pipe(
           Effect.map((r) => r.branch),
+          // Amplify's API Gateway front door can time out a slow
+          // control-plane call ("Endpoint request timed out"); reads are
+          // side-effect free, so retry the typed tag with bounded backoff.
+          Effect.retry({
+            while: (e): boolean => e._tag === "TimeoutException",
+            schedule: Schedule.exponential("2 seconds"),
+            times: 3,
+          }),
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
         );
 
@@ -239,30 +247,52 @@ export const BranchProvider = () =>
           if (!branch) {
             // Amplify throttles writes aggressively (surfaced as a
             // BadRequestException with a "Rate exceeded" message rather than
-            // a throttling error class) — retry with bounded backoff.
-            const created = yield* amplify
-              .createBranch({
+            // a throttling error class) — retry with bounded backoff. Its
+            // API Gateway front door can also time out a slow CreateBranch
+            // (typed TimeoutException, "Endpoint request timed out") with
+            // the outcome unknown — re-observe before every (re)try so a
+            // retry converges on the branch the timed-out call created.
+            branch = yield* observe(news.appId, branchName).pipe(
+              Effect.flatMap((existing) =>
+                existing
+                  ? Effect.succeed(existing)
+                  : amplify
+                      .createBranch({
+                        appId: news.appId,
+                        branchName,
+                        ...settings,
+                        tags: desiredTags,
+                      })
+                      .pipe(Effect.map((r) => r.branch)),
+              ),
+              Effect.retry({
+                while: (e): boolean =>
+                  e._tag === "TimeoutException" ||
+                  (e._tag === "BadRequestException" &&
+                    (e.message ?? "").includes("Rate exceeded")),
+                schedule: Schedule.exponential("2 seconds"),
+                times: 5,
+              }),
+            );
+          } else {
+            // UpdateBranch is idempotent — retry front-door timeouts and
+            // the "Rate exceeded" throttle with bounded backoff.
+            const updated = yield* amplify
+              .updateBranch({
                 appId: news.appId,
                 branchName,
                 ...settings,
-                tags: desiredTags,
               })
               .pipe(
                 Effect.retry({
                   while: (e): boolean =>
-                    e._tag === "BadRequestException" &&
-                    (e.message ?? "").includes("Rate exceeded"),
+                    e._tag === "TimeoutException" ||
+                    (e._tag === "BadRequestException" &&
+                      (e.message ?? "").includes("Rate exceeded")),
                   schedule: Schedule.exponential("2 seconds"),
                   times: 5,
                 }),
               );
-            branch = created.branch;
-          } else {
-            const updated = yield* amplify.updateBranch({
-              appId: news.appId,
-              branchName,
-              ...settings,
-            });
             yield* syncTags(
               updated.branch.branchArn,
               desiredTags,
@@ -314,12 +344,22 @@ export const BranchProvider = () =>
             return branches;
           }),
         delete: Effect.fn(function* ({ output }) {
+          // DeleteBranch is idempotent — retry front-door timeouts; a
+          // timed-out delete that actually landed resolves to
+          // NotFoundException on the retry, which is swallowed below.
           yield* amplify
             .deleteBranch({
               appId: output.appId,
               branchName: output.branchName,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+            .pipe(
+              Effect.retry({
+                while: (e): boolean => e._tag === "TimeoutException",
+                schedule: Schedule.exponential("2 seconds"),
+                times: 3,
+              }),
+              Effect.catchTag("NotFoundException", () => Effect.void),
+            );
         }),
       };
     }),

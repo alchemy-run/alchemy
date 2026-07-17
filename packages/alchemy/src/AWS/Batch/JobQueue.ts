@@ -1,4 +1,5 @@
 import * as batch from "@distilled.cloud/aws/batch";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -14,6 +15,21 @@ import { pollBatch, retryBatch } from "./internal.ts";
 export type JobQueueName = string;
 export type JobQueueArn =
   `arn:aws:batch:${RegionID}:${AccountID}:job-queue/${JobQueueName}`;
+
+/**
+ * Raised when a job queue's asynchronous deletion does not complete within
+ * the provider's poll budget. Reporting success here would let the engine
+ * delete the queue's compute environments while the association still exists,
+ * wedging the whole chain.
+ */
+export class JobQueueDeleteTimeoutError extends Data.TaggedError(
+  "JobQueueDeleteTimeoutError",
+)<{
+  readonly jobQueueName: string;
+  readonly status: string | undefined;
+  readonly statusReason: string | undefined;
+  readonly message: string;
+}> {}
 
 export interface JobQueueProps {
   /**
@@ -323,11 +339,23 @@ export const JobQueueProvider = () =>
 
           // Wait until fully gone so downstream compute-environment deletion
           // doesn't trip over the lingering association (queue deletion is
-          // asynchronous and takes up to ~1-2 minutes).
-          yield* pollBatch(
+          // asynchronous and takes up to ~1-2 minutes). An expired poll MUST
+          // NOT report success — the engine would then delete the queue's
+          // compute environments mid-teardown and wedge the chain.
+          const final = yield* pollBatch(
             describeOne(name),
             (q) => q === undefined || q.status === "DELETED",
           );
+          if (final && final.status !== "DELETED") {
+            return yield* Effect.fail(
+              new JobQueueDeleteTimeoutError({
+                jobQueueName: name,
+                status: final.status,
+                statusReason: final.statusReason,
+                message: `Job queue ${name} was still ${final.status ?? "present"} after the delete poll budget${final.statusReason ? `: ${final.statusReason}` : ""}`,
+              }),
+            );
+          }
         }),
       };
     }),

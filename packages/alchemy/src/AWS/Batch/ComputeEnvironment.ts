@@ -1,5 +1,6 @@
 import * as batch from "@distilled.cloud/aws/batch";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -302,6 +303,67 @@ export const ComputeEnvironmentProvider = () =>
           message: `Compute environment ${name} settled as ${status}${statusReason ? `: ${statusReason}` : ""}`,
         });
       };
+
+      /**
+       * Restore the CE's regular (non-service-linked) service role when it no
+       * longer exists in IAM, returning the role name to drop afterwards.
+       * Batch cannot tear a CE down without assuming this role — a dangling
+       * role is the canonical cause of undeletable, forever-INVALID CEs.
+       */
+      const restoreServiceRoleIfMissing = Effect.fn(function* (
+        serviceRoleArn: string | undefined,
+      ) {
+        if (!serviceRoleArn || serviceRoleArn.includes("/aws-service-role/")) {
+          return undefined;
+        }
+        const roleName = serviceRoleArn.split("/").pop()!;
+        const exists = yield* iam.getRole({ RoleName: roleName }).pipe(
+          Effect.map(() => true),
+          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(false)),
+        );
+        if (exists) return undefined;
+        yield* iam
+          .createRole({
+            RoleName: roleName,
+            AssumeRolePolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "batch.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            }),
+            Description:
+              "Temporarily restored by alchemy so AWS Batch can tear down a compute environment whose service role was deleted",
+          })
+          .pipe(
+            // Concurrent delete of a replaced instance may restore it first.
+            Effect.catchTag("EntityAlreadyExistsException", () => Effect.void),
+          );
+        yield* iam.attachRolePolicy({
+          RoleName: roleName,
+          PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
+        });
+        // IAM propagation before Batch tries to assume the role.
+        yield* Effect.sleep("10 seconds");
+        return roleName;
+      });
+
+      /** Drop a role restored by {@link restoreServiceRoleIfMissing}. */
+      const dropRestoredServiceRole = Effect.fn(function* (roleName: string) {
+        yield* iam
+          .detachRolePolicy({
+            RoleName: roleName,
+            PolicyArn:
+              "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
+          })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        yield* iam
+          .deleteRole({ RoleName: roleName })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+      });
 
       /**
        * A force nuke cannot rely on stack dependency ordering: a listed
@@ -701,26 +763,71 @@ export const ComputeEnvironmentProvider = () =>
           const disabled = yield* awaitDisabled(name);
           if (!disabled || disabled.status === "DELETED") return;
 
+          // Batch tears the CE down (its ECS cluster, ENIs, …) by assuming the
+          // CE's service role. If that role was deleted first (crashed destroy,
+          // force-nuke ordering), the async deletion fails with an sts:AssumeRole
+          // CLIENT_ERROR and the CE is stuck INVALID forever. Restore a minimal
+          // same-name role (same ARN — role ARNs carry no unique id) so teardown
+          // can proceed, and drop it again once the CE is gone. Service-linked
+          // roles are never restored (they're account infrastructure).
+          const restoredRole = yield* restoreServiceRoleIfMissing(
+            disabled.serviceRole,
+          );
+
           // deleteComputeEnvironment is idempotent (succeeds when missing) but
           // rejects while a JobQueue association is still tearing down — retry
           // through that window (queue deletion is asynchronous).
+          const requestDelete = retryBatch(
+            batch.deleteComputeEnvironment({ computeEnvironment: name }),
+            (e) =>
+              e._tag === "ComputeEnvironmentInUse" ||
+              e._tag === "ComputeEnvironmentBeingModified",
+            24,
+          ).pipe(
+            Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void),
+          );
           if (disabled.status !== "DELETING") {
-            yield* retryBatch(
-              batch.deleteComputeEnvironment({ computeEnvironment: name }),
-              (e) =>
-                e._tag === "ComputeEnvironmentInUse" ||
-                e._tag === "ComputeEnvironmentBeingModified",
-              24,
-            ).pipe(
-              Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void),
-            );
+            yield* requestDelete;
+            // Describe can briefly return the pre-delete record (e.g. a stale
+            // INVALID status) before the DELETING transition becomes visible.
+            yield* Effect.sleep("3 seconds");
           }
 
           // Wait until it's actually gone (CE deletion takes ~1-2 minutes).
-          yield* pollBatch(
+          // Settling on INVALID means the async deletion attempt FAILED (e.g.
+          // the service role was dangling until the restore above) — it never
+          // self-recovers, so re-issue the delete once and wait again.
+          const awaitGone = pollBatch(
             describeOne(name),
-            (ce) => ce === undefined || ce.status === "DELETED",
+            (ce) =>
+              ce === undefined ||
+              ce.status === "DELETED" ||
+              ce.status === "INVALID",
           );
+          let final = yield* awaitGone;
+          if (final && final.status === "INVALID") {
+            yield* requestDelete;
+            yield* Effect.sleep("3 seconds");
+            final = yield* awaitGone;
+          } else if (final && final.status !== "DELETED") {
+            // Still DELETING when the poll budget expired — a slow but healthy
+            // teardown gets one more poll round before failing loudly.
+            final = yield* awaitGone;
+          }
+
+          if (
+            restoredRole !== undefined &&
+            (final === undefined || final.status === "DELETED")
+          ) {
+            yield* dropRestoredServiceRole(restoredRole);
+          }
+
+          // A poll that merely expires MUST NOT report success — the engine
+          // would then delete the CE's dependencies (service role, subnets)
+          // while teardown is still consuming them, wedging the CE for good.
+          if (final && final.status !== "DELETED") {
+            return yield* Effect.fail(invalid(name, final));
+          }
         }),
       };
     }),
