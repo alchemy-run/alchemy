@@ -56,6 +56,15 @@
     },
     {
       "path": "../../distilled/packages/axiom/tsconfig.json"
+    },
+    {
+      "path": "../../cloudflare-tools/packages/cloudflare-rolldown-plugin/tsconfig.json"
+    },
+    {
+      "path": "../../cloudflare-tools/packages/cloudflare-runtime/tsconfig.node.json"
+    },
+    {
+      "path": "../../cloudflare-tools/packages/cloudflare-vite-plugin/tsconfig.node.json"
     }
   ]
 }
