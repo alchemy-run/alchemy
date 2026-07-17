@@ -218,13 +218,15 @@ span IDs, so Axiom can jump from a log line to its trace:
 Deploy again, make a few requests, and the waterfall in Axiom now
 shows the nested `bucket.get` span with your log line attached.
 
-## Swapping or removing the exporter
+## Swapping, stacking, or removing exporters
 
 Telemetry is just a Layer, so turning it off is removing
 `Axiom.Telemetry` from the `Layer.mergeAll` — without an exporter
-Layer, Effect's no-op tracer makes every span free. And because the
+Layer, Effect's no-op tracer makes every span free. Because the
 Axiom layer is sugar over the generic `Alchemy.Telemetry.otlp`
-binding layer, any OTLP backend slots into the same position:
+binding layer, any OTLP backend slots into the same position — and
+exporters *compose*, so shipping to Axiom and a second backend at
+once is just another entry in the merge:
 
 ```typescript
 import * as Alchemy from "alchemy";
@@ -232,6 +234,7 @@ import * as Alchemy from "alchemy";
 Effect.provide(
   Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
+    Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
     Alchemy.Telemetry.otlp({
       url: "https://collector.example.com",
       headers: { "x-api-key": apiKey },
@@ -240,8 +243,9 @@ Effect.provide(
 )
 ```
 
-`Alchemy.Telemetry.layer(...)` goes one step further and installs
-any custom exporter Layer. See
+Spans are serialized once and fanned out, so both backends see the
+same trace and span ids. `Alchemy.Telemetry.layer(...)` goes one
+step further and installs any custom exporter Layer. See
 [Telemetry](/infrastructure-as-effects/telemetry) for the full
 mechanics.
 

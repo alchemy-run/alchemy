@@ -52,7 +52,10 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as OtlpLogger from "effect/unstable/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/unstable/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/unstable/observability/OtlpSerialization";
@@ -76,7 +79,7 @@ export type TelemetryLayer = Layer.Layer<never, any, any>;
  * {@link unpackEnvValue} — it handles all three shapes (packed JSON,
  * Redacted marker, and a raw string set directly in the environment).
  */
-const readBound = (key: string): Effect.Effect<string | undefined> =>
+const readBoundValue = (key: string): Effect.Effect<unknown> =>
   Config.string(key).pipe(
     Config.withDefault(undefined),
     Effect.orElseSucceed(() => undefined),
@@ -85,13 +88,19 @@ const readBound = (key: string): Effect.Effect<string | undefined> =>
         return undefined;
       }
       const value = unpackEnvValue<unknown>(raw);
-      const inner = Redacted.isRedacted(value) ? Redacted.value(value) : value;
-      return inner === undefined
+      return Redacted.isRedacted(value) ? Redacted.value(value) : value;
+    }),
+  );
+
+const readBound = (key: string): Effect.Effect<string | undefined> =>
+  readBoundValue(key).pipe(
+    Effect.map((inner) =>
+      inner === undefined
         ? undefined
         : typeof inner === "string"
           ? inner
-          : String(inner);
-    }),
+          : String(inner),
+    ),
   );
 
 /**
@@ -154,10 +163,38 @@ const parseOtlpHeaders = (
 };
 
 /**
- * Resolve one signal's OTLP endpoint + headers from the standard env vars:
- * `OTEL_EXPORTER_OTLP_{SIGNAL}_ENDPOINT` is used as-is; otherwise the base
- * `OTEL_EXPORTER_OTLP_ENDPOINT` gets `/v1/{signal}` appended (matching the
- * OpenTelemetry SDK spec). Headers fall back per-signal → base.
+ * One export target for one signal, as stored in the bound destination
+ * list: a concrete OTLP/HTTP URL and the headers to send with it.
+ */
+interface ResolvedSignal {
+  url: string;
+  headers?: Record<string, string> | undefined;
+}
+
+/**
+ * One export destination in the bound list — the resolved form of one
+ * {@link Telemetry.otlp} layer.
+ */
+interface ResolvedDestination {
+  traces?: ResolvedSignal | undefined;
+  logs?: ResolvedSignal | undefined;
+  metrics?: ResolvedSignal | undefined;
+}
+
+/**
+ * The single env binding carrying every configured destination as a JSON
+ * array of {@link ResolvedDestination}. One key (instead of per-signal
+ * keys) is what lets multiple `Telemetry.otlp` layers compose — each layer
+ * build appends its destination and rebinds the full list.
+ */
+const EXPORTERS_KEY = "ALCHEMY_OTEL_EXPORTERS";
+
+/**
+ * Resolve one signal's endpoint + headers from the standard OpenTelemetry
+ * env vars (`OTEL_EXPORTER_OTLP_{SIGNAL}_ENDPOINT` as-is, or the base
+ * endpoint with `/v1/{signal}` appended; headers per-signal → base). This
+ * forms an *implicit extra destination*, so platform-injected OTLP config
+ * exports without any layer.
  */
 const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS") =>
   Effect.gen(function* () {
@@ -175,49 +212,149 @@ const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS") =>
     const rawHeaders =
       (yield* readBound(`OTEL_EXPORTER_OTLP_${signal}_HEADERS`)) ??
       (yield* readBound("OTEL_EXPORTER_OTLP_HEADERS"));
-    return { url, headers: parseOtlpHeaders(rawHeaders) };
+    return { url, headers: parseOtlpHeaders(rawHeaders) } as ResolvedSignal;
   });
 
-const makeFromEnv = (options?: {
+/**
+ * Sentinel URLs the single exporter set posts to; the fanout client
+ * rewrites each POST to every configured destination for that signal.
+ * Serializing once through one exporter per signal is what keeps span ids
+ * consistent across destinations — Effect has a single `Tracer` service,
+ * so per-destination tracers would generate divergent trace ids.
+ */
+const SENTINEL = {
+  traces: "http://telemetry.alchemy.internal/v1/traces",
+  logs: "http://telemetry.alchemy.internal/v1/logs",
+  metrics: "http://telemetry.alchemy.internal/v1/metrics",
+} as const;
+
+/**
+ * Wrap the ambient `HttpClient` so a POST to a sentinel URL is re-sent to
+ * every destination configured for that signal (with the destination's own
+ * headers). A single healthy destination keeps the exporter alive: the
+ * first 2xx response is returned; per-destination failures are logged at
+ * debug and only surface when every destination fails.
+ */
+const fanoutClient = (
+  routes: ReadonlyMap<string, ResolvedSignal[]>,
+): Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient> =>
+  Layer.effect(
+    HttpClient.HttpClient,
+    Effect.gen(function* () {
+      const base = yield* HttpClient.HttpClient;
+      return HttpClient.transform(base, (effect, request) => {
+        const targets = routes.get(request.url);
+        if (targets === undefined) {
+          return effect;
+        }
+        return Effect.gen(function* () {
+          const results = yield* Effect.all(
+            targets.map((target) =>
+              Effect.result(
+                base.execute(
+                  request.pipe(
+                    HttpClientRequest.setUrl(target.url),
+                    HttpClientRequest.setHeaders(target.headers ?? {}),
+                  ),
+                ),
+              ),
+            ),
+            { concurrency: "unbounded" },
+          );
+          const healthy = results.find(
+            (result) =>
+              Result.isSuccess(result) &&
+              result.success.status >= 200 &&
+              result.success.status < 300,
+          );
+          const anySuccess =
+            healthy ?? results.find((result) => Result.isSuccess(result));
+          if (anySuccess !== undefined && Result.isSuccess(anySuccess)) {
+            for (const result of results) {
+              if (result !== anySuccess && Result.isFailure(result)) {
+                yield* Effect.logDebug(
+                  "telemetry destination failed",
+                  result.failure,
+                );
+              }
+            }
+            return anySuccess.success;
+          }
+          const failure = results.find((result) => Result.isFailure(result));
+          return yield* failure !== undefined && Result.isFailure(failure)
+            ? Effect.fail(failure.failure)
+            : effect;
+        });
+      });
+    }),
+  );
+
+const makeExporterLayer = (options?: {
   exportInterval?: Duration.Input;
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
-      const [traces, logs, metrics] = yield* Effect.all([
+      // Depending on the secret/plain packing path, the bound list arrives
+      // as a JSON string or already parsed into an array.
+      const rawList = yield* readBoundValue(EXPORTERS_KEY);
+      const bound: ResolvedDestination[] = Array.isArray(rawList)
+        ? (rawList as ResolvedDestination[])
+        : typeof rawList === "string" && rawList !== ""
+          ? yield* Effect.try(
+              () => JSON.parse(rawList) as ResolvedDestination[],
+            )
+          : [];
+      // The standard OTEL_* env vars form an implicit extra destination.
+      const [stdTraces, stdLogs, stdMetrics] = yield* Effect.all([
         signalConfig("TRACES"),
         signalConfig("LOGS"),
         signalConfig("METRICS"),
       ]);
-      if (traces === undefined && logs === undefined && metrics === undefined) {
+      const destinations: ResolvedDestination[] = [
+        ...bound,
+        ...(stdTraces || stdLogs || stdMetrics
+          ? [{ traces: stdTraces, logs: stdLogs, metrics: stdMetrics }]
+          : []),
+      ];
+      const targets = (signal: keyof ResolvedDestination) =>
+        destinations.flatMap((destination) => {
+          const resolved = destination[signal];
+          return resolved !== undefined ? [resolved] : [];
+        });
+      const traces = targets("traces");
+      const logs = targets("logs");
+      const metrics = targets("metrics");
+      if (traces.length === 0 && logs.length === 0 && metrics.length === 0) {
         return Layer.empty;
       }
       const resource = yield* defaultResource;
+      const routes = new Map<string, ResolvedSignal[]>();
       const layers: Layer.Layer<never, never, any>[] = [];
-      if (traces !== undefined) {
+      if (traces.length > 0) {
+        routes.set(SENTINEL.traces, traces);
         layers.push(
           OtlpTracer.layer({
-            url: traces.url,
-            headers: traces.headers,
+            url: SENTINEL.traces,
             resource,
             exportInterval: options?.exportInterval,
           }),
         );
       }
-      if (logs !== undefined) {
+      if (logs.length > 0) {
+        routes.set(SENTINEL.logs, logs);
         layers.push(
           OtlpLogger.layer({
-            url: logs.url,
-            headers: logs.headers,
+            url: SENTINEL.logs,
             resource,
             exportInterval: options?.exportInterval,
           }),
         );
       }
-      if (metrics !== undefined) {
+      if (metrics.length > 0) {
+        routes.set(SENTINEL.metrics, metrics);
         layers.push(
           OtlpMetrics.layer({
-            url: metrics.url,
-            headers: metrics.headers,
+            url: SENTINEL.metrics,
             resource,
             exportInterval: options?.exportInterval,
           }),
@@ -225,11 +362,12 @@ const makeFromEnv = (options?: {
       }
       return Layer.mergeAll(...(layers as [Layer.Layer<never>])).pipe(
         Layer.provide(OtlpSerialization.layerJson),
+        Layer.provide(fanoutClient(routes)),
       );
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning(
-          "Invalid OTEL_* telemetry configuration; telemetry disabled",
+          "Invalid telemetry configuration; telemetry disabled",
           cause,
         ).pipe(Effect.as(Layer.empty)),
       ),
@@ -253,7 +391,7 @@ const makeFromEnv = (options?: {
  * A malformed configuration degrades to `Layer.empty` with a warning
  * instead of failing the event.
  */
-const fromBoundConfig: TelemetryLayer = makeFromEnv({
+const fromBoundConfig: TelemetryLayer = makeExporterLayer({
   exportInterval: "1 hour",
 });
 
@@ -262,7 +400,7 @@ const fromBoundConfig: TelemetryLayer = makeFromEnv({
  * the standard periodic export intervals, since a server's root scope only
  * flushes at shutdown.
  */
-const fromBoundConfigProcess: TelemetryLayer = makeFromEnv();
+const fromBoundConfigProcess: TelemetryLayer = makeExporterLayer();
 
 const reference = Context.Reference<TelemetryLayer>("alchemy/Telemetry", {
   defaultValue: () => fromBoundConfig,
@@ -274,13 +412,17 @@ const reference = Context.Reference<TelemetryLayer>("alchemy/Telemetry", {
  * event's request scope, so scoped exporters flush when the request scope
  * finalizes.
  *
- * Provide it on the Function/Worker's init Effect
- * (`Effect.provide(Telemetry.layer(...))`): building the returned Layer
- * registers the exporter Layer on the current runtime context, where the
- * runtime bridges pick it up per event. Handlers' request-time context is
- * assembled by the bridge, so a plain `Layer.succeed` of the reference on
- * the init Effect would never reach them — the registration is what makes
- * the override visible at request time.
+ * Custom layers COMPOSE with the built-in OTLP destinations and with each
+ * other: loggers and metric exporters merge; a custom `Tracer` (a single
+ * Effect service) replaces the built-in one.
+ *
+ * Provide it on the Function/Worker's init Effect (merged into the single
+ * `Effect.provide`): building the returned Layer registers the exporter
+ * Layer on the current runtime context, where the runtime bridges pick it
+ * up per event. Handlers' request-time context is assembled by the bridge,
+ * so a plain `Layer.succeed` of the reference on the init Effect would
+ * never reach them — the registration is what makes it visible at request
+ * time.
  */
 const telemetryLayer = (layer: TelemetryLayer): Layer.Layer<never> =>
   Layer.effect(
@@ -288,7 +430,10 @@ const telemetryLayer = (layer: TelemetryLayer): Layer.Layer<never> =>
     Effect.gen(function* () {
       const ctx = yield* CurrentRuntimeContext;
       if (ctx !== undefined) {
-        ctx.telemetry = layer;
+        ctx.telemetry =
+          ctx.telemetry === undefined
+            ? layer
+            : Layer.mergeAll(ctx.telemetry, layer);
       }
       return layer;
     }),
@@ -336,33 +481,115 @@ export interface OtlpOptions {
 }
 
 /**
- * Serialize a headers record into the OTLP `k=v,k2=v2` wire form as a
- * single Output. If any value is `Redacted` the whole composed value is
- * `Redacted`, so it binds as a secret.
+ * A placeholder in the destinations template pointing at one captured
+ * Input value.
  */
-const headersValue = (
-  headers: Record<string, OtlpHeaderValue>,
+interface Placeholder {
+  readonly $input: number;
+}
+
+/**
+ * Per-runtime-context accumulator: every `Telemetry.otlp` layer built for
+ * the same host appends its destination here and rebinds the full list, so
+ * merged layers compose instead of clobbering each other.
+ */
+const rcDestinations = new WeakMap<object, OtlpOptions[]>();
+
+/**
+ * Compose the full destination list into a single Output: capture every
+ * Input (urls, header values) into an `Output.all`, then materialize the
+ * JSON array of {@link ResolvedDestination}. If any captured value is
+ * `Redacted`, the whole JSON binds as a secret.
+ */
+const destinationsOutput = (
+  list: OtlpOptions[],
 ): Output.Output<string | Redacted.Redacted<string>> => {
-  const keys = Object.keys(headers);
+  const inputs: unknown[] = [];
+  const capture = (value: unknown): Placeholder => {
+    inputs.push(value);
+    return { $input: inputs.length - 1 };
+  };
+  const captureHeaders = (
+    headers: Record<string, OtlpHeaderValue> | undefined,
+  ): Record<string, Placeholder> | undefined =>
+    headers === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(headers).map(([key, value]) => [key, capture(value)]),
+        );
+  const template = list.map((options) => ({
+    url: options.url !== undefined ? capture(options.url) : undefined,
+    headers: captureHeaders(options.headers),
+    traces: options.traces && {
+      url: capture(options.traces.url),
+      headers: captureHeaders(options.traces.headers),
+    },
+    logs: options.logs && {
+      url: capture(options.logs.url),
+      headers: captureHeaders(options.logs.headers),
+    },
+    metrics: options.metrics && {
+      url: capture(options.metrics.url),
+      headers: captureHeaders(options.metrics.headers),
+    },
+  }));
   return (
     Output.all(
-      ...keys.map((key) => Output.asOutput(headers[key] as never)),
-    ) as Output.Output<(string | Redacted.Redacted<string>)[]>
+      ...inputs.map((input) => Output.asOutput(input as never)),
+    ) as Output.Output<unknown[]>
   ).pipe(
     Output.map((values) => {
       let secret = false;
-      const parts = keys.map((key, i) => {
-        let value = values[i];
+      const resolve = (placeholder: Placeholder): string => {
+        let value = values[placeholder.$input];
         if (Redacted.isRedacted(value)) {
           secret = true;
           value = Redacted.value(value);
         }
-        // Escape the OTLP headers-format delimiters; the runtime read side
-        // URL-decodes values (per the OpenTelemetry spec).
-        return `${key}=${/[,=]/.test(value) ? encodeURIComponent(value) : value}`;
+        return typeof value === "string" ? value : String(value);
+      };
+      const resolveHeaders = (
+        headers: Record<string, Placeholder> | undefined,
+      ): Record<string, string> | undefined =>
+        headers === undefined
+          ? undefined
+          : Object.fromEntries(
+              Object.entries(headers).map(([key, value]) => [
+                key,
+                resolve(value),
+              ]),
+            );
+      const resolveSignal = (
+        entry: { url: Placeholder; headers?: Record<string, Placeholder> },
+        base: { url?: Placeholder; headers?: Record<string, Placeholder> },
+        path: string,
+      ): ResolvedSignal | undefined => {
+        if (entry !== undefined) {
+          return {
+            url: resolve(entry.url),
+            headers: resolveHeaders(entry.headers),
+          };
+        }
+        if (base.url !== undefined) {
+          return {
+            url: `${resolve(base.url).replace(/\/$/, "")}/v1/${path}`,
+            headers: resolveHeaders(base.headers),
+          };
+        }
+        return undefined;
+      };
+      const destinations = template.flatMap((entry): ResolvedDestination[] => {
+        const destination: ResolvedDestination = {
+          traces: resolveSignal(entry.traces as never, entry, "traces"),
+          logs: resolveSignal(entry.logs as never, entry, "logs"),
+          metrics: resolveSignal(entry.metrics as never, entry, "metrics"),
+        };
+        return destination.traces || destination.logs || destination.metrics
+          ? [destination]
+          : [];
       });
-      const joined = parts.join(",");
-      return secret ? Redacted.make(joined) : joined;
+      const json = JSON.stringify(destinations);
+      return secret ? Redacted.make(json) : json;
     }),
   );
 };
@@ -377,12 +604,15 @@ const headersValue = (
  * exporter reads the bound values back and ships traces, logs, and metrics
  * over OTLP/HTTP JSON, flushed as each event's scope closes.
  *
- * Compose it into the Function/Worker's single `Effect.provide`:
+ * Exporters COMPOSE: merge several `otlp` layers (or vendor sugar like
+ * `Axiom.Telemetry`) and every destination receives the telemetry — spans
+ * are serialized once, so trace/span ids agree across destinations:
  *
  * ```ts
  * Effect.provide(
  *   Layer.mergeAll(
  *     Cloudflare.R2.ReadWriteBucketBinding,
+ *     Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
  *     Alchemy.Telemetry.otlp({
  *       url: "https://api.honeycomb.io",
  *       headers: { "x-honeycomb-team": apiKey },
@@ -390,9 +620,6 @@ const headersValue = (
  *   ),
  * )
  * ```
- *
- * Vendor sugar can wrap this — e.g. `Axiom.Telemetry({ token, traces })`
- * binds Axiom dataset endpoints and an ingest token.
  */
 const otlp = (options: OtlpOptions): Layer.Layer<never> =>
   Layer.effect(
@@ -400,38 +627,22 @@ const otlp = (options: OtlpOptions): Layer.Layer<never> =>
     Effect.gen(function* () {
       const rc = yield* CurrentRuntimeContext;
       if (rc !== undefined && !globalThis.__ALCHEMY_RUNTIME__) {
-        const bind = (
-          key: string,
-          value: Input<string | Redacted.Redacted<string>> | undefined,
-        ) =>
-          value === undefined
-            ? Effect.void
-            : Effect.asVoid(rc.set(key, Output.asOutput(value as never)));
-        const bindSignal = (
-          name: "TRACES" | "LOGS" | "METRICS",
-          signal: OtlpSignalOptions | undefined,
-        ) =>
-          Effect.all([
-            bind(`OTEL_EXPORTER_OTLP_${name}_ENDPOINT`, signal?.url),
-            bind(
-              `OTEL_EXPORTER_OTLP_${name}_HEADERS`,
-              signal?.headers && headersValue(signal.headers),
-            ),
-          ]);
-        yield* Effect.all([
-          bind("OTEL_EXPORTER_OTLP_ENDPOINT", options.url),
-          bind(
-            "OTEL_EXPORTER_OTLP_HEADERS",
-            options.headers && headersValue(options.headers),
-          ),
-          bindSignal("TRACES", options.traces),
-          bindSignal("LOGS", options.logs),
-          bindSignal("METRICS", options.metrics),
-          bind("OTEL_SERVICE_NAME", options.serviceName),
-        ]);
+        // Accumulate this destination with any bound by sibling layers on
+        // the same host, and rebind the full list (rebinding the same key
+        // just overwrites, so build order doesn't matter).
+        const list = rcDestinations.get(rc) ?? [];
+        list.push(options);
+        rcDestinations.set(rc, list);
+        yield* rc.set(EXPORTERS_KEY, destinationsOutput(list));
+        if (options.serviceName !== undefined) {
+          yield* rc.set(
+            "OTEL_SERVICE_NAME",
+            Output.asOutput(options.serviceName as never),
+          );
+        }
       }
-      // The runtime half reads the bound values back per event (or once per
-      // process via `provideProcessTelemetry`).
+      // The runtime half reads the bound destinations back per event (or
+      // once per process via `provideProcessTelemetry`).
       return fromBoundConfig;
     }),
   );
@@ -463,9 +674,11 @@ export const Telemetry = Object.assign(reference, {
  * A failed build (bad user Layer, config error) degrades to an empty
  * Context with a warning instead of failing the event.
  *
- * `override` is the Layer registered on the runtime context by
- * {@link Telemetry.layer} during init; when absent the reference (and so
- * the env-driven default) applies.
+ * `override` is the (possibly merged) custom Layer registered on the
+ * runtime context by {@link Telemetry.layer} during init. It composes with
+ * — rather than replaces — the bound OTLP destinations: loggers and metric
+ * exporters merge, and a custom `Tracer` (a single Effect service) wins
+ * over the built-in one.
  *
  * Declared `R = never`: the Layer's actual requirements (`HttpClient`,
  * `ConfigProvider`, …) are satisfied at runtime by the bridge's surrounding
@@ -475,10 +688,15 @@ export const buildEventTelemetry = (
   context: Context.Context<never>,
   scope: Scope.Scope,
   override?: TelemetryLayer | undefined,
+  base?: TelemetryLayer | undefined,
 ): Effect.Effect<Context.Context<never>> =>
-  Effect.suspend(() =>
-    Layer.buildWithScope(override ?? Context.get(context, reference), scope),
-  ).pipe(
+  Effect.suspend(() => {
+    const bound = base ?? Context.get(context, reference);
+    return Layer.buildWithScope(
+      override === undefined ? bound : Layer.mergeAll(bound, override),
+      scope,
+    );
+  }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("Failed to build telemetry layer", cause).pipe(
         Effect.as(Context.empty()),
@@ -497,9 +715,9 @@ export const buildEventTelemetry = (
  * closes on graceful exit.
  *
  * `runtimeContext` is the entrypoint's runtime context; its `telemetry`
- * field carries the override registered by {@link Telemetry.layer} during
- * init. Without an override the bound-config exporter (with standard
- * periodic export intervals) applies.
+ * field carries the custom Layer(s) registered by {@link Telemetry.layer}
+ * during init, composed with the bound OTLP destinations (read with the
+ * standard periodic export intervals).
  */
 export const provideProcessTelemetry =
   (runtimeContext?: { telemetry?: TelemetryLayer | undefined }) =>
@@ -512,7 +730,8 @@ export const provideProcessTelemetry =
       const telemetry = yield* buildEventTelemetry(
         context,
         scope,
-        runtimeContext?.telemetry ?? fromBoundConfigProcess,
+        runtimeContext?.telemetry,
+        fromBoundConfigProcess,
       );
       return yield* Effect.provideContext(effect, telemetry);
     });

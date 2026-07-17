@@ -126,8 +126,12 @@ describe("Cloudflare Worker Telemetry", () => {
         yield* expectUrlContains(collected, "test.child-span");
         // Log record shipped by the OTLP logger.
         yield* expectUrlContains(collected, "did-work-log");
-        // Default resource attributes stamped by fromEnv.
+        // Default resource attributes stamped by the exporter.
         yield* expectUrlContains(collected, "alchemy.stack");
+        // Exporter composition: the fixture merges a second otlp layer
+        // whose traces url lands under /v1/second-traces — same spans,
+        // second destination.
+        yield* expectUrlContains(collected, "second-traces");
 
         // Custom exporter path: Effect.provide(Telemetry.layer(...)) on
         // the Worker init Effect replaces the built-in OTLP exporter.

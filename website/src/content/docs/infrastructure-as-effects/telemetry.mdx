@@ -72,6 +72,48 @@ Vendor layers wrap this. [`Axiom.Telemetry`](/axiom) takes an ingest
 [Tutorial Part 6](/cloudflare/tutorial/part-6) for the end-to-end
 walkthrough.
 
+For a manually-configured backend — a url and an API key — resolve
+the secret with `Config` in the layer's init and pass it as a header.
+The `Config` read binds the value at deploy time, and because it is
+`Redacted` it travels as a secret binding:
+
+```typescript
+const Honeycomb = Layer.unwrap(
+  Effect.gen(function* () {
+    const key = yield* Config.redacted("HONEYCOMB_API_KEY");
+    return Alchemy.Telemetry.otlp({
+      url: "https://api.honeycomb.io",
+      headers: { "x-honeycomb-team": key },
+    });
+  }),
+);
+```
+
+## Multiple destinations
+
+Exporter layers compose: merge as many as you need and every
+destination receives the telemetry. Telemetry is serialized once and
+fanned out per signal, so trace and span ids agree across
+destinations — the same trace is queryable in both backends:
+
+```typescript
+Effect.provide(
+  Layer.mergeAll(
+    Cloudflare.R2.ReadWriteBucketBinding,
+    Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+    Alchemy.Telemetry.otlp({
+      url: "https://collector.internal.example.com",
+      headers: { "x-api-key": apiKey },
+    }),
+  ),
+)
+```
+
+Each destination only receives the signals it configures — here Axiom
+gets traces and logs while the second collector gets all three. A
+destination that fails to accept an export is logged and skipped; one
+healthy destination keeps the exporter alive.
+
 ## Service identity
 
 The exported `service.name` defaults to the deployed Function/Worker's
@@ -127,6 +169,10 @@ const object = yield* bucket
 Layer is built per event into the event's request scope, so a custom
 exporter gets the same flush-on-close behavior as the built-in one.
 
+Custom layers also compose with the OTLP destinations and with each
+other: loggers and metric exporters merge, while a custom `Tracer` —
+a single Effect service — replaces the built-in one.
+
 :::caution
 A custom Layer for per-event runtimes should disable or greatly
 lengthen its periodic export intervals (e.g.
@@ -138,13 +184,13 @@ scope close delivers everything.
 
 ## Under the hood
 
-The binding travels as environment bindings on the host: building
-`Telemetry.otlp` at deploy time binds the resolved urls and headers
-under the standard `OTEL_EXPORTER_OTLP_*` names (secrets through the
-secret channel), and the runtime exporter reads them back per event.
-That also means an environment that already sets those standard
-variables exports without any layer configuration — useful when the
-platform injects OTLP settings for you.
+The binding travels as environment bindings on the host: each
+`Telemetry.otlp` layer appends its destination to a single bound
+destination list (secrets through the secret channel), and the
+runtime exporter reads the list back per event. An environment that
+sets the standard `OTEL_EXPORTER_OTLP_*` variables contributes one
+implicit extra destination — useful when the platform injects OTLP
+settings for you.
 
 ## Where next
 

@@ -62,14 +62,20 @@ export default class OtelTracedWorker extends Cloudflare.Worker<OtelTracedWorker
       }),
     };
   }).pipe(
-    // The telemetry binding layer, composed like any other binding: the
+    // The telemetry binding layers, composed like any other binding: the
     // collector url is resolved once at deploy time and bound onto the
-    // Worker; nothing telemetry-specific appears in handler code.
+    // Worker; nothing telemetry-specific appears in handler code. Two
+    // merged otlp layers = two destinations — spans are serialized once
+    // and fanned out to both (the second lands under `/v1/second-traces`,
+    // which the collector records as signal "second-traces").
     Effect.provide(
       Layer.unwrap(
         Effect.gen(function* () {
           const url = yield* Config.string("COLLECTOR_URL");
-          return Telemetry.otlp({ url, serviceName: "otel-traced-test" });
+          return Layer.mergeAll(
+            Telemetry.otlp({ url, serviceName: "otel-traced-test" }),
+            Telemetry.otlp({ traces: { url: `${url}/v1/second-traces` } }),
+          );
         }),
       ),
     ),
