@@ -6,7 +6,7 @@ import {
 } from "@/Auth/AuthProvider.ts";
 import { AlchemyProfile, ProfileLive } from "@/Auth/Profile.ts";
 import { NodeServices } from "@effect/platform-node";
-import { expect, it } from "@effect/vitest";
+import { expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

@@ -1,7 +1,8 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
+import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -202,8 +203,10 @@ test.skipIf(!process.env.DEBUG_RAW_STREAM)(
   Effect.gen(function* () {
     const out = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-    const fs = yield* Effect.promise(() => import("node:fs"));
-    const print = (s: string) => fs.writeSync(2, s);
+    // Through the Console SERVICE so the runner captures it per-test (raw
+    // fd writes bypass capture and corrupt the reporter/TUI).
+    const console = yield* ConsoleService.Console;
+    const print = (s: string) => console.log(s);
 
     for (const includeUsage of ["0", "1"] as const) {
       const res = yield* client
@@ -521,13 +524,13 @@ test(
       );
     expect(res.status).toBe(200);
 
-    // Write to fd 2 (stderr) with fs.writeSync to bypass vitest's stdout
-    // capture and Node's stream buffering — chunks land in the terminal as
-    // soon as they arrive from the network.
-    const fs = yield* Effect.promise(() => import("node:fs"));
-    const print = (s: string) => fs.writeSync(2, s);
+    // Through the Console SERVICE: the runner buffers it per-test (the TUI
+    // detail pane live-tails it), and nothing leaks into the reporter
+    // output. Raw fd writes (the old fs.writeSync(2, ...)) bypass capture.
+    const console = yield* ConsoleService.Console;
+    const print = (s: string) => console.log(s);
 
-    print("\n--- live stream begin ---\n");
+    print("--- live stream begin ---");
     let collected = "";
 
     yield* res.stream.pipe(

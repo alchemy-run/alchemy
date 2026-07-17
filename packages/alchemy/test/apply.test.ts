@@ -11,8 +11,8 @@ import {
   type ResourceState,
   State,
 } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

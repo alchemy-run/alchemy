@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -108,7 +108,7 @@ test(
   "RpcServer.toHttpEffect: unary RPC response",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    console.log("url:", url);
+    yield* Effect.log("url:", url);
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);

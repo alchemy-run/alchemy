@@ -1,6 +1,7 @@
 import cloudflare, {
   type CloudflareVitePluginOptions,
 } from "@distilled.cloud/cloudflare-vite-plugin";
+import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { createRequire } from "node:module";
@@ -42,6 +43,7 @@ export const viteBuild = (
     const outputPlugin = yield* viteBuildOutputPlugin({
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
+    const console = yield* ConsoleService.Console;
     yield* Effect.promise(async () => {
       const vite = await loadVite(rootDir);
       const builder = await vite.createBuilder(
@@ -49,6 +51,14 @@ export const viteBuild = (
           root: rootDir,
           define: getDefine(env),
           plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
+          customLogger: makeViteLogger(console),
+          // Disables the NATIVE rolldown progress reporter ("transforming…",
+          // "rendering chunks…", "computing gzip size…"): it prints from
+          // Rust straight to fd 1 and cannot be intercepted from JS — vite
+          // only enables it when logLevel >= info. Info-level build
+          // summaries are suppressed with it; warnings and errors still
+          // reach the customLogger above.
+          logLevel: "warn",
         },
         // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
         // Originally we used `undefined` here, but this caused the static site build to fail.

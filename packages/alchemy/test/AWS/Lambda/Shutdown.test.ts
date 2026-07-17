@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";

@@ -8,7 +8,7 @@ import {
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 

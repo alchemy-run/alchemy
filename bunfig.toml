@@ -1,6 +1,12 @@
 [install]
 minimumReleaseAge = 259200
 minimumReleaseAgeExcludes = [
+  "@opentui/core",
+  "@opentui/core-darwin-arm64",
+  "@opentui/core-darwin-x64",
+  "@opentui/core-linux-x64",
+  "@opentui/core-linux-arm64",
+  "@opentui/core-win32-x64",
   "@distilled.cloud/aws",
   "@distilled.cloud/axiom",
   "@distilled.cloud/cloudflare-rolldown-plugin",

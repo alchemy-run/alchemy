@@ -1,5 +1,5 @@
 import * as Alchemy from "@/index.ts";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";

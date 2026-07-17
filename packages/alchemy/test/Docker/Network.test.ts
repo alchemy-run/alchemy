@@ -2,11 +2,10 @@ import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { describe } from "vitest";
 import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
