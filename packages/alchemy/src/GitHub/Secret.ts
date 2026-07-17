@@ -1,9 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import { type Environment, resolveEnvironmentName } from "./Environment.ts";
-import { Octokit } from "./Octokit.ts";
+import { octokitFor } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface SecretProps {
@@ -34,6 +36,15 @@ export interface SecretProps {
    * environment name or a `GitHub.Environment` resource.
    */
   environment?: string | Environment;
+
+  /**
+   * Override the GitHub host or API base URL for this resource only (e.g.
+   * `github.example.com` for GitHub Enterprise). Falls back to
+   * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
+   * provider. Changing it replaces the resource — the same name on a
+   * different GitHub instance is a different physical resource.
+   */
+  baseUrl?: string;
 }
 
 export interface Secret extends Resource<
@@ -148,6 +159,15 @@ async function encryptValue(
 
 export const SecretProvider = () =>
   Provider.succeed(Secret, {
+    // The only structural change is the host: the same secret name on a
+    // different GitHub instance is a different physical secret.
+    diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return;
+      if (olds !== undefined && (yield* gitHubBaseUrlChanged(olds, news))) {
+        return { action: "replace" };
+      }
+    }),
+
     // Non-listable: a GitHub Actions secret is keyed entirely by its parent
     // (owner, repository[, environment], name) which arrive as props — there is
     // no ambient owner/repo scope to enumerate from, `list()` takes no input,
@@ -185,7 +205,7 @@ export const SecretProvider = () =>
   });
 
 const upsertSecret = Effect.fn(function* (props: SecretProps) {
-  const octokit = yield* Octokit;
+  const octokit = yield* octokitFor(props.baseUrl);
   const plaintext = Redacted.value(props.value);
   const environment = resolveEnvironmentName(props.environment);
 
@@ -232,7 +252,7 @@ const upsertSecret = Effect.fn(function* (props: SecretProps) {
 });
 
 const deleteSecret = Effect.fn(function* (props: SecretProps) {
-  const octokit = yield* Octokit;
+  const octokit = yield* octokitFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
   yield* Effect.tryPromise(async () => {
     try {

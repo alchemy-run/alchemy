@@ -2,7 +2,8 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Octokit } from "./Octokit.ts";
+import { gitHubBaseUrlChanged } from "./BaseUrl.ts";
+import { Octokit, octokitFor } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface EnvironmentProps {
@@ -65,6 +66,15 @@ export interface EnvironmentProps {
   deploymentBranchPolicy?:
     | { protectedBranches: true }
     | { customBranchPolicies: string[] };
+
+  /**
+   * Override the GitHub host or API base URL for this resource only (e.g.
+   * `github.example.com` for GitHub Enterprise). Falls back to
+   * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
+   * provider. Changing it replaces the resource — the same name on a
+   * different GitHub instance is a different physical resource.
+   */
+  baseUrl?: string;
 }
 
 export interface Environment extends Resource<
@@ -219,21 +229,22 @@ export const EnvironmentProvider = () =>
     stables: ["environmentId", "nodeId"],
 
     // The environment name is its path identity — GitHub has no rename, so
-    // changing owner, repository, or name replaces the resource.
+    // changing owner, repository, name, or the host replaces the resource.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
+      if (olds === undefined) return;
       if (
-        olds !== undefined &&
-        (news.owner !== olds.owner ||
-          news.repository !== olds.repository ||
-          news.name !== olds.name)
+        news.owner !== olds.owner ||
+        news.repository !== olds.repository ||
+        news.name !== olds.name ||
+        (yield* gitHubBaseUrlChanged(olds, news))
       ) {
         return { action: "replace" };
       }
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(news.baseUrl);
 
       // Resolve reviewer logins/slugs to the numeric IDs the API expects.
       const reviewers = yield* Effect.tryPromise({
@@ -413,7 +424,7 @@ export const EnvironmentProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       yield* Effect.tryPromise({
         try: async () => {

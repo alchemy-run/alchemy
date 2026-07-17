@@ -1,10 +1,12 @@
 import { readEnvCredentials } from "@/GitHub/AuthProvider";
 import { GitHubCredentials, fromToken } from "@/GitHub/Credentials";
 import {
+  gitHubBaseUrlChanged,
   githubHostname,
   normalizeGitHubBaseUrl,
   resolveGitHubBaseUrlFromEnv,
 } from "@/GitHub/BaseUrl";
+import { octokitFor } from "@/GitHub/Octokit";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -169,6 +171,63 @@ describe("readEnvCredentials", () => {
       ),
     );
     expect(Result.isFailure(result)).toBe(true);
+  });
+});
+
+describe("gitHubBaseUrlChanged", () => {
+  const changed = (a: string | undefined, b: string | undefined) =>
+    Effect.runSync(gitHubBaseUrlChanged({ baseUrl: a }, { baseUrl: b }));
+
+  test("cosmetic rewrites of the same host do not count as a change", () => {
+    expect(
+      changed("github.example.com", "https://github.example.com/api/v3"),
+    ).toBe(false);
+    expect(changed(undefined, "github.com")).toBe(false);
+    expect(changed("acme.ghe.com", "https://api.acme.ghe.com")).toBe(false);
+  });
+
+  test("moving between hosts counts as a change", () => {
+    expect(changed(undefined, "github.example.com")).toBe(true);
+    expect(changed("github.example.com", undefined)).toBe(true);
+    expect(changed("github.example.com", "other.example.com")).toBe(true);
+  });
+});
+
+describe("octokitFor", () => {
+  const octokitOf = (
+    credsBaseUrl: string | undefined,
+    resourceBaseUrl: string | undefined,
+  ) =>
+    Effect.runSync(
+      octokitFor(resourceBaseUrl).pipe(
+        Effect.provide(
+          fromToken(
+            "test-token",
+            credsBaseUrl !== undefined ? { baseUrl: credsBaseUrl } : undefined,
+          ),
+        ),
+      ),
+    );
+
+  test("falls back to the credentials' host when no override is given", () => {
+    const octokit = octokitOf("github.example.com", undefined);
+    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
+      "https://github.example.com/api/v3",
+    );
+  });
+
+  test("a per-resource baseUrl overrides the credentials' host", () => {
+    const octokit = octokitOf("github.example.com", "other.example.com");
+    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
+      "https://other.example.com/api/v3",
+    );
+  });
+
+  test("an explicit github.com override wins over an enterprise credential host", () => {
+    const octokit = octokitOf("github.example.com", "github.com");
+    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe(
+      "https://api.github.com",
+    );
   });
 });
 

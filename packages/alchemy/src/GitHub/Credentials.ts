@@ -23,7 +23,14 @@ export interface GitHubCredentialsService {
    * residency). `undefined` targets github.com.
    */
   readonly baseUrl?: string;
-  readonly octokit: () => Octokit;
+  /**
+   * Construct an Octokit for these credentials. Pass `override` to target a
+   * different host than the credentials' own `baseUrl` — `override.baseUrl`
+   * is used verbatim, including `undefined` for github.com (which is why the
+   * override is an object rather than an optional string: it distinguishes
+   * "no override" from "override to the github.com default").
+   */
+  readonly octokit: (override?: { baseUrl: string | undefined }) => Octokit;
 }
 
 export class GitHubCredentials extends Context.Service<
@@ -37,11 +44,13 @@ const make = (
 ): GitHubCredentialsService => ({
   token,
   baseUrl,
-  octokit: () =>
-    new Octokit({
+  octokit: (override) => {
+    const url = override !== undefined ? override.baseUrl : baseUrl;
+    return new Octokit({
       auth: Redacted.value(token),
-      ...(baseUrl !== undefined ? { baseUrl } : {}),
-    }),
+      ...(url !== undefined ? { baseUrl: url } : {}),
+    });
+  },
 });
 
 /**
@@ -93,11 +102,19 @@ export const fromEnv = () =>
  * Build a `GitHubCredentials` layer that resolves a token via the
  * Alchemy AuthProvider for the configured profile (defaults to
  * `default`, overridable with `ALCHEMY_PROFILE`).
+ *
+ * Pass `baseUrl` to hard-code the GitHub host — it takes precedence over
+ * whatever host the auth provider resolved from the profile config or
+ * environment. `GitHub.providers({ baseUrl })` threads its option here.
  */
-export const fromAuthProvider = () =>
+export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
   Layer.effect(
     GitHubCredentials,
     Effect.gen(function* () {
+      const fixedBaseUrl =
+        options?.baseUrl !== undefined
+          ? { baseUrl: yield* normalizeGitHubBaseUrl(options.baseUrl) }
+          : undefined;
       const profile = yield* AlchemyProfile;
       const auth = yield* getAuthProvider<
         GitHubAuthConfig,
@@ -110,7 +127,12 @@ export const fromAuthProvider = () =>
         Effect.flatMap((config) =>
           auth.read(profileName, config as GitHubAuthConfig),
         ),
-        Effect.map((creds) => make(creds.token, creds.baseUrl)),
+        Effect.map((creds) =>
+          make(
+            creds.token,
+            fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl,
+          ),
+        ),
         Effect.mapError(
           (e) =>
             new AuthError({

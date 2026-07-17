@@ -1,8 +1,10 @@
 import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import { type Environment, resolveEnvironmentName } from "./Environment.ts";
-import { Octokit } from "./Octokit.ts";
+import { Octokit, octokitFor } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface VariableProps {
@@ -32,6 +34,15 @@ export interface VariableProps {
    * environment name or a `GitHub.Environment` resource.
    */
   environment?: string | Environment;
+
+  /**
+   * Override the GitHub host or API base URL for this resource only (e.g.
+   * `github.example.com` for GitHub Enterprise). Falls back to
+   * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
+   * provider. Changing it replaces the resource — the same name on a
+   * different GitHub instance is a different physical resource.
+   */
+  baseUrl?: string;
 }
 
 export interface Variable extends Resource<
@@ -128,6 +139,15 @@ export const Variable = Resource<Variable>("GitHub.Variable");
 
 export const VariableProvider = () =>
   Provider.succeed(Variable, {
+    // The only structural change is the host: the same variable name on a
+    // different GitHub instance is a different physical variable.
+    diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return;
+      if (olds !== undefined && (yield* gitHubBaseUrlChanged(olds, news))) {
+        return { action: "replace" };
+      }
+    }),
+
     reconcile: Effect.fn(function* ({ news, olds }) {
       // A variable is keyed by its location (repo vs. environment). When the
       // location changed, the previous variable is orphaned: delete it before
@@ -219,7 +239,7 @@ export const VariableProvider = () =>
   });
 
 const getVariable = Effect.fn(function* (props: VariableProps) {
-  const octokit = yield* Octokit;
+  const octokit = yield* octokitFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
   return yield* Effect.tryPromise({
     try: async () => {
@@ -249,7 +269,7 @@ const getVariable = Effect.fn(function* (props: VariableProps) {
 });
 
 const createVariable = Effect.fn(function* (props: VariableProps) {
-  const octokit = yield* Octokit;
+  const octokit = yield* octokitFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
   yield* Effect.tryPromise(async () => {
     if (environment !== undefined) {
@@ -272,7 +292,7 @@ const createVariable = Effect.fn(function* (props: VariableProps) {
 });
 
 const updateVariable = Effect.fn(function* (props: VariableProps) {
-  const octokit = yield* Octokit;
+  const octokit = yield* octokitFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
   yield* Effect.tryPromise(async () => {
     if (environment !== undefined) {
@@ -295,7 +315,7 @@ const updateVariable = Effect.fn(function* (props: VariableProps) {
 });
 
 const deleteVariable = Effect.fn(function* (props: VariableProps) {
-  const octokit = yield* Octokit;
+  const octokit = yield* octokitFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
   yield* Effect.tryPromise(async () => {
     try {

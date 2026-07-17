@@ -48,6 +48,36 @@ back to `GITHUB_ACCESS_TOKEN` / `GITHUB_TOKEN`, and the `gh` CLI method
 runs `gh auth token --hostname <host>` (run
 `gh auth login --hostname <host>` once first).
 
+### Pin the host in code
+
+To fix the host for the whole app — independent of profile
+configuration or the environment — pass it to `providers()`:
+
+```typescript
+providers: GitHub.providers({ baseUrl: "github.example.com" }),
+```
+
+The auth provider sees the pinned host too: `alchemy login` stops
+prompting for it and authenticates against it directly.
+
+### Per-resource host override
+
+Every GitHub resource also takes its own `baseUrl` prop, so a single
+stack can span github.com and an enterprise instance:
+
+```typescript
+yield* GitHub.Repository("mirror", {
+  owner: "my-org",
+  name: "mirror",
+  baseUrl: "github.example.com",
+});
+```
+
+Resolution order is: resource `baseUrl` → `providers({ baseUrl })` →
+the host from the login profile or environment. Changing a resource's
+`baseUrl` replaces it — the same name on a different GitHub instance
+is a different physical resource.
+
 ## Token scopes
 
 - `repo` — always required.

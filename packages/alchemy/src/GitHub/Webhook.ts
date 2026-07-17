@@ -1,9 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../Input.ts";
+import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Octokit } from "./Octokit.ts";
+import { gitHubBaseUrlChanged } from "./BaseUrl.ts";
+import { Octokit, octokitFor } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import type { WebhookEventName } from "./RepositoryEventSource.ts";
 
@@ -58,6 +60,15 @@ export interface WebhookProps {
    * @default false
    */
   insecureSsl?: boolean;
+
+  /**
+   * Override the GitHub host or API base URL for this resource only (e.g.
+   * `github.example.com` for GitHub Enterprise). Falls back to
+   * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
+   * provider. Changing it replaces the resource — the same name on a
+   * different GitHub instance is a different physical resource.
+   */
+  baseUrl?: string;
 }
 
 export interface Webhook extends Resource<
@@ -140,8 +151,17 @@ export const WebhookProvider = () =>
   Provider.succeed(Webhook, {
     stables: ["webhookId"],
 
+    // The only structural change is the host: the same webhook on a
+    // different GitHub instance is a different physical webhook.
+    diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return;
+      if (olds !== undefined && (yield* gitHubBaseUrlChanged(olds, news))) {
+        return { action: "replace" };
+      }
+    }),
+
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(news.baseUrl);
 
       const config = {
         url: news.url as string,
@@ -254,7 +274,7 @@ export const WebhookProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       yield* Effect.tryPromise(async () => {
         try {
