@@ -5,6 +5,7 @@ import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
+import type { AiBinding } from "../AI/AiBinding.ts";
 import type { Gateway as AiGateway } from "../AI/Gateway.ts";
 import type { SearchInstance } from "../AI/SearchInstance.ts";
 import type { SearchNamespace } from "../AI/SearchNamespace.ts";
@@ -72,6 +73,7 @@ export type WorkerBindingResource =
   | Namespace
   | Queue
   | AiGateway
+  | AiBinding
   | SearchInstance
   | SearchNamespace
   | Dataset

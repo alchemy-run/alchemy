@@ -4,6 +4,7 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
+import { isAi } from "../AI/Ai.ts";
 import { isAiGateway } from "../AI/Gateway.ts";
 import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
@@ -227,6 +228,11 @@ const toBinding = (
       namespace: binding.name,
     };
   } else if (isAiGateway(binding)) {
+    return {
+      type: "ai",
+      name: bindingName,
+    };
+  } else if (isAi(binding)) {
     return {
       type: "ai",
       name: bindingName,

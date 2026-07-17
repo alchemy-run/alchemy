@@ -61,44 +61,46 @@ export type GetBindingType<T> =
                     ? Queue<unknown>
                     : T extends AI.Gateway
                       ? Ai
-                      : T extends AI.Search
-                        ? AiSearchInstance
-                        : T extends AI.SearchNamespace
-                          ? AiSearchNamespace
-                          : T extends Email.SendEmail
-                            ? SendEmail
-                            : T extends AnalyticsEngine.Dataset
-                              ? AnalyticsEngineDataset
-                              : T extends ArtifactsNs.Namespace
-                                ? Artifacts
-                                : T extends RateLimitBinding
-                                  ? RateLimit
-                                  : T extends ImagesNs.ImagesBinding
-                                    ? ImagesBinding
-                                    : T extends BrowserBinding
-                                      ? BrowserRun
-                                      : T extends HyperdriveNs.Connection
-                                        ? Hyperdrive
-                                        : T extends VersionMetadataBinding
-                                          ? WorkerVersionMetadata
-                                          : T extends WorkerLoaderResource
-                                            ? WorkerLoader
-                                            : T extends WorkflowLike<
-                                                  infer Params
-                                                >
-                                              ? Workflow<Params>
-                                              : T extends DurableObjectLike
-                                                ? DurableObjectNamespace<
-                                                    Exclude<
-                                                      T["Shape"],
-                                                      undefined
-                                                    >
+                      : T extends AI.AiBinding
+                        ? Ai
+                        : T extends AI.Search
+                          ? AiSearchInstance
+                          : T extends AI.SearchNamespace
+                            ? AiSearchNamespace
+                            : T extends Email.SendEmail
+                              ? SendEmail
+                              : T extends AnalyticsEngine.Dataset
+                                ? AnalyticsEngineDataset
+                                : T extends ArtifactsNs.Namespace
+                                  ? Artifacts
+                                  : T extends RateLimitBinding
+                                    ? RateLimit
+                                    : T extends ImagesNs.ImagesBinding
+                                      ? ImagesBinding
+                                      : T extends BrowserBinding
+                                        ? BrowserRun
+                                        : T extends HyperdriveNs.Connection
+                                          ? Hyperdrive
+                                          : T extends VersionMetadataBinding
+                                            ? WorkerVersionMetadata
+                                            : T extends WorkerLoaderResource
+                                              ? WorkerLoader
+                                              : T extends WorkflowLike<
+                                                    infer Params
                                                   >
-                                                : T extends Redacted<any>
-                                                  ? // redacteds are always stored as secret_text, so are always string
-                                                    // we JSON.stringify when not a Redacted<string>
-                                                    string
-                                                  : T;
+                                                ? Workflow<Params>
+                                                : T extends DurableObjectLike
+                                                  ? DurableObjectNamespace<
+                                                      Exclude<
+                                                        T["Shape"],
+                                                        undefined
+                                                      >
+                                                    >
+                                                  : T extends Redacted<any>
+                                                    ? // redacteds are always stored as secret_text, so are always string
+                                                      // we JSON.stringify when not a Redacted<string>
+                                                      string
+                                                    : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

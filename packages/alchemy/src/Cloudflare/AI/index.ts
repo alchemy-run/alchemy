@@ -1,3 +1,5 @@
+export * from "./Ai.ts";
+export * from "./AiBinding.ts";
 export * from "./CustomTopics.ts";
 export * from "./Dataset.ts";
 export * from "./DurableObjectChatPersistence.ts";
