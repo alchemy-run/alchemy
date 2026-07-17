@@ -5,7 +5,6 @@ import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import type { AiBinding } from "../AI/AiBinding.ts";
 import type { Gateway as AiGateway } from "../AI/Gateway.ts";
 import type { SearchInstance } from "../AI/SearchInstance.ts";
 import type { SearchNamespace } from "../AI/SearchNamespace.ts";
@@ -23,6 +22,7 @@ import type { Secret } from "../SecretsStore/Secret.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
+import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
@@ -73,7 +73,7 @@ export type WorkerBindingResource =
   | Namespace
   | Queue
   | AiGateway
-  | AiBinding
+  | AIBinding
   | SearchInstance
   | SearchNamespace
   | Dataset

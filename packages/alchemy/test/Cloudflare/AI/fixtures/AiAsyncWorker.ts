@@ -3,14 +3,14 @@ import * as pathe from "pathe";
 
 /**
  * Async (non-Effect) Worker declaring the Workers AI binding via
- * `env: { AI: Cloudflare.AI.Ai() }`. `InferEnv` maps the marker to the
+ * `env: { AI: Cloudflare.Workers.AI() }`. `InferEnv` maps the marker to the
  * native `Ai` runtime handle, so the handler calls `env.AI.run(...)`
  * directly.
  */
 export const AiAsyncWorker = Cloudflare.Worker("AiAsyncWorker", {
   main: pathe.resolve(import.meta.dirname, "AiAsyncHandler.ts"),
   env: {
-    AI: Cloudflare.AI.Ai(),
+    AI: Cloudflare.Workers.AI(),
   },
 });
 

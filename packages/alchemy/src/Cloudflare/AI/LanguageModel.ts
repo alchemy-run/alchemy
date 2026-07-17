@@ -15,18 +15,11 @@ import * as Sse from "effect/unstable/encoding/Sse";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 
 /**
- * Alias for the global Workers AI runtime handle type (`env.AI`). Exported so
- * modules that themselves declare an `Ai` identifier (the `Cloudflare.AI.Ai`
- * binding) can still name the runtime type.
- */
-export type WorkersAi = Ai;
-
-/**
  * The slice of an AI client the LanguageModel adapter needs: the raw Workers
  * AI handle plus, when routed through an AI Gateway, the gateway id.
  *
  * Both `Cloudflare.AI.QueryGateway(gateway)` (gateway-routed) and
- * `Cloudflare.AI.Ai()` (plain Workers AI binding) clients satisfy it.
+ * `Cloudflare.Workers.AI()` (plain Workers AI binding) clients satisfy it.
  */
 export interface LanguageModelClient {
   /** Effect resolving to the raw Workers AI runtime binding. */
@@ -45,7 +38,7 @@ export interface LanguageModelClient {
 export interface LanguageModelOptions {
   /**
    * Already-bound AI client — from `Cloudflare.AI.QueryGateway(gateway)`
-   * (routed through the gateway) or `Cloudflare.AI.Ai()` (direct).
+   * (routed through the gateway) or `Cloudflare.Workers.AI()` (direct).
    */
   readonly client: LanguageModelClient;
   /** Workers AI model id, e.g. `@cf/meta/llama-3.3-70b-instruct-fp8-fast`. */

@@ -4,7 +4,6 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import { isAi } from "../AI/Ai.ts";
 import { isAiGateway } from "../AI/Gateway.ts";
 import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
@@ -24,6 +23,7 @@ import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
+import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
 import {
@@ -232,7 +232,7 @@ const toBinding = (
       type: "ai",
       name: bindingName,
     };
-  } else if (isAi(binding)) {
+  } else if (isAI(binding)) {
     return {
       type: "ai",
       name: bindingName,

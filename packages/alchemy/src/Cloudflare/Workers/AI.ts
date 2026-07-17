@@ -5,17 +5,17 @@ import type * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Binding from "../Workers/Binding.ts";
-import type { AiBinding } from "./AiBinding.ts";
-import type { LanguageModelOptions, WorkersAi } from "./LanguageModel.ts";
+import type { LanguageModelOptions } from "../AI/LanguageModel.ts";
+import type { AIBinding } from "./AIBinding.ts";
+import * as Binding from "./Binding.ts";
 
-const TypeId = "Cloudflare.AI.Ai" as const;
+const TypeId = "Cloudflare.Workers.AI" as const;
 type TypeId = typeof TypeId;
 
 /**
  * Error raised by Workers AI runtime operations (`ai.run`, `ai.models`, …).
  */
-export class WorkersAiError extends Data.TaggedError("WorkersAiError")<{
+export class WorkersAIError extends Data.TaggedError("WorkersAIError")<{
   /**
    * Human-readable runtime error message.
    */
@@ -33,15 +33,15 @@ export class WorkersAiError extends Data.TaggedError("WorkersAiError")<{
  * runtime value is the same `env.AI` handle you would declare in
  * `wrangler.json`.
  *
- * `Ai` is a single value that is at once the `Binding.Service` tag, the
- * callable that produces an {@link AiBinding}, and the type. Declare it on a
+ * `AI` is a single value that is at once the `Binding.Service` tag, the
+ * callable that produces an {@link AIBinding}, and the type. Declare it on a
  * Worker's `env` (it flows through `InferEnv` → the runtime `Ai` handle) or
  * `yield*` it inside an Effect-native Worker to attach the binding and obtain
- * the {@link AiClient}.
+ * the {@link AIClient}.
  *
- * Use {@link Gateway} + `QueryGateway` instead when you want requests routed
- * through an AI Gateway (caching, rate limiting, logs); use `Ai` when you just
- * want to call Workers AI models.
+ * Use `Cloudflare.AI.Gateway` + `QueryGateway` instead when you want requests
+ * routed through an AI Gateway (caching, rate limiting, logs); use `AI` when
+ * you just want to call Workers AI models.
  *
  * @binding
  * @product Workers AI
@@ -52,7 +52,7 @@ export class WorkersAiError extends Data.TaggedError("WorkersAiError")<{
  * ```typescript
  * Cloudflare.Worker("AiWorker", { main: import.meta.url },
  *   Effect.gen(function* () {
- *     const ai = yield* Cloudflare.AI.Ai();
+ *     const ai = yield* Cloudflare.Workers.AI();
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const result = yield* ai.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
@@ -61,7 +61,7 @@ export class WorkersAiError extends Data.TaggedError("WorkersAiError")<{
  *         return yield* HttpServerResponse.json(result);
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.AI.AiBinding)),
+ *   }).pipe(Effect.provide(Cloudflare.Workers.AIBinding)),
  * );
  * ```
  *
@@ -73,7 +73,7 @@ export class WorkersAiError extends Data.TaggedError("WorkersAiError")<{
  * model — the same adapter AI Gateway's `QueryGateway` uses, minus the
  * gateway routing.
  * ```typescript
- * const ai = yield* Cloudflare.AI.Ai();
+ * const ai = yield* Cloudflare.Workers.AI();
  *
  * const languageModel = ai.model({
  *   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
@@ -90,7 +90,7 @@ export class WorkersAiError extends Data.TaggedError("WorkersAiError")<{
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
- *   env: { AI: Cloudflare.AI.Ai() },
+ *   env: { AI: Cloudflare.Workers.AI() },
  * });
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
@@ -99,34 +99,34 @@ export class WorkersAiError extends Data.TaggedError("WorkersAiError")<{
  *
  * @see https://developers.cloudflare.com/workers-ai/
  */
-export interface Ai extends Binding.Service<Ai, TypeId, AiClient> {
+export interface AI extends Binding.Service<AI, TypeId, AIClient> {
   /**
    * @param name Binding name (logical id) — the `env` key it resolves to.
    * @default "AI"
    */
-  (name?: string): AiBinding;
+  (name?: string): AIBinding;
 }
 
-export const Ai = Binding.Service<Ai>({
+export const AI = Binding.Service<AI>({
   id: TypeId,
   defaultName: "AI",
   toWorkerBinding: (binding) => ({ type: "ai", name: binding.name }),
 });
 
-export const isAi = (value: unknown): value is AiBinding =>
+export const isAI = (value: unknown): value is AIBinding =>
   Binding.isBinding(value) && value.kind === TypeId;
 
 /**
  * Effect-native client for a Cloudflare Workers AI binding. Wraps the runtime
  * `Ai` handle so each operation returns an Effect tagged with
- * {@link WorkersAiError}, and provides a `model(options)` factory that
+ * {@link WorkersAIError}, and provides a `model(options)` factory that
  * produces an `effect/unstable/ai` `LanguageModel` `Layer`.
  */
-export interface AiClient {
+export interface AIClient {
   /**
    * Effect resolving to the raw Workers AI runtime binding.
    */
-  raw: Effect.Effect<WorkersAi, never, RuntimeContext>;
+  raw: Effect.Effect<Ai, never, RuntimeContext>;
   /**
    * Run inference on a Workers AI model. Typed by the model catalog from
    * `@cloudflare/workers-types` — pass `options` (e.g. `returnRawResponse`,
@@ -138,7 +138,7 @@ export interface AiClient {
     options?: AiOptions,
   ): Effect.Effect<
     AiModels[Name]["postProcessedOutputs"],
-    WorkersAiError,
+    WorkersAIError,
     RuntimeContext
   >;
   /**
@@ -146,7 +146,7 @@ export interface AiClient {
    */
   models(
     params?: AiModelsSearchParams,
-  ): Effect.Effect<AiModelsSearchObject[], WorkersAiError, RuntimeContext>;
+  ): Effect.Effect<AiModelsSearchObject[], WorkersAIError, RuntimeContext>;
   /**
    * Provide an `effect/unstable/ai` `LanguageModel` layer backed by this
    * binding and the given Workers AI model.

@@ -1,4 +1,6 @@
 export * from "./AccountSetting.ts";
+export * from "./AI.ts";
+export * from "./AIBinding.ts";
 export * from "./Assets.ts";
 export * from "./Browser.ts";
 export * from "./BrowserBinding.ts";

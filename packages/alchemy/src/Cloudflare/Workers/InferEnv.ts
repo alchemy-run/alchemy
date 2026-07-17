@@ -22,6 +22,7 @@ import type * as KV from "../KV/index.ts";
 import type * as Queues from "../Queues/index.ts";
 import type * as R2 from "../R2/index.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
+import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
@@ -61,7 +62,7 @@ export type GetBindingType<T> =
                     ? Queue<unknown>
                     : T extends AI.Gateway
                       ? Ai
-                      : T extends AI.AiBinding
+                      : T extends AIBinding
                         ? Ai
                         : T extends AI.Search
                           ? AiSearchInstance

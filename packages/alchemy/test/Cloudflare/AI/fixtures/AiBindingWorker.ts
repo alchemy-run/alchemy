@@ -16,7 +16,7 @@ export default class AiBindingTestWorker extends Cloudflare.Worker<AiBindingTest
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    const ai = yield* Cloudflare.AI.Ai();
+    const ai = yield* Cloudflare.Workers.AI();
 
     const languageModel = ai.model({
       model: MODEL,
@@ -84,5 +84,5 @@ export default class AiBindingTestWorker extends Cloudflare.Worker<AiBindingTest
         return HttpServerResponse.text("ok");
       }).pipe(Effect.provide(languageModel)),
     };
-  }).pipe(Effect.provide(Cloudflare.AI.AiBinding)),
+  }).pipe(Effect.provide(Cloudflare.Workers.AIBinding)),
 ) {}
