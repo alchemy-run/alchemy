@@ -1,3 +1,4 @@
+import { adopt } from "@/AdoptPolicy";
 import * as GitHub from "@/GitHub";
 import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Provider from "@/Provider";
@@ -35,23 +36,6 @@ const getRepo = (repo: string, repoOwner: string = owner) =>
         } catch (error: any) {
           if (error.status === 404) return undefined;
           throw error;
-        }
-      },
-      catch: (e) => e as Error,
-    });
-  });
-
-// Out-of-band cleanup for repos the engine intentionally leaves behind
-// (retain-policy tests). Idempotent — a 404 means it's already gone.
-const deleteRepo = (repo: string, repoOwner: string) =>
-  Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    yield* Effect.tryPromise({
-      try: async () => {
-        try {
-          await octokit.rest.repos.delete({ owner: repoOwner, repo });
-        } catch (error: any) {
-          if (error.status !== 404) throw error;
         }
       },
       catch: (e) => e as Error,
@@ -190,10 +174,10 @@ test.provider.skipIf(!owner || !owner2)(
     Effect.gen(function* () {
       const name = "alchemy-effect-repo-owner-test";
 
-      // Clean up any leftovers from a previous run in BOTH orgs.
+      // Clean up any leftovers from a previous run. Repos a crashed run left
+      // behind converge back under management when the deploy below re-takes
+      // the same deterministic name (reconcile's create-race path).
       yield* stack.destroy();
-      yield* deleteRepo(name, owner);
-      yield* deleteRepo(name, owner2);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -245,11 +229,10 @@ test.provider.skipIf(!owner || !owner2)(
     Effect.gen(function* () {
       const name = "alchemy-effect-repo-retain-test";
 
-      // Clean up any leftovers from a previous run in BOTH orgs (retained
-      // repos are invisible to stack.destroy, so delete out-of-band).
+      // Clean up any leftovers from a previous run. Retained repos a prior
+      // run left behind converge back under management when the deploys
+      // below re-take the same deterministic names.
       yield* stack.destroy();
-      yield* deleteRepo(name, owner);
-      yield* deleteRepo(name, owner2);
 
       // No `destroy()` pipe — the default `retain` policy applies.
       const created = yield* stack.deploy(
@@ -282,11 +265,36 @@ test.provider.skipIf(!owner || !owner2)(
       const oldRepo = yield* getRepo(name, owner);
       expect(oldRepo?.id).toEqual(created.repoId);
 
-      // Cleanup: destroy retains the new repo too, so remove both
-      // out-of-band.
+      // Cleanup — all through the engine: adopt the retained repo back into
+      // state under a second logical ID and flip both resources to the
+      // `destroy` removal policy, so the final stack.destroy() deletes both.
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          const current = yield* GitHub.Repository("Repo", {
+            owner: owner2,
+            name,
+            description: "alchemy-effect retain-on-replace test",
+            visibility: "private",
+          }).pipe(destroy());
+
+          const old = yield* GitHub.Repository("OldRepo", {
+            owner,
+            name,
+            description: "alchemy-effect retain-on-replace test",
+            visibility: "private",
+          }).pipe(adopt(), destroy());
+
+          return { current, old };
+        }),
+      );
+
+      // The adopted resource converged onto the retained repo, not a new one.
+      expect(adopted.old.repoId).toEqual(created.repoId);
+      expect(adopted.current.repoId).toEqual(replaced.repoId);
+
       yield* stack.destroy();
-      yield* deleteRepo(name, owner);
-      yield* deleteRepo(name, owner2);
+      expect(yield* getRepo(name, owner)).toBeUndefined();
+      expect(yield* getRepo(name, owner2)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
