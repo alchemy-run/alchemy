@@ -3,8 +3,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { dedent } from "../Util/dedent.ts";
-import { gitHubBaseUrlChanged } from "./BaseUrl.ts";
-import { octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, octokitFor } from "./Octokit.ts";
 import * as GitHub from "./Providers.ts";
 
 export interface CommentProps {

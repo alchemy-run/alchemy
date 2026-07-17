@@ -1,12 +1,11 @@
 import { readEnvCredentials } from "@/GitHub/AuthProvider";
 import { GitHubCredentials, fromToken } from "@/GitHub/Credentials";
 import {
-  gitHubBaseUrlChanged,
   githubHostname,
   normalizeGitHubBaseUrl,
   resolveGitHubBaseUrlFromEnv,
 } from "@/GitHub/BaseUrl";
-import { octokitFor } from "@/GitHub/Octokit";
+import { gitHubBaseUrlChanged, octokitFor } from "@/GitHub/Octokit";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -175,8 +174,24 @@ describe("readEnvCredentials", () => {
 });
 
 describe("gitHubBaseUrlChanged", () => {
-  const changed = (a: string | undefined, b: string | undefined) =>
-    Effect.runSync(gitHubBaseUrlChanged({ baseUrl: a }, { baseUrl: b }));
+  // The comparison resolves each side through the full fallback chain, so it
+  // needs the ambient credentials host — `undefined` in props means "use the
+  // credentials' host", not "github.com".
+  const changed = (
+    a: string | undefined,
+    b: string | undefined,
+    credsBaseUrl?: string,
+  ) =>
+    Effect.runSync(
+      gitHubBaseUrlChanged({ baseUrl: a }, { baseUrl: b }).pipe(
+        Effect.provide(
+          fromToken(
+            "test-token",
+            credsBaseUrl !== undefined ? { baseUrl: credsBaseUrl } : undefined,
+          ),
+        ),
+      ),
+    );
 
   test("cosmetic rewrites of the same host do not count as a change", () => {
     expect(
@@ -190,6 +205,36 @@ describe("gitHubBaseUrlChanged", () => {
     expect(changed(undefined, "github.example.com")).toBe(true);
     expect(changed("github.example.com", undefined)).toBe(true);
     expect(changed("github.example.com", "other.example.com")).toBe(true);
+  });
+
+  test("making the ambient enterprise host explicit is not a change", () => {
+    // providers({ baseUrl: "github.example.com" }): prop undefined and prop
+    // "github.example.com" resolve to the same effective host.
+    expect(changed(undefined, "github.example.com", "github.example.com")).toBe(
+      false,
+    );
+    expect(changed("github.example.com", undefined, "github.example.com")).toBe(
+      false,
+    );
+    expect(
+      changed(
+        undefined,
+        "https://github.example.com/api/v3",
+        "github.example.com",
+      ),
+    ).toBe(false);
+  });
+
+  test("explicit github.com under an ambient enterprise host IS a change", () => {
+    // prop undefined resolves to the enterprise host; prop "github.com"
+    // pins the resource back to github.com — different physical instance.
+    expect(changed(undefined, "github.com", "github.example.com")).toBe(true);
+    expect(changed("github.com", undefined, "github.example.com")).toBe(true);
+  });
+
+  test("undefined on both sides is never a change", () => {
+    expect(changed(undefined, undefined)).toBe(false);
+    expect(changed(undefined, undefined, "github.example.com")).toBe(false);
   });
 });
 

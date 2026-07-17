@@ -45,34 +45,6 @@ export const normalizeGitHubBaseUrl = (
   });
 
 /**
- * {@link normalizeGitHubBaseUrl} lifted over `undefined` — used to compare
- * `baseUrl` props in `diff`, where either side may be unset.
- */
-export const normalizeOptionalGitHubBaseUrl = (
-  input: string | undefined,
-): Effect.Effect<string | undefined, AuthError> =>
-  input === undefined
-    ? Effect.succeed(undefined)
-    : normalizeGitHubBaseUrl(input);
-
-/**
- * Whether a resource's `baseUrl` prop changed between deploys, compared on
- * the normalized API base URL so cosmetic rewrites (`github.example.com` →
- * `https://github.example.com/api/v3`) don't trigger a replacement. Used by
- * resource `diff` implementations — a resource with the same name on a
- * different GitHub instance is a different physical resource.
- */
-export const gitHubBaseUrlChanged = (
-  olds: { baseUrl?: string },
-  news: { baseUrl?: string },
-): Effect.Effect<boolean, AuthError> =>
-  Effect.gen(function* () {
-    const oldUrl = yield* normalizeOptionalGitHubBaseUrl(olds.baseUrl);
-    const newUrl = yield* normalizeOptionalGitHubBaseUrl(news.baseUrl);
-    return oldUrl !== newUrl;
-  });
-
-/**
  * The hostname `gh auth token --hostname` expects for a normalized API base
  * URL — the plain host for GitHub Enterprise Server, and the `api.`-less
  * host for GitHub Enterprise Cloud with data residency.
