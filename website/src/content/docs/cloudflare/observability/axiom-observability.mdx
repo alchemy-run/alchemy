@@ -43,26 +43,41 @@ If you haven't connected an Axiom account yet, run through
 
 A `Dataset` is Axiom's top-level container. Pick a `kind` per OTEL
 signal — it determines the schema and how the data renders in the
-Axiom UI:
+Axiom UI. Declare them in their own module so both the Stack and the
+Worker can import them:
 
 ```typescript
-const traces  = yield* Axiom.Dataset("traces",  { name: "app-traces",  kind: "otel:traces:v1"  });
-const logs    = yield* Axiom.Dataset("logs",    { name: "app-logs",    kind: "otel:logs:v1"    });
-const metrics = yield* Axiom.Dataset("metrics", { name: "app-metrics", kind: "otel:metrics:v1" });
+// src/observability.ts
+import * as Axiom from "alchemy/Axiom";
+
+export const Traces = Axiom.Dataset("Traces", {
+  name: "app-traces",
+  kind: "otel:traces:v1",
+});
+
+export const Logs = Axiom.Dataset("Logs", {
+  name: "app-logs",
+  kind: "otel:logs:v1",
+});
+
+export const Metrics = Axiom.Dataset("Metrics", {
+  name: "app-metrics",
+  kind: "otel:metrics:v1",
+});
 ```
 
 `kind` cannot be changed after creation — updating it triggers a
 replacement, which deletes the data — so pick it up front. Each
 dataset exposes Axiom's OTLP/HTTP endpoints as output attributes
 (`otelTracesEndpoint`, `otelLogsEndpoint`, `otelMetricsEndpoint`),
-which is what makes the next step a pure wiring exercise.
+which is what makes the binding below a pure wiring exercise.
 
 ## Set retention
 
 Retention is a prop, so a retention change is a diff in the PR:
 
 ```typescript
-const logs = yield* Axiom.Dataset("logs", {
+export const Logs = Axiom.Dataset("Logs", {
   name: "app-logs",
   kind: "otel:logs:v1",
   description: "Application logs from prod workers",
@@ -80,7 +95,8 @@ An `ApiToken` scoped with `datasetCapabilities` can ingest into
 exactly the datasets you list and nothing else:
 
 ```typescript
-const ingest = yield* Axiom.ApiToken("ingest", {
+// src/observability.ts
+export const Ingest = Axiom.ApiToken("Ingest", {
   name: "prod-ingest",
   description: "Worker OTEL ingest",
   datasetCapabilities: {
@@ -92,20 +108,24 @@ const ingest = yield* Axiom.ApiToken("ingest", {
 ```
 
 Axiom returns the bearer value exactly once, at create time. It's
-captured into `ingest.token` as a `Redacted<string>` and persisted
+captured into `Ingest.token` as a `Redacted<string>` and persisted
 in resource state — treat state as sensitive. Tokens have no update
 API: changing any prop replaces the token and mints a new bearer;
 identical props never rotate it.
 
 ## Bind Axiom to the Worker
 
-Provide the `Axiom.Telemetry` binding layer on the Worker's init
-Effect, merged into the single `Effect.provide` with the other
-binding layers. That's the whole integration — every span, log
-record, and metric the Worker produces is exported, flushed as each
-request completes:
+Import the datasets and token into the Worker's module and provide
+the `Axiom.Telemetry` binding layer on its init Effect, merged into
+the single `Effect.provide` with the other binding layers. That's
+the whole integration — every span, log record, and metric the
+Worker produces is exported, flushed as each request completes:
 
 ```typescript
+// src/worker.ts
+import * as Axiom from "alchemy/Axiom";
+import { Ingest, Logs, Metrics, Traces } from "./observability.ts";
+
 export default Cloudflare.Worker(
   "Api",
   { main: import.meta.url },
@@ -143,10 +163,15 @@ external HTTPS collector via Logpush. Point one at the Axiom dataset's
 OTLP endpoint:
 
 ```typescript
+// in the Stack's generator
 import * as Output from "alchemy/Output";
 import * as Redacted from "effect/Redacted";
+import { Ingest, Traces } from "./src/observability.ts";
 
-yield* Cloudflare.Workers.ObservabilityDestination("Traces", {
+const traces = yield* Traces;
+const ingest = yield* Ingest;
+
+yield* Cloudflare.Workers.ObservabilityDestination("TracesExport", {
   url: traces.otelTracesEndpoint,
   headers: {
     authorization: Output.map(ingest.token, (t) => `Bearer ${Redacted.value(t)}`),

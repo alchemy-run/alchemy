@@ -56,7 +56,18 @@ an exporter is providing the `Axiom.Telemetry` binding layer on the
 Function/Worker:
 
 ```typescript
-// on the Worker's init Effect, merged with its other binding layers:
+// src/observability.ts — declared at module scope so the Worker can import them
+export const Traces = Axiom.Dataset("Traces", { name: "app-traces", kind: "otel:traces:v1" });
+export const Logs   = Axiom.Dataset("Logs",   { name: "app-logs",   kind: "otel:logs:v1"   });
+export const Ingest = Axiom.ApiToken("Ingest", {
+  name: "app-ingest",
+  datasetCapabilities: {
+    "app-traces": { ingest: ["create"] },
+    "app-logs":   { ingest: ["create"] },
+  },
+});
+
+// src/worker.ts — on the Worker's init Effect, merged with its other binding layers:
 Effect.provide(
   Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
@@ -68,7 +79,9 @@ Effect.provide(
 Building the layer binds each dataset's endpoint and the ingest
 token's `Authorization` header (as a secret) onto the host; at
 runtime the built-in exporter ships each signal to its dataset,
-flushed per request.
+flushed per request. See the
+[end-to-end guide](/cloudflare/observability/axiom-observability)
+for the full pattern.
 
 - `otelTracesEndpoint` / `otelLogsEndpoint` / `otelMetricsEndpoint` —
   the per-signal OTLP/HTTP URLs.

@@ -44,17 +44,18 @@ mechanics.
 ## Provision the receiving end
 
 The endpoint the exporter targets is a resource. An
-[Axiom](/axiom) `Dataset` is created per OTEL signal and exposes its
+[Axiom](/axiom) `Dataset` is declared per OTEL signal and exposes its
 OTLP endpoints as outputs:
 
 ```typescript
+// src/observability.ts
 import * as Axiom from "alchemy/Axiom";
 
-const traces = yield* Axiom.Dataset("traces", {
+export const Traces = Axiom.Dataset("Traces", {
   name: "app-traces",
   kind: "otel:traces:v1",
 });
-const logs = yield* Axiom.Dataset("logs", {
+export const Logs = Axiom.Dataset("Logs", {
   name: "app-logs",
   kind: "otel:logs:v1",
 });
@@ -71,6 +72,7 @@ on the Worker — a binding layer that wires the datasets and token in
 one line:
 
 ```typescript
+// src/observability.ts
 export const Ingest = Axiom.ApiToken("Ingest", {
   name: "prod-ingest",
   datasetCapabilities: {
@@ -79,7 +81,9 @@ export const Ingest = Axiom.ApiToken("Ingest", {
   },
 });
 
-// in the Worker's init Effect:
+// src/worker.ts — in the Worker's init Effect:
+import { Ingest, Logs, Traces } from "./observability.ts";
+
 Effect.provide(
   Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
@@ -102,7 +106,10 @@ On Cloudflare you can skip the in-process exporter entirely: an
 the Worker:
 
 ```typescript
-yield* Cloudflare.Workers.ObservabilityDestination("Traces", {
+// in the Stack's generator
+const traces = yield* Traces;
+
+yield* Cloudflare.Workers.ObservabilityDestination("TracesExport", {
   url: traces.otelTracesEndpoint,
   headers: { authorization: `Bearer ${process.env.AXIOM_TOKEN}` },
   logpushDataset: "opentelemetry-traces",
