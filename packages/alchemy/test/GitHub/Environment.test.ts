@@ -15,10 +15,11 @@ const logLevel = Effect.provideService(
 );
 
 // These tests create, mutate, and delete a real deployment environment, so
-// they require an owner (user login or org) the token can write to. Skip
-// when unset. The host repository is public because environments (and their
-// protection rules) on private repositories are plan-gated.
-const owner = process.env.GITHUB_TEST_OWNER ?? "";
+// they run against the dedicated test org (never a real one). Set
+// GITHUB_TEST_OWNER="" to skip. The host repository is public because
+// environments (and their protection rules) on private repositories are
+// plan-gated.
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 const repo =
   process.env.GITHUB_TEST_ENVIRONMENT_REPOSITORY ??
   "alchemy-effect-environment-test";

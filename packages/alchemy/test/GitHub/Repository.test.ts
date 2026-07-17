@@ -14,9 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// These tests create, mutate, and delete a real repository, so they require an
-// owner (user login or org) the token can write to. Skip when unset.
-const owner = process.env.GITHUB_TEST_OWNER ?? "";
+// These tests create, mutate, and delete real repositories, so they run
+// against the dedicated test org (never a real one). Set GITHUB_TEST_OWNER=""
+// to skip the owner-scoped tests entirely.
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 
 const getRepo = (repo: string) =>
   Effect.gen(function* () {

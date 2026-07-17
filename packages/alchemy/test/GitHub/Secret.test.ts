@@ -16,9 +16,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Deploying a secret needs an owner + repository the token can write to.
-// Never default to a real organization — skip when GITHUB_TEST_OWNER is unset.
-const owner = process.env.GITHUB_TEST_OWNER ?? "";
+// Deploying a secret needs an owner + repository the token can write to —
+// the dedicated test org (never a real one). Set GITHUB_TEST_OWNER="" to
+// skip.
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 const repository = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
 
 // GitHub never returns a secret's value, only its metadata — so `getRepoSecret`
