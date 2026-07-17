@@ -42,8 +42,8 @@ export interface SecretsProps {
  * @example
  * ```ts
  * yield* GitHub.Secrets({
- *   owner: "alchemy-run",
- *   repository: "alchemy",
+ *   owner: "my-org",
+ *   repository: "my-repo",
  *   secrets: {
  *     AXIOM_INGEST_TOKEN: tokenValue,
  *     AXIOM_DATASET_TRACES: traces.name,

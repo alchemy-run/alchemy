@@ -40,8 +40,8 @@ export interface VariablesProps {
  * @example
  * ```ts
  * yield* GitHub.Variables({
- *   owner: "alchemy-run",
- *   repository: "alchemy",
+ *   owner: "my-org",
+ *   repository: "my-repo",
  *   variables: {
  *     AWS_ROLE_ARN: role.roleArn,
  *     AWS_REGION: region,

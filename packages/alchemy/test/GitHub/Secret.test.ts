@@ -17,7 +17,8 @@ const logLevel = Effect.provideService(
 );
 
 // Deploying a secret needs an owner + repository the token can write to.
-const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run";
+// Never default to a real organization — skip when GITHUB_TEST_OWNER is unset.
+const owner = process.env.GITHUB_TEST_OWNER ?? "";
 const repository = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
 
 // GitHub never returns a secret's value, only its metadata — so `getRepoSecret`
@@ -40,7 +41,7 @@ const secretExists = (name: string) =>
     });
   });
 
-test.provider(
+test.provider.skipIf(!owner)(
   "Secrets resolves Config values before wrapping them as Redacted",
   (stack) =>
     Effect.gen(function* () {
@@ -77,7 +78,7 @@ test.provider(
 // ambient owner/repo scope, and GitHub exposes no account-wide enumeration —
 // only list-secrets *within* a specific repo. So `list()` always returns `[]`,
 // even when a secret exists in the cloud.
-test.provider(
+test.provider.skipIf(!owner)(
   "list returns an empty array for non-enumerable GitHub secrets",
   (stack) =>
     Effect.gen(function* () {
