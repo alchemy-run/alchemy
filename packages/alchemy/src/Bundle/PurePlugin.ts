@@ -150,7 +150,7 @@ export const purePlugin = (
           !entryPaths.has(cleanId) &&
           isSideEffectFree(info?.sideEffects);
 
-        const anchors = collectPureAnchors(code, cleanId);
+        const anchors = collectPureAnchorsCached(code, cleanId);
         if (anchors === null) {
           // Metadata-only result: omitting `code` tells rolldown the
           // source was NOT transformed, so no sourcemap is expected and
@@ -310,6 +310,39 @@ export function packageNameFromId(id: string): string | null {
   }
   return parts[0];
 }
+
+/**
+ * Process-wide memo of {@link collectPureAnchors} results keyed by module id.
+ *
+ * Parsing with oxc dominates the plugin's main-thread CPU (it showed up as
+ * ~60% of the profile of a test run), and the same modules — effect/alchemy
+ * dist files — are re-scanned for EVERY bundle built in the process. The
+ * single-process test runner builds dozens of worker bundles per run, so
+ * this cache eliminates all repeat parses. The stored `code` is compared on
+ * lookup, so a changed file (e.g. dev watch mode) never serves a stale
+ * result.
+ */
+const anchorsCache = new Map<
+  string,
+  { readonly code: string; readonly anchors: number[] | null }
+>();
+const ANCHORS_CACHE_MAX = 10_000;
+
+const collectPureAnchorsCached = (
+  code: string,
+  filename: string,
+): number[] | null => {
+  const cached = anchorsCache.get(filename);
+  if (cached !== undefined && cached.code === code) {
+    return cached.anchors;
+  }
+  const anchors = collectPureAnchors(code, filename);
+  if (anchorsCache.size >= ANCHORS_CACHE_MAX) {
+    anchorsCache.clear();
+  }
+  anchorsCache.set(filename, { code, anchors });
+  return anchors;
+};
 
 /**
  * Parses `code` and returns the offsets at which `/*#__PURE__*\/` must be

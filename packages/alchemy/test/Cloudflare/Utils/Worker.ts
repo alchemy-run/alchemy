@@ -1,5 +1,5 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

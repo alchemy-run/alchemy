@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { Secret } from "@/AWS/SecretsManager/Secret.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

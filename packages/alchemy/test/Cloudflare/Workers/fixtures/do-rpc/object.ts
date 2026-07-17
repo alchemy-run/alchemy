@@ -16,6 +16,18 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEn
       return {
         put: (key: string, value: string) => kv.put(key, value),
         get: (key: string) => kv.get(key),
+        // The Cloudflare colo this instance is running in, as reported by a
+        // subrequest it makes itself (a subrequest is served by the
+        // datacenter the caller runs in, so the trace names *this* DO's
+        // colo). Used to observe where `locationHint` placed the instance.
+        colo: () =>
+          Effect.promise(async () => {
+            const response = await fetch(
+              "https://cloudflare.com/cdn-cgi/trace",
+            );
+            const trace = await response.text();
+            return trace.match(/^colo=(.*)$/m)?.[1] ?? "unknown";
+          }),
         // Mirrors the `tick` example from the tutorial:
         // https://alchemy.run/cloudflare/compute/durable-objects
         // An RPC method that returns a Stream of sequential numbers.

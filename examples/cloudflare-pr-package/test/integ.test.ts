@@ -22,19 +22,32 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
 
 type Client = HttpClient.HttpClient;
 
-// A fresh workers.dev URL can return connection errors or Cloudflare edge 52x
-// cold-start responses for a few seconds. `client.execute` only fails the
-// Effect on connection errors, so repeat a write-free public request (a GET on
-// a non-existent tag -> 404) until the Worker code is actually executing.
+// A fresh workers.dev URL serves Cloudflare's "nothing here yet" 404 page
+// until the new route propagates (often 30s+, occasionally over a minute for
+// a just-enabled subdomain), and can also return connection errors or edge
+// 52x cold-start responses. A 404 is therefore ambiguous - it may be the edge
+// placeholder, not the Worker. The only response that proves the Worker code
+// is executing is a 401 to a bad-token PUT (auth runs before any body/header
+// validation and before any binding work, so repeating it is side-effect
+// free). `client.execute` only fails the Effect on connection errors, so
+// retry those and repeat until the 401 shows up. Callers must assert the
+// returned status is 401 so a propagation stall fails loudly here instead of
+// as a confusing 404 on the next assertion.
 const warmUp = (client: Client, url: string) =>
-  client.get(`${url}/projects/_warmup/tags/_none`).pipe(
-    Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (res) => res.status === 404,
-      times: 20,
-    }),
-  );
+  client
+    .execute(
+      HttpClientRequest.put(`${url}/projects/_warmup/packages`).pipe(
+        HttpClientRequest.bearerToken("warmup-not-the-token"),
+      ),
+    )
+    .pipe(
+      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (res) => res.status === 401,
+        times: 90,
+      }),
+    );
 
 const upload = (
   client: Client,
@@ -142,20 +155,11 @@ test(
       return client.execute(req);
     };
 
-    // Warm up through edge propagation - a fresh workers.dev URL can return
-    // connection errors or Cloudflare edge 52x cold-start responses for a few
-    // seconds. `client.execute` only fails the Effect on connection errors, so
-    // repeat until the Worker itself answers with the auth rejection (401).
-    // A bad-token PUT is rejected before any binding work, so repeating it is
-    // side-effect free.
-    yield* put("warmup").pipe(
-      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (res) => res.status === 401,
-        times: 20,
-      }),
-    );
+    // Warm up through edge propagation and assert the Worker actually
+    // answered (401) - if the route never propagated we want to fail here,
+    // not with a baffling 404 on the valid-token assertion below.
+    const warmed = yield* warmUp(client, url);
+    expect(warmed.status).toBe(401);
 
     // Valid token -> 200 with a resourceId. The first real write can hit a
     // cold R2/DO binding and 500, so poll until it converges.
@@ -186,7 +190,8 @@ test(
     );
     expect(del.status).toBe(200);
   }),
-  { timeout: 120_000 },
+  // Warmup alone can legitimately take ~90s on a fresh workers.dev route.
+  { timeout: 180_000 },
 );
 
 test(
@@ -194,7 +199,7 @@ test(
   Effect.gen(function* () {
     const { url, authToken } = yield* stack;
     const client = yield* HttpClient.HttpClient;
-    yield* warmUp(client, url);
+    expect((yield* warmUp(client, url)).status).toBe(401);
 
     const project = "download-test";
     const content = "fake-tarball-contents- -12345";
@@ -234,7 +239,7 @@ test(
     );
     expect(gone.status).toBe(404);
   }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test(
@@ -242,7 +247,7 @@ test(
   Effect.gen(function* () {
     const { url, authToken } = yield* stack;
     const client = yield* HttpClient.HttpClient;
-    yield* warmUp(client, url);
+    expect((yield* warmUp(client, url)).status).toBe(401);
 
     const project = "gc-test";
     const content = "gc-bundle-body";
@@ -286,5 +291,5 @@ test(
     );
     expect(collected.status).toBe(404);
   }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

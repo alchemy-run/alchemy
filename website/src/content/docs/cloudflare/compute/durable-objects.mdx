@@ -393,6 +393,54 @@ If you want schema-*validated* procedures (payload validation,
 tagged error schemas shared with external clients), reach for
 [Effect RPC](/cloudflare/apis/effect-rpc) on a Worker instead.
 
+## Place an instance in a region
+
+A Durable Object is created wherever its **first-ever** request came
+from, and it lives there for good. That is the right default when an
+instance's traffic all comes from whoever created it — `getByName(userId)`
+lands next to that user by construction.
+
+It is the wrong default as soon as the name stops tracking geography. A
+pool sharded by hash (`pool:7`), a fixed roster, a shard index — any of
+these can be created by whichever request happened to arrive first, and
+every later caller pays for that accident. A Sydney user hashed onto an
+instance a Frankfurt request created is making a cross-planet round trip
+on every call, forever.
+
+Pass a `locationHint` to say where a **new** instance should be created:
+
+```typescript
+const shard = shards.getByName("pool:apac:3", { locationHint: "apac" });
+```
+
+Hints only apply at creation, so this is safe to add to an existing call
+site: instances that already exist stay where they are, and nothing you
+pass can move them.
+
+Derive the name and the hint from the same region, so each region
+addresses its own shards:
+
+```typescript
+// in a Worker fetch handler
+const region = hintFor(request.cf?.continent); // your own mapping
+const shard = shards.getByName(`pool:${region}:${index}`, {
+  locationHint: region,
+});
+```
+
+:::caution
+Hint the region you name. If two regions can address one name, they race
+to create the single instance behind it and the loser is stuck talking
+across the planet — the hint cannot fix it afterwards.
+:::
+
+Available hints are `wnam`, `enam`, `sam`, `weur`, `eeur`, `apac`, `oc`,
+`afr`, and `me`. Each is best-effort:
+Cloudflare places the instance in the nearest location it can to the
+hinted region, which may not be inside it. Under `alchemy dev` there is
+only one location to place anything in, so hints are accepted and
+ignored — placement is only observable once deployed.
+
 ## Call scope vs isolate scope
 
 A Durable Object shares its isolate's layer build with the Worker

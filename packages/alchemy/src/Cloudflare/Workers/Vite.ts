@@ -1,6 +1,7 @@
 import cloudflare, {
   type CloudflareVitePluginOptions,
 } from "@distilled.cloud/cloudflare-vite-plugin";
+import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { createRequire } from "node:module";
@@ -8,6 +9,38 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
 import { viteBuildOutputPlugin } from "../../Bundle/Vite.ts";
+
+/**
+ * Route Vite's logger through the ambient Effect `Console` service instead of
+ * its default stdout logger. Under the CLI this is the global console
+ * (identical output); under environments that override the Console — e.g.
+ * alchemy-test's per-test buffering console — the build output is captured
+ * with the test instead of leaking to the terminal.
+ */
+const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
+  const loggedErrors = new WeakSet<object>();
+  let hasWarned = false;
+  return {
+    info: (msg) => console.log(msg),
+    warn: (msg) => {
+      hasWarned = true;
+      console.warn(msg);
+    },
+    warnOnce: (msg) => {
+      hasWarned = true;
+      console.warn(msg);
+    },
+    error: (msg, options) => {
+      if (options?.error != null) loggedErrors.add(options.error);
+      console.error(msg);
+    },
+    clearScreen: () => {},
+    hasErrorLogged: (error) => loggedErrors.has(error),
+    get hasWarned() {
+      return hasWarned;
+    },
+  };
+};
 
 /**
  * Signals to the app's own Vite config that Alchemy is injecting its
@@ -51,18 +84,21 @@ export const viteDev = (
   serverOptions: vite.ServerOptions,
 ) =>
   Effect.acquireRelease(
-    Effect.promise(async () => {
-      process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
-      const vite = await loadVite(rootDir);
-      const devServer = await vite.createServer({
-        root: rootDir,
-        define: getDefine(env),
-        plugins: [cloudflare(pluginOptions)],
-        server: serverOptions,
-      });
-      await devServer.listen();
-      return devServer;
-    }),
+    ConsoleService.consoleWith((console) =>
+      Effect.promise(async () => {
+        process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
+        const vite = await loadVite(rootDir);
+        const devServer = await vite.createServer({
+          root: rootDir,
+          define: getDefine(env),
+          plugins: [cloudflare(pluginOptions)],
+          server: serverOptions,
+          customLogger: makeViteLogger(console),
+        });
+        await devServer.listen();
+        return devServer;
+      }),
+    ),
     (devServer) =>
       Effect.promise(async () => {
         await devServer.close();
@@ -78,6 +114,7 @@ export const viteBuild = (
     const outputPlugin = yield* viteBuildOutputPlugin({
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
+    const console = yield* ConsoleService.Console;
     yield* Effect.promise(async () => {
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
@@ -86,6 +123,14 @@ export const viteBuild = (
           root: rootDir,
           define: getDefine(env),
           plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
+          customLogger: makeViteLogger(console),
+          // Disables the NATIVE rolldown progress reporter ("transforming…",
+          // "rendering chunks…", "computing gzip size…"): it prints from
+          // Rust straight to fd 1 and cannot be intercepted from JS — vite
+          // only enables it when logLevel >= info. Info-level build
+          // summaries are suppressed with it; warnings and errors still
+          // reach the customLogger above.
+          logLevel: "warn",
         },
         // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
         // Originally we used `undefined` here, but this caused the static site build to fail.

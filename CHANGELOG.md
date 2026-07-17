@@ -1,3 +1,36 @@
+## v2.0.0-beta.63
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **action**:
+  - Local bindings + Output accessors in Actions &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/807 [<samp>(0da65)</samp>](https://github.com/alchemy-run/alchemy/commit/0da65a76)
+- **cli**:
+  - Alchemy login works without an alchemy.run.ts &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/842 [<samp>(422fb)</samp>](https://github.com/alchemy-run/alchemy/commit/422fb83d)
+- **cloudflare**:
+  - **workers**: Declare Durable Object class transfers between workers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/803 [<samp>(33424)</samp>](https://github.com/alchemy-run/alchemy/commit/334241b8)
+- **website**:
+  - Serve alchemy.run, redirect v2.alchemy.run to it &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/806 [<samp>(85ed5)</samp>](https://github.com/alchemy-run/alchemy/commit/85ed5e30)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Pack durable object metadata into a single script tag &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/824 [<samp>(9642f)</samp>](https://github.com/alchemy-run/alchemy/commit/9642f816)
+  - Signal plugin injection to app vite configs via ALCHEMY_CLOUDFLARE_VITE_INJECTED &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy/issues/833 [<samp>(5a6ed)</samp>](https://github.com/alchemy-run/alchemy/commit/5a6edd57)
+- **drizzle**:
+  - Forward Effect membership checks through proxyChain &nbsp;-&nbsp; by **Julian Archila** in https://github.com/alchemy-run/alchemy/issues/827 [<samp>(31026)</samp>](https://github.com/alchemy-run/alchemy/commit/31026041)
+- **engine**:
+  - Never persist unresolved Output exprs in resource state &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/835 [<samp>(fd18b)</samp>](https://github.com/alchemy-run/alchemy/commit/fd18bf96)
+- **planetscale**:
+  - Reconcile MySQL replicas without replacing database &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/825 [<samp>(c8079)</samp>](https://github.com/alchemy-run/alchemy/commit/c8079167)
+- **runtime**:
+  - Reify auto-bound Config markers at request time &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/829 [<samp>(60eb5)</samp>](https://github.com/alchemy-run/alchemy/commit/60eb5529)
+- **vite**:
+  - Include workspace packages in input hash &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy/issues/822 [<samp>(a5a22)</samp>](https://github.com/alchemy-run/alchemy/commit/a5a22a0c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.62...HEAD)
+
+---
+
 ## v2.0.0-beta.62
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

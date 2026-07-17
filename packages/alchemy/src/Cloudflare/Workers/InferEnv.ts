@@ -22,6 +22,7 @@ import type * as KV from "../KV/index.ts";
 import type * as Queues from "../Queues/index.ts";
 import type * as R2 from "../R2/index.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
+import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
@@ -61,44 +62,46 @@ export type GetBindingType<T> =
                     ? Queue<unknown>
                     : T extends AI.Gateway
                       ? Ai
-                      : T extends AI.Search
-                        ? AiSearchInstance
-                        : T extends AI.SearchNamespace
-                          ? AiSearchNamespace
-                          : T extends Email.SendEmail
-                            ? SendEmail
-                            : T extends AnalyticsEngine.Dataset
-                              ? AnalyticsEngineDataset
-                              : T extends ArtifactsNs.Namespace
-                                ? Artifacts
-                                : T extends RateLimitBinding
-                                  ? RateLimit
-                                  : T extends ImagesNs.ImagesBinding
-                                    ? ImagesBinding
-                                    : T extends BrowserBinding
-                                      ? BrowserRun
-                                      : T extends HyperdriveNs.Connection
-                                        ? Hyperdrive
-                                        : T extends VersionMetadataBinding
-                                          ? WorkerVersionMetadata
-                                          : T extends WorkerLoaderResource
-                                            ? WorkerLoader
-                                            : T extends WorkflowLike<
-                                                  infer Params
-                                                >
-                                              ? Workflow<Params>
-                                              : T extends DurableObjectLike
-                                                ? DurableObjectNamespace<
-                                                    Exclude<
-                                                      T["Shape"],
-                                                      undefined
-                                                    >
+                      : T extends AIBinding
+                        ? Ai
+                        : T extends AI.Search
+                          ? AiSearchInstance
+                          : T extends AI.SearchNamespace
+                            ? AiSearchNamespace
+                            : T extends Email.SendEmail
+                              ? SendEmail
+                              : T extends AnalyticsEngine.Dataset
+                                ? AnalyticsEngineDataset
+                                : T extends ArtifactsNs.Namespace
+                                  ? Artifacts
+                                  : T extends RateLimitBinding
+                                    ? RateLimit
+                                    : T extends ImagesNs.ImagesBinding
+                                      ? ImagesBinding
+                                      : T extends BrowserBinding
+                                        ? BrowserRun
+                                        : T extends HyperdriveNs.Connection
+                                          ? Hyperdrive
+                                          : T extends VersionMetadataBinding
+                                            ? WorkerVersionMetadata
+                                            : T extends WorkerLoaderResource
+                                              ? WorkerLoader
+                                              : T extends WorkflowLike<
+                                                    infer Params
                                                   >
-                                                : T extends Redacted<any>
-                                                  ? // redacteds are always stored as secret_text, so are always string
-                                                    // we JSON.stringify when not a Redacted<string>
-                                                    string
-                                                  : T;
+                                                ? Workflow<Params>
+                                                : T extends DurableObjectLike
+                                                  ? DurableObjectNamespace<
+                                                      Exclude<
+                                                        T["Shape"],
+                                                        undefined
+                                                      >
+                                                    >
+                                                  : T extends Redacted<any>
+                                                    ? // redacteds are always stored as secret_text, so are always string
+                                                      // we JSON.stringify when not a Redacted<string>
+                                                      string
+                                                    : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

@@ -6,6 +6,7 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -19,7 +20,7 @@ export interface WarpConnectorProps {
   /**
    * User-friendly name for the WARP Connector tunnel. Tunnel names are
    * unique per account, which makes the name the resource's identity
-   * during adoption and state recovery. Mutable — patched in place.
+   * during adoption and state recovery. Changing it replaces the tunnel.
    *
    * @default ${app}-${stage}-${id}
    */
@@ -85,9 +86,9 @@ export type WarpConnector = Resource<
  * ```
  *
  * @section Renaming
- * @example Rename in place
+ * @example Replace with a new name
  * ```typescript
- * // Renaming patches the existing tunnel — same tunnelId, no replacement.
+ * // Renaming creates a new tunnel with a new tunnelId.
  * const connector = yield* Cloudflare.Tunnel.WarpConnector("SiteA", {
  *   name: "site-a-connector-v2",
  * });
@@ -107,12 +108,14 @@ export const WarpConnectorProvider = () =>
   Provider.succeed(WarpConnector, {
     stables: ["tunnelId", "accountId", "createdAt"],
 
-    diff: Effect.fn(function* ({ output }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // name converges via PATCH.
+      if (isResolved(news) && olds !== undefined && olds.name !== news.name) {
+        return { action: "replace" } as const;
+      }
       return undefined;
     }),
 

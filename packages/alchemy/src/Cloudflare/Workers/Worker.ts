@@ -585,7 +585,24 @@ export interface ViteOptions {
    *
    * @see {@link MemoOptions}
    */
-  memo?: MemoOptions;
+  memo?: MemoOptions & {
+    /**
+     * Configure additional workspaces to hash.
+     * By default, auto-detects workspaces during Vite build, then hashes all
+     * non-gitignored files in the workspace plus the nearest lockfile.
+     * @default "auto"
+     */
+    workspaces?:
+      | "auto"
+      | Array<
+          MemoOptions & {
+            /**
+             * The working directory to hash, relative to the Vite root.
+             */
+            cwd: string;
+          }
+        >;
+  };
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
@@ -632,6 +649,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
       assets: string | undefined;
       bundle: string | undefined;
       input: string | undefined;
+      additionalWorkspaces: string[] | undefined;
       // Hash of the deploy-time metadata surface (compatibility, env,
       // bindings, asset config, limits, observability, ...) so metadata-only
       // edits trigger an update (#745). Optional: state written before this

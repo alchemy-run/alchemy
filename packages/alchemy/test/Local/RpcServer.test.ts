@@ -1,7 +1,7 @@
 import { unwrapRpcHandlers } from "@/Local/RpcSerialization.ts";
 import type { RpcProxyApi } from "@/Local/RpcServer.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { assert, describe, expect, it } from "@effect/vitest";
+import { assert, describe, expect, it } from "alchemy-test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";

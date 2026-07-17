@@ -30,6 +30,9 @@
       "path": "./tsconfig.scripts.json"
     },
     {
+      "path": "./packages/alchemy-test/tsconfig.json"
+    },
+    {
       "path": "./packages/alchemy/tsconfig.json"
     },
     {

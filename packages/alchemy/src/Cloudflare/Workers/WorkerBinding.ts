@@ -22,6 +22,7 @@ import type { Secret } from "../SecretsStore/Secret.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
+import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
@@ -72,6 +73,7 @@ export type WorkerBindingResource =
   | Namespace
   | Queue
   | AiGateway
+  | AIBinding
   | SearchInstance
   | SearchNamespace
   | Dataset

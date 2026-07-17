@@ -48,6 +48,12 @@ export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
 export type DurableObjectGetDurableObjectOptions =
   cf.DurableObjectNamespaceGetDurableObjectOptions;
+/**
+ * The regions a Durable Object can be *hinted* toward at creation —
+ * `"wnam"`, `"enam"`, `"sam"`, `"weur"`, `"eeur"`, `"apac"`, `"oc"`, … See
+ * the "Placing a Durable Object in a Region" section on {@link DurableObject}.
+ */
+export type DurableObjectLocationHint = cf.DurableObjectLocationHint;
 
 export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
 
@@ -78,7 +84,10 @@ export interface DurableObject<
   Type: TypeId;
   name: string;
   namespaceId: Output.Output<string>;
-  getByName: (name: string) => DurableObjectStub<Shape>;
+  getByName: (
+    name: string,
+    options?: DurableObjectGetDurableObjectOptions,
+  ) => DurableObjectStub<Shape>;
   newUniqueId: () => DurableObjectId;
   idFromName: (name: string) => DurableObjectId;
   idFromString: (id: string) => DurableObjectId;
@@ -628,6 +637,37 @@ export class DurableObjectScope extends Context.Service<
  * return yield* room.fetch(request);
  * ```
  *
+ * @section Placing a Durable Object in a Region
+ * A Durable Object is created wherever its *first-ever* request
+ * came from, and it stays there for life. That default is right for
+ * an instance whose traffic all comes from the user who created it,
+ * and wrong for one whose name is derived from something other than
+ * geography (a shard index, a hash, a fixed roster) — a Sydney user
+ * routed onto an instance that some Frankfurt request happened to
+ * create first pays a cross-planet round trip on every call.
+ *
+ * Pass a `locationHint` to place the instance near the traffic you
+ * expect instead. It only applies to *creation*: an instance that
+ * already exists is unaffected, so a hint can't move a live DO.
+ *
+ * @example Sharding instances by region
+ * ```typescript
+ * // Both the name and the hint derive from the caller's region, so
+ * // each shard is created in the region whose users address it.
+ * const region = hintFor(request.cf?.continent); // "apac", "weur", …
+ * const shard = shards.getByName(`pool:${region}:${index}`, {
+ *   locationHint: region,
+ * });
+ * ```
+ *
+ * :::caution
+ * A hint is a hint: Cloudflare places the instance in the nearest
+ * location it *can*, which may not be the hinted one, and only the
+ * first request to a given name has any say. Derive the name from
+ * the same region you hint with — otherwise two regions race to
+ * create one shared instance and the loser is stuck with it.
+ * :::
+ *
  * @section Accessing Instance State
  * Each Durable Object instance has its own transactional key-value
  * storage via `Cloudflare.DurableObjectState`. Resolve the `state`
@@ -1129,7 +1169,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
               (durableObjectNamespaces) => durableObjectNamespaces?.[namespace],
             ),
           ),
-          getByName: (name: string) => makeRpcStub(binding.getByName(name)),
+          getByName: (
+            name: string,
+            options?: DurableObjectGetDurableObjectOptions,
+          ) => makeRpcStub(binding.getByName(name, options)),
           // newUniqueId: () => use((ns) => ns.newUniqueId()),
           // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
           // idFromString: (id: string) => use((ns) => ns.idFromString(id)),

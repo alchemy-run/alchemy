@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -37,7 +37,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
     Effect.gen(function* () {
       const { asyncUrl } = yield* stack;
       expect(asyncUrl).toBeTypeOf("string");
-      console.log(asyncUrl);
+      yield* Effect.log(asyncUrl);
 
       const body = yield* expectUrlContains(asyncUrl, '"STR":"hello"', {
         timeout: "60 seconds",
