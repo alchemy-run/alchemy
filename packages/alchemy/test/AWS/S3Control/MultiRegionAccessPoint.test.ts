@@ -1,10 +1,10 @@
 import * as AWS from "@/AWS";
 import { Bucket } from "@/AWS/S3";
 import { MultiRegionAccessPoint } from "@/AWS/S3Control";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3control from "@distilled.cloud/aws/s3-control";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -45,8 +45,8 @@ test.provider(
   { timeout: 60_000 },
 );
 
-// Multi-Region Access Point provisioning is asynchronous and takes several
-// minutes each way (create + delete), so the full lifecycle is gated.
+// Multi-Region Access Point provisioning is asynchronous and can consume the
+// entire 240s suite ceiling, so the full lifecycle remains explicitly gated.
 test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
   "create and delete multi-region access point (slow, gated)",
   (stack) =>
@@ -82,6 +82,5 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       );
       expect(afterDestroy).toBeUndefined();
     }),
-  // async create (~5-10 min) + async delete (~5 min)
-  { timeout: 1_500_000 },
+  { timeout: 240_000 },
 );

@@ -1,11 +1,12 @@
 import * as AWS from "@/AWS";
-import { Vpc } from "@/AWS/EC2";
 import { Profile, ProfileAssociation } from "@/AWS/Route53Profiles";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as profiles from "@distilled.cloud/aws/route53profiles";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -54,23 +55,25 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      // A Profile association accepts any VPC in the Region. Use the
+      // standing default VPC instead of consuming a scarce VPC quota slot;
+      // because it is resolved outside the stack, destroy cannot delete it.
+      const defaultVpc = yield* getDefaultVpc;
+
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("ProfileVpc", {
-            cidrBlock: "10.63.0.0/24",
-          });
           const profile = yield* Profile("VpcDnsProfile", {});
           const association = yield* ProfileAssociation("VpcDns", {
             profileId: profile.profileId,
-            resourceId: vpc.vpcId,
+            resourceId: defaultVpc.vpcId,
           });
-          return { vpc, profile, association };
+          return { profile, association };
         }),
       );
 
       expect(deployed.association.profileAssociationId).toMatch(/^rpassoc-/);
       expect(deployed.association.profileId).toBe(deployed.profile.profileId);
-      expect(deployed.association.resourceId).toBe(deployed.vpc.vpcId);
+      expect(deployed.association.resourceId).toBe(defaultVpc.vpcId);
 
       // Out-of-band: the association exists for the (profile, VPC) pair.
       const live = yield* profiles.getProfileAssociation({
@@ -79,7 +82,7 @@ test.provider(
       expect(live.ProfileAssociation?.ProfileId).toBe(
         deployed.profile.profileId,
       );
-      expect(live.ProfileAssociation?.ResourceId).toBe(deployed.vpc.vpcId);
+      expect(live.ProfileAssociation?.ResourceId).toBe(defaultVpc.vpcId);
       expect(["CREATING", "COMPLETE"]).toContain(
         live.ProfileAssociation?.Status,
       );
@@ -87,13 +90,10 @@ test.provider(
       // Re-deploying the same stack is a no-op (idempotent reconcile).
       const again = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("ProfileVpc", {
-            cidrBlock: "10.63.0.0/24",
-          });
           const profile = yield* Profile("VpcDnsProfile", {});
           const association = yield* ProfileAssociation("VpcDns", {
             profileId: profile.profileId,
-            resourceId: vpc.vpcId,
+            resourceId: defaultVpc.vpcId,
           });
           return { association };
         }),
@@ -102,11 +102,15 @@ test.provider(
         deployed.association.profileAssociationId,
       );
 
-      // Destroy tears down association → profile → VPC in order. The
-      // association disassociates asynchronously (~1–2 min).
+      // Destroy tears down the association before the profile. The standing
+      // default VPC is deliberately outside the stack and must remain.
       yield* stack.destroy();
       yield* assertAssociationGone(deployed.association.profileAssociationId);
       yield* assertProfileGone(deployed.profile.profileId);
+      const vpcAfter = yield* ec2.describeVpcs({
+        VpcIds: [defaultVpc.vpcId],
+      });
+      expect(vpcAfter.Vpcs?.[0]?.IsDefault).toBe(true);
     }),
   { timeout: 360_000 },
 );

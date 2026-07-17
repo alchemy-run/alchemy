@@ -1,5 +1,6 @@
 import * as s3vectors from "@distilled.cloud/aws/s3vectors";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -277,10 +278,55 @@ export const VectorBucketProvider = () =>
           yield* session.note(name);
           return { vectorBucketName: name, vectorBucketArn: vectorBucketArn! };
         }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* s3vectors
-            .deleteVectorBucket({ vectorBucketName: output.vectorBucketName })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+        delete: Effect.fn(function* ({ output, force }) {
+          const vectorBucketName = output.vectorBucketName;
+          if (force !== true) {
+            yield* s3vectors
+              .deleteVectorBucket({ vectorBucketName })
+              .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+            return;
+          }
+
+          const purgeAndDelete = Effect.gen(function* () {
+            // Indexes are scoped to their bucket and invisible to a global
+            // nuke scan. Only the explicit force path may purge them.
+            const indexes = yield* s3vectors.listIndexes
+              .items({ vectorBucketName })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) => Array.from(chunk)),
+                Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+              );
+            yield* Effect.forEach(
+              indexes,
+              (index) =>
+                s3vectors
+                  .deleteIndex({
+                    vectorBucketName,
+                    indexName: index.indexName,
+                  })
+                  .pipe(
+                    Effect.catchTag("NotFoundException", () => Effect.void),
+                  ),
+              { concurrency: 4, discard: true },
+            );
+            yield* s3vectors.deleteVectorBucket({ vectorBucketName });
+          });
+
+          yield* purgeAndDelete.pipe(
+            // Index deletion is eventually consistent and bucket deletion can
+            // report Conflict until all indexes disappear. Re-list on retry.
+            Effect.retry({
+              while: (e) =>
+                e._tag === "ConflictException" ||
+                e._tag === "ServiceUnavailableException",
+              schedule: Schedule.max([
+                Schedule.exponential(500),
+                Schedule.recurs(8),
+              ]),
+            }),
+            Effect.catchTag("NotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

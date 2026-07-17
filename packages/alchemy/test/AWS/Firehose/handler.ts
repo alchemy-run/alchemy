@@ -32,9 +32,10 @@ export const BucketAndDeliveryStreamLive = Layer.effect(
         destination: {
           bucketArn: bucket.bucketArn,
           prefix: "records/",
-          // Minimum buffering so AWS_TEST_SLOW=1 S3-arrival polling stays
-          // bounded; ingest assertions never wait on delivery.
-          bufferingInterval: "60 seconds",
+          // Direct S3 supports zero buffering. Keep the binding fixture at
+          // zero so end-to-end delivery can be proven inside the normal test
+          // budget instead of imposing Firehose's one-minute flush delay.
+          bufferingInterval: "0 seconds",
           bufferingSizeInMBs: 1,
         },
         tags: { fixture: "firehose-bindings" },

@@ -1,4 +1,5 @@
 import * as iot from "@distilled.cloud/aws/iot";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -72,6 +73,13 @@ export interface ThingType extends Resource<
  * ```
  */
 export const ThingType = Resource<ThingType>("AWS.IoT.ThingType");
+
+export class ThingTypeDeletionTimedOut extends Data.TaggedError(
+  "ThingTypeDeletionTimedOut",
+)<{
+  readonly thingTypeName: string;
+  readonly waitedSeconds: number;
+}> {}
 
 export const ThingTypeProvider = () =>
   Provider.effect(
@@ -185,29 +193,80 @@ export const ThingTypeProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // A thing type must be deprecated before it can be deleted, and AWS
-          // enforces a 5-minute wait between deprecation and deletion. We
-          // deprecate then attempt deletion; the "wait 5 minutes" rejection
-          // (surfaced as InvalidRequestException) is tolerated — the type is
-          // left deprecated and becomes deletable on the next destroy.
-          yield* iot
-            .deprecateThingType({ thingTypeName: output.thingTypeName })
+          const thingTypeName = output.thingTypeName;
+
+          // Things reference their type, so the engine dependency graph (and
+          // nuke's independent Thing provider) must remove owned Things first.
+          // Do not silently delete arbitrary foreign Things merely because
+          // they share this account-global type.
+          const initial = yield* iot
+            .describeThingType({ thingTypeName })
             .pipe(
-              // InvalidRequestException: already deprecated (delete must be
-              // idempotent — a repeated destroy re-enters here).
-              Effect.catchTag(
-                ["ResourceNotFoundException", "InvalidRequestException"],
-                () => Effect.void,
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
               ),
             );
-          yield* iot
-            .deleteThingType({ thingTypeName: output.thingTypeName })
-            .pipe(
-              Effect.catchTag(
-                ["ResourceNotFoundException", "InvalidRequestException"],
-                () => Effect.void,
+          if (initial === undefined) return;
+
+          if (!initial.thingTypeMetadata?.deprecated) {
+            yield* iot
+              .deprecateThingType({ thingTypeName })
+              .pipe(
+                Effect.catchTag(
+                  ["ResourceNotFoundException", "InvalidRequestException"],
+                  () => Effect.void,
+                ),
+              );
+          }
+
+          // AWS enforces a mandatory five-minute deprecation window. A single
+          // provider operation must not block that long: retry only its typed
+          // InvalidRequestException for ~45s, then fail explicitly so state is
+          // preserved. A later destroy/nuke re-enters with the same stable name
+          // after AWS's clock has elapsed and completes the deletion. Success
+          // still requires DescribeThingType to report actual NotFound.
+          const attempts = 12;
+          const intervalSeconds = 4;
+          for (let attempt = 0; attempt < attempts; attempt++) {
+            const absent = yield* iot.describeThingType({ thingTypeName }).pipe(
+              Effect.as(false),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(true),
               ),
             );
+            if (absent) return;
+
+            const deleteAccepted = yield* iot
+              .deleteThingType({ thingTypeName })
+              .pipe(
+                Effect.as(true),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(true),
+                ),
+                Effect.catchTag("InvalidRequestException", () =>
+                  Effect.succeed(false),
+                ),
+              );
+            if (deleteAccepted) {
+              const gone = yield* iot.describeThingType({ thingTypeName }).pipe(
+                Effect.as(false),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(true),
+                ),
+              );
+              if (gone) return;
+            }
+            if (attempt + 1 < attempts) {
+              yield* Effect.sleep(`${intervalSeconds} seconds`);
+            }
+          }
+
+          return yield* Effect.fail(
+            new ThingTypeDeletionTimedOut({
+              thingTypeName,
+              waitedSeconds: (attempts - 1) * intervalSeconds,
+            }),
+          );
         }),
       });
     }),

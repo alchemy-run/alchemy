@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { PermissionSet } from "@/AWS/IdentityCenter";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 

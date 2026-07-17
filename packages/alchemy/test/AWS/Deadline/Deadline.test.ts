@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Budget, Farm, Fleet, Queue, StorageProfile } from "@/AWS/Deadline";
 import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as deadline from "@distilled.cloud/aws/deadline";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -51,7 +51,10 @@ const assertFarmDeleted = Effect.fn(function* (farmId: string) {
     Effect.flatMap(() => Effect.fail(new FarmStillExists())),
     Effect.retry({
       while: (e) => e._tag === "FarmStillExists",
-      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+      schedule: Schedule.max([
+        Schedule.spaced("6 seconds"),
+        Schedule.recurs(9),
+      ]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );

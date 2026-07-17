@@ -9,10 +9,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import {
-  SNSApiFunction,
-  SNSApiFunctionLive,
-  TopicAndQueue,
-} from "./handler.ts";
+  SubscriptionTargetFunction,
+  SubscriptionTargetFunctionLive,
+} from "./subscription-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,17 +23,20 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const { topic, queue, subscription } = yield* TopicAndQueue;
-
-          const apiFunction = yield* SNSApiFunction;
+          const topic = yield* AWS.SNS.Topic("LambdaSubscriptionTopic");
+          const target = yield* SubscriptionTargetFunction;
+          const subscription = yield* Subscription("LambdaSubscription", {
+            topicArn: topic.topicArn,
+            protocol: "lambda",
+            endpoint: target.functionArn,
+            returnSubscriptionArn: true,
+          });
 
           return {
-            apiFunction,
             topic,
-            queue,
             subscription,
           };
-        }).pipe(Effect.provide(SNSApiFunctionLive)),
+        }).pipe(Effect.provide(SubscriptionTargetFunctionLive)),
       );
 
       expect(deployed.subscription.subscriptionArn).toBeDefined();
@@ -57,7 +59,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertSubscriptionDeleted(deployed.subscription.subscriptionArn);
     }),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a

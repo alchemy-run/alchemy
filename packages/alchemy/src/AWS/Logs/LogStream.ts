@@ -194,6 +194,22 @@ export const LogStreamProvider = () =>
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+
+          const remaining = yield* Effect.repeat(
+            observe(output.logGroupName, output.logStreamName),
+            {
+              schedule: Schedule.fixed("250 millis"),
+              until: (stream) => stream === undefined,
+              times: 20,
+            },
+          );
+          if (remaining !== undefined) {
+            yield* Effect.die(
+              new Error(
+                `CloudWatch log stream ${output.logGroupName}:${output.logStreamName} remained observable after delete`,
+              ),
+            );
+          }
         }),
       };
     }),

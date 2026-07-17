@@ -164,8 +164,7 @@ export default LexTestFunction.make(
               inputStream: new TextEncoder().encode(body.text),
             }),
             (reply) => ({
-              // gzip+base64 on the wire — the test asserts presence only.
-              inputTranscript: reply.inputTranscript ?? null,
+              contentType: reply.contentType ?? null,
               sessionId: reply.sessionId ?? null,
             }),
           );

@@ -1,14 +1,13 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { describe } from "vitest";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 import DocDBTestFunctionLive, { DocDBTestFunction } from "./handler";

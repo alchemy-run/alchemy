@@ -1,10 +1,10 @@
 import * as AWS from "@/AWS";
 import { Cluster } from "@/AWS/EMR/Cluster.ts";
 import * as Output from "@/Output";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as emr from "@distilled.cloud/aws/emr";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

@@ -1,16 +1,14 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import AcmTestFunctionLive, {
   AcmTestFunction,
   FIXTURE_DOMAIN,

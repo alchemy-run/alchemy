@@ -1,4 +1,5 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -84,6 +85,11 @@ export interface Cluster extends Resource<
  */
 export const Cluster = Resource<Cluster>("AWS.ECS.Cluster");
 
+class ClusterStillActive extends Data.TaggedError("ClusterStillActive")<{
+  readonly cluster: string;
+  readonly status: string | undefined;
+}> {}
+
 export const ClusterProvider = () =>
   Provider.effect(
     Cluster,
@@ -143,7 +149,11 @@ export const ClusterProvider = () =>
             include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
           });
           const cluster = described.clusters?.[0];
-          if (!cluster?.clusterArn) {
+          // ECS deletion is a transition to INACTIVE. AWS may continue to
+          // return an inactive cluster from DescribeClusters for a while, but
+          // it is no longer a usable resource and must not be resurrected in
+          // state during refresh.
+          if (!cluster?.clusterArn || cluster.status === "INACTIVE") {
             return undefined;
           }
           return {
@@ -191,7 +201,10 @@ export const ClusterProvider = () =>
               { concurrency: 5 },
             );
             return described.flat().flatMap((cluster) => {
-              if (!cluster.clusterArn) {
+              // DeleteCluster does not immediately erase a cluster. Inactive
+              // clusters can remain discoverable according to the ECS API,
+              // so exclude that terminal state from nuke/provider inventory.
+              if (!cluster.clusterArn || cluster.status === "INACTIVE") {
                 return [];
               }
               const tags = Object.fromEntries(
@@ -311,6 +324,13 @@ export const ClusterProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const cluster = output.clusterArn;
 
+          // Observe mutable associations instead of trusting persisted output:
+          // capacity providers can be attached out of band or output can be
+          // stale after a prior interrupted reconcile.
+          const observedCluster = (yield* ecs.describeClusters({
+            clusters: [cluster],
+          })).clusters?.find((candidate) => candidate.clusterArn === cluster);
+
           // A cluster cannot be deleted while it still contains services,
           // running tasks, or registered container instances — empty it
           // first so deletion actually converges instead of silently
@@ -393,7 +413,34 @@ export const ClusterProvider = () =>
             { discard: true },
           );
 
-          // 4. Delete the (now empty) cluster. Draining services/tasks is
+          // 4. Remove custom capacity-provider associations. A cluster with
+          //    an associated provider cannot be deleted even after its
+          //    services, tasks, and container instances have drained.
+          if (
+            (observedCluster?.capacityProviders ?? output.capacityProviders)
+              .length > 0
+          ) {
+            yield* ecs
+              .putClusterCapacityProviders({
+                cluster,
+                capacityProviders: [],
+                defaultCapacityProviderStrategy: [],
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) =>
+                    e._tag === "UpdateInProgressException" ||
+                    e._tag === "ResourceInUseException",
+                  schedule: Schedule.max([
+                    Schedule.fixed("3 seconds"),
+                    Schedule.recurs(10),
+                  ]),
+                }),
+                Effect.catchTag("ClusterNotFoundException", () => Effect.void),
+              );
+          }
+
+          // 5. Delete the (now empty) cluster. Draining services/tasks is
           //    asynchronous, so retry the contains-* rejections briefly.
           yield* ecs
             .deleteCluster({
@@ -405,6 +452,7 @@ export const ClusterProvider = () =>
                   e._tag === "ClusterContainsServicesException" ||
                   e._tag === "ClusterContainsTasksException" ||
                   e._tag === "ClusterContainsContainerInstancesException" ||
+                  e._tag === "ClusterContainsCapacityProviderException" ||
                   e._tag === "UpdateInProgressException",
                 schedule: Schedule.max([
                   Schedule.fixed("3 seconds"),
@@ -413,6 +461,33 @@ export const ClusterProvider = () =>
               }),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
+
+          // DeleteCluster's successful response only means that ECS accepted
+          // the transition. Observe the terminal INACTIVE state (or absence)
+          // before reporting deletion so dependent teardown and a following
+          // nuke pass do not race the cluster lifecycle.
+          yield* ecs.describeClusters({ clusters: [cluster] }).pipe(
+            Effect.flatMap((response) => {
+              const observed = response.clusters?.find(
+                (candidate) => candidate.clusterArn === cluster,
+              );
+              return !observed || observed.status === "INACTIVE"
+                ? Effect.void
+                : Effect.fail(
+                    new ClusterStillActive({
+                      cluster,
+                      status: observed.status,
+                    }),
+                  );
+            }),
+            Effect.retry({
+              while: (error) => error instanceof ClusterStillActive,
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(15),
+              ]),
+            }),
+          );
         }),
       };
     }),

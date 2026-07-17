@@ -1,22 +1,14 @@
 import * as AWS from "@/AWS";
-import {
-  InternetGateway,
-  Route,
-  RouteTable,
-  RouteTableAssociation,
-  SecurityGroup,
-  Subnet,
-  Vpc,
-} from "@/AWS/EC2";
+import { SecurityGroup } from "@/AWS/EC2";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
 import * as Test from "@/Test/Alchemy";
-import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 import TestTask from "./fixtures/task.ts";
 import {
   E2E_CLUSTER_NAME,
@@ -32,9 +24,11 @@ const { test } = Test.make({ providers: AWS.providers() });
 // `{ fetch }` handler is served and (b) the `ServerHost.run` background loop is
 // actually executing inside the deployed container (`/ticks` keeps climbing).
 //
-// This is the real-deploy regression for #706. It is heavy (Docker build + ECR
-// push + Fargate placement + ALB health), so it is skipped under `FAST=1`.
-test.provider.skipIf(!!process.env.FAST)(
+// This is the real-deploy regression for #706. Docker/ECR + Fargate placement
+// + the ALB health ramp takes about five minutes even on the standing default
+// VPC, so keep it out of the hard-240 default sweep. Run it explicitly with
+// `AWS_TEST_SLOW=1`; `FAST=1` always keeps the lifecycle disabled.
+test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
   // The title doubles as the scratch stack name, which prefixes every
   // physical name — the orphan sweep prefix-matches on it.
   E2E_TEST_TITLE,
@@ -51,56 +45,23 @@ test.provider.skipIf(!!process.env.FAST)(
         reclaimTaskE2EOrphans.pipe(Effect.orDie),
       );
 
-      const azResult = yield* ec2.describeAvailabilityZones({});
-      const available = (azResult.AvailabilityZones ?? []).filter(
-        (az) => az.State === "available",
-      );
-      const az1 = available[0]?.ZoneName!;
-      const az2 = available[1]?.ZoneName!;
+      // Reuse the standing public network. Creating a dedicated VPC here is
+      // both unnecessary for the Task regression and races the account's VPC
+      // quota during c128 sweeps. An internet-facing ALB needs two AZs.
+      const { vpcId, subnetIds } = yield* getDefaultVpcNetwork;
+      if (subnetIds.length < 2) {
+        return yield* Effect.die(
+          new Error("default VPC has fewer than 2 subnets"),
+        );
+      }
+      const publicSubnetIds = subnetIds.slice(0, 2);
 
       const { url, targetGroupArn } = yield* stack.deploy(
         Effect.gen(function* () {
-          // Public networking: VPC + IGW + 2 public subnets (ALB needs ≥2 AZs)
-          // + route to the IGW + a security group that admits the ALB (80) and
-          // the container traffic port (3000).
-          const vpc = yield* Vpc("EcsE2EVpc", {
-            cidrBlock: "10.80.0.0/16",
-            enableDnsSupport: true,
-            enableDnsHostnames: true,
-          });
-          const igw = yield* InternetGateway("EcsE2EIgw", {
-            vpcId: vpc.vpcId,
-          });
-          const subnetA = yield* Subnet("EcsE2ESubnetA", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.80.1.0/24",
-            availabilityZone: az1,
-            mapPublicIpOnLaunch: true,
-          });
-          const subnetB = yield* Subnet("EcsE2ESubnetB", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.80.2.0/24",
-            availabilityZone: az2,
-            mapPublicIpOnLaunch: true,
-          });
-          const routeTable = yield* RouteTable("EcsE2ERouteTable", {
-            vpcId: vpc.vpcId,
-          });
-          yield* Route("EcsE2ERoute", {
-            routeTableId: routeTable.routeTableId,
-            destinationCidrBlock: "0.0.0.0/0",
-            gatewayId: igw.internetGatewayId,
-          });
-          yield* RouteTableAssociation("EcsE2EAssocA", {
-            routeTableId: routeTable.routeTableId,
-            subnetId: subnetA.subnetId,
-          });
-          yield* RouteTableAssociation("EcsE2EAssocB", {
-            routeTableId: routeTable.routeTableId,
-            subnetId: subnetB.subnetId,
-          });
+          // The default VPC supplies public routing and subnets; this managed
+          // security group remains isolated to the test and is swept exactly.
           const securityGroup = yield* SecurityGroup("EcsE2ESg", {
-            vpcId: vpc.vpcId,
+            vpcId,
             description: "alchemy ecs task e2e",
             ingress: [
               {
@@ -145,8 +106,8 @@ test.provider.skipIf(!!process.env.FAST)(
             public: true,
             listenerPort: 80,
             healthCheckPath: "/health",
-            vpcId: vpc.vpcId,
-            subnets: [subnetA.subnetId, subnetB.subnetId],
+            vpcId,
+            subnets: publicSubnetIds,
             securityGroups: [securityGroup.groupId],
             assignPublicIp: true,
           });

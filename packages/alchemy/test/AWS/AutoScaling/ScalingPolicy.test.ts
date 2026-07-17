@@ -13,6 +13,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { getAutoScalingTestSubnetId } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -155,15 +156,7 @@ test.provider(
         LaunchTemplateData: { ImageId: imageId, InstanceType: "t3.micro" },
       } as any);
 
-      const subnets = yield* ec2.describeSubnets({
-        Filters: [{ Name: "default-for-az", Values: ["true"] }],
-      } as any);
-      const subnetId = subnets.Subnets?.[0]?.SubnetId;
-      if (!subnetId) {
-        return yield* Effect.die(
-          new Error("no default-VPC subnet available in this region"),
-        );
-      }
+      const subnetId = yield* getAutoScalingTestSubnetId;
 
       const deployPolicy = () =>
         stack.deploy(
@@ -171,7 +164,7 @@ test.provider(
             const group = yield* AutoScalingGroup("RecoveryGroup", {
               autoScalingGroupName: recoveryAsgName,
               launchTemplate: { launchTemplateName: recoveryLtName },
-              subnetIds: [subnetId as `subnet-${string}`],
+              subnetIds: [subnetId],
               minSize: 0,
               maxSize: 0,
               desiredCapacity: 0,

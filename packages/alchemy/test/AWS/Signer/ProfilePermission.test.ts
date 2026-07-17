@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { ProfilePermission, SigningProfile } from "@/AWS/Signer";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as signer from "@distilled.cloud/aws/signer";
 import * as sts from "@distilled.cloud/aws/sts";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

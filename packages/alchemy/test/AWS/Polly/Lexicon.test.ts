@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Lexicon } from "@/AWS/Polly/Lexicon.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as polly from "@distilled.cloud/aws/polly";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
@@ -39,6 +39,28 @@ const getLexicon = (name: string) =>
       ),
     );
 
+const waitForContent = (name: string, content: string) =>
+  Effect.gen(function* () {
+    let found: polly.GetLexiconOutput | undefined;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      found = yield* getLexicon(name);
+      if (unredact(found?.Lexicon?.Content)?.includes(content)) return found;
+      yield* Effect.sleep("250 millis");
+    }
+    return found;
+  });
+
+const waitUntilGone = (name: string) =>
+  Effect.gen(function* () {
+    let found: polly.GetLexiconOutput | undefined;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      found = yield* getLexicon(name);
+      if (found === undefined) return found;
+      yield* Effect.sleep("250 millis");
+    }
+    return found;
+  });
+
 test.provider(
   "lifecycle: create named lexicon, update content, destroy",
   (stack) =>
@@ -61,7 +83,10 @@ test.provider(
       expect(deployed.lexemesCount).toBe(1);
 
       // Out-of-band verification via distilled.
-      const created = yield* getLexicon(lexiconName);
+      const created = yield* waitForContent(
+        lexiconName,
+        "infrastructure as code",
+      );
       expect(unredact(created?.Lexicon?.Content)).toContain(
         "infrastructure as code",
       );
@@ -80,14 +105,17 @@ test.provider(
           });
         }),
       );
-      const updated = yield* getLexicon(lexiconName);
+      const updated = yield* waitForContent(
+        lexiconName,
+        "infrastructure as effects",
+      );
       expect(unredact(updated?.Lexicon?.Content)).toContain(
         "infrastructure as effects",
       );
 
       // Destroy — the lexicon is gone.
       yield* stack.destroy();
-      const after = yield* getLexicon(lexiconName);
+      const after = yield* waitUntilGone(lexiconName);
       expect(after).toBeUndefined();
     }),
   { timeout: 180_000 },
@@ -111,7 +139,7 @@ test.provider(
       expect(created).toBeDefined();
 
       yield* stack.destroy();
-      const after = yield* getLexicon(deployed.lexiconName);
+      const after = yield* waitUntilGone(deployed.lexiconName);
       expect(after).toBeUndefined();
     }),
   { timeout: 180_000 },

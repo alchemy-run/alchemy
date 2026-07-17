@@ -1,6 +1,5 @@
 import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2/Subnet.ts";
-import { Vpc } from "@/AWS/EC2/Vpc.ts";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
 import * as Provider from "@/Provider";
@@ -12,6 +11,7 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { getDefaultVpc } from "../DefaultVpc.ts";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -26,8 +26,8 @@ const { test } = Test.make({ providers: AWS.providers() });
 // (the canonical `AWS.ECS.Task` resource) and instead register a minimal task
 // definition against a public image and run the service at `desiredCount: 0`,
 // so `createService` returns immediately without waiting for Fargate task
-// placement. Networking is a throwaway VPC + single subnet (no NAT/IGW needed
-// since no task is ever launched).
+// placement. Networking is a stack-owned subnet in the standing default VPC
+// (no NAT/IGW needed since no task is ever launched).
 test.provider("list enumerates the deployed service", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
@@ -63,15 +63,13 @@ test.provider("list enumerates the deployed service", (stack) =>
         new Error("registerTaskDefinition returned no task definition ARN"),
       );
     }
+    const defaultVpc = yield* getDefaultVpc;
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
-        const vpc = yield* Vpc("ListServiceVpc", {
-          cidrBlock: "10.71.0.0/16",
-        });
         const subnet = yield* Subnet("ListServiceSubnet", {
-          vpcId: vpc.vpcId,
-          cidrBlock: "10.71.1.0/24",
+          vpcId: defaultVpc.vpcId,
+          cidrBlock: defaultVpc.subnetCidrBlock(234),
         });
         const cluster = yield* Cluster("ListServiceCluster", {
           clusterName: "alchemy-test-ecs-service-list",
@@ -84,7 +82,7 @@ test.provider("list enumerates the deployed service", (stack) =>
             port: 80,
           },
           desiredCount: 0,
-          vpcId: vpc.vpcId,
+          vpcId: defaultVpc.vpcId,
           subnets: [subnet.subnetId],
         });
       }),
@@ -148,6 +146,7 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
+      const defaultVpc = yield* getDefaultVpc;
 
       const deployService = (props: {
         desiredCount: number;
@@ -157,10 +156,9 @@ test.provider(
       }) =>
         stack.deploy(
           Effect.gen(function* () {
-            const vpc = yield* Vpc("InPlaceVpc", { cidrBlock: "10.72.0.0/16" });
             const subnet = yield* Subnet("InPlaceSubnet", {
-              vpcId: vpc.vpcId,
-              cidrBlock: "10.72.1.0/24",
+              vpcId: defaultVpc.vpcId,
+              cidrBlock: defaultVpc.subnetCidrBlock(235),
             });
             const cluster = yield* Cluster("InPlaceCluster", {
               clusterName: "alchemy-test-ecs-service-inplace",
@@ -169,7 +167,7 @@ test.provider(
               cluster,
               task: { taskDefinitionArn, containerName: "app", port: 80 },
               desiredCount: props.desiredCount,
-              vpcId: vpc.vpcId,
+              vpcId: defaultVpc.vpcId,
               subnets: [subnet.subnetId],
               assignPublicIp: props.assignPublicIp,
               tags: props.tags,
@@ -255,11 +253,11 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       // Clean up any out-of-band ELBv2 leftovers from a prior interrupted run
-      // BEFORE destroying the stack: a stale ALB holds ENIs in the stack's
-      // VPC, which deadlocks the VPC deletion inside `stack.destroy()`. It
-      // also keeps the fresh ALB, target group, and listener consistently
-      // wired (a stale, unassociated target group would make `createService`
-      // reject with `InvalidParameterException`).
+      // BEFORE destroying the stack: a stale ALB holds ENIs in the
+      // stack-owned subnets and prevents their deletion. It also keeps the
+      // fresh ALB, target group, and listener consistently wired (a stale,
+      // unassociated target group would make `createService` reject with
+      // `InvalidParameterException`).
       const existingLbs = yield* elbv2
         .describeLoadBalancers({ Names: ["alchemy-test-ecs-manuallb"] })
         .pipe(Effect.catch(() => Effect.succeed({ LoadBalancers: [] })));
@@ -321,6 +319,7 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
+      const defaultVpc = yield* getDefaultVpc;
 
       // Resolve two available AZs in the active region — hardcoding zone
       // names breaks as soon as the profile targets a different region.
@@ -335,22 +334,21 @@ test.provider(
       // out-of-band ELBv2 resources.
       const net = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("ManualLbVpc", { cidrBlock: "10.73.0.0/16" });
           const subnetA = yield* Subnet("ManualLbSubnetA", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.73.1.0/24",
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(236),
             availabilityZone: az1,
           });
           const subnetB = yield* Subnet("ManualLbSubnetB", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.73.2.0/24",
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(237),
             availabilityZone: az2,
           });
           const cluster = yield* Cluster("ManualLbCluster", {
             clusterName: "alchemy-test-ecs-service-manuallb",
           });
           return {
-            vpcId: vpc.vpcId.as<string>(),
+            vpcId: defaultVpc.vpcId,
             subnetAId: subnetA.subnetId.as<string>(),
             subnetBId: subnetB.subnetId.as<string>(),
             clusterArn: cluster.clusterArn.as<string>(),
@@ -404,15 +402,14 @@ test.provider(
       // Service wired to the user-supplied target group.
       const service = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("ManualLbVpc", { cidrBlock: "10.73.0.0/16" });
           const subnetA = yield* Subnet("ManualLbSubnetA", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.73.1.0/24",
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(236),
             availabilityZone: az1,
           });
           const subnetB = yield* Subnet("ManualLbSubnetB", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.73.2.0/24",
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(237),
             availabilityZone: az2,
           });
           const cluster = yield* Cluster("ManualLbCluster", {
@@ -423,7 +420,7 @@ test.provider(
             task: { taskDefinitionArn, containerName: "app", port: 80 },
             desiredCount: 0,
             public: false,
-            vpcId: vpc.vpcId,
+            vpcId: defaultVpc.vpcId,
             subnets: [subnetA.subnetId, subnetB.subnetId],
             loadBalancers: [
               { targetGroupArn, containerName: "app", containerPort: 80 },
@@ -518,14 +515,14 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
+      const defaultVpc = yield* getDefaultVpc;
 
       const deployService = () =>
         stack.deploy(
           Effect.gen(function* () {
-            const vpc = yield* Vpc("WedgedVpc", { cidrBlock: "10.74.0.0/16" });
             const subnet = yield* Subnet("WedgedSubnet", {
-              vpcId: vpc.vpcId,
-              cidrBlock: "10.74.1.0/24",
+              vpcId: defaultVpc.vpcId,
+              cidrBlock: defaultVpc.subnetCidrBlock(238),
             });
             const cluster = yield* Cluster("WedgedCluster", {
               clusterName: "alchemy-test-ecs-service-wedged",
@@ -535,7 +532,7 @@ test.provider(
               cluster,
               task: { taskDefinitionArn, containerName: "app", port: 80 },
               desiredCount: 0,
-              vpcId: vpc.vpcId,
+              vpcId: defaultVpc.vpcId,
               subnets: [subnet.subnetId],
             });
           }),

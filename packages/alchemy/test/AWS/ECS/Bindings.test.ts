@@ -1,24 +1,16 @@
 import * as AWS from "@/AWS";
-import {
-  InternetGateway,
-  Route,
-  RouteTable,
-  RouteTableAssociation,
-  Subnet,
-  Vpc,
-} from "@/AWS/EC2";
+import { Subnet } from "@/AWS/EC2";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import OneShotTask from "./fixtures/oneshot-task.ts";
+import { getDefaultVpc } from "../DefaultVpc.ts";
 import EcsBindingsTestFunctionLive, {
   EcsBindingsTestFunction,
 } from "./handler.ts";
@@ -28,36 +20,19 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "EcsBindings");
 
 // Infra the fixture Lambda references via `Resource.ref(...)` (see
-// handler.ts): public networking (NAT-free — the Fargate task pulls its
-// image from ECR through an IGW + public IP), a scratch cluster, and the
+// handler.ts): a public subnet in the default VPC, a scratch cluster, and the
 // one-shot busybox task definition. Yielded by BOTH deploy phases so the
 // second (Lambda) deploy doesn't delete them.
 const infra = Effect.gen(function* () {
-  const vpc = yield* Vpc("EcsBindingsVpc", {
-    cidrBlock: "10.83.0.0/16",
-    enableDnsSupport: true,
-    enableDnsHostnames: true,
-  });
-  const igw = yield* InternetGateway("EcsBindingsIgw", {
-    vpcId: vpc.vpcId,
-  });
+  // ECS bindings are not EC2 VPC coverage. Reuse the standing default VPC so
+  // this fixture does not compete for the account's small VPC quota during a
+  // high-concurrency AWS sweep. The stack still owns its subnet, preserving
+  // Resource.ref coverage and deterministic cleanup.
+  const vpc = yield* getDefaultVpc;
   const subnet = yield* Subnet("EcsBindingsSubnet", {
     vpcId: vpc.vpcId,
-    cidrBlock: "10.83.1.0/24",
-    availabilityZone: "us-west-2a",
+    cidrBlock: vpc.subnetCidrBlock(240),
     mapPublicIpOnLaunch: true,
-  });
-  const routeTable = yield* RouteTable("EcsBindingsRouteTable", {
-    vpcId: vpc.vpcId,
-  });
-  yield* Route("EcsBindingsRoute", {
-    routeTableId: routeTable.routeTableId,
-    destinationCidrBlock: "0.0.0.0/0",
-    gatewayId: igw.internetGatewayId,
-  });
-  yield* RouteTableAssociation("EcsBindingsRta", {
-    routeTableId: routeTable.routeTableId,
-    subnetId: subnet.subnetId,
   });
   const cluster = yield* Cluster("EcsBindingsCluster", {
     clusterName: "alchemy-test-ecs-bindings",
@@ -66,11 +41,11 @@ const infra = Effect.gen(function* () {
   return { cluster, task, subnet };
 });
 
-// Deploy is heavy: VPC network + cluster + Docker build/push of the one-shot
-// busybox image + Lambda. Budget generous readiness polling on top.
+// Deploy is heavy: default-VPC subnet + cluster + the one-shot task definition
+// + Lambda. Keep readiness polling bounded after the deploy completes.
 const readinessPolicy = Schedule.max([
   Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
+  Schedule.recurs(10),
 ]);
 
 let baseUrl: string;
@@ -145,14 +120,15 @@ const describeTask = (taskArn: string) =>
   );
 
 // Poll the fixture's /describe route until the task reaches STOPPED.
-// Bounded: 40 × 5s = 200s of polling (a one-shot busybox task typically
-// stops within ~60s of RunTask).
+// Bounded: 16 × 5s = 80s of polling. A one-shot busybox task typically stops
+// within ~40s, but ECS can remain DEPROVISIONING for around a minute when the
+// account is under a high-concurrency test sweep.
 const describeUntilStopped = (taskArn: string) =>
   describeTask(taskArn).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("5 seconds"),
       until: (t) => t?.lastStatus === "STOPPED",
-      times: 40,
+      times: 16,
     }),
   );
 
@@ -202,16 +178,16 @@ describe("ECS Bindings", () => {
       );
       yield* Effect.logInfo("ECS bindings setup: fixture ready");
     }),
-    // The cold path (Docker build/push + VPC + Lambda from scratch) can
-    // exceed 300s; warm reruns converge in a couple of minutes.
-    { timeout: 540_000 },
+    // c128 sweeps can starve the phase-2 Lambda bundle/create beyond 180s.
+    // Keep the hook below the suite's hard wall while allowing that cold tail.
+    { timeout: 210_000 },
   );
 
   // NO_DESTROY=1 keeps the deployment around between runs while iterating —
   // without it an interrupted run tears everything down and the next run
   // pays the full cold build again.
   afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    timeout: 300_000,
+    timeout: 180_000,
   });
 
   describe("RunTask", () => {
@@ -286,7 +262,7 @@ describe("ECS Bindings", () => {
             Effect.repeat({
               schedule: Schedule.spaced("5 seconds"),
               until: (arns) => arns.includes(run.taskArn!),
-              times: 40,
+              times: 10,
             }),
           );
           expect(taskArns).toContain(run.taskArn!);

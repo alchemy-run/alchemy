@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { assertApiKeyDeleted, assertUsagePlanDeleted } from "./assertions.ts";

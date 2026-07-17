@@ -1,10 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -12,8 +12,6 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import EmrServerlessTestFunctionLive, {
   BINDINGS_APP_NAME,
   BINDINGS_ROLE_NAME,
@@ -38,6 +36,18 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
 }> {}
+
+class JobRunNotTerminal extends Data.TaggedError("JobRunNotTerminal")<{
+  readonly jobRunId: string;
+  readonly state: string;
+}> {}
+
+class ApplicationNotStarted extends Data.TaggedError("ApplicationNotStarted")<{
+  readonly applicationId: string;
+  readonly state: string;
+}> {}
+
+const terminalJobRunStates = ["SUCCESS", "CANCELLED", "FAILED"] as const;
 
 // The shared Lambda fixture occasionally answers a transient 5xx under load
 // (cold re-init, IAM propagation on the freshly attached policy). Retry only
@@ -72,6 +82,51 @@ const getJson = (path: string) =>
 const postJson = (path: string) =>
   send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
     Effect.flatMap((r) => r.json),
+  );
+
+const waitForTerminalJobRun = (jobRunId: string) =>
+  getJson(`/jobrun-detail?id=${jobRunId}`).pipe(
+    Effect.flatMap((value) => {
+      const detail = value as { jobRunId: string; state: string };
+      return terminalJobRunStates.includes(
+        detail.state as (typeof terminalJobRunStates)[number],
+      )
+        ? Effect.succeed(detail)
+        : Effect.fail(
+            new JobRunNotTerminal({
+              jobRunId: detail.jobRunId,
+              state: detail.state,
+            }),
+          );
+    }),
+    Effect.retry({
+      while: (error) => error._tag === "JobRunNotTerminal",
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(25),
+      ]),
+    }),
+  );
+
+const waitForApplicationStarted = (applicationId: string) =>
+  emr.getApplication({ applicationId }).pipe(
+    Effect.flatMap(({ application }) =>
+      application.state === "STARTED"
+        ? Effect.succeed(application)
+        : Effect.fail(
+            new ApplicationNotStarted({
+              applicationId,
+              state: application.state,
+            }),
+          ),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "ApplicationNotStarted",
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(15),
+      ]),
+    }),
   );
 
 /** Find the fixture application out-of-band via its deterministic name. */
@@ -289,28 +344,36 @@ describe.sequential("EMRServerless Bindings", () => {
           )) as { jobRunId: string };
           expect(cancelled.jobRunId).toBe(run.jobRunId);
 
-          // 4. GetJobRun observes the cancellation.
-          const detail = (yield* getJson(
-            `/jobrun-detail?id=${run.jobRunId}`,
-          )) as { jobRunId: string; state: string };
+          // 4. GetJobRun observes the cancellation through a terminal state.
+          // StopApplication rejects while any run is still CANCELLING, so the
+          // cancellation response alone is not a sufficient readiness signal.
+          const detail = yield* waitForTerminalJobRun(run.jobRunId);
           expect(detail.jobRunId).toBe(run.jobRunId);
-          expect(["CANCELLING", "CANCELLED"]).toContain(detail.state);
+          expect(terminalJobRunStates).toContain(detail.state);
 
           // 5. The submitted run shows up in ListJobRuns.
           const listed = (yield* getJson("/jobruns")) as { ids: string[] };
           expect(listed.ids).toContain(run.jobRunId);
 
-          // 6. Wait out-of-band for the application to settle in STARTED
-          //    (stop is only valid once the start transition completes).
+          // 6. Converge the application back to STARTED. The fixture's
+          //    one-minute auto-stop can legitimately win while the cancelled
+          //    job settles under load, but StopApplication is only valid from
+          //    STARTED.
           const app = yield* findApplication;
-          yield* emr.getApplication({ applicationId: app.id }).pipe(
-            Effect.map((response) => response.application.state),
-            Effect.repeat({
-              schedule: Schedule.spaced("5 seconds"),
-              until: (state): boolean => state !== "STARTING",
-              times: 24,
-            }),
-          );
+          const { application } = yield* emr.getApplication({
+            applicationId: app.id,
+          });
+          if (
+            application.state === "CREATED" ||
+            application.state === "STOPPED"
+          ) {
+            const restarted = (yield* postJson("/app-start")) as {
+              tag: string;
+            };
+            expect(restarted.tag).toBe("ok");
+          }
+          const startedApplication = yield* waitForApplicationStarted(app.id);
+          expect(startedApplication.state).toBe("STARTED");
 
           // 7. StopApplication.
           const stopped = (yield* postJson("/app-stop")) as { tag: string };

@@ -6,10 +6,10 @@ import {
   MetricsDestination,
   ResourcePolicy,
 } from "@/AWS/RUM";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as rum from "@distilled.cloud/aws/rum";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 

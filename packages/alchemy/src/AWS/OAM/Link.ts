@@ -6,7 +6,12 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { readOamTags, syncOamTags } from "./internal.ts";
+import {
+  deleteLinkAndWait,
+  readOamTags,
+  retryOamMutation,
+  syncOamTags,
+} from "./internal.ts";
 
 /**
  * The telemetry resource types that can be shared over a link.
@@ -248,13 +253,15 @@ export const LinkProvider = () =>
 
           // ENSURE
           if (live?.Arn == null) {
-            live = yield* oam.createLink({
-              LabelTemplate: news.labelTemplate,
-              ResourceTypes: news.resourceTypes,
-              SinkIdentifier: news.sinkIdentifier,
-              LinkConfiguration: desiredConfiguration,
-              Tags: news.tags,
-            });
+            live = yield* retryOamMutation(
+              oam.createLink({
+                LabelTemplate: news.labelTemplate,
+                ResourceTypes: news.resourceTypes,
+                SinkIdentifier: news.sinkIdentifier,
+                LinkConfiguration: desiredConfiguration,
+                Tags: news.tags,
+              }),
+            );
           }
           const linkArn = live!.Arn!;
 
@@ -266,11 +273,13 @@ export const LinkProvider = () =>
               desiredConfiguration,
             )
           ) {
-            live = yield* oam.updateLink({
-              Identifier: linkArn,
-              ResourceTypes: news.resourceTypes,
-              LinkConfiguration: desiredConfiguration,
-            });
+            live = yield* retryOamMutation(
+              oam.updateLink({
+                Identifier: linkArn,
+                ResourceTypes: news.resourceTypes,
+                LinkConfiguration: desiredConfiguration,
+              }),
+            );
           }
 
           // SYNC tags — against observed cloud tags (adoption-safe).
@@ -285,11 +294,7 @@ export const LinkProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* oam
-            .deleteLink({ Identifier: output.linkArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* deleteLinkAndWait(output.linkArn);
         }),
       });
     }),

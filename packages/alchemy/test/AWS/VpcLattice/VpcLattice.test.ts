@@ -1,4 +1,6 @@
 import * as AWS from "@/AWS";
+import type { ScopedPlanStatusSession } from "@/Cli/Cli.ts";
+import * as Provider from "@/Provider";
 import { Vpc } from "@/AWS/EC2";
 import { normalizePolicyDocument } from "@/AWS/IAM/Policy.ts";
 import {
@@ -8,14 +10,20 @@ import {
   ServiceNetwork,
   ServiceNetworkVpcAssociation,
 } from "@/AWS/VpcLattice";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+const stubSession = {
+  note: () => Effect.void,
+} as unknown as ScopedPlanStatusSession;
 
 const findServiceNetwork = (id: string) =>
   vpclattice
@@ -28,6 +36,11 @@ const findServiceNetwork = (id: string) =>
 
 class StillExists extends Data.TaggedError("StillExists")<{
   readonly id: string;
+}> {}
+
+class AssociationNotReady extends Data.TaggedError("AssociationNotReady")<{
+  readonly serviceNetworkId: string;
+  readonly vpcId: string;
 }> {}
 
 const assertServiceNetworkDeleted = (id: string) =>
@@ -296,4 +309,122 @@ test.provider(
       yield* assertServiceNetworkDeleted(network.serviceNetworkId);
     }),
   { timeout: 240_000 },
+);
+
+test.provider(
+  "force delete removes an unowned association but normal delete protects it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const network = yield* stack.deploy(
+        ServiceNetwork("ForceDeleteServiceNetwork", {}),
+      );
+      const defaultVpc = yield* getDefaultVpc;
+      const association = yield* Effect.gen(function* () {
+        const listed = yield* vpclattice.listServiceNetworkVpcAssociations({
+          serviceNetworkIdentifier: network.serviceNetworkId,
+          vpcIdentifier: defaultVpc.vpcId,
+        });
+        const existing = listed.items.find(
+          (item) => item.status !== "DELETE_IN_PROGRESS",
+        );
+        if (existing?.id) return existing;
+
+        // A prior interrupted run or a simultaneous observation/create race
+        // may have already established this unique network/VPC association.
+        // Conflict is therefore an observe-again signal, not a test failure.
+        const created = yield* vpclattice
+          .createServiceNetworkVpcAssociation({
+            // Idempotency tokens are scoped to the exact request parameters.
+            // Derive it from both physical identifiers so a replacement
+            // network after an interrupted run does not reuse a token whose
+            // prior request referenced a different network.
+            clientToken: `alchemy-${network.serviceNetworkId}-${defaultVpc.vpcId}`,
+            serviceNetworkIdentifier: network.serviceNetworkId,
+            vpcIdentifier: defaultVpc.vpcId,
+          })
+          .pipe(
+            Effect.catchTag("ConflictException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        if (created?.id) return created;
+
+        const raced = yield* vpclattice.listServiceNetworkVpcAssociations({
+          serviceNetworkIdentifier: network.serviceNetworkId,
+          vpcIdentifier: defaultVpc.vpcId,
+        });
+        const observed = raced.items.find(
+          (item) => item.status !== "DELETE_IN_PROGRESS",
+        );
+        if (observed?.id) return observed;
+        return yield* Effect.fail(
+          new AssociationNotReady({
+            serviceNetworkId: network.serviceNetworkId,
+            vpcId: defaultVpc.vpcId,
+          }),
+        );
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "AssociationNotReady",
+          schedule: Schedule.max([
+            Schedule.spaced("3 seconds"),
+            Schedule.recurs(20),
+          ]),
+        }),
+      );
+      const associationId = association.id;
+      if (!associationId) {
+        return yield* Effect.die(
+          new Error("VPC Lattice did not return an association id"),
+        );
+      }
+
+      // Converge any association recovered from an interrupted run to the
+      // intended out-of-band, unowned fixture state.
+      if (association.arn) {
+        const listedTags = yield* vpclattice.listTagsForResource({
+          resourceArn: association.arn,
+        });
+        const tagKeys = Object.keys(listedTags.tags ?? {});
+        if (tagKeys.length > 0) {
+          yield* vpclattice.untagResource({
+            resourceArn: association.arn,
+            tagKeys,
+          });
+        }
+      }
+
+      const provider = yield* Provider.findProvider(ServiceNetwork);
+      const input = {
+        id: "ForceDeleteServiceNetwork",
+        fqn: "ForceDeleteServiceNetwork",
+        instanceId: "force-delete-test",
+        olds: {},
+        output: network,
+        session: stubSession,
+        bindings: [],
+      };
+
+      // A normal stack destroy must not take ownership of an untagged,
+      // out-of-band association. The network delete therefore remains blocked.
+      const normalDelete = yield* Effect.result(provider.delete(input));
+      expect(Result.isFailure(normalDelete)).toBe(true);
+      const stillAttached = yield* vpclattice.getServiceNetworkVpcAssociation({
+        serviceNetworkVpcAssociationIdentifier: associationId,
+      });
+      expect(stillAttached.id).toBe(associationId);
+
+      // Nuke is explicitly operator-confirmed and passes force=true. It may
+      // remove all associations that prevent deletion of the listed network.
+      yield* provider.delete({ ...input, force: true });
+      yield* assertAssociationDeleted(associationId);
+      yield* assertServiceNetworkDeleted(network.serviceNetworkId);
+
+      // The stack still has stale state for the now-deleted network; provider
+      // delete is idempotent and must clean that state without another API error.
+      yield* stack.destroy();
+    }),
+  { timeout: 180_000 },
 );

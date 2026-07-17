@@ -1,10 +1,12 @@
 import * as AWS from "@/AWS";
 import { LicenseConfiguration } from "@/AWS/LicenseManager";
-import * as Test from "@/Test/Vitest";
+import type { LicenseConfigurationProps } from "@/AWS/LicenseManager/LicenseConfiguration.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -51,12 +53,30 @@ test.provider(
   { timeout: 60_000 },
 );
 
-// NOTE: CreateLicenseConfiguration has a small DAILY account quota (~10
-// creates/day, deletes do not refund it). The two lifecycle tests below
-// consume 3 creates per run, so repeated same-day runs eventually fail
-// with the typed ResourceLimitExceededException ("maximum allowed number
-// of license configurations created in one day"). That is quota, not a
-// bug — re-run the next day.
+// CreateLicenseConfiguration has a small DAILY account quota (~10 creates;
+// deletes do not refund it). Keep create-based lifecycle coverage explicit so
+// aggregate sweeps never exhaust the shared account for the rest of the day.
+// The typed not-found probe and provider-diff assertion remain unconditional.
+const RUN_CREATE_LIFECYCLE =
+  process.env.AWS_TEST_LICENSE_MANAGER_CREATE === "1";
+
+const callDiff = (
+  olds: LicenseConfigurationProps,
+  news: LicenseConfigurationProps,
+) =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(LicenseConfiguration);
+    return yield* provider.diff!({
+      id: "Licenses",
+      fqn: "Licenses",
+      instanceId: "licenses",
+      olds,
+      news,
+      oldBindings: undefined as never,
+      newBindings: undefined as never,
+      output: undefined,
+    });
+  });
 const isLive = (status: string | undefined) => status !== "DELETED";
 
 // Out-of-band read via distilled; DELETED (soft-deleted) counts as gone.
@@ -68,7 +88,7 @@ const getLive = (arn: string) =>
     ),
   );
 
-test.provider(
+test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
   "create, update, and delete a license configuration",
   (stack) =>
     Effect.gen(function* () {
@@ -147,7 +167,17 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider("diff: changing licenseCountingType forces replacement", () =>
+  Effect.gen(function* () {
+    const result = yield* callDiff(
+      { licenseCountingType: "Instance", licenseCount: 2 },
+      { licenseCountingType: "Core", licenseCount: 2 },
+    );
+    expect(result).toEqual({ action: "replace" });
+  }),
+);
+
+test.provider.skipIf(!RUN_CREATE_LIFECYCLE)(
   "changing licenseCountingType replaces the license configuration",
   (stack) =>
     Effect.gen(function* () {

@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { Resource as CloudControlResource } from "@/AWS/CloudControl";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as CloudControl from "@distilled.cloud/aws/cloudcontrol";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -37,7 +37,7 @@ const assertDeleted = Effect.fn(function* (name: string) {
     Effect.flatMap(() => Effect.fail(new ResourceStillExists())),
     Effect.retry({
       while: (e) => e._tag === "ResourceStillExists",
-      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(20)]),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );

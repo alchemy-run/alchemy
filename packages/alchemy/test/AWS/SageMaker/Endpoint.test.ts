@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM/Role.ts";
 import { Endpoint, EndpointConfig, Model } from "@/AWS/SageMaker";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

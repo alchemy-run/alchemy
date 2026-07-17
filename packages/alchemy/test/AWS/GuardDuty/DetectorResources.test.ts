@@ -4,13 +4,20 @@ import { Filter } from "@/AWS/GuardDuty/Filter.ts";
 import { IPSet } from "@/AWS/GuardDuty/IPSet.ts";
 import { ThreatIntelSet } from "@/AWS/GuardDuty/ThreatIntelSet.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { makeGuardDutyTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+const testLease = makeGuardDutyTestLease();
+
+beforeAll(testLease.acquire, { timeout: 240_000 });
+afterAll(testLease.release);
 
 const TRUSTED_KEY = "trusted-ips.txt";
 const THREAT_KEY = "threat-ips.txt";

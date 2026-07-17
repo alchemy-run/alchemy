@@ -28,6 +28,9 @@ export default DsqlDirectFunction.make(
     main,
     url: true,
     timeout: Duration.seconds(30),
+    // Preserve `pg` as CommonJS in node_modules; bundling it rewrites the
+    // Client constructor into a namespace object and crashes Lambda init.
+    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const cluster = yield* Db;

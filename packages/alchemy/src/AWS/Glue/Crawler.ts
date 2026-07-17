@@ -1,5 +1,6 @@
 import * as glue from "@distilled.cloud/aws/glue";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -12,6 +13,8 @@ import type { Providers } from "../Providers.ts";
 import {
   crawlerArn,
   fetchObservedTags,
+  retryCrawlerDelete,
+  retryWhileCrawlerTargetNotReady,
   retryWhileCrawlerRunning,
   retryWhileRoleNotAssumable,
   syncTags,
@@ -329,8 +332,14 @@ export const CrawlerProvider = () =>
 
           // 2. ENSURE / 3. SYNC
           if (crawler === undefined) {
-            yield* retryWhileRoleNotAssumable(
-              glue.createCrawler({ Name: name, ...common, Tags: desiredTags }),
+            yield* retryWhileCrawlerTargetNotReady(
+              retryWhileRoleNotAssumable(
+                glue.createCrawler({
+                  Name: name,
+                  ...common,
+                  Tags: desiredTags,
+                }),
+              ),
             ).pipe(
               Effect.catchTag("AlreadyExistsException", () => Effect.void),
             );
@@ -338,8 +347,10 @@ export const CrawlerProvider = () =>
             // updateCrawler fails with CrawlerRunningException mid-crawl and
             // with GlueRoleNotAssumable during IAM propagation.
             yield* retryWhileCrawlerRunning(
-              retryWhileRoleNotAssumable(
-                glue.updateCrawler({ Name: name, ...common }),
+              retryWhileCrawlerTargetNotReady(
+                retryWhileRoleNotAssumable(
+                  glue.updateCrawler({ Name: name, ...common }),
+                ),
               ),
             );
           }
@@ -361,9 +372,51 @@ export const CrawlerProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* retryWhileCrawlerRunning(
-            glue.deleteCrawler({ Name: output.crawlerName }),
-          ).pipe(Effect.catchTag("EntityNotFoundException", () => Effect.void));
+          const name = output.crawlerName;
+          let crawler = yield* observe(name);
+          if (crawler === undefined) return;
+
+          if (crawler.State === "RUNNING") {
+            yield* glue
+              .stopCrawler({ Name: name })
+              .pipe(
+                Effect.catchTag(
+                  [
+                    "CrawlerNotRunningException",
+                    "CrawlerStoppingException",
+                    "EntityNotFoundException",
+                  ],
+                  () => Effect.void,
+                ),
+              );
+          }
+
+          // Stop is asynchronous. Wait for READY (deletable) or absence;
+          // interrupted deletes can resume from RUNNING/STOPPING safely.
+          crawler = yield* Effect.repeat(observe(name), {
+            schedule: Schedule.fixed("2 seconds"),
+            until: (current) =>
+              current === undefined || current.State === "READY",
+            times: 15,
+          });
+          if (crawler === undefined) return;
+
+          yield* retryCrawlerDelete(glue.deleteCrawler({ Name: name })).pipe(
+            Effect.catchTag("EntityNotFoundException", () => Effect.void),
+          );
+
+          const remaining = yield* Effect.repeat(observe(name), {
+            schedule: Schedule.fixed("2 seconds"),
+            until: (current) => current === undefined,
+            times: 15,
+          });
+          if (remaining !== undefined) {
+            return yield* Effect.fail(
+              new glue.OperationTimeoutException({
+                Message: `crawler ${name} remained visible after delete for 30 seconds`,
+              }),
+            );
+          }
         }),
       });
     }),

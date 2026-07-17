@@ -195,7 +195,7 @@ export class PipeFailed extends Data.TaggedError("PipeFailed")<{
 /**
  * Raised when a pipe does not settle out of a transitional state
  * (`CREATING`, `UPDATING`, `STARTING`, `STOPPING`, `DELETING`) within the
- * bounded wait (~90s for create/update, ~2min for delete). Surfaces the
+ * bounded wait (~60s). Surfaces the
  * last observed state instead of hanging the deploy.
  */
 export class PipeStateTimeout extends Data.TaggedError("PipeStateTimeout")<{
@@ -260,7 +260,7 @@ const retryWhileTransitioning = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "PipeStillTransitioning",
-    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
 const retryWhilePresent = <A, E extends { _tag: string }, R>(
@@ -268,7 +268,7 @@ const retryWhilePresent = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "PipeStillPresent",
-    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
 /**
@@ -289,7 +289,7 @@ const retryUntilRoleAssumable = <A, E extends { _tag: string }, R>(
         (message.includes("assume") || message.includes("trust"))
       );
     },
-    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(24)]),
+    schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
   });
 
 /**
@@ -302,7 +302,7 @@ const retryWhileConflicting = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
   });
 
 /**
@@ -425,7 +425,7 @@ export const PipeProvider = () =>
           );
 
       /**
-       * Poll (bounded, ~90s) until the pipe leaves its transitional state.
+       * Poll (bounded, ~60s) until the pipe leaves its transitional state.
        * A `*_FAILED` terminal state surfaces as a typed `PipeFailed`; a pipe
        * still transitioning after the bounded wait surfaces as a typed
        * `PipeStateTimeout` — never a hang.
@@ -469,7 +469,7 @@ export const PipeProvider = () =>
         return described;
       });
 
-      /** Poll (bounded, ~2min) until `describePipe` returns NotFound. */
+      /** Poll (bounded, ~60s) until `describePipe` returns NotFound. */
       const awaitGone = Effect.fn(function* (pipeName: string) {
         yield* pipes.describePipe({ Name: pipeName }).pipe(
           Effect.flatMap((d) =>

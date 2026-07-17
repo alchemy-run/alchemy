@@ -1,6 +1,8 @@
 import * as emrc from "@distilled.cloud/aws/emr-containers";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -181,6 +183,15 @@ export interface JobTemplate extends Resource<
   Providers
 > {}
 
+export class JobTemplateConsistencyError extends Data.TaggedError(
+  "JobTemplateConsistencyError",
+)<{
+  readonly jobTemplateId: string;
+  readonly jobTemplateName: string;
+  readonly operation: "create" | "delete";
+  readonly message: string;
+}> {}
+
 /**
  * An Amazon EMR on EKS job template — a stored set of `StartJobRun` values
  * (execution role, release label, job driver, configuration) that can be
@@ -285,6 +296,32 @@ export const JobTemplateProvider = () =>
         );
       });
 
+      const observeListedById = Effect.fn(function* (id: string) {
+        return yield* emrc.listJobTemplates.items({}).pipe(
+          Stream.filter((jt) => jt.id === id),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
+      });
+
+      const awaitListVisibility = (id: string) =>
+        Effect.repeat(observeListedById(id), {
+          schedule: Schedule.spaced("3 seconds"),
+          until: (jt) => jt !== undefined,
+          times: 10,
+        });
+
+      const awaitAbsent = (id: string) =>
+        Effect.repeat(
+          Effect.all([observeById(id), observeListedById(id)] as const),
+          {
+            schedule: Schedule.spaced("3 seconds"),
+            until: ([described, listed]) =>
+              described === undefined && listed === undefined,
+            times: 10,
+          },
+        );
+
       const observe = Effect.fn(function* (
         id: string | undefined,
         name: string,
@@ -386,6 +423,17 @@ export const JobTemplateProvider = () =>
                 }),
               );
             }
+            const listed = yield* awaitListVisibility(jt.id);
+            if (listed?.id !== jt.id) {
+              return yield* Effect.fail(
+                new JobTemplateConsistencyError({
+                  jobTemplateId: jt.id,
+                  jobTemplateName: name,
+                  operation: "create",
+                  message: `job template ${name} (${jt.id}) was not visible in ListJobTemplates after 30 seconds`,
+                }),
+              );
+            }
           }
 
           // No tag sync: EMR containers' TagResource rejects job template
@@ -403,6 +451,17 @@ export const JobTemplateProvider = () =>
           yield* emrc
             .deleteJobTemplate({ id: output.jobTemplateId })
             .pipe(Effect.catchTag("ValidationException", () => Effect.void));
+          const [described, listed] = yield* awaitAbsent(output.jobTemplateId);
+          if (described !== undefined || listed !== undefined) {
+            return yield* Effect.fail(
+              new JobTemplateConsistencyError({
+                jobTemplateId: output.jobTemplateId,
+                jobTemplateName: output.jobTemplateName,
+                operation: "delete",
+                message: `job template ${output.jobTemplateName} (${output.jobTemplateId}) remained visible after delete for 30 seconds`,
+              }),
+            );
+          }
         }),
       });
     }),

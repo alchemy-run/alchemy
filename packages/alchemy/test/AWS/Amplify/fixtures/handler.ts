@@ -1,5 +1,6 @@
 import * as Amplify from "@/AWS/Amplify";
 import * as Lambda from "@/AWS/Lambda";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -17,6 +18,11 @@ export default AmplifyTestFunction.make(
   {
     main,
     url: true,
+    // GenerateAccessLogs can take longer than Lambda's 3s default while
+    // Amplify prepares the pre-signed archive URL. Keep the invocation alive
+    // long enough for the handler to return either the typed service result or
+    // its structured diagnostic response instead of a raw Function URL 502.
+    timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
     const app = yield* Amplify.App("BindingsTestApp", {
@@ -170,11 +176,20 @@ export default AmplifyTestFunction.make(
           const result = yield* deleteJob({
             branchName: body.branchName,
             jobId: body.jobId,
-          });
-          return yield* HttpServerResponse.json({
-            deleted: true,
-            status: result.jobSummary.status,
-          });
+          }).pipe(
+            Effect.map((r) => ({
+              deleted: true as const,
+              status: r.jobSummary.status,
+            })),
+            Effect.catchTag(["BadRequestException", "NotFoundException"], (e) =>
+              Effect.succeed({
+                deleted: false as const,
+                errorTag: e._tag,
+                message: e.message,
+              }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (request.method === "GET" && pathname === "/artifacts") {
@@ -201,7 +216,18 @@ export default AmplifyTestFunction.make(
           }).pipe(
             Effect.map((r) => ({ ok: true as const, logUrl: r.logUrl })),
             Effect.catchTag(["BadRequestException", "NotFoundException"], (e) =>
-              Effect.succeed({ ok: false as const, errorTag: e._tag }),
+              Effect.succeed({
+                ok: false as const,
+                errorTag: e._tag,
+                message: e.message,
+              }),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.succeed({
+                ok: false as const,
+                errorTag: "UnexpectedCause",
+                cause: String(cause),
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);

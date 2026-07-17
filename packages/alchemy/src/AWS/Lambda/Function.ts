@@ -1034,33 +1034,44 @@ export const FunctionProvider = () =>
       }) {
         yield* Effect.logDebug(`creating role ${id}`);
         const tags = yield* createInternalTags(id);
-        // Engine has cleared us via `read` — foreign-tagged functions are
-        // surfaced as `Unowned` and require `--adopt`. On a race between
-        // read and create, treat `EntityAlreadyExistsException` as adoption.
-        const role = yield* iam
-          .createRole({
-            RoleName: roleName,
-            AssumeRolePolicyDocument: JSON.stringify({
-              Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Principal: {
-                    Service: "lambda.amazonaws.com",
-                  },
-                  Action: "sts:AssumeRole",
-                },
-              ],
-            }),
-            Tags: createTagsList(tags),
-          })
+        // Observe before ensure. Reconcile calls this even with persisted
+        // output so an execution role deleted out-of-band is recreated, but
+        // the normal update path avoids provoking an expected
+        // EntityAlreadyExists exception (important under high concurrency).
+        let role = yield* iam
+          .getRole({ RoleName: roleName })
           .pipe(
-            Effect.catchTag("EntityAlreadyExistsException", () =>
-              iam.getRole({
-                RoleName: roleName,
-              }),
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
             ),
           );
+        if (role === undefined) {
+          // Engine has cleared us via `read` — foreign-tagged functions are
+          // surfaced as `Unowned` and require `--adopt`. On a race between
+          // observe and create, read the role created by the peer reconciler.
+          role = yield* iam
+            .createRole({
+              RoleName: roleName,
+              AssumeRolePolicyDocument: JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: {
+                      Service: "lambda.amazonaws.com",
+                    },
+                    Action: "sts:AssumeRole",
+                  },
+                ],
+              }),
+              Tags: createTagsList(tags),
+            })
+            .pipe(
+              Effect.catchTag("EntityAlreadyExistsException", () =>
+                iam.getRole({ RoleName: roleName }),
+              ),
+            );
+        }
 
         yield* Effect.logDebug(`attaching policy ${id}`);
         yield* iam
@@ -1140,6 +1151,24 @@ export const FunctionProvider = () =>
               cwd,
               external: externalOption,
               platform: "node",
+              // Workspace tests and generated service patches execute
+              // distilled from `src` through its `bun` export condition.
+              // Resolve the deployed Lambda bundle the same way so a live
+              // binding test cannot silently exercise stale `lib` output.
+              resolve: {
+                ...inputOptions.resolve,
+                conditionNames: [
+                  "bun",
+                  ...(
+                    inputOptions.resolve?.conditionNames ?? [
+                      "node",
+                      "import",
+                      "module",
+                      "default",
+                    ]
+                  ).filter((condition) => condition !== "bun"),
+                ],
+              },
               plugins: [inputOptions.plugins, plugins],
             },
             {
@@ -1994,10 +2023,18 @@ export default handler;
           const { roleName, policyName, functionName, functionArn } =
             yield* createNames(id, news.functionName);
 
-          const roleArn =
-            output?.roleArn ??
-            (yield* createRoleIfNotExists({ id, roleName, vpc: news.vpc })).Role
-              .Arn;
+          // State is only a cache: the execution role may have been removed
+          // out-of-band (or by a previously interrupted cleanup) while the
+          // function output remains persisted. Always observe/ensure the
+          // deterministic role before syncing binding policies so reconcile
+          // can recover from that partial state instead of failing the first
+          // `putRolePolicy` with `NoSuchEntityException`.
+          const ensuredRole = yield* createRoleIfNotExists({
+            id,
+            roleName,
+            vpc: news.vpc,
+          });
+          const roleArn = ensuredRole.Role.Arn ?? output?.roleArn;
 
           const {
             env,
@@ -2209,6 +2246,24 @@ export default handler;
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
 
+          // Release the execution role before the auxiliary CloudWatch Logs
+          // reap below. A recently invoked function can keep that reap alive
+          // for ~40 seconds while Lambda flushes its final log batches; if the
+          // process is interrupted during that window, leaving role deletion
+          // until afterwards strands the deterministic role. IAM can briefly
+          // report the just-detached role as still in use, so retry those
+          // eventual-consistency conflicts on a bounded schedule.
+          yield* iam.deleteRole({ RoleName: output.roleName }).pipe(
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "DeleteConflictException" ||
+                error._tag === "ConcurrentModificationException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+            }),
+          );
+
           // Lambda auto-creates /aws/lambda/{name} on the first invoke and
           // deleteFunction does NOT remove it — without this every deleted
           // function leaks an orphaned log group. Worse, the Lambda service
@@ -2223,11 +2278,20 @@ export default handler;
           // first flush may still be in flight — is re-reaped on a short
           // bounded schedule.
           const logGroupName = `/aws/lambda/${output.functionName}`;
-          const reapLogGroup = logs
-            .deleteLogGroup({ logGroupName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          const reapLogGroup = logs.deleteLogGroup({ logGroupName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            // CloudWatch Logs can sit in its SDK retry path for minutes
+            // under a full parallel sweep. Log-group cleanup is auxiliary
+            // to the already-completed Lambda delete, so bound each reap
+            // attempt while preserving the t=0/20/40 flush watch below.
+            Effect.timeoutOrElse({
+              duration: "5 seconds",
+              orElse: () =>
+                Effect.logWarning(
+                  `Timed out reaping Lambda log group ${logGroupName}`,
+                ),
+            }),
+          );
           const lastIngestion = yield* logs
             .describeLogStreams({
               logGroupName,
@@ -2240,6 +2304,16 @@ export default handler;
               Effect.catchTag("ResourceNotFoundException", () =>
                 Effect.succeed(undefined),
               ),
+              Effect.timeoutOrElse({
+                duration: "5 seconds",
+                orElse: () =>
+                  Effect.gen(function* () {
+                    yield* Effect.logWarning(
+                      `Timed out inspecting Lambda log group ${logGroupName}`,
+                    );
+                    return undefined;
+                  }),
+              }),
             );
           const now = yield* Effect.sync(() => Date.now());
           const quiescent =
@@ -2256,11 +2330,70 @@ export default handler;
             );
           }
 
-          yield* iam
-            .deleteRole({
-              RoleName: output.roleName,
+          // A timed-out delete attempt above is not deletion proof. After the
+          // final Lambda flush window, make one bounded authoritative pass and
+          // require exact-name absence before discarding the function's state.
+          // This keeps throttling visible as a provider failure instead of
+          // silently stranding an auto-created log group for nuke.
+          const observeLogGroup = logs
+            .describeLogGroups({
+              logGroupNamePrefix: logGroupName,
+              limit: 1,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+            .pipe(
+              Effect.map((response) =>
+                (response.logGroups ?? []).some(
+                  (group) => group.logGroupName === logGroupName,
+                ),
+              ),
+              Effect.timeoutOrElse({
+                duration: "10 seconds",
+                orElse: () =>
+                  Effect.die(
+                    new Error(
+                      `Timed out confirming Lambda log group deletion: ${logGroupName}`,
+                    ),
+                  ),
+              }),
+            );
+
+          if (yield* observeLogGroup) {
+            yield* logs.deleteLogGroup({ logGroupName }).pipe(
+              Effect.retry({
+                while: (error) =>
+                  error._tag === "OperationAbortedException" ||
+                  error._tag === "ServiceUnavailableException",
+                schedule: Schedule.max([
+                  Schedule.exponential("250 millis"),
+                  Schedule.recurs(8),
+                ]),
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.timeoutOrElse({
+                duration: "10 seconds",
+                orElse: () =>
+                  Effect.die(
+                    new Error(
+                      `Timed out deleting Lambda log group ${logGroupName}`,
+                    ),
+                  ),
+              }),
+            );
+          }
+
+          const logGroupRemains = yield* Effect.repeat(observeLogGroup, {
+            schedule: Schedule.fixed("1 second"),
+            until: (present) => !present,
+            times: 10,
+          });
+          if (logGroupRemains) {
+            yield* Effect.die(
+              new Error(
+                `Lambda log group ${logGroupName} remained observable after delete`,
+              ),
+            );
+          }
+
           return null as any;
         }),
         tail: ({ output }) => {

@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { LinkedWhatsAppBusinessAccount } from "@/AWS/SocialMessaging";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

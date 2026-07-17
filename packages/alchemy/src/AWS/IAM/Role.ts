@@ -730,7 +730,40 @@ export const RoleProvider = () =>
             .deleteRole({
               RoleName: output.roleName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+            .pipe(
+              Effect.retry({
+                while: (error) =>
+                  error._tag === "ConcurrentModificationException" ||
+                  error._tag === "DeleteConflictException" ||
+                  error._tag === "LimitExceededException" ||
+                  error._tag === "ServiceFailureException",
+                schedule: Schedule.max([
+                  Schedule.exponential("250 millis"),
+                  Schedule.recurs(8),
+                ]),
+              }),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            );
+
+          // IAM deletion is eventually consistent. Do not let the engine
+          // discard state until the role is actually absent, otherwise a
+          // following clean run (or nuke) can still discover the old role.
+          for (let attempt = 0; attempt < 30; attempt++) {
+            const remaining = yield* iam
+              .getRole({ RoleName: output.roleName })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            if (remaining === undefined) return;
+            yield* Effect.sleep("1 second");
+          }
+          yield* Effect.die(
+            new Error(
+              `IAM role ${output.roleName} remained observable 30 seconds after delete`,
+            ),
+          );
         }),
       };
     }),

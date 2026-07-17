@@ -36,7 +36,16 @@ const Stack = Alchemy.Stack(
   }).pipe(Effect.provide(KinesisApiFunctionLive)),
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
+const stack = beforeAll(
+  Effect.gen(function* () {
+    yield* Effect.logInfo("Kinesis test setup: destroying previous resources");
+    yield* destroy(Stack);
+
+    yield* Effect.logInfo("Kinesis test setup: deploying fixture");
+    return yield* deploy(Stack);
+  }),
+  { timeout: 240_000 },
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
 
 // Lambda Function URLs cold-start (DNS, init) and a fresh role's IAM grants
@@ -44,8 +53,8 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
 // any non-200 lets the first request wait through that window; warm calls
 // return on the first try and never retry.
 const readinessSchedule = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
+  Schedule.fixed("4 seconds"),
+  Schedule.recurs(10),
 ]);
 
 // Lambda Function URLs come back with a trailing slash (`https://…on.aws/`).
@@ -58,6 +67,7 @@ const urlOf = (baseUrl: string, path: string) =>
 
 const getJson = (baseUrl: string, path: string) =>
   HttpClient.get(urlOf(baseUrl, path)).pipe(
+    Effect.timeout("5 seconds"),
     Effect.flatMap((response) =>
       response.status === 200
         ? response.json
@@ -73,6 +83,9 @@ const postJson = (baseUrl: string, path: string, body: unknown) =>
       body,
     ),
   ).pipe(
+    // Runtime routes are normally sub-second. The record-polling and sink
+    // routes can legitimately spend several seconds on bounded retries.
+    Effect.timeout("15 seconds"),
     Effect.flatMap((response) =>
       response.status === 200
         ? response.json

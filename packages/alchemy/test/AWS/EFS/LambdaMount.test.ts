@@ -1,15 +1,14 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as efs from "@distilled.cloud/aws/efs";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { fileURLToPath } from "node:url";
-import { describe } from "vitest";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 // Flagship EFS e2e: a VPC-attached Lambda mounts an EFS access point at

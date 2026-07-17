@@ -1,18 +1,16 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import BatchTestFunctionLive, { BatchTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -20,6 +18,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "BatchBindings");
 
 let baseUrl: string;
+const submittedJobIds = new Set<string>();
 
 // AWS Batch auto-creates the shared, account-level `/aws/batch/job` log group
 // the first time a job writes logs — it is NOT deleted with the compute
@@ -107,11 +106,13 @@ const submit = (jobName: string) =>
       ),
     );
     expect(response.status).toBe(200);
-    return (yield* response.json) as {
+    const submitted = (yield* response.json) as {
       jobId: string;
       jobName: string;
       jobArn?: string;
     };
+    submittedJobIds.add(submitted.jobId);
+    return submitted;
   });
 
 /** Out-of-band job status via distilled. */
@@ -119,6 +120,50 @@ const jobStatus = (jobId: string) =>
   batch
     .describeJobs({ jobs: [jobId] })
     .pipe(Effect.map((res) => res.jobs?.[0]?.status));
+
+const terminalJobStatuses = new Set(["SUCCEEDED", "FAILED"]);
+
+/**
+ * Release Fargate tasks before deleting the queue and compute environment.
+ *
+ * Several binding tests intentionally stop once a submitted job is visible;
+ * leaving those jobs active makes Batch drain its managed ENIs only after
+ * stack teardown has already started. Terminating every non-terminal job here
+ * moves that asynchronous wait to the front of teardown, before the VPC graph
+ * competes for the suite's hard timeout.
+ */
+const drainSubmittedJobs = Core.withProviders(
+  Effect.gen(function* () {
+    const jobIds = [...submittedJobIds];
+    if (jobIds.length === 0) return;
+
+    const describeSubmitted = batch
+      .describeJobs({ jobs: jobIds })
+      .pipe(Effect.map((response) => response.jobs ?? []));
+    const jobs = yield* describeSubmitted;
+    yield* Effect.forEach(
+      jobs.filter((job) => !terminalJobStatuses.has(job.status ?? "")),
+      (job) =>
+        batch.terminateJob({
+          jobId: job.jobId!,
+          reason: "Batch binding test teardown",
+        }),
+      { concurrency: 4, discard: true },
+    );
+
+    yield* describeSubmitted.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (observed) =>
+          observed.every((job) => terminalJobStatuses.has(job.status ?? "")),
+        times: 10,
+      }),
+    );
+    submittedJobIds.clear();
+  }).pipe(Effect.orDie),
+  testOptions,
+  sharedStack.name,
+);
 
 describe("Batch Bindings", () => {
   beforeAll(
@@ -156,9 +201,13 @@ describe("Batch Bindings", () => {
     }),
     { timeout: 300_000 },
   );
-  afterAll(sharedStack.destroy().pipe(Effect.ensuring(reapBatchJobLogGroup)), {
-    timeout: 300_000,
-  });
+  afterAll(
+    drainSubmittedJobs.pipe(
+      Effect.andThen(sharedStack.destroy()),
+      Effect.ensuring(reapBatchJobLogGroup),
+    ),
+    { timeout: 240_000 },
+  );
 
   describe("SubmitJob", () => {
     test.provider(

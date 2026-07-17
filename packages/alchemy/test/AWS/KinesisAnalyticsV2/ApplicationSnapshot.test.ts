@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { Application, ApplicationSnapshot } from "@/AWS/KinesisAnalyticsV2";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

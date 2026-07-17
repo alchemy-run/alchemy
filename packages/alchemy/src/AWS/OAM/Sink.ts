@@ -8,7 +8,12 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { readOamTags, syncOamTags } from "./internal.ts";
+import {
+  deleteSinkAndWait,
+  readOamTags,
+  retryOamMutation,
+  syncOamTags,
+} from "./internal.ts";
 
 export interface SinkProps {
   /**
@@ -218,13 +223,11 @@ export const SinkProvider = () =>
           // ENSURE — create when missing; a ConflictException means a peer
           // created the same-named sink concurrently, so re-observe.
           if (live?.Arn == null) {
-            live = yield* oam
-              .createSink({ Name: sinkName, Tags: news?.tags })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  findByName(sinkName),
-                ),
-              );
+            live = yield* retryOamMutation(
+              oam.createSink({ Name: sinkName, Tags: news?.tags }),
+            ).pipe(
+              Effect.catchTag("ConflictException", () => findByName(sinkName)),
+            );
           }
           const sinkArn = live!.Arn!;
           const sinkId = live!.Id!;
@@ -244,10 +247,12 @@ export const SinkProvider = () =>
                 ),
               );
             if (!samePolicy(observed, desired)) {
-              yield* oam.putSinkPolicy({
-                SinkIdentifier: sinkArn,
-                Policy: desired,
-              });
+              yield* retryOamMutation(
+                oam.putSinkPolicy({
+                  SinkIdentifier: sinkArn,
+                  Policy: desired,
+                }),
+              );
             }
           }
 
@@ -258,14 +263,7 @@ export const SinkProvider = () =>
           return { sinkName, sinkArn, sinkId };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the sink may already be gone. A ConflictException
-          // (links still attached) is a genuine dependency violation and
-          // propagates so the engine surfaces it.
-          yield* oam
-            .deleteSink({ Identifier: output.sinkArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* deleteSinkAndWait(output.sinkArn);
         }),
       });
     }),

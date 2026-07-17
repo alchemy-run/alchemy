@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Enabler } from "@/AWS/Inspector2/Enabler.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as inspector2 from "@distilled.cloud/aws/inspector2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -17,10 +17,27 @@ const typeStatus = (
   key: "ec2" | "ecr" | "lambda",
 ) => account?.resourceState?.[key]?.status;
 
+test.provider("account scan status is observable", () =>
+  Effect.gen(function* () {
+    const account = yield* accountStatus;
+    expect(account?.accountId).toBeTruthy();
+    expect(
+      ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(
+        typeStatus(account, "ec2") ?? "",
+      ),
+    ).toBe(true);
+    expect(
+      ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(
+        typeStatus(account, "ecr") ?? "",
+      ),
+    ).toBe(true);
+  }),
+);
+
 // The Inspector enabler is an account/region singleton. This test only runs
 // when Inspector is fully disabled — it must never disable scan types the user
 // already enabled (capture-and-restore safety).
-test.provider(
+test.provider.skipIf(!process.env.INSPECTOR2_TEST_ENABLER)(
   "lifecycle: enable EC2/ECR, add LAMBDA, disable",
   (stack) =>
     Effect.gen(function* () {

@@ -3,9 +3,9 @@ import { EIP } from "@/AWS/EC2";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Protection, ProtectionGroup } from "@/AWS/Shield";
 import * as Output from "@/Output";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as shield from "@distilled.cloud/aws/shield";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

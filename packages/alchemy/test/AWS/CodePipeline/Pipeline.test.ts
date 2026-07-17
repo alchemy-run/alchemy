@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Pipeline } from "@/AWS/CodePipeline/Pipeline.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as codepipeline from "@distilled.cloud/aws/codepipeline";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Output from "@/Output";
 

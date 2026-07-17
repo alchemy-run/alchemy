@@ -1,14 +1,19 @@
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Link, Sink } from "@/AWS/OAM";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as oam from "@distilled.cloud/aws/oam";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { makeOamTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
+const serviceLease = makeOamTestLease();
+
+beforeAll(serviceLease.acquire, { timeout: 3_600_000 });
+afterAll(serviceLease.release);
 
 const assertSinkGone = (sinkArn: string) =>
   oam.getSink({ Identifier: sinkArn }).pipe(

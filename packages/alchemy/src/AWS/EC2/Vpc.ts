@@ -552,7 +552,11 @@ export const VpcProvider = () =>
                 // Use fixed 5s delay instead of exponential to avoid very long waits
                 schedule: Schedule.max([
                   Schedule.fixed(5000),
-                  Schedule.recurs(60),
+                  // A dependency that has not drained within ~50s is a real
+                  // cleanup defect. Preserve state and fail promptly so a
+                  // subsequent destroy/nuke can retry after fixing the child,
+                  // rather than hanging this resource for five minutes.
+                  Schedule.recurs(10),
                 ]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(

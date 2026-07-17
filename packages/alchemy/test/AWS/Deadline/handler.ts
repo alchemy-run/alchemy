@@ -48,6 +48,7 @@ export default DeadlineTestFunction.make(
       description: "alchemy deadline bindings fixture queue",
       jobRunAsUser: { runAs: "WORKER_AGENT_USER" },
     });
+    const QueueId = yield* queue.queueId;
 
     // Event source: subscribe the host to Deadline job status changes. The
     // deploy proves the EventBridge rule + invoke permission wiring.
@@ -121,10 +122,18 @@ export default DeadlineTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/queue") {
+          return yield* HttpServerResponse.json({ queueId: yield* QueueId });
+        }
+
         // Submit a render job from the fixture template (farm/queue ids are
         // injected by the binding).
         if (request.method === "POST" && pathname === "/jobs") {
           const { jobId } = yield* createJob({
+            // The outer HTTP fixture retries transient 5xx responses. Keep
+            // CreateJob idempotent if AWS accepted the first request but the
+            // Lambda response was lost.
+            clientToken: "alchemy-deadline-bindings-job",
             template: JOB_TEMPLATE,
             templateType: "JSON",
             priority: 50,

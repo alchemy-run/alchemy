@@ -9,8 +9,10 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  retryGaDeletion,
   retryGaTransaction,
   retryUntilAcceleratorDeletable,
+  retryUntilListenerDeletable,
   withGaRegion,
 } from "./common.ts";
 
@@ -217,6 +219,73 @@ const fetchTags = Effect.fn(function* (resourceArn: string) {
   );
 });
 
+/**
+ * Global Accelerator's listener and endpoint-group resources are untagged
+ * children and cannot be enumerated independently by account-wide nuke.
+ * When nuke explicitly force-deletes an accelerator, discover and remove the
+ * complete child tree first. Normal stack destroy still relies on dependency
+ * ordering and deletes each child through its own provider.
+ */
+const deleteAcceleratorChildren = Effect.fn(function* (acceleratorArn: string) {
+  const listeners = yield* withGaRegion(
+    ga.listListeners
+      .items({ AcceleratorArn: acceleratorArn })
+      .pipe(Stream.runCollect),
+  ).pipe(
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("AcceleratorNotFoundException", () =>
+      Effect.succeed([] as ga.Listener[]),
+    ),
+  );
+
+  // GA serializes mutations per accelerator. Keep this traversal sequential
+  // so deleting several children does not manufacture transaction conflicts.
+  yield* Effect.forEach(
+    listeners,
+    Effect.fn(function* (listener) {
+      if (!listener.ListenerArn) return;
+      const listenerArn = listener.ListenerArn;
+      const endpointGroups = yield* withGaRegion(
+        ga.listEndpointGroups
+          .items({ ListenerArn: listenerArn })
+          .pipe(Stream.runCollect),
+      ).pipe(
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag("ListenerNotFoundException", () =>
+          Effect.succeed([] as ga.EndpointGroup[]),
+        ),
+      );
+
+      yield* Effect.forEach(
+        endpointGroups,
+        (group) =>
+          group.EndpointGroupArn
+            ? retryGaDeletion(
+                withGaRegion(
+                  ga.deleteEndpointGroup({
+                    EndpointGroupArn: group.EndpointGroupArn,
+                  }),
+                ),
+              ).pipe(
+                Effect.catchTag(
+                  "EndpointGroupNotFoundException",
+                  () => Effect.void,
+                ),
+              )
+            : Effect.void,
+        { discard: true },
+      );
+
+      // Endpoint-group detachment is asynchronous. The same bounded retry
+      // used by the child provider waits until the listener is deletable.
+      yield* retryUntilListenerDeletable(
+        withGaRegion(ga.deleteListener({ ListenerArn: listenerArn })),
+      ).pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.void));
+    }),
+    { discard: true },
+  );
+});
+
 export const AcceleratorProvider = () =>
   Provider.succeed(Accelerator, {
     stables: ["acceleratorArn", "dnsName", "dualStackDnsName", "ipAddresses"],
@@ -381,8 +450,14 @@ export const AcceleratorProvider = () =>
       yield* session.note(acceleratorArn);
       return toAttributes(live, acceleratorArn, flowLogs);
     }),
-    delete: Effect.fn(function* ({ output, session }) {
+    delete: Effect.fn(function* ({ output, session, force }) {
       const acceleratorArn = output.acceleratorArn;
+      if (force) {
+        yield* session.note(
+          "deleting accelerator listeners and endpoint groups",
+        );
+        yield* deleteAcceleratorChildren(acceleratorArn);
+      }
       // An accelerator must be disabled before it can be deleted.
       const exists = yield* retryGaTransaction(
         withGaRegion(

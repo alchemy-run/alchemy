@@ -210,6 +210,11 @@ provider(
       const response = yield* HttpClient.post(`${baseUrl}/sink`, {
         body: yield* HttpBody.json({ messages }),
       }).pipe(
+        // QueueSink can legitimately spend several seconds retrying a partial
+        // batch failure, but a stalled Function URL request must not consume
+        // the whole test timeout.
+        Effect.timeout("15 seconds"),
+        Effect.mapError(() => "not ready" as const),
         Effect.flatMap((result) =>
           result.status === 200
             ? Effect.succeed(result)
@@ -218,10 +223,8 @@ provider(
         Effect.tapError(Console.log),
         Effect.retry({
           while: (error) => error === "not ready",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.fixed("3 seconds"),
+          times: 4,
         }),
         Effect.flatMap((result) => result.json),
       );
@@ -625,6 +628,8 @@ class QueueAttributesNotReady extends Data.TaggedError(
 
 const waitForFunctionReady = (url: string) =>
   HttpClient.get(url).pipe(
+    Effect.timeout("4 seconds"),
+    Effect.mapError(() => new FunctionNotReady()),
     Effect.flatMap((response) =>
       response.status === 200
         ? (response.json as Effect.Effect<{ queueUrl: string }>)
@@ -640,10 +645,8 @@ const waitForFunctionReady = (url: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(75),
-      ]),
+      schedule: Schedule.fixed("4 seconds"),
+      times: 10,
     }),
   );
 

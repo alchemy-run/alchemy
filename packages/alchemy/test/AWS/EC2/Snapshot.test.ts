@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { Snapshot, Volume } from "@/AWS/EC2";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -62,7 +62,7 @@ const assertSnapshotDeleted = Effect.fn(function* (snapshotId: string) {
     Effect.flatMap(() => Effect.fail(new SnapshotStillExists())),
     Effect.retry({
       while: (e) => e instanceof SnapshotStillExists,
-      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
     }),
     Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
   );

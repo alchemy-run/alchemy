@@ -1,15 +1,13 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import SQSTestFunctionLive, { SQSTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -20,17 +18,19 @@ const sharedStack = Core.scratchStack(testOptions, "SQSBindings");
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling so we don't fail the whole suite on a slow init.
 const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
+  Schedule.fixed("4 seconds"),
+  Schedule.recurs(10),
 ]);
 
 let baseUrl: string;
 let queueUrl: string;
 let dlqUrl: string;
+let moveSourceUrl: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
+  readonly message: string;
 }> {}
 
 // The shared Lambda fixture occasionally answers a transient 5xx under
@@ -39,12 +39,25 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
 // a genuine 4xx/assertion failure is returned immediately.
 const send = (request: HttpClientRequest.HttpClientRequest) =>
   HttpClient.execute(request).pipe(
+    Effect.timeout("5 seconds"),
+    Effect.mapError(
+      (error) =>
+        new TransientUpstream({
+          status: 0,
+          body: String(error),
+          message: `Function URL request failed: ${String(error)}`,
+        }),
+    ),
     Effect.flatMap((response) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
               Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
+                new TransientUpstream({
+                  status: response.status,
+                  body,
+                  message: `Function returned ${response.status}: ${body}`,
+                }),
               ),
             ),
           )
@@ -74,6 +87,8 @@ interface ReceivedMessage {
 }
 
 class MessageNotReceived extends Data.TaggedError("MessageNotReceived") {}
+
+class MessageNotVisible extends Data.TaggedError("MessageNotVisible") {}
 
 class QueueStillExists extends Data.TaggedError("QueueStillExists") {}
 
@@ -135,12 +150,12 @@ const receiveViaBindingUntil = (
 
 // Out-of-band verification: poll the queue via distilled until every body in
 // `bodies` has been received, deleting each matching message as it arrives.
-const receiveAndDeleteViaDistilled = (bodies: string[]) =>
+const receiveAndDeleteViaDistilled = (bodies: string[], sourceUrl = queueUrl) =>
   Effect.gen(function* () {
     const found = new Set<string>();
     yield* Effect.gen(function* () {
       const result = yield* SQS.receiveMessage({
-        QueueUrl: queueUrl,
+        QueueUrl: sourceUrl,
         MaxNumberOfMessages: 10,
         WaitTimeSeconds: 2,
       });
@@ -152,7 +167,7 @@ const receiveAndDeleteViaDistilled = (bodies: string[]) =>
         ) {
           found.add(message.Body);
           yield* SQS.deleteMessage({
-            QueueUrl: queueUrl,
+            QueueUrl: sourceUrl,
             ReceiptHandle: message.ReceiptHandle,
           });
         }
@@ -169,6 +184,51 @@ const receiveAndDeleteViaDistilled = (bodies: string[]) =>
         ]),
       }),
     );
+  });
+
+// Message-move tasks only operate on messages that actually entered a DLQ
+// through its source queue's redrive policy. Drive the dedicated source's
+// receive count, then use the clean DLQ's non-consuming approximate count as
+// readiness. Receiving from the DLQ, even with VisibilityTimeout=0, races the
+// asynchronous redrive scanner. The retry and final settle are bounded.
+const seedDlqViaRedrive = (body: string) =>
+  Effect.gen(function* () {
+    yield* SQS.sendMessage({
+      QueueUrl: moveSourceUrl,
+      MessageBody: body,
+    });
+
+    // Actively drive the receive count until SQS reports a visible DLQ
+    // message. VisibilityTimeout=0 increments the source receive count
+    // without hiding it between attempts.
+    yield* Effect.gen(function* () {
+      yield* SQS.receiveMessage({
+        QueueUrl: moveSourceUrl,
+        MaxNumberOfMessages: 10,
+        WaitTimeSeconds: 1,
+        VisibilityTimeout: 0,
+      });
+
+      const dlqAttributes = yield* SQS.getQueueAttributes({
+        QueueUrl: dlqUrl,
+        AttributeNames: ["ApproximateNumberOfMessages"],
+      });
+      if (
+        Number(dlqAttributes.Attributes?.ApproximateNumberOfMessages ?? "0") < 1
+      ) {
+        return yield* Effect.fail(new MessageNotVisible());
+      }
+    }).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "MessageNotVisible",
+        schedule: Schedule.fixed("1 second"),
+        times: 15,
+      }),
+    );
+
+    // Let the redrive metadata observed through the approximate count settle
+    // before starting the asynchronous message-move scanner.
+    yield* Effect.sleep("2 seconds");
   });
 
 // All five tests share ONE queue; a concurrent receive in test A steals (and
@@ -198,11 +258,16 @@ describe.sequential("SQS Bindings", () => {
       // captured env vars (the queue URLs) finish propagating; keep polling
       // until both queue URLs are populated.
       const ready = yield* HttpClient.get(`${baseUrl}/ready`).pipe(
+        Effect.timeout("4 seconds"),
+        Effect.mapError(
+          () => new Error("Function URL readiness request timed out"),
+        ),
         Effect.flatMap((response) =>
           response.status === 200
             ? (response.json as Effect.Effect<{
                 queueUrl?: string;
                 dlqUrl?: string;
+                moveSourceUrl?: string;
               }>)
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
@@ -210,8 +275,16 @@ describe.sequential("SQS Bindings", () => {
           typeof body?.queueUrl === "string" &&
           body.queueUrl.length > 0 &&
           typeof body?.dlqUrl === "string" &&
-          body.dlqUrl.length > 0
-            ? Effect.succeed(body as { queueUrl: string; dlqUrl: string })
+          body.dlqUrl.length > 0 &&
+          typeof body?.moveSourceUrl === "string" &&
+          body.moveSourceUrl.length > 0
+            ? Effect.succeed(
+                body as {
+                  queueUrl: string;
+                  dlqUrl: string;
+                  moveSourceUrl: string;
+                },
+              )
             : Effect.fail(new Error("Function returned empty queue URLs")),
         ),
         Effect.tapError((error) =>
@@ -223,6 +296,7 @@ describe.sequential("SQS Bindings", () => {
       );
       queueUrl = ready.queueUrl;
       dlqUrl = ready.dlqUrl;
+      moveSourceUrl = ready.moveSourceUrl;
 
       yield* Effect.logInfo(
         `SQS test setup: fixture ready (queueUrl: ${queueUrl})`,
@@ -241,6 +315,7 @@ describe.sequential("SQS Bindings", () => {
         Effect.gen(function* () {
           if (queueUrl) yield* assertQueueDeleted(queueUrl);
           if (dlqUrl) yield* assertQueueDeleted(dlqUrl);
+          if (moveSourceUrl) yield* assertQueueDeleted(moveSourceUrl);
         }),
         testOptions,
         sharedStack.name,
@@ -516,35 +591,42 @@ describe.sequential("SQS Bindings", () => {
             queueUrls: string[];
           };
           expect(sources.queueUrls).toContain(queueUrl);
+          expect(sources.queueUrls).toContain(moveSourceUrl);
 
-          // Land a message directly in the DLQ (out-of-band), then redrive
-          // it into the main queue through the StartMessageMoveTask binding.
+          // Redrive through the dedicated source so SQS records the metadata
+          // required for the message-move task.
           const messageBody = `redrive-${crypto.randomUUID()}`;
-          yield* SQS.sendMessage({
-            QueueUrl: dlqUrl,
-            MessageBody: messageBody,
-          });
+          yield* seedDlqViaRedrive(messageBody);
 
           const started = (yield* post("/move/start", {})) as {
             taskHandle?: string;
           };
           expect(started.taskHandle).toBeTruthy();
 
-          // The task is visible via the ListMessageMoveTasks binding.
+          // Out-of-band data-plane proof: the message arrives back in its
+          // source queue. This is authoritative even while List's status and
+          // approximate counters lag.
+          yield* receiveAndDeleteViaDistilled([messageBody], moveSourceUrl);
+
+          // The exact task is visible via the ListMessageMoveTasks binding.
           const listed = (yield* post("/move/list", {})) as {
             tasks: { taskHandle?: string; status?: string }[];
           };
-          expect(listed.tasks.length).toBeGreaterThanOrEqual(1);
-          expect(["RUNNING", "COMPLETED", "COMPLETING"]).toContain(
-            listed.tasks[0]!.status,
+          expect(Array.isArray(listed.tasks)).toBe(true);
+          const task = listed.tasks.find(
+            (candidate) => candidate.taskHandle === started.taskHandle,
           );
+          // SQS may omit a one-message task as soon as it completes. When it
+          // is retained, assert the decoded status; the destination receive
+          // above is the authoritative completion proof.
+          if (task !== undefined) {
+            expect(["RUNNING", "COMPLETING", "COMPLETED"]).toContain(
+              task.status,
+            );
+          }
 
-          // Out-of-band: the message arrives in the destination queue.
-          yield* receiveAndDeleteViaDistilled([messageBody]);
-
-          // Cancelling the (by now finished) task exercises the
-          // CancelMessageMoveTask binding end-to-end; a completed task
-          // surfaces the typed ResourceNotFoundException as canceled:false.
+          // CancelMessageMoveTask rejects an already-completed task. The
+          // handler converts that exact typed terminal race to canceled:false.
           const canceled = (yield* post("/move/cancel", {
             taskHandle: started.taskHandle,
           })) as { canceled: boolean };

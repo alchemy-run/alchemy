@@ -1,11 +1,11 @@
 import * as AWS from "@/AWS";
 import { AnomalyMonitor } from "@/AWS/CostExplorer/AnomalyMonitor.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

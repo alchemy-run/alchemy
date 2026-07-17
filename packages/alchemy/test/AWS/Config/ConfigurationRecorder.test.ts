@@ -1,14 +1,16 @@
 import * as AWS from "@/AWS";
 import { ConfigurationRecorder, DeliveryChannel } from "@/AWS/Config";
 import { Bucket } from "@/AWS/S3";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { makeConfigTestLease } from "./TestLease.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+const testLease = makeConfigTestLease();
 
 // Ungated typed-error probes: prove the distilled error unions carry the
 // not-found tags the recorder/channel providers' read/delete paths depend
@@ -197,6 +199,6 @@ test.provider.skipIf(!process.env.AWS_TEST_CONFIG_RECORDER)(
         }),
       );
       expect(channelGone._tag).toBe("NoSuchDeliveryChannelException");
-    }),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)), testLease.use),
   { timeout: 240_000 },
 );

@@ -733,10 +733,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
           e._tag === "StreamStillExists" ||
           // During stream deletion, AWS may return incomplete responses that fail parsing
           e._tag === "ParseError",
-        schedule: Schedule.max([
-          Schedule.exponential(500),
-          Schedule.recurs(30),
-        ]),
+        schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
       }),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     );

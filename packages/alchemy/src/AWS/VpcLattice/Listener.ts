@@ -13,7 +13,7 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { retryOnConflict } from "./internal.ts";
+import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
 
 /**
  * The action a listener (or rule) applies to matched traffic: forward to
@@ -282,11 +282,13 @@ export const ListenerProvider = () =>
             JSON.stringify(news.defaultAction)
           ) {
             // Sync default action — the only mutable setting.
-            yield* vpclattice.updateListener({
-              serviceIdentifier: news.serviceIdentifier,
-              listenerIdentifier: listener.id,
-              defaultAction: news.defaultAction,
-            });
+            yield* retryOnConflict(
+              vpclattice.updateListener({
+                serviceIdentifier: news.serviceIdentifier,
+                listenerIdentifier: listener.id,
+                defaultAction: news.defaultAction,
+              }),
+            );
           }
 
           yield* syncTags(listener.arn, desiredTags);
@@ -315,6 +317,7 @@ export const ListenerProvider = () =>
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
+          yield* waitUntilAbsent(observe(output.serviceId, output.listenerId));
         }),
       };
     }),

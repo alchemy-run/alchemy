@@ -7,9 +7,9 @@ import {
   VariantStore,
   Workflow,
 } from "@/AWS/Omics";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as omics from "@distilled.cloud/aws/omics";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

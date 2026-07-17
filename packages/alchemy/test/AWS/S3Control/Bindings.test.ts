@@ -1,14 +1,14 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as s3control from "@distilled.cloud/aws/s3-control";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import S3ControlBindingsFunctionLive, {
   S3ControlBindingsFunction,
 } from "./fixtures/bindings-handler.ts";
@@ -20,6 +20,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "S3ControlBindings");
 const mrapStack = Core.scratchStack(testOptions, "S3ControlMrapBindings");
+const ACCOUNT_ID = "391965393224";
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
@@ -217,10 +218,9 @@ describe.sequential("AWS.S3Control bindings", () => {
   });
 });
 
-// Multi-Region Access Point provisioning is asynchronous and takes 10-20
-// minutes per create/delete cycle — far beyond the suite's polling budget, so
-// the failover-route bindings are gated like the MRAP resource lifecycle
-// test (AWS_TEST_SLOW=1 to run).
+// Multi-Region Access Point provisioning is asynchronous and can consume the
+// entire 240s suite ceiling. Keep this explicitly gated; a hard-killed run
+// must be audited by deterministic physical name before it is retried.
 describe
   .skipIf(!process.env.AWS_TEST_SLOW)
   .sequential("AWS.S3Control MRAP route bindings (slow)", () => {
@@ -238,10 +238,10 @@ describe
         mrapBaseUrl = attrs.functionUrl!.replace(/\/+$/, "");
         yield* awaitReady(`${mrapBaseUrl}/routes`);
       }),
-      { timeout: 1_500_000 },
+      { timeout: 240_000 },
     );
 
-    afterAll(mrapStack.destroy(), { timeout: 1_500_000 });
+    afterAll(mrapStack.destroy(), { timeout: 240_000 });
 
     describe("GetMultiRegionAccessPointRoutes + SubmitMultiRegionAccessPointRoutes", () => {
       test.provider(
@@ -249,6 +249,7 @@ describe
         (_stack) =>
           Effect.gen(function* () {
             const before = (yield* getJson(mrapBaseUrl, "/routes")) as {
+              mrapName: string;
               routes: { region: string; trafficDialPercentage: number }[];
             };
             expect(before.routes.length).toBeGreaterThan(0);
@@ -260,8 +261,21 @@ describe
             for (const route of after.routes) {
               expect(route.trafficDialPercentage).toBe(100);
             }
+
+            // Verify the binding's mutation independently of the Lambda
+            // response, through the distilled S3Control client.
+            const live = yield* s3control
+              .getMultiRegionAccessPointRoutes({
+                AccountId: ACCOUNT_ID,
+                Mrap: before.mrapName,
+              })
+              .pipe(Effect.provideService(Region, Effect.succeed("us-west-2")));
+            expect(live.Routes?.length).toBe(before.routes.length);
+            for (const route of live.Routes ?? []) {
+              expect(route.TrafficDialPercentage).toBe(100);
+            }
           }),
-        { timeout: 240_000 },
+        { timeout: 120_000 },
       );
     });
   });

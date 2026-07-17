@@ -26,9 +26,10 @@ import * as Schedule from "effect/Schedule";
  * to zero leftovers regardless of how the previous one ended. A clean account
  * costs one `describeVpcs` call.
  *
- * NOTE: the account-wide `dms-vpc-role` IAM role is shared AWS service
- * infrastructure (created if missing by the ReplicationSubnetGroup provider,
- * like a service-linked role) and is intentionally NEVER deleted here.
+ * NOTE: the account-wide `dms-vpc-role` IAM role is owned and cleaned by the
+ * ReplicationSubnetGroup provider when Alchemy created it and the last subnet
+ * group is gone. The network reaper does not delete foreign/pre-existing IAM
+ * roles with that AWS-mandated name.
  */
 
 /** Fixed CIDRs of the DMS test VPCs (see the two test files). */

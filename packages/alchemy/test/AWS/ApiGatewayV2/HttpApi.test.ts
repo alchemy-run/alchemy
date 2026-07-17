@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -79,20 +79,39 @@ test.provider(
         query: { foo: "bar", baz: "qux" },
       });
 
-      // 2. Path parameters.
-      const item = yield* HttpClient.get(`${baseUrl}/items/widget-42`).pipe(
-        Effect.flatMap((response) => response.json),
+      // 2. Path parameters. Route propagation is independent, so the echo
+      // route becoming live does not guarantee this route is visible yet.
+      const item = yield* edgePropagationRetry(
+        HttpClient.get(`${baseUrl}/items/widget-42`).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? response.json
+              : Effect.fail(
+                  new Error(`GET /items/widget-42 returned ${response.status}`),
+                ),
+          ),
+        ),
       );
       expect(item).toEqual({ id: "widget-42" });
 
-      // 3. POST body round-trip.
-      const created = yield* HttpClient.execute(
-        HttpClientRequest.post(`${baseUrl}/items`).pipe(
-          HttpClientRequest.bodyJsonUnsafe({ name: "widget", count: 2 }),
+      // 3. POST body round-trip. This handler is side-effect-free, so retrying
+      // the request while AWS propagates the POST route is safe.
+      const created = yield* edgePropagationRetry(
+        HttpClient.execute(
+          HttpClientRequest.post(`${baseUrl}/items`).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ name: "widget", count: 2 }),
+          ),
+        ).pipe(
+          Effect.flatMap((response) =>
+            response.status === 201
+              ? response.json
+              : Effect.fail(
+                  new Error(`POST /items returned ${response.status}`),
+                ),
+          ),
         ),
       );
-      expect(created.status).toBe(201);
-      expect(yield* created.json).toEqual({
+      expect(created).toEqual({
         received: { name: "widget", count: 2 },
       });
 

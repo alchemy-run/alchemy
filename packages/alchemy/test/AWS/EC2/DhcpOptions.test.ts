@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { DhcpOptions, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -29,7 +29,7 @@ const assertDeleted = Effect.fn(function* (dhcpOptionsId: string) {
     ),
     Effect.retry({
       while: (e) => e instanceof DhcpOptionsStillExists,
-      schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(20)]),
+      schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(8)]),
     }),
     Effect.catchTag("InvalidDhcpOptionID.NotFound", () => Effect.void),
     Effect.catchTag("InvalidDhcpOptionsID.NotFound", () => Effect.void),

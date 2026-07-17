@@ -1,20 +1,23 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as guardduty from "@distilled.cloud/aws/guardduty";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import GuardDutyTestFunctionLive, { GuardDutyTestFunction } from "./handler";
+import { makeGuardDutyTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "GuardDutyBindings");
+const testLease = makeGuardDutyTestLease();
+
+beforeAll(testLease.acquire, { timeout: 240_000 });
+afterAll(testLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.

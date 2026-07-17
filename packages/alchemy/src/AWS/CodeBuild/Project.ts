@@ -183,6 +183,30 @@ export interface ProjectEnvironmentConfig {
   imagePullCredentialsType?: "CODEBUILD" | "SERVICE_ROLE";
 }
 
+/** Build log destinations for a CodeBuild project. */
+export interface ProjectLogsConfig {
+  /** CloudWatch Logs delivery configuration. */
+  cloudWatchLogs?: {
+    /** Whether CloudWatch Logs delivery is enabled. */
+    status: "ENABLED" | "DISABLED";
+    /** Optional CloudWatch log group name. */
+    groupName?: string;
+    /** Optional CloudWatch log stream name. */
+    streamName?: string;
+  };
+  /** S3 log delivery configuration. */
+  s3Logs?: {
+    /** Whether S3 log delivery is enabled. */
+    status: "ENABLED" | "DISABLED";
+    /** S3 bucket and prefix for build logs. */
+    location?: string;
+    /** Disable default encryption for S3 build logs. */
+    encryptionDisabled?: boolean;
+    /** Access granted to the destination bucket owner. */
+    bucketOwnerAccess?: "NONE" | "READ_ONLY" | "FULL";
+  };
+}
+
 export interface ProjectProps {
   /**
    * Name of the build project (2-255 chars). If omitted a deterministic
@@ -237,6 +261,11 @@ export interface ProjectProps {
    * @default false
    */
   badgeEnabled?: boolean;
+  /**
+   * Build log destinations. Set both destinations to `DISABLED` for builds
+   * that do not need persisted logs.
+   */
+  logsConfig?: ProjectLogsConfig;
   /**
    * Resource policy attached to the project — shares the project with other
    * AWS accounts by granting them read actions such as
@@ -454,6 +483,7 @@ export const ProjectProvider = () =>
             concurrentBuildLimit: news.concurrentBuildLimit,
             encryptionKey: news.encryptionKey,
             badgeEnabled: news.badgeEnabled,
+            logsConfig: news.logsConfig,
             tags: toWireTags(desiredTags),
           };
 

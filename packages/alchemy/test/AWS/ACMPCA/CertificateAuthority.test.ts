@@ -5,9 +5,9 @@ import {
   Permission,
 } from "@/AWS/ACMPCA";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as acmpca from "@distilled.cloud/aws/acm-pca";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

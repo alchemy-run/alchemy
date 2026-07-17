@@ -1,12 +1,19 @@
 import * as AWS from "@/AWS";
 import { Detector } from "@/AWS/GuardDuty/Detector.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as guardduty from "@distilled.cloud/aws/guardduty";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { makeGuardDutyTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+const testLease = makeGuardDutyTestLease();
+
+beforeAll(testLease.acquire, { timeout: 240_000 });
+afterAll(testLease.release);
 
 const firstDetectorId = guardduty
   .listDetectors({})

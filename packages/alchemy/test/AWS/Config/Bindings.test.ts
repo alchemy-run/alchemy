@@ -1,17 +1,16 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import ConfigTestFunctionLive, { ConfigTestFunction } from "./handler";
+import { makeConfigTestLease } from "./TestLease.ts";
 
 // Runtime binding coverage for every Config capability that can be
 // exercised against fixture-deployable resources. One binding has no route
@@ -25,6 +24,7 @@ import ConfigTestFunctionLive, { ConfigTestFunction } from "./handler";
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ConfigBindings");
+const testLease = makeConfigTestLease();
 
 // PutConfigRule (the fixture's rule) requires a configuration recorder in
 // the account/region. Capture-and-restore: if the account has none, stand
@@ -136,6 +136,7 @@ const postJson = (path: string) =>
 describe("Config Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
+      yield* testLease.acquire;
       yield* Effect.logInfo("Config test setup: ensuring recorder");
       // Direct distilled calls need the AWS provider context (credentials,
       // region) that `test.provider` bodies get implicitly.
@@ -174,14 +175,20 @@ describe("Config Bindings", () => {
   );
 
   afterAll(
-    Effect.gen(function* () {
-      yield* sharedStack.destroy();
-      yield* Core.withProviders(
-        removeRecorderIfCreated(recorderCreated),
-        testOptions,
-        "ConfigBindings",
-      );
-    }),
+    sharedStack
+      .destroy()
+      .pipe(
+        Effect.ensuring(
+          Effect.suspend(() =>
+            Core.withProviders(
+              removeRecorderIfCreated(recorderCreated),
+              testOptions,
+              "ConfigBindings",
+            ),
+          ),
+        ),
+        Effect.ensuring(testLease.release),
+      ),
     { timeout: 180_000 },
   );
 

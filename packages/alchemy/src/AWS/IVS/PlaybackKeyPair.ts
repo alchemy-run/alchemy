@@ -1,6 +1,7 @@
 import * as ivs from "@distilled.cloud/aws/ivs";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -84,6 +85,22 @@ export const PlaybackKeyPair = Resource<PlaybackKeyPair>(
 export class IvsPlaybackKeyPairIncomplete extends Data.TaggedError(
   "IvsPlaybackKeyPairIncomplete",
 )<{ message: string }> {}
+
+/**
+ * DeletePlaybackKeyPair intermittently returns InternalServerException even
+ * though a subsequent attempt succeeds. Retry only that typed transient error
+ * on a bounded schedule; other delete errors still fail immediately.
+ */
+const retryDeleteInternalServer = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (error) => error._tag === "InternalServerException",
+    schedule: Schedule.max([
+      Schedule.exponential("500 millis"),
+      Schedule.recurs(6),
+    ]),
+  });
 
 export const PlaybackKeyPairProvider = () =>
   Provider.effect(
@@ -225,6 +242,7 @@ export const PlaybackKeyPairProvider = () =>
             .deletePlaybackKeyPair({ arn: output.playbackKeyPairArn })
             .pipe(
               retryWhileThrottled,
+              retryDeleteInternalServer,
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
         }),

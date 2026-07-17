@@ -1,12 +1,14 @@
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
+import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Credentials } from "../Credentials.ts";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
@@ -61,6 +63,14 @@ export class JobDefinitionConfigError extends Data.TaggedError(
   "JobDefinitionConfigError",
 )<{
   readonly message: string;
+}> {}
+
+class JobDefinitionStillVisible extends Data.TaggedError(
+  "JobDefinitionStillVisible",
+)<{
+  readonly family: string;
+  readonly service: "Batch" | "ECS";
+  readonly arns: readonly string[];
 }> {}
 
 export interface JobDefinitionProps extends PlatformProps {
@@ -128,6 +138,12 @@ export interface JobDefinitionProps extends PlatformProps {
    * Effect-native form.
    */
   executionRoleArn?: string;
+  /**
+   * Compute platforms that can run this definition. Use `EC2` for unmanaged
+   * ECS compute environments.
+   * @default ["FARGATE"]
+   */
+  platformCapabilities?: ("EC2" | "FARGATE")[];
   /**
    * Whether the Fargate task ENI gets a public IP. Required for image pulls
    * from public registries when running in public subnets.
@@ -429,6 +445,7 @@ const fingerprint = (input: {
   retryAttempts?: number;
   timeoutSeconds?: number;
   propagateTags?: boolean;
+  platformCapabilities?: ("EC2" | "FARGATE")[];
 }) =>
   JSON.stringify({
     image: input.image,
@@ -447,6 +464,9 @@ const fingerprint = (input: {
     retryAttempts: input.retryAttempts ?? 1,
     timeoutSeconds: input.timeoutSeconds,
     propagateTags: input.propagateTags ?? false,
+    platformCapabilities: [
+      ...(input.platformCapabilities ?? ["FARGATE"]),
+    ].sort(),
   });
 
 const observedFingerprint = (d: batch.JobDefinition) => {
@@ -474,6 +494,9 @@ const observedFingerprint = (d: batch.JobDefinition) => {
     retryAttempts: d.retryStrategy?.attempts,
     timeoutSeconds: d.timeout?.attemptDurationSeconds,
     propagateTags: d.propagateTags,
+    platformCapabilities: d.platformCapabilities as
+      | ("EC2" | "FARGATE")[]
+      | undefined,
   });
 };
 
@@ -494,6 +517,7 @@ const desiredFingerprint = (
     retryAttempts: effective.retryAttempts,
     timeoutSeconds: effective.timeoutSeconds,
     propagateTags: effective.propagateTags,
+    platformCapabilities: news.platformCapabilities,
   });
 
 export const JobDefinitionProvider = () =>
@@ -541,6 +565,151 @@ export const JobDefinitionProvider = () =>
 
       const latestRevision = (name: string) =>
         activeRevisions(name).pipe(Effect.map((defs) => defs.at(-1)));
+
+      const waitUntilNoActiveBatchRevisions = (family: string) =>
+        Effect.gen(function* () {
+          const active = yield* activeRevisions(family);
+          if (active.length > 0) {
+            return yield* Effect.fail(
+              new JobDefinitionStillVisible({
+                family,
+                service: "Batch",
+                arns: active.flatMap((revision) =>
+                  revision.jobDefinitionArn ? [revision.jobDefinitionArn] : [],
+                ),
+              }),
+            );
+          }
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "JobDefinitionStillVisible",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(15),
+            ]),
+          }),
+        );
+
+      const listBackingTaskDefinitions = (
+        family: string,
+        status: "ACTIVE" | "INACTIVE",
+      ) =>
+        ecs.listTaskDefinitions({ familyPrefix: family, status }).pipe(
+          Effect.map((response) =>
+            (response.taskDefinitionArns ?? []).filter((arn) => {
+              const suffix = arn.split("/").at(-1);
+              return suffix?.slice(0, suffix.lastIndexOf(":")) === family;
+            }),
+          ),
+        );
+
+      const waitUntilBackingRevisionDeletionStarted = (
+        family: string,
+        arn: string,
+      ) =>
+        Effect.gen(function* () {
+          const status = yield* ecs
+            .describeTaskDefinition({ taskDefinition: arn })
+            .pipe(
+              Effect.map((response) => response.taskDefinition?.status),
+              // Not-found means ECS already completed the asynchronous
+              // deletion and is therefore terminal as well.
+              Effect.catchTag("ClientException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (status !== undefined && status !== "DELETE_IN_PROGRESS") {
+            return yield* Effect.fail(
+              new JobDefinitionStillVisible({
+                family,
+                service: "ECS",
+                arns: [arn],
+              }),
+            );
+          }
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "JobDefinitionStillVisible",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(30),
+            ]),
+          }),
+        );
+
+      /**
+       * AWS Batch registers an ECS task definition under the same family when
+       * a job first runs. It is not part of Batch's list API or Alchemy state,
+       * and Batch can leave it ACTIVE after the Batch definition is gone.
+       * Exact-family filtering keeps this cleanup scoped to the resource.
+       */
+      const reapBackingTaskDefinitions = (family: string) =>
+        Effect.gen(function* () {
+          const active = yield* listBackingTaskDefinitions(family, "ACTIVE");
+          yield* Effect.forEach(
+            active,
+            (arn) =>
+              ecs
+                .deregisterTaskDefinition({ taskDefinition: arn })
+                .pipe(Effect.catchTag("ClientException", () => Effect.void)),
+            { concurrency: 4, discard: true },
+          );
+
+          // Observe ACTIVE absence before attempting the hard delete. This is
+          // the transition ECS requires before deleteTaskDefinitions.
+          yield* Effect.gen(function* () {
+            const remaining = yield* listBackingTaskDefinitions(
+              family,
+              "ACTIVE",
+            );
+            if (remaining.length > 0) {
+              return yield* Effect.fail(
+                new JobDefinitionStillVisible({
+                  family,
+                  service: "ECS",
+                  arns: remaining,
+                }),
+              );
+            }
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "JobDefinitionStillVisible",
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(15),
+              ]),
+            }),
+          );
+
+          const inactive = [
+            ...new Set([
+              ...active,
+              ...(yield* listBackingTaskDefinitions(family, "INACTIVE")),
+            ]),
+          ];
+          for (let i = 0; i < inactive.length; i += 10) {
+            const response = yield* ecs.deleteTaskDefinitions({
+              taskDefinitions: inactive.slice(i, i + 10),
+            });
+            if ((response.failures?.length ?? 0) > 0) {
+              return yield* Effect.fail(
+                new Error(
+                  `ECS failed to delete Batch backing task definitions for ${family}: ${response.failures
+                    ?.map(
+                      (failure) =>
+                        `${failure.arn ?? "unknown"}: ${failure.reason ?? "unknown"} (${failure.detail ?? "no detail"})`,
+                    )
+                    .join(", ")}`,
+                ),
+              );
+            }
+          }
+          yield* Effect.forEach(
+            inactive,
+            (arn) => waitUntilBackingRevisionDeletionStarted(family, arn),
+            { concurrency: 4, discard: true },
+          );
+        });
 
       /**
        * Ensure an IAM role trusted by ECS tasks exists (creates on miss,
@@ -1159,10 +1328,13 @@ await Effect.runPromise(program).then(
             !latest ||
             observedFingerprint(latest) !== desiredFingerprint(effective, news)
           ) {
+            const platformCapabilities = news.platformCapabilities ?? [
+              "FARGATE",
+            ];
             const registered = yield* batch.registerJobDefinition({
               jobDefinitionName: name,
               type: "container",
-              platformCapabilities: ["FARGATE"],
+              platformCapabilities,
               containerProperties: {
                 image: effective.image,
                 command: effective.command,
@@ -1175,9 +1347,9 @@ await Effect.runPromise(program).then(
                 environment: Object.entries(effective.environment).map(
                   ([key, value]) => ({ name: key, value }),
                 ),
-                networkConfiguration: {
-                  assignPublicIp: effective.assignPublicIp,
-                },
+                networkConfiguration: platformCapabilities.includes("FARGATE")
+                  ? { assignPublicIp: effective.assignPublicIp }
+                  : undefined,
               },
               parameters: effective.parameters,
               retryStrategy:
@@ -1236,6 +1408,13 @@ await Effect.runPromise(program).then(
               }),
             { concurrency: 4 },
           );
+          yield* waitUntilNoActiveBatchRevisions(output.jobDefinitionName);
+
+          // A submitted Batch job causes AWSServiceRoleForBatch to create a
+          // backing ECS task-definition revision with the exact same family.
+          // Batch deregistration does not reliably reclaim it, so delete it
+          // explicitly only after the Batch family is observed inactive.
+          yield* reapBackingTaskDefinitions(output.jobDefinitionName);
 
           // Reap the managed platform resources (Effect-native form only).
           yield* cleanupPlatformResources(output);

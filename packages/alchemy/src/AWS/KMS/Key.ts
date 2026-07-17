@@ -418,6 +418,25 @@ export const KeyProvider = () =>
           Effect.catchTag("NotFoundException", () => Effect.void),
           Effect.catchTag("KMSInvalidStateException", () => Effect.void),
         );
+
+      const remaining = yield* Effect.repeat(
+        kms.describeKey({ KeyId: output.keyId }).pipe(
+          Effect.map((response) => response.KeyMetadata?.KeyState),
+          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        ),
+        {
+          schedule: Schedule.fixed("250 millis"),
+          until: (state) => state === undefined || state === "PendingDeletion",
+          times: 20,
+        },
+      );
+      if (remaining !== undefined && remaining !== "PendingDeletion") {
+        yield* Effect.die(
+          new Error(
+            `KMS key ${output.keyId} remained ${remaining} after scheduling deletion`,
+          ),
+        );
+      }
       yield* session.note(`Scheduled KMS key deletion: ${output.keyId}`);
     }),
   });
@@ -478,7 +497,7 @@ const readConvergedKey = Effect.fn(function* ({
   desiredRotationPeriodInDays: number | undefined;
   desiredTags: Record<string, string>;
 }) {
-  return yield* Effect.gen(function* () {
+  const observeConverged = Effect.gen(function* () {
     const key = yield* readKey({ keyId, deletionWindowInDays });
     if (!key) {
       return yield* Effect.fail(new KmsKeyNotConverged());
@@ -518,6 +537,17 @@ const readConvergedKey = Effect.fn(function* ({
       }
     }
     return key;
+  });
+
+  return yield* Effect.gen(function* () {
+    // KMS reads can briefly move backwards after a successful mutation (for
+    // example, GetKeyPolicy may serve the new policy once and then an older
+    // replica's default policy). A single matching read is therefore not a
+    // sufficient convergence signal under high concurrency. Require two
+    // consecutive observations before returning the resource to the engine.
+    yield* observeConverged;
+    yield* Effect.sleep("500 millis");
+    return yield* observeConverged;
   }).pipe(
     Effect.retry({
       while: (error: { _tag: string }) =>

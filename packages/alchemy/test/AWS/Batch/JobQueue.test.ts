@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import { ComputeEnvironment } from "@/AWS/Batch/ComputeEnvironment.ts";
 import { JobQueue } from "@/AWS/Batch/JobQueue.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { BatchTestNetwork } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,8 +28,11 @@ const describeCe = batch
 
 const chain = (priority?: number) =>
   Effect.gen(function* () {
+    const network = yield* BatchTestNetwork;
     const ce = yield* ComputeEnvironment("JqCE", {
       computeEnvironmentName: ceName,
+      subnets: network.subnetIds,
+      securityGroupIds: network.securityGroupIds,
     });
     return yield* JobQueue("Queue", {
       jobQueueName: queueName,
@@ -69,5 +73,5 @@ test.provider(
       expect(yield* describeQueue).toBeUndefined();
       expect(yield* describeCe).toBeUndefined();
     }),
-  { timeout: 480_000 },
+  { timeout: 240_000 },
 );

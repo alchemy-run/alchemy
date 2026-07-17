@@ -120,11 +120,20 @@ export const AppFlowApiFunctionLive = AppFlowApiFunction.make(
     const describeFlowExecutionRecords =
       yield* AWS.AppFlow.DescribeFlowExecutionRecords(flow);
     const eventsSink = yield* AWS.SQS.QueueSink(eventsQueue);
+    const flowEventPattern = AWS.AppFlow.flowEvents({
+      flowNames: [FLOW_NAME],
+    });
 
     // Forward this flow's AppFlow run reports into the sink queue so the test
-    // can observe them out-of-band via `sqs.receiveMessage`.
+    // can observe them out-of-band via `sqs.receiveMessage`. Native AppFlow
+    // reports use the reserved `aws.appflow` source and are best-effort. Keep
+    // that production pattern and add a custom source solely so the test can
+    // publish a deterministic readiness/report probe through PutEvents.
     yield* AWS.EventBridge.consumeBusEvents(
-      AWS.AppFlow.flowEvents({ flowNames: [FLOW_NAME] }),
+      {
+        ...flowEventPattern,
+        source: [...flowEventPattern.source, "alchemy.test.appflow"],
+      },
       (events: Stream.Stream<AWS.EventBridge.EventRecord>) =>
         events.pipe(
           Stream.map((event) => ({

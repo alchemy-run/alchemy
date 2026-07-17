@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { DBParameterGroup } from "@/AWS/Neptune";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as neptune from "@distilled.cloud/aws/neptune";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";

@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import * as Output from "@/Output";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as s3files from "@distilled.cloud/aws/s3files";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

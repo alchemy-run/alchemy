@@ -9,9 +9,9 @@ import {
   RuleSet,
   TrafficPolicy,
 } from "@/AWS/MailManager";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as mm from "@distilled.cloud/aws/mailmanager";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

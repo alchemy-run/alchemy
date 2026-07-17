@@ -1,14 +1,22 @@
 import * as AWS from "@/AWS";
 import { ConfigRule } from "@/AWS/Config";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { makeConfigTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
+const testLease = makeConfigTestLease();
+
+// Acquire outside the individual lifecycle timer. Bindings holds the same
+// account/Region recorder lease for its file-long fixture, and queueing behind
+// it is scheduling rather than part of this rule's cloud-operation budget.
+beforeAll(testLease.acquire, { timeout: 240_000 });
+afterAll(testLease.release);
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on. Runs in every

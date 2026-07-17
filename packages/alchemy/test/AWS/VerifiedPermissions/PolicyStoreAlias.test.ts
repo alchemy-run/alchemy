@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { PolicyStore, PolicyStoreAlias } from "@/AWS/VerifiedPermissions";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as avp from "@distilled.cloud/aws/verifiedpermissions";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 

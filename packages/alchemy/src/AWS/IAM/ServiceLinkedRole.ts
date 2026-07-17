@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -20,7 +21,11 @@ export class ServiceLinkedRoleDeletionFailed extends Data.TaggedError(
   readonly roleName: string;
   readonly status: string;
   readonly reason: string | undefined;
-}> {}
+}> {
+  override get message() {
+    return `IAM service-linked role ${this.roleName} deletion ${this.status}${this.reason ? `: ${this.reason}` : ""}`;
+  }
+}
 
 export interface ServiceLinkedRoleProps {
   /**
@@ -161,45 +166,82 @@ export const ServiceLinkedRoleProvider = () =>
         return response?.Role;
       });
 
-      // Deletion is an asynchronous task. Poll it to a terminal state on a
-      // bounded budget (30 × 2s = 60s) — a plain counted loop, deliberately
-      // not Effect.retry/repeat, whose conditional return types leak into
-      // declaration emit (see PATTERNS.md §7).
-      const waitForDeletion = Effect.fn(function* (
-        roleName: string,
-        deletionTaskId: string,
-      ) {
+      const submitDeletion = Effect.fn(function* (roleName: string) {
+        return yield* iam.deleteServiceLinkedRole({ RoleName: roleName }).pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "LimitExceededException" ||
+              error._tag === "ServiceFailureException",
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(6),
+            ]),
+          }),
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      });
+
+      // Deletion is asynchronous. Poll both task status and the role itself on
+      // a bounded budget (30 × 2s = 60s); observable role absence, not merely
+      // task success/absence, is terminal. IAM can transiently mark a deletion
+      // task FAILED even though immediately resubmitting it succeeds. Treat a
+      // failed or expired task as a request to re-observe and resubmit within
+      // the same budget. If a dependency really remains, every task continues
+      // to fail and the final typed error retains the resource in state.
+      const deleteAndWait = Effect.fn(function* (roleName: string) {
+        let deletionTaskId: string | undefined;
+        let lastStatus = "NOT_SUBMITTED";
+        let lastReason: string | undefined;
         for (let attempt = 0; attempt < 30; attempt++) {
-          const status = yield* iam
-            .getServiceLinkedRoleDeletionStatus({
-              DeletionTaskId: deletionTaskId,
-            })
-            .pipe(
-              // An unknown task id means the task record aged out — the
-              // role is gone; treat as success so delete stays idempotent.
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed({
-                  Status: "SUCCEEDED" as const,
-                  Reason: undefined,
-                }),
-              ),
-            );
-          if (status.Status === "SUCCEEDED") {
+          // The role's observable absence is the terminal condition. A newly
+          // submitted deletion task can briefly return NoSuchEntity before
+          // its status record propagates, so task absence alone is not proof.
+          const role = yield* getRole(roleName);
+          if (!role) {
             return;
           }
-          if (status.Status === "FAILED") {
-            const usage = (status.Reason?.RoleUsageList ?? [])
-              .flatMap((entry) => entry.Resources ?? [])
-              .join(", ");
-            return yield* Effect.fail(
-              new ServiceLinkedRoleDeletionFailed({
-                roleName,
-                status: status.Status,
-                reason: [status.Reason?.Reason, usage]
+
+          if (deletionTaskId === undefined) {
+            const submitted = yield* submitDeletion(roleName);
+            deletionTaskId = submitted?.DeletionTaskId;
+            lastStatus = deletionTaskId ? "SUBMITTED" : "NOT_FOUND";
+          }
+
+          if (deletionTaskId !== undefined) {
+            const status = yield* iam
+              .getServiceLinkedRoleDeletionStatus({
+                DeletionTaskId: deletionTaskId,
+              })
+              .pipe(
+                // Both the task record and IAM itself are eventually
+                // consistent. Keep polling the role on transient status-read
+                // failures; never translate them into successful deletion.
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed("TASK_NOT_FOUND" as const),
+                ),
+                Effect.catchTag("ServiceFailureException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            if (status === "TASK_NOT_FOUND") {
+              lastStatus = status;
+              deletionTaskId = undefined;
+            } else if (status !== undefined) {
+              lastStatus = status.Status;
+              if (status.Status === "FAILED") {
+                const usage = (status.Reason?.RoleUsageList ?? [])
+                  .flatMap((entry) => entry.Resources ?? [])
+                  .join(", ");
+                lastReason = [status.Reason?.Reason, usage]
                   .filter((part) => part)
-                  .join(" — "),
-              }),
-            );
+                  .join(" — ");
+                // AWS documents that a new request must be submitted after a
+                // failed deletion task. The next bounded iteration does so.
+                deletionTaskId = undefined;
+              }
+            }
           }
           yield* Effect.sleep("2 seconds");
         }
@@ -207,7 +249,9 @@ export const ServiceLinkedRoleProvider = () =>
           new ServiceLinkedRoleDeletionFailed({
             roleName,
             status: "TIMED_OUT",
-            reason: `deletion task ${deletionTaskId} did not reach a terminal state within 60s`,
+            reason:
+              lastReason ??
+              `deletion task ${deletionTaskId ?? "not returned"} was ${lastStatus}, but role remained observable after 60s`,
           }),
         );
       });
@@ -343,17 +387,7 @@ export const ServiceLinkedRoleProvider = () =>
           return toAttributes(fresh, news.awsServiceName);
         }),
         delete: Effect.fn(function* ({ output }) {
-          const submitted = yield* iam
-            .deleteServiceLinkedRole({ RoleName: output.roleName })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          if (!submitted) {
-            return;
-          }
-          yield* waitForDeletion(output.roleName, submitted.DeletionTaskId);
+          yield* deleteAndWait(output.roleName);
         }),
       };
     }),

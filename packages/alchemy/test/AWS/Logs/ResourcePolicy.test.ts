@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { ResourcePolicy } from "@/AWS/Logs/ResourcePolicy.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

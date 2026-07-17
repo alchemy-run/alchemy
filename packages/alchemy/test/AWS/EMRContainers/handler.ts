@@ -4,6 +4,7 @@ import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -62,12 +63,32 @@ export default EmrcTestFunction.make(
       yield* EMRContainers.DescribeJobTemplate(template);
     const listJobTemplates = yield* EMRContainers.ListJobTemplates();
     const listVirtualClusters = yield* EMRContainers.ListVirtualClusters();
+    const templateId = yield* template.jobTemplateId;
 
     const bound = {
       describeJobTemplate,
       listJobTemplates,
       listVirtualClusters,
     };
+
+    // Drain a bounded number of pages on every observation. AWS list APIs may
+    // return a short (or empty) page with a continuation token while the
+    // account is being mutated by other test files, so repeatedly reading only
+    // page one makes the full-concurrency sweep flaky.
+    const listAllJobTemplates = Effect.fn(function* () {
+      const templates: Array<{ readonly id?: string }> = [];
+      let nextToken: string | undefined;
+      for (let page = 0; page < 10; page++) {
+        const response = yield* listJobTemplates({
+          maxResults: 100,
+          nextToken,
+        });
+        templates.push(...(response.templates ?? []));
+        nextToken = response.nextToken;
+        if (nextToken === undefined) break;
+      }
+      return templates;
+    });
 
     return {
       fetch: Effect.gen(function* () {
@@ -93,9 +114,15 @@ export default EmrcTestFunction.make(
 
         // Account-level list.
         if (request.method === "GET" && pathname === "/templates") {
-          const { templates } = yield* listJobTemplates();
+          const expectedTemplateId = yield* templateId;
+          const templates = yield* Effect.repeat(listAllJobTemplates(), {
+            schedule: Schedule.fixed("2 seconds"),
+            until: (items) =>
+              items.some((item) => item.id === expectedTemplateId),
+            times: 10,
+          });
           return yield* HttpServerResponse.json({
-            ids: (templates ?? []).map((t) => t.id),
+            ids: templates.map((template) => template.id),
           });
         }
 

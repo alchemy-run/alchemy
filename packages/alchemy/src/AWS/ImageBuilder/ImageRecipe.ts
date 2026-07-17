@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  deleteImageBuilderLogGroup,
   imageBuilderArn,
   immutableVersionKeysChanged,
   retryWhileDependedOn,
@@ -318,6 +319,48 @@ export const ImageRecipeProvider = () =>
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
+
+          // Do not discard state until Image Builder confirms the owned
+          // version is gone. The auto-created recipe log group is shared by
+          // every version with the same name, so delete it only when no live
+          // same-name recipe remains (including a replacement version).
+          for (let attempt = 0; attempt < 30; attempt++) {
+            if ((yield* getRecipe(output.imageRecipeArn)) === undefined) break;
+            if (attempt === 29) {
+              return yield* Effect.die(
+                new Error(
+                  `Image Builder recipe ${output.imageRecipeArn} remained observable 30 seconds after delete`,
+                ),
+              );
+            }
+            yield* Effect.sleep("1 second");
+          }
+
+          const summaries = yield* imagebuilder.listImageRecipes
+            .pages({ owner: "Self" })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((pages) =>
+                Array.from(pages).flatMap(
+                  (page) => page.imageRecipeSummaryList ?? [],
+                ),
+              ),
+            );
+          const sameName = summaries.filter(
+            (summary) =>
+              summary.name === output.imageRecipeName &&
+              summary.arn !== undefined,
+          );
+          const liveSameName = yield* Effect.forEach(
+            sameName,
+            (summary) => getRecipe(summary.arn!),
+            { concurrency: 4 },
+          );
+          if (liveSameName.every((recipe) => recipe === undefined)) {
+            yield* deleteImageBuilderLogGroup(
+              `/aws/imagebuilder/${output.imageRecipeName}`,
+            );
+          }
         }),
 
         list: () =>

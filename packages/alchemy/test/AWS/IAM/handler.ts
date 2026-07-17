@@ -176,9 +176,11 @@ export default IamTestFunction.make(
 
         if (request.method === "GET" && pathname === "/service-last-accessed") {
           // Access-advisor round trip against the fixture user: generate the
-          // job, poll (bounded) until it leaves IN_PROGRESS, then drill into
+          // job, briefly poll until it leaves IN_PROGRESS, then drill into
           // the s3 namespace (guaranteed present — the user's inline policy
-          // allows s3).
+          // allows s3). Keep this well below the Lambda timeout: under
+          // parallel test load the IAM calls themselves can be slow, and the
+          // caller already accepts IN_PROGRESS as a valid asynchronous state.
           const { JobId } = yield* generateServiceLastAccessedDetails({
             Arn: yield* userArn,
           });
@@ -186,9 +188,9 @@ export default IamTestFunction.make(
             JobId: JobId!,
           }).pipe(
             Effect.repeat({
-              schedule: Schedule.spaced("2 seconds"),
+              schedule: Schedule.spaced("1 second"),
               until: (r): boolean => r.JobStatus !== "IN_PROGRESS",
-              times: 8,
+              times: 3,
             }),
           );
           if (details.JobStatus !== "COMPLETED") {

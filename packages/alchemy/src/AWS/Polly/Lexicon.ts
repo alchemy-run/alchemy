@@ -139,6 +139,50 @@ export const LexiconProvider = () =>
             ),
           );
 
+      const waitForContent = (name: string, desired: string) =>
+        Effect.gen(function* () {
+          let found: polly.GetLexiconOutput | undefined;
+          let consecutiveMatches = 0;
+          for (let attempt = 0; attempt < 20; attempt++) {
+            found = yield* getOne(name);
+            if (contentOf(found?.Lexicon) === desired) {
+              // Polly can transiently return a response whose Lexicon payload
+              // is absent immediately after PutLexicon. Require two stable
+              // reads before exposing the updated resource to dependants.
+              consecutiveMatches++;
+              if (consecutiveMatches === 2) return found;
+            } else {
+              consecutiveMatches = 0;
+            }
+            yield* Effect.sleep("500 millis");
+          }
+          return yield* Effect.fail(
+            new Error(
+              `Polly lexicon '${name}' did not converge to the desired content`,
+            ),
+          );
+        });
+
+      const waitUntilGone = (name: string) =>
+        Effect.gen(function* () {
+          let consecutiveMisses = 0;
+          for (let attempt = 0; attempt < 20; attempt++) {
+            const found = yield* getOne(name);
+            if (found === undefined) {
+              consecutiveMisses++;
+              if (consecutiveMisses === 2) return;
+            } else {
+              consecutiveMisses = 0;
+            }
+            yield* Effect.sleep("500 millis");
+          }
+          return yield* Effect.fail(
+            new Error(
+              `Polly lexicon '${name}' is still observable after deletion`,
+            ),
+          );
+        });
+
       return {
         stables: ["lexiconName", "lexiconArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
@@ -208,7 +252,10 @@ export const LexiconProvider = () =>
           }
 
           yield* session.note(name);
-          const final = yield* getOne(name);
+          // PutLexicon can return before GetLexicon exposes the new document.
+          // Wait briefly for the exact desired content so callers never observe
+          // stale state immediately after a successful deploy.
+          const final = yield* waitForContent(name, news.content);
           return toAttributes(
             name,
             final?.LexiconAttributes?.LexiconArn ?? (yield* lexiconArn(name)),
@@ -222,6 +269,10 @@ export const LexiconProvider = () =>
             .pipe(
               Effect.catchTag("LexiconNotFoundException", () => Effect.void),
             );
+          // DeleteLexicon may return before the control plane consistently
+          // reports absence. Confirm deletion so nuke cannot leave a lexicon
+          // behind and lose the only state that identifies it.
+          yield* waitUntilGone(output.lexiconName);
         }),
       };
     }),

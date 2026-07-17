@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { HttpNamespace } from "@/AWS/CloudMap";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

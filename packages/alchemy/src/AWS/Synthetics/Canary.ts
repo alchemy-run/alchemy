@@ -1,4 +1,6 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
+import * as lambda from "@distilled.cloud/aws/lambda";
 import * as synthetics from "@distilled.cloud/aws/synthetics";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
@@ -178,6 +180,8 @@ export interface Canary extends Resource<
     roleName: string | undefined;
     /** Hash of the last-applied desired configuration; used to skip no-op updates. */
     configHash: string | undefined;
+    /** Exact ARN of the service-created Lambda function backing the canary. */
+    engineArn: string | undefined;
   },
   {},
   Providers
@@ -269,6 +273,21 @@ export class CanaryFailed extends Data.TaggedError("CanaryFailed")<{
   canaryName: string;
   stateReasonCode: string | undefined;
   message: string;
+}> {}
+
+class CanaryBackingResourceStillVisible extends Data.TaggedError(
+  "CanaryBackingResourceStillVisible",
+)<{
+  readonly canaryName: string;
+  readonly resource: "LambdaFunction" | "LogGroup";
+  readonly identifier: string;
+}> {}
+
+class UnexpectedCanaryEngineArn extends Data.TaggedError(
+  "UnexpectedCanaryEngineArn",
+)<{
+  readonly canaryName: string;
+  readonly engineArn: string;
 }> {}
 
 const TRANSITIONAL_STATES = [
@@ -472,6 +491,154 @@ export const CanaryProvider = () =>
         yield* waitUntilGone(canaryName);
       });
 
+      const backingFunctionName = (canaryName: string, engineArn: string) => {
+        const marker = ":function:";
+        const markerIndex = engineArn.indexOf(marker);
+        const functionName =
+          markerIndex === -1
+            ? undefined
+            : engineArn.slice(markerIndex + marker.length).split(":")[0];
+        // EngineArn is observed directly from this owned canary. Retain an
+        // explicit name check so a malformed or unexpectedly-shaped response
+        // can never make deletion target another Lambda.
+        return functionName?.startsWith(`cwsyn-${canaryName}-`)
+          ? Effect.succeed(functionName)
+          : Effect.fail(
+              new UnexpectedCanaryEngineArn({ canaryName, engineArn }),
+            );
+      };
+
+      const discoverBackingFunctionNames = Effect.fn(function* (
+        canaryName: string,
+        engineArn: string | undefined,
+      ) {
+        if (engineArn) {
+          return [yield* backingFunctionName(canaryName, engineArn)];
+        }
+
+        // EngineArn is optional and is absent on some Synthetics runtimes.
+        // The backing Lambda's only observable relationship is its service
+        // name. Require the complete canonical UUID suffix so a canary named
+        // `foo` can never capture another named `foo-bar`.
+        const escapedCanaryName = canaryName.replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\$&",
+        );
+        const exactBackingName = new RegExp(
+          `^cwsyn-${escapedCanaryName}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
+          "i",
+        );
+        const pages = yield* lambda.listFunctions
+          .pages({})
+          .pipe(Stream.runCollect);
+        return Array.from(pages)
+          .flatMap((page) => page.Functions ?? [])
+          .flatMap((fn) =>
+            fn.FunctionName && exactBackingName.test(fn.FunctionName)
+              ? [fn.FunctionName]
+              : [],
+          );
+      });
+
+      const backingFunctionExists = (functionName: string) =>
+        lambda.getFunction({ FunctionName: functionName }).pipe(
+          Effect.as(true),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(false),
+          ),
+        );
+
+      const exactLogGroupExists = (logGroupName: string) =>
+        logs
+          .describeLogGroups({
+            logGroupNamePrefix: logGroupName,
+            limit: 50,
+          })
+          .pipe(
+            Effect.map((response) =>
+              (response.logGroups ?? []).some(
+                (group) => group.logGroupName === logGroupName,
+              ),
+            ),
+          );
+
+      const waitForBackingResourceGone = (
+        canaryName: string,
+        resource: "LambdaFunction" | "LogGroup",
+        identifier: string,
+        exists: Effect.Effect<boolean, any, any>,
+      ) =>
+        exists.pipe(
+          Effect.flatMap((visible) =>
+            visible
+              ? Effect.fail(
+                  new CanaryBackingResourceStillVisible({
+                    canaryName,
+                    resource,
+                    identifier,
+                  }),
+                )
+              : Effect.void,
+          ),
+          Effect.retry({
+            while: (error) =>
+              error._tag === "CanaryBackingResourceStillVisible",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(20),
+            ]),
+          }),
+        );
+
+      const deleteBackingResources = Effect.fn(function* (
+        canaryName: string,
+        functionName: string,
+      ) {
+        const logGroupName = `/aws/lambda/${functionName}`;
+
+        yield* lambda.deleteFunction({ FunctionName: functionName }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "ResourceConflictException",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(20),
+            ]),
+          }),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+        yield* waitForBackingResourceGone(
+          canaryName,
+          "LambdaFunction",
+          functionName,
+          backingFunctionExists(functionName),
+        );
+
+        // Lambda never owns its log group lifecycle. A just-finished
+        // invocation can flush its final stream after Lambda deletion starts,
+        // so reap this exact group across a short quiescence window.
+        for (let attempt = 0; attempt < 5; attempt++) {
+          if (yield* exactLogGroupExists(logGroupName)) {
+            yield* logs.deleteLogGroup({ logGroupName }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "OperationAbortedException",
+                schedule: Schedule.max([
+                  Schedule.fixed("2 seconds"),
+                  Schedule.recurs(15),
+                ]),
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+          }
+          yield* Effect.sleep("2 seconds");
+        }
+        yield* waitForBackingResourceGone(
+          canaryName,
+          "LogGroup",
+          logGroupName,
+          exactLogGroupExists(logGroupName),
+        );
+      });
+
       /**
        * Ensure the auto-created execution role exists and its inline policy
        * matches the artifact bucket. Every step is idempotent: create
@@ -598,14 +765,38 @@ export const CanaryProvider = () =>
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam.deleteRole({ RoleName: roleName }).pipe(
-          Effect.catchTag("NoSuchEntityException", () => Effect.void),
           Effect.retry({
-            while: (e) => e._tag === "DeleteConflictException",
+            while: (error) =>
+              error._tag === "ConcurrentModificationException" ||
+              error._tag === "DeleteConflictException" ||
+              error._tag === "LimitExceededException" ||
+              error._tag === "ServiceFailureException",
             schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
+              Schedule.fixed("1 second"),
+              Schedule.recurs(20),
             ]),
           }),
+          Effect.catchTag("NoSuchEntityException", () => Effect.void),
+        );
+
+        // IAM deletion is eventually consistent. Keep the canary's state
+        // until its owned execution role is observably absent so a following
+        // nuke cannot race the successful DeleteRole request.
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const remaining = yield* iam
+            .getRole({ RoleName: roleName })
+            .pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (remaining === undefined) return;
+          yield* Effect.sleep("1 second");
+        }
+        return yield* Effect.die(
+          new Error(
+            `Synthetics execution role ${roleName} remained observable 30 seconds after delete`,
+          ),
         );
       });
 
@@ -675,7 +866,13 @@ export const CanaryProvider = () =>
             };
 
       return Canary.Provider.of({
-        stables: ["canaryName", "canaryArn", "canaryId", "roleName"],
+        stables: [
+          "canaryName",
+          "canaryArn",
+          "canaryId",
+          "roleName",
+          "engineArn",
+        ],
 
         // Enumerate every canary in the ambient account/region.
         list: () =>
@@ -701,6 +898,7 @@ export const CanaryProvider = () =>
                 runtimeVersion: canary.RuntimeVersion ?? "",
                 roleName: undefined,
                 configHash: undefined,
+                engineArn: canary.EngineArn,
               });
             }
             return items;
@@ -723,6 +921,7 @@ export const CanaryProvider = () =>
             runtimeVersion: canary.RuntimeVersion ?? "",
             roleName: output?.roleName,
             configHash: output?.configHash,
+            engineArn: canary.EngineArn ?? output?.engineArn,
           };
           const tags = filterTags(canary.Tags);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -930,11 +1129,24 @@ export const CanaryProvider = () =>
             runtimeVersion,
             roleName,
             configHash,
+            engineArn: observed?.EngineArn,
           };
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, session }) {
+          const observed = yield* getCanaryOrUndefined(output.canaryName);
+          const engineArn = observed?.EngineArn ?? output.engineArn;
+          const backingFunctions = yield* discoverBackingFunctionNames(
+            output.canaryName,
+            engineArn,
+          );
           yield* deleteCanaryAndWait(output.canaryName);
+          for (const functionName of backingFunctions) {
+            yield* session.note(
+              `deleting exact backing Lambda ${functionName} and log group /aws/lambda/${functionName}`,
+            );
+            yield* deleteBackingResources(output.canaryName, functionName);
+          }
           // Clean up the auto-created execution role (never a user-supplied
           // one).
           if (output.roleName) {

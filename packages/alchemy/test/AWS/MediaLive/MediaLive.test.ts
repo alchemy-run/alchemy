@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Channel, Input, InputSecurityGroup } from "@/AWS/MediaLive";
 import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as medialive from "@distilled.cloud/aws/medialive";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

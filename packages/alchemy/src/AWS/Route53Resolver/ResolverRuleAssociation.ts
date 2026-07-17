@@ -190,7 +190,12 @@ export const ResolverRuleAssociationProvider = () =>
                 .flatMap((association) =>
                   association.Id !== undefined &&
                   association.ResolverRuleId !== undefined &&
-                  association.VPCId !== undefined
+                  association.VPCId !== undefined &&
+                  // AWS creates an Internet Resolver association for each
+                  // VPC. It cannot be disassociated directly and disappears
+                  // automatically with the VPC.
+                  !association.Id.startsWith("rslvr-autodefined") &&
+                  !association.ResolverRuleId.startsWith("rslvr-autodefined")
                     ? [
                         {
                           resolverRuleAssociationId: association.Id,

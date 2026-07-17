@@ -132,10 +132,19 @@ test.provider("create bucket with forceDestroy", (stack) =>
       Body: "Hello, World!",
     });
 
+    // A heavily parallel account sweep can briefly observe the successful
+    // PutObject before the object is readable through a different S3
+    // endpoint. Retry only the typed visibility miss, with a hard bound;
+    // authorization and request-shape errors still fail immediately.
     yield* S3.headObject({
       Bucket: bucket.bucketName,
       Key: "test-object.txt",
-    });
+    }).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "NotFound",
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(6)]),
+      }),
+    );
 
     yield* stack.destroy();
 

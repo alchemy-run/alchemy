@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Blueprint } from "@/AWS/BedrockDataAutomation";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

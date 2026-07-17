@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as sts from "@distilled.cloud/aws/sts";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 

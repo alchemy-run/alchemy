@@ -1,6 +1,8 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecs from "@distilled.cloud/aws/ecs";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -215,8 +217,9 @@ export interface TaskDefinition extends Resource<
  *   changed** (compared against the observed latest `ACTIVE` revision), so a
  *   no-op redeploy keeps the same revision;
  * - changing the `family` replaces the resource;
- * - destroy deregisters (and best-effort deletes) every `ACTIVE` revision of
- *   the family.
+ * - destroy deregisters and hard-deletes every revision of the family. ECS
+ *   may retain referenced revisions in `DELETE_IN_PROGRESS` until their tasks
+ *   and services terminate; that is a successful terminal state.
  *
  * **Layering — why `TaskDefinition` is deliberately *not* a Platform.** ECS
  * splits "what runs" from "how it runs": a task definition is the immutable
@@ -554,9 +557,12 @@ export const TaskDefinitionProvider = () =>
         );
       });
 
-      const listActiveFamilyArns = Effect.fn(function* (family: string) {
+      const listFamilyArns = Effect.fn(function* (
+        family: string,
+        status: "ACTIVE" | "INACTIVE",
+      ) {
         const arns = yield* ecs.listTaskDefinitions
-          .pages({ familyPrefix: family, status: "ACTIVE" })
+          .pages({ familyPrefix: family, status })
           .pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
@@ -569,6 +575,72 @@ export const TaskDefinitionProvider = () =>
         return arns.filter(
           (arn) => arn.split("/").pop()?.split(":")[0] === family,
         );
+      });
+
+      class TaskDefinitionRevisionNotTerminal extends Data.TaggedError(
+        "TaskDefinitionRevisionNotTerminal",
+      )<{
+        readonly taskDefinitionArn: string;
+        readonly status: ecs.TaskDefinitionStatus | undefined;
+      }> {}
+
+      const deletionObservationSchedule = Schedule.max([
+        Schedule.spaced("1 second"),
+        Schedule.recurs(15),
+      ]);
+
+      const waitUntilRevisionDeregistered = Effect.fn(function* (
+        taskDefinitionArn: string,
+      ) {
+        yield* ecs
+          .describeTaskDefinition({ taskDefinition: taskDefinitionArn })
+          .pipe(
+            Effect.flatMap(({ taskDefinition }) =>
+              taskDefinition?.status !== "ACTIVE"
+                ? Effect.void
+                : Effect.fail(
+                    new TaskDefinitionRevisionNotTerminal({
+                      taskDefinitionArn,
+                      status: taskDefinition.status,
+                    }),
+                  ),
+            ),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "TaskDefinitionRevisionNotTerminal",
+              schedule: deletionObservationSchedule,
+            }),
+            Effect.catchTag("ClientException", () => Effect.void),
+          );
+      });
+
+      const waitUntilRevisionDeletionStarted = Effect.fn(function* (
+        taskDefinitionArn: string,
+      ) {
+        yield* ecs
+          .describeTaskDefinition({ taskDefinition: taskDefinitionArn })
+          .pipe(
+            Effect.flatMap(({ taskDefinition }) =>
+              taskDefinition?.status === "DELETE_IN_PROGRESS"
+                ? Effect.void
+                : Effect.fail(
+                    new TaskDefinitionRevisionNotTerminal({
+                      taskDefinitionArn,
+                      status: taskDefinition?.status,
+                    }),
+                  ),
+            ),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "TaskDefinitionRevisionNotTerminal",
+              schedule: deletionObservationSchedule,
+            }),
+            // ECS eventually removes an unreferenced DELETE_IN_PROGRESS
+            // revision. Not-found is therefore also a successful terminal
+            // observation; literal absence is not required because referenced
+            // revisions may legitimately remain DELETE_IN_PROGRESS.
+            Effect.catchTag("ClientException", () => Effect.void),
+          );
       });
 
       return {
@@ -742,13 +814,23 @@ export const TaskDefinitionProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Deregister every ACTIVE revision of the family (the family is
           // this resource's physical identity), tolerating already-INACTIVE
-          // races, then best-effort hard-delete the deregistered revisions.
-          const owned = yield* listActiveFamilyArns(output.family).pipe(
+          // races, then hard-delete all revisions. AWS can retain a referenced
+          // revision in DELETE_IN_PROGRESS, so observe that exact terminal
+          // status rather than waiting indefinitely for physical absence.
+          const active = yield* listFamilyArns(output.family, "ACTIVE").pipe(
             Effect.catchTag("ClientException", () =>
               Effect.succeed([] as string[]),
             ),
           );
-          for (const arn of owned) {
+          const alreadyInactive = yield* listFamilyArns(
+            output.family,
+            "INACTIVE",
+          ).pipe(
+            Effect.catchTag("ClientException", () =>
+              Effect.succeed([] as string[]),
+            ),
+          );
+          for (const arn of active) {
             yield* ecs
               .deregisterTaskDefinition({ taskDefinition: arn })
               .pipe(
@@ -758,10 +840,24 @@ export const TaskDefinitionProvider = () =>
                 ),
               );
           }
-          for (let i = 0; i < owned.length; i += 10) {
-            yield* ecs
+          yield* Effect.forEach(active, waitUntilRevisionDeregistered, {
+            concurrency: 10,
+          });
+          const inactive = [
+            ...new Set([
+              ...active,
+              ...alreadyInactive,
+              ...(yield* listFamilyArns(output.family, "INACTIVE").pipe(
+                Effect.catchTag("ClientException", () =>
+                  Effect.succeed([] as string[]),
+                ),
+              )),
+            ]),
+          ];
+          for (let i = 0; i < inactive.length; i += 10) {
+            const deleted = yield* ecs
               .deleteTaskDefinitions({
-                taskDefinitions: owned.slice(i, i + 10),
+                taskDefinitions: inactive.slice(i, i + 10),
               })
               .pipe(
                 Effect.catchTag(
@@ -769,7 +865,22 @@ export const TaskDefinitionProvider = () =>
                   () => Effect.void,
                 ),
               );
+            if (deleted && (deleted.failures?.length ?? 0) > 0) {
+              return yield* Effect.die(
+                new Error(
+                  `ECS failed to delete task definition revisions: ${deleted.failures
+                    ?.map(
+                      (failure) =>
+                        `${failure.arn ?? "unknown"}: ${failure.reason ?? "unknown"} (${failure.detail ?? "no detail"})`,
+                    )
+                    .join(", ")}`,
+                ),
+              );
+            }
           }
+          yield* Effect.forEach(inactive, waitUntilRevisionDeletionStarted, {
+            concurrency: 10,
+          });
           if (output.logGroupName) {
             yield* logs
               .deleteLogGroup({ logGroupName: output.logGroupName })

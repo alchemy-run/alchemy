@@ -33,6 +33,22 @@ export const retryGaTransaction = <A, E extends { _tag: string }, R>(
   });
 
 /**
+ * Deletion is subject to both GA's serialized transactions and occasional
+ * transient internal-service failures. Keep the retry bounded to about one
+ * minute so teardown converges without hanging indefinitely.
+ */
+export const retryGaDeletion = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) =>
+      e._tag === "TransactionInProgressException" ||
+      e._tag === "ConflictException" ||
+      e._tag === "InternalServiceErrorException",
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+  });
+
+/**
  * `deleteAccelerator` requires the accelerator to be fully disabled and all
  * listeners removed. Both conditions clear asynchronously after the disabling
  * `updateAccelerator` / dependent deletes return, so retry the delete on a
@@ -49,7 +65,8 @@ export const retryUntilAcceleratorDeletable = <
     while: (e) =>
       e._tag === "AcceleratorNotDisabledException" ||
       e._tag === "AssociatedListenerFoundException" ||
-      e._tag === "TransactionInProgressException",
+      e._tag === "TransactionInProgressException" ||
+      e._tag === "InternalServiceErrorException",
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
   });
 
@@ -61,6 +78,9 @@ export const retryUntilListenerDeletable = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) => e._tag === "AssociatedEndpointGroupFoundException",
+    while: (e) =>
+      e._tag === "AssociatedEndpointGroupFoundException" ||
+      e._tag === "TransactionInProgressException" ||
+      e._tag === "InternalServiceErrorException",
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
   });

@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
-import { retryOnApiStatusUpdating } from "@/AWS/ApiGateway/common.ts";
+import { deleteRestApiAndWait } from "@/AWS/ApiGateway/common.ts";
 import { AWSEnvironment } from "@/AWS/Environment";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -65,15 +65,7 @@ const findRestApis = (logicalId: string) =>
 
 const reapRestApis = (logicalId: string) =>
   findRestApis(logicalId).pipe(
-    Effect.flatMap(
-      Effect.forEach((api) =>
-        retryOnApiStatusUpdating(
-          ag
-            .deleteRestApi({ restApiId: api.id })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
-        ),
-      ),
-    ),
+    Effect.flatMap(Effect.forEach((api) => deleteRestApiAndWait(api.id))),
     Effect.asVoid,
     Effect.orDie,
   );

@@ -1,16 +1,14 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as licensemanager from "@distilled.cloud/aws/license-manager";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import LicenseManagerTestFunctionLive, {
   LicenseManagerTestFunction,
 } from "./handler";
@@ -18,15 +16,16 @@ import LicenseManagerTestFunctionLive, {
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "LicenseManagerBindings");
+const RUN_CREATE_LIFECYCLE =
+  process.env.AWS_TEST_LICENSE_MANAGER_CREATE === "1";
 
 // NOTE: CreateLicenseConfiguration has a small DAILY account quota (~10
 // creates/day; deletes do NOT refund it — soft-deleted configurations still
-// count). This suite's fixture consumes 1 create per run. On a
-// quota-exhausted day the beforeAll deploy fails with the typed
-// ResourceLimitExceededException ("You have reached the maximum allowed
-// number of license configurations created in one day") and every test here
-// is skipped. That is quota, not a bug — re-run the next day (see the same
-// note in LicenseConfiguration.test.ts).
+// count). This suite's fixture consumes 1 create per run, so keep the whole
+// shared fixture behind the same explicit gate as LicenseConfiguration.test.
+// Otherwise a quota rejection in beforeAll cascades into 16 misleading test
+// failures. Enable with AWS_TEST_LICENSE_MANAGER_CREATE=1 on a fresh quota
+// day to exercise the live binding fixture.
 
 // License Manager requires one-time account onboarding (see
 // LicenseConfiguration.test.ts): create the service-linked role
@@ -92,7 +91,9 @@ const getJson = (path: string) =>
     Effect.flatMap((r) => r.json),
   );
 
-describe.sequential("LicenseManager Bindings", () => {
+const describeCreateLifecycle = describe.skipIf(!RUN_CREATE_LIFECYCLE);
+
+describeCreateLifecycle.sequential("LicenseManager Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       // beforeAll runs outside the provider context — provide the AWS

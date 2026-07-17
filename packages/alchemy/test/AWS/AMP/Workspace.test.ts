@@ -4,9 +4,9 @@ import {
   RuleGroupsNamespace,
   Workspace,
 } from "@/AWS/AMP";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as amp from "@distilled.cloud/aws/amp";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

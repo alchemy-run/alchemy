@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { BasePathMapping } from "@/AWS/ApiGateway/BasePathMapping";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { assertRestApiDeleted } from "./assertions.ts";

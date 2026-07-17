@@ -4,10 +4,10 @@ import {
   withQueryEndpoint,
   withWriteEndpoint,
 } from "@/AWS/Timestream/internal";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as TSW from "@distilled.cloud/aws/timestream-write";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

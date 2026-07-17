@@ -1,5 +1,6 @@
 import * as schemas from "@distilled.cloud/aws/schemas";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -250,10 +251,62 @@ export const RegistryProvider = () =>
           };
         }),
 
-        delete: Effect.fn(function* ({ output }) {
-          yield* schemas
-            .deleteRegistry({ RegistryName: output.registryName })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+        delete: Effect.fn(function* ({ output, force }) {
+          const RegistryName = output.registryName;
+          if (force !== true) {
+            yield* schemas
+              .deleteRegistry({ RegistryName })
+              .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+            return;
+          }
+
+          const purgeAndDelete = Effect.gen(function* () {
+            // Schemas are registry-scoped and globally invisible to nuke.
+            // Only its explicit operator-confirmed force path may remove them
+            // or an attached registry policy.
+            const childSchemas = yield* schemas.listSchemas
+              .items({ RegistryName })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) => Array.from(chunk)),
+              );
+            yield* Effect.forEach(
+              childSchemas,
+              (schema) =>
+                schema.SchemaName === undefined
+                  ? Effect.void
+                  : schemas
+                      .deleteSchema({
+                        RegistryName,
+                        SchemaName: schema.SchemaName,
+                      })
+                      .pipe(
+                        Effect.catchTag("NotFoundException", () => Effect.void),
+                      ),
+              { concurrency: 4, discard: true },
+            );
+            yield* schemas
+              .deleteResourcePolicy({ RegistryName })
+              .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+            yield* schemas.deleteRegistry({ RegistryName });
+          });
+
+          yield* purgeAndDelete.pipe(
+            // Registry deletion can briefly observe schemas that have already
+            // accepted deletion. Re-list and retry only bounded transient or
+            // dependency-shaped failures.
+            Effect.retry({
+              while: (e) =>
+                e._tag === "BadRequestException" ||
+                e._tag === "InternalServerErrorException" ||
+                e._tag === "ServiceUnavailableException",
+              schedule: Schedule.max([
+                Schedule.exponential(500),
+                Schedule.recurs(8),
+              ]),
+            }),
+            Effect.catchTag("NotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { EIP, InternetGateway, NatGateway, Subnet, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";

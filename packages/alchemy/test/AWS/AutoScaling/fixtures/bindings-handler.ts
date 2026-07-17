@@ -23,13 +23,13 @@ import {
   TerminateInstanceInAutoScalingGroupHttp,
 } from "@/AWS/AutoScaling";
 import { amazonLinux2023 } from "@/AWS/EC2";
-import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { getAutoScalingTestSubnetId } from "../TestNetwork.ts";
 
 export const bindingsAsgName = "alchemy-test-asg-bindings-asg";
 
@@ -60,19 +60,7 @@ export const BindingsFleetLive = Layer.effect(
       ? ((yield* amazonLinux2023()) ?? "ami-00000000000000000")
       : "ami-00000000000000000";
     const subnetId = isDeploy
-      ? yield* ec2
-          .describeSubnets({
-            Filters: [{ Name: "default-for-az", Values: ["true"] }],
-          } as any)
-          .pipe(
-            Effect.map(
-              (r) =>
-                (r.Subnets?.[0]?.SubnetId ?? "subnet-0") as `subnet-${string}`,
-            ),
-            // Deploy-time lookup only; a failure here is a fixture defect, not
-            // a typed error the Function impl contract can carry.
-            Effect.orDie,
-          )
+      ? yield* getAutoScalingTestSubnetId.pipe(Effect.orDie)
       : ("subnet-0" as `subnet-${string}`);
 
     const template = yield* LaunchTemplate("BindingsTemplate", {

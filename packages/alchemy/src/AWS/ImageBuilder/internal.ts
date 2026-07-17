@@ -1,3 +1,4 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -47,6 +48,45 @@ export const retryWhileDependedOn = <A, E extends { _tag: string }, R>(
     while: (e) => e._tag === "ResourceDependencyException",
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
   });
+
+/**
+ * Delete one exact CloudWatch log group that Image Builder auto-created for
+ * an Alchemy-owned recipe or pipeline. Callers derive the name from their
+ * owned resource output; this helper never scans or deletes by broad prefix.
+ */
+export const deleteImageBuilderLogGroup = Effect.fn(function* (
+  logGroupName: string,
+) {
+  yield* logs.deleteLogGroup({ logGroupName }).pipe(
+    Effect.retry({
+      while: (error) =>
+        error._tag === "OperationAbortedException" ||
+        error._tag === "ServiceUnavailableException",
+      schedule: Schedule.max([
+        Schedule.fixed("500 millis"),
+        Schedule.recurs(10),
+      ]),
+    }),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+  );
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const response = yield* logs.describeLogGroups({
+      logGroupNamePrefix: logGroupName,
+      limit: 1,
+    });
+    const present = (response.logGroups ?? []).some(
+      (group) => group.logGroupName === logGroupName,
+    );
+    if (!present) return;
+    yield* Effect.sleep("500 millis");
+  }
+  return yield* Effect.die(
+    new Error(
+      `Image Builder log group ${logGroupName} remained observable 10 seconds after delete`,
+    ),
+  );
+});
 
 /**
  * Convert an Image Builder wire tag map (values may be undefined) into a

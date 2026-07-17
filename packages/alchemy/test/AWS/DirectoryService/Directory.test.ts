@@ -5,10 +5,10 @@ import {
   EventTopic,
 } from "@/AWS/DirectoryService";
 import { Topic } from "@/AWS/SNS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ds from "@distilled.cloud/aws/directory-service";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

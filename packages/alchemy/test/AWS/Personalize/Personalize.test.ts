@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Dataset, DatasetGroup, EventTracker, Schema } from "@/AWS/Personalize";
 import { toTagRecord } from "@/AWS/Personalize/internal.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as personalize from "@distilled.cloud/aws/personalize";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

@@ -1,4 +1,5 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -181,12 +182,25 @@ const retryThroughDeletionWindow = <A, E extends { _tag: string }, R>(
   Effect.retry(self, {
     while: (e) =>
       e._tag === "InvalidRequestException" &&
-      ((e as { Message?: string }).Message?.includes(
-        "scheduled for deletion",
-      ) ??
-        false),
+      isDeletionInProgress((e as { Message?: string }).Message),
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
   });
+
+const isDeletionInProgress = (message: string | undefined): boolean => {
+  const normalized = message?.toLowerCase();
+  return (
+    normalized?.includes("scheduled for deletion") === true ||
+    normalized?.includes("marked for deletion") === true
+  );
+};
+
+class SecretNotVisible extends Data.TaggedError("SecretNotVisible")<{
+  readonly secretId: string;
+}> {}
+
+class SecretStillExists extends Data.TaggedError("SecretStillExists")<{
+  readonly secretId: string;
+}> {}
 
 export const SecretProvider = () =>
   Provider.effect(
@@ -249,6 +263,48 @@ export const SecretProvider = () =>
         // reconcile recreates it once the pending deletion finishes.
         return described?.DeletedDate ? undefined : described;
       });
+
+      // `CreateSecret` may return before `DescribeSecret` can observe the new
+      // secret. Keep this wait provider-local so every caller (including nuke
+      // recovery and adoption) gets the same bounded consistency handling.
+      const readSecretAfterCreate = (secretId: string) =>
+        Effect.retry(
+          readSecret(secretId).pipe(
+            Effect.flatMap((secret) =>
+              secret?.ARN && secret.Name
+                ? Effect.succeed(secret)
+                : Effect.fail(new SecretNotVisible({ secretId })),
+            ),
+          ),
+          {
+            while: (error) => error._tag === "SecretNotVisible",
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(10),
+            ]),
+          },
+        );
+
+      // Force deletion is asynchronous. `DeletedDate` means the operation was
+      // accepted, not that the resource is absent, so deletion completion must
+      // be checked with the raw API rather than `readSecret`.
+      const waitForSecretAbsence = (secretId: string) =>
+        Effect.retry(
+          secretsmanager
+            .describeSecret({ SecretId: secretId })
+            .pipe(
+              Effect.flatMap(() =>
+                Effect.fail(new SecretStillExists({ secretId })),
+              ),
+            ),
+          {
+            while: (error) => error._tag === "SecretStillExists",
+            schedule: Schedule.max([
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(10),
+            ]),
+          },
+        ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
       return {
         stables: ["secretArn", "secretName"],
@@ -321,7 +377,7 @@ export const SecretProvider = () =>
                   Effect.catchTag("ResourceExistsException", () => Effect.void),
                 ),
             );
-            observed = yield* readSecret(secretName);
+            observed = yield* readSecretAfterCreate(secretName);
           }
 
           if (!observed?.ARN || !observed.Name) {
@@ -422,7 +478,13 @@ export const SecretProvider = () =>
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.catchTag("InvalidRequestException", (error) =>
+                isDeletionInProgress(error.Message)
+                  ? Effect.void
+                  : Effect.fail(error),
+              ),
             );
+          yield* waitForSecretAbsence(output.secretArn);
         }),
         // `listSecrets` returns full secret metadata (ARN, name, description,
         // KMS key, and tags) inline, so we hydrate the exact `read` Attributes

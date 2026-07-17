@@ -1,4 +1,5 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -125,6 +126,12 @@ export interface DhcpOptions extends Resource<
  */
 export const DhcpOptions = Resource<DhcpOptions>("AWS.EC2.DhcpOptions");
 
+class DhcpOptionsStillVisible extends Data.TaggedError(
+  "DhcpOptionsStillVisible",
+)<{
+  dhcpOptionsId: string;
+}> {}
+
 // Build the NewDhcpConfiguration list AWS expects from the flat props.
 const buildConfigurations = (
   props: DhcpOptionsProps,
@@ -181,6 +188,19 @@ export const DhcpOptionsProvider = () =>
           Effect.catchTag("InvalidDhcpOptionsID.NotFound", () =>
             Effect.succeed(undefined),
           ),
+        );
+
+      const waitUntilDhcpOptionsGone = (dhcpOptionsId: string) =>
+        describeDhcpOptions(dhcpOptionsId).pipe(
+          Effect.flatMap((options) =>
+            options === undefined
+              ? Effect.void
+              : Effect.fail(new DhcpOptionsStillVisible({ dhcpOptionsId })),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "DhcpOptionsStillVisible",
+            schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(15)]),
+          }),
         );
 
       // Which VPC (if any) currently points at this options set.
@@ -366,6 +386,7 @@ export const DhcpOptionsProvider = () =>
               ]),
             }),
           );
+          yield* waitUntilDhcpOptionsGone(dhcpOptionsId);
         }),
       };
     }),

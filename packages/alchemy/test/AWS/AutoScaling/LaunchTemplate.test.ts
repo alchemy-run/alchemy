@@ -2,9 +2,9 @@ import * as AWS from "@/AWS";
 import { LaunchTemplate } from "@/AWS/AutoScaling";
 import { amazonLinux2023 } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
-import { retryOnApiStatusUpdating } from "@/AWS/ApiGateway/common.ts";
+import { deleteRestApiAndWait } from "@/AWS/ApiGateway/common.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { assertRestApiDeleted } from "./assertions.ts";
@@ -31,15 +31,7 @@ const reapRestApis = (logicalId: string) =>
         ),
       ),
     ),
-    Effect.flatMap(
-      Effect.forEach((api) =>
-        retryOnApiStatusUpdating(
-          ag
-            .deleteRestApi({ restApiId: api.id })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
-        ),
-      ),
-    ),
+    Effect.flatMap(Effect.forEach((api) => deleteRestApiAndWait(api.id))),
     Effect.asVoid,
     // Finalizer contract: the error channel must be `never`. Any unexpected
     // error here is a genuinely stuck delete and should surface as a defect.

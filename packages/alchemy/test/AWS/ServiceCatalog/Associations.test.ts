@@ -7,10 +7,11 @@ import {
   PrincipalPortfolioAssociation,
   Product,
 } from "@/AWS/ServiceCatalog";
-import * as Test from "@/Test/Vitest";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -122,6 +123,35 @@ test.provider(
       expect(
         (principals.Principals ?? []).some(
           (p) => p.PrincipalARN === deployed.roleArn,
+        ),
+      ).toBe(true);
+
+      // Account-wide provider enumeration drives `alchemy unsafe nuke`.
+      // Both association providers must discover their child resources so
+      // teardown can schedule them before the portfolio and product.
+      const productAssociationProvider = yield* Provider.findProvider(
+        PortfolioProductAssociation,
+      );
+      const principalAssociationProvider = yield* Provider.findProvider(
+        PrincipalPortfolioAssociation,
+      );
+      const [productAssociations, principalAssociations] = yield* Effect.all([
+        productAssociationProvider.list(),
+        principalAssociationProvider.list(),
+      ]);
+      expect(
+        productAssociations.some(
+          (association) =>
+            association.portfolioId === deployed.portfolioId &&
+            association.productId === deployed.productId,
+        ),
+      ).toBe(true);
+      expect(
+        principalAssociations.some(
+          (association) =>
+            association.portfolioId === deployed.portfolioId &&
+            association.principalArn === deployed.roleArn &&
+            association.principalType === "IAM",
         ),
       ).toBe(true);
 

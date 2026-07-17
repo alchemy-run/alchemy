@@ -1,15 +1,14 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./VpcTest.ts";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import Ec2BindingsFunctionLive, {
   Ec2BindingsFunction,
 } from "./fixtures/bindings-handler.ts";
@@ -37,6 +36,15 @@ type RouteResult = {
   snapshotId?: string;
 };
 
+class SnapshotNotReady extends Data.TaggedError("SnapshotNotReady")<{
+  snapshotId: string;
+  state: string;
+}> {}
+
+class SnapshotStillVisible extends Data.TaggedError("SnapshotStillVisible")<{
+  snapshotId: string;
+}> {}
+
 // Call a fixture route, repeating (bounded) while the response still shows an
 // authorization failure — a freshly attached IAM policy is eventually
 // consistent and the first invocations after deploy can see EC2's
@@ -55,6 +63,10 @@ const callRoute = (method: "GET" | "POST", path: string) =>
               new Error(`Route ${path} not ready: ${response.status}`),
             ),
       ),
+      // A freshly deployed Function URL can briefly return 502 while the
+      // Lambda execution environment is still initializing. Retry transport
+      // readiness separately from the typed IAM-propagation result below.
+      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
       Effect.map((json) => json as RouteResult),
       Effect.repeat({
         until: (body): boolean =>
@@ -191,13 +203,57 @@ describe("EC2 runtime bindings", () => {
         expect(body.ok).toBe(true);
         expect(body.snapshotId).toBeTruthy();
 
-        // The runtime-created snapshot is not stack-managed — delete it
-        // out-of-band so the test leaves zero orphans (pending snapshots can
-        // be deleted).
-        yield* ec2.deleteSnapshot({ SnapshotId: body.snapshotId! }).pipe(
+        // Do not delete a pending snapshot. AWS accepts that request and hides
+        // the snapshot immediately, but its background copy can keep the
+        // source volume stuck in `deleting` for many minutes. Wait for this
+        // tiny empty-volume snapshot to finish before removing it.
+        yield* ec2.describeSnapshots({ SnapshotIds: [body.snapshotId!] }).pipe(
+          Effect.flatMap((result) => {
+            const state = result.Snapshots?.[0]?.State ?? "missing";
+            if (state === "completed") return Effect.void;
+            if (state === "error") {
+              return Effect.fail(
+                new Error(`Snapshot ${body.snapshotId} entered error state`),
+              );
+            }
+            return Effect.fail(
+              new SnapshotNotReady({
+                snapshotId: body.snapshotId!,
+                state,
+              }),
+            );
+          }),
           Effect.retry({
-            schedule: Schedule.spaced("3 seconds"),
-            times: 8,
+            while: (error) => error instanceof SnapshotNotReady,
+            schedule: Schedule.max([
+              Schedule.fixed("2 seconds"),
+              Schedule.recurs(29),
+            ]),
+          }),
+        );
+
+        // The runtime-created snapshot is not stack-managed — delete it
+        // out-of-band and confirm the exact ID is no longer enumerable.
+        yield* ec2
+          .deleteSnapshot({ SnapshotId: body.snapshotId! })
+          .pipe(Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void));
+        yield* ec2.describeSnapshots({ SnapshotIds: [body.snapshotId!] }).pipe(
+          Effect.flatMap((result) =>
+            (result.Snapshots ?? []).length === 0
+              ? Effect.void
+              : Effect.fail(
+                  new SnapshotStillVisible({
+                    snapshotId: body.snapshotId!,
+                  }),
+                ),
+          ),
+          Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
+          Effect.retry({
+            while: (error) => error instanceof SnapshotStillVisible,
+            schedule: Schedule.max([
+              Schedule.fixed("1 second"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
       }),

@@ -1,13 +1,20 @@
 import * as AWS from "@/AWS";
 import { TelemetryRule } from "@/AWS/ObservabilityAdmin";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { makeObservabilityAdminTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+const testLease = makeObservabilityAdminTestLease();
+
+beforeAll(testLease.acquire, { timeout: 3_600_000 });
+afterAll(testLease.release);
 
 const readStatus = obs
   .getTelemetryEvaluationStatus({})
@@ -16,7 +23,7 @@ const readStatus = obs
 // Bounded wait for the account-wide telemetry config toggle to settle.
 const awaitSettled = readStatus.pipe(
   Effect.repeat({
-    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     until: (status): boolean => status !== "STARTING" && status !== "STOPPING",
   }),
 );

@@ -10,20 +10,6 @@ import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class SNSEventFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
-  "SNSEventFunction",
-) {}
-
-export const SNSEventFunctionLive = SNSEventFunction.make(
-  {
-    main,
-    url: true,
-  },
-  Effect.gen(function* () {
-    // no-op, we're just gonna be targeted manualy by the Subscription
-  }),
-);
-
 const formatError = (error: unknown) =>
   typeof error === "object" && error !== null && "_tag" in error
     ? { ok: false as const, error: (error as { _tag: string })._tag }
@@ -52,13 +38,6 @@ export const TopicAndQueueLive = Layer.effect(
     const subscriptionAttrsQueue = yield* AWS.SQS.Queue(
       "SubscriptionAttrsQueue",
     );
-    const eventFunction = yield* SNSEventFunction;
-    const subscription = yield* AWS.SNS.Subscription("FixtureSubscription", {
-      topicArn: topic.topicArn,
-      protocol: "lambda",
-      endpoint: eventFunction.functionArn,
-      returnSubscriptionArn: true,
-    });
     const queueSubscription = yield* AWS.SNS.Subscription(
       "QueueFixtureSubscription",
       {
@@ -71,12 +50,14 @@ export const TopicAndQueueLive = Layer.effect(
     return {
       topic,
       queue,
-      subscription,
+      // ConfirmSubscription only injects the parent TopicArn, so the existing
+      // queue subscription exercises that binding without a second Lambda.
+      subscription: queueSubscription,
       subscriptionAttrsQueue,
       queueSubscription,
     };
   }),
-).pipe(Layer.provide(SNSEventFunctionLive));
+);
 
 export class SNSApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "SNSApiFunction",

@@ -17,7 +17,11 @@ import {
 } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import { retryOnConflict, waitUntilStable } from "./internal.ts";
+import {
+  retryOnConflict,
+  waitUntilAbsent,
+  waitUntilStable,
+} from "./internal.ts";
 
 /**
  * The kind of compute a target group routes to.
@@ -474,10 +478,12 @@ export const TargetGroupProvider = () =>
                   JSON.stringify(value),
             );
             if (drifted) {
-              yield* vpclattice.updateTargetGroup({
-                targetGroupIdentifier: targetGroupId,
-                healthCheck: desired,
-              });
+              yield* retryOnConflict(
+                vpclattice.updateTargetGroup({
+                  targetGroupIdentifier: targetGroupId,
+                  healthCheck: desired,
+                }),
+              );
             }
           }
 
@@ -548,8 +554,8 @@ export const TargetGroupProvider = () =>
               ),
             {
               schedule: Schedule.max([
-                Schedule.spaced("5 seconds"),
-                Schedule.recurs(30),
+                Schedule.spaced("3 seconds"),
+                Schedule.recurs(15),
               ]),
               until: (remaining): boolean => remaining === 0,
             },
@@ -563,7 +569,7 @@ export const TargetGroupProvider = () =>
           );
           // Deletion is asynchronous while targets drain; wait until the
           // group is actually gone so dependent VPC deletes don't conflict.
-          yield* waitUntilStable(observe(output.targetGroupId));
+          yield* waitUntilAbsent(observe(output.targetGroupId));
         }),
       };
     }),

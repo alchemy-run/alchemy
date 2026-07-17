@@ -137,15 +137,15 @@ export const waitForLocaleSettled = Effect.fn("AWS.LexV2.waitForLocaleSettled")(
 /**
  * Poll `describeBotLocale` until a triggered build lands on `Built`.
  * `Building` and `ReadyExpressTesting` are intermediate build states. A tiny
- * bot builds in ~1-2 minutes — budget 5 minutes (the build path is env-gated
- * in tests).
+ * bot normally builds in under a minute; keep the poll bounded to ~90 seconds
+ * so a stalled AWS build fails promptly.
  */
 export const waitForLocaleBuilt = Effect.fn("AWS.LexV2.waitForLocaleBuilt")(
   function* (botId: string, localeId: string) {
     const locale = yield* untilConverged(
       lexm.describeBotLocale({ botId, botVersion: "DRAFT", localeId }),
       (l) => l.botLocaleStatus === "Built" || l.botLocaleStatus === "Failed",
-      { intervalSeconds: 5, times: 60 },
+      { intervalSeconds: 5, times: 18 },
     );
     if (locale.botLocaleStatus !== "Built") {
       return yield* Effect.fail(

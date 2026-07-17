@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { ParameterGroup } from "@/AWS/MemoryDB";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as memorydb from "@distilled.cloud/aws/memorydb";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

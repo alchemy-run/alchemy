@@ -2,10 +2,10 @@ import * as AWS from "@/AWS";
 import { Flow } from "@/AWS/AppFlow";
 import type { PolicyStatement } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as appflow from "@distilled.cloud/aws/appflow";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

@@ -1,10 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Alchemy from "@/index.ts";
 import * as State from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Firehose from "@distilled.cloud/aws/firehose";
 import * as S3 from "@distilled.cloud/aws/s3";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -39,7 +39,16 @@ const Stack = Alchemy.Stack(
   }).pipe(Effect.provide(FirehoseApiFunctionLive)),
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
+const stack = beforeAll(
+  Effect.gen(function* () {
+    // A prior interrupted run may leave local state pointing at a partially
+    // deleted Lambda/IAM fixture. Start from a clean stack; provider deletes
+    // are idempotent, and deploy then proves stale-state recovery as well.
+    yield* destroy(Stack);
+    return yield* deploy(Stack);
+  }),
+  { timeout: 240_000 },
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 120_000 });
 
 // Lambda Function URLs cold-start (DNS, init) and a fresh role's IAM grants
@@ -188,100 +197,86 @@ describe("Firehose Bindings", () => {
     );
   });
 
-  // S3 arrival proof is gated: Firehose buffers for ≥ 60s before delivering,
-  // which busts the speed doctrine for the default suite. Run with
-  // AWS_TEST_SLOW=1 to verify end-to-end delivery with bounded polling.
-  describe.skipIf(!process.env.AWS_TEST_SLOW)("S3 delivery (slow)", () => {
-    class NoObjectsYet extends Data.TaggedError("NoObjectsYet") {}
+  // Even with zero buffering, Firehose treats the interval and size as hints
+  // and has exceeded the default suite's 90-second platform budget in live
+  // runs. Keep the end-to-end proof opt-in, but run its independent checks
+  // concurrently so they share one bounded delivery window.
+  describe.concurrent.skipIf(!process.env.AWS_TEST_SLOW)(
+    "S3 delivery (slow)",
+    () => {
+      class MarkerNotDeliveredYet extends Data.TaggedError(
+        "MarkerNotDeliveredYet",
+      ) {}
 
-    test.provider(
-      "delivers buffered records to the destination bucket",
-      () =>
-        Effect.gen(function* () {
-          const { url, bucketName } = yield* stack;
-          yield* postJson(url, "/put-record", {
-            data: `s3-delivery-${crypto.randomUUID()}`,
-          });
-
+      const waitForMarker = (bucketName: string, marker: string) => {
+        const findMarker = Effect.gen(function* () {
           const listing = yield* S3.listObjectsV2({
             Bucket: bucketName,
             Prefix: "records/",
-          }).pipe(
-            Effect.flatMap((result) =>
-              (result.KeyCount ?? 0) > 0
-                ? Effect.succeed(result)
-                : Effect.fail(new NoObjectsYet()),
-            ),
-            Effect.retry({
-              while: (e: { _tag: string }) => e._tag === "NoObjectsYet",
-              schedule: Schedule.max([
-                Schedule.fixed("10 seconds"),
-                Schedule.recurs(12),
-              ]),
-            }),
-          );
-          expect(listing.KeyCount ?? 0).toBeGreaterThan(0);
-        }),
-      { timeout: 180_000 },
-    );
-
-    class MarkerNotDeliveredYet extends Data.TaggedError(
-      "MarkerNotDeliveredYet",
-    ) {}
-
-    test.provider(
-      "sink records land in the destination bucket (marker-anchored)",
-      () =>
-        Effect.gen(function* () {
-          const { url, bucketName } = yield* stack;
-          const marker = `sink-delivery-${crypto.randomUUID()}`;
-          yield* postJson(url, "/sink", {
-            records: [`${marker}-1`, `${marker}-2`],
           });
-
-          // Poll until a delivered object *contains the marker* — anchoring
-          // on content (not bare KeyCount) attributes delivery to the sink
-          // records rather than to other tests sharing the prefix.
-          const findMarker = Effect.gen(function* () {
-            const listing = yield* S3.listObjectsV2({
-              Bucket: bucketName,
-              Prefix: "records/",
-            });
-            for (const object of listing.Contents ?? []) {
-              if (object.Key === undefined) {
-                continue;
-              }
-              const got = yield* S3.getObject({
-                Bucket: bucketName,
-                Key: object.Key,
-              });
-              // The body read surfaces plain `Error` (streaming transport) —
-              // a mid-delivery read hiccup is just "not delivered yet", so
-              // fold it into the retryable tag instead of failing the poll.
-              const text = yield* Stream.mkString(
-                Stream.decodeText(got.Body!),
-              ).pipe(
-                Effect.catch(() => Effect.fail(new MarkerNotDeliveredYet())),
-              );
-              if (text.includes(marker)) {
-                return object.Key;
-              }
+          for (const object of listing.Contents ?? []) {
+            if (object.Key === undefined) {
+              continue;
             }
-            return yield* new MarkerNotDeliveredYet();
-          });
+            const got = yield* S3.getObject({
+              Bucket: bucketName,
+              Key: object.Key,
+            });
+            // The body read surfaces plain `Error` (streaming transport) — a
+            // mid-delivery read hiccup is just "not delivered yet".
+            const text = yield* Stream.mkString(
+              Stream.decodeText(got.Body!),
+            ).pipe(
+              Effect.catch(() => Effect.fail(new MarkerNotDeliveredYet())),
+            );
+            if (text.includes(marker)) {
+              return object.Key;
+            }
+          }
+          return yield* new MarkerNotDeliveredYet();
+        });
 
-          const key = yield* findMarker.pipe(
-            Effect.retry({
-              while: (e) => e._tag === "MarkerNotDeliveredYet",
-              schedule: Schedule.max([
-                Schedule.fixed("10 seconds"),
-                Schedule.recurs(12),
-              ]),
-            }),
-          );
-          expect(key).toBeTruthy();
-        }),
-      { timeout: 180_000 },
-    );
-  });
+        return findMarker.pipe(
+          Effect.retry({
+            while: (e) => e._tag === "MarkerNotDeliveredYet",
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(12),
+            ]),
+          }),
+        );
+      };
+
+      test.provider(
+        "delivers buffered records to the destination bucket",
+        () =>
+          Effect.gen(function* () {
+            const { url, bucketName } = yield* stack;
+            // Randomness is only a payload correlation marker, never a
+            // physical resource name. It prevents a prior run's object from
+            // satisfying this delivery proof.
+            const marker = `put-record-delivery-${crypto.randomUUID()}`;
+            yield* postJson(url, "/put-record", {
+              data: marker,
+            });
+            expect(yield* waitForMarker(bucketName, marker)).toBeTruthy();
+          }),
+        { timeout: 180_000 },
+      );
+
+      test.provider(
+        "sink records land in the destination bucket (marker-anchored)",
+        () =>
+          Effect.gen(function* () {
+            const { url, bucketName } = yield* stack;
+            const marker = `sink-delivery-${crypto.randomUUID()}`;
+            yield* postJson(url, "/sink", {
+              records: [`${marker}-1`, `${marker}-2`],
+            });
+            expect(yield* waitForMarker(bucketName, marker)).toBeTruthy();
+          }),
+        { timeout: 180_000 },
+      );
+    },
+  );
 });

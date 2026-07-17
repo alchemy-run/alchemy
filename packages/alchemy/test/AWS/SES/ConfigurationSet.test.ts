@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { ConfigurationSet, ConfigurationSetEventDestination } from "@/AWS/SES";
 import { Topic } from "@/AWS/SNS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

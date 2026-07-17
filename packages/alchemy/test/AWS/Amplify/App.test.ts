@@ -1,13 +1,18 @@
 import * as AWS from "@/AWS";
 import { App } from "@/AWS/Amplify";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as amplify from "@distilled.cloud/aws/amplify";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { makeAmplifyTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
+const testLease = makeAmplifyTestLease();
+
+beforeAll(testLease.acquire, { timeout: 240_000 });
+afterAll(testLease.release);
 
 const findApp = (appId: string) =>
   amplify.getApp({ appId }).pipe(

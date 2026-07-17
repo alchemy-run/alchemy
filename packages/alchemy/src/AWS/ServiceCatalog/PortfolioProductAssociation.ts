@@ -5,7 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { awaitVisible } from "./internal.ts";
+import { awaitVisible, retryWhileResourceInUse } from "./internal.ts";
 
 export interface PortfolioProductAssociationProps {
   /**
@@ -81,10 +81,51 @@ export const PortfolioProductAssociationProvider = () =>
 
       return PortfolioProductAssociation.Provider.of({
         stables: ["portfolioId", "productId"],
-        // Sub-resource: associations are keyed by their product/portfolio
-        // pair and cannot be enumerated account-wide without walking every
-        // product.
-        list: () => Effect.succeed([]),
+        // Service Catalog has no account-wide association API. Walk every
+        // product and enumerate its portfolios so unsafe nuke can remove
+        // associations before attempting to delete their parents.
+        list: () =>
+          Effect.gen(function* () {
+            const productIds = yield* servicecatalog.searchProductsAsAdmin
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((pages) =>
+                  Array.from(pages)
+                    .flatMap((page) => page.ProductViewDetails ?? [])
+                    .flatMap((detail) => {
+                      const productId = detail.ProductViewSummary?.ProductId;
+                      return productId === undefined ? [] : [productId];
+                    }),
+                ),
+              );
+
+            const associations = yield* Effect.forEach(
+              productIds,
+              (productId) =>
+                servicecatalog.listPortfoliosForProduct
+                  .pages({ ProductId: productId })
+                  .pipe(
+                    Stream.runCollect,
+                    Effect.map((pages) =>
+                      Array.from(pages)
+                        .flatMap((page) => page.PortfolioDetails ?? [])
+                        .flatMap((portfolio) =>
+                          portfolio.Id === undefined
+                            ? []
+                            : [{ productId, portfolioId: portfolio.Id }],
+                        ),
+                    ),
+                    // A product can disappear between the account-wide walk
+                    // and association hydration.
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed([]),
+                    ),
+                  ),
+              { concurrency: 5 },
+            );
+            return associations.flat();
+          }),
         // Existence-only resource — every property is part of its identity.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -123,14 +164,16 @@ export const PortfolioProductAssociationProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* servicecatalog
-            .disassociateProductFromPortfolio({
-              ProductId: output.productId,
-              PortfolioId: output.portfolioId,
-            })
-            .pipe(
+          if (yield* isAssociated(output.productId, output.portfolioId)) {
+            yield* retryWhileResourceInUse(
+              servicecatalog.disassociateProductFromPortfolio({
+                ProductId: output.productId,
+                PortfolioId: output.portfolioId,
+              }),
+            ).pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+          }
         }),
       });
     }),

@@ -179,7 +179,7 @@ describe("AWS.KMS.Key", () => {
         yield* assertAliasDeleted(updated.alias.aliasName);
         yield* assertKeyPendingDeletion(updated.key.keyId);
       }),
-    { timeout: 180_000 },
+    { timeout: 120_000 },
   );
 
   test.provider(
@@ -231,7 +231,7 @@ describe("AWS.KMS.Key", () => {
 
         yield* assertKeyPendingDeletion(replaced.key.keyId);
       }),
-    { timeout: 180_000 },
+    { timeout: 120_000 },
   );
 
   const aliasNameA = "alias/alchemy-test-kms-rename-a" as const;
@@ -323,7 +323,7 @@ describe("AWS.KMS.Key", () => {
 
         yield* assertAliasDeleted(aliasNameB);
       }),
-    { timeout: 180_000 },
+    { timeout: 120_000 },
   );
 
   class AliasStillExists extends Data.TaggedError("AliasStillExists") {}

@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Domain } from "@/AWS/DataZone";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as datazone from "@distilled.cloud/aws/datazone";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

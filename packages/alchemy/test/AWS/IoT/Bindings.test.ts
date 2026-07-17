@@ -1,14 +1,12 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import IoTBindingsFunctionLive, {
   IoTBindingsFunction,
   RETAINED_TOPIC,
@@ -18,11 +16,11 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "IoTBindings");
 
-// Lambda function URL cold-start (DNS, IAM propagation, init) can take
-// over 60s on a fresh deploy; budget ~150s of readiness polling.
+// Bound environment propagation can lag the code update; keep the readiness
+// wait bounded to about 50 seconds.
 const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
+  Schedule.fixed("5 seconds"),
+  Schedule.recurs(10),
 ]);
 
 let baseUrl: string;

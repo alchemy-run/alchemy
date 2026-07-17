@@ -1,13 +1,19 @@
 import * as AWS from "@/AWS";
 import { Namespace, Table, TableBucket } from "@/AWS/S3Tables";
-import * as Test from "@/Test/Vitest";
+import type { ScopedPlanStatusSession } from "@/Cli/Cli.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import * as s3tables from "@distilled.cloud/aws/s3tables";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
+const stubSession = {
+  note: () => Effect.void,
+} as unknown as ScopedPlanStatusSession;
 
 // Auto-generated table-bucket names are `${testNameSlug}-${id}-${stage}-`
 // truncated + a random instance-id suffix. A run killed mid-deploy (before
@@ -190,22 +196,24 @@ test.provider(
 
       const first = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* TableBucket("Renamed", {
-            name: "alchemy-s3t-name-a",
-          });
+          return yield* TableBucket("Renamed");
         }),
       );
-      expect(first.name).toBe("alchemy-s3t-name-a");
+      expect(first.name).toBeDefined();
       yield* s3tables.getTableBucket({ tableBucketARN: first.tableBucketArn });
 
+      // Derive the replacement name from the engine-generated physical name.
+      // Reusing fixed bucket names across test runs races AWS's deletion
+      // tombstone and can return Conflict for minutes after Get reports 404.
+      const replacementName = `${first.name.slice(0, 55)}-renamed`;
       const second = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* TableBucket("Renamed", {
-            name: "alchemy-s3t-name-b",
+            name: replacementName,
           });
         }),
       );
-      expect(second.name).toBe("alchemy-s3t-name-b");
+      expect(second.name).toBe(replacementName);
       expect(second.tableBucketArn).not.toBe(first.tableBucketArn);
 
       // The old bucket must have been deleted as part of the replacement.
@@ -219,4 +227,80 @@ test.provider(
       );
     }),
   { timeout: 180_000 },
+);
+
+test.provider(
+  "ordinary bucket delete protects untracked children; force purges them",
+  (stack) =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(TableBucket);
+      const initialDestroy = yield* Effect.result(stack.destroy());
+      if (Result.isFailure(initialDestroy)) {
+        // Recover only this test's deterministic leftovers from an interrupted
+        // protection assertion. Ordinary destroy intentionally cannot remove
+        // them, so use the same explicit force path nuke uses.
+        const stale = (yield* provider.list()).filter((bucket) =>
+          bucket.name.startsWith(
+            "ordinary-bucket-delete-protects-untracked-child",
+          ),
+        );
+        yield* Effect.forEach(
+          stale,
+          (output) =>
+            provider.delete({
+              id: "CascadeDeleteRecovery",
+              fqn: "CascadeDeleteRecovery",
+              instanceId: "force-delete-recovery",
+              olds: {},
+              output,
+              session: stubSession,
+              bindings: [],
+              force: true,
+            }),
+          { discard: true },
+        );
+        yield* stack.destroy();
+      }
+
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* TableBucket("CascadeDelete");
+        }),
+      );
+      // Simulate a run interrupted before child state was persisted. Global
+      // nuke can see the bucket but cannot enumerate Namespace providers.
+      yield* s3tables.createNamespace({
+        tableBucketARN: bucket.tableBucketArn,
+        namespace: ["untracked_child"],
+      });
+
+      const deleteInput = {
+        id: "CascadeDelete",
+        fqn: "CascadeDelete",
+        instanceId: "force-delete-test",
+        olds: {},
+        output: bucket,
+        session: stubSession,
+        bindings: [],
+      };
+      const protectedDelete = yield* Effect.result(
+        provider.delete(deleteInput),
+      );
+      expect(Result.isFailure(protectedDelete)).toBe(true);
+      if (Result.isFailure(protectedDelete)) {
+        expect(protectedDelete.failure._tag).toBe("BadRequestException");
+      }
+      yield* s3tables.getNamespace({
+        tableBucketARN: bucket.tableBucketArn,
+        namespace: "untracked_child",
+      });
+
+      yield* provider.delete({ ...deleteInput, force: true });
+      yield* waitUntilGone(
+        s3tables.getTableBucket({ tableBucketARN: bucket.tableBucketArn }),
+      );
+      // Clear the now-stale stack state through the normal idempotent path.
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
 );

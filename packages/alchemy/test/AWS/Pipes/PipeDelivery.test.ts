@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -54,7 +54,7 @@ describe.sequential("AWS.Pipes delivery", () => {
           Effect.retry({
             schedule: Schedule.max([
               Schedule.fixed("1 seconds"),
-              Schedule.recurs(60),
+              Schedule.recurs(45),
             ]),
           }),
         );
@@ -69,14 +69,14 @@ describe.sequential("AWS.Pipes delivery", () => {
           MessageBody: messageBody,
         });
 
-        // Poll the sink queue until the forwarded body shows up. Bounded:
-        // ~30 polls of (2s long-poll + 2s spacing) ≈ 120s — first-event
-        // latency through a freshly-created pipe can be slow (~90s budget).
+        // Poll the sink queue until the forwarded body shows up. Nine 8s
+        // long polls with 500ms spacing give delivery a bounded ~76s budget
+        // without spending half the time asleep between polls.
         const received = yield* Effect.gen(function* () {
           const result = yield* SQS.receiveMessage({
             QueueUrl: sinkQueueUrl,
             MaxNumberOfMessages: 10,
-            WaitTimeSeconds: 2,
+            WaitTimeSeconds: 8,
           });
           const match = (result.Messages ?? []).find(
             (message) => message.Body === messageBody,
@@ -93,8 +93,8 @@ describe.sequential("AWS.Pipes delivery", () => {
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
             schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(30),
+              Schedule.spaced("500 millis"),
+              Schedule.recurs(8),
             ]),
           }),
         );

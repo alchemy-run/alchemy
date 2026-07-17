@@ -1,13 +1,18 @@
 import * as AWS from "@/AWS";
 import { Application } from "@/AWS/AppRegistry";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { makeAppRegistryTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
+const serviceLease = makeAppRegistryTestLease();
+
+beforeAll(serviceLease.acquire, { timeout: 3_600_000 });
+afterAll(serviceLease.release);
 
 class ApplicationStillExists extends Data.TaggedError(
   "ApplicationStillExists",

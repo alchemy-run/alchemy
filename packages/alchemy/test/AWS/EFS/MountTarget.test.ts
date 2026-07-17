@@ -1,13 +1,12 @@
 import * as AWS from "@/AWS";
 import type { VpcId } from "@/AWS/EC2";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as efs from "@distilled.cloud/aws/efs";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { describe } from "vitest";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const testOptions = { providers: AWS.providers() };

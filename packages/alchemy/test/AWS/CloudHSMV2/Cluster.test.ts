@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Cluster, Hsm } from "@/AWS/CloudHSMV2";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";

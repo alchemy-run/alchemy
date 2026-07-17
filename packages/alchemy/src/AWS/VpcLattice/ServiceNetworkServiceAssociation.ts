@@ -12,7 +12,11 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { retryOnConflict, waitUntilStable } from "./internal.ts";
+import {
+  retryOnConflict,
+  waitUntilAbsent,
+  waitUntilStable,
+} from "./internal.ts";
 
 export interface ServiceNetworkServiceAssociationProps {
   /**
@@ -314,7 +318,7 @@ export const ServiceNetworkServiceAssociationProvider = () =>
           );
           // Deletion is asynchronous; wait until the association is actually
           // gone so dependent service/network deletes don't conflict.
-          yield* waitUntilStable(observe(output.associationId));
+          yield* waitUntilAbsent(observe(output.associationId));
         }),
       };
     }),

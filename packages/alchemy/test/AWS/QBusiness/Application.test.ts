@@ -6,9 +6,9 @@ import {
   Retriever,
   WebExperience,
 } from "@/AWS/QBusiness";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as qbusiness from "@distilled.cloud/aws/qbusiness";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

@@ -1,21 +1,21 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import ObservabilityAdminBindingsFunctionLive, {
   ObservabilityAdminBindingsFunction,
 } from "./handler";
+import { makeObservabilityAdminTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
+const testLease = makeObservabilityAdminTestLease();
 const sharedStack = Core.scratchStack(
   testOptions,
   "ObservabilityAdminBindings",
@@ -25,7 +25,7 @@ const sharedStack = Core.scratchStack(
 // over 60s on a fresh deploy.
 const readinessPolicy = Schedule.max([
   Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
+  Schedule.recurs(10),
 ]);
 
 const readStatus = obs
@@ -34,7 +34,7 @@ const readStatus = obs
 
 const awaitSettled = readStatus.pipe(
   Effect.repeat({
-    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     until: (status): boolean => status !== "STARTING" && status !== "STOPPING",
   }),
 );
@@ -87,6 +87,9 @@ const getJson = (path: string) =>
 // explicitly.
 const aws = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Core.withProviders(effect, testOptions, sharedStack.name);
+
+beforeAll(testLease.acquire, { timeout: 3_600_000 });
+afterAll(testLease.release);
 
 // The fixture's telemetry rule requires the account-wide telemetry config
 // feature, so run sequentially and capture-and-restore the onboarding state.

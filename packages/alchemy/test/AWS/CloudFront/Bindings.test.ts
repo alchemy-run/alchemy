@@ -1,17 +1,15 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import CloudFrontTestFunctionLive, {
   CloudFrontTestFunction,
 } from "./handler.ts";

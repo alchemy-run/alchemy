@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as contacts from "@distilled.cloud/aws/ssm-contacts";
 import * as incidents from "@distilled.cloud/aws/ssm-incidents";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";

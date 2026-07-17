@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Assessment, Control, Framework } from "@/AWS/AuditManager";
 import * as Output from "@/Output";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as auditmanager from "@distilled.cloud/aws/auditmanager";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

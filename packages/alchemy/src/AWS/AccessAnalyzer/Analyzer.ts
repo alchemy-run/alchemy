@@ -1,6 +1,8 @@
 import * as aa from "@distilled.cloud/aws/accessanalyzer";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -75,6 +77,10 @@ export interface Analyzer extends Resource<
   {},
   Providers
 > {}
+
+class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
+  readonly analyzerName: string;
+}> {}
 
 /**
  * An AWS IAM Access Analyzer — continuously monitors resource policies to
@@ -283,6 +289,29 @@ export const AnalyzerProvider = () =>
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+
+          // Unused-access analyzers are account/Region singletons. The delete
+          // API returns before the quota slot is necessarily reusable, so a
+          // delete-first replacement (or a subsequent clean test run) can hit
+          // ServiceQuotaExceededException unless we observe deletion here.
+          yield* observe(output.analyzerName).pipe(
+            Effect.flatMap((analyzer) =>
+              analyzer === undefined
+                ? Effect.void
+                : Effect.fail(
+                    new AnalyzerStillExists({
+                      analyzerName: output.analyzerName,
+                    }),
+                  ),
+            ),
+            Effect.retry({
+              while: (error) => error._tag === "AnalyzerStillExists",
+              schedule: Schedule.max([
+                Schedule.spaced("2 seconds"),
+                Schedule.recurs(15),
+              ]),
+            }),
+          );
         }),
       });
     }),

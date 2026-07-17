@@ -94,6 +94,14 @@ const sameStringSet = (
   return left.length === right.length && left.every((v, i) => v === right[i]);
 };
 
+const DMS_VPC_ROLE_NAME = "dms-vpc-role";
+const DMS_VPC_POLICY_ARN =
+  "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole";
+const DMS_VPC_ROLE_OWNER_TAG = {
+  Key: "alchemy::managed-by",
+  Value: "AWS.DMS.ReplicationSubnetGroup",
+} as const;
+
 export const ReplicationSubnetGroupProvider = () =>
   Provider.effect(
     ReplicationSubnetGroup,
@@ -128,13 +136,13 @@ export const ReplicationSubnetGroupProvider = () =>
       // DMS requires the account-wide `dms-vpc-role` (trusting
       // dms.amazonaws.com with the AmazonDMSVPCManagementRole managed policy)
       // before any VPC-touching operation. The console creates it implicitly;
-      // API callers must ensure it. Like a service-linked role it is shared
-      // account infrastructure with a fixed name, so it is created if missing
-      // and never deleted.
+      // API callers must ensure it. Tag only roles created by this provider so
+      // deletion can distinguish our helper from pre-existing account
+      // infrastructure with the same AWS-mandated name.
       const ensureDmsVpcRole = Effect.gen(function* () {
         yield* iam
           .createRole({
-            RoleName: "dms-vpc-role",
+            RoleName: DMS_VPC_ROLE_NAME,
             AssumeRolePolicyDocument: JSON.stringify({
               Version: "2012-10-17",
               Statement: [
@@ -145,16 +153,102 @@ export const ReplicationSubnetGroupProvider = () =>
                 },
               ],
             }),
+            Tags: [DMS_VPC_ROLE_OWNER_TAG],
           })
           .pipe(
             Effect.catchTag("EntityAlreadyExistsException", () => Effect.void),
           );
         // Idempotent — attaching an already-attached managed policy is a no-op.
         yield* iam.attachRolePolicy({
-          RoleName: "dms-vpc-role",
-          PolicyArn:
-            "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole",
+          RoleName: DMS_VPC_ROLE_NAME,
+          PolicyArn: DMS_VPC_POLICY_ARN,
         });
+      }).pipe(
+        // A concurrent last-subnet-group delete can remove the shared helper
+        // between create/get and policy attachment. Re-observe and ensure it
+        // again instead of surfacing a cross-test race.
+        Effect.retry({
+          while: (error) =>
+            error._tag === "NoSuchEntityException" ||
+            error._tag === "ConcurrentModificationException" ||
+            error._tag === "LimitExceededException" ||
+            error._tag === "ServiceFailureException",
+          schedule: Schedule.max([
+            Schedule.fixed("1 second"),
+            Schedule.recurs(10),
+          ]),
+        }),
+      );
+
+      const deleteOwnedDmsVpcRoleIfUnused = Effect.gen(function* () {
+        // Bound the whole observe/detach/delete loop to 30 seconds. Every pass
+        // rechecks DMS first, so a concurrent subnet-group create protects the
+        // role and takes responsibility for deleting it later.
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const groups = yield* dms.describeReplicationSubnetGroups({});
+          if ((groups.ReplicationSubnetGroups ?? []).length > 0) return;
+
+          const tags = yield* iam
+            .listRoleTags({ RoleName: DMS_VPC_ROLE_NAME })
+            .pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (tags === undefined) return;
+          const owned = (tags.Tags ?? []).some(
+            (tag) =>
+              tag.Key === DMS_VPC_ROLE_OWNER_TAG.Key &&
+              tag.Value === DMS_VPC_ROLE_OWNER_TAG.Value,
+          );
+          if (!owned) return;
+
+          const deleted = yield* Effect.gen(function* () {
+            yield* iam
+              .detachRolePolicy({
+                RoleName: DMS_VPC_ROLE_NAME,
+                PolicyArn: DMS_VPC_POLICY_ARN,
+              })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
+            yield* iam
+              .deleteRole({ RoleName: DMS_VPC_ROLE_NAME })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
+            return true;
+          }).pipe(
+            Effect.catchTag(
+              [
+                "ConcurrentModificationException",
+                "DeleteConflictException",
+                "LimitExceededException",
+                "ServiceFailureException",
+              ],
+              () => Effect.succeed(false),
+            ),
+          );
+          if (!deleted) {
+            yield* Effect.sleep("1 second");
+            continue;
+          }
+
+          const remaining = yield* iam
+            .getRole({ RoleName: DMS_VPC_ROLE_NAME })
+            .pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (remaining === undefined) return;
+          yield* Effect.sleep("1 second");
+        }
+        return yield* Effect.die(
+          new Error(
+            `IAM role ${DMS_VPC_ROLE_NAME} remained observable 30 seconds after the last DMS subnet group was deleted`,
+          ),
+        );
       });
 
       const readTags = Effect.fn(function* (arn: string) {
@@ -245,6 +339,9 @@ export const ReplicationSubnetGroupProvider = () =>
                 // A freshly-created dms-vpc-role takes a few seconds to
                 // propagate to DMS, which surfaces as AccessDeniedFault
                 // ("The IAM Role ... is not configured properly").
+                Effect.catchTag("AccessDeniedFault", (error) =>
+                  ensureDmsVpcRole.pipe(Effect.andThen(Effect.fail(error))),
+                ),
                 Effect.retry({
                   while: (e) => e._tag === "AccessDeniedFault",
                   schedule: Schedule.spaced("5 seconds"),
@@ -307,6 +404,24 @@ export const ReplicationSubnetGroupProvider = () =>
                 output.replicationSubnetGroupIdentifier,
             })
             .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.void));
+
+          // Observe actual absence before discarding state or considering the
+          // shared helper unused. DMS deletion is eventually consistent.
+          for (let attempt = 0; attempt < 30; attempt++) {
+            if (
+              (yield* findGroup(output.replicationSubnetGroupIdentifier)) ===
+              undefined
+            ) {
+              yield* deleteOwnedDmsVpcRoleIfUnused;
+              return;
+            }
+            yield* Effect.sleep("1 second");
+          }
+          yield* Effect.die(
+            new Error(
+              `DMS replication subnet group ${output.replicationSubnetGroupIdentifier} remained observable 30 seconds after delete`,
+            ),
+          );
         }),
 
         list: () =>

@@ -224,7 +224,7 @@ const retryWhileStillExists = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "QueueStillExists",
-    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(24)]),
+    schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
   });
 
 const stringSetDelta = (

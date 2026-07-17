@@ -109,6 +109,8 @@ describe("AWS.CloudFront.KeyGroup", () => {
 
         yield* stack.destroy();
         yield* assertKeyGroupDeleted(updated.group.keyGroupId);
+        yield* assertPublicKeyDeleted(updated.primary.publicKeyId);
+        yield* assertPublicKeyDeleted(updated.secondary.publicKeyId);
       }),
     { timeout: 300_000 },
   );
@@ -129,7 +131,7 @@ describe("AWS.CloudFront.KeyGroup", () => {
               comment: "list",
               items: [primary.publicKeyId],
             });
-            return { group };
+            return { primary, group };
           }),
         );
 
@@ -142,6 +144,7 @@ describe("AWS.CloudFront.KeyGroup", () => {
 
         yield* stack.destroy();
         yield* assertKeyGroupDeleted(deployed.group.keyGroupId);
+        yield* assertPublicKeyDeleted(deployed.primary.publicKeyId);
       }),
     { timeout: 300_000 },
   );
@@ -157,6 +160,20 @@ const assertKeyGroupDeleted = (id: string) =>
       schedule: Schedule.max([
         Schedule.fixed("5 seconds"),
         Schedule.recurs(24),
+      ]),
+    }),
+  );
+
+const assertPublicKeyDeleted = (id: string) =>
+  cloudfront.getPublicKey({ Id: id }).pipe(
+    Effect.flatMap(() => Effect.fail(new Error("PublicKeyStillExists"))),
+    Effect.catchTag("NoSuchPublicKey", () => Effect.void),
+    Effect.retry({
+      while: (error) =>
+        error instanceof Error && error.message === "PublicKeyStillExists",
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(15),
       ]),
     }),
   );

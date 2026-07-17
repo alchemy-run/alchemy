@@ -33,17 +33,15 @@
  */
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as kms from "@distilled.cloud/aws/kms";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import KMSTestFunctionLive, {
   KMSTestFunction,
   STANDING_AGREEMENT_KEY_ALIAS,
@@ -72,6 +70,12 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
 }> {}
 
 class CryptoNotAuthorized extends Data.TaggedError("CryptoNotAuthorized") {}
+
+class StandingKeyNotReady extends Data.TaggedError("StandingKeyNotReady")<{
+  readonly actualState: kms.KeyState | undefined;
+  readonly expectedState: kms.KeyState;
+  readonly keyId: string;
+}> {}
 
 // Cold re-inits under parallel load surface as transient 5xx from the fixture
 // — retry those; a genuine 4xx/assertion failure is returned immediately.
@@ -178,14 +182,51 @@ const scanKeyMetadatas = Effect.gen(function* () {
   );
 });
 
+/**
+ * Wait for KMS's eventually-consistent state transition to become visible.
+ * Ten seconds is ample in practice and keeps a broken transition bounded.
+ */
+const waitForKeyState = Effect.fn(function* (
+  keyId: string,
+  expectedState: kms.KeyState,
+) {
+  return yield* kms.describeKey({ KeyId: keyId }).pipe(
+    Effect.flatMap((response) => {
+      const actualState = response.KeyMetadata?.KeyState;
+      return actualState === expectedState
+        ? Effect.succeed(response.KeyMetadata!)
+        : Effect.fail(
+            new StandingKeyNotReady({
+              actualState,
+              expectedState,
+              keyId,
+            }),
+          );
+    }),
+    Effect.retry({
+      while: (error) => error._tag === "StandingKeyNotReady",
+      schedule: Schedule.max([
+        Schedule.fixed("250 millis"),
+        Schedule.recurs(40),
+      ]),
+    }),
+  );
+});
+
 /** Converge an existing (possibly pending-deletion/disabled) key to enabled. */
 const reviveKey = Effect.fn(function* (metadata: kms.KeyMetadata) {
+  const keyId = metadata.KeyId!;
   if (metadata.KeyState === "PendingDeletion") {
-    yield* kms.cancelKeyDeletion({ KeyId: metadata.KeyId });
-    yield* kms.enableKey({ KeyId: metadata.KeyId });
+    yield* kms.cancelKeyDeletion({ KeyId: keyId });
+    // CancelKeyDeletion leaves the key disabled, but that transition is not
+    // immediately visible. Enabling or aliasing it too early is rejected as
+    // KMSInvalidStateException (the c64 sweep's 17-test setup cascade).
+    yield* waitForKeyState(keyId, "Disabled");
+    yield* kms.enableKey({ KeyId: keyId });
   } else if (metadata.Enabled === false) {
-    yield* kms.enableKey({ KeyId: metadata.KeyId });
+    yield* kms.enableKey({ KeyId: keyId });
   }
+  return yield* waitForKeyState(keyId, "Enabled");
 });
 
 /**
@@ -239,6 +280,15 @@ const ensureStandingKey = Effect.fn(function* (
         );
 
   yield* kms.createAlias({ AliasName: spec.alias, TargetKeyId: keyId }).pipe(
+    // DescribeKey reaches Enabled before CreateAlias's internal view of the
+    // key always converges. Retry only that exact transient state error.
+    Effect.retry({
+      while: (error) => error._tag === "KMSInvalidStateException",
+      schedule: Schedule.max([
+        Schedule.fixed("250 millis"),
+        Schedule.recurs(40),
+      ]),
+    }),
     Effect.catchTag("AlreadyExistsException", () =>
       // Lost a create race with a parallel run: the alias already points at
       // another key. Schedule ours for deletion so it doesn't become an

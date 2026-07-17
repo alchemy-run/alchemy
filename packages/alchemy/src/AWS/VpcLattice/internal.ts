@@ -37,3 +37,16 @@ export const waitUntilStable = <
     schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     until: (s) => s === undefined || !(s.status ?? "").endsWith("IN_PROGRESS"),
   });
+
+/**
+ * Re-run an observation until the resource is observably absent. Delete APIs
+ * commonly return before VPC Lattice removes the resource; a merely stable
+ * `ACTIVE` response is not deletion success. Bounded to about 60 seconds.
+ */
+export const waitUntilAbsent = <A, E extends { readonly _tag: string }, R>(
+  observe: Effect.Effect<A | undefined, E, R>,
+): Effect.Effect<A | undefined, E, R> =>
+  Effect.repeat(observe, {
+    schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]),
+    until: (resource) => resource === undefined,
+  });

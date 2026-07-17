@@ -3,9 +3,9 @@ import { Export } from "@/AWS/BCMDataExports/Export.ts";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

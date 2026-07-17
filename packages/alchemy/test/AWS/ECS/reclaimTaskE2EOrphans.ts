@@ -363,6 +363,30 @@ const reclaimNetworking = Effect.gen(function* () {
       Effect.asVoid,
     );
   }
+
+  // The smoke fixture normally reuses the standing default VPC, so its
+  // test-owned security group is not nested under a test-owned VPC above.
+  // Select it by the exact stack tag and leave every shared/default group
+  // untouched.
+  const ownedSecurityGroups = yield* ec2
+    .describeSecurityGroups({
+      Filters: [{ Name: "tag:alchemy::stack", Values: [STACK_NAME] }],
+    })
+    .pipe(Effect.map((r) => r.SecurityGroups ?? []));
+  for (const securityGroup of ownedSecurityGroups) {
+    if (!securityGroup.GroupId || securityGroup.GroupName === "default") {
+      continue;
+    }
+    yield* ec2.deleteSecurityGroup({ GroupId: securityGroup.GroupId }).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "DependencyViolation",
+        schedule: drainSchedule,
+        times: DRAIN_ATTEMPTS,
+      }),
+      Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
+      Effect.asVoid,
+    );
+  }
 });
 
 const reclaimEcrRepositories = Effect.gen(function* () {

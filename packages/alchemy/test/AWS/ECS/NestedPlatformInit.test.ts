@@ -1,12 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { describe } from "vitest";
-
 import NestedEcsReproFunctionLive, {
   NestedEcsReproFunction,
 } from "./fixtures/nested-ecs-lambda.ts";
@@ -32,7 +30,7 @@ let baseUrl: string;
 // exhausted, which fails the suite loudly.
 const readinessPolicy = Schedule.max([
   Schedule.fixed("2 seconds"),
-  Schedule.recurs(60),
+  Schedule.recurs(10),
 ]);
 
 describe.sequential("ECS Nested Platform Init", () => {
@@ -71,10 +69,10 @@ describe.sequential("ECS Nested Platform Init", () => {
       );
       yield* Effect.logInfo("nested-platform setup: fixture ready");
     }),
-    { timeout: 300_000 },
+    { timeout: 180_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 300_000 });
+  afterAll(sharedStack.destroy(), { timeout: 180_000 });
 
   test(
     "nested Platform (ECS.Task in Lambda) init does not OOM the sandbox",

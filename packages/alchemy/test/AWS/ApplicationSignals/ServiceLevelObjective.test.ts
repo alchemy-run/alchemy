@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { ServiceLevelObjective } from "@/AWS/ApplicationSignals";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as appsignals from "@distilled.cloud/aws/application-signals";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

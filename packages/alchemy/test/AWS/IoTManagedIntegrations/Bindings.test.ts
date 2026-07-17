@@ -1,14 +1,12 @@
 import * as AWS from "@/AWS";
 import { Region } from "@/AWS/Region.ts";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { describe } from "vitest";
-
 import IoTMITestFunctionLive, { IoTMITestFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };

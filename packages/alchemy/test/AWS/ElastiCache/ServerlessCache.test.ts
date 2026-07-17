@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { connectEnvPrefix } from "@/AWS/ElastiCache";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

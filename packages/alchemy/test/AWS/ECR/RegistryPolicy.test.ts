@@ -2,11 +2,11 @@ import * as AWS from "@/AWS";
 import { RegistryPolicy } from "@/AWS/ECR";
 import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { normalizePolicyDocument } from "@/AWS/IAM/Policy.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

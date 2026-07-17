@@ -2,7 +2,6 @@ import * as Lambda from "@/AWS/Lambda";
 import * as RDS from "@/AWS/RDS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -42,19 +41,6 @@ export default RdsBindingsTestFunction.make(
     url: true,
   },
   Effect.gen(function* () {
-    // Event source: subscribe the host to RDS cluster/snapshot events on
-    // the account's default EventBridge bus. The deploy proves the
-    // EventBridge rule + invoke permission wiring.
-    yield* RDS.consumeRdsEvents(
-      { kinds: ["db-cluster", "db-cluster-snapshot"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `rds event: ${event["detail-type"]} -> ${event.resources.join(", ")}`,
-          ),
-        ),
-    );
-
     const describeDBClusters = yield* RDS.DescribeDBClusters();
     const describeDBInstances = yield* RDS.DescribeDBInstances();
     const describeDBClusterEndpoints = yield* RDS.DescribeDBClusterEndpoints();
@@ -265,7 +251,6 @@ export default RdsBindingsTestFunction.make(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Lambda.EventSource,
         RDS.DescribeDBClustersHttp,
         RDS.DescribeDBInstancesHttp,
         RDS.DescribeDBClusterEndpointsHttp,

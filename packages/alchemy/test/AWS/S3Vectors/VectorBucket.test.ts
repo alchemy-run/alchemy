@@ -1,13 +1,19 @@
 import * as AWS from "@/AWS";
 import { Index, VectorBucket } from "@/AWS/S3Vectors";
-import * as Test from "@/Test/Vitest";
+import type { ScopedPlanStatusSession } from "@/Cli/Cli.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import * as s3vectors from "@distilled.cloud/aws/s3vectors";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
+const stubSession = {
+  note: () => Effect.void,
+} as unknown as ScopedPlanStatusSession;
 
 const findBucket = (vectorBucketName: string) =>
   s3vectors.getVectorBucket({ vectorBucketName }).pipe(
@@ -207,4 +213,53 @@ test.provider(
       yield* assertBucketDeleted(bucketName);
     }),
   { timeout: 240_000 },
+);
+
+test.provider(
+  "ordinary bucket delete protects an untracked index; force purges it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* VectorBucket("CascadeDelete", {});
+        }),
+      );
+      // Simulate an index created before state persistence. Its child provider
+      // cannot enumerate it globally, but deleting the bucket must still work.
+      yield* s3vectors.createIndex({
+        vectorBucketName: bucket.vectorBucketName,
+        indexName: "untracked-child",
+        dataType: "float32",
+        dimension: 2,
+        distanceMetric: "cosine",
+      });
+
+      const provider = yield* Provider.findProvider(VectorBucket);
+      const deleteInput = {
+        id: "CascadeDelete",
+        fqn: "CascadeDelete",
+        instanceId: "force-delete-test",
+        olds: {},
+        output: bucket,
+        session: stubSession,
+        bindings: [],
+      };
+      const protectedDelete = yield* Effect.result(
+        provider.delete(deleteInput),
+      );
+      expect(Result.isFailure(protectedDelete)).toBe(true);
+      if (Result.isFailure(protectedDelete)) {
+        expect(protectedDelete.failure._tag).toBe("ConflictException");
+      }
+      expect(
+        yield* findIndex(bucket.vectorBucketName, "untracked-child"),
+      ).toBeDefined();
+
+      yield* provider.delete({ ...deleteInput, force: true });
+      yield* assertBucketDeleted(bucket.vectorBucketName);
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
 );

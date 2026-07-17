@@ -1,4 +1,7 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -181,6 +184,47 @@ const ruleNeedsUpdate = (
   );
 };
 
+const vpcFlowLogGroupName = "/aws/vpc";
+
+const isVpcFlowLogRule = (rule: obs.TelemetryRule | undefined): boolean =>
+  rule?.ResourceType === "AWS::EC2::VPC" &&
+  rule.TelemetryType === "Logs" &&
+  rule.TelemetrySourceTypes?.includes("VPC_FLOW_LOGS") === true &&
+  rule.DestinationConfiguration?.DestinationType === "cloud-watch-logs";
+
+const isManagedVpcFlowLog = (
+  flowLog: ec2.FlowLog,
+): flowLog is ec2.FlowLog & { FlowLogId: string } =>
+  flowLog.FlowLogId !== undefined &&
+  flowLog.ResourceId?.startsWith("vpc-") === true &&
+  flowLog.LogGroupName === vpcFlowLogGroupName &&
+  flowLog.LogDestinationType === "cloud-watch-logs" &&
+  flowLog.Tags?.some(
+    (tag) =>
+      tag.Key === "CloudWatchTelemetryRuleManaged" && tag.Value === "true",
+  ) === true;
+
+class TelemetryRuleStillExists extends Data.TaggedError(
+  "TelemetryRuleStillExists",
+)<{ readonly ruleName: string }> {}
+
+class ManagedVpcFlowLogDeleteFailed extends Data.TaggedError(
+  "ManagedVpcFlowLogDeleteFailed",
+)<{ readonly failures: ec2.UnsuccessfulItem[] }> {}
+
+class ManagedVpcFlowLogsStillExist extends Data.TaggedError(
+  "ManagedVpcFlowLogsStillExist",
+)<{ readonly flowLogIds: string[] }> {}
+
+class ManagedVpcLogGroupStillExists extends Data.TaggedError(
+  "ManagedVpcLogGroupStillExists",
+)<{ readonly logGroupName: string }> {}
+
+const cleanupObservationSchedule = Schedule.max([
+  Schedule.fixed("1 second"),
+  Schedule.recurs(10),
+]);
+
 /** Project props to the wire `TelemetryRule` struct (dropping undefineds). */
 const toWireRule = (props: TelemetryRuleProps): obs.TelemetryRule =>
   JSON.parse(
@@ -225,6 +269,145 @@ export const TelemetryRuleProvider = () =>
               Effect.succeed(undefined),
             ),
           );
+      });
+
+      const waitUntilRuleAbsent = Effect.fn(function* (ruleName: string) {
+        yield* readRule(ruleName).pipe(
+          Effect.flatMap((rule) =>
+            rule === undefined
+              ? Effect.void
+              : Effect.fail(new TelemetryRuleStillExists({ ruleName })),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "TelemetryRuleStillExists",
+            schedule: cleanupObservationSchedule,
+          }),
+        );
+      });
+
+      const matchingRulesRemain = Effect.fn(function* () {
+        const summaries = yield* obs.listTelemetryRules.items({}).pipe(
+          Stream.runCollect,
+          Effect.map((items) => Array.from(items)),
+        );
+        const rules = yield* Effect.forEach(
+          summaries.flatMap((summary) =>
+            summary.RuleName === undefined ? [] : [summary.RuleName],
+          ),
+          readRule,
+          { concurrency: 4 },
+        );
+        return rules.some((rule) => isVpcFlowLogRule(rule?.TelemetryRule));
+      });
+
+      const listManagedVpcFlowLogs = () =>
+        ec2.describeFlowLogs
+          .items({
+            Filter: [
+              {
+                Name: "tag:CloudWatchTelemetryRuleManaged",
+                Values: ["true"],
+              },
+              { Name: "log-group-name", Values: [vpcFlowLogGroupName] },
+            ],
+          })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((items) =>
+              Array.from(items).filter(isManagedVpcFlowLog),
+            ),
+          );
+
+      const waitUntilManagedFlowLogsAbsent = Effect.fn(function* (
+        deletedIds: string[],
+      ) {
+        const deleted = new Set(deletedIds);
+        yield* listManagedVpcFlowLogs().pipe(
+          Effect.flatMap((flowLogs) => {
+            const remaining = flowLogs
+              .map((flowLog) => flowLog.FlowLogId)
+              .filter((flowLogId) => deleted.has(flowLogId));
+            return remaining.length === 0
+              ? Effect.void
+              : Effect.fail(
+                  new ManagedVpcFlowLogsStillExist({
+                    flowLogIds: remaining,
+                  }),
+                );
+          }),
+          Effect.retry({
+            while: (error) => error._tag === "ManagedVpcFlowLogsStillExist",
+            schedule: cleanupObservationSchedule,
+          }),
+        );
+      });
+
+      const waitUntilVpcLogGroupAbsent = logs
+        .describeLogGroups({
+          logGroupNamePrefix: vpcFlowLogGroupName,
+          limit: 1,
+        })
+        .pipe(
+          Effect.flatMap((response) =>
+            response.logGroups?.some(
+              (group) => group.logGroupName === vpcFlowLogGroupName,
+            ) === true
+              ? Effect.fail(
+                  new ManagedVpcLogGroupStillExists({
+                    logGroupName: vpcFlowLogGroupName,
+                  }),
+                )
+              : Effect.void,
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "ManagedVpcLogGroupStillExists",
+            schedule: cleanupObservationSchedule,
+          }),
+        );
+
+      const cleanupManagedVpcFlowLogs = Effect.fn(function* () {
+        const managed = yield* listManagedVpcFlowLogs();
+        const flowLogIds = managed.map((flowLog) => flowLog.FlowLogId);
+        if (flowLogIds.length > 0) {
+          yield* ec2.deleteFlowLogs({ FlowLogIds: flowLogIds }).pipe(
+            Effect.flatMap((response) => {
+              const failures = (response.Unsuccessful ?? []).filter(
+                (failure) =>
+                  failure.Error?.Code !== "InvalidFlowLogId.NotFound",
+              );
+              return failures.length === 0
+                ? Effect.void
+                : Effect.fail(new ManagedVpcFlowLogDeleteFailed({ failures }));
+            }),
+            Effect.retry({
+              while: (error) => error._tag === "ManagedVpcFlowLogDeleteFailed",
+              schedule: cleanupObservationSchedule,
+            }),
+          );
+          yield* waitUntilManagedFlowLogsAbsent(flowLogIds);
+        }
+
+        // `/aws/vpc` is shared by all Observability Admin-managed VPC flow
+        // logs. Delete it only after no flow log of any ownership still uses
+        // the destination; otherwise deleting the group would destroy user
+        // logs or another rule's delivery target.
+        const groupConsumers = yield* ec2.describeFlowLogs
+          .items({
+            Filter: [{ Name: "log-group-name", Values: [vpcFlowLogGroupName] }],
+          })
+          .pipe(Stream.runCollect);
+        if (groupConsumers.length > 0) return;
+
+        yield* logs.deleteLogGroup({ logGroupName: vpcFlowLogGroupName }).pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "OperationAbortedException" ||
+              error._tag === "ServiceUnavailableException",
+            schedule: cleanupObservationSchedule,
+          }),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+        yield* waitUntilVpcLogGroupAbsent;
       });
 
       const readTags = Effect.fn(function* (ruleArn: string) {
@@ -362,12 +545,30 @@ export const TelemetryRuleProvider = () =>
           return toAttrs(observed, tags);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, olds }) {
+          // Capture the live rule before deleting it so adoption and drift do
+          // not make cleanup decisions from stale desired state.
+          const observed = yield* readRule(output.ruleName);
+          const deletedRule =
+            observed?.TelemetryRule ??
+            (olds === undefined ? undefined : toWireRule(olds));
           yield* obs
             .deleteTelemetryRule({ RuleIdentifier: output.ruleName })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+          yield* waitUntilRuleAbsent(output.ruleName);
+
+          // Observability Admin asynchronously creates EC2 flow logs and the
+          // shared `/aws/vpc` destination for VPC_FLOW_LOGS rules, but deleting
+          // the rule does not remove them. Reap only when this was such a rule
+          // and no other live rule can own the shared managed resources.
+          if (
+            isVpcFlowLogRule(deletedRule) &&
+            !(yield* matchingRulesRemain())
+          ) {
+            yield* cleanupManagedVpcFlowLogs();
+          }
         }),
       });
     }),

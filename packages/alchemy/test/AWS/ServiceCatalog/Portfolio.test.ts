@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { Portfolio } from "@/AWS/ServiceCatalog";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

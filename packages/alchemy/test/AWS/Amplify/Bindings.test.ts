@@ -1,23 +1,26 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as amplify from "@distilled.cloud/aws/amplify";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import AmplifyTestFunctionLive, {
   AmplifyTestFunction,
 } from "./fixtures/handler";
+import { makeAmplifyTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "AmplifyBindings");
+const testLease = makeAmplifyTestLease();
+
+beforeAll(testLease.acquire, { timeout: 240_000 });
+afterAll(testLease.release);
 
 const branchName = "main";
 
@@ -29,7 +32,7 @@ const SITE_ZIP_BASE64 =
 
 const readinessPolicy = Schedule.max([
   Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
+  Schedule.recurs(10),
 ]);
 
 let baseUrl: string;
@@ -38,6 +41,7 @@ let appId: string;
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
+  readonly message: string;
 }> {}
 
 // Retry transient 5xx from the fixture (cold re-init under parallel-suite
@@ -49,7 +53,11 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
         ? response.text.pipe(
             Effect.flatMap((body) =>
               Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
+                new TransientUpstream({
+                  status: response.status,
+                  body,
+                  message: `fixture returned ${response.status}: ${body}`,
+                }),
               ),
             ),
           )
@@ -76,7 +84,50 @@ const getJson = (path: string) =>
     Effect.flatMap((response) => response.json),
   );
 
-describe("Amplify Bindings", () => {
+const deploySite = (branchName: string) =>
+  Effect.gen(function* () {
+    const staged = (yield* postJson("/deployments", { branchName })) as {
+      jobId: string;
+      zipUploadUrl: string;
+    };
+    expect(staged.jobId).toBeTruthy();
+    expect(staged.zipUploadUrl).toContain("https://");
+
+    const zipBytes = yield* Effect.sync(() =>
+      Uint8Array.from(Buffer.from(SITE_ZIP_BASE64, "base64")),
+    );
+    const upload = yield* HttpClient.execute(
+      HttpClientRequest.put(staged.zipUploadUrl).pipe(
+        HttpClientRequest.bodyUint8Array(zipBytes, "application/zip"),
+      ),
+    );
+    expect(upload.status).toBe(200);
+
+    const released = (yield* postJson("/deployments/start", {
+      branchName,
+      jobId: staged.jobId,
+    })) as { jobSummary: { jobId: string; status: string } };
+    expect(released.jobSummary.jobId).toBe(staged.jobId);
+
+    const settled = yield* getJson(
+      `/job?branchName=${branchName}&jobId=${staged.jobId}`,
+    ).pipe(
+      Effect.map((body) => body as { status: string; stepCount: number }),
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (job): boolean =>
+          job.status === "SUCCEED" ||
+          job.status === "FAILED" ||
+          job.status === "CANCELLED",
+        times: 10,
+      }),
+    );
+    expect(settled.status).toBe("SUCCEED");
+
+    return { ...staged, ...settled };
+  });
+
+describe.sequential("Amplify Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
       yield* sharedStack.destroy();
@@ -127,58 +178,21 @@ describe("Amplify Bindings", () => {
   test(
     "manual deployment lifecycle through the bindings",
     Effect.gen(function* () {
-      // CreateDeployment — stage the deployment, get the pre-signed zip URL.
-      const staged = (yield* postJson("/deployments", { branchName })) as {
-        jobId: string;
-        zipUploadUrl: string;
-      };
-      expect(staged.jobId).toBeTruthy();
-      expect(staged.zipUploadUrl).toContain("https://");
-
-      // Upload the site zip out-of-band (pre-signed URL, no IAM involved).
-      const zipBytes = yield* Effect.sync(() =>
-        Uint8Array.from(Buffer.from(SITE_ZIP_BASE64, "base64")),
-      );
-      const upload = yield* HttpClient.execute(
-        HttpClientRequest.put(staged.zipUploadUrl).pipe(
-          HttpClientRequest.bodyUint8Array(zipBytes, "application/zip"),
-        ),
-      );
-      expect(upload.status).toBe(200);
-
-      // StartDeployment — release the staged artifact.
-      const released = (yield* postJson("/deployments/start", {
-        branchName,
-        jobId: staged.jobId,
-      })) as { jobSummary: { jobId: string; status: string } };
-      expect(released.jobSummary.jobId).toBe(staged.jobId);
-
-      // GetJob — poll until the deployment settles.
-      const settled = yield* getJson(
-        `/job?branchName=${branchName}&jobId=${staged.jobId}`,
-      ).pipe(
-        Effect.map((body) => body as { status: string; stepCount: number }),
-        Effect.repeat({
-          schedule: Schedule.spaced("5 seconds"),
-          until: (job): boolean =>
-            job.status === "SUCCEED" ||
-            job.status === "FAILED" ||
-            job.status === "CANCELLED",
-          times: 36,
-        }),
-      );
-      expect(settled.status).toBe("SUCCEED");
+      // CreateDeployment, StartDeployment, and GetJob — stage the site,
+      // upload it through the pre-signed URL, release it, and wait for the
+      // deployment to settle.
+      const deployed = yield* deploySite(branchName);
 
       // ListJobs — the deployment shows up in the branch's job history.
       const jobs = (yield* getJson(`/jobs?branchName=${branchName}`)) as {
         jobSummaries: Array<{ jobId: string }>;
       };
-      expect(jobs.jobSummaries.map((j) => j.jobId)).toContain(staged.jobId);
+      expect(jobs.jobSummaries.map((j) => j.jobId)).toContain(deployed.jobId);
 
       // ListArtifacts — manual deploys typically produce none; the call
       // itself (auth + wiring) is what's under test.
       const artifacts = (yield* getJson(
-        `/artifacts?branchName=${branchName}&jobId=${staged.jobId}`,
+        `/artifacts?branchName=${branchName}&jobId=${deployed.jobId}`,
       )) as {
         artifacts: Array<{ artifactId: string; artifactFileName: string }>;
       };
@@ -196,17 +210,29 @@ describe("Amplify Bindings", () => {
       // with a typed tag; either outcome proves the binding + IAM wiring.
       const stopped = (yield* postJson("/jobs/stop", {
         branchName,
-        jobId: staged.jobId,
+        jobId: deployed.jobId,
       })) as { stopped: boolean; errorTag?: string };
       if (!stopped.stopped) {
-        expect(stopped.errorTag).toBeTruthy();
+        expect(stopped.errorTag).toBe("BadRequestException");
       }
 
-      // DeleteJob — prune the settled job from the branch history.
+      // DeleteJob correctly rejects the active hosted deployment with a typed
+      // BadRequestException. Deploy a successor, then prune the old job.
+      const activeDelete = (yield* postJson("/jobs/delete", {
+        branchName,
+        jobId: deployed.jobId,
+      })) as { deleted: boolean; errorTag?: string; message?: string };
+      expect(activeDelete.deleted).toBe(false);
+      expect(activeDelete.errorTag).toBe("BadRequestException");
+      expect(activeDelete.message).toContain("active job");
+
+      const successor = yield* deploySite(branchName);
+      expect(successor.jobId).not.toBe(deployed.jobId);
+
       const deleted = (yield* postJson("/jobs/delete", {
         branchName,
-        jobId: staged.jobId,
-      })) as { deleted: boolean };
+        jobId: deployed.jobId,
+      })) as { deleted: boolean; errorTag?: string };
       expect(deleted.deleted).toBe(true);
 
       // Out-of-band: the job is gone from the branch history.
@@ -216,10 +242,10 @@ describe("Amplify Bindings", () => {
         "AmplifyBindings",
       );
       expect(remaining.jobSummaries.map((j) => j.jobId)).not.toContain(
-        staged.jobId,
+        deployed.jobId,
       );
     }),
-    { timeout: 300_000 },
+    { timeout: 120_000, retry: 0 },
   );
 
   test(
@@ -269,15 +295,27 @@ describe("Amplify Bindings", () => {
       const meta = (yield* getJson("/meta")) as { defaultDomain: string };
       const result = (yield* postJson("/access-logs", {
         domainName: meta.defaultDomain,
-      })) as { ok: boolean; logUrl?: string; errorTag?: string };
+      })) as {
+        ok: boolean;
+        logUrl?: string;
+        errorTag?: string;
+        message?: string;
+        cause?: string;
+      };
       if (result.ok) {
         expect(result.logUrl).toContain("https://");
+      } else if (result.errorTag === "UnexpectedCause") {
+        return yield* Effect.fail(
+          new Error(result.cause ?? "GenerateAccessLogs failed unexpectedly"),
+        );
       } else {
         // Some accounts gate access logs on the default domain — the typed
         // tag still proves the binding + IAM wiring.
-        expect(result.errorTag).toBeTruthy();
+        expect(["BadRequestException", "NotFoundException"]).toContain(
+          result.errorTag,
+        );
       }
     }),
-    { timeout: 60_000 },
+    { timeout: 60_000, retry: 0 },
   );
 });

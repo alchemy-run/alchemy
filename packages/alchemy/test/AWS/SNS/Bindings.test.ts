@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as SNS from "@distilled.cloud/aws/sns";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "alchemy-test";
@@ -18,7 +18,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const readinessPolicy = Schedule.max([
   Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
+  Schedule.recurs(14),
 ]);
 
 describe.sequential("SNS Bindings", () => {
@@ -61,10 +61,11 @@ describe.sequential("SNS Bindings", () => {
         // here waits until the policy is actually live before any assertions.
         const readinessUrl = `${baseUrl}/topic-attributes`;
         yield* Effect.logInfo(
-          `SNS test setup: probing IAM readiness at ${readinessUrl} (150s budget)`,
+          `SNS test setup: probing IAM readiness at ${readinessUrl} (150s bounded budget)`,
         );
 
         yield* HttpClient.get(readinessUrl).pipe(
+          Effect.timeout("8 seconds"),
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
@@ -91,6 +92,7 @@ describe.sequential("SNS Bindings", () => {
               ),
             ),
             Effect.flatMap((response) => response.json),
+            Effect.timeout("20 seconds"),
           );
 
         const postJson = (path: string, body: unknown) =>
@@ -104,6 +106,7 @@ describe.sequential("SNS Bindings", () => {
               Effect.flatMap(response.text, Effect.logInfo),
             ),
             Effect.flatMap((response) => response.json),
+            Effect.timeout("20 seconds"),
           );
 
         const deleteJson = (path: string, body: unknown) =>
@@ -112,7 +115,16 @@ describe.sequential("SNS Bindings", () => {
               HttpClientRequest.delete(`${baseUrl}${path}`),
               body,
             ),
-          ).pipe(Effect.flatMap((response) => response.json));
+          ).pipe(
+            Effect.flatMap((response) => response.json),
+            Effect.timeout("20 seconds"),
+          );
+
+        const bufferedQueueMessages: Array<{
+          message: string;
+          topicArn: string;
+          subject?: string;
+        }> = [];
 
         const waitForQueueMessage = Effect.fn(function* (
           predicate: (body: {
@@ -121,42 +133,59 @@ describe.sequential("SNS Bindings", () => {
             subject?: string;
           }) => boolean,
         ) {
-          return yield* SQS.receiveMessage({
-            QueueUrl: queueUrl,
-            MaxNumberOfMessages: 1,
-            WaitTimeSeconds: 20,
-            VisibilityTimeout: 30,
+          const takeBuffered = () => {
+            const index = bufferedQueueMessages.findIndex(predicate);
+            return index < 0
+              ? undefined
+              : bufferedQueueMessages.splice(index, 1)[0];
+          };
+
+          return yield* Effect.gen(function* () {
+            const buffered = takeBuffered();
+            if (buffered) return buffered;
+
+            const result = yield* SQS.receiveMessage({
+              QueueUrl: queueUrl,
+              MaxNumberOfMessages: 10,
+              WaitTimeSeconds: 5,
+              VisibilityTimeout: 30,
+            });
+            const messages = (result.Messages ?? []).filter(
+              (message) => message.Body && message.ReceiptHandle,
+            );
+            if (messages.length === 0) {
+              return yield* Effect.fail(new QueueMessageNotReady());
+            }
+
+            yield* Effect.forEach(
+              messages,
+              (message) =>
+                SQS.deleteMessage({
+                  QueueUrl: queueUrl,
+                  ReceiptHandle: message.ReceiptHandle!,
+                }),
+              { concurrency: "unbounded" },
+            );
+            bufferedQueueMessages.push(
+              ...messages.map(
+                (message) =>
+                  JSON.parse(message.Body!) as {
+                    message: string;
+                    topicArn: string;
+                    subject?: string;
+                  },
+              ),
+            );
+
+            const received = takeBuffered();
+            return yield* received
+              ? Effect.succeed(received)
+              : Effect.fail(new QueueMessageNotReady());
           }).pipe(
-            Effect.flatMap((result) => {
-              const message = result.Messages?.[0];
-              if (!message?.Body || !message.ReceiptHandle) {
-                return Effect.fail(new QueueMessageNotReady());
-              }
-
-              const body = JSON.parse(message.Body) as {
-                message: string;
-                topicArn: string;
-                subject?: string;
-              };
-
-              return SQS.deleteMessage({
-                QueueUrl: queueUrl,
-                ReceiptHandle: message.ReceiptHandle,
-              }).pipe(
-                Effect.flatMap(() =>
-                  predicate(body)
-                    ? Effect.succeed(body)
-                    : Effect.fail(new QueueMessageNotReady()),
-                ),
-              );
-            }),
-            // Each attempt already long-polls up to 20s, so a handful of
-            // retries spans a generous (~3min) delivery window without the
-            // short-poll spin that made this flaky — and stays under the
-            // test's 360s budget even across the multiple waits per run.
+            // Five-second long polls keep the complete retry window below 45s.
             Effect.retry({
               while: (error) => error._tag === "QueueMessageNotReady",
-              schedule: Schedule.recurs(9),
+              schedule: Schedule.recurs(8),
             }),
           );
         });
@@ -552,7 +581,7 @@ describe.sequential("SNS Bindings", () => {
           yield* assertTopicGone(topicArn);
         }
       }),
-    { timeout: 360_000 },
+    { timeout: 240_000 },
   );
 });
 

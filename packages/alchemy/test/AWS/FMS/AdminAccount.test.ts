@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { AdminAccount, pinFms } from "@/AWS/FMS/AdminAccount.ts";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as fms from "@distilled.cloud/aws/fms";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";

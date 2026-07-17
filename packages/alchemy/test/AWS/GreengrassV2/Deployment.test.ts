@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { ComponentVersion, Deployment } from "@/AWS/GreengrassV2";
 import { Thing } from "@/AWS/IoT";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

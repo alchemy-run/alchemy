@@ -5,9 +5,9 @@ import * as SNS from "@/AWS/SNS";
 import { Database, ScheduledQuery, Table } from "@/AWS/Timestream";
 import { withQueryEndpoint } from "@/AWS/Timestream/internal";
 import * as Output from "@/Output";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as TSQ from "@distilled.cloud/aws/timestream-query";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

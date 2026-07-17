@@ -1,12 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "./VpcTest.ts";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { describe } from "vitest";
-
 import NetworkTestFunctionLive, {
   NetworkTestFunction,
 } from "./fixtures/network-function";
@@ -42,6 +40,7 @@ describe("EC2.Network composed in a Lambda layer", () => {
       // does not provide `AWSEnvironment` — a 200 here proves the `Network`
       // composition re-executes cleanly at Lambda init.
       yield* HttpClient.get(`${baseUrl}/network`).pipe(
+        Effect.timeout("4 seconds"),
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
@@ -50,7 +49,10 @@ describe("EC2.Network composed in a Lambda layer", () => {
         Effect.retry({ schedule: readinessPolicy }),
       );
     }),
-    { timeout: 300_000 },
+    // This nested setup hook is scheduled while the file may still be queued
+    // on the shared VPC-capacity lease. Give coordination the suite wall;
+    // every cloud/HTTP wait inside remains independently bounded.
+    { timeout: 3_600_000 },
   );
 
   afterAll(sharedStack.destroy(), { timeout: 240_000 });

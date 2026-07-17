@@ -4,9 +4,9 @@ import {
   SlackChannelConfiguration,
 } from "@/AWS/Chatbot";
 import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as chatbot from "@distilled.cloud/aws/chatbot";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -70,7 +70,9 @@ test.provider(
 
 // Validates the distilled chatbot patch: the wire ResourceNotFoundException
 // is outside the Smithy model's union for this operation and is added via
-// patches/chatbot.json.
+// patches/chatbot.json. The Teams read endpoint occasionally has >30s tail
+// latency under a full c128 sweep, so this probe gets a narrow 60s budget;
+// the typed assertion is unchanged and no service error is masked.
 test.provider(
   "getMicrosoftTeamsChannelConfiguration on a nonexistent configuration fails with ResourceNotFoundException",
   () =>
@@ -83,7 +85,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 30_000 },
+  { timeout: 60_000 },
 );
 
 // The Slack read path is a filter — an unknown ARN yields an empty list, not

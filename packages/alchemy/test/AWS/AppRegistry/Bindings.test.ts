@@ -1,21 +1,23 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import AppRegistryTestFunctionLive, {
   AppRegistryTestFunction,
 } from "./handler";
+import { makeAppRegistryTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "AppRegistryBindings");
+const serviceLease = makeAppRegistryTestLease();
+
+beforeAll(serviceLease.acquire, { timeout: 3_600_000 });
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
@@ -97,6 +99,7 @@ describe.sequential("AppRegistry Bindings", () => {
   );
 
   afterAll(sharedStack.destroy(), { timeout: 120_000 });
+  afterAll(serviceLease.release);
 
   describe("binding registration", () => {
     test.provider("all 9 capabilities initialize in the runtime", (_stack) =>

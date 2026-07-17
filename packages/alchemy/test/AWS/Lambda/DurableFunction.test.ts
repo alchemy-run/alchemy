@@ -1,14 +1,13 @@
 import * as AWS from "@/AWS";
 import { encodeDurableEnvelope } from "@/AWS/Lambda/DurableBridge.ts";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import { describe } from "vitest";
 import DurableFlowLive, { DurableFlow } from "./fixtures/durable-handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -47,9 +46,8 @@ describe("Lambda DurableFunction", () => {
 
   // Full lifecycle: a real deploy (bundling + vendoring the Durable Execution
   // SDK + waiting out IAM role propagation) plus a live durable execution with
-  // a suspend/resume. A warm run is ~40s; a cold first deploy can take a few
-  // minutes. Gated off the default fast suite: AWS_TEST_DURABLE=1.
-  describe.skipIf(!process.env.AWS_TEST_DURABLE)("lifecycle", () => {
+  // a suspend/resume.
+  describe("lifecycle", () => {
     let functionName: string;
 
     beforeAll(

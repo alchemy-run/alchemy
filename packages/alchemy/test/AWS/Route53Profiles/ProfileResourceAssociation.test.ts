@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Profile, ProfileResourceAssociation } from "@/AWS/Route53Profiles";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as profiles from "@distilled.cloud/aws/route53profiles";
 import * as resolver from "@distilled.cloud/aws/route53resolver";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

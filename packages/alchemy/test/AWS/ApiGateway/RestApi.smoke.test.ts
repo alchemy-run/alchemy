@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

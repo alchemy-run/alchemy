@@ -101,8 +101,10 @@ export const RuleGroupsNamespaceProvider = () =>
        * Poll until the namespace reaches ACTIVE. A namespace in CREATING /
        * UPDATING omits its `data` blob from the description, so callers that
        * need the definition must wait for ACTIVE first. Activation is
-       * usually seconds but has been observed to take over a minute, so the
-       * budget is ~90s.
+       * usually seconds but has been observed to remain CREATING beyond 90s
+       * under account load. Poll less frequently for a bounded ~2 minute
+       * window so deployments tolerate that documented asynchronous
+       * lifecycle without creating an unbounded wait.
        */
       const waitActive = Effect.fn(function* (
         workspaceId: string,
@@ -114,8 +116,8 @@ export const RuleGroupsNamespaceProvider = () =>
             Effect.map((r) => r.ruleGroupsNamespace),
             Effect.repeat({
               schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(30),
+                Schedule.fixed("12 seconds"),
+                Schedule.recurs(10),
               ]),
               until: (n) => n.status.statusCode === "ACTIVE",
             }),

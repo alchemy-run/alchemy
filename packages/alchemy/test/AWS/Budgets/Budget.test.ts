@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Budget } from "@/AWS/Budgets/Budget.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as budgets from "@distilled.cloud/aws/budgets";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

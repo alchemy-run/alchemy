@@ -1,12 +1,11 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { describe } from "vitest";
 import ElastiCacheBindingsTestFunctionLive, {
   ElastiCacheBindingsTestFunction,
 } from "./bindings-handler.ts";

@@ -1,14 +1,12 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import SimpleDBTestFunctionLive, { SimpleDBTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -48,7 +46,8 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      while: (e) => e._tag === "TransientUpstream",
+      while: (e) =>
+        e._tag === "TransientUpstream" || e._tag === "HttpClientError",
       schedule: Schedule.max([
         Schedule.exponential("500 millis"),
         Schedule.recurs(6),

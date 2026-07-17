@@ -16,7 +16,11 @@ import {
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { ServiceNetworkAuthType } from "./ServiceNetwork.ts";
-import { retryOnConflict, waitUntilStable } from "./internal.ts";
+import {
+  retryOnConflict,
+  waitUntilAbsent,
+  waitUntilStable,
+} from "./internal.ts";
 
 export interface ServiceProps {
   /**
@@ -310,6 +314,7 @@ export const ServiceProvider = () =>
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
+          yield* waitUntilAbsent(observe(output.serviceId));
         }),
       };
     }),

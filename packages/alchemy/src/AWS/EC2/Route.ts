@@ -419,7 +419,14 @@ export const RouteProvider = () =>
                     const routeTableId = rt.RouteTableId;
                     if (routeTableId === undefined) return [];
                     return (rt.Routes ?? [])
-                      .filter((r) => r.GatewayId !== "local")
+                      .filter(
+                        (r) =>
+                          r.GatewayId !== "local" &&
+                          // VPC Lattice injects service-managed routes while
+                          // a VPC association is active. They cannot be
+                          // deleted through EC2 and drain with the association.
+                          r.GatewayId !== "VpcLattice",
+                      )
                       .map((r) => ({
                         routeTableId: routeTableId as RouteTableId,
                         destinationCidrBlock: r.DestinationCidrBlock,

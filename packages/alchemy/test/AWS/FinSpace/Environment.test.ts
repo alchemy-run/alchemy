@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Environment } from "@/AWS/FinSpace";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as finspace from "@distilled.cloud/aws/finspace";
 import * as finspaceData from "@distilled.cloud/aws/finspace-data";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

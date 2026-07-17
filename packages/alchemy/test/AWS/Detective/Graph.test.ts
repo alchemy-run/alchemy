@@ -1,12 +1,19 @@
 import * as AWS from "@/AWS";
 import { Graph } from "@/AWS/Detective/Graph.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as detective from "@distilled.cloud/aws/detective";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { makeDetectiveTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+const testLease = makeDetectiveTestLease();
+
+beforeAll(testLease.acquire, { timeout: 240_000 });
+afterAll(testLease.release);
 
 const firstGraphArn = detective
   .listGraphs({})

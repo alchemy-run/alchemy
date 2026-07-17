@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { DeliveryStream } from "@/AWS/Firehose";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Firehose from "@distilled.cloud/aws/firehose";
 import * as iam from "@distilled.cloud/aws/iam";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

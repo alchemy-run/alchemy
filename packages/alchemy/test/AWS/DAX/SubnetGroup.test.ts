@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { SubnetGroup } from "@/AWS/DAX";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as dax from "@distilled.cloud/aws/dax";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";

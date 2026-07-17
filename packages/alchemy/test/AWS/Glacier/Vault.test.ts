@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Vault } from "@/AWS/Glacier";
 import { Topic } from "@/AWS/SNS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as glacier from "@distilled.cloud/aws/glacier";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

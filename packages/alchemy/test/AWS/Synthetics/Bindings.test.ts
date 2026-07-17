@@ -1,15 +1,13 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import SyntheticsBindingsFunctionLive, {
   SyntheticsBindingsFunction,
 } from "./handler";
@@ -208,19 +206,19 @@ describe.sequential("Synthetics Bindings", () => {
             tag: string;
           };
           expect(response.tag).toBe("ok");
-          // The canary leaves READY once the start is accepted; the
-          // provider's destroy stops/deletes it regardless of state.
-          const started = yield* getJson("/canary").pipe(
-            Effect.map((r) => r as { tag: string; state?: string }),
+          // A one-shot canary can traverse READY -> RUNNING -> READY between
+          // state polls. Prove the accepted start by observing its run record
+          // instead of relying on a transient control-plane state.
+          const started = yield* getJson("/runs").pipe(
+            Effect.map((r) => r as { tag: string; count?: number }),
             Effect.repeat({
-              schedule: Schedule.spaced("3 seconds"),
-              until: (r): boolean => r.state !== "READY",
-              times: 20,
+              schedule: Schedule.spaced("2 seconds"),
+              until: (r): boolean => r.tag === "ok" && (r.count ?? 0) > 0,
+              times: 25,
             }),
           );
-          expect(["STARTING", "RUNNING", "STOPPING", "STOPPED"]).toContain(
-            started.state,
-          );
+          expect(started.tag).toBe("ok");
+          expect(started.count).toBeGreaterThan(0);
         }),
       { timeout: 120_000 },
     );

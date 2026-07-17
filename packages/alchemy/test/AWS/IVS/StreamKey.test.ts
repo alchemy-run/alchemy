@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { Channel, StreamKey } from "@/AWS/IVS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ivs from "@distilled.cloud/aws/ivs";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

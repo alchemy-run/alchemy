@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { StateMachine } from "@/AWS/StepFunctions";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as sfn from "@distilled.cloud/aws/sfn";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

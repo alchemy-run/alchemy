@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
@@ -25,7 +26,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { functionName, functionUrl } = yield* stack.deploy(
+      const { functionName, functionUrl, roleName } = yield* stack.deploy(
         TestFunction.pipe(Effect.provide(TestFunctionLive)),
       );
 
@@ -63,6 +64,7 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(functionName);
+      yield* assertRoleDeleted(roleName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -408,6 +410,21 @@ const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+    }),
+  );
+});
+
+// Function cleanup owns its generated execution role. Verify the role is not
+// stranded when deletion also waits for Lambda's asynchronous log flush.
+const assertRoleDeleted = Effect.fn(function* (roleName: string) {
+  yield* iam.getRole({ RoleName: roleName }).pipe(
+    Effect.flatMap(() =>
+      Effect.fail(new Error(`Role ${roleName} still exists`)),
+    ),
+    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
     }),
   );
 });

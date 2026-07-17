@@ -114,7 +114,7 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
+    schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
   });
 
 /**
@@ -135,9 +135,10 @@ export const retryWhileFarmSettling = <
   Effect.retry(self, {
     while: (e) =>
       e._tag === "ConflictException" ||
+      e._tag === "InternalServerException" ||
       e._tag === "ResourceNotFoundException" ||
       e._tag === "ThrottlingException",
-    schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
+    schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
   });
 
 /**
@@ -154,5 +155,5 @@ export const retryThroughIamPropagation = <
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "AccessDeniedException",
-    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
+    schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
   });

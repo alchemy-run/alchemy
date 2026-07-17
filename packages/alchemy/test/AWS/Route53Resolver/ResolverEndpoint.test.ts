@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { ResolverEndpoint } from "@/AWS/Route53Resolver";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as r53r from "@distilled.cloud/aws/route53resolver";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { assertEndpointDeleting, defaultNetwork } from "./helpers.ts";
 

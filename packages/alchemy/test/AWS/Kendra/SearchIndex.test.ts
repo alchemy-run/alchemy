@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { DataSource, Index } from "@/AWS/Kendra";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as kendra from "@distilled.cloud/aws/kendra";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

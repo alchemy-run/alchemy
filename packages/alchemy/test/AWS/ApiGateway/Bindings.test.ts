@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -12,6 +12,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import ApiGatewayBindingsFunctionLive, {
   ApiGatewayBindingsFunction,
 } from "./fixtures/bindings-handler.ts";
+import { assertApiKeyDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -180,17 +181,10 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
 
-      // Zero-orphan proof: no runtime-created API key with the constant test
-      // name survives the destroy + through-the-bindings cleanup.
-      const strays = yield* ag.getApiKeys.pages({ nameQuery: keyName }).pipe(
-        Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.items ?? []).filter((key) => key.name === keyName),
-          ),
-        ),
-      );
-      expect(strays).toHaveLength(0);
+      // The list endpoint can briefly return a deleted key after GetApiKeys
+      // has already observed the deletion. Prove the runtime-created key is
+      // gone by its stable ID through the bounded typed NotFound assertion.
+      yield* assertApiKeyDeleted(created.id);
     }).pipe(Effect.ensuring(reapApiKeys)),
   { timeout: 600_000 },
 );

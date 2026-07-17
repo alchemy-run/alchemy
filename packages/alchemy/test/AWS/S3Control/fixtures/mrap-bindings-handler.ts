@@ -54,6 +54,7 @@ export default S3ControlMrapBindingsFunction.make(
         if (request.method === "GET" && pathname === "/routes") {
           const { Routes } = yield* getRoutes();
           return yield* HttpServerResponse.json({
+            mrapName: mrap.multiRegionAccessPointName,
             routes: (Routes ?? []).map((r) => ({
               region: r.Region,
               trafficDialPercentage: r.TrafficDialPercentage,

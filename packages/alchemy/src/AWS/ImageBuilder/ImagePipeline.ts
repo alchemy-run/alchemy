@@ -11,6 +11,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireMinutes } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  deleteImageBuilderLogGroup,
   driftedFrom,
   imageBuilderArn,
   retryWhileDependedOn,
@@ -348,6 +349,24 @@ export const ImagePipelineProvider = () =>
             }),
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+
+          // Image Builder creates this fixed group outside of the pipeline
+          // API. Delete only the exact group derived from this owned output,
+          // and only after the pipeline itself is observed absent.
+          for (let attempt = 0; attempt < 30; attempt++) {
+            if ((yield* getPipeline(output.imagePipelineArn)) === undefined) {
+              yield* deleteImageBuilderLogGroup(
+                `/aws/imagebuilder/pipeline/${output.imagePipelineName.toLowerCase()}`,
+              );
+              return;
+            }
+            yield* Effect.sleep("1 second");
+          }
+          return yield* Effect.die(
+            new Error(
+              `Image Builder pipeline ${output.imagePipelineArn} remained observable 30 seconds after delete`,
+            ),
           );
         }),
 

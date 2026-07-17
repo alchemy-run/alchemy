@@ -9,10 +9,10 @@ import {
   Vehicle,
 } from "@/AWS/IoTFleetWise";
 import { Bucket } from "@/AWS/S3";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

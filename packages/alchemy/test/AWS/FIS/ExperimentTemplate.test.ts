@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { ExperimentTemplate } from "@/AWS/FIS";
 import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as fis from "@distilled.cloud/aws/fis";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

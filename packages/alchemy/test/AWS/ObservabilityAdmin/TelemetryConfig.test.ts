@@ -1,11 +1,18 @@
 import * as AWS from "@/AWS";
 import { TelemetryConfig } from "@/AWS/ObservabilityAdmin";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { makeObservabilityAdminTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({
+  providers: AWS.providers(),
+});
+const testLease = makeObservabilityAdminTestLease();
+
+beforeAll(testLease.acquire, { timeout: 3_600_000 });
+afterAll(testLease.release);
 
 const readStatus = obs
   .getTelemetryEvaluationStatus({})

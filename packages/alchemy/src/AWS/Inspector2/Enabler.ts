@@ -1,6 +1,8 @@
 import * as inspector2 from "@distilled.cloud/aws/inspector2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -15,6 +17,18 @@ export type ResourceScanType =
   | "LAMBDA"
   | "LAMBDA_CODE"
   | "CODE_REPOSITORY";
+
+/**
+ * Raised when Inspector does not reach the requested scan state within the
+ * provider's bounded convergence budget.
+ */
+export class Inspector2NotConverged extends Data.TaggedError(
+  "Inspector2NotConverged",
+)<{
+  readonly accountId: string;
+  readonly expected: string;
+  readonly actual: Readonly<Record<string, string | undefined>>;
+}> {}
 
 export interface EnablerProps {
   /**
@@ -101,6 +115,14 @@ const enabledTypes = (
   return out;
 };
 
+const statusesOf = (
+  resourceState: inspector2.ResourceState | undefined,
+  types: readonly string[],
+): Record<string, string | undefined> =>
+  Object.fromEntries(
+    types.map((type) => [type, statusOfType(resourceState, type)]),
+  );
+
 export const EnablerProvider = () =>
   Provider.effect(
     EnablerResource,
@@ -110,20 +132,67 @@ export const EnablerProvider = () =>
           .batchGetAccountStatus({ accountIds: [accountId] })
           .pipe(Effect.map((r) => r.accounts?.[0]));
 
-      // Enablement is fast (~10–20s per type). Poll until every desired type
-      // reaches the terminal `ENABLED` state so a subsequent destroy can
-      // cleanly disable it (disable is rejected while a type is `ENABLING`).
-      const waitUntilEnabled = (accountId: string, types: string[]) =>
-        getAccount(accountId).pipe(
+      // Inspector enablement can remain transitional for several minutes.
+      // Keep the provider's wait bounded (~50s) and, critically, check the
+      // terminal value because Effect.repeat returns its last success when the
+      // repetition budget is exhausted even if `until` never became true.
+      const waitUntilEnabled = Effect.fn(function* (
+        accountId: string,
+        types: readonly string[],
+      ) {
+        const account = yield* getAccount(accountId).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             until: (account) =>
               types.every(
                 (t) => statusOfType(account?.resourceState, t) === "ENABLED",
               ),
-            times: 24,
+            times: 10,
           }),
         );
+        if (
+          !types.every(
+            (type) => statusOfType(account?.resourceState, type) === "ENABLED",
+          )
+        ) {
+          return yield* Effect.fail(
+            new Inspector2NotConverged({
+              accountId,
+              expected: "ENABLED",
+              actual: statusesOf(account?.resourceState, types),
+            }),
+          );
+        }
+        return account;
+      });
+
+      const disableManagedTypes = Effect.fn(function* (
+        accountId: string,
+        types: readonly string[],
+      ) {
+        if (types.length === 0) return;
+
+        let account = yield* getAccount(accountId);
+        const enabling = types.filter(
+          (type) => statusOfType(account?.resourceState, type) === "ENABLING",
+        );
+        if (enabling.length > 0) {
+          yield* waitUntilEnabled(accountId, enabling);
+          account = yield* getAccount(accountId);
+        }
+
+        // DISABLING and DISABLED are already converging toward deletion. Only
+        // issue disable for types that are observably enabled.
+        const enabled = types.filter(
+          (type) => statusOfType(account?.resourceState, type) === "ENABLED",
+        );
+        if (enabled.length === 0) return;
+        yield* inspector2
+          .disable({ accountIds: [accountId], resourceTypes: enabled })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+      });
 
       return {
         read: Effect.fn(function* ({ output }) {
@@ -132,12 +201,21 @@ export const EnablerProvider = () =>
           const account = yield* getAccount(accountId);
           if (!account) return undefined;
           const enabled = enabledTypes(account.resourceState);
-          if (enabled.length === 0) return undefined;
-          return {
+          const managed = output
+            ? output.resourceTypes.filter(
+                (type) =>
+                  statusOfType(account.resourceState, type) !== "DISABLED",
+              )
+            : enabled;
+          if (managed.length === 0) return undefined;
+          const attrs = {
             accountId,
-            resourceTypes: enabled,
+            resourceTypes: managed,
             state: account.state?.status,
           };
+          // Inspector has no tags. A live singleton without prior Alchemy
+          // state is foreign and must be explicitly adopted.
+          return output ? attrs : Unowned(attrs);
         }),
 
         // Inspector enablement is an account/region singleton keyed on the
@@ -166,7 +244,11 @@ export const EnablerProvider = () =>
           const currentlyEnabled = enabledTypes(account?.resourceState);
 
           // 2. ENSURE — enable any desired type not yet enabled.
-          const toEnable = desired.filter((t) => !currentlyEnabled.includes(t));
+          const toEnable = desired.filter(
+            (type) =>
+              !currentlyEnabled.includes(type) &&
+              statusOfType(account?.resourceState, type) !== "ENABLING",
+          );
           if (toEnable.length > 0) {
             yield* inspector2.enable({
               accountIds: [accountId],
@@ -177,7 +259,7 @@ export const EnablerProvider = () =>
           // Wait for the desired types to reach the terminal ENABLED state
           // before returning — otherwise a follow-up destroy would be rejected
           // with ENABLE_IN_PROGRESS.
-          if (toEnable.length > 0) {
+          if (desired.some((type) => !currentlyEnabled.includes(type))) {
             yield* waitUntilEnabled(accountId, desired);
           }
 
@@ -185,36 +267,28 @@ export const EnablerProvider = () =>
           // Disable teardown is slow (minutes); fire it and do not block, the
           // account converges to the desired set asynchronously.
           const previouslyManaged = output?.resourceTypes ?? [];
-          const toDisable = previouslyManaged.filter(
-            (t) => !desired.includes(t) && currentlyEnabled.includes(t),
+          const noLongerManaged = previouslyManaged.filter(
+            (type) => !desired.includes(type),
           );
-          if (toDisable.length > 0) {
-            yield* inspector2.disable({
-              accountIds: [accountId],
-              resourceTypes: toDisable,
-            });
-          }
+          yield* disableManagedTypes(accountId, noLongerManaged);
 
           const final = yield* getAccount(accountId);
+          const managed = [
+            ...new Set([
+              ...previouslyManaged.filter((type) => desired.includes(type)),
+              ...toEnable,
+            ]),
+          ];
           yield* session.note(accountId);
           return {
             accountId,
-            resourceTypes: desired,
+            resourceTypes: managed,
             state: final?.state?.status,
           };
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          if (output.resourceTypes.length === 0) return;
-          yield* inspector2
-            .disable({
-              accountIds: [output.accountId],
-              resourceTypes: output.resourceTypes,
-            })
-            .pipe(
-              Effect.catchTag("ValidationException", () => Effect.void),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* disableManagedTypes(output.accountId, output.resourceTypes);
         }),
       };
     }),

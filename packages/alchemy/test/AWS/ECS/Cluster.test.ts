@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -36,6 +36,13 @@ test.provider("list enumerates the deployed cluster", (stack) =>
       clusters: ["alchemy-test-ecs-cluster-list"],
     });
     expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
+      false,
+    );
+
+    // ECS can keep the terminal INACTIVE record discoverable for a while.
+    // Provider inventory (and therefore nuke) must treat it as deleted.
+    const afterList = yield* provider.list();
+    expect(afterList.some((c) => c.clusterArn === cluster.clusterArn)).toBe(
       false,
     );
   }),

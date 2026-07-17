@@ -4,10 +4,10 @@ import {
   Collection,
   SecurityPolicy,
 } from "@/AWS/OpenSearchServerless";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

@@ -31,6 +31,13 @@ export const makeTransferServerHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the server ARN. */
   actions: readonly string[];
+  /**
+   * Override the IAM resource derived from the server. Most server-scoped
+   * operations authorize against the server ARN; a few operations use a
+   * related resource type instead (for example, TestIdentityProvider uses a
+   * user ARN even though ServerId is the injected request identifier).
+   */
+  resource?: (server: Server) => string | Output.Output<string>;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
@@ -46,7 +53,10 @@ export const makeTransferServerHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [Output.interpolate`${server.arn}`],
+                Resource: [
+                  options.resource?.(server) ??
+                    Output.interpolate`${server.arn}`,
+                ],
               },
             ],
           });

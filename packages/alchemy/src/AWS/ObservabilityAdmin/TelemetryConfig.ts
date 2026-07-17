@@ -102,7 +102,7 @@ const awaitSettledStatus: Effect.Effect<
   ObsRequirements
 > = readStatus.pipe(
   Effect.repeat({
-    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     until: (status) => status !== "STARTING" && status !== "STOPPING",
   }),
 );

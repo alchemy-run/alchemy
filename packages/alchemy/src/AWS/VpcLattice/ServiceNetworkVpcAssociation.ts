@@ -12,7 +12,7 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { retryOnConflict, waitUntilStable } from "./internal.ts";
+import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
 
 export interface ServiceNetworkVpcAssociationProps {
   /**
@@ -228,15 +228,35 @@ export const ServiceNetworkVpcAssociationProvider = () =>
         }),
         list: () =>
           Effect.gen(function* () {
-            const summaries =
-              yield* vpclattice.listServiceNetworkVpcAssociations
-                .pages({})
-                .pipe(
-                  Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) => page.items ?? []),
+            // AWS does not support an unfiltered account-wide association
+            // listing: at least one serviceNetworkIdentifier or vpcIdentifier
+            // is required. Enumerate service networks first, then list each
+            // network's associations so nuke can discover orphaned links.
+            const serviceNetworkIds = yield* vpclattice.listServiceNetworks
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk)
+                    .flatMap((page) => page.items ?? [])
+                    .flatMap((network) =>
+                      network.id === undefined ? [] : [network.id],
+                    ),
+                ),
+              );
+            const summaries = (yield* Effect.forEach(
+              serviceNetworkIds,
+              (serviceNetworkIdentifier) =>
+                vpclattice.listServiceNetworkVpcAssociations
+                  .pages({ serviceNetworkIdentifier })
+                  .pipe(
+                    Stream.runCollect,
+                    Effect.map((chunk) =>
+                      Array.from(chunk).flatMap((page) => page.items ?? []),
+                    ),
                   ),
-                );
+              { concurrency: 10 },
+            )).flat();
             return yield* Effect.forEach(
               summaries.filter(
                 (s): s is typeof s & { id: string; arn: string } =>
@@ -271,7 +291,7 @@ export const ServiceNetworkVpcAssociationProvider = () =>
           // DELETE_IN_PROGRESS while hyperplane ENIs are torn down). Wait
           // until it is actually gone so a dependent ServiceNetwork delete
           // doesn't hit `ConflictException: has VPC(s) associated`.
-          yield* waitUntilStable(observe(output.associationId));
+          yield* waitUntilAbsent(observe(output.associationId));
         }),
       };
     }),

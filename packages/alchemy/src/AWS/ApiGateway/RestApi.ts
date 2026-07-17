@@ -10,7 +10,12 @@ import { createInternalTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 import { AWSEnvironment } from "../Environment.ts";
-import { restApiArn, retryOnApiStatusUpdating, syncTags } from "./common.ts";
+import {
+  deleteRestApiAndWait,
+  restApiArn,
+  retryOnApiStatusUpdating,
+  syncTags,
+} from "./common.ts";
 
 export interface RestApiProps {
   /**
@@ -486,11 +491,7 @@ export const RestApiProvider = () =>
           return snapshotFromApi(final);
         }),
         delete: Effect.fn(function* ({ output, session }) {
-          yield* retryOnApiStatusUpdating(
-            ag
-              .deleteRestApi({ restApiId: output.restApiId })
-              .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
-          );
+          yield* deleteRestApiAndWait(output.restApiId);
           yield* session.note(`Deleted REST API ${output.restApiId}`);
         }),
       };

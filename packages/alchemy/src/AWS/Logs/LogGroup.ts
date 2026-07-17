@@ -439,6 +439,33 @@ export const LogGroupProvider = () =>
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+
+          const remaining = yield* Effect.repeat(
+            logs
+              .describeLogGroups({
+                logGroupNamePrefix: output.logGroupName,
+                limit: 1,
+              })
+              .pipe(
+                Effect.map((response) =>
+                  (response.logGroups ?? []).some(
+                    (group) => group.logGroupName === output.logGroupName,
+                  ),
+                ),
+              ),
+            {
+              schedule: Schedule.fixed("250 millis"),
+              until: (present) => !present,
+              times: 20,
+            },
+          );
+          if (remaining) {
+            yield* Effect.die(
+              new Error(
+                `CloudWatch log group ${output.logGroupName} remained observable after delete`,
+              ),
+            );
+          }
         }),
       };
     }),

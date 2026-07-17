@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { JobDefinition } from "@/AWS/Batch/JobDefinition.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 

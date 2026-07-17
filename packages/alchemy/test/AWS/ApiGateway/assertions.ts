@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -22,8 +23,18 @@ export class ResourceStillExists extends Data.TaggedError(
 // also subject to the account-wide throttle during a busy suite — retry
 // both "still visible" and `TooManyRequestsException` briefly.
 const goneSchedule = Schedule.max([
-  Schedule.exponential(500),
-  Schedule.recurs(8),
+  Schedule.exponential(500).pipe(
+    Schedule.modifyDelay(({ duration }) =>
+      Effect.succeed(
+        Duration.isGreaterThan(duration, Duration.seconds(5))
+          ? Duration.seconds(5)
+          : duration,
+      ),
+    ),
+  ),
+  // 0.5 + 1 + 2 + 4 + five 5s delays = 32.5s, long enough to cross the
+  // account's ~30s read throttle while remaining inside the retry budget.
+  Schedule.recurs(9),
 ]);
 
 export const assertRestApiDeleted = Effect.fn(function* (restApiId: string) {

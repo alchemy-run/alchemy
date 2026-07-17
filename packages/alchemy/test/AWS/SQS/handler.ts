@@ -1,5 +1,6 @@
 import * as Lambda from "@/AWS/Lambda";
 import * as SQS from "@/AWS/SQS";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -37,6 +38,17 @@ export default SQSTestFunction.make(
         maxReceiveCount: 1000,
       },
     });
+    // Dedicated source for MessageMoveTasks. Messages must have actually
+    // redriven from a source queue to be eligible for DLQ redrive; directly
+    // sending to the DLQ is not deterministic. Keep this separate from the
+    // shared binding queue because maxReceiveCount=1 would interfere with the
+    // receive/visibility tests below.
+    const moveSource = yield* SQS.Queue("BindingsMoveSource", {
+      redrivePolicy: {
+        deadLetterTargetArn: dlq.queueArn,
+        maxReceiveCount: 1,
+      },
+    });
 
     const sendMessage = yield* SQS.SendMessage(queue);
     const sendMessageBatch = yield* SQS.SendMessageBatch(queue);
@@ -51,12 +63,13 @@ export default SQSTestFunction.make(
     const listDeadLetterSourceQueues =
       yield* SQS.ListDeadLetterSourceQueues(dlq);
     const startMessageMoveTask = yield* SQS.StartMessageMoveTask(dlq, {
-      destination: queue,
+      destination: moveSource,
     });
     const cancelMessageMoveTask = yield* SQS.CancelMessageMoveTask(dlq);
     const listMessageMoveTasks = yield* SQS.ListMessageMoveTasks(dlq);
     const queueUrl = yield* queue.queueUrl;
     const dlqUrl = yield* dlq.queueUrl;
+    const moveSourceUrl = yield* moveSource.queueUrl;
 
     return {
       fetch: Effect.gen(function* () {
@@ -71,6 +84,7 @@ export default SQSTestFunction.make(
             ok: true,
             queueUrl: yield* queueUrl,
             dlqUrl: yield* dlqUrl,
+            moveSourceUrl: yield* moveSourceUrl,
           });
         }
 
@@ -252,15 +266,20 @@ export default SQSTestFunction.make(
           const body = (yield* request.json) as unknown as {
             taskHandle: string;
           };
-          // A task that already finished cancels with the typed
-          // ResourceNotFoundException — surface that as canceled:false so the
-          // test can accept the benign race.
+          // A task that already finished is a benign race: SQS returns either
+          // ResourceNotFoundException or this exact typed validation message.
+          // Preserve every other InvalidParameterValueException as a failure.
           const canceled = yield* cancelMessageMoveTask({
             TaskHandle: body.taskHandle,
           }).pipe(
             Effect.map(() => true),
             Effect.catchTag("ResourceNotFoundException", () =>
               Effect.succeed(false),
+            ),
+            Effect.catchTag("InvalidParameterValueException", (error) =>
+              error.message === "Only active tasks can be cancelled."
+                ? Effect.succeed(false)
+                : Effect.fail(error),
             ),
           );
           return yield* HttpServerResponse.json({ canceled });
@@ -270,7 +289,18 @@ export default SQSTestFunction.make(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
         );
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Lambda's default failure response is only "Internal Server Error",
+        // which hides the typed SQS rejection that made the route fail. This
+        // is a test-only handler: return the pretty Effect cause so the live
+        // test log identifies the exact capability/IAM/consistency failure.
+        Effect.catchCause((cause) =>
+          HttpServerResponse.json(
+            { error: Cause.pretty(cause) },
+            { status: 500 },
+          ),
+        ),
+      ),
     };
   }).pipe(
     Effect.provide(

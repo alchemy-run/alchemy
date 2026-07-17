@@ -6,9 +6,9 @@ import {
 } from "@/AWS/CloudTrail";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -1,12 +1,17 @@
 import * as AWS from "@/AWS";
 import { Hub } from "@/AWS/SecurityHub/Hub.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as securityhub from "@distilled.cloud/aws/securityhub";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { makeSecurityHubTestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
+const testLease = makeSecurityHubTestLease();
+
+beforeAll(testLease.acquire, { timeout: 240_000 });
+afterAll(testLease.release);
 
 // `describeHub` throws `InvalidAccessException` when the account is not
 // subscribed to Security Hub.

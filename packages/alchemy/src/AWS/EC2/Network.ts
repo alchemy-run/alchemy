@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
+import * as Output from "../../Output.ts";
 import type { EIP as EIPResource } from "./EIP.ts";
 import { EIP } from "./EIP.ts";
 import type { InternetGateway as InternetGatewayResource } from "./InternetGateway.ts";
@@ -346,7 +347,20 @@ export const Network = (id: string, props: NetworkProps) =>
         privateRouteAssociations,
         gatewayEndpoints,
         vpcId: vpc.vpcId,
-        publicSubnetIds: publicSubnets.map((subnet) => subnet.subnetId),
+        // A "public subnet" is usable for public IPv4 only after both its
+        // route-table association and the route through the internet gateway
+        // exist. Preserve those dependencies in the convenience IDs returned
+        // to downstream resources. Besides preventing a launch/readiness race,
+        // this makes teardown order those consumers before the route and IGW;
+        // EC2 refuses to detach an IGW while an instance in the VPC still owns
+        // a public IPv4 address.
+        publicSubnetIds: publicSubnets.map((subnet, index) =>
+          Output.all(
+            subnet.subnetId,
+            publicRouteAssociations[index].associationId,
+            publicInternetRoute.routeTableId,
+          ).pipe(Output.map(([subnetId]) => subnetId)),
+        ),
         privateSubnetIds: privateSubnets.map((subnet) => subnet.subnetId),
       } satisfies NetworkResources;
     }).pipe(Effect.orDie),

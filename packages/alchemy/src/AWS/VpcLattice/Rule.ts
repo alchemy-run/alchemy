@@ -13,7 +13,7 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { retryOnConflict } from "./internal.ts";
+import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
 
 /**
  * The match conditions of a listener rule (HTTP method, path, and header
@@ -319,14 +319,16 @@ export const RuleProvider = () =>
             JSON.stringify(rule.action) !== JSON.stringify(news.action)
           ) {
             // Sync match/priority/action — all mutable in place.
-            yield* vpclattice.updateRule({
-              serviceIdentifier: news.serviceIdentifier,
-              listenerIdentifier: news.listenerIdentifier,
-              ruleIdentifier: rule.id,
-              match: news.match,
-              priority: news.priority,
-              action: news.action,
-            });
+            yield* retryOnConflict(
+              vpclattice.updateRule({
+                serviceIdentifier: news.serviceIdentifier,
+                listenerIdentifier: news.listenerIdentifier,
+                ruleIdentifier: rule.id,
+                match: news.match,
+                priority: news.priority,
+                action: news.action,
+              }),
+            );
           }
 
           yield* syncTags(rule.arn, desiredTags);
@@ -354,6 +356,13 @@ export const RuleProvider = () =>
             }),
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          yield* waitUntilAbsent(
+            observe(
+              output.serviceIdentifier,
+              output.listenerIdentifier,
+              output.ruleId,
+            ),
           );
         }),
       };

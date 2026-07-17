@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Alarm } from "@/AWS/CloudWatch/Alarm.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

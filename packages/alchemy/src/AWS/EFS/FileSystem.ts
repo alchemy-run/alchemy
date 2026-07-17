@@ -251,10 +251,22 @@ export interface FileSystem extends Resource<
  */
 export const FileSystem = Resource<FileSystem>("AWS.EFS.FileSystem");
 
+const isMutableEfsTagKey = (key: string): boolean =>
+  !key.toLowerCase().startsWith("aws:");
+
+const mutableEfsTags = (tags: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(tags).filter(([key]) => isMutableEfsTagKey(key)),
+  );
+
 const efsTagsToRecord = (
   tags: readonly efs.Tag[] | undefined,
 ): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
+  Object.fromEntries(
+    (tags ?? [])
+      .filter((tag) => isMutableEfsTagKey(tag.Key))
+      .map((tag) => [tag.Key, tag.Value]),
+  );
 
 /**
  * A file system briefly reports `creating`/`updating` before settling in
@@ -457,9 +469,9 @@ export const FileSystemProvider = () =>
                 ThroughputMode: news.throughputMode,
                 ProvisionedThroughputInMibps: news.provisionedThroughputInMibps,
                 AvailabilityZoneName: news.availabilityZoneName,
-                Tags: Object.entries({ ...news.tags, ...internalTags }).map(
-                  ([Key, Value]) => ({ Key, Value }),
-                ),
+                Tags: Object.entries(
+                  mutableEfsTags({ ...news.tags, ...internalTags }),
+                ).map(([Key, Value]) => ({ Key, Value })),
               })
               .pipe(
                 Effect.catchTag("FileSystemAlreadyExists", (e) =>
@@ -608,10 +620,11 @@ export const FileSystemProvider = () =>
           // 3f. SYNC tags — diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = efsTagsToRecord(fs.Tags);
-          const { upsert, removed } = diffTags(observedTags, {
+          const desiredTags = mutableEfsTags({
             ...news.tags,
             ...internalTags,
           });
+          const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* efs.tagResource({
               ResourceId: fileSystemId,

@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Output from "@/Output";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as ddb from "@distilled.cloud/aws/dynamodb";
@@ -9,7 +9,7 @@ import * as lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as sfn from "@distilled.cloud/aws/sfn";
 import * as sqs from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

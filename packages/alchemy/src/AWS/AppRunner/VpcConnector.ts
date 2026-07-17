@@ -1,4 +1,5 @@
 import * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -120,6 +121,13 @@ const sameStringSet = (
   const right = [...(b ?? [])].sort();
   return left.length === right.length && left.every((v, i) => v === right[i]);
 };
+
+class VpcConnectorStillActive extends Data.TaggedError(
+  "VpcConnectorStillActive",
+)<{
+  readonly vpcConnectorArn: string;
+  readonly status: string;
+}> {}
 
 export const VpcConnectorProvider = () =>
   Provider.effect(
@@ -257,11 +265,42 @@ export const VpcConnectorProvider = () =>
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
-                while: (e) => e._tag === "InvalidRequestException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
+                while: (e) =>
+                  e._tag === "InvalidRequestException" ||
+                  e._tag === "InternalServiceErrorException",
+                schedule: Schedule.fixed("5 seconds"),
+                times: 8,
+              }),
+            );
+
+          // App Runner retains deleted connector revisions as INACTIVE, so
+          // INACTIVE is the service's terminal deleted state. Do not release
+          // Alchemy state while the connector is still ACTIVE: App Runner's
+          // managed ENIs would keep stack-owned subnets and security groups in
+          // use and make their bottom-up teardown flaky.
+          yield* apprunner
+            .describeVpcConnector({
+              VpcConnectorArn: output.vpcConnectorArn,
+            })
+            .pipe(
+              Effect.flatMap(({ VpcConnector }) => {
+                const status = (VpcConnector.Status ?? "ACTIVE").toUpperCase();
+                return status === "INACTIVE"
+                  ? Effect.void
+                  : Effect.fail(
+                      new VpcConnectorStillActive({
+                        vpcConnectorArn: output.vpcConnectorArn,
+                        status,
+                      }),
+                    );
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.retry({
+                while: (e) =>
+                  e._tag === "VpcConnectorStillActive" ||
+                  e._tag === "InternalServiceErrorException",
+                schedule: Schedule.fixed("3 seconds"),
+                times: 10,
               }),
             );
         }),

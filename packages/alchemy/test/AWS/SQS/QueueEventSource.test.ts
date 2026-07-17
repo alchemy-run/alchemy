@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -32,6 +32,10 @@ describe.sequential("AWS.SQS.QueueEventSource", () => {
         // until the fixture reports both queue identifiers.
         const { sourceQueueUrl, sourceQueueArn, resultQueueUrl } =
           yield* HttpClient.get(functionUrl).pipe(
+            Effect.timeout("4 seconds"),
+            Effect.mapError(
+              () => new FunctionNotReady("Function URL request timed out"),
+            ),
             Effect.flatMap((response) =>
               response.status === 200
                 ? (response.json as Effect.Effect<{
@@ -62,8 +66,8 @@ describe.sequential("AWS.SQS.QueueEventSource", () => {
             ),
             Effect.retry({
               schedule: Schedule.max([
-                Schedule.fixed("1 seconds"),
-                Schedule.recurs(60),
+                Schedule.fixed("4 seconds"),
+                Schedule.recurs(10),
               ]),
             }),
           );
@@ -106,8 +110,8 @@ describe.sequential("AWS.SQS.QueueEventSource", () => {
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
             schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(30),
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(10),
             ]),
           }),
         );
@@ -142,8 +146,8 @@ const waitForEventSourceMappingEnabled = Effect.fn(function* (
     Effect.retry({
       while: (error) => error._tag === "EventSourceMappingNotReady",
       schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(30),
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(10),
       ]),
     }),
   );
@@ -163,8 +167,8 @@ const assertQueueDeleted = Effect.fn(function* (queueUrl: string) {
       // cadence with a bounded budget.
       while: (e) => e._tag === "QueueStillExists",
       schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(45),
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(10),
       ]),
     }),
     Effect.catchTag("QueueDoesNotExist", () => Effect.void),

@@ -7,9 +7,9 @@ import {
 } from "@/AWS/Cognito";
 import { Role } from "@/AWS/IAM";
 import * as Output from "@/Output";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ci from "@distilled.cloud/aws/cognito-identity";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

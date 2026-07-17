@@ -1,6 +1,7 @@
 import * as CodeBuild from "@/AWS/CodeBuild";
 import * as IAM from "@/AWS/IAM";
 import * as Lambda from "@/AWS/Lambda";
+import * as Logs from "@/AWS/Logs";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -67,16 +68,22 @@ export default CodeBuildTestFunction.make(
           Statement: [
             {
               Effect: "Allow",
-              Action: [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents",
-              ],
+              Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
               Resource: ["*"],
             },
           ],
         },
       },
+    });
+
+    // Own CodeBuild's deterministic log destination in the stack instead of
+    // allowing the service to create its implicit `/aws/codebuild/...` group.
+    // Project depends on this output, so destroy deletes the Project before
+    // the LogGroup; removing CreateLogGroup above prevents a late-finishing
+    // build from recreating it after the observed LogGroup deletion.
+    const buildLogs = yield* Logs.LogGroup("BindingsBuildLogs", {
+      logGroupName: `/aws/codebuild/${FIXTURE_PROJECT_NAME}`,
+      retention: "1 day",
     });
 
     const project = yield* CodeBuild.Project("BindingsProject", {
@@ -86,6 +93,13 @@ export default CodeBuildTestFunction.make(
       environment: {
         image: "aws/codebuild/amazonlinux2-x86_64-standard:5.0",
         computeType: "BUILD_GENERAL1_SMALL",
+      },
+      logsConfig: {
+        cloudWatchLogs: {
+          status: "ENABLED",
+          groupName: buildLogs.logGroupName,
+        },
+        s3Logs: { status: "DISABLED" },
       },
     });
 

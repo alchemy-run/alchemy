@@ -1,16 +1,14 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as dsql from "@distilled.cloud/aws/dsql";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import { Db } from "./fixtures/db";
 import DsqlDirectFunctionLive, {
   DsqlDirectFunction,
@@ -36,6 +34,13 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly body: string;
 }> {}
 
+class FixtureReadinessFailed extends Data.TaggedError(
+  "FixtureReadinessFailed",
+)<{
+  readonly status: number;
+  readonly body: string;
+}> {}
+
 class ClusterStillPresent extends Data.TaggedError("ClusterStillPresent")<{
   readonly clusterId: string;
 }> {}
@@ -43,8 +48,8 @@ class ClusterStillPresent extends Data.TaggedError("ClusterStillPresent")<{
 // The fixtures surface every failure as a 500 (handler-level `Effect.orDie`).
 // A 5xx here is a cold init or a first-connect transient — retry bounded;
 // 4xx/assertion failures surface immediately.
-const send = (request: HttpClientRequest.HttpClientRequest) =>
-  HttpClient.execute(request).pipe(
+const send = (request: () => HttpClientRequest.HttpClientRequest) =>
+  Effect.suspend(() => HttpClient.execute(request())).pipe(
     Effect.flatMap((response) =>
       response.status >= 500
         ? response.text.pipe(
@@ -58,17 +63,40 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.spaced("5 seconds"),
+      times: 8,
     }),
   );
 
 const postJson = (url: string, body: unknown) =>
-  send(
+  send(() =>
     HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(url), body),
   ).pipe(Effect.flatMap((r) => r.json));
+
+const waitForFixture = (url: string) =>
+  Effect.suspend(() => HttpClient.get(url)).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? Effect.void
+        : response.text.pipe(
+            Effect.flatMap((body) => {
+              const error: TransientUpstream | FixtureReadinessFailed =
+                response.status >= 500
+                  ? new TransientUpstream({ status: response.status, body })
+                  : new FixtureReadinessFailed({
+                      status: response.status,
+                      body,
+                    });
+              return Effect.fail(error);
+            }),
+          ),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "TransientUpstream",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 18,
+    }),
+  );
 
 describe("DSQL.Connect", () => {
   beforeAll(
@@ -105,20 +133,9 @@ describe("DSQL.Connect", () => {
       clusterId = outputs.clusterId;
 
       // Function URL propagation + cold start + first token-auth connect.
-      // Bounded: 5s x 24 = 2 min ceiling.
-      yield* HttpClient.get(`${drizzleUrl}/health`).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(new Error(`Fixture not ready: ${response.status}`)),
-        ),
-        Effect.retry({
-          schedule: Schedule.max([
-            Schedule.spaced("5 seconds"),
-            Schedule.recurs(24),
-          ]),
-        }),
-      );
+      // Bounded: retry transient 5xx responses for at most 90 seconds. Each
+      // attempt creates a fresh request; non-transient statuses fail directly.
+      yield* waitForFixture(`${drizzleUrl}/health`);
       yield* Effect.logInfo(
         `DSQL.Connect setup: fixtures ready (cluster ${clusterId})`,
       );
@@ -174,7 +191,7 @@ describe("DSQL.Connect", () => {
         })) as { success: boolean };
         expect(insert.success).toBe(true);
 
-        const select = (yield* send(
+        const select = (yield* send(() =>
           HttpClientRequest.get(`${drizzleUrl}/select?id=1`),
         ).pipe(Effect.flatMap((r) => r.json))) as {
           rows: { id: number; title: string }[];
@@ -189,7 +206,7 @@ describe("DSQL.Connect", () => {
     "resolves connection info with a fresh IAM auth token",
     (_stack) =>
       Effect.gen(function* () {
-        const info = (yield* send(
+        const info = (yield* send(() =>
           HttpClientRequest.get(`${directUrl}/info`),
         ).pipe(Effect.flatMap((r) => r.json))) as {
           host: string;
@@ -215,7 +232,7 @@ describe("DSQL.Connect", () => {
     "GetVpcEndpointServiceName binding resolves the PrivateLink service name",
     (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
+        const response = (yield* send(() =>
           HttpClientRequest.get(`${directUrl}/vpc-endpoint-service`),
         ).pipe(Effect.flatMap((r) => r.json))) as {
           serviceName: string;

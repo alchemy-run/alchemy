@@ -13,7 +13,7 @@ import {
   tagRecord,
 } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { retryOnConflict } from "./internal.ts";
+import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
 
 /**
  * Authorization mode for a service network. `NONE` allows all traffic;
@@ -150,6 +150,164 @@ export const ServiceNetworkProvider = () =>
         }
       });
 
+      const isOwnedAssociation = Effect.fn(function* (
+        arn: string,
+        ownerTags: Record<string, string>,
+      ) {
+        const listed = yield* vpclattice
+          .listTagsForResource({ resourceArn: arn })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        if (!listed) return false;
+        const tags = tagRecord(listed.tags);
+        return (
+          tags["alchemy::id"] !== undefined &&
+          tags["alchemy::stack"] === ownerTags["alchemy::stack"] &&
+          tags["alchemy::stage"] === ownerTags["alchemy::stage"]
+        );
+      });
+
+      const deleteVpcAssociations = Effect.fn(function* (
+        serviceNetworkId: string,
+        ownerTags: Record<string, string>,
+        force: boolean,
+      ) {
+        const pages = yield* vpclattice.listServiceNetworkVpcAssociations
+          .pages({ serviceNetworkIdentifier: serviceNetworkId })
+          .pipe(Stream.runCollect);
+        const associations = Array.from(pages).flatMap(
+          (page) => page.items ?? [],
+        );
+        yield* Effect.forEach(
+          associations,
+          (association) =>
+            Effect.gen(function* () {
+              if (
+                !association.id ||
+                !association.arn ||
+                (!force &&
+                  !(yield* isOwnedAssociation(association.arn, ownerTags)))
+              ) {
+                return;
+              }
+              yield* retryOnConflict(
+                vpclattice.deleteServiceNetworkVpcAssociation({
+                  serviceNetworkVpcAssociationIdentifier: association.id,
+                }),
+              ).pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+              yield* waitUntilAbsent(
+                vpclattice
+                  .getServiceNetworkVpcAssociation({
+                    serviceNetworkVpcAssociationIdentifier: association.id,
+                  })
+                  .pipe(
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  ),
+              );
+            }),
+          { concurrency: 10 },
+        );
+      });
+
+      const deleteServiceAssociations = Effect.fn(function* (
+        serviceNetworkId: string,
+        ownerTags: Record<string, string>,
+        force: boolean,
+      ) {
+        const pages = yield* vpclattice.listServiceNetworkServiceAssociations
+          .pages({ serviceNetworkIdentifier: serviceNetworkId })
+          .pipe(Stream.runCollect);
+        const associations = Array.from(pages).flatMap(
+          (page) => page.items ?? [],
+        );
+        yield* Effect.forEach(
+          associations,
+          (association) =>
+            Effect.gen(function* () {
+              if (
+                !association.id ||
+                !association.arn ||
+                (!force &&
+                  !(yield* isOwnedAssociation(association.arn, ownerTags)))
+              ) {
+                return;
+              }
+              yield* retryOnConflict(
+                vpclattice.deleteServiceNetworkServiceAssociation({
+                  serviceNetworkServiceAssociationIdentifier: association.id,
+                }),
+              ).pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+              yield* waitUntilAbsent(
+                vpclattice
+                  .getServiceNetworkServiceAssociation({
+                    serviceNetworkServiceAssociationIdentifier: association.id,
+                  })
+                  .pipe(
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  ),
+              );
+            }),
+          { concurrency: 10 },
+        );
+      });
+
+      const deleteResourceAssociations = Effect.fn(function* (
+        serviceNetworkId: string,
+        ownerTags: Record<string, string>,
+        force: boolean,
+      ) {
+        const pages = yield* vpclattice.listServiceNetworkResourceAssociations
+          .pages({ serviceNetworkIdentifier: serviceNetworkId })
+          .pipe(Stream.runCollect);
+        const associations = Array.from(pages).flatMap(
+          (page) => page.items ?? [],
+        );
+        yield* Effect.forEach(
+          associations,
+          (association) =>
+            Effect.gen(function* () {
+              if (
+                !association.id ||
+                !association.arn ||
+                (!force &&
+                  !(yield* isOwnedAssociation(association.arn, ownerTags)))
+              ) {
+                return;
+              }
+              yield* retryOnConflict(
+                vpclattice.deleteServiceNetworkResourceAssociation({
+                  serviceNetworkResourceAssociationIdentifier: association.id,
+                }),
+              ).pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+              yield* waitUntilAbsent(
+                vpclattice
+                  .getServiceNetworkResourceAssociation({
+                    serviceNetworkResourceAssociationIdentifier: association.id,
+                  })
+                  .pipe(
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  ),
+              );
+            }),
+          { concurrency: 10 },
+        );
+      });
+
       return {
         stables: ["serviceNetworkId", "serviceNetworkArn", "name"],
         diff: Effect.fn(function* ({ id, olds, news }) {
@@ -254,7 +412,36 @@ export const ServiceNetworkProvider = () =>
               { concurrency: 10 },
             );
           }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, force }) {
+          if (!(yield* observe(output.serviceNetworkId))) {
+            return;
+          }
+          // Nuke discovers resources independently and therefore cannot rely on
+          // the stack dependency graph to order association deletion before the
+          // service network. An operator-confirmed nuke may remove every
+          // attached association blocking deletion. Ordinary stack deletion is
+          // deliberately conservative and removes only associations owned by
+          // the same Alchemy stack/stage.
+          yield* Effect.all(
+            [
+              deleteVpcAssociations(
+                output.serviceNetworkId,
+                output.tags,
+                force === true,
+              ),
+              deleteServiceAssociations(
+                output.serviceNetworkId,
+                output.tags,
+                force === true,
+              ),
+              deleteResourceAssociations(
+                output.serviceNetworkId,
+                output.tags,
+                force === true,
+              ),
+            ],
+            { concurrency: 3 },
+          );
           yield* retryOnConflict(
             vpclattice.deleteServiceNetwork({
               serviceNetworkIdentifier: output.serviceNetworkId,
@@ -262,6 +449,7 @@ export const ServiceNetworkProvider = () =>
           ).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
+          yield* waitUntilAbsent(observe(output.serviceNetworkId));
         }),
       };
     }),

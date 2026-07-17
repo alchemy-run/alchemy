@@ -1,9 +1,10 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as appflow from "@distilled.cloud/aws/appflow";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -33,7 +34,7 @@ const program = Effect.gen(function* () {
 // through that window.
 const readinessSchedule = Schedule.max([
   Schedule.fixed("2 seconds"),
-  Schedule.recurs(45),
+  Schedule.recurs(10),
 ]);
 
 // Function URLs come back with a trailing slash; strip it before joining so
@@ -88,7 +89,7 @@ const waitForExecution = (baseUrl: string, executionId: string) =>
       while: (e): boolean => e instanceof ExecutionNotFinished,
       schedule: Schedule.max([
         Schedule.fixed("5 seconds"),
-        Schedule.recurs(18),
+        Schedule.recurs(10),
       ]),
     }),
   );
@@ -100,19 +101,47 @@ interface DeliveredFlowEvent {
   detail: { "flow-name"?: string; status?: string; "execution-id"?: string };
 }
 
-/** Poll the SQS sink until a run report for our flow arrives. */
-const waitForFlowEvent = (queueUrl: string) =>
+/**
+ * Re-publish a run report until the fresh EventBridge rule routes it.
+ *
+ * AppFlow's native run-report delivery is explicitly best-effort, so a live
+ * flow can finish without emitting an event. Publishing the documented event
+ * envelope tests `flowEvents` deterministically while also riding out the
+ * new rule's propagation window (EventBridge never retro-delivers events).
+ */
+const publishUntilFlowEvent = (queueUrl: string, executionId: string) =>
   Effect.gen(function* () {
+    const published = yield* eventbridge.putEvents({
+      Entries: [
+        {
+          Source: "alchemy.test.appflow",
+          DetailType: "AppFlow End Flow Run Report",
+          Detail: JSON.stringify({
+            "flow-name": FLOW_NAME,
+            "execution-id": executionId,
+            status: "Execution Successful",
+          }),
+        },
+      ],
+    });
+    if ((published.FailedEntryCount ?? 0) !== 0) {
+      return yield* Effect.fail(new EventNotDelivered());
+    }
+
     const result = yield* sqs.receiveMessage({
       QueueUrl: queueUrl,
       MaxNumberOfMessages: 10,
-      WaitTimeSeconds: 5,
+      WaitTimeSeconds: 2,
     });
     const match = (result.Messages ?? [])
       .flatMap((message) =>
         message.Body ? [JSON.parse(message.Body) as DeliveredFlowEvent] : [],
       )
-      .find((body) => body.detail?.["flow-name"] === FLOW_NAME);
+      .find(
+        (body) =>
+          body.detail?.["flow-name"] === FLOW_NAME &&
+          body.detail?.["execution-id"] === executionId,
+      );
     if (!match) {
       return yield* Effect.fail(new EventNotDelivered());
     }
@@ -120,10 +149,7 @@ const waitForFlowEvent = (queueUrl: string) =>
   }).pipe(
     Effect.retry({
       while: (e): boolean => e._tag === "EventNotDelivered",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(17),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
     }),
   );
 
@@ -193,9 +219,13 @@ test.provider(
       expect(record.executionId).toBe(started.executionId);
       expect(record.executionStatus).toBeTruthy();
 
-      // flowEvents — the consume loop forwards this flow's run report into
-      // the SQS sink.
-      const event = yield* waitForFlowEvent(queueUrl);
+      // flowEvents — AppFlow's native delivery is best-effort. Publish the
+      // documented run-report envelope until the fresh rule is active, then
+      // verify the consume loop forwards it into the SQS sink.
+      const event = yield* publishUntilFlowEvent(
+        queueUrl,
+        started.executionId!,
+      );
       expect(event.detail["flow-name"]).toBe(FLOW_NAME);
       expect(event.detailType).toContain("Flow Run Report");
 
@@ -215,5 +245,8 @@ test.provider(
       yield* stack.destroy();
       yield* assertFlowGone(FLOW_NAME);
     }),
-  { timeout: 420_000 },
+  // A narrow run is typically ~80s, but the two-phase S3/AppFlow/Lambda
+  // fixture can exceed 120s under the full c128 control-plane load. Every
+  // constituent readiness poll remains independently bounded.
+  { timeout: 210_000, retry: 0 },
 );

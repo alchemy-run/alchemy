@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -39,10 +39,10 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       expect(publicIpAddress).toBeTruthy();
-      // Unredact the returned private key so it can be printed / used for SSH.
+      // Unredact only to prove the returned value is usable key material. Do
+      // not log the ephemeral private key into the test artifact.
       const pem = privateKey ? Redacted.value(privateKey) : undefined;
       expect(pem).toContain("PRIVATE KEY");
-      yield* Effect.log(`instance ssh private key:\n${pem}`);
       const base = `http://${publicIpAddress}:3000`;
 
       // Poll until the instance boots, installs bun, syncs the bundle from S3,
@@ -60,15 +60,28 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(served).toBe(true);
 
-      const body = yield* HttpClient.get(`${base}/health`).pipe(
-        Effect.flatMap((res) => res.json),
-      );
+      const getJson = (path: string) =>
+        HttpClient.get(`${base}${path}`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : Effect.fail(
+                  new Error(`${path} temporarily returned ${res.status}`),
+                ),
+          ),
+          // cloud-init/systemd can briefly restart the hosted process just
+          // after the first successful health probe, especially while a full
+          // network lane is saturating EC2. Bound the post-readiness probes as
+          // well as the initial health poll.
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
+        );
+
+      const body = yield* getJson("/health");
       expect(body).toEqual({ ok: true });
 
       // Prove the ServerHost.run background loop is executing on the instance:
       // the tick counter climbs between two reads.
-      const readTicks = HttpClient.get(`${base}/ticks`).pipe(
-        Effect.flatMap((res) => res.json),
+      const readTicks = getJson("/ticks").pipe(
         Effect.map((value) => (value as { ticks: number }).ticks),
       );
       const first = yield* readTicks;

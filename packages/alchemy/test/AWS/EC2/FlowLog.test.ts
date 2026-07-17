@@ -3,9 +3,9 @@ import { FlowLog, Vpc } from "@/AWS/EC2";
 import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -29,7 +29,7 @@ const assertDeleted = Effect.fn(function* (flowLogId: string) {
     ),
     Effect.retry({
       while: (e) => e instanceof FlowLogStillExists,
-      schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(20)]),
+      schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(8)]),
     }),
     Effect.catchTag("InvalidFlowLogId.NotFound", () => Effect.void),
   );

@@ -27,6 +27,10 @@ export default DsqlDrizzleFunction.make(
     main,
     url: true,
     timeout: Duration.seconds(30),
+    // `pg` is CommonJS and Rolldown's bundled interop turns its Client export
+    // into a namespace object under Node. Install it intact in the Lambda
+    // artifact so @effect/sql-pg loads the package with Node's CJS semantics.
+    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const cluster = yield* Db;

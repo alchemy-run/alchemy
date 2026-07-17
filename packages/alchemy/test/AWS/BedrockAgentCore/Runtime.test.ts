@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Runtime } from "@/AWS/BedrockAgentCore";
 import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

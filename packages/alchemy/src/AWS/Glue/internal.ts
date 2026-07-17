@@ -134,6 +134,35 @@ export const retryWhileRoleNotAssumable = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
   });
 
+/**
+ * Glue validates crawler S3 targets through a service credential that can lag
+ * a newly-created bucket. Retry only the distilled synthetic tag for the
+ * observed InvalidAccessKeyId propagation failure.
+ */
+export const retryWhileCrawlerTargetNotReady = <
+  A,
+  E extends { _tag: string },
+  R,
+>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "GlueS3TargetNotReady",
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
+  });
+
+/** Bounded retry for transient states that prevent crawler deletion. */
+export const retryCrawlerDelete = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) =>
+      e._tag === "CrawlerRunningException" ||
+      e._tag === "SchedulerTransitioningException" ||
+      e._tag === "OperationTimeoutException",
+    schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+  });
+
 /** Glue free-form parameter/label maps arrive with `undefined` values erased. */
 export const cleanMap = (
   map: Record<string, string | undefined> | undefined,

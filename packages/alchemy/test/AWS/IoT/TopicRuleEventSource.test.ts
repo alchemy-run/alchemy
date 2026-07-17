@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -32,6 +32,11 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
         const { resultQueueUrl } = yield* HttpClient.get(
           `${functionUrl}/ready`,
         ).pipe(
+          // Bound each fetch attempt so a transient Function URL DNS/socket
+          // stall reaches the retry schedule instead of consuming the whole
+          // test timeout.
+          Effect.timeout("4 seconds"),
+          Effect.mapError(() => new FunctionNotReady("ready request")),
           Effect.flatMap((response) =>
             response.status === 200
               ? (response.json as Effect.Effect<{ resultQueueUrl?: string }>)
@@ -44,8 +49,8 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
           ),
           Effect.retry({
             schedule: Schedule.max([
-              Schedule.fixed("1 seconds"),
-              Schedule.recurs(60),
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(10),
             ]),
           }),
         );
@@ -59,6 +64,8 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
             HttpClientRequest.bodyJsonUnsafe({ marker }),
           ),
         ).pipe(
+          Effect.timeout("4 seconds"),
+          Effect.mapError(() => new FunctionNotReady("publish request")),
           Effect.filterOrFail(
             (response) => response.status === 200,
             (response) => new FunctionNotReady(`publish ${response.status}`),
@@ -66,16 +73,15 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
           Effect.retry({
             while: (e) => e._tag === "FunctionNotReady",
             schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(15),
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(10),
             ]),
           }),
         );
 
         // Poll the result queue until the forwarded message (carrying the
-        // marker) shows up. Bounded: ~45 polls, each a 2s long-poll — IoT rule
-        // provisioning + permission propagation can take a while on a fresh
-        // deploy, so republish periodically while we wait.
+        // marker) shows up. IoT rule and permission propagation are eventually
+        // consistent, so republish while waiting, bounded to about 50 seconds.
         const received = yield* Effect.gen(function* () {
           const result = yield* SQS.receiveMessage({
             QueueUrl: resultQueueUrl,
@@ -92,7 +98,7 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
               HttpClientRequest.post(`${functionUrl}/publish`).pipe(
                 HttpClientRequest.bodyJsonUnsafe({ marker }),
               ),
-            ).pipe(Effect.ignore);
+            ).pipe(Effect.timeout("4 seconds"), Effect.ignore);
             return yield* Effect.fail(new MessageNotDelivered());
           }
           yield* SQS.deleteMessage({
@@ -104,8 +110,8 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
             schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(45),
+              Schedule.fixed("3 seconds"),
+              Schedule.recurs(10),
             ]),
           }),
         );
@@ -137,13 +143,13 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
           Effect.retry({
             while: (e) => e._tag === "ResourceStillExists",
             schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(30),
+              Schedule.spaced("5 seconds"),
+              Schedule.recurs(10),
             ]),
           }),
         );
       }),
-    { timeout: 300_000 },
+    { timeout: 180_000 },
   );
 });
 

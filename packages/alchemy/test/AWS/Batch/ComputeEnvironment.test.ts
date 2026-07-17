@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import { ComputeEnvironment } from "@/AWS/Batch/ComputeEnvironment.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { BatchTestNetwork } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -19,16 +20,20 @@ const describeCe = batch
   );
 
 test.provider(
-  "lifecycle: create with default-VPC networking, update, destroy",
+  "lifecycle: create with stack-owned networking, update, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // Create — no subnets/security groups: exercises default-VPC fallback.
+      // Create with a stack-owned network. Creating an ambient default VPC
+      // leaves AWS-generated resources outside this stack's state.
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
+          const network = yield* BatchTestNetwork;
           return yield* ComputeEnvironment("LifecycleCE", {
             computeEnvironmentName: ceName,
+            subnets: network.subnetIds,
+            securityGroupIds: network.securityGroupIds,
           });
         }),
       );
@@ -56,10 +61,13 @@ test.provider(
       // Update — maxvCpus and state sync in place (no replacement).
       yield* stack.deploy(
         Effect.gen(function* () {
+          const network = yield* BatchTestNetwork;
           return yield* ComputeEnvironment("LifecycleCE", {
             computeEnvironmentName: ceName,
             maxvCpus: 8,
             state: "DISABLED",
+            subnets: network.subnetIds,
+            securityGroupIds: network.securityGroupIds,
           });
         }),
       );
@@ -73,5 +81,5 @@ test.provider(
       const after = yield* describeCe;
       expect(after).toBeUndefined();
     }),
-  { timeout: 480_000 },
+  { timeout: 240_000 },
 );

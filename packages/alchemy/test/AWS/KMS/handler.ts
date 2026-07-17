@@ -16,7 +16,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * "deleted" state; pending-deletion keys are not billed). A passing run
  * therefore leaves no aliases and no enabled keys behind.
  */
-export const STANDING_KEY_ALIAS = "alias/alchemy-test-bindings" as const;
+export const STANDING_KEY_ALIAS = "alias/alchemy-test-kms-bindings" as const;
 export const STANDING_HMAC_KEY_ALIAS =
   "alias/alchemy-test-bindings-hmac" as const;
 export const STANDING_SIGNING_KEY_ALIAS =

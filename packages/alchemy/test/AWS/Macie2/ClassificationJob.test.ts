@@ -3,12 +3,19 @@ import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { ClassificationJob } from "@/AWS/Macie2/ClassificationJob.ts";
 import { Session } from "@/AWS/Macie2/Session.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as macie2 from "@distilled.cloud/aws/macie2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { makeMacie2TestLease } from "./TestLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
+const testLease = makeMacie2TestLease();
+
+// Lease acquisition may queue behind the complete lifecycle of every other
+// Macie file. This does not widen any cloud-operation polling budget.
+beforeAll(testLease.acquire, { timeout: 3_600_000 });
+afterAll(testLease.release);
 
 const getSession = macie2.getMacieSession({}).pipe(
   Effect.map((s) => s as macie2.GetMacieSessionResponse | undefined),

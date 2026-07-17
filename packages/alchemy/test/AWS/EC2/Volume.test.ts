@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import { Volume } from "@/AWS/EC2";
+import { Alias, Key, type AliasName } from "@/AWS/KMS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as kms from "@distilled.cloud/aws/kms";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -50,6 +51,9 @@ test.provider(
       expect(v?.Size).toBe(1);
       expect(v?.AvailabilityZone).toBe(AZ);
       expect(v?.State === "available" || v?.State === "creating").toBe(true);
+      expect(
+        v?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value,
+      ).toBeTruthy();
 
       // list() enumerates the deployed volume.
       const provider = yield* Provider.findProvider(Volume);
@@ -62,85 +66,159 @@ test.provider(
   { timeout: 120_000 },
 );
 
-// The standing test key shared with test/AWS/KMS ($1/mo, 7-day deletion
-// window — never created/deleted per run). An account nuke can remove it or
-// leave it pending deletion, which makes encrypted-volume creation fail
-// asynchronously (the volume silently transitions to error/deleted), so heal
-// it before deploying.
-const STANDING_KEY_ALIAS = "alias/alchemy-test-bindings";
+class AliasStillExists extends Data.TaggedError("AliasStillExists") {}
+class KeyNotPendingDeletion extends Data.TaggedError("KeyNotPendingDeletion") {}
 
-const ensureStandingKey = Effect.gen(function* () {
-  const existing = yield* kms.describeKey({ KeyId: STANDING_KEY_ALIAS }).pipe(
-    Effect.map((response) => response.KeyMetadata),
-    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-  );
+const kmsObservationSchedule = Schedule.max([
+  Schedule.fixed("1 second"),
+  Schedule.recurs(30),
+]);
 
-  if (existing?.KeyId) {
-    if (existing.KeyState === "PendingDeletion") {
-      yield* kms.cancelKeyDeletion({ KeyId: existing.KeyId });
-      yield* kms.enableKey({ KeyId: existing.KeyId });
-    } else if (existing.Enabled === false) {
-      yield* kms.enableKey({ KeyId: existing.KeyId });
+/**
+ * Idempotent out-of-band backstop for the stack-managed fixture. KMS keys
+ * cannot be hard-deleted, so the clean terminal state is alias NotFound plus
+ * key PendingDeletion. The stack provider remains the owner; this finalizer
+ * closes failure/timeout gaps and observes both terminal states before return.
+ */
+const releaseManagedKey = (
+  aliasName: AliasName | undefined,
+  keyId: string | undefined,
+) =>
+  Effect.gen(function* () {
+    let targetKeyId = keyId;
+    if (aliasName !== undefined) {
+      const viaAlias = yield* kms.describeKey({ KeyId: aliasName }).pipe(
+        Effect.map((response) => response.KeyMetadata),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      );
+      targetKeyId ??= viaAlias?.KeyId;
+
+      yield* kms.deleteAlias({ AliasName: aliasName }).pipe(
+        Effect.retry({
+          while: (error) =>
+            error._tag === "DependencyTimeoutException" ||
+            error._tag === "KMSInternalException",
+          schedule: Schedule.max([
+            Schedule.fixed("500 millis"),
+            Schedule.recurs(8),
+          ]),
+        }),
+        Effect.catchTag("NotFoundException", () => Effect.void),
+      );
+
+      yield* kms.describeKey({ KeyId: aliasName }).pipe(
+        Effect.flatMap(() => Effect.fail(new AliasStillExists())),
+        Effect.catchTag("NotFoundException", () => Effect.void),
+        Effect.retry({
+          while: (error) => error._tag === "AliasStillExists",
+          schedule: kmsObservationSchedule,
+        }),
+      );
     }
-    return existing.KeyId;
-  }
 
-  const created = yield* kms.createKey({
-    Description:
-      "Standing key for alchemy AWS binding tests — never deleted (see test/AWS/KMS/Bindings.test.ts)",
-    Tags: [{ TagKey: "alchemy:standing-fixture", TagValue: "kms-bindings" }],
+    if (targetKeyId !== undefined) {
+      const metadata = yield* kms.describeKey({ KeyId: targetKeyId }).pipe(
+        Effect.map((response) => response.KeyMetadata),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      );
+      if (metadata && metadata.KeyState !== "PendingDeletion") {
+        yield* kms
+          .scheduleKeyDeletion({
+            KeyId: targetKeyId,
+            PendingWindowInDays: 7,
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "DependencyTimeoutException" ||
+                error._tag === "KMSInternalException",
+              schedule: Schedule.max([
+                Schedule.fixed("500 millis"),
+                Schedule.recurs(8),
+              ]),
+            }),
+            Effect.catchTag(
+              ["KMSInvalidStateException", "NotFoundException"],
+              () => Effect.void,
+            ),
+          );
+      }
+
+      yield* kms.describeKey({ KeyId: targetKeyId }).pipe(
+        Effect.flatMap((response) =>
+          response.KeyMetadata?.KeyState === "PendingDeletion"
+            ? Effect.void
+            : Effect.fail(new KeyNotPendingDeletion()),
+        ),
+        Effect.catchTag("NotFoundException", () => Effect.void),
+        Effect.retry({
+          while: (error) => error._tag === "KeyNotPendingDeletion",
+          schedule: kmsObservationSchedule,
+        }),
+      );
+    }
   });
-  const keyId = created.KeyMetadata?.KeyId;
-  if (!keyId) {
-    return yield* Effect.die(new Error("createKey returned no key ID"));
-  }
-  yield* kms
-    .createAlias({ AliasName: STANDING_KEY_ALIAS, TargetKeyId: keyId })
-    .pipe(
-      Effect.catchTag("AlreadyExistsException", () =>
-        // Lost a create race with a parallel run: schedule ours for deletion
-        // so it doesn't become a $1/mo orphan.
-        kms
-          .scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 })
-          .pipe(Effect.ignore),
-      ),
-    );
-  const described = yield* kms.describeKey({ KeyId: STANDING_KEY_ALIAS });
-  return described.KeyMetadata!.KeyId;
-});
 
 test.provider(
-  "create an encrypted volume with the standing KMS alias",
-  (stack) =>
-    Effect.gen(function* () {
+  "create an encrypted volume with a managed KMS key and alias",
+  (stack) => {
+    let fixtureAliasName: AliasName | undefined;
+    let fixtureKeyId: string | undefined;
+    return Effect.gen(function* () {
       yield* stack.destroy();
-      yield* ensureStandingKey;
 
-      const volume = yield* stack.deploy(
+      const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Volume("TestEncryptedVolume", {
+          const key = yield* Key("EncryptedVolumeKey", {
+            description: "Alchemy EC2 encrypted-volume test key",
+            deletionWindow: "7 days",
+            tags: { fixture: "ec2-volume" },
+          });
+          const alias = yield* Alias("EncryptedVolumeAlias", {
+            targetKeyId: key.keyId,
+          });
+          const volume = yield* Volume("TestEncryptedVolume", {
             availabilityZone: AZ,
             size: 1,
             volumeType: "gp3",
             encrypted: true,
-            // A standing KMS key that never gets created/deleted by tests.
-            kmsKeyId: "alias/alchemy-test-bindings",
+            kmsKeyId: alias.aliasName,
           });
+          return { alias, key, volume };
         }),
       );
+      fixtureAliasName = deployed.alias.aliasName;
+      fixtureKeyId = deployed.key.keyId;
 
-      expect(volume.encrypted).toBe(true);
+      expect(deployed.volume.encrypted).toBe(true);
 
       const observed = yield* EC2.describeVolumes({
-        VolumeIds: [volume.volumeId],
+        VolumeIds: [deployed.volume.volumeId],
       });
       const v = observed.Volumes?.[0];
       expect(v?.Encrypted).toBe(true);
-      expect(v?.KmsKeyId).toBeDefined();
+      expect(v?.KmsKeyId).toBe(deployed.key.keyArn);
 
       yield* stack.destroy();
-      yield* assertVolumeDeleted(volume.volumeId);
-    }).pipe(logLevel),
+      yield* assertVolumeDeleted(deployed.volume.volumeId);
+      yield* releaseManagedKey(fixtureAliasName, fixtureKeyId);
+    }).pipe(
+      logLevel,
+      // Always run both the state-owned destroy and the direct idempotent
+      // backstop. This covers assertions, failures, and runner interruption
+      // while preserving dependency order (Volume -> Alias -> Key).
+      Effect.ensuring(
+        Effect.gen(function* () {
+          yield* stack.destroy().pipe(Effect.ignore);
+          // Finalizers require a `never` error channel. Escalate a cleanup
+          // failure to a visible defect instead of swallowing it.
+          yield* releaseManagedKey(fixtureAliasName, fixtureKeyId).pipe(
+            Effect.orDie,
+          );
+        }).pipe(logLevel),
+      ),
+    );
+  },
   { timeout: 120_000 },
 );
 
@@ -148,15 +226,13 @@ const assertVolumeDeleted = Effect.fn(function* (volumeId: string) {
   yield* EC2.describeVolumes({ VolumeIds: [volumeId] }).pipe(
     Effect.flatMap((result) => {
       const state = result.Volumes?.[0]?.State;
-      // `deleting` is terminal — EC2 can keep a deleted volume visible in
-      // this state for many minutes of internal bookkeeping.
-      return state === undefined || state === "deleted" || state === "deleting"
+      return state === undefined || state === "deleted"
         ? Effect.void
         : Effect.fail(new VolumeStillExists());
     }),
     Effect.retry({
       while: (e) => e instanceof VolumeStillExists,
-      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
     }),
     Effect.catchTag("InvalidVolume.NotFound", () => Effect.void),
   );

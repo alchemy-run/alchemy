@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { Subnet } from "@/AWS/EC2";
+import { Subnet, Vpc } from "@/AWS/EC2";
 import { Listener, LoadBalancer, TargetGroup } from "@/AWS/ELBv2";
 import * as Test from "@/Test/Alchemy";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
@@ -8,9 +8,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
-import { getDefaultVpc } from "../DefaultVpc.ts";
 import { deleteCertBestEffort, ensureImportedCert } from "./fixtures/acm.ts";
-import { DEFAULT_CERT_PEM, DEFAULT_KEY_PEM } from "./fixtures/certs.ts";
+import { OIDC_CERT_PEM, OIDC_KEY_PEM } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,8 +20,8 @@ const logLevel = Effect.provideService(
 
 // Exercises the full DefaultActions surface on a single ALB listener:
 // forward -> redirect -> fixedResponse -> weighted multi-target-group forward
-// with stickiness, all in-place via modifyListener. Reuses the default VPC and
-// carves stack-owned subnets (subnets don't count against the VPC limit).
+// with stickiness, all in-place via modifyListener. The network is stack-owned
+// so concurrent suites cannot replace the account's default VPC underneath it.
 test.provider(
   "listener default actions: forward -> redirect -> fixedResponse -> weighted",
   (stack) =>
@@ -38,19 +37,18 @@ test.provider(
       expect(az1).toBeTruthy();
       expect(az2).toBeTruthy();
 
-      const defaultVpc = yield* getDefaultVpc;
-
       // STAGE 1: simple forward listener (sugar form).
       const s1 = yield* stack.deploy(
         Effect.gen(function* () {
+          const vpc = yield* Vpc("LVpc", { cidrBlock: "10.240.0.0/16" });
           const subnet1 = yield* Subnet("LSubnet1", {
-            vpcId: defaultVpc.vpcId,
-            cidrBlock: defaultVpc.subnetCidrBlock(224),
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.240.224.0/24",
             availabilityZone: az1,
           });
           const subnet2 = yield* Subnet("LSubnet2", {
-            vpcId: defaultVpc.vpcId,
-            cidrBlock: defaultVpc.subnetCidrBlock(225),
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.240.225.0/24",
             availabilityZone: az2,
           });
           const lb = yield* LoadBalancer("LLb", {
@@ -59,13 +57,13 @@ test.provider(
             type: "application",
           });
           const tgBlue = yield* TargetGroup("LTgBlue", {
-            vpcId: defaultVpc.vpcId,
+            vpcId: vpc.vpcId,
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
           });
           const tgGreen = yield* TargetGroup("LTgGreen", {
-            vpcId: defaultVpc.vpcId,
+            vpcId: vpc.vpcId,
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
@@ -98,14 +96,15 @@ test.provider(
       // STAGE 2: redirect HTTP -> HTTPS (in place).
       yield* stack.deploy(
         Effect.gen(function* () {
+          const vpc = yield* Vpc("LVpc", { cidrBlock: "10.240.0.0/16" });
           const subnet1 = yield* Subnet("LSubnet1", {
-            vpcId: defaultVpc.vpcId,
-            cidrBlock: defaultVpc.subnetCidrBlock(224),
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.240.224.0/24",
             availabilityZone: az1,
           });
           const subnet2 = yield* Subnet("LSubnet2", {
-            vpcId: defaultVpc.vpcId,
-            cidrBlock: defaultVpc.subnetCidrBlock(225),
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.240.225.0/24",
             availabilityZone: az2,
           });
           const lb = yield* LoadBalancer("LLb", {
@@ -114,13 +113,13 @@ test.provider(
             type: "application",
           });
           yield* TargetGroup("LTgBlue", {
-            vpcId: defaultVpc.vpcId,
+            vpcId: vpc.vpcId,
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
           });
           yield* TargetGroup("LTgGreen", {
-            vpcId: defaultVpc.vpcId,
+            vpcId: vpc.vpcId,
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
@@ -150,14 +149,15 @@ test.provider(
       // STAGE 3: fixed-response (in place).
       yield* stack.deploy(
         Effect.gen(function* () {
+          const vpc = yield* Vpc("LVpc", { cidrBlock: "10.240.0.0/16" });
           const subnet1 = yield* Subnet("LSubnet1", {
-            vpcId: defaultVpc.vpcId,
-            cidrBlock: defaultVpc.subnetCidrBlock(224),
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.240.224.0/24",
             availabilityZone: az1,
           });
           const subnet2 = yield* Subnet("LSubnet2", {
-            vpcId: defaultVpc.vpcId,
-            cidrBlock: defaultVpc.subnetCidrBlock(225),
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.240.225.0/24",
             availabilityZone: az2,
           });
           const lb = yield* LoadBalancer("LLb", {
@@ -166,13 +166,13 @@ test.provider(
             type: "application",
           });
           yield* TargetGroup("LTgBlue", {
-            vpcId: defaultVpc.vpcId,
+            vpcId: vpc.vpcId,
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
           });
           yield* TargetGroup("LTgGreen", {
-            vpcId: defaultVpc.vpcId,
+            vpcId: vpc.vpcId,
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
@@ -202,14 +202,15 @@ test.provider(
       // STAGE 4: weighted multi-target-group forward with stickiness.
       yield* stack.deploy(
         Effect.gen(function* () {
+          const vpc = yield* Vpc("LVpc", { cidrBlock: "10.240.0.0/16" });
           const subnet1 = yield* Subnet("LSubnet1", {
-            vpcId: defaultVpc.vpcId,
-            cidrBlock: defaultVpc.subnetCidrBlock(224),
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.240.224.0/24",
             availabilityZone: az1,
           });
           const subnet2 = yield* Subnet("LSubnet2", {
-            vpcId: defaultVpc.vpcId,
-            cidrBlock: defaultVpc.subnetCidrBlock(225),
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.240.225.0/24",
             availabilityZone: az2,
           });
           const lb = yield* LoadBalancer("LLb", {
@@ -218,13 +219,13 @@ test.provider(
             type: "application",
           });
           const tgBlue = yield* TargetGroup("LTgBlue", {
-            vpcId: defaultVpc.vpcId,
+            vpcId: vpc.vpcId,
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
           });
           const tgGreen = yield* TargetGroup("LTgGreen", {
-            vpcId: defaultVpc.vpcId,
+            vpcId: vpc.vpcId,
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
@@ -290,9 +291,9 @@ test.provider(
       yield* stack.destroy();
 
       const certArn = yield* ensureImportedCert(
-        "default.elbv2-test.alchemy.internal",
-        DEFAULT_CERT_PEM,
-        DEFAULT_KEY_PEM,
+        "oidc.elbv2-test.alchemy.internal",
+        OIDC_CERT_PEM,
+        OIDC_KEY_PEM,
       );
 
       // Everything below runs under an `Effect.ensuring` finalizer so the
@@ -310,18 +311,19 @@ test.provider(
         expect(az1).toBeTruthy();
         expect(az2).toBeTruthy();
 
-        const defaultVpc = yield* getDefaultVpc;
-
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
+            const vpc = yield* Vpc("OidcVpc", {
+              cidrBlock: "10.241.0.0/16",
+            });
             const subnet1 = yield* Subnet("OidcSubnet1", {
-              vpcId: defaultVpc.vpcId,
-              cidrBlock: defaultVpc.subnetCidrBlock(226),
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.241.226.0/24",
               availabilityZone: az1,
             });
             const subnet2 = yield* Subnet("OidcSubnet2", {
-              vpcId: defaultVpc.vpcId,
-              cidrBlock: defaultVpc.subnetCidrBlock(227),
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.241.227.0/24",
               availabilityZone: az2,
             });
             const lb = yield* LoadBalancer("OidcLb", {

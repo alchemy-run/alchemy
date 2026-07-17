@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { Scraper, ScraperLoggingConfiguration, Workspace } from "@/AWS/AMP";
 import * as Logs from "@/AWS/Logs";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as amp from "@distilled.cloud/aws/amp";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

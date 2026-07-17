@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
-import { Thing, ThingType } from "@/AWS/IoT";
-import * as Test from "@/Test/Vitest";
+import { Thing, ThingType, ThingTypeDeletionTimedOut } from "@/AWS/IoT";
+import * as Test from "@/Test/Alchemy";
 import * as iot from "@distilled.cloud/aws/iot";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -24,18 +24,29 @@ const assertThingGone = (thingName: string) =>
   );
 
 // AWS enforces a mandatory 5-minute window between deprecating a thing type
-// and deleting it, so `stack.destroy()` can only leave the type deprecated
-// (like KMS keys pending deletion). A generated physical name would mint a
-// fresh random suffix every run and strand one permanently-orphaned
-// deprecated type per run — so the name is a deterministic constant, and
-// each run pre-cleans the previous run's deprecated leftover (deletable once
-// its 5-minute window has passed). Worst-case residue is exactly one
-// deprecated thing type with this name, reaped by the next run.
+// and deleting it. Keep the explicit name deterministic so an interrupted
+// slow-lane run reclaims the same type instead of minting random-suffixed
+// residue; the provider's delete waits until DescribeThingType is NotFound.
 const testThingTypeName = "alchemy-test-iot-thing-type";
 
 describe.sequential("AWS.IoT.ThingType", () => {
-  test.provider(
-    "creates a thing type, associates a thing, and deprecates it on destroy",
+  test.provider("typed not-found probe", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        iot.describeThingType({
+          thingTypeName: "alchemy-nonexistent-thing-type-probe",
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+  );
+
+  // AWS requires a thing type to remain deprecated for at least five minutes
+  // before deletion. The provider fully waits for observable absence, so this
+  // lifecycle is intentionally outside the default fast sweep; enable it for
+  // the slow lane with AWS_TEST_SLOW=1.
+  test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+    "creates a thing type, associates a thing, and deletes it",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -92,17 +103,30 @@ describe.sequential("AWS.IoT.ThingType", () => {
         });
         expect(thing.thingTypeName).toEqual(created.thingTypeName);
 
-        yield* stack.destroy();
+        // First destroy removes the Thing and deprecates its type, then exits
+        // on the provider's bounded nonterminal error instead of blocking for
+        // AWS's mandatory five-minute window. State remains for re-entry.
+        const pending = yield* Effect.flip(stack.destroy());
+        expect(pending).toBeInstanceOf(ThingTypeDeletionTimedOut);
         yield* assertThingGone(created.thingName);
 
-        // AWS enforces a 5-minute window between deprecation and deletion, so
-        // destroy cannot delete the type immediately — it deprecates it and
-        // tolerates the rejected delete. Assert the deprecated end state.
-        const afterDestroy = yield* iot.describeThingType({
+        const deprecated = yield* iot.describeThingType({
           thingTypeName: created.thingTypeName,
         });
-        expect(afterDestroy.thingTypeMetadata?.deprecated).toBe(true);
+        expect(deprecated.thingTypeMetadata?.deprecated).toBe(true);
+
+        // The first bounded delete already consumed ~45s. Wait out the rest
+        // of AWS's platform clock, then re-enter deletion exactly as a later
+        // nuke would after discovering the deterministic leftover.
+        yield* Effect.sleep("260 seconds");
+        yield* stack.destroy();
+
+        // Successful deletion returns only after observable absence.
+        const error = yield* Effect.flip(
+          iot.describeThingType({ thingTypeName: created.thingTypeName }),
+        );
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
-    { timeout: 180_000 },
+    { timeout: 420_000 },
   );
 });

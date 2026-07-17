@@ -166,6 +166,10 @@ export interface Queue extends Resource<
   Providers
 > {}
 
+class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
+  readonly queueUrl: string;
+}> {}
+
 /**
  * An Amazon SQS queue for reliable, decoupled message processing.
  *
@@ -681,11 +685,67 @@ export const QueueProvider = () =>
           };
         }),
         delete: Effect.fn(function* (input) {
+          const queueUrl = input.output.queueUrl;
           yield* sqs
             .deleteQueue({
-              QueueUrl: input.output.queueUrl,
+              QueueUrl: queueUrl,
             })
-            .pipe(Effect.catchTag("QueueDoesNotExist", () => Effect.void));
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "RequestThrottled",
+                schedule: Schedule.max([
+                  Schedule.exponential("500 millis"),
+                  Schedule.recurs(6),
+                ]),
+              }),
+              Effect.catchTag("QueueDoesNotExist", () => Effect.void),
+            );
+
+          // DeleteQueue is asynchronous and SQS can keep serving the queue
+          // for up to 60 seconds. GetQueueAttributes can report not-found
+          // before ListQueues stops returning the URL, and nuke discovers
+          // queues through ListQueues. Require both control-plane views to
+          // agree before state is removed or a same-name replacement starts.
+          // Typed read throttles mean "absence not confirmed yet" and retry;
+          // re-entering delete remains safe because QueueDoesNotExist is OK.
+          const queueName = queueUrl.slice(queueUrl.lastIndexOf("/") + 1);
+          yield* Effect.gen(function* () {
+            const attributesAbsent = yield* sqs
+              .getQueueAttributes({
+                QueueUrl: queueUrl,
+                AttributeNames: ["QueueArn"],
+              })
+              .pipe(
+                Effect.as(false),
+                Effect.catchTag("QueueDoesNotExist", () =>
+                  Effect.succeed(true),
+                ),
+                Effect.catchTag("RequestThrottled", () =>
+                  Effect.succeed(false),
+                ),
+              );
+            const absentFromList = yield* sqs
+              .listQueues({ QueueNamePrefix: queueName })
+              .pipe(
+                Effect.map(
+                  (result) => !(result.QueueUrls ?? []).includes(queueUrl),
+                ),
+                Effect.catchTag("RequestThrottled", () =>
+                  Effect.succeed(false),
+                ),
+              );
+            if (!attributesAbsent || !absentFromList) {
+              return yield* Effect.fail(new QueueStillExists({ queueUrl }));
+            }
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "QueueStillExists",
+              schedule: Schedule.max([
+                Schedule.spaced("2 seconds"),
+                Schedule.recurs(30),
+              ]),
+            }),
+          );
         }),
       });
     }),

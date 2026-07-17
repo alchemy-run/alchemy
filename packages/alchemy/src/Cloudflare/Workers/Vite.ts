@@ -10,6 +10,34 @@ import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
 import { viteBuildOutputPlugin } from "../../Bundle/Vite.ts";
 
+/** Route Vite output through the ambient Effect Console service. */
+const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
+  const loggedErrors = new WeakSet<object>();
+  let hasWarned = false;
+  return {
+    info: (msg) => console.log(msg),
+    warn: (msg) => {
+      hasWarned = true;
+      console.warn(msg);
+    },
+    warnOnce: (msg) => {
+      hasWarned = true;
+      console.warn(msg);
+    },
+    error: (msg, options) => {
+      if (options?.error != null) loggedErrors.add(options.error);
+      console.error(msg);
+    },
+    clearScreen: () => {},
+    hasErrorLogged: (error) => loggedErrors.has(error),
+    get hasWarned() {
+      return hasWarned;
+    },
+  };
+};
+
+const ALCHEMY_CLOUDFLARE_VITE_INJECTED = "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
+
 export const viteDev = (
   rootDir: string = process.cwd(),
   env: Record<string, unknown>,
@@ -17,17 +45,21 @@ export const viteDev = (
   serverOptions: vite.ServerOptions,
 ) =>
   Effect.acquireRelease(
-    Effect.promise(async () => {
-      const vite = await loadVite(rootDir);
-      const devServer = await vite.createServer({
-        root: rootDir,
-        define: getDefine(env),
-        plugins: [cloudflare(pluginOptions)],
-        server: serverOptions,
-      });
-      await devServer.listen();
-      return devServer;
-    }),
+    ConsoleService.consoleWith((console) =>
+      Effect.promise(async () => {
+        process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
+        const vite = await loadVite(rootDir);
+        const devServer = await vite.createServer({
+          root: rootDir,
+          define: getDefine(env),
+          plugins: [cloudflare(pluginOptions)],
+          server: serverOptions,
+          customLogger: makeViteLogger(console),
+        });
+        await devServer.listen();
+        return devServer;
+      }),
+    ),
     (devServer) =>
       Effect.promise(async () => {
         await devServer.close();
@@ -45,6 +77,7 @@ export const viteBuild = (
     });
     const console = yield* ConsoleService.Console;
     yield* Effect.promise(async () => {
+      process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
       const builder = await vite.createBuilder(
         {

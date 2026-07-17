@@ -411,8 +411,9 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "FleetNotReady",
-    // Fleet activation is usually well under a minute; budget ~3 min.
-    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(36)]),
+    // Fleet activation is usually well under a minute; stay within the
+    // provider-wide bounded provisioning budget.
+    schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
   });
 
 const waitForFleetActive = (

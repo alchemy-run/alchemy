@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { DomainName } from "@/AWS/ApiGateway";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { assertDomainNameDeleted } from "./assertions.ts";

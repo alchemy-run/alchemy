@@ -9,6 +9,7 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import { BatchTestNetwork } from "./TestNetwork.ts";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -25,9 +26,40 @@ export default BatchTestFunction.make(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    // The whole Batch chain: Fargate CE (default-VPC networking) → queue →
-    // busybox echo job definition.
-    const computeEnvironment = yield* Batch.ComputeEnvironment("TestCE", {});
+    const unmanagedServiceRole = process.env.AWS_TEST_SLOW
+      ? undefined
+      : yield* IAM.Role("BatchServiceRole", {
+          assumeRolePolicyDocument: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: { Service: "batch.amazonaws.com" },
+                Action: ["sts:AssumeRole"],
+              },
+            ],
+          },
+          managedPolicyArns: [
+            "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
+          ],
+        });
+
+    // Fast capability tests only need jobs to reach RUNNABLE, so use an
+    // unmanaged CE without VPC resources. The slow SUCCEEDED round-trip keeps
+    // the managed Fargate path and its stack-owned network.
+    const computeEnvironment = process.env.AWS_TEST_SLOW
+      ? yield* Effect.gen(function* () {
+          const network = yield* BatchTestNetwork;
+          return yield* Batch.ComputeEnvironment("TestCE", {
+            subnets: network.subnetIds,
+            securityGroupIds: network.securityGroupIds,
+          });
+        })
+      : yield* Batch.ComputeEnvironment("TestCE", {
+          managementType: "UNMANAGED",
+          unmanagedvCpus: 4,
+          serviceRole: unmanagedServiceRole!.roleArn,
+        });
     const queue = yield* Batch.JobQueue("TestQueue", {
       computeEnvironments: [computeEnvironment.computeEnvironmentArn],
     });
@@ -50,6 +82,8 @@ export default BatchTestFunction.make(
       image: "public.ecr.aws/docker/library/busybox:latest",
       command: ["echo", "hello-from-batch"],
       executionRoleArn: executionRole.roleArn,
+      platformCapabilities: process.env.AWS_TEST_SLOW ? ["FARGATE"] : ["EC2"],
+      vcpus: process.env.AWS_TEST_SLOW ? 0.25 : 1,
       timeout: Duration.minutes(5),
     });
 

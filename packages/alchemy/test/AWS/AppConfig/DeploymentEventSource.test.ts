@@ -1,13 +1,12 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import AppConfigEventsTestFunctionLive, {
   AppConfigEventsTestFunction,
 } from "./fixtures/events-handler";
@@ -26,6 +25,67 @@ interface EventBody {
     Environment?: { Id?: string };
   } | null;
 }
+
+class DeploymentRequestFailed extends Data.TaggedError(
+  "DeploymentRequestFailed",
+)<{
+  readonly status: number;
+  readonly body: string;
+}> {}
+
+class DeploymentEventPending extends Data.TaggedError(
+  "DeploymentEventPending",
+)<{
+  readonly deploymentNumber: number;
+}> {}
+
+const startDeployment = Effect.suspend(() =>
+  HttpClient.execute(
+    HttpClientRequest.post(`${baseUrl}/deploy`).pipe(
+      HttpClientRequest.bodyJsonUnsafe({ version: "1" }),
+    ),
+  ).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? response.json
+        : response.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(
+                new DeploymentRequestFailed({ status: response.status, body }),
+              ),
+            ),
+          ),
+    ),
+    Effect.map((json) => json as { deploymentNumber?: number; state?: string }),
+    // Lambda URL cold starts and fresh execution-role permissions can surface
+    // as transient 5xx responses. Retry those only; genuine 4xx responses are
+    // actionable test failures.
+    Effect.retry({
+      while: (error) =>
+        error._tag === "DeploymentRequestFailed" && error.status >= 500,
+      schedule: Schedule.exponential("1 second"),
+      times: 6,
+    }),
+  ),
+);
+
+const awaitCompleteEvent = (deploymentNumber: number) =>
+  HttpClient.get(
+    `${baseUrl}/event?number=${deploymentNumber}&type=OnDeploymentComplete`,
+  ).pipe(
+    Effect.flatMap((response) => response.json),
+    Effect.map((json) => json as unknown as EventBody),
+    Effect.flatMap((body) =>
+      body.event === null
+        ? Effect.fail(new DeploymentEventPending({ deploymentNumber }))
+        : Effect.succeed(body.event),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "DeploymentEventPending",
+      schedule: Schedule.fixed("3 seconds"),
+      times: 5,
+    }),
+  );
 
 describe("AppConfig DeploymentEventSource", () => {
   beforeAll(
@@ -70,51 +130,38 @@ describe("AppConfig DeploymentEventSource", () => {
     "deployment notifications invoke the Lambda through the extension",
     () =>
       Effect.gen(function* () {
-        // Trigger a deployment at runtime; the extension association was
-        // provisioned at deploy time, so its ON_DEPLOYMENT_* actions fire.
-        // A fresh invoke role can briefly reject with AccessDenied (500
-        // through the handler's orDie); retry the first request.
-        const started = yield* HttpClient.execute(
-          HttpClientRequest.post(`${baseUrl}/deploy`).pipe(
-            HttpClientRequest.bodyJsonUnsafe({ version: "1" }),
-          ),
-        ).pipe(
-          Effect.flatMap((response) =>
-            response.status === 200
-              ? response.json
-              : Effect.fail(new Error(`deploy failed: ${response.status}`)),
-          ),
-          Effect.map(
-            (json) => json as { deploymentNumber?: number; state?: string },
-          ),
+        // AppConfig notifications are fire-and-forget. The first invocation
+        // can be lost while the freshly-created AppConfig invoke role is
+        // propagating; waiting longer for that same notification cannot make
+        // it reappear. Retry the whole bounded start+observe cycle so each
+        // attempt emits a fresh action-point notification.
+        const observed = yield* Effect.gen(function* () {
+          const started = yield* startDeployment;
+          const deploymentNumber = started.deploymentNumber;
+          if (deploymentNumber === undefined) {
+            return yield* Effect.fail(
+              new DeploymentRequestFailed({
+                status: 200,
+                body: "StartDeployment response omitted DeploymentNumber",
+              }),
+            );
+          }
+          return {
+            deploymentNumber,
+            event: yield* awaitCompleteEvent(deploymentNumber),
+          };
+        }).pipe(
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential("2 seconds"),
-              Schedule.recurs(8),
-            ]),
-          }),
-        );
-        expect(started.deploymentNumber).toBeGreaterThan(0);
-
-        // Poll until the ON_DEPLOYMENT_COMPLETE notification lands (the
-        // fixture persists each notification to S3 under a per-deployment
-        // key, so delivery to any Lambda instance is observable here).
-        const eventUrl = `${baseUrl}/event?number=${started.deploymentNumber}&type=OnDeploymentComplete`;
-        const body = yield* HttpClient.get(eventUrl).pipe(
-          Effect.flatMap((response) => response.json),
-          Effect.map((json) => json as unknown as EventBody),
-          Effect.repeat({
-            schedule: Schedule.spaced("5 seconds"),
-            until: (json): boolean => json.event !== null,
-            times: 36,
+            while: (error) => error._tag === "DeploymentEventPending",
+            schedule: Schedule.fixed("5 seconds"),
+            times: 3,
           }),
         );
 
-        const complete = body.event;
-        expect(complete).toBeDefined();
-        expect(complete!.InvocationId).toBeTruthy();
-        expect(complete!.DeploymentNumber).toBe(started.deploymentNumber);
+        expect(observed.deploymentNumber).toBeGreaterThan(0);
+        expect(observed.event.InvocationId).toBeTruthy();
+        expect(observed.event.DeploymentNumber).toBe(observed.deploymentNumber);
       }),
-    { timeout: 300_000 },
+    { timeout: 120_000 },
   );
 });

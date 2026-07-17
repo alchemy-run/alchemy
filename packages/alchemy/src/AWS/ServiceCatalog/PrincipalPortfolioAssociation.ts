@@ -102,10 +102,64 @@ export const PrincipalPortfolioAssociationProvider = () =>
 
       return PrincipalPortfolioAssociation.Provider.of({
         stables: ["portfolioId", "principalArn", "principalType"],
-        // Sub-resource: associations are keyed by their parent portfolio
-        // and cannot be enumerated account-wide without walking every
-        // portfolio.
-        list: () => Effect.succeed([]),
+        // Service Catalog has no account-wide principal-association API. Walk
+        // every portfolio so unsafe nuke can remove principals before their
+        // parent portfolios. AWS may replace the ARN of a deleted IAM role
+        // with its stable principal ID (ARO...); preserve that value because
+        // the disassociate API accepts it.
+        list: () =>
+          Effect.gen(function* () {
+            const portfolioIds = yield* servicecatalog.listPortfolios
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((pages) =>
+                  Array.from(pages)
+                    .flatMap((page) => page.PortfolioDetails ?? [])
+                    .flatMap((portfolio) =>
+                      portfolio.Id === undefined ? [] : [portfolio.Id],
+                    ),
+                ),
+              );
+
+            const associations = yield* Effect.forEach(
+              portfolioIds,
+              (portfolioId) =>
+                servicecatalog.listPrincipalsForPortfolio
+                  .pages({ PortfolioId: portfolioId })
+                  .pipe(
+                    Stream.runCollect,
+                    Effect.map((pages) =>
+                      Array.from(pages)
+                        .flatMap((page) => page.Principals ?? [])
+                        .flatMap((principal) => {
+                          if (principal.PrincipalARN === undefined) return [];
+                          const principalType =
+                            principal.PrincipalType === "IAM"
+                              ? ("IAM" as const)
+                              : principal.PrincipalType === "IAM_PATTERN"
+                                ? ("IAM_PATTERN" as const)
+                                : undefined;
+                          if (principalType === undefined) return [];
+                          return [
+                            {
+                              portfolioId,
+                              principalArn: principal.PrincipalARN,
+                              principalType,
+                            },
+                          ];
+                        }),
+                    ),
+                    // A portfolio can disappear between enumeration and
+                    // association hydration.
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed([]),
+                    ),
+                  ),
+              { concurrency: 5 },
+            );
+            return associations.flat();
+          }),
         // Existence-only resource — every property is part of its identity.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -155,15 +209,17 @@ export const PrincipalPortfolioAssociationProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* servicecatalog
-            .disassociatePrincipalFromPortfolio({
-              PortfolioId: output.portfolioId,
-              PrincipalARN: output.principalArn,
-              PrincipalType: output.principalType,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          if (yield* isAssociated(output.portfolioId, output.principalArn)) {
+            yield* servicecatalog
+              .disassociatePrincipalFromPortfolio({
+                PortfolioId: output.portfolioId,
+                PrincipalARN: output.principalArn,
+                PrincipalType: output.principalType,
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+          }
         }),
       });
     }),

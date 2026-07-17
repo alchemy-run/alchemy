@@ -149,6 +149,18 @@ export interface HealthCheck extends Resource<
  */
 export const HealthCheck = Resource<HealthCheck>("AWS.Route53.HealthCheck");
 
+/**
+ * Whether a Route 53 health check can be managed directly through Route 53.
+ *
+ * Health checks with `LinkedService` are owned by another AWS service (for
+ * example, Cloud Map). Route 53 refuses direct deletion of those checks, and
+ * the owning service may retain them as tombstones after its resource is
+ * deleted. They therefore must not be returned to account-wide nuke inventory.
+ */
+export const isNukeableHealthCheck = (check: {
+  LinkedService?: route53.LinkedService;
+}): boolean => check.LinkedService === undefined;
+
 const toConfig = (props: HealthCheckProps): route53.HealthCheckConfig => ({
   Type: props.type,
   IPAddress: props.ipAddress,
@@ -255,11 +267,13 @@ export const HealthCheckProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.HealthChecks ?? []).map((check) => ({
-                  id: check.Id,
-                  healthCheckId: check.Id,
-                  type: check.HealthCheckConfig.Type,
-                })),
+                (page.HealthChecks ?? [])
+                  .filter(isNukeableHealthCheck)
+                  .map((check) => ({
+                    id: check.Id,
+                    healthCheckId: check.Id,
+                    type: check.HealthCheckConfig.Type,
+                  })),
               ),
             ),
           ),

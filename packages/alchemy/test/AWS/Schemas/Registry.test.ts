@@ -1,18 +1,23 @@
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
+import type { ScopedPlanStatusSession } from "@/Cli/Cli.ts";
 import {
   normalizePolicyDocument,
   type PolicyDocument,
 } from "@/AWS/IAM/Policy.ts";
 import { Registry } from "@/AWS/Schemas";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as schemas from "@distilled.cloud/aws/schemas";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
+const stubSession = {
+  note: () => Effect.void,
+} as unknown as ScopedPlanStatusSession;
 
 const assertRegistryGone = (registryName: string) =>
   schemas.describeRegistry({ RegistryName: registryName }).pipe(
@@ -166,6 +171,56 @@ describe("AWS.Schemas.Registry", () => {
         // DELETE
         yield* stack.destroy();
         yield* assertRegistryGone(renamed.registryName);
+      }),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "ordinary registry delete protects an untracked schema; force purges it",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const registry = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Registry("CascadeDelete", {});
+          }),
+        );
+        // Simulate a schema created before state persistence. Nuke can list the
+        // registry but the child provider has no account-wide enumeration.
+        yield* schemas.createSchema({
+          RegistryName: registry.registryName,
+          SchemaName: "UntrackedChild",
+          Type: "OpenApi3",
+          Content: JSON.stringify({
+            openapi: "3.0.0",
+            info: { title: "UntrackedChild", version: "1.0.0" },
+            paths: {},
+          }),
+        });
+
+        const provider = yield* Provider.findProvider(Registry);
+        const deleteInput = {
+          id: "CascadeDelete",
+          fqn: "CascadeDelete",
+          instanceId: "force-delete-test",
+          olds: {},
+          output: registry,
+          session: stubSession,
+          bindings: [],
+        };
+        const protectedDelete = yield* Effect.result(
+          provider.delete(deleteInput),
+        );
+        expect(Result.isFailure(protectedDelete)).toBe(true);
+        yield* schemas.describeSchema({
+          RegistryName: registry.registryName,
+          SchemaName: "UntrackedChild",
+        });
+
+        yield* provider.delete({ ...deleteInput, force: true });
+        yield* assertRegistryGone(registry.registryName);
+        yield* stack.destroy();
       }),
     { timeout: 120_000 },
   );

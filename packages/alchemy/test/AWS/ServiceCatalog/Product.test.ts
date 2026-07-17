@@ -1,10 +1,10 @@
 import * as AWS from "@/AWS";
 import { Bucket } from "@/AWS/S3";
 import { Product } from "@/AWS/ServiceCatalog";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

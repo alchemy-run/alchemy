@@ -1,15 +1,15 @@
 import * as AWS from "@/AWS";
 import { Vpc, VpcPeeringConnection } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({ providers: AWS.providers() }, 2);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -32,7 +32,7 @@ const assertDeleted = Effect.fn(function* (pcxId: string) {
     }),
     Effect.retry({
       while: (e) => e instanceof PeeringStillLive,
-      schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(20)]),
+      schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(8)]),
     }),
     Effect.catchTag(
       "InvalidVpcPeeringConnectionID.NotFound",

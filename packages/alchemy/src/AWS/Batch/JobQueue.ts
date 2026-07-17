@@ -147,6 +147,18 @@ export const JobQueueProvider = () =>
               q.status !== "DELETING"),
         );
 
+      const awaitDisabled = (name: string) =>
+        pollBatch(
+          describeOne(name),
+          (queue) =>
+            queue === undefined ||
+            queue.status === "DELETED" ||
+            queue.status === "DELETING" ||
+            (queue.state === "DISABLED" &&
+              queue.status !== "CREATING" &&
+              queue.status !== "UPDATING"),
+        );
+
       return {
         stables: ["jobQueueName", "jobQueueArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
@@ -296,13 +308,18 @@ export const JobQueueProvider = () =>
               (e) => e._tag === "JobQueueBeingModified",
             ).pipe(Effect.catchTag("JobQueueNotFound", () => Effect.void));
           }
-          yield* awaitSettled(name);
+          const disabled = yield* awaitDisabled(name);
+          if (!disabled || disabled.status === "DELETED") return;
 
-          // deleteJobQueue is idempotent (succeeds when missing / DELETING).
-          yield* retryBatch(
-            batch.deleteJobQueue({ jobQueue: name }),
-            (e) => e._tag === "JobQueueBeingModified",
-          );
+          // A resumed destroy can observe DELETING. Do not issue a redundant
+          // delete; just wait for the relationship to disappear. This keeps
+          // the downstream compute-environment delete strictly ordered.
+          if (disabled.status !== "DELETING") {
+            yield* retryBatch(
+              batch.deleteJobQueue({ jobQueue: name }),
+              (e) => e._tag === "JobQueueBeingModified",
+            ).pipe(Effect.catchTag("JobQueueNotFound", () => Effect.void));
+          }
 
           // Wait until fully gone so downstream compute-environment deletion
           // doesn't trip over the lingering association (queue deletion is

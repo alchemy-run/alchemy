@@ -1,13 +1,14 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import NightlyJob, { MARKER } from "./fixtures/nightly-job.ts";
+import { BatchTestNetwork } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,9 +32,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
+          const network = yield* BatchTestNetwork;
           const computeEnvironment = yield* AWS.Batch.ComputeEnvironment(
             "PlatformCE",
-            {},
+            {
+              subnets: network.subnetIds,
+              securityGroupIds: network.securityGroupIds,
+            },
           );
           const queue = yield* AWS.Batch.JobQueue("PlatformQueue", {
             computeEnvironments: [computeEnvironment.computeEnvironmentArn],

@@ -2,9 +2,9 @@ import * as AWS from "@/AWS";
 import { OpenIDConnectProvider } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { testOidcListUrl, testOidcThumbprintA } from "./fixtures.ts";
 

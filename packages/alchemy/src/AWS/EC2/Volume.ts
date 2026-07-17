@@ -8,7 +8,12 @@ import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import {
+  createAlchemyTagFilters,
+  createInternalTags,
+  createTagsList,
+  diffTags,
+} from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
@@ -227,6 +232,31 @@ export const VolumeProvider = () =>
   Provider.effect(
     Volume,
     Effect.gen(function* () {
+      // EBS volume IDs are server-assigned. Recover a successfully created
+      // volume after state persistence failure via the resource instance tag;
+      // logical-id-only tags are insufficient during replacement because the
+      // old and new volume instances can coexist.
+      const findVolumeByInstanceTags = Effect.fn(function* (
+        id: string,
+        instanceId: string,
+      ) {
+        const filters = yield* createAlchemyTagFilters(id);
+        const pages = yield* ec2.describeVolumes
+          .pages({
+            Filters: [
+              ...filters,
+              { Name: "tag:alchemy::instance", Values: [instanceId] },
+            ],
+          })
+          .pipe(Stream.runCollect);
+        return Array.from(pages)
+          .flatMap((page) => page.Volumes ?? [])
+          .find(
+            (volume) =>
+              volume.State !== "deleting" && volume.State !== "deleted",
+          );
+      });
+
       return {
         stables: [
           "volumeId",
@@ -259,10 +289,20 @@ export const VolumeProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          instanceId,
+          news,
+          output,
+          session,
+        }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const alchemyTags = yield* createInternalTags(id);
-          const desiredTags = { ...alchemyTags, ...news.tags };
+          const desiredTags = {
+            ...news.tags,
+            ...alchemyTags,
+            "alchemy::instance": instanceId,
+          };
 
           // 1. OBSERVE — cloud state is authoritative; output is only an id
           //    cache. A volume in a terminal state is treated as missing.
@@ -283,6 +323,9 @@ export const VolumeProvider = () =>
             ) {
               volume = found;
             }
+          }
+          if (volume === undefined) {
+            volume = yield* findVolumeByInstanceTags(id, instanceId);
           }
 
           // 2. ENSURE — create the volume when missing, then wait until it is
@@ -454,6 +497,8 @@ class VolumeNotReady extends Data.TaggedError("VolumeNotReady")<{
 
 class VolumeStillExists extends Data.TaggedError("VolumeStillExists")<{
   volumeId: string;
+  state: string;
+  message: string;
 }> {}
 
 /**
@@ -512,14 +557,19 @@ const waitForVolumeDeleted = (
         ),
       );
     const volume = result.Volumes?.[0];
-    // `deleting` is terminal and irreversible — deleteVolume has been
-    // accepted and EC2 can keep the volume visible in `deleting` for many
-    // minutes of internal bookkeeping. Waiting for it to disappear entirely
-    // makes destroy flaky for no benefit.
-    if (!volume || volume.State === "deleted" || volume.State === "deleting") {
+    // Do not treat `deleting` as deleted. The provider's delete contract is
+    // complete only after EC2 stops returning the volume; otherwise nuke can
+    // report success while the resource remains in its inventory.
+    if (!volume || volume.State === "deleted") {
       return;
     }
-    return yield* new VolumeStillExists({ volumeId });
+    return yield* new VolumeStillExists({
+      volumeId,
+      state: volume.State ?? "unknown",
+      message:
+        `Volume ${volumeId} remains ${volume.State ?? "visible"} after the bounded delete wait; ` +
+        "AWS accepted DeleteVolume but has not removed it",
+    });
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof VolumeStillExists,

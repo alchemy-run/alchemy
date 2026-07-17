@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -119,7 +119,7 @@ const expectVpcAttribute = Effect.fn(function* (props: {
     ),
     Effect.retry({
       while: (e) => e._tag === "VpcAttributeStale",
-      schedule: Schedule.exponential(100),
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
     }),
   );
 });
@@ -135,7 +135,7 @@ export const assertVpcDeleted = Effect.fn(function* (vpcId: string) {
     Effect.flatMap(() => Effect.fail(new VpcStillExists())),
     Effect.retry({
       while: (e) => e._tag === "VpcStillExists",
-      schedule: Schedule.exponential(100),
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
     }),
     Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
   );

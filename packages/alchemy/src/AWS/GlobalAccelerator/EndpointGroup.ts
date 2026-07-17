@@ -7,7 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import { withGaRegion } from "./common.ts";
+import { retryGaDeletion, withGaRegion } from "./common.ts";
 
 export interface EndpointConfiguration {
   /**
@@ -410,10 +410,12 @@ export const EndpointGroupProvider = () =>
       return toAttributes(live, endpointGroupArn);
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* withGaRegion(
-        ga.deleteEndpointGroup({
-          EndpointGroupArn: output.endpointGroupArn,
-        }),
+      yield* retryGaDeletion(
+        withGaRegion(
+          ga.deleteEndpointGroup({
+            EndpointGroupArn: output.endpointGroupArn,
+          }),
+        ),
       ).pipe(
         Effect.catchTag("EndpointGroupNotFoundException", () => Effect.void),
       );
