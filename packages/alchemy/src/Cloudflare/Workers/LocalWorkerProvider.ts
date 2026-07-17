@@ -66,6 +66,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
@@ -168,6 +169,35 @@ export const LocalWorkerProvider = () =>
       ) {
         const modules: Module[] = [];
         for (const file of bundle.files) {
+          // Vendored Python packages are opaque Data modules named by their
+          // `python_modules/<relpath>` — mirroring the deploy path — except
+          // the `workers-runtime-sdk` JS shims, which the runtime imports
+          // as ES modules via `import_from_javascript()`.
+          if (file.path.startsWith("python_modules/")) {
+            const isJsShim =
+              file.path.startsWith("python_modules/workers/") &&
+              /\.m?js$/.test(file.path);
+            modules.push(
+              isJsShim
+                ? {
+                    name: file.path,
+                    type: "ESModule",
+                    content:
+                      typeof file.content === "string"
+                        ? file.content
+                        : new TextDecoder().decode(file.content),
+                  }
+                : {
+                    name: file.path,
+                    type: "Data",
+                    content:
+                      typeof file.content === "string"
+                        ? new TextEncoder().encode(file.content)
+                        : file.content,
+                  },
+            );
+            continue;
+          }
           const ext = path.extname(file.path);
           const type = moduleTypeFromExtension(ext);
           if (type === "SourceMap") continue;
@@ -458,7 +488,15 @@ export const LocalWorkerProvider = () =>
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
-        yield* bundler.watch(worker.bundleOptions).pipe(
+        yield* (
+          isPythonMain(worker.bundleOptions.main)
+            ? watchPythonWorkerBundle({
+                id: worker.bundleOptions.id,
+                main: worker.bundleOptions.main,
+                compatibility: worker.compatibility,
+              })
+            : bundler.watch(worker.bundleOptions)
+        ).pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               start = Date.now();
@@ -933,6 +971,8 @@ const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {
       return "ESModule";
     case ".cjs":
       return "CommonJsModule";
+    case ".py":
+      return "PythonModule";
     case ".map":
       return "SourceMap";
     default:
