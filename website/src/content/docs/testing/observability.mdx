@@ -25,7 +25,7 @@ import * as Alchemy from "alchemy";
 Effect.provide(
   Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
-    Alchemy.Telemetry.otlp({
+    Alchemy.Telemetry.layerOtlp({
       url: "https://collector.example.com",
       headers: { "x-api-key": apiKey },
     }),

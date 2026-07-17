@@ -223,7 +223,7 @@ shows the nested `bucket.get` span with your log line attached.
 Telemetry is just a Layer, so turning it off is removing
 `Axiom.Telemetry` from the `Layer.mergeAll` — without an exporter
 Layer, Effect's no-op tracer makes every span free. Because the
-Axiom layer is sugar over the generic `Alchemy.Telemetry.otlp`
+Axiom layer is sugar over the generic `Alchemy.Telemetry.layerOtlp`
 binding layer, any OTLP backend slots into the same position — and
 exporters *compose*, so shipping to Axiom and a second backend at
 once is just another entry in the merge:
@@ -235,7 +235,7 @@ Effect.provide(
   Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
     Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
-    Alchemy.Telemetry.otlp({
+    Alchemy.Telemetry.layerOtlp({
       url: "https://collector.example.com",
       headers: { "x-api-key": apiKey },
     }),

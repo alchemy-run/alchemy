@@ -30,7 +30,7 @@ export interface BaseRuntimeContext {
   planServices?: Layer.Layer<any>;
   /**
    * Telemetry exporter Layer registered during init via
-   * `Telemetry.layer(...)` / `Telemetry.otlp(...)` (see Telemetry.ts).
+   * `Telemetry.layer(...)` / `Telemetry.layerOtlp(...)` (see Telemetry.ts).
    * The runtime bridges build it into every event's request scope,
    * overriding the env-driven default.
    */

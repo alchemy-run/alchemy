@@ -42,14 +42,14 @@ is a no-op, so all instrumentation stays free.
 
 ## Binding layers
 
-`Alchemy.Telemetry.otlp` is the generic form: a *binding* layer for
+`Alchemy.Telemetry.layerOtlp` is the generic form: a *binding* layer for
 any OTLP/HTTP backend. Its url and header values accept plain values
 or resource Outputs — at deploy time, building the layer binds them
 onto the host (`Redacted` values as secret bindings), and at runtime
 the exporter reads them back:
 
 ```typescript
-Alchemy.Telemetry.otlp({
+Alchemy.Telemetry.layerOtlp({
   url: "https://api.honeycomb.io",
   headers: { "x-honeycomb-team": apiKey },
 })
@@ -60,7 +60,7 @@ entry takes precedence over the base `url` (which gets
 `/v1/{traces,logs,metrics}` appended):
 
 ```typescript
-Alchemy.Telemetry.otlp({
+Alchemy.Telemetry.layerOtlp({
   traces: { url: collector.tracesUrl, headers: { ... } },
   logs: { url: collector.logsUrl, headers: { ... } },
 })
@@ -81,7 +81,7 @@ The `Config` read binds the value at deploy time, and because it is
 const Honeycomb = Layer.unwrap(
   Effect.gen(function* () {
     const key = yield* Config.redacted("HONEYCOMB_API_KEY");
-    return Alchemy.Telemetry.otlp({
+    return Alchemy.Telemetry.layerOtlp({
       url: "https://api.honeycomb.io",
       headers: { "x-honeycomb-team": key },
     });
@@ -101,7 +101,7 @@ Effect.provide(
   Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
     Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
-    Alchemy.Telemetry.otlp({
+    Alchemy.Telemetry.layerOtlp({
       url: "https://collector.internal.example.com",
       headers: { "x-api-key": apiKey },
     }),
@@ -185,7 +185,7 @@ scope close delivers everything.
 ## Under the hood
 
 The binding travels as environment bindings on the host: each
-`Telemetry.otlp` layer appends its destination to a single bound
+`layerOtlp` layer appends its destination to a single bound
 destination list (secrets through the secret channel), and the
 runtime exporter reads the list back per event. An environment that
 sets the standard `OTEL_EXPORTER_OTLP_*` variables contributes one

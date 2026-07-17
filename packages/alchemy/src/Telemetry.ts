@@ -21,7 +21,7 @@
  *       // vendor sugar — binds dataset endpoints + ingest token:
  *       Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
  *       // or the generic OTLP form, wired from any Inputs/Outputs:
- *       // Alchemy.Telemetry.otlp({ url: collector.url, headers: { ... } }),
+ *       // Alchemy.Telemetry.layerOtlp({ url: collector.url, headers: { ... } }),
  *       // or any custom exporter Layer:
  *       // Alchemy.Telemetry.layer(myExporterLayer),
  *     ),
@@ -29,7 +29,7 @@
  * );
  * ```
  *
- * {@link Telemetry.otlp} is a *binding* layer: at deploy time it binds the
+ * {@link layerOtlp} is a *binding* layer: at deploy time it binds the
  * configured endpoints/headers onto the host (Redacted values as secrets),
  * and at runtime the exporter reads those bound values back. Telemetry is
  * off until a layer is provided — Effect's default tracer is a no-op, so
@@ -173,7 +173,7 @@ interface ResolvedSignal {
 
 /**
  * One export destination in the bound list — the resolved form of one
- * {@link Telemetry.otlp} layer.
+ * {@link layerOtlp} layer.
  */
 interface ResolvedDestination {
   traces?: ResolvedSignal | undefined;
@@ -184,7 +184,7 @@ interface ResolvedDestination {
 /**
  * The single env binding carrying every configured destination as a JSON
  * array of {@link ResolvedDestination}. One key (instead of per-signal
- * keys) is what lets multiple `Telemetry.otlp` layers compose — each layer
+ * keys) is what lets multiple `layerOtlp` layers compose — each layer
  * build appends its destination and rebinds the full list.
  */
 const EXPORTERS_KEY = "ALCHEMY_OTEL_EXPORTERS";
@@ -375,7 +375,7 @@ const makeExporterLayer = (options?: {
   );
 
 /**
- * The runtime half of the {@link Telemetry.otlp} binding, and the default
+ * The runtime half of the {@link layerOtlp} binding, and the default
  * per-event Layer: reads the bound `OTEL_EXPORTER_OTLP_*` values back and
  * constructs the OTLP JSON exporters. Each signal resolves independently;
  * only configured signals export; resolves to `Layer.empty` when nothing is
@@ -402,9 +402,20 @@ const fromBoundConfig: TelemetryLayer = makeExporterLayer({
  */
 const fromBoundConfigProcess: TelemetryLayer = makeExporterLayer();
 
-const reference = Context.Reference<TelemetryLayer>("alchemy/Telemetry", {
-  defaultValue: () => fromBoundConfig,
-});
+/**
+ * The per-event telemetry exporters, as a `Context.Reference` holding the
+ * Layer the runtime bridges build into every event's request scope.
+ * Provide it via {@link layerOtlp} / {@link layer} rather than directly —
+ * see the module documentation.
+ */
+export const Telemetry = Context.Reference<TelemetryLayer>(
+  "alchemy/Telemetry",
+  {
+    defaultValue: () => fromBoundConfig,
+  },
+);
+
+const reference = Telemetry;
 
 /**
  * Install a custom telemetry Layer (any Layer providing a `Tracer`,
@@ -424,7 +435,7 @@ const reference = Context.Reference<TelemetryLayer>("alchemy/Telemetry", {
  * never reach them — the registration is what makes it visible at request
  * time.
  */
-const telemetryLayer = (layer: TelemetryLayer): Layer.Layer<never> =>
+export const layer = (exporter: TelemetryLayer): Layer.Layer<never> =>
   Layer.effect(
     reference,
     Effect.gen(function* () {
@@ -432,10 +443,10 @@ const telemetryLayer = (layer: TelemetryLayer): Layer.Layer<never> =>
       if (ctx !== undefined) {
         ctx.telemetry =
           ctx.telemetry === undefined
-            ? layer
-            : Layer.mergeAll(ctx.telemetry, layer);
+            ? exporter
+            : Layer.mergeAll(ctx.telemetry, exporter);
       }
-      return layer;
+      return exporter;
     }),
   );
 
@@ -461,7 +472,7 @@ export interface OtlpSignalOptions {
 }
 
 /**
- * Options for {@link Telemetry.otlp}. Configure a base `url` (with
+ * Options for {@link layerOtlp}. Configure a base `url` (with
  * `/v1/{signal}` appended per signal), per-signal urls, or a mix — a
  * per-signal entry takes precedence over the base.
  */
@@ -489,7 +500,7 @@ interface Placeholder {
 }
 
 /**
- * Per-runtime-context accumulator: every `Telemetry.otlp` layer built for
+ * Per-runtime-context accumulator: every `layerOtlp` layer built for
  * the same host appends its destination here and rebinds the full list, so
  * merged layers compose instead of clobbering each other.
  */
@@ -613,7 +624,7 @@ const destinationsOutput = (
  *   Layer.mergeAll(
  *     Cloudflare.R2.ReadWriteBucketBinding,
  *     Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
- *     Alchemy.Telemetry.otlp({
+ *     Alchemy.Telemetry.layerOtlp({
  *       url: "https://api.honeycomb.io",
  *       headers: { "x-honeycomb-team": apiKey },
  *     }),
@@ -621,7 +632,7 @@ const destinationsOutput = (
  * )
  * ```
  */
-const otlp = (options: OtlpOptions): Layer.Layer<never> =>
+export const layerOtlp = (options: OtlpOptions): Layer.Layer<never> =>
   Layer.effect(
     reference,
     Effect.gen(function* () {
@@ -648,18 +659,6 @@ const otlp = (options: OtlpOptions): Layer.Layer<never> =>
   );
 
 /**
- * The per-event telemetry exporters, as a `Context.Reference` holding the
- * Layer the runtime bridges build into every event's request scope. See
- * the module documentation for how to provide one.
- */
-export const Telemetry = Object.assign(reference, {
-  /** Install a custom telemetry Layer. */
-  layer: telemetryLayer,
-  /** The built-in OTLP exporter as a binding layer. */
-  otlp,
-});
-
-/**
  * Build the configured {@link Telemetry} Layer into an event's request
  * scope, returning the Context of telemetry services to provide to the
  * event's handler effect.
@@ -675,7 +674,7 @@ export const Telemetry = Object.assign(reference, {
  * Context with a warning instead of failing the event.
  *
  * `override` is the (possibly merged) custom Layer registered on the
- * runtime context by {@link Telemetry.layer} during init. It composes with
+ * runtime context by {@link layer} during init. It composes with
  * — rather than replaces — the bound OTLP destinations: loggers and metric
  * exporters merge, and a custom `Tracer` (a single Effect service) wins
  * over the built-in one.
@@ -715,7 +714,7 @@ export const buildEventTelemetry = (
  * closes on graceful exit.
  *
  * `runtimeContext` is the entrypoint's runtime context; its `telemetry`
- * field carries the custom Layer(s) registered by {@link Telemetry.layer}
+ * field carries the custom Layer(s) registered by {@link layer}
  * during init, composed with the bound OTLP destinations (read with the
  * standard periodic export intervals).
  */

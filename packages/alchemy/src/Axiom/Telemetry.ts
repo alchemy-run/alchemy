@@ -3,10 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
-import {
-  Telemetry as AlchemyTelemetry,
-  type OtlpSignalOptions,
-} from "../Telemetry.ts";
+import { layerOtlp, type OtlpSignalOptions } from "../Telemetry.ts";
 import type { ApiToken } from "./ApiToken.ts";
 import type { Dataset } from "./Dataset.ts";
 
@@ -74,7 +71,7 @@ const signal = (
 /**
  * Export a Function/Worker's telemetry to Axiom.
  *
- * A binding layer over {@link AlchemyTelemetry.otlp | Alchemy.Telemetry.otlp}:
+ * A binding layer over {@link layerOtlp | Alchemy.Telemetry.layerOtlp}:
  * building it binds each dataset's OTLP endpoint and the ingest token's
  * `Authorization` header (as a secret) onto the host, and at runtime the
  * built-in exporter ships each signal to its dataset, flushed per event.
@@ -112,7 +109,7 @@ export const Telemetry = (props: AxiomTelemetryProps): Layer.Layer<never> =>
       const traces = props.traces && (yield* instance(props.traces));
       const logs = props.logs && (yield* instance(props.logs));
       const metrics = props.metrics && (yield* instance(props.metrics));
-      return AlchemyTelemetry.otlp({
+      return layerOtlp({
         serviceName: props.serviceName,
         traces: signal(token, traces, "otelTracesEndpoint"),
         logs: signal(token, logs, "otelLogsEndpoint"),

@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import { Telemetry } from "@/Telemetry.ts";
+import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,7 +7,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
- * Effect-native Worker exercising the built-in `Telemetry.otlp` binding
+ * Effect-native Worker exercising the built-in `Telemetry.layerOtlp` binding
  * layer: building it at deploy time binds the collector url (resolved from
  * the deployer's `COLLECTOR_URL` config, provided by Telemetry.test.ts
  * after the collector deploys) and the service name onto the Worker; at
@@ -73,8 +73,8 @@ export default class OtelTracedWorker extends Cloudflare.Worker<OtelTracedWorker
         Effect.gen(function* () {
           const url = yield* Config.string("COLLECTOR_URL");
           return Layer.mergeAll(
-            Telemetry.otlp({ url, serviceName: "otel-traced-test" }),
-            Telemetry.otlp({ traces: { url: `${url}/v1/second-traces` } }),
+            Telemetry.layerOtlp({ url, serviceName: "otel-traced-test" }),
+            Telemetry.layerOtlp({ traces: { url: `${url}/v1/second-traces` } }),
           );
         }),
       ),

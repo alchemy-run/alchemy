@@ -1,5 +1,5 @@
 import * as Lambda from "@/AWS/Lambda";
-import { Telemetry } from "@/Telemetry.ts";
+import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,7 +7,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
- * Lambda fixture for Telemetry.test.ts: exercises the `Telemetry.otlp`
+ * Lambda fixture for Telemetry.test.ts: exercises the `Telemetry.layerOtlp`
  * binding layer. Building it at deploy time binds the collector url
  * (resolved from the deployer's `COLLECTOR_URL` config, provided by the
  * test's ConfigProvider override) and the service name onto the Function;
@@ -74,7 +74,7 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
       Layer.unwrap(
         Effect.gen(function* () {
           const url = yield* Config.string("COLLECTOR_URL");
-          return Telemetry.otlp({ url, serviceName: "otel-lambda-test" });
+          return Telemetry.layerOtlp({ url, serviceName: "otel-lambda-test" });
         }),
       ),
     ),
