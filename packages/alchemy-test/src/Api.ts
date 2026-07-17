@@ -11,7 +11,7 @@ import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
 import * as TestConsole from "effect/testing/TestConsole";
 
-import type { Hook, Mode, Suite, TestBody } from "./Model.ts";
+import type { Hook, Mode, TestBody } from "./Model.ts";
 import { makeSuite } from "./Model.ts";
 import { currentSuite, withSuite } from "./Registry.ts";
 

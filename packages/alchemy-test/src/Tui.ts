@@ -16,8 +16,11 @@
  *   y              copy error+output   q        quit
  *
  * Mouse: the wheel scrolls the viewable content without moving the selected
- * line; clicking a row selects it; drag-selecting text copies it to the
- * clipboard on release (OSC52 + pbcopy).
+ * line; clicking a row selects it. Drag-to-select text works in the detail
+ * pane (enter) and copies to the clipboard on release (OSC52 + pbcopy);
+ * list rows are not text-selectable — they're a recycled pool, and an
+ * anchored selection highlight would leave residue as rows repaint (use `y`
+ * to copy a row's details instead).
  *
  * Colors follow the terminal theme: default foreground/background
  * everywhere, ANSI palette colors only for status glyphs, and inverse video
@@ -469,7 +472,12 @@ const makeTui = async (logFile: string): Promise<Tui> => {
         width: "100%",
         height: 1,
         content: "",
-        selectable: true,
+        // NOT selectable: rows are a recycled pool, and opentui anchors
+        // text-selection highlights on the renderable — a drag would leave
+        // highlight residue behind as row content repaints under it. Copy
+        // from the list with `y`; free-form text selection lives in the
+        // detail pane (enter), whose content is stable.
+        selectable: false,
         // Wheel scrolls the viewable content without moving the selection;
         // a click selects the row under the cursor.
         onMouse: (event: MouseEvent) => {
