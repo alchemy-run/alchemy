@@ -846,10 +846,32 @@ export const make = <A>(
                   })
                   .pipe(providePlanScope(fqn, oldState.instanceId));
                 if (attr) {
+                  // The recovered resource may be foreign: our interrupted
+                  // create could have lost a name race, or died before
+                  // stamping ownership. Route `Unowned` through the same
+                  // adoption table as the cold-start probe above — never
+                  // silently take over (and later mutate/delete) a resource
+                  // we cannot prove we created.
+                  if (Unowned.is(attr)) {
+                    const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
+                    if (!adoptThis) {
+                      return yield* new OwnedBySomeoneElse({
+                        message:
+                          `Cannot resume creating resource '${fqn}' ` +
+                          `(${resource.Type}): a resource with its physical ` +
+                          "identity exists in the cloud but is not owned by " +
+                          "this stack/stage/logical-id. Re-run with `--adopt` " +
+                          "(or wrap the effect in `adopt(true)`) to take it " +
+                          "over.",
+                        resourceType: resource.Type,
+                        logicalId: id,
+                      });
+                    }
+                  }
                   return Node<Create>({
                     action: "create",
                     props: news,
-                    state: { ...oldState, attr },
+                    state: { ...oldState, attr: stripUnowned(attr) },
                   });
                 }
               }
@@ -1251,36 +1273,27 @@ export const make = <A>(
             // Tasks are routed through `actionDeletions` above.
             if (isActionState(persisted)) return;
             const oldState = persisted as ResourceState | undefined;
-            let attr: any = oldState?.attr;
             if (oldState) {
               const { logicalId } = parseFqn(fqn);
               const resourceType = oldState.resourceType;
               const provider = yield* findProviderByType(resourceType);
-              if (oldState.attr === undefined) {
-                if (provider.read) {
-                  attr = yield* provider
-                    .read({
-                      id: logicalId,
-                      fqn,
-                      instanceId: oldState.instanceId,
-                      olds: oldState.props as never,
-                      output: oldState.attr as never,
-                    })
-                    .pipe(providePlanScope(fqn, oldState.instanceId));
-                }
-              }
+              // NOTE: an attr-less row (interrupted create) is NOT recovered
+              // here. Apply's `deleteResource` performs the authoritative
+              // read-then-delete recovery — it also covers replaced-chain
+              // old generations that never pass through plan, and routes
+              // `Unowned` results away from `provider.delete`.
               return [
                 fqn,
                 {
                   action: "delete",
-                  state: { ...oldState, attr },
+                  state: oldState,
                   provider: provider,
                   resource: {
                     Namespace: oldState.namespace,
                     FQN: fqn,
                     LogicalId: logicalId,
                     Type: oldState.resourceType,
-                    Attributes: attr,
+                    Attributes: oldState.attr,
                     Props: oldState.props,
                     Binding: undefined!,
                     Provider: Provider(resourceType),
