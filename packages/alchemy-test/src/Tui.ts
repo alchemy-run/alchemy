@@ -11,8 +11,10 @@
  *   j/k or arrows  move one line       space / ^d ^u / ^f ^b   page / half page
  *   gg / G         top / bottom        /        live type-to-filter
  *   enter          open test / toggle  h / l    collapse / expand file
+ *   e / c          expand / collapse all visible files
  *   esc            back / clear filter p f n s  toggle pass/fail/pending/skipped
- *   r              retry test / file   x        kill running test
+ *   r              retry test / file   R        retry all failed tests
+ *   x              kill running test
  *   y              copy error+output   q        quit
  *
  * Mouse: the wheel scrolls the viewable content without moving the selected
@@ -23,8 +25,8 @@
  * to copy a row's details instead).
  *
  * Colors follow the terminal theme: default foreground/background
- * everywhere, ANSI palette colors only for status glyphs, and inverse video
- * for the selected row (neovim-style).
+ * everywhere, ANSI palette colors only for status glyphs, and a subtle
+ * theme-aware background for the selected row (neovim-style).
  *
  * Performance: the list is a fixed pool of Text rows (one per terminal
  * line) painted from the visible window only — updates are O(window), never
@@ -32,6 +34,7 @@
  */
 import {
   BoxRenderable,
+  bg,
   CliRenderEvents,
   createCliRenderer,
   dim,
@@ -41,7 +44,6 @@ import {
   strikethrough,
   StyledText,
   stringToStyledText,
-  TextAttributes,
   TextRenderable,
   yellow,
   type CliRenderer,
@@ -148,7 +150,12 @@ interface FileNode {
 }
 
 type Node =
-  | { readonly kind: "file"; readonly node: FileNode }
+  | {
+      readonly kind: "file";
+      readonly node: FileNode;
+      /** Aggregate status of the tests that survived the active filters. */
+      readonly status: Status;
+    }
   | { readonly kind: "test"; readonly entry: Entry };
 
 const makeCounts = (): Record<Status, number> => ({
@@ -175,16 +182,26 @@ const fileSummary = (node: FileNode): string => {
     ...(c.running > 0 ? [`${c.running} running`] : []),
     `${c.pass}/${node.tests.length - c.skip - c.todo} passed`,
     ...(c.skip > 0 ? [`${c.skip} skipped`] : []),
+    ...(c.todo > 0 ? [`${c.todo} todo`] : []),
   ];
   return parts.join(" · ");
 };
 
-const fileStatus = (node: FileNode): Status => {
-  const c = node.counts;
-  if (c.fail > 0) return "fail";
-  if (node.hook !== undefined || c.running > 0) return "running";
-  if (c.queued > 0) return "queued";
-  if (c.pass > 0) return "pass";
+const visibleFileStatus = (
+  node: FileNode,
+  tests: ReadonlyArray<Entry>,
+): Status => {
+  if (tests.some((test) => test.status === "fail")) return "fail";
+  if (
+    node.hook !== undefined &&
+    tests.some((test) => test.status === "running" || test.status === "queued")
+  ) {
+    return "running";
+  }
+  if (tests.some((test) => test.status === "running")) return "running";
+  if (tests.some((test) => test.status === "queued")) return "queued";
+  if (tests.some((test) => test.status === "pass")) return "pass";
+  if (tests.some((test) => test.status === "todo")) return "todo";
   return "skip";
 };
 
@@ -204,12 +221,12 @@ class TuiState {
   readonly files = new Map<string, FileNode>();
   readonly fileOrder: Array<FileNode> = [];
   readonly fileLogs = new Map<string, ReadonlyArray<LogEntry>>();
-  /** Independent status-group visibility toggles (all on by default). */
+  /** Independent status groups; only failed and pending show by default. */
   readonly show: Record<StatusGroup, boolean> = {
-    pass: true,
+    pass: false,
     fail: true,
     pending: true,
-    skipped: true,
+    skipped: false,
   };
   /** Active filter query ("" = none). Applied live on every keystroke. */
   filter = "";
@@ -318,7 +335,7 @@ class TuiState {
       const tests = node.tests.filter((t) => this.matches(t));
       if (tests.length === 0) continue;
       const expanded = this.isExpanded(node);
-      out.push({ kind: "file", node });
+      out.push({ kind: "file", node, status: visibleFileStatus(node, tests) });
       if (expanded) {
         for (const entry of tests) out.push({ kind: "test", entry });
       }
@@ -413,7 +430,7 @@ interface Tui {
 }
 
 const FOOTER_HINTS =
-  "j/k · enter open · / filter · h/l fold · r retry · x kill · y copy · q quit";
+  "j/k · enter open · / filter · h/l fold · e/c all · r retry · R retry failed · x kill · y copy · q quit";
 
 const makeTui = async (logFile: string): Promise<Tui> => {
   const state = new TuiState();
@@ -429,6 +446,8 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     // the run log) — don't let opentui's overlay re-patch it afterwards.
     consoleMode: "disabled",
   });
+  const selectionBackground = (): string =>
+    renderer.themeMode === "light" ? "#d0d0d0" : "#303030";
 
   // Divert stray JS-level stdout/stderr writes into the run log while the
   // TUI owns the screen: anything that bypasses the per-test Effect Console
@@ -669,9 +688,12 @@ const makeTui = async (logFile: string): Promise<Tui> => {
         node !== undefined && state.topIndex + i === state.selectedIndex;
 
       if (node === undefined) {
-        if (row.key !== "") {
-          row.key = "";
-          row.text.content = "";
+        // Empty content emits no cells, so it does not erase whatever this
+        // recycled screen row painted previously. Repaint the entire width.
+        const emptyKey = `empty|${width}`;
+        if (row.key !== emptyKey) {
+          row.key = emptyKey;
+          row.text.content = " ".repeat(width);
         }
         continue;
       }
@@ -681,7 +703,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       let rest: string;
       if (node.kind === "file") {
         const expanded = state.isExpanded(node.node);
-        status = fileStatus(node.node);
+        status = node.status;
         head = ` ${expanded ? "▾" : "▸"} ${GLYPH[status]} `;
         const phase = filePhase(node.node);
         rest =
@@ -717,23 +739,12 @@ const makeTui = async (logFile: string): Promise<Tui> => {
           chunks.push(...stringToStyledText(rest).chunks);
         }
       }
-      // Inverse video for the selection — uses the terminal's own colors.
-      // Baked into every chunk (NOT the renderable's default `attributes`):
-      // buffer-default attributes are applied when the styled chunks are
-      // packed, so flipping them on an already-painted row is unreliable
-      // and left INVERSE residue on rows the selection had passed through.
-      // (Set directly instead of opentui's `reverse()` helper — that helper
-      // passes `{ reverse: true }` to a builder that only reads `inverse`,
-      // so it never actually sets the bit.)
+      // Use an explicit background instead of terminal inverse video.
+      // OpenTUI's cell diff can leave inverse attributes behind when the
+      // selection moves upward; a concrete background has symmetric paint
+      // and clear operations in both navigation directions.
       row.text.content = new StyledText(
-        isSelected
-          ? chunks.map((chunk) => ({
-              ...chunk,
-              attributes:
-                (chunk.attributes ?? TextAttributes.NONE) |
-                TextAttributes.INVERSE,
-            }))
-          : chunks,
+        isSelected ? chunks.map(bg(selectionBackground())) : chunks,
       );
     }
   };
@@ -787,6 +798,28 @@ const makeTui = async (logFile: string): Promise<Tui> => {
 
   const setExpanded = (node: FileNode, expanded: boolean): void => {
     node.expanded = expanded;
+    state.dirty = true;
+    renderList();
+  };
+
+  const setAllVisibleExpanded = (expanded: boolean): void => {
+    const selected = selectedNode();
+    const visibleFiles = new Set(
+      state
+        .visible()
+        .map((node) => (node.kind === "file" ? node.node : node.entry.file)),
+    );
+    for (const file of visibleFiles) file.expanded = expanded;
+
+    const nodes = state.visible();
+    const selectedFile =
+      selected?.kind === "file" ? selected.node : selected?.entry.file;
+    const selectedIndex = nodes.findIndex((node) =>
+      expanded && selected?.kind === "test"
+        ? node.kind === "test" && node.entry === selected.entry
+        : node.kind === "file" && node.node === selectedFile,
+    );
+    state.selectedIndex = Math.max(selectedIndex, 0);
     state.dirty = true;
     renderList();
   };
@@ -863,6 +896,20 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       controller.retryFile(node.node.file);
       flash(`retrying ${node.node.file}`);
     }
+  };
+
+  const retryFailures = (): void => {
+    const controller = state.controller;
+    if (controller === undefined) return;
+    const failed = [...state.byId.values()].filter(
+      (entry) => entry.status === "fail",
+    );
+    for (const entry of failed) controller.retryTest(entry.meta.id);
+    flash(
+      failed.length === 0
+        ? "no failed tests to retry"
+        : `retrying ${failed.length} failed test${failed.length === 1 ? "" : "s"}`,
+    );
   };
 
   const killSelection = (): void => {
@@ -955,7 +1002,11 @@ const makeTui = async (logFile: string): Promise<Tui> => {
         copySelection();
         return;
       case "r":
-        retrySelection();
+        if (key.shift) {
+          retryFailures();
+        } else {
+          retrySelection();
+        }
         return;
       case "x":
         killSelection();
@@ -1041,6 +1092,12 @@ const makeTui = async (logFile: string): Promise<Tui> => {
         if (node?.kind === "file") setExpanded(node.node, true);
         return;
       }
+      case "e":
+        setAllVisibleExpanded(true);
+        return;
+      case "c":
+        setAllVisibleExpanded(false);
+        return;
       case "up":
       case "k":
         moveSelection(-1);
