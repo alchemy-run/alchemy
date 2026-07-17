@@ -1482,6 +1482,11 @@ export const LiveWorkerProvider = () =>
           },
           {
             type: "plain_text",
+            name: "ALCHEMY_WORKER_NAME",
+            text: name,
+          },
+          {
+            type: "plain_text",
             name: "ALCHEMY_STACK_NAME",
             text: stack.name,
           },

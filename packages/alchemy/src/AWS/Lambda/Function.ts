@@ -41,6 +41,7 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { packEnvValue, unpackEnvValue } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
+import { buildEventTelemetry } from "../../Telemetry.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -613,53 +614,74 @@ export const Function: Platform<
       exports: Effect.sync(() => ({
         // construct an Effect that produces the Function's entrypoint
         // Effect<(event, context) => Promise<any>>
-        handler: Effect.map(
-          Effect.all(listeners, {
+        handler: Effect.gen(function* () {
+          const handlers = yield* Effect.all(listeners, {
             concurrency: "unbounded",
-          }),
-          (handlers) =>
-            async (event: any, context: lambda.Context): Promise<any> => {
-              for (const handler of handlers) {
-                const eff = handler(event);
-                if (Effect.isEffect(eff)) {
-                  // Each invocation gets a fresh request scope, matching the
-                  // Worker / Durable Object / Workflow bridges. The scope is
-                  // settled inline before returning: a buffered Lambda
-                  // response is not released to the caller until the Invoke
-                  // phase completes, so deferring cleanup (e.g. via an
-                  // INVOKE-subscribed extension window) shows up as response
-                  // latency anyway — keep request finalizers fast. A failing
-                  // finalizer is logged and ignored so it can't mask the
-                  // invocation's outcome.
-                  const scope = Scope.makeUnsafe();
-                  const exit = await eff.pipe(
-                    Effect.provide(
-                      Layer.mergeAll(
-                        Layer.succeed(HandlerContext, context),
-                        Layer.succeed(Scope.Scope, scope),
-                      ),
-                    ),
-                    Effect.tap(Effect.logDebug),
-                    Effect.runPromiseExit,
+          });
+          // Sandbox-lifetime services, captured so each invocation can
+          // build its telemetry exporters and run the handler effect
+          // against the same context the init phase saw (mirrors
+          // WorkerBridge). The build's memo map is stripped so a Layer the
+          // user `Effect.provide`s inside a handler builds per invocation.
+          const services = Context.omit(Layer.CurrentMemoMap)(
+            yield* Effect.context<never>(),
+          );
+          return async (event: any, context: lambda.Context): Promise<any> => {
+            for (const handler of handlers) {
+              const eff = handler(event);
+              if (Effect.isEffect(eff)) {
+                // Each invocation gets a fresh request scope, matching the
+                // Worker / Durable Object / Workflow bridges. The scope is
+                // settled inline before returning: a buffered Lambda
+                // response is not released to the caller until the Invoke
+                // phase completes, so deferring cleanup (e.g. via an
+                // INVOKE-subscribed extension window) shows up as response
+                // latency anyway — keep request finalizers fast. A failing
+                // finalizer is logged and ignored so it can't mask the
+                // invocation's outcome.
+                const scope = Scope.makeUnsafe();
+                // Telemetry exporters build into the invocation scope so
+                // buffered spans/logs/metrics flush when it settles below.
+                const exit = await buildEventTelemetry(
+                  services,
+                  scope,
+                  (ctx as Serverless.FunctionContext).telemetry,
+                ).pipe(
+                  Effect.flatMap((telemetry) =>
+                    Effect.provideContext(eff, telemetry),
+                  ),
+                  Effect.provide(
+                    Layer.mergeAll(
+                      Layer.succeed(HandlerContext, context),
+                      Layer.succeed(Scope.Scope, scope),
+                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                  ),
+                  Effect.tap(Effect.logDebug),
+                  Effect.runPromiseExit,
+                );
+                if (!isScopeEjected(scope)) {
+                  // The HttpMiddleware tracer ends the request's root span
+                  // in a dispatcher task scheduled after the handler effect
+                  // resolves; yield one macrotask so it reaches the
+                  // telemetry exporter's buffer before the flush finalizer.
+                  await new Promise((resolve) => setTimeout(resolve, 0));
+                  await Scope.close(scope, exit).pipe(
+                    Effect.ignoreCause({
+                      log: "Warn",
+                      message: "Lambda invocation scope close failed",
+                    }),
+                    Effect.runPromise,
                   );
-                  if (!isScopeEjected(scope)) {
-                    await Scope.close(scope, exit).pipe(
-                      Effect.ignoreCause({
-                        log: "Warn",
-                        message: "Lambda invocation scope close failed",
-                      }),
-                      Effect.runPromise,
-                    );
-                  }
-                  if (Exit.isSuccess(exit)) {
-                    return exit.value;
-                  }
-                  throw Cause.squash(exit.cause);
                 }
+                if (Exit.isSuccess(exit)) {
+                  return exit.value;
+                }
+                throw Cause.squash(exit.cause);
               }
-              throw new Error("No event handler found");
-            },
-        ),
+            }
+            throw new Error("No event handler found");
+          };
+        }),
       })),
     };
     return ctx;

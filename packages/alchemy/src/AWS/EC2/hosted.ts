@@ -189,6 +189,7 @@ import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -210,8 +211,15 @@ const platform = Layer.mergeAll(
 // and run it with a Bun HTTP server bound to PORT, so a returned { fetch }
 // handler is actually served and host.run loops stay alive.
 const program = handler.pipe(
-  Effect.flatMap((instance) => instance.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes on graceful
+  // shutdown.
+  Effect.flatMap((instance) =>
+    instance.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.program),
+      provideProcessTelemetry(instance.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     Layer.effect(
       Stack,

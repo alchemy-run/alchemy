@@ -341,6 +341,7 @@ export const LocalWorkerProvider = () =>
         const compatibility = getCompatibility(props);
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
+          Text.local("ALCHEMY_WORKER_NAME", name),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
           Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),

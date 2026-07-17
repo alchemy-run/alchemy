@@ -1,8 +1,10 @@
 import * as Cause from "effect/Cause";
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import { buildEventTelemetry } from "../../Telemetry.ts";
 import { isScopeEjected } from "../Workers/HttpServer.ts";
 import { getWorkerExport } from "../Workers/WorkerBridge.ts";
 import {
@@ -49,18 +51,31 @@ export const makeWorkflowBridge =
     });
 
     return class WorkflowBridge extends WorkflowEntrypoint {
-      readonly fn: Promise<WorkflowImpl<unknown, unknown>>;
+      readonly build: Promise<{
+        readonly context: Context.Context<never>;
+        readonly fn: WorkflowImpl<unknown, unknown>;
+        readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
+      }>;
 
       constructor(ctx: unknown, env: unknown) {
         super(ctx, env);
 
-        this.fn = build(() => {}).then(({ context, export: wf }) =>
-          wf.make(env).pipe(Effect.provideContext(context), Effect.runPromise),
-        ) as Promise<WorkflowImpl<unknown, unknown>>;
+        this.build = build(() => {}).then(
+          ({ context, export: wf, telemetry }) =>
+            wf.make(env).pipe(
+              Effect.provideContext(context),
+              Effect.map((fn) => ({
+                context,
+                fn: fn as WorkflowImpl<unknown, unknown>,
+                telemetry,
+              })),
+              Effect.runPromise,
+            ),
+        );
       }
 
       async run(event: any, step: any): Promise<unknown> {
-        const fn = await this.fn;
+        const { context, fn, telemetry } = await this.build;
         // Each run-invocation gets a fresh `Scope`, following the same
         // per-invocation-scope pattern as `WorkerBridge.processEvent`. `task`
         // threads it into every step via the surrounding body context, so
@@ -69,7 +84,13 @@ export const makeWorkflowBridge =
         // workflow steps, matching the Worker and Durable Object bridges.
         const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(
-          fn(event.payload).pipe(
+          // Build the configured telemetry exporters into the run's scope so
+          // buffered telemetry flushes when the scope closes at the end of
+          // the run-invocation.
+          buildEventTelemetry(context, scope, telemetry()).pipe(
+            Effect.flatMap((telemetry) =>
+              Effect.provideContext(fn(event.payload), telemetry),
+            ),
             Effect.provide(
               Layer.succeed(
                 WorkflowEventService,
@@ -79,6 +100,7 @@ export const makeWorkflowBridge =
                   Layer.succeed(WorkflowStep, wrapWorkflowStep(step)),
                 ),
                 Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
+                Layer.provideMerge(Layer.succeedContext(context)),
               ),
             ),
           ) as Effect.Effect<unknown>,

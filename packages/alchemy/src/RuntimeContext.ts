@@ -28,6 +28,13 @@ export interface BaseRuntimeContext {
   shape?: () => Record<string, unknown>;
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
+  /**
+   * Telemetry exporter Layer registered during init via
+   * `Telemetry.layer(...)` / `Telemetry.otlp(...)` (see Telemetry.ts).
+   * The runtime bridges build it into every event's request scope,
+   * overriding the env-driven default.
+   */
+  telemetry?: Layer.Layer<never, any, any>;
 }
 
 /**

@@ -19,6 +19,7 @@ import {
 } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import { buildEventTelemetry } from "../../Telemetry.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
@@ -41,13 +42,16 @@ import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
 /**
  * The isolate-lifetime artifacts produced by a single layer build: the built
- * service Context, the resolved export for this entrypoint, and the user's
- * RPC shape (a thunk — the shape is only populated once `serve` has run).
+ * service Context, the resolved export for this entrypoint, the user's
+ * RPC shape (a thunk — the shape is only populated once `serve` has run),
+ * and the telemetry Layer override registered during init (a thunk for the
+ * same reason).
  */
 export interface WorkerBuild<Export = any> {
   readonly context: Context.Context<any>;
   readonly export: Export;
   readonly shape: () => Record<string, any>;
+  readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
 }
 
 /**
@@ -87,7 +91,18 @@ export const makeWorkerBridge = (
       .then(
         (built) => {
           const [eff, services] = makeEffect(built);
-          return eff.pipe(
+          // Build the configured telemetry exporters into the *request*
+          // scope (not the never-finalized isolate scope): the batching
+          // fiber lives in this event's I/O context and buffered telemetry
+          // flushes when the scope closes into `ctx.waitUntil` below.
+          return buildEventTelemetry(
+            built.context,
+            scope,
+            built.telemetry(),
+          ).pipe(
+            Effect.flatMap((telemetry) =>
+              Effect.provideContext(eff, telemetry),
+            ),
             // Per-event services take precedence over the captured services
             // and the built isolate context: the isolate context carries the
             // *deferred* WorkerExecutionContext (yieldable in the top-level
@@ -118,8 +133,15 @@ export const makeWorkerBridge = (
       .finally(() =>
         isScopeEjected(scope)
           ? undefined
-          : Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
-              ctx.waitUntil(promise),
+          : ctx.waitUntil(
+              // The HttpMiddleware tracer ends the request's root span in a
+              // dispatcher task scheduled after the handler effect resolves.
+              // Yield one macrotask before closing the scope so that span
+              // reaches the telemetry exporter's buffer before the scope's
+              // flush finalizer runs.
+              new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
+                Effect.runPromise(Scope.close(scope, Exit.void)),
+              ),
             ),
       );
   };
@@ -398,6 +420,7 @@ export const getWorkerExport = <Export = any>({
                 context,
                 export: exp,
                 shape: rc.shape,
+                telemetry: () => rc.telemetry,
               }),
             ),
             Effect.provideContext(context),
