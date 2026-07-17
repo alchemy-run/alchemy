@@ -12,6 +12,8 @@ import { BundleError } from "./Bundle.ts";
 export interface InstalledPackageFile {
   readonly path: string;
   readonly content: Uint8Array<ArrayBufferLike>;
+  /** Complete Unix mode, including the file type bits. */
+  readonly mode?: number;
 }
 
 export type PackageInstall =
@@ -587,11 +589,23 @@ const readArtifactFiles = (directory: string) =>
       a.localeCompare(b),
     )) {
       const absolutePath = path.join(directory, relativePath);
+      const linkTarget = yield* fs
+        .readLink(absolutePath)
+        .pipe(Effect.catch(() => Effect.succeed(undefined)));
+      if (linkTarget !== undefined) {
+        files.push({
+          path: relativePath.replaceAll("\\", "/"),
+          content: new TextEncoder().encode(linkTarget),
+          mode: 0o120777,
+        });
+        continue;
+      }
       const stat = yield* fs.stat(absolutePath);
       if (stat.type !== "File") continue;
       files.push({
         path: relativePath.replaceAll("\\", "/"),
         content: yield* fs.readFile(absolutePath),
+        mode: stat.mode,
       });
     }
     return files;
