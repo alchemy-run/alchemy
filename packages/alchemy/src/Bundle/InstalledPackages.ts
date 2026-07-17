@@ -14,6 +14,8 @@ export interface InstalledPackageFile {
   readonly content: Uint8Array<ArrayBufferLike>;
 }
 
+type JsonRecord = Record<string, unknown>;
+
 export type PackageInstall =
   | ReadonlyArray<string>
   | Readonly<Record<string, string>>;
@@ -203,7 +205,17 @@ export function resolveInstallTargets(
         options.requested[packageName],
       );
     }
-    return resolved;
+    const lockfilePath = yield* findUp(options.cwd, lockfileNames);
+    if (lockfilePath === undefined) {
+      return resolved;
+    }
+    return yield* pinInstallVersionsFromLockfile({
+      cwd: options.cwd,
+      lockfilePath,
+      packageJson: sourcePackageJson,
+      requested: options.requested,
+      resolved,
+    });
   }).pipe(Effect.mapError(toBundleError));
 }
 
@@ -398,6 +410,458 @@ const resolveInstallVersion = (
 
     return version;
   });
+
+const pinInstallVersionsFromLockfile = (options: {
+  readonly cwd: string;
+  readonly lockfilePath: string;
+  readonly packageJson: PackageJson;
+  readonly requested: Readonly<Record<string, string>>;
+  readonly resolved: Readonly<Record<string, string>>;
+}): Effect.Effect<
+  Record<string, string>,
+  BundleError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const lockfileName = path.basename(options.lockfilePath);
+    const lockfileDirectory = path.dirname(options.lockfilePath);
+    const importer = path
+      .relative(lockfileDirectory, options.cwd)
+      .replaceAll("\\", "/");
+    const candidates = Object.keys(options.resolved).filter((packageName) => {
+      const requested = options.requested[packageName];
+      const declared = declaredPackageVersion(options.packageJson, packageName);
+      return (
+        declared !== undefined &&
+        (requested === undefined ||
+          requested === "" ||
+          requested === "*" ||
+          requested === declared)
+      );
+    });
+    if (candidates.length === 0) {
+      return { ...options.resolved };
+    }
+
+    const locked: Record<string, string> =
+      lockfileName === "bun.lockb"
+        ? {}
+        : yield* Effect.gen(function* () {
+            const content = yield* fs.readFileString(options.lockfilePath).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new BundleError({
+                    message: `Failed to read package-manager lockfile for Lambda externals from '${options.cwd}'`,
+                    cause,
+                  }),
+              ),
+            );
+            return yield* Effect.try({
+              try: () =>
+                parseLockedVersions({
+                  name: lockfileName,
+                  content,
+                  importer,
+                  candidates,
+                  packageJson: options.packageJson,
+                }),
+              catch: (cause) =>
+                new BundleError({
+                  message: `Failed to resolve locked Lambda package versions from '${options.lockfilePath}'`,
+                  cause,
+                }),
+            });
+          });
+
+    if (lockfileName === "bun.lock" || lockfileName === "bun.lockb") {
+      for (const packageName of candidates) {
+        if (locked[packageName] !== undefined) continue;
+        const installedVersion = yield* findInstalledPackageVersion(
+          options.cwd,
+          packageName,
+        );
+        if (installedVersion !== undefined) {
+          locked[packageName] = installedVersion;
+        }
+      }
+    }
+
+    for (const packageName of candidates) {
+      if (locked[packageName] === undefined) {
+        return yield* Effect.fail(
+          new BundleError({
+            message: `Could not resolve a locked version for '${packageName}' from '${options.lockfilePath}'. Pin an exact npm-compatible version in build.install or refresh the package-manager lockfile.`,
+          }),
+        );
+      }
+    }
+
+    return { ...options.resolved, ...locked };
+  });
+
+const parseLockedVersions = (options: {
+  readonly name: string;
+  readonly content: string;
+  readonly importer: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+}): Record<string, string> => {
+  switch (options.name) {
+    case "package-lock.json":
+      return parsePackageLock(options);
+    case "pnpm-lock.yaml":
+      return parsePnpmLock(options);
+    case "bun.lock":
+      return parseBunLock(options);
+    case "yarn.lock":
+      return parseYarnLock(options);
+    default:
+      return {};
+  }
+};
+
+const parsePackageLock = (options: {
+  readonly content: string;
+  readonly importer: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+}): Record<string, string> => {
+  const lockfile = asRecord(JSON.parse(options.content));
+  const packages = asRecord(lockfile?.packages);
+  const dependencies = asRecord(lockfile?.dependencies);
+  const importerKey = options.importer === "." ? "" : options.importer;
+  const importer = asRecord(packages?.[importerKey]);
+  const locked: Record<string, string> = {};
+
+  for (const packageName of options.candidates) {
+    const importerSpec = dependencyValue(importer, packageName);
+    const declared = declaredPackageVersion(options.packageJson, packageName);
+    if (
+      importerSpec !== undefined &&
+      declared !== undefined &&
+      importerSpec !== declared
+    ) {
+      continue;
+    }
+
+    for (const packagePath of nodeModulesLookupPaths(
+      importerKey,
+      packageName,
+    )) {
+      const version = stringValue(asRecord(packages?.[packagePath])?.version);
+      if (version !== undefined) {
+        locked[packageName] = version;
+        break;
+      }
+    }
+
+    if (locked[packageName] === undefined && importerKey === "") {
+      const version = stringValue(
+        asRecord(dependencies?.[packageName])?.version,
+      );
+      if (version !== undefined) {
+        locked[packageName] = version;
+      }
+    }
+  }
+  return locked;
+};
+
+const parsePnpmLock = (options: {
+  readonly content: string;
+  readonly importer: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+}): Record<string, string> => {
+  const lockfile = asRecord(parseYaml(options.content));
+  const importers = asRecord(lockfile?.importers);
+  const importerKey = options.importer === "" ? "." : options.importer;
+  const importer =
+    asRecord(importers?.[importerKey]) ??
+    (importerKey === "." ? lockfile : undefined);
+  const locked: Record<string, string> = {};
+
+  for (const packageName of options.candidates) {
+    const entry = dependencyEntry(importer, packageName);
+    const record = asRecord(entry);
+    const specifier = stringValue(record?.specifier);
+    const declared = declaredPackageVersion(options.packageJson, packageName);
+    if (
+      specifier !== undefined &&
+      declared !== undefined &&
+      specifier !== declared
+    ) {
+      continue;
+    }
+    const rawVersion =
+      typeof entry === "string" ? entry : stringValue(record?.version);
+    const version = normalizePnpmVersion(packageName, rawVersion);
+    if (version !== undefined) {
+      locked[packageName] = version;
+    }
+  }
+  return locked;
+};
+
+const parseBunLock = (options: {
+  readonly content: string;
+  readonly candidates: ReadonlyArray<string>;
+}): Record<string, string> => {
+  const lockfile = asRecord(parseJsonc(options.content));
+  const packages = asRecord(lockfile?.packages);
+  const locked: Record<string, string> = {};
+  if (packages === undefined) return locked;
+
+  for (const packageName of options.candidates) {
+    const direct = parseBunPackageDescriptor(packages[packageName]);
+    if (direct?.name === packageName) {
+      locked[packageName] = direct.version;
+      continue;
+    }
+    const matches = Object.values(packages)
+      .map(parseBunPackageDescriptor)
+      .filter(
+        (entry): entry is { name: string; version: string } =>
+          entry?.name === packageName,
+      );
+    if (matches.length === 1) {
+      locked[packageName] = matches[0].version;
+    }
+  }
+  return locked;
+};
+
+const parseYarnLock = (options: {
+  readonly content: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+}): Record<string, string> => {
+  const lines = options.content.split(/\r?\n/);
+  const locked: Record<string, string> = {};
+  for (let index = 0; index < lines.length; index++) {
+    const headerLine = lines[index];
+    if (/^\s/.test(headerLine) || !headerLine.endsWith(":")) continue;
+    const header = headerLine.slice(0, -1).replace(/^"|"$/g, "");
+    const selectors = header
+      .split(",")
+      .map((selector) => selector.trim().replace(/^"|"$/g, ""));
+    let version: string | undefined;
+    let bodyIndex = index + 1;
+    while (bodyIndex < lines.length && /^\s/.test(lines[bodyIndex])) {
+      const match = /^\s+version(?::\s*|\s+)["']?([^"'\s]+)["']?/.exec(
+        lines[bodyIndex],
+      );
+      if (match !== null) version = match[1];
+      bodyIndex++;
+    }
+    if (version === undefined) continue;
+
+    for (const packageName of options.candidates) {
+      const specifier = declaredPackageVersion(
+        options.packageJson,
+        packageName,
+      );
+      if (specifier === undefined) continue;
+      const expected = `${packageName}@${specifier}`;
+      const berryExpected = `${packageName}@npm:${specifier}`;
+      if (selectors.includes(expected) || selectors.includes(berryExpected)) {
+        locked[packageName] = version;
+      }
+    }
+    index = bodyIndex - 1;
+  }
+  return locked;
+};
+
+const dependencyEntry = (
+  importer: JsonRecord | undefined,
+  packageName: string,
+): unknown =>
+  asRecord(importer?.dependencies)?.[packageName] ??
+  asRecord(importer?.optionalDependencies)?.[packageName] ??
+  asRecord(importer?.devDependencies)?.[packageName];
+
+const dependencyValue = (
+  importer: JsonRecord | undefined,
+  packageName: string,
+): string | undefined => stringValue(dependencyEntry(importer, packageName));
+
+const declaredPackageVersion = (
+  packageJson: PackageJson,
+  packageName: string,
+): string | undefined =>
+  packageJson.dependencies?.[packageName] ??
+  packageJson.optionalDependencies?.[packageName] ??
+  packageJson.devDependencies?.[packageName];
+
+const nodeModulesLookupPaths = (
+  importer: string,
+  packageName: string,
+): ReadonlyArray<string> => {
+  const paths: string[] = [];
+  let current = importer;
+  while (true) {
+    paths.push(
+      current === ""
+        ? `node_modules/${packageName}`
+        : `${current}/node_modules/${packageName}`,
+    );
+    if (current === "") break;
+    const separator = current.lastIndexOf("/");
+    current = separator === -1 ? "" : current.slice(0, separator);
+  }
+  return paths;
+};
+
+const normalizePnpmVersion = (
+  packageName: string,
+  rawVersion: string | undefined,
+): string | undefined => {
+  if (
+    rawVersion === undefined ||
+    rawVersion.startsWith("link:") ||
+    rawVersion.startsWith("workspace:")
+  ) {
+    return undefined;
+  }
+  let version = rawVersion.startsWith("/") ? rawVersion.slice(1) : rawVersion;
+  if (version.startsWith(`${packageName}@`)) {
+    version = version.slice(packageName.length + 1);
+  }
+  const peerSuffix = version.indexOf("(");
+  return peerSuffix === -1 ? version : version.slice(0, peerSuffix);
+};
+
+const parseBunPackageDescriptor = (
+  value: unknown,
+): { name: string; version: string } | undefined => {
+  if (!Array.isArray(value) || typeof value[0] !== "string") {
+    return undefined;
+  }
+  const descriptor = value[0];
+  const separator = descriptor.lastIndexOf("@");
+  if (separator <= 0 || separator === descriptor.length - 1) {
+    return undefined;
+  }
+  return {
+    name: descriptor.slice(0, separator),
+    version: descriptor.slice(separator + 1),
+  };
+};
+
+const parseJsonc = (content: string): unknown => {
+  let withoutComments = "";
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < content.length; index++) {
+    const char = content[index];
+    const next = content[index + 1];
+    if (inString) {
+      withoutComments += char;
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      withoutComments += char;
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      while (index < content.length && content[index] !== "\n") index++;
+      withoutComments += "\n";
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      index += 2;
+      while (
+        index < content.length &&
+        !(content[index] === "*" && content[index + 1] === "/")
+      ) {
+        if (content[index] === "\n") withoutComments += "\n";
+        index++;
+      }
+      index++;
+      continue;
+    }
+    withoutComments += char;
+  }
+
+  let withoutTrailingCommas = "";
+  inString = false;
+  escaped = false;
+  for (let index = 0; index < withoutComments.length; index++) {
+    const char = withoutComments[index];
+    if (inString) {
+      withoutTrailingCommas += char;
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      withoutTrailingCommas += char;
+      continue;
+    }
+    if (char === ",") {
+      let lookahead = index + 1;
+      while (/\s/.test(withoutComments[lookahead] ?? "")) lookahead++;
+      if (
+        withoutComments[lookahead] === "}" ||
+        withoutComments[lookahead] === "]"
+      ) {
+        continue;
+      }
+    }
+    withoutTrailingCommas += char;
+  }
+  return JSON.parse(withoutTrailingCommas);
+};
+
+const findInstalledPackageVersion = (
+  cwd: string,
+  packageName: string,
+): Effect.Effect<
+  string | undefined,
+  BundleError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    let current = cwd;
+    while (true) {
+      const manifestPath = path.join(
+        current,
+        "node_modules",
+        ...packageName.split("/"),
+        "package.json",
+      );
+      if (yield* fs.exists(manifestPath).pipe(Effect.mapError(toBundleError))) {
+        const manifest = JSON.parse(
+          yield* fs
+            .readFileString(manifestPath)
+            .pipe(Effect.mapError(toBundleError)),
+        ) as { readonly version?: unknown };
+        if (typeof manifest.version === "string") return manifest.version;
+      }
+      const parent = path.dirname(current);
+      if (parent === current) return undefined;
+      current = parent;
+    }
+  });
+
+const asRecord = (value: unknown): JsonRecord | undefined =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : undefined;
+
+const stringValue = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
 
 const resolveCatalogVersion = (
   cwd: string,
