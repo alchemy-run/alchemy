@@ -34,11 +34,11 @@ import {
   dim,
   green,
   red,
-  reverse,
   ScrollBoxRenderable,
   strikethrough,
   StyledText,
   stringToStyledText,
+  TextAttributes,
   TextRenderable,
   yellow,
   type CliRenderer,
@@ -719,8 +719,18 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       // buffer-default attributes are applied when the styled chunks are
       // packed, so flipping them on an already-painted row is unreliable
       // and left INVERSE residue on rows the selection had passed through.
+      // (Set directly instead of opentui's `reverse()` helper — that helper
+      // passes `{ reverse: true }` to a builder that only reads `inverse`,
+      // so it never actually sets the bit.)
       row.text.content = new StyledText(
-        isSelected ? chunks.map((chunk) => reverse(chunk)) : chunks,
+        isSelected
+          ? chunks.map((chunk) => ({
+              ...chunk,
+              attributes:
+                (chunk.attributes ?? TextAttributes.NONE) |
+                TextAttributes.INVERSE,
+            }))
+          : chunks,
       );
     }
   };
