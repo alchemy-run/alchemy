@@ -14,7 +14,7 @@
     "bench:containers": "cd benchmark/container && bun run bench",
     "build:clean:shallow": "bun clean:shallow . && bun run build",
     "build:clean": "bun clean . && bun i && bun run build && bun download:env",
-    "build:cloudflare-tools": "bun run --filter './cloudflare-tools/packages/*' build",
+    "build:cloudflare-tools": "bun tsc -b distilled/packages/cloudflare/tsconfig.json && bun run --filter './cloudflare-tools/packages/*' build",
     "build:packages": "bun tsc -b && bun run --filter './cloudflare-tools/packages/*' --filter './packages/*' build",
     "build": "bun tsc -b && bun run --filter ./website --filter './cloudflare-tools/packages/*' --filter './packages/*' build && bun lint:providers",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
