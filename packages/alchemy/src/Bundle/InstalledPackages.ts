@@ -595,7 +595,9 @@ const readArtifactFiles = (directory: string) =>
       if (linkTarget !== undefined) {
         files.push({
           path: relativePath.replaceAll("\\", "/"),
-          content: new TextEncoder().encode(linkTarget),
+          content: yield* Effect.sync(() =>
+            new TextEncoder().encode(linkTarget),
+          ),
           mode: 0o120777,
         });
         continue;

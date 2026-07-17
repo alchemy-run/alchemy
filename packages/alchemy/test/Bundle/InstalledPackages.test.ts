@@ -419,13 +419,20 @@ describe("Lambda external packages", () => {
             "node_modules/@img/sharp-libvips-linux-arm64/lib/libvips.so",
           ),
         ).not.toBeNull();
-        expect(
-          zip.file("node_modules/sharp/bin/sharp-tool")!.unixPermissions! &
-            0o111,
-        ).toBe(0o111);
-        expect(
-          zip.file("node_modules/.bin/sharp-tool")!.unixPermissions! & 0o170000,
-        ).toBe(0o120000);
+        const executablePermissions = zip.file(
+          "node_modules/sharp/bin/sharp-tool",
+        )!.unixPermissions;
+        const symlinkPermissions = zip.file(
+          "node_modules/.bin/sharp-tool",
+        )!.unixPermissions;
+        if (
+          typeof executablePermissions !== "number" ||
+          typeof symlinkPermissions !== "number"
+        ) {
+          throw new Error("Expected numeric Unix permissions in archive");
+        }
+        expect(executablePermissions & 0o111).toBe(0o111);
+        expect(symlinkPermissions & 0o170000).toBe(0o120000);
         expect(
           yield* Effect.promise(() =>
             zip.file("node_modules/.bin/sharp-tool")!.async("string"),
