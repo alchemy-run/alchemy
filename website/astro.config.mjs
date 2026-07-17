@@ -628,6 +628,7 @@ export default defineConfig({
             {
               label: "AI",
               items: [
+                { label: "Workers AI", link: "/cloudflare/ai/workers-ai" },
                 { label: "AI Gateway", link: "/cloudflare/ai/ai-gateway" },
                 {
                   label: "AI Search (AutoRAG)",

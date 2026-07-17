@@ -17,6 +17,13 @@ bound it, `.model({...})` returns an Effect `LanguageModel.LanguageModel`
 Layer — and from there you're using the same `generateText` /
 `streamText` APIs you'd use against any other provider.
 
+Don't need caching, rate limiting, or the request log? The plain
+[Workers AI binding](/cloudflare/ai/workers-ai)
+(`Cloudflare.Workers.AI`) calls the same models directly, with no
+gateway resource — and its `ai.model({...})` produces the same
+`LanguageModel` Layer, so you can start there and add the gateway
+later without touching handler code.
+
 ## Declare the gateway
 
 Create `src/AiGateway.ts` with a single resource definition. The
