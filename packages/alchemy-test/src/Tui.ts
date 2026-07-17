@@ -34,11 +34,11 @@ import {
   dim,
   green,
   red,
+  reverse,
   ScrollBoxRenderable,
   strikethrough,
   StyledText,
   stringToStyledText,
-  TextAttributes,
   TextRenderable,
   yellow,
   type CliRenderer,
@@ -669,7 +669,6 @@ const makeTui = async (logFile: string): Promise<Tui> => {
         if (row.key !== "") {
           row.key = "";
           row.text.content = "";
-          row.text.attributes = TextAttributes.NONE;
         }
         continue;
       }
@@ -715,11 +714,14 @@ const makeTui = async (logFile: string): Promise<Tui> => {
           chunks.push(...stringToStyledText(rest).chunks);
         }
       }
-      row.text.content = new StyledText(chunks);
       // Inverse video for the selection — uses the terminal's own colors.
-      row.text.attributes = isSelected
-        ? TextAttributes.INVERSE
-        : TextAttributes.NONE;
+      // Baked into every chunk (NOT the renderable's default `attributes`):
+      // buffer-default attributes are applied when the styled chunks are
+      // packed, so flipping them on an already-painted row is unreliable
+      // and left INVERSE residue on rows the selection had passed through.
+      row.text.content = new StyledText(
+        isSelected ? chunks.map((chunk) => reverse(chunk)) : chunks,
+      );
     }
   };
 
