@@ -3,7 +3,7 @@
 /**
  * Test adapter for the `alchemy-test` runner (see `packages/alchemy-test`).
  *
- * Same shape as {@link "./Vitest.ts"} / {@link "./Bun.ts"}, but registers
+ * Same shape as {@link "./Bun.ts"}, but registers
  * tests as raw Effects with the alchemy-test harness so the single-process
  * runner can inject a buffering Logger/Console per test and manage
  * concurrency + timeouts itself.
