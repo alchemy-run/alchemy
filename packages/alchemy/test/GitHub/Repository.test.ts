@@ -15,21 +15,43 @@ const logLevel = Effect.provideService(
 );
 
 // These tests create, mutate, and delete real repositories, so they run
-// against the dedicated test org (never a real one). Set GITHUB_TEST_OWNER=""
-// to skip the owner-scoped tests entirely.
+// against the dedicated test orgs (never a real one). Set GITHUB_TEST_OWNER=""
+// to skip the owner-scoped tests entirely. The second org hosts the target
+// side of owner-change (replacement) tests.
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
+const owner2 = process.env.GITHUB_TEST_OWNER_2 ?? "alchemy-run-test-2";
 
-const getRepo = (repo: string) =>
+const getRepo = (repo: string, repoOwner: string = owner) =>
   Effect.gen(function* () {
     const octokit = yield* Octokit;
     return yield* Effect.tryPromise({
       try: async () => {
         try {
-          const { data } = await octokit.rest.repos.get({ owner, repo });
+          const { data } = await octokit.rest.repos.get({
+            owner: repoOwner,
+            repo,
+          });
           return data;
         } catch (error: any) {
           if (error.status === 404) return undefined;
           throw error;
+        }
+      },
+      catch: (e) => e as Error,
+    });
+  });
+
+// Out-of-band cleanup for repos the engine intentionally leaves behind
+// (retain-policy tests). Idempotent — a 404 means it's already gone.
+const deleteRepo = (repo: string, repoOwner: string) =>
+  Effect.gen(function* () {
+    const octokit = yield* Octokit;
+    yield* Effect.tryPromise({
+      try: async () => {
+        try {
+          await octokit.rest.repos.delete({ owner: repoOwner, repo });
+        } catch (error: any) {
+          if (error.status !== 404) throw error;
         }
       },
       catch: (e) => e as Error,
@@ -155,6 +177,116 @@ test.provider.skipIf(!owner)(
       yield* stack.destroy();
       const afterDestroy = yield* getRepo(name);
       expect(afterDestroy).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Owner changes are replacements, not moves (we never call GitHub's transfer
+// API). With deletion opted in via `destroy()`, the replaced old-generation
+// repo is deleted from the old org after the new one is created.
+test.provider.skipIf(!owner || !owner2)(
+  "changing the owner replaces the repository (destroy-opted)",
+  (stack) =>
+    Effect.gen(function* () {
+      const name = "alchemy-effect-repo-owner-test";
+
+      // Clean up any leftovers from a previous run in BOTH orgs.
+      yield* stack.destroy();
+      yield* deleteRepo(name, owner);
+      yield* deleteRepo(name, owner2);
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GitHub.Repository("Repo", {
+            owner,
+            name,
+            description: "alchemy-effect owner-change test",
+            visibility: "private",
+            autoInit: true,
+          }).pipe(destroy());
+        }),
+      );
+      expect(created.fullName).toEqual(`${owner}/${name}`);
+
+      // Same logical ID, new owner → replacement: fresh repoId under the new
+      // org, and (because deletion is opted in) the old repo is cleaned up.
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GitHub.Repository("Repo", {
+            owner: owner2,
+            name,
+            description: "alchemy-effect owner-change test",
+            visibility: "private",
+            autoInit: true,
+          }).pipe(destroy());
+        }),
+      );
+      expect(replaced.fullName).toEqual(`${owner2}/${name}`);
+      expect(replaced.repoId).not.toEqual(created.repoId);
+
+      const oldRepo = yield* getRepo(name, owner);
+      expect(oldRepo).toBeUndefined();
+      const newRepo = yield* getRepo(name, owner2);
+      expect(newRepo?.id).toEqual(replaced.repoId);
+
+      yield* stack.destroy();
+      const afterDestroy = yield* getRepo(name, owner2);
+      expect(afterDestroy).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// The safety property: under the DEFAULT `retain` removal policy, an owner
+// change creates the new repo but RETAINS the old one on GitHub — history is
+// never destroyed by a replacement unless deletion was explicitly opted in.
+test.provider.skipIf(!owner || !owner2)(
+  "changing the owner retains the old repository by default",
+  (stack) =>
+    Effect.gen(function* () {
+      const name = "alchemy-effect-repo-retain-test";
+
+      // Clean up any leftovers from a previous run in BOTH orgs (retained
+      // repos are invisible to stack.destroy, so delete out-of-band).
+      yield* stack.destroy();
+      yield* deleteRepo(name, owner);
+      yield* deleteRepo(name, owner2);
+
+      // No `destroy()` pipe — the default `retain` policy applies.
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GitHub.Repository("Repo", {
+            owner,
+            name,
+            description: "alchemy-effect retain-on-replace test",
+            visibility: "private",
+            autoInit: true,
+          });
+        }),
+      );
+
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GitHub.Repository("Repo", {
+            owner: owner2,
+            name,
+            description: "alchemy-effect retain-on-replace test",
+            visibility: "private",
+            autoInit: true,
+          });
+        }),
+      );
+      expect(replaced.repoId).not.toEqual(created.repoId);
+      expect(replaced.fullName).toEqual(`${owner2}/${name}`);
+
+      // The replaced old generation must still exist in the old org.
+      const oldRepo = yield* getRepo(name, owner);
+      expect(oldRepo?.id).toEqual(created.repoId);
+
+      // Cleanup: destroy retains the new repo too, so remove both
+      // out-of-band.
+      yield* stack.destroy();
+      yield* deleteRepo(name, owner);
+      yield* deleteRepo(name, owner2);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
