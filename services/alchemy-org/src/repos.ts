@@ -1,33 +1,26 @@
 /**
- * The REAL repositories the org maintains — the resource-first form:
- * each export IS the un-yielded `GitHub.Repository(...)` constructor
- * Effect. Charters pass these to the scoped event constructors directly
- * (the deferred form, resolved in-Effect by the consuming Layer), and
- * the Stack in alchemy.run.ts `yield*`s the same consts to provision
- * them — resources are memoized by FQN, so every yield resolves the one
- * instance.
+ * The repository the factory manages — the resource IS the export: an
+ * un-yielded `GitHub.Repository(...)` constructor Effect at module
+ * scope, the ONE way this repository is named anywhere. Charters pass
+ * it to the scoped event constructors, implementation Layers pass it to
+ * the GitHub bindings (`GitHub.ListIssues(testAlchemy)`) and to
+ * `consumeRepositoryEvents` — its declared identity (owner/name) is
+ * readable statically, so none of that needs a Stack. The Stack in
+ * alchemy.run.ts `yield*`s the same const to provision it — resources
+ * are memoized by FQN, so every yield resolves the one instance.
+ *
+ * This is the `test-alchemy` SANDBOX: a repo we own and can reset, so
+ * live iteration cuts issues here without touching production
+ * codebases. Pointing the factory at the real alchemy repositories is a
+ * one-line change to this file once the loop has proven itself.
  */
 import * as GitHub from "alchemy/GitHub";
 
-export const alchemyEffect = GitHub.Repository("alchemy-effect", {
+export const testAlchemy = GitHub.Repository("test-alchemy", {
   owner: "alchemy-run",
-  name: "alchemy-effect",
-  description: "Infrastructure-as-Effects",
-  hasIssues: true,
-  deleteBranchOnMerge: true,
-});
-
-/**
- * distilled is embedded in the alchemy-effect workspace as a git
- * submodule (`./distilled`): one issue's fix may produce a PR here too —
- * distilled merges first, then the superproject bumps the submodule
- * pointer.
- */
-export const distilled = GitHub.Repository("distilled", {
-  owner: "alchemy-run",
-  name: "distilled",
+  name: "test-alchemy",
   description:
-    "Typed cloud SDKs, distilled from OpenAPI — embedded in the alchemy-effect workspace as a git submodule",
+    "Sandbox repository managed by the alchemy-org software factory — cut issues here and the factory resolves them",
   hasIssues: true,
   deleteBranchOnMerge: true,
 });

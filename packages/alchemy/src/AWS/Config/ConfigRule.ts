@@ -216,15 +216,15 @@ export const ConfigRuleProvider = () =>
             : {};
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          const oldName = yield* createRuleName(id, olds);
+          const oldName = yield* createRuleName(id, olds ?? {});
           const newName = yield* createRuleName(id, news);
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name =
             output?.configRuleName ?? (yield* createRuleName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -264,9 +264,10 @@ export const ConfigRuleProvider = () =>
               Effect.retry({
                 while: (e) =>
                   e._tag === "NoAvailableConfigurationRecorderException",
-                schedule: Schedule.fixed(2000).pipe(
-                  Schedule.both(Schedule.recurs(15)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(2000),
+                  Schedule.recurs(15),
+                ]),
               }),
             );
 
@@ -311,9 +312,10 @@ export const ConfigRuleProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.fixed(3000).pipe(
-                  Schedule.both(Schedule.recurs(10)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(3000),
+                  Schedule.recurs(10),
+                ]),
               }),
               Effect.catchTag("NoSuchConfigRuleException", () => Effect.void),
             );

@@ -1,15 +1,23 @@
 /**
  * Tool interfaces of the organization. Pure contracts — physics comes
- * from Layers (a DevBox container for Bash/Grep/ReadFile/EditFile,
- * Octokit for the GitHub tools, a human or an automated system for
- * Approve). See layers.ts for the current (stubbed) physics.
+ * from Layers (local FileSystem/shell physics in toolbox.ts, Octokit in
+ * github-tools.ts, a console or human surface for Approve). Which Layer
+ * implements a contract is an entrypoint decision, never the charter's.
  *
  * The autonomy dial: `Approve` is an ordinary Tool. Whether the org is
  * human-supervised or autonomous is decided by which Layer implements it
  * for the Reviewer — never by the charter.
  */
 import * as AI from "alchemy/AI";
-import { command, issue, message, path, pattern, pr } from "./vocabulary.ts";
+import {
+  command,
+  content,
+  issue,
+  message,
+  path,
+  pattern,
+  pr,
+} from "./vocabulary.ts";
 
 // ── sandboxed workspace access ─────────────────────────────────
 
@@ -21,17 +29,17 @@ export class ReadFile extends AI.Tool<ReadFile>()("readFile")`
 Read the file at ${path}.` {}
 
 export class EditFile extends AI.Tool<EditFile>()("editFile")`
-Replace the contents of the file at ${path}.` {}
+Replace the file at ${path} with ${content}.` {}
 
 export class Bash extends AI.Tool<Bash>()("bash")`
-Run ${command} in the sandboxed DevBox and return stdout, stderr,
+Run ${command} in the sandboxed workspace and return stdout, stderr,
 and the exit code. The test suite is the only oracle of done-ness.` {}
 
 // ── GitHub ─────────────────────────────────────────────────────
 
 export class SearchIssues extends AI.Tool<SearchIssues>()("searchIssues")`
-Search issues and pull requests across our repositories for
-${pattern}. Use before filing anything — duplicates are debt.` {}
+Search issues and pull requests in the repository for ${pattern}.
+Use before filing anything — duplicates are debt.` {}
 
 export class OpenPullRequest extends AI.Tool<OpenPullRequest>()(
   "openPullRequest",
@@ -50,8 +58,7 @@ never a way to skip review.` {}
 // ── surfaces ───────────────────────────────────────────────────
 
 export class Comment extends AI.Tool<Comment>()("comment")`
-Comment ${message} on the GitHub issue or pull request that
-triggered this work.` {}
+Comment ${message} on ${issue}.` {}
 
 // ── human-class tools (the autonomy dial) ──────────────────────
 

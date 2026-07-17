@@ -8,14 +8,15 @@
  * alchemy + distilled flywheel lives in `services/alchemy-org`.
  *
  * The GitHub sources come from the CORE catalog (src/GitHub/Events.ts).
- * Delivery is the DERIVED front door (canon §5): the worker composes
- * `GitHub.frontDoor(ResolveGitHubIssue)`, which reads the `AI.when` /
- * `AI.exit` declarations below and wires `consumeRepositoryEvents`
- * underneath — `issues.opened` creates a run, `issue_comment.created`
- * steers it, and `issues.closed` settles it (observed by the kernel
- * through the exit's channel subscription, correlated by the source's
- * own `key`: `owner/repository#number`). Budget is NOT prose — the
- * worker provides `AI.budget({...})` as a Layer next to the kernel.
+ * Delivery is owned by the process's IMPLEMENTATION (the components
+ * doctrine): the worker hand-wires `GitHub.consumeRepositoryEvents`,
+ * adapting each delivery and picking the door — `issues.opened`
+ * creates a run, `issue_comment.created` steers it, and
+ * `issues.closed` settles it (observed by the kernel through the
+ * exit's channel subscription, correlated by the source's own `key`:
+ * `owner/repository#number`). The `AI.when` / `AI.exit` declarations
+ * below encode the INTERFACE only. Budget is NOT prose — the worker
+ * provides `AI.budget({...})` as a Layer next to the kernel.
  */
 import * as S from "effect/Schema";
 import * as AI from "@/AI/index.ts";

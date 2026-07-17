@@ -12,7 +12,9 @@
   "scripts": {
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "local": "bun run src/local.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "@effect/ai-anthropic": "catalog:",

@@ -230,7 +230,8 @@ export const TrailProvider = () =>
 
       // Observed tags for a trail, keyed as a plain record. CloudTrail's
       // ListTags returns a per-resource list; a trail can vanish between the
-      // describe and the tag read, so tolerate NotFound.
+      // describe and the tag read (ResourceNotFoundException), so tag reads
+      // tolerate every failure — tags are a best-effort observation here.
       const fetchTrailTags = (trailArn: string) =>
         cloudtrail.listTags({ ResourceIdList: [trailArn] }).pipe(
           Effect.map((r) => {
@@ -239,9 +240,6 @@ export const TrailProvider = () =>
               list.map((t) => [t.Key, t.Value ?? ""] as const),
             ) as Record<string, string>;
           }),
-          Effect.catchTag("TrailNotFoundException", () =>
-            Effect.succeed({} as Record<string, string>),
-          ),
           Effect.catch(() => Effect.succeed({} as Record<string, string>)),
         );
 
@@ -290,16 +288,16 @@ export const TrailProvider = () =>
           const tags = yield* fetchTrailTags(trailArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          const oldName = yield* createTrailName(id, olds);
+          const oldName = yield* createTrailName(id, olds ?? {});
           const newName = yield* createTrailName(id, news);
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
           // fall through — updateTrail handles every other mutable property
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const trailName =
             output?.trailName ?? (yield* createTrailName(id, news));
@@ -333,7 +331,6 @@ export const TrailProvider = () =>
             live = yield* cloudtrail
               .createTrail({
                 Name: trailName,
-                S3BucketName: news.s3BucketName,
                 ...settings,
                 TagsList: Object.entries({
                   ...news.tags,
@@ -345,9 +342,10 @@ export const TrailProvider = () =>
                   while: (e) =>
                     e._tag === "InsufficientS3BucketPolicyException" ||
                     e._tag === "S3BucketDoesNotExistException",
-                  schedule: Schedule.fixed(2000).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed(2000),
+                    Schedule.recurs(15),
+                  ]),
                 }),
                 Effect.catchTag("TrailAlreadyExistsException", () =>
                   cloudtrail

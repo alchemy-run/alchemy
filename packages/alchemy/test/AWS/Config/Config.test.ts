@@ -196,7 +196,8 @@ test.provider(
             Effect.catchTag("NoSuchConfigurationRecorderException", () =>
               Effect.succeed(true),
             ),
-            Effect.retry({
+            // poll the SUCCESS value until it flips — repeat, not retry
+            Effect.repeat({
               schedule: Schedule.spaced("1 seconds"),
               until: (isGone) => isGone === true,
               times: 8,

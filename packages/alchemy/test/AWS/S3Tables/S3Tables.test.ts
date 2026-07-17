@@ -9,19 +9,18 @@ import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Poll a getter until it reports the resource is gone (typed
-// NotFoundException), bounded so a stuck delete fails fast.
+// NotFoundException — the read's error union must carry it), bounded so
+// a stuck delete fails fast.
 const waitUntilGone = <A, E extends { _tag: string }, R>(
-  read: Effect.Effect<A, E, R>,
+  read: Effect.Effect<A, E | s3tables.NotFoundException, R>,
 ) =>
   read.pipe(
     Effect.flatMap(() =>
       Effect.fail({ _tag: "StillExists" as const } as const),
     ),
     Effect.retry({
-      while: (e: { _tag: string }) => e._tag === "StillExists",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      while: (e: { _tag: string }): boolean => e._tag === "StillExists",
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
   );

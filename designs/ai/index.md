@@ -29,7 +29,12 @@ message (**no auto-delivery** — delivery is always code you can read),
 run. Alchemy **Resources are expressions** too — resolved identity +
 dependency edge, no capability grant — and providers expose **scoped
 event sources** (`GitHub.IssueOpened(repo)`) for per-resource
-charters. State lives in your DB or as folds over the Trace. DDD/Event
+charters. **Implementations own delivery**: a process declares a
+domain interface (`AI.Process<Self, Interface>`) and is implemented by
+`Layer.effect(Term, …)` over seam services (event arrival, `Ledger`
+dedupe, kernel); environments (local polling vs Cloudflare webhooks +
+D1 + Durable Objects) are Layer provide-lists — see
+`services/alchemy-org` and the software-factory plan. State lives in your DB or as folds over the Trace. DDD/Event
 Storming are embedded patterns, never constructs. Removed concepts
 (with reasons): business-processes.md §3; the signature reduction
 (`on`→`when`, `AI.emit` subsumed by mention, `each`/`every` deleted):

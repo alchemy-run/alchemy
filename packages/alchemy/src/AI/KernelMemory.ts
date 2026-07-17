@@ -210,33 +210,16 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
       );
       let oneShot = 0;
 
-      // subscribe one EventSource → its runtime stream (channel-backed
-      // resolves the family tag from ambient context; kernel-internal
-      // goes through the harness bus). Used ONLY by machine-observed
-      // halts (reassess §B) — auto-delivery is demoted (canon §2:
-      // AI.when is declaration-only; delivery is always outside code).
+      // subscribe one KERNEL-INTERNAL (channel-less) EventSource → its
+      // harness-bus stream. Used ONLY by machine-observed halts on
+      // internal sources (tests, same-harness stimuli). World-side
+      // (channel-backed) sources are never subscribed by the kernel:
+      // their exits arrive by explicit delivery — `settle(key, event)`
+      // from the implementation Layer that consumed the wire (canon §5:
+      // implementations own delivery — exits included).
       const subscribeSource = Effect.fn(function* (
         source: EventSource<any, any, any>,
       ) {
-        if (source.channel !== undefined) {
-          const channel = yield* Effect.serviceOption(
-            source.channel as never,
-          ).pipe(
-            Effect.flatMap(
-              Option.match({
-                onSome: (service) =>
-                  Effect.succeed(service as EventChannelService),
-                onNone: () =>
-                  Effect.die(
-                    new Error(
-                      `event channel for ${source["~alchemy/Name"]} has no Layer in context (Req should have caught this)`,
-                    ),
-                  ),
-              }),
-            ),
-          );
-          return yield* channel.subscribe(source);
-        }
         return yield* eventBus.subscribe(source);
       });
 
@@ -296,6 +279,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             readonly takeSteers: () => Prompt.Message[];
             /** Park until a run-key–addressed steer arrives for this run. */
             readonly awaitSteer: Effect.Effect<Prompt.Message[]>;
+            /**
+             * Park until `settle(key, event)` delivers this run's
+             * machine-observed exit (or an internal channel-less source
+             * completes the same seat via the bus).
+             */
+            readonly awaitSettle: Effect.Effect<unknown>;
           },
         ) => Effect.Effect<unknown, unknown>;
         /**
@@ -323,6 +312,17 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // the run serves another work round. Single-threaded mutation.
         const keyedSteers = new Map<string, Prompt.Message[]>();
         const parkWakes = new Map<string, Deferred.Deferred<void>>();
+        // Run naming (canon §5: implementations own delivery): `send(item,
+        // { key })` names the run with its WORLD identity ("owner/repo#7")
+        // so steer/settle address it without ever seeing the kernel
+        // session. names: world key → session, live for the run's life.
+        const names = new Map<string, string>();
+        // Every run's machine-exit seat, by session: `settle(key, event)`
+        // completes it; a machine-exit run awaits it as its exit (internal
+        // channel-less sources complete the same seat via the bus).
+        const settleSeats = new Map<string, Deferred.Deferred<unknown>>();
+        const resolveRunKey = (runKey: string): string =>
+          names.get(runKey) ?? runKey;
         let activeSession: string | undefined;
         const takeKeyedSteers = (runKey: string): Prompt.Message[] => {
           const messages = keyedSteers.get(runKey) ?? [];
@@ -713,6 +713,8 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
 
         interface Admission {
           readonly item: unknown;
+          /** The caller's world-identity name for the run (send options.key). */
+          readonly key?: string;
           /** Present iff a dispatcher is joined on the outcome. */
           readonly reply?: Deferred.Deferred<unknown, unknown>;
           /** Tombstoned by a cascade cancel; the ring skips it. */
@@ -730,6 +732,11 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     current = admission;
                     const session = `${termName}#${oneShot++}`;
                     activeSession = session;
+                    // the run's world name (if the implementation gave
+                    // one) and its machine-exit seat, live for the run
+                    if (admission.key !== undefined) {
+                      names.set(admission.key, session);
+                    }
                     return Effect.flatMap(
                       Effect.exit(
                         // the admission is a durable fact (§2.7): without
@@ -737,14 +744,27 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                         // the Trace — the serving tier's transcript view
                         // derives its user half from this row
                         Effect.andThen(
-                          emitRow(
-                            session,
-                            "run.admitted",
-                            session,
-                            "admitted",
-                            {
-                              item: admission.item,
-                            },
+                          Effect.tap(
+                            Deferred.make<unknown>().pipe(
+                              Effect.tap((seat) =>
+                                Effect.sync(() =>
+                                  settleSeats.set(session, seat),
+                                ),
+                              ),
+                            ),
+                            () =>
+                              emitRow(
+                                session,
+                                "run.admitted",
+                                session,
+                                "admitted",
+                                {
+                                  item: admission.item,
+                                  ...(admission.key !== undefined && {
+                                    key: admission.key,
+                                  }),
+                                },
+                              ),
                           ),
                           options.runItem(admission.item, {
                             session,
@@ -752,15 +772,23 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                             emitRow,
                             takeSteers: () => takeKeyedSteers(session),
                             awaitSteer: awaitKeyedSteer(session),
+                            awaitSettle: Effect.suspend(() =>
+                              Deferred.await(settleSeats.get(session)!),
+                            ),
                           }),
                         ).pipe(
                           Effect.ensuring(
                             Effect.sync(() => {
                               current = undefined;
                               activeSession = undefined;
-                              // a settled run's undelivered keyed steers
-                              // are dropped (the actor is gone)
+                              // a settled run's undelivered keyed steers,
+                              // name, and settle seat are dropped (the
+                              // actor is gone)
                               keyedSteers.delete(session);
+                              settleSeats.delete(session);
+                              if (admission.key !== undefined) {
+                                names.delete(admission.key);
+                              }
                             }),
                           ),
                         ),
@@ -822,10 +850,10 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
          * admission interrupts the ring's current turn — safe on shared
          * delegates because the ring is serial: active means *this* item.
          */
-        const admit = (item: unknown) =>
+        const admit = (item: unknown, key?: string) =>
           Effect.gen(function* () {
             const reply = yield* Deferred.make<unknown, unknown>();
-            const admission: Admission = { item, reply };
+            const admission: Admission = { item, key, reply };
             yield* Queue.offer(mailbox, admission);
             return {
               await: Deferred.await(reply),
@@ -849,11 +877,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
 
         return {
           // dispatch = send + join: same admission path, plus a reply seat
-          dispatch: (item: unknown) =>
-            Effect.flatMap(admit(item), (handle) => handle.await),
-          // send = the admission half alone (fire-and-forget)
-          send: (item: unknown) =>
-            Effect.asVoid(Queue.offer(mailbox, { item })),
+          dispatch: (item: unknown, options?: { readonly key?: string }) =>
+            Effect.flatMap(admit(item, options?.key), (handle) => handle.await),
+          // send = the admission half alone (fire-and-forget); options.key
+          // NAMES the run with its world identity for steer/settle
+          send: (item: unknown, options?: { readonly key?: string }) =>
+            Effect.asVoid(Queue.offer(mailbox, { item, key: options?.key })),
           // run = join the ring's unbounded life. Vestigial (canon §2):
           // auto-delivery is demoted — the mailbox drain is
           // kernel-internal and delivery is explicit outside code.
@@ -870,7 +899,8 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           steer: (first: unknown, second?: unknown) =>
             Effect.suspend(() => {
               if (second !== undefined) {
-                const runKey = String(first);
+                // the caller addresses by world name or kernel session
+                const runKey = resolveRunKey(String(first));
                 const messages = toMessages(second);
                 if (runKey === activeSession && activeInbox !== undefined) {
                   activeInbox.push({ _tag: "Steered", messages });
@@ -892,6 +922,20 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 parkedSteers.push(...messages);
               }
               return Effect.void;
+            }),
+          // settle = the machine-observed exit, DELIVERED (canon §5:
+          // implementations own delivery — exits included). Completes the
+          // named run's exit seat with the event; the parked machine-exit
+          // run resolves with it as Out. A key with no live run is an
+          // idempotent no-op: the run may have settled already — the
+          // world outranks the org's beliefs.
+          settle: (runKey: string, event: unknown) =>
+            Effect.suspend(() => {
+              const session = resolveRunKey(runKey);
+              const seat = settleSeats.get(session);
+              return seat !== undefined
+                ? Effect.asVoid(Deferred.succeed(seat, event))
+                : Effect.void;
             }),
           // interrupt = Scope authority as a control admission (§0.6),
           // CASCADING (§2.8b): children first — every in-flight
@@ -1040,12 +1084,22 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               // scoped: the exit watcher fibers die when the run returns
               Effect.scoped(
                 Effect.gen(function* () {
-                  // watch every exit source (AI.exit(AI.when(A, B)) exits
-                  // on A or B); the first correlated event settles.
-                  // Correlation precedence: the explicit match override >
-                  // per-source key equality > any event from the source.
+                  // The exit arrives by DELIVERY (canon §5: implementations
+                  // own delivery — exits included): the implementation
+                  // Layer that received the world's event calls
+                  // `settle(key, event)`, completing this run's seat. The
+                  // kernel subscribes to NOTHING for channel-backed world
+                  // sources. Channel-less (kernel-internal) sources keep
+                  // the harness-bus path — tests and same-harness stimuli
+                  // publish there, correlated by match/key as before.
                   const exit = yield* Deferred.make<unknown>();
+                  yield* Effect.forkScoped(
+                    Effect.flatMap(run.awaitSettle, (event) =>
+                      Effect.asVoid(Deferred.succeed(exit, event)),
+                    ),
+                  );
                   for (const source of sources) {
+                    if (source.channel !== undefined) continue; // world: delivered, never subscribed
                     const match = halt.match ?? keyEqualityMatch(source);
                     const stream = yield* subscribeSource(source);
                     yield* Effect.forkScoped(

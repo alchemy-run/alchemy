@@ -165,6 +165,7 @@ export const CloudflareKernelLive = Layer.effect(
         send: todo,
         run: todo,
         steer: todo,
+        settle: todo,
         interrupt: todo,
       };
     }
@@ -213,6 +214,18 @@ export const CloudflareKernelLive = Layer.effect(
               deliveryId: `steer/${term["~alchemy/Name"]}/${JSON.stringify(input)}`,
               kind: "steer",
               item: input,
+            })
+            .pipe(Effect.asVoid),
+        // exit delivery IS delivery: the machine-observed exit enters the
+        // ring's one inbox like everything else; the DO settles the
+        // parked run whose key matches (Phase 2 wires the seat)
+        settle: (runKey: string, event: unknown) =>
+          rings
+            .getByName(term["~alchemy/Name"])
+            .admit({
+              deliveryId: `settle/${term["~alchemy/Name"]}/${runKey}`,
+              kind: "control",
+              item: { type: "settle", runKey, event },
             })
             .pipe(Effect.asVoid),
         interrupt: () =>

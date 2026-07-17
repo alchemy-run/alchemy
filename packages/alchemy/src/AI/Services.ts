@@ -58,9 +58,9 @@ type LeafServices<R> =
  *   catalog's, marked `owner: "world"` — its type narrows
  *   `~alchemy/Owner` to the literal) affords nothing by bare mention —
  *   the world publishes it, a process never can — so it contributes no
- *   channel tag. A machine-observed halt on the same source still does
- *   (the Halt arm above): observing the world needs the channel's
- *   physics;
+ *   channel tag. A machine-observed exit on a world source contributes
+ *   no channel tag either: the kernel never subscribes the world — the
+ *   implementation Layer delivers the exit (`settle(key, event)`);
  * - everything else is a leaf.
  *
  * Nesting is deliberately capped at depth 1: signature/control
@@ -69,13 +69,13 @@ type LeafServices<R> =
  */
 export type RefServices<R> =
   R extends Halt<infer Inner, any>
-    ?
-        // a machine-observed halt (`AI.exit(AI.when(...))`) carries its
-        // exit EventSources in the declared Refs type (a source-typed
-        // pseudo-entry whose Channel is the union of the when's channel
-        // tags) — each channel must join Req (the kernel observes the
-        // world on the process's behalf; reassess §B)
-        LeafServices<Inner[number]> | EventChannels<Inner[number]>
+    ? // a machine-observed exit contributes ONLY its nested template
+      // refs' tags. Its sources contribute NO channel tag: the kernel
+      // never subscribes the world — the exit event is DELIVERED by
+      // the implementation Layer (`settle(key, event)`), and the wire's
+      // compile fence rides the consuming call site (canon §5:
+      // implementations own delivery — exits included)
+      LeafServices<Inner[number]>
     : R extends Fold<infer A, infer Inner>
       ? LeafServices<A> | LeafServices<Inner[number]>
       : R extends Check<infer A, infer Inner>

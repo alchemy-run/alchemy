@@ -4,6 +4,13 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ReleaseVersion } from "./ReleaseVersion.ts";
 
+// the repository whose releases we watch — the resource is how a
+// repository is named (its declared identity resolves statically)
+const alchemyRepo = Github.Repository("alchemy", {
+  owner: "alchemy-run",
+  name: "alchemy",
+});
+
 export default Cloudflare.Worker(
   "ReleaseService",
   { main: import.meta.url },
@@ -11,23 +18,20 @@ export default Cloudflare.Worker(
     const versions = yield* ReleaseVersion;
 
     yield* Github.consumeRepositoryEvents(
-      {
-        owner: "alchemy-run",
-        repository: "alchemy",
-        events: ["push"],
-      },
+      alchemyRepo,
+      { events: ["push"] },
       (event) => {
-        const title = event.payload.head_commit?.message.split("\n")[0] ?? "";
+        // the wire delivers TYPED events (Github.PushEvent)
+        const title = event.headCommit?.message.split("\n")[0] ?? "";
         const isRelease =
-          event.payload.ref === "refs/heads/main" &&
-          title.startsWith("chore(release):");
+          event.branch === "main" && title.startsWith("chore(release):");
 
         return isRelease
-          ? versions.getByName(event.payload.head_commit!.id).generateBlog({
-              input: event.payload,
+          ? versions.getByName(event.headCommit!.id).generateBlog({
+              input: event,
             })
           : Effect.log(
-              `Skipping commit "${event.payload.head_commit?.message}" (hash: ${event.payload.head_commit!.id})`,
+              `Skipping commit "${event.headCommit?.message}" (hash: ${event.headCommit?.id})`,
             );
       },
     );

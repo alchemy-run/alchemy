@@ -11,6 +11,13 @@ import * as AI from "@/AI/index.ts";
 import * as GitHub from "@/GitHub/index.ts";
 import { ResolveGitHubIssue } from "./fixtures/org/processes.ts";
 
+// the deferred resource form — its declared identity (owner/name) is
+// readable statically, so clauses render the real owner/repo
+const repo = GitHub.Repository("render-test-alchemy", {
+  owner: "alchemy-run",
+  name: "test-alchemy",
+});
+
 describe("control refs render in place", () => {
   it("AI.until renders the halt contract where it sits", () => {
     class Compute extends AI.Process<Compute>()("Compute")`
@@ -103,7 +110,6 @@ ${AI.never`healthy`}` {}
   });
 
   it("a description-bearing when renders the clause verbatim, no 'arrives'", () => {
-    const repo = { owner: "alchemy-run", repository: "test-alchemy" };
     class Desk extends AI.Process<Desk>()("RenderDesk")`
 ${AI.when(GitHub.IssueOpened(repo))}, read it first. ${AI.never`healthy`}` {}
     const prose = AI.renderTemplate((Desk as any).template, (Desk as any).refs);
@@ -114,7 +120,6 @@ ${AI.when(GitHub.IssueOpened(repo))}, read it first. ${AI.never`healthy`}` {}
   });
 
   it("a mixed when uses descriptions where present, '{name} arrives' where not", () => {
-    const repo = { owner: "alchemy-run", repository: "test-alchemy" };
     const Nudge = AI.EventSource("org.nudge", S.Struct({ n: S.Number }));
     class Desk extends AI.Process<Desk>()("RenderMixedDesk")`
 ${AI.when(GitHub.IssueOpened(repo), Nudge)} act on it. ${AI.never`healthy`}` {}
@@ -125,7 +130,6 @@ ${AI.when(GitHub.IssueOpened(repo), Nudge)} act on it. ${AI.never`healthy`}` {}
   });
 
   it("a bare mention renders only the NAME — descriptions never leak into noun position", () => {
-    const repo = { owner: "alchemy-run", repository: "test-alchemy" };
     class Talker extends AI.Process<Talker>()("RenderTalker")`
 ${GitHub.IssueOpened(repo)} is vocabulary here. ${AI.never`healthy`}` {}
     const prose = AI.renderTemplate(
@@ -139,7 +143,6 @@ ${GitHub.IssueOpened(repo)} is vocabulary here. ${AI.never`healthy`}` {}
   });
 
   it("a machine-observed exit renders the source's description as the exit clause", () => {
-    const repo = { owner: "alchemy-run", repository: "test-alchemy" };
     class Case extends AI.Process<Case>()("RenderCase")`
 Work the issue.
 ${AI.exit(AI.when(GitHub.IssueClosed(repo)))}` {}
@@ -150,7 +153,6 @@ ${AI.exit(AI.when(GitHub.IssueClosed(repo)))}` {}
   });
 
   it("a prose-carrying exit joins the clause and the authored prose with an em dash", () => {
-    const repo = { owner: "alchemy-run", repository: "test-alchemy" };
     class Case extends AI.Process<Case>()("RenderProseCase")`
 Work the issue.
 ${AI.exit(AI.when(GitHub.IssueClosed(repo)))`whether merged or by hand`}` {}
@@ -171,7 +173,6 @@ Work it. ${AI.exit(AI.when(Done))`one way or another`}` {}
   });
 
   it("a multi-source exit joins the sources' clauses with ' or '", () => {
-    const repo = { owner: "alchemy-run", repository: "test-alchemy" };
     class Case extends AI.Process<Case>()("RenderMultiCase")`
 Work the issue.
 ${AI.exit(AI.when(GitHub.IssueClosed(repo), GitHub.PullRequestMerged(repo)))}` {}
@@ -181,19 +182,19 @@ ${AI.exit(AI.when(GitHub.IssueClosed(repo), GitHub.PullRequestMerged(repo)))}` {
     );
   });
 
-  it("the fixture charter renders as readable prose (deferred repo ⇒ generic clause)", () => {
+  it("the fixture charter renders as readable prose (deferred repo ⇒ real identity)", () => {
     // normalize the template's line wraps so assertions read as sentences
     const prose = AI.renderTemplate(
       (ResolveGitHubIssue as any).template,
       (ResolveGitHubIssue as any).refs,
     ).replace(/\s+/g, " ");
-    // the deferred (un-yielded resource) form can't know owner/repo at
-    // construction — the clause falls back to "the repository"
+    // the deferred (un-yielded resource) form carries its declared
+    // identity statically — clauses name the real owner/repo
     expect(prose).toContain(
-      "when an issue opens in the repository, read it, then searchIssues for",
+      "when an issue opens in alchemy-run/test-alchemy, read it, then searchIssues for",
     );
     expect(prose).toContain(
-      "when a comment lands on an issue in the repository, read it and adjust",
+      "when a comment lands on an issue in alchemy-run/test-alchemy, read it and adjust",
     );
     // tools compose as the sentence's verb (prose guide: never "reply
     // with ${Reply}" — the mention IS the action)
@@ -202,7 +203,7 @@ ${AI.exit(AI.when(GitHub.IssueClosed(repo), GitHub.PullRequestMerged(repo)))}` {
     // the machine exit composes the source's clause with the charter's
     // authored prose — no lead-in restatement anywhere in the charter
     expect(prose).toContain(
-      "This run ends when: GitHub closes an issue in the repository — whether the merged pull request closed it or a maintainer closed it by hand",
+      "This run ends when: GitHub closes an issue in alchemy-run/test-alchemy — whether the merged pull request closed it or a maintainer closed it by hand",
     );
     expect(prose).not.toContain("is what ends your work");
     // budget is a Layer, not prose

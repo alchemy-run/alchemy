@@ -1,8 +1,10 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
-import type { ResourceLike } from "./Resource.ts";
+import { deferredResourceMeta, type ResourceLike } from "./Resource.ts";
 import { Self } from "./Self.ts";
+import { Stack } from "./Stack.ts";
 import { taggedFunction } from "./Util/effect.ts";
 
 export interface ServiceLike {
@@ -20,7 +22,16 @@ type BindParameters<
   Req = never,
 > = Parameters extends [infer First, ...infer Rest]
   ? [
-      Input<First> | Effect.Effect<First, never, Req>,
+      // A parameter that ALREADY admits Effects (e.g. GitHub's
+      // `RepositoryLike = Repository | Effect<Repository, any, any>`)
+      // is passed exactly as declared — re-wrapping it in
+      // `Effect<First, never, Req>` would make TS infer the argument's
+      // own R into Req and leak it onto the caller (a deferred resource
+      // constructor's Stack/provider requirements, which the impl never
+      // incurs when it resolves identity statically).
+      [Extract<First, Effect.Effect<any, any, any>>] extends [never]
+        ? Input<First> | Effect.Effect<First, never, Req>
+        : First,
       ...BindParameters<Rest, Req>,
     ]
   : [];
@@ -63,12 +74,29 @@ export const Service = <
   id: Self["key"],
 ): Self => {
   const tag = Context.Service<Self, (...args: any[]) => Effect.Effect<any>>(id);
+  // Effect args are resolved before the impl sees them. ONE exception:
+  // an un-yielded resource constructor (the deferred form) only resolves
+  // under a Stack — when no Stack is ambient (e.g. a local factory
+  // process binding `GitHub.ListIssues(repo)` off the exported const) it
+  // passes through as-is, and the impl reads its static identity via
+  // deferredResourceMeta instead.
+  const resolveArg = (arg: any): Effect.Effect<any> =>
+    !Effect.isEffect(arg)
+      ? Effect.succeed(arg)
+      : deferredResourceMeta(arg) === undefined
+        ? (arg as Effect.Effect<any>)
+        : Effect.serviceOption(Stack).pipe(
+            Effect.flatMap((stack) =>
+              Option.isSome(stack)
+                ? (arg as Effect.Effect<any>)
+                : Effect.succeed(arg),
+            ),
+          );
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
-      Effect.all(
-        args.map((arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg))),
-        { concurrency: "unbounded" },
-      ).pipe(Effect.flatMap((resolved) => f(...resolved))),
+      Effect.all(args.map(resolveArg), { concurrency: "unbounded" }).pipe(
+        Effect.flatMap((resolved) => f(...resolved)),
+      ),
     );
   return taggedFunction(tag as any, callable) as unknown as Self;
 };

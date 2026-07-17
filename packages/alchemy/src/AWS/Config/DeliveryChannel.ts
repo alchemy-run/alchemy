@@ -131,15 +131,15 @@ export const DeliveryChannelProvider = () =>
             s3BucketName: channel.s3BucketName ?? "",
           };
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          const oldName = yield* createChannelName(id, olds);
+          const oldName = yield* createChannelName(id, olds ?? {});
           const newName = yield* createChannelName(id, news);
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name =
             output?.channelName ?? (yield* createChannelName(id, news));
           // putDeliveryChannel is an idempotent upsert. A just-applied S3
@@ -163,9 +163,10 @@ export const DeliveryChannelProvider = () =>
                 while: (e) =>
                   e._tag === "InsufficientDeliveryPolicyException" ||
                   e._tag === "NoSuchBucketException",
-                schedule: Schedule.fixed(2000).pipe(
-                  Schedule.both(Schedule.recurs(15)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(2000),
+                  Schedule.recurs(15),
+                ]),
               }),
             );
           yield* session.note(name);
@@ -180,11 +181,16 @@ export const DeliveryChannelProvider = () =>
             .deleteDeliveryChannel({ DeliveryChannelName: output.channelName })
             .pipe(
               Effect.retry({
-                while: (e) =>
+                // explicit `boolean` so the predicate is NOT inferred as a
+                // type guard — a guard would narrow the retried tag out of
+                // the downstream union, but a bounded schedule can exhaust
+                // and re-raise it, which the catchTag below must still see
+                while: (e): boolean =>
                   e._tag === "LastDeliveryChannelDeleteFailedException",
-                schedule: Schedule.fixed(2000).pipe(
-                  Schedule.both(Schedule.recurs(10)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(2000),
+                  Schedule.recurs(10),
+                ]),
               }),
               Effect.catchTag(
                 "NoSuchDeliveryChannelException",

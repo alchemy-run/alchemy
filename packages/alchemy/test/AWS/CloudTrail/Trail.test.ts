@@ -79,7 +79,8 @@ test.provider(
         .getTrailStatus({ Name: trailName })
         .pipe(
           Effect.map((s) => s.IsLogging ?? false),
-          Effect.retry({
+          // poll the SUCCESS value until it flips — repeat, not retry
+          Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             until: (isLogging) => isLogging === true,
             times: 15,
@@ -110,7 +111,7 @@ test.provider(
         .getTrailStatus({ Name: trailName })
         .pipe(
           Effect.map((s) => s.IsLogging ?? false),
-          Effect.retry({
+          Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             until: (isLogging) => isLogging === false,
             times: 15,
@@ -125,9 +126,10 @@ test.provider(
         Effect.flatMap(() => Effect.fail(new Error("trail still exists"))),
         Effect.retry({
           while: (e) => e instanceof Error,
-          schedule: Schedule.exponential(200).pipe(
-            Schedule.both(Schedule.recurs(8)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(200),
+            Schedule.recurs(8),
+          ]),
         }),
         Effect.catchTag("TrailNotFoundException", () => Effect.void),
         Effect.catch(() => Effect.void),

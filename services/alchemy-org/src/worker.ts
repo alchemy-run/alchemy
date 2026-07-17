@@ -1,13 +1,31 @@
 /**
- * The organization deployed — NOT DEPLOYED YET. One Cloudflare Worker
- * hosting the org: agents (each with its own tool physics), the
- * ResolveGitHubIssue process, the GitHub channel, and the DERIVED front
- * door (`GitHub.frontDoor(ResolveGitHubIssue)` walks the charter's
- * declarations and wires `consumeRepositoryEvents` underneath — no
- * hand-written webhook routing).
+ * The factory on Cloudflare — the DEPLOYABLE SHAPE, not deployed yet.
+ * Same Factory as local.ts; the environment is this provide-list:
  *
- * Before deploying: wire real tool physics (layers.ts is all stubs) and
- * settle the kernel (see the TODO below).
+ * | seam                        | Cloudflare physics                       |
+ * |-----------------------------|------------------------------------------|
+ * | GitHub.RepositoryEventSource| webhook (provisioned + HMAC-verified)     |
+ * | Ledger                      | D1 (`org-ledger`, declared by D1Ledger)   |
+ * | AI.Kernel                   | TODO(deploy) — see the OrgRing note below |
+ * | Engineer workspace tools    | TODO(deploy) — DevBox container (Phase 3) |
+ *
+ * TODO(deploy) — the kernel slot: `AI.memory` below keeps the Layer
+ * graph closed so this file type-checks as the deployable shape, but
+ * model turns MUST NOT run in the stateless Worker. The real physics is
+ * `CloudflareKernelLive(OrgRing)`: interpret-by-ROUTING — `send`/`steer`
+ * admit into the term's Durable Object, and the DO hosts the execution
+ * stack (the same terms + agents + model, composed a second time on the
+ * DO class), giving per-key serialization for free. The Phase-3 harness
+ * owns it; the sketch:
+ *
+ * ```ts
+ * export class OrgRing extends Cloudflare.DurableObject<OrgRing>()("OrgRing",
+ *   Effect.gen(function* () {
+ *     const kernel = yield* AI.Kernel;          // the DO-side driver
+ *     return { admit: (delivery) => kernel.route(delivery) };
+ *   }).pipe(Effect.provide(ExecutionStack)),    // terms + EngineerCloudflare +
+ * ) {}                                          // ReviewerCloudflare + model
+ * ```
  */
 import * as AnthropicClient from "@effect/ai-anthropic/AnthropicClient";
 import * as AnthropicLanguageModel from "@effect/ai-anthropic/AnthropicLanguageModel";
@@ -21,74 +39,39 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Engineer, Reviewer } from "./agents.ts";
-import { ResolveGitHubIssue } from "./flywheel.ts";
+import { Factory } from "./factory.ts";
 import {
-  ApproveHumanLive,
-  BashDevBox,
+  ApproveConsole,
   CommentLive,
-  EditFileLive,
-  GrepLive,
   MergePullRequestLive,
   OpenPullRequestLive,
-  ReadFileLive,
   SearchIssuesLive,
-} from "./layers.ts";
-import { alchemyEffect } from "./repos.ts";
+} from "./github-tools.ts";
+import { GitHubIssues } from "./issues.ts";
+import { D1Ledger } from "./ledger.ts";
+import { GitHubPullRequests } from "./pull-requests.ts";
+import { Bash, EditFile, Grep, ReadFile } from "./tools.ts";
 
-// ─── agents: same contracts, per-agent physics ───────────────────
+// ─── workspace tools: TODO(deploy) — the DevBox container ──────────
 
-const EngineerLive = AI.layer(Engineer).pipe(
-  Layer.provide([
-    BashDevBox,
-    GrepLive,
-    ReadFileLive,
-    EditFileLive,
-    OpenPullRequestLive,
-  ]),
+const todo = (what: string) => () =>
+  Effect.die(new Error(`TODO(deploy): ${what}`));
+
+const DevBoxTools = Layer.mergeAll(
+  Layer.succeed(Bash, todo("exec in the DevBox container") as never),
+  Layer.succeed(Grep, todo("ripgrep in the DevBox container") as never),
+  Layer.succeed(ReadFile, todo("read from the DevBox checkout") as never),
+  Layer.succeed(EditFile, todo("edit in the DevBox checkout") as never),
 );
 
-// Reviewer holds the only ${Approve} in the org — the autonomy dial:
-// ApproveHumanLive makes the org an orchestra; an auto-approve Layer
-// would make it a factory. Merging stays fenced regardless:
-// MergePullRequest refuses without an approved review, and Approve
-// lives only in the Reviewer's template.
-const ReviewerLive = AI.layer(Reviewer).pipe(
-  Layer.provide([ApproveHumanLive, CommentLive]),
-);
+// ─── model + kernel (the TODO(deploy) slot — see the module JSDoc) ─
 
-// ─── the one Process over its agents ─────────────────────────────
-// The Process triages, replies, and merges itself — SearchIssues /
-// Comment / MergePullRequest are ITS tools; agents exist only where the
-// work is a distinct craft with a distinct toolbox.
-
-const ResolveGitHubIssueLive = AI.layer(ResolveGitHubIssue).pipe(
-  Layer.provide([
-    EngineerLive,
-    ReviewerLive,
-    CommentLive,
-    SearchIssuesLive,
-    MergePullRequestLive,
-  ]),
-  // budget is NOT prose (owner ruling): ceilings are provided where the
-  // term is provided — exhaustion stays a typed BudgetExceeded exit.
-  // Future: a per-dispatch override for one-off tighter/looser runs.
-  Layer.provide(
-    AI.budget({ tokens: "10M", wallClock: "72h", iterations: 24, stall: 4 }),
-  ),
-);
-
-// TODO(deploy): which kernel Layer to provide is deliberately open until
-// deploy. The in-memory kernel below keeps the graph closed for
-// type-checking, but it holds no durable state — the real deployment
-// wants a durable Cloudflare kernel (a Ring Durable Object owning the
-// admission ledger + Trace) before webhooks are pointed at this Worker.
 const ModelLive = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
 }).pipe(
   Layer.provide(
     AnthropicClient.layer({
       apiKey:
-        // TODO(sam): use effect/Config
         process.env.ANTHROPIC_API_KEY === undefined
           ? undefined
           : Redacted.make(process.env.ANTHROPIC_API_KEY),
@@ -96,30 +79,71 @@ const ModelLive = AnthropicLanguageModel.layer({
   ),
   Layer.provide(FetchHttpClient.layer),
 );
-const KernelLive = AI.memory.pipe(Layer.provide(ModelLive));
 
-// ─── the org: the ring + its derived front door ──────────────────
+const EventBusLive = AI.EventBusMemory;
+// TODO(deploy): replace with CloudflareKernelLive(OrgRing) — execution
+// belongs in the OrgRing DO (Phase-3 harness), never this Worker.
+const KernelLive = AI.memory.pipe(Layer.provide([ModelLive, EventBusLive]));
 
-const OrgLive = GitHub.frontDoor(ResolveGitHubIssue).pipe(
-  Layer.provideMerge(ResolveGitHubIssueLive),
-  Layer.provide(GitHub.GitHubEventsLive),
-  Layer.provide(KernelLive),
+// ─── credentials + tools ───────────────────────────────────────────
+
+// the GitHub API bindings' Cloudflare physics: the *Http layers capture
+// the provider credential as ONE GitHub.PersonalAccessToken resource
+// per host and bind its value into the Worker — the deployed runtime
+// authenticates with the bound token. NO credentials layer here: the
+// token resource's provider gets them from the Stack's
+// `GitHub.providers()` (auth provider: env, stored PAT, `gh` CLI), and
+// the runtime reads the BOUND token (local.ts provides the *Local
+// layers off ambient credentials instead).
+const GitHubApi = Layer.mergeAll(
+  GitHub.ListIssuesHttp,
+  GitHub.GetIssueHttp,
+  GitHub.SearchIssuesHttp,
+  GitHub.CreateIssueCommentHttp,
+  GitHub.ListPullRequestsHttp,
+  GitHub.ListPullRequestReviewsHttp,
+  GitHub.MergePullRequestHttp,
+);
+
+const GitHubToolsLive = Layer.mergeAll(
+  SearchIssuesLive,
+  CommentLive,
+  MergePullRequestLive,
+  OpenPullRequestLive,
+).pipe(Layer.provide(GitHubApi));
+
+const EngineerCloudflare = AI.layer(Engineer).pipe(
+  Layer.provide([DevBoxTools, GitHubToolsLive, KernelLive]),
+);
+const ReviewerCloudflare = AI.layer(Reviewer).pipe(
+  Layer.provide([ApproveConsole, GitHubToolsLive, KernelLive]),
+);
+
+// ─── the environment: one provide-list ─────────────────────────────
+
+const FactoryCloudflare = Factory.pipe(
+  Layer.provide([EngineerCloudflare, ReviewerCloudflare]), // ← agents
+  Layer.provide(GitHubToolsLive), // ← the processes' own tools
+  Layer.provide(GitHubApi), // ← the domain methods' API bindings
+  // ← the wire: provisions the repository webhook pointing at this
+  //   Worker and claims + verifies the delivery path
+  Layer.provide(Cloudflare.Workers.GitHubRepositoryEventSourceLive),
+  // ← the ledger declares its own D1 database; the binding gives it
+  //   the runtime client
+  Layer.provide(D1Ledger.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding))),
+  Layer.provideMerge(KernelLive),
+  Layer.provide(EventBusLive),
 );
 
 export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
-  "AlchemyOrg",
+  "Org",
   { main: import.meta.url },
   Effect.gen(function* () {
-    // resolving the ring from context proves the whole graph closed:
-    // every agent, tool, the channel, the kernel, and the front door
-    // found a Layer
-    const issues = yield* ResolveGitHubIssue;
-
-    // the exported resource resolved to its plain { owner, repository }
-    // in init — the same one resolver the front door and channel Layer
-    // use (the deferred form is legal here: init runs at plan time
-    // under the Stack)
-    const repoRef = yield* GitHub.resolveRepositoryRef(alchemyEffect);
+    // resolving both tags from context proves the whole graph closed:
+    // processes, agents, tools, channel, ledger, kernel, and the wire
+    // all found a Layer
+    const issues = yield* GitHubIssues;
+    const pulls = yield* GitHubPullRequests;
 
     return {
       fetch: Effect.gen(function* () {
@@ -128,50 +152,27 @@ export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
 
         // GitHub webhook deliveries never reach this handler — the
         // GitHubRepositoryEventSourceLive listener claims them first,
-        // and the front door routes them.
+        // and the drive loops in issues.ts/pull-requests.ts route them.
 
-        // Manual case admission, typed end to end: In = the case's
-        // accepted messages, Out = the IssueClosed event payload (the
-        // WORLD settles the case; dispatch resolves when GitHub closes
-        // the issue).
-        const match = url.pathname.match(/^\/issues\/(\d+)\/work$/);
-        if (request.method === "POST" && match) {
-          const closed = yield* issues
-            .dispatch({
-              owner: repoRef.owner,
-              repository: repoRef.repository,
-              number: Number(match[1]),
-              title: `manual dispatch of #${match[1]}`,
-              body: "",
-            })
-            .pipe(
-              // both abnormal exits are typed: exhaustion is resumable,
-              // refusal carries the ratified blocker
-              Effect.catchTag("AI.BudgetExceeded", (e) =>
-                Effect.succeed({
-                  budgetExceeded: e.limit,
-                  resumeHint: e.resumeHint,
-                } as const),
-              ),
-              Effect.catchTag("AI.Refused", (e) =>
-                Effect.succeed({ refused: e.reason } as const),
-              ),
-            );
-          return yield* HttpServerResponse.json(closed);
+        if (request.method === "GET" && url.pathname === "/issues") {
+          // the declared interface, through the tag — typed end to end
+          return yield* HttpServerResponse.json(yield* issues.listIssues());
         }
 
-        return HttpServerResponse.text("alchemy-org", { status: 200 });
+        if (request.method === "GET" && url.pathname === "/status") {
+          const openPulls = yield* pulls.listOpen();
+          return yield* HttpServerResponse.json({
+            factory: "alchemy-org",
+            repository: "alchemy-run/test-alchemy",
+            processes: ["GitHubIssues", "GitHubPullRequests"],
+            openPullRequests: openPulls.length,
+          });
+        }
+
+        return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(
-    Effect.provide(
-      OrgLive.pipe(
-        // the wire: provisions the repository webhook pointing at this
-        // Worker and claims the delivery path — ONE instance shared by the
-        // channel Layer (through OrgLive's open requirement) and the front
-        // door's derived consuming call sites
-        Layer.provide(Cloudflare.Workers.GitHubRepositoryEventSourceLive),
-      ),
-    ),
-  ),
+    // ONE provide (owner convention): the environment was built above
+    // with Layer combinators — never chain Effect.provide calls.
+  }).pipe(Effect.provide(FactoryCloudflare)),
 ) {}

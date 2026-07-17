@@ -30,8 +30,8 @@ export const OrgStack = Alchemy.Stack(
     // repository rename) and whose provisioning props come from its
     // identity props. The charter in processes.ts passes the exported
     // const itself (the DEFERRED form — module scope, before any deploy);
-    // both forms name the same wire — the one
-    // GitHub.frontDoor(ResolveGitHubIssue) consumes.
+    // both forms name the same wire — the one the worker's hand-wired
+    // `GitHub.consumeRepositoryEvents` delivery consumes.
     const issueOpened = GitHub.IssueOpened(repo);
     const issueClosed = GitHub.IssueClosed(repo);
 

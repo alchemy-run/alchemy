@@ -1,41 +1,37 @@
 /**
- * The AlchemyOrg Stack — NOT deployed yet: `bun alchemy deploy` will
- * provision the repos' webhooks when we're ready (and, in later phases,
- * the Worker in src/worker.ts plus the DevBox containers backing the
- * Engineer's tools).
+ * The AlchemyOrg Stack — the FACTORY, provisioned: the `test-alchemy`
+ * sandbox repository it manages, and the OrgWorker (src/worker.ts),
+ * whose implementation Layers declare their own infrastructure —
+ * yielding the Worker provisions the repository webhook
+ * (`GitHubRepositoryEventSourceLive`) and the ledger's D1 database
+ * (`D1Ledger`) as a consequence of the Layers that consume them.
  *
- * The same program that defines the org provisions the surface it
- * manages: the exported repo consts (src/repos.ts) ARE the resources —
- * yielding them here provisions them, and the charters' deferred scoped
- * sources resolve to the same instances (memoized by FQN).
+ * The same program that defines the org provisions its surface: the
+ * exported repo const (src/repos.ts) IS the resource — yielding it here
+ * resolves the one instance every charter and binding already names
+ * (resources are memoized by FQN).
  */
 import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
-import { alchemyEffect, distilled } from "./src/repos.ts";
+import * as Layer from "effect/Layer";
+import { testAlchemy } from "./src/repos.ts";
+import OrgWorker from "./src/worker.ts";
 
 export default Alchemy.Stack(
   "AlchemyOrg",
-  { providers: GitHub.providers(), state: Alchemy.localState() },
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
+    state: Alchemy.localState(),
+  },
   Effect.gen(function* () {
-    const alchemy = yield* alchemyEffect;
-    const distilledRepo = yield* distilled;
-
-    // Resource-first scoped sources: the SAME resources that provision
-    // the repositories scope their event catalog — here the RESOLVED
-    // (yielded) form; the flywheel charter passes the exported consts
-    // (the DEFERRED form). Both name the same wire — the one
-    // GitHub.frontDoor(ResolveGitHubIssue) consumes.
-    const issueOpened = GitHub.IssueOpened(alchemy);
-    const issueClosed = GitHub.IssueClosed(alchemy);
-    const distilledMerged = GitHub.PullRequestMerged(distilledRepo);
+    const repo = yield* testAlchemy;
+    const factory = yield* OrgWorker;
 
     return {
-      alchemy: alchemy.fullName,
-      distilled: distilledRepo.fullName,
-      // the scoped sources are pure data — surface their identities so
-      // the deploy output shows what the org subscribes to
-      sources: [issueOpened.name, issueClosed.name, distilledMerged.name],
+      repository: repo.fullName,
+      factory: factory.url.as<string>(),
     };
   }),
 );

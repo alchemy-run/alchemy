@@ -26,6 +26,7 @@ const ReleaseBloggerPendingMigration = Layer.succeed(ReleaseBlogger, {
   send: () => pending("send"),
   run: () => pending("run"),
   steer: () => pending("steer"),
+  settle: () => pending("settle"),
   interrupt: () => pending("interrupt"),
 });
 

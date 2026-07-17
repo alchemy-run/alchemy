@@ -21,21 +21,23 @@
  * deploy time an EventSource compiles to webhook-ingestion
  * infrastructure; the front door routes from that webhook to the
  * accepting process with explicit `send`/`steer`. The payload schemas
- * here are the **distilled work-item shapes** the org's processes
- * consume — deliberately NOT the full Octokit webhook payloads.
+ * here ARE the typed wire events ({@link RepositoryEvent}) — a
+ * charter's `AI.when` types `In` as exactly what the delivery handler
+ * routes.
  */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
 import { type EventChannelService, EventSource } from "../AI/EventSource.ts";
-import { isResourceOfType } from "../Resource.ts";
 import type { Repository } from "./Repository.ts";
-import type {
-  GitHubEventName,
-  RepositoryRef,
-  WebhookEvent,
-} from "./RepositoryEventSource.ts";
+import type { GitHubEventName, WebhookEvent } from "./RepositoryEventSource.ts";
+import {
+  isRepositoryResource,
+  type RepositoryLike,
+  repositoryIdentity,
+  resolveRepository,
+} from "./RepositoryLike.ts";
 
 /**
  * The channel tag for the GitHub event family: the service a harness
@@ -66,14 +68,16 @@ export class GitHubEvents extends Context.Service<
  */
 export interface GitHubSourceProps {
   /**
-   * The repository whose events this source delivers. The resolved
-   * forms (plain ref, yielded resource) are normalized to a plain
-   * `{ owner, repository }` at construction; the deferred form (an
-   * un-yielded `GitHub.Repository(...)` constructor Effect) is carried
-   * as-is and resolved in-Effect by the consuming Layer via
-   * {@link resolveRepositoryRef}.
+   * The repository whose events this source delivers — normalized at
+   * construction to its plain identity when the {@link RepositoryLike}
+   * form allows (a yielded resource, or a deferred constructor with
+   * plain-string props); otherwise the deferred Effect is carried as-is
+   * and resolved in-Effect by the consuming Layer via
+   * {@link resolveSourceRepo}.
    */
-  repo: RepositoryRef | Effect.Effect<Repository, any, any>;
+  repo:
+    | { owner: string; repository: string }
+    | Effect.Effect<Repository, any, any>;
   /** Bare GitHub event name — what the webhook is provisioned with. */
   event: GitHubEventName;
   /** Family-specific runtime filter (action, label, branch, …). */
@@ -81,33 +85,10 @@ export interface GitHubSourceProps {
 }
 
 /**
- * What a scoped constructor accepts — the same three forms a binding
- * accepts its host resource in:
- *
- * - a plain `{ owner, repository }` ref (the simple path — also what
- *   {@link consumeRepositoryEvents} takes);
- * - a provisioned (yielded) {@link Repository} resource — resource-first
- *   inside a Stack program;
- * - the **un-yielded constructor Effect** itself
- *   (`export const repo = GitHub.Repository("repo", {...})`) — the
- *   deferred form, usable at module scope before any Stack exists.
- *   Resources are memoized by FQN, so the Layer that later yields the
- *   same exported const resolves the one instance the Stack provisioned.
- */
-export type RepositoryLike =
-  | RepositoryRef
-  | Repository
-  | Effect.Effect<Repository, any, any>;
-
-const isRepositoryResource = (repo: RepositoryLike): repo is Repository =>
-  isResourceOfType(repo, "GitHub.Repository");
-
-/**
- * Stable per-module-load identity for the DEFERRED form: the un-yielded
- * constructor Effect exposes nothing statically (FQN/Props only exist on
- * the instance yielded inside a Stack), so the source's display name gets
- * a placeholder keyed on the Effect **object** — the same exported const
- * always maps to the same `N`.
+ * Stable per-module-load identity for a DEFERRED constructor whose
+ * identity props aren't plain strings (an `Input` owner/name): the
+ * source's display name gets a placeholder keyed on the Effect
+ * **object** — the same exported const always maps to the same `N`.
  */
 const deferredIds = new WeakMap<object, number>();
 let nextDeferredId = 0;
@@ -124,182 +105,346 @@ const deferredKey = (repo: object): string => {
  * A source's deterministic identity suffix — a plain string at
  * construction time (module scope; no Output resolution):
  *
- * - plain ref → `owner/repository`;
- * - resource → its `FQN` (namespace path + logical ID) — the resource's
- *   *stable logical identity*, unchanged by a repository rename (a
- *   rename converges in place; the FQN names the declaration, not the
- *   current cloud name);
- * - deferred constructor Effect → `@deferred:N` (stable per module
- *   load; same exported Effect ⇒ same `N`).
+ * - yielded resource → its `FQN` (namespace path + logical ID) — the
+ *   resource's *stable logical identity*, unchanged by a repository
+ *   rename (a rename converges in place; the FQN names the declaration,
+ *   not the current cloud name);
+ * - deferred constructor Effect → `owner/repository` read from its
+ *   static {@link repositoryIdentity}; `@deferred:N` only when the
+ *   identity props are unresolved `Input`s (stable per module load).
  *
  * The name is DISPLAY/topology identity only — the **wire identity**
  * (which repo to provision and filter) always resolves from
- * `props.repo` in-Effect via {@link resolveRepositoryRef}. The
+ * `props.repo` in-Effect via {@link resolveSourceRepo}. The
  * kernel-internal EventBus correlates on the name, but world-owned
  * GitHub sources ride the channel (the webhook wire), not the bus, so
  * the placeholder never becomes a wire key.
  */
-const scopeKey = (repo: RepositoryLike): string =>
-  isRepositoryResource(repo)
-    ? repo.FQN
-    : Effect.isEffect(repo)
-      ? deferredKey(repo)
-      : `${repo.owner}/${repo.repository}`;
-
-/**
- * Synchronous fast-path: the plain `{ owner, repository }` for the two
- * RESOLVED forms (plain ref, yielded resource).
- *
- * For a {@link Repository} resource the identity is read from its
- * **input props** (`Props.owner` / `Props.name`) — they are the
- * repository's identity (owner change = replacement, name change =
- * in-place rename) and are plain strings in the canonical usage. Webhook
- * provisioning needs plan-time strings (the delivery path and the
- * webhook's logical ID derive from them), so unresolved inputs (an
- * `Output`/`Config`/`Effect` owner or name) are a construction-time
- * defect directing the caller to the plain-ref form.
- */
-const scopeRef = (repo: RepositoryRef | Repository): RepositoryRef => {
-  if (!isRepositoryResource(repo)) return repo;
-  const { owner, name } = repo.Props;
-  if (typeof owner !== "string" || typeof name !== "string") {
-    throw new Error(
-      `GitHub event sources need the repository's identity as plain strings at construction time, but ${repo.FQN} was declared with unresolved owner/name inputs — pass a plain { owner, repository } ref instead`,
-    );
-  }
-  return { owner, repository: name };
+const scopeKey = (repo: RepositoryLike): string => {
+  if (isRepositoryResource(repo)) return repo.FQN;
+  const identity = repositoryIdentity(repo);
+  return identity === undefined
+    ? deferredKey(repo)
+    : `${identity.owner}/${identity.repository}`;
 };
 
 /**
- * Normalize what a scoped constructor stores in `props.repo`: the
- * resolved forms collapse to a plain ref eagerly (today's behavior —
- * unresolved inputs defect at construction with a clear message); the
- * deferred form is carried as-is for the Layer to resolve in-Effect.
+ * Normalize what a scoped constructor stores in `props.repo`: forms
+ * with statically-known identity (a yielded resource's props, a
+ * deferred constructor's meta) collapse to the plain identity eagerly;
+ * a deferred constructor with unresolved identity props is carried
+ * as-is for the Layer to resolve in-Effect.
  */
-const normalizeRepo = (
-  repo: RepositoryLike,
-): RepositoryRef | Effect.Effect<Repository, any, any> =>
-  Effect.isEffect(repo) ? repo : scopeRef(repo);
+const normalizeRepo = (repo: RepositoryLike): GitHubSourceProps["repo"] => {
+  const identity = repositoryIdentity(repo);
+  if (identity !== undefined) return identity;
+  if (Effect.isEffect(repo)) return repo;
+  throw new Error(
+    `GitHub event sources need the repository's identity as plain strings at construction time, but ${repo.FQN} was declared with unresolved owner/name inputs`,
+  );
+};
 
 /**
  * The repository as it reads in a source's rendered clause (its
- * `description` — the combinator contract): resolved forms name the
- * repo (`owner/repository`); the DEFERRED form can't know the strings
- * at construction (like the `@deferred:N` display name above, the true
- * identity only exists in-Effect), so its clauses use the generic
- * "the repository" — still a full, readable clause.
+ * `description` — the combinator contract): statically-known identity
+ * names the repo (`owner/repository`); a deferred form with unresolved
+ * identity can't know the strings at construction, so its clauses use
+ * the generic "the repository" — still a full, readable clause.
  */
-const describeRepo = (
-  scope: RepositoryRef | Effect.Effect<Repository, any, any>,
-): string =>
+const describeRepo = (scope: GitHubSourceProps["repo"]): string =>
   Effect.isEffect(scope)
     ? "the repository"
     : `${scope.owner}/${scope.repository}`;
 
 /**
- * The natural identity key of issue/PR-scoped GitHub events (the
- * EventSource `key` contract): `owner/repository#number` — the ONE
- * correlation function shared by the front door (steering key: first
- * key ⇒ `send` creates the run, seen key ⇒ `steer`) and the kernel
- * (machine-observed exits settle on key equality between the run's
- * work item and the observed event). Returns `undefined` when the
- * value doesn't carry the identity fields (e.g. a plain-string work
- * item) — consumers fall back to their keyless behavior.
+ * The EventSource `key` contract over the typed events: {@link eventKey}
+ * guarded for non-event values (a plain-string demo work item) —
+ * consumers fall back to their keyless behavior on `undefined`.
  */
-const identityKey = (value: {
-  owner?: unknown;
-  repository?: unknown;
-  number?: unknown;
-}): string | undefined =>
-  typeof value?.owner === "string" &&
-  typeof value?.repository === "string" &&
-  typeof value?.number === "number"
-    ? `${value.owner}/${value.repository}#${value.number}`
-    : undefined;
+const identityKey = (value: unknown): string | undefined => {
+  try {
+    return eventKey(value as RepositoryEvent);
+  } catch {
+    return undefined;
+  }
+};
 
 /**
- * THE one resolver every consuming Layer uses to turn a source's
- * `props.repo` (any {@link RepositoryLike} form) into the plain
- * `{ owner, repository }` it provisions and filters with:
- *
- * - plain ref → succeeds as-is;
- * - yielded {@link Repository} → identity props (`Props.owner` /
- *   `Props.name`; defect if not plain strings);
- * - deferred constructor Effect → `yield*`s it. Resources are memoized
- *   by FQN, so this resolves the same instance the Stack yielded.
- *
- * R is typed `never` with one well-commented internal cast: the deferred
- * Effect's own requirements (Stack, namespace, provider) cannot be
- * carried on the term type (the Layer walks refs at RUNTIME of its init
- * Effect), and they are satisfied wherever bindings are legal — a host's
- * init Effect runs at plan time under the Stack (the bindings
- * precedent). Yielding a deferred source anywhere else is a defect at
- * runtime (a missing-service die), same as any out-of-phase binding.
+ * Resolve a source's `props.repo` to the plain `{ owner, repository }`
+ * a consuming Layer provisions and filters with — already plain for the
+ * statically-known forms; the deferred Effect resolves via
+ * {@link resolveRepository} (legal under a Stack — the bindings
+ * precedent).
  */
-export const resolveRepositoryRef = (
-  repo: RepositoryLike,
-): Effect.Effect<RepositoryRef> =>
-  Effect.isEffect(repo)
-    ? Effect.map(
-        // SAFETY: see JSDoc — the deferred form is only legal where
-        // bindings are legal (host init phase, under the Stack); the
-        // Effect's true R (Stack | CurrentNamespace | Provider) is
-        // ambient there. Elsewhere this dies at runtime, by design.
-        repo as Effect.Effect<Repository>,
-        (resolved) => scopeRef(resolved),
-      )
-    : Effect.sync(() => scopeRef(repo));
+export const resolveSourceRepo = (
+  repo: GitHubSourceProps["repo"],
+): Effect.Effect<{ owner: string; repository: string }> =>
+  Effect.isEffect(repo) ? resolveRepository(repo) : Effect.succeed(repo);
 
-// ─── payload schemas: distilled work-item shapes, not Octokit ─────
+// ─── the typed wire: tagged repository events ──────────────────────
+//
+// `consumeRepositoryEvents` delivers THESE — a tagged union routing
+// code matches on (`Match.tag("IssueOpened", …)`), never raw webhook
+// payloads. The entity objects (`issue`, `comment`, `pullRequest`,
+// `repository`) are the wire's OWN objects passed through by reference
+// — every delivered field survives at runtime; the interfaces type the
+// principal fields (which is also what a charter's `AI.when` types as
+// the process's `In`).
+//
+// Each event is ONE name declared twice — a NAMED interface (so
+// signatures and hovers read `IssueClosedEvent`, never a structural
+// expansion) merged with the schema const of the same name (what the
+// scoped source constructors carry). The interfaces are the source of
+// truth for the payload types; the schema consts are annotated with
+// them, so the two can never drift.
 
-export const IssueOpenedEvent = S.Struct({
-  owner: S.String,
-  repository: S.String,
+export interface Actor {
+  readonly login: string;
+}
+
+export interface RepositoryInfo {
+  /** Repository name (`alchemy-effect`). */
+  readonly name: string;
+  readonly owner: Actor;
+}
+
+export interface Label {
+  readonly name: string;
+}
+
+/** The principal fields of an issue as delivered by the wire. */
+export interface Issue {
+  readonly number: number;
+  readonly title: string;
+  readonly body?: string | null;
+  readonly state?: string;
+  readonly html_url?: string;
+  readonly user?: Actor | null;
+  readonly labels?: ReadonlyArray<Label>;
+  readonly created_at?: string;
+  readonly closed_at?: string | null;
+}
+
+/** The principal fields of an issue comment as delivered by the wire. */
+export interface IssueComment {
+  readonly body: string;
+  readonly user?: Actor | null;
+  readonly html_url?: string;
+  readonly created_at?: string;
+}
+
+/** The principal fields of a pull request as delivered by the wire. */
+export interface PullRequest {
+  readonly number: number;
+  readonly title: string;
+  readonly body?: string | null;
+  readonly state?: string;
+  readonly html_url?: string;
+  readonly user?: Actor | null;
+  readonly merged?: boolean;
+  readonly merge_commit_sha?: string | null;
+  readonly head?: { readonly ref: string };
+  readonly base?: { readonly ref: string };
+}
+
+export interface Commit {
+  readonly id: string;
+  readonly message: string;
+}
+
+const ActorSchema = S.Struct({ login: S.String });
+
+const RepositoryInfoSchema = S.Struct({
+  name: S.String,
+  owner: ActorSchema,
+});
+
+const LabelSchema = S.Struct({ name: S.String });
+
+const IssueSchema = S.Struct({
   number: S.Number,
   title: S.String,
+  body: S.optionalKey(S.NullOr(S.String)),
+  state: S.optionalKey(S.String),
+  html_url: S.optionalKey(S.String),
+  user: S.optionalKey(S.NullOr(ActorSchema)),
+  labels: S.optionalKey(S.Array(LabelSchema)),
+  created_at: S.optionalKey(S.String),
+  closed_at: S.optionalKey(S.NullOr(S.String)),
+});
+
+const IssueCommentSchema = S.Struct({
   body: S.String,
+  user: S.optionalKey(S.NullOr(ActorSchema)),
+  html_url: S.optionalKey(S.String),
+  created_at: S.optionalKey(S.String),
 });
 
-export const IssueLabeledEvent = S.Struct({
-  owner: S.String,
-  repository: S.String,
-  number: S.Number,
-  label: S.String,
-});
-
-export const IssueCommentedEvent = S.Struct({
-  owner: S.String,
-  repository: S.String,
-  number: S.Number,
-  author: S.String,
-  comment: S.String,
-});
-
-export const IssueClosedEvent = S.Struct({
-  owner: S.String,
-  repository: S.String,
-  number: S.Number,
-});
-
-export const PullRequestOpenedEvent = S.Struct({
-  owner: S.String,
-  repository: S.String,
+const PullRequestSchema = S.Struct({
   number: S.Number,
   title: S.String,
+  body: S.optionalKey(S.NullOr(S.String)),
+  state: S.optionalKey(S.String),
+  html_url: S.optionalKey(S.String),
+  user: S.optionalKey(S.NullOr(ActorSchema)),
+  merged: S.optionalKey(S.Boolean),
+  merge_commit_sha: S.optionalKey(S.NullOr(S.String)),
+  head: S.optionalKey(S.Struct({ ref: S.String })),
+  base: S.optionalKey(S.Struct({ ref: S.String })),
 });
 
-export const PullRequestMergedEvent = S.Struct({
-  owner: S.String,
-  repository: S.String,
-  number: S.Number,
+const CommitSchema = S.Struct({
+  id: S.String,
+  message: S.String,
 });
 
-export const PushEvent = S.Struct({
-  owner: S.String,
-  repository: S.String,
+/**
+ * The schema shape an event const carries: a real schema whose `Type`
+ * is the event's NAMED interface — exactly what `AI.EventSource`
+ * requires, without leaking the structural struct type into hovers.
+ */
+type EventSchema<T> = S.Top & { readonly Type: T };
+
+export interface IssueOpenedEvent {
+  readonly _tag: "IssueOpened";
+  readonly repository: RepositoryInfo;
+  readonly issue: Issue;
+}
+export const IssueOpenedEvent: EventSchema<IssueOpenedEvent> = S.TaggedStruct(
+  "IssueOpened",
+  { repository: RepositoryInfoSchema, issue: IssueSchema },
+);
+
+export interface IssueLabeledEvent {
+  readonly _tag: "IssueLabeled";
+  readonly repository: RepositoryInfo;
+  readonly issue: Issue;
+  readonly label: Label;
+}
+export const IssueLabeledEvent: EventSchema<IssueLabeledEvent> = S.TaggedStruct(
+  "IssueLabeled",
+  {
+    repository: RepositoryInfoSchema,
+    issue: IssueSchema,
+    label: LabelSchema,
+  },
+);
+
+export interface IssueCommentedEvent {
+  readonly _tag: "IssueCommented";
+  readonly repository: RepositoryInfo;
+  readonly issue: Issue;
+  readonly comment: IssueComment;
+}
+export const IssueCommentedEvent: EventSchema<IssueCommentedEvent> =
+  S.TaggedStruct("IssueCommented", {
+    repository: RepositoryInfoSchema,
+    issue: IssueSchema,
+    comment: IssueCommentSchema,
+  });
+
+export interface IssueClosedEvent {
+  readonly _tag: "IssueClosed";
+  readonly repository: RepositoryInfo;
+  readonly issue: Issue;
+}
+export const IssueClosedEvent: EventSchema<IssueClosedEvent> = S.TaggedStruct(
+  "IssueClosed",
+  { repository: RepositoryInfoSchema, issue: IssueSchema },
+);
+
+export interface PullRequestOpenedEvent {
+  readonly _tag: "PullRequestOpened";
+  readonly repository: RepositoryInfo;
+  readonly pullRequest: PullRequest;
+}
+export const PullRequestOpenedEvent: EventSchema<PullRequestOpenedEvent> =
+  S.TaggedStruct("PullRequestOpened", {
+    repository: RepositoryInfoSchema,
+    pullRequest: PullRequestSchema,
+  });
+
+export interface PullRequestMergedEvent {
+  readonly _tag: "PullRequestMerged";
+  readonly repository: RepositoryInfo;
+  readonly pullRequest: PullRequest;
+}
+export const PullRequestMergedEvent: EventSchema<PullRequestMergedEvent> =
+  S.TaggedStruct("PullRequestMerged", {
+    repository: RepositoryInfoSchema,
+    pullRequest: PullRequestSchema,
+  });
+
+/** A pull request closed WITHOUT merging (merges are {@link PullRequestMergedEvent}). */
+export interface PullRequestClosedEvent {
+  readonly _tag: "PullRequestClosed";
+  readonly repository: RepositoryInfo;
+  readonly pullRequest: PullRequest;
+}
+export const PullRequestClosedEvent: EventSchema<PullRequestClosedEvent> =
+  S.TaggedStruct("PullRequestClosed", {
+    repository: RepositoryInfoSchema,
+    pullRequest: PullRequestSchema,
+  });
+
+export interface PushEvent {
+  readonly _tag: "Push";
+  readonly repository: RepositoryInfo;
+  /** The full git ref (`refs/heads/main`). */
+  readonly ref: string;
+  /** The branch name (`main`), derived from `ref`. */
+  readonly branch: string;
+  readonly headCommit: Commit | null;
+}
+export const PushEvent: EventSchema<PushEvent> = S.TaggedStruct("Push", {
+  repository: RepositoryInfoSchema,
+  ref: S.String,
   branch: S.String,
-  title: S.String,
+  headCommit: S.NullOr(CommitSchema),
 });
+
+/** Every issue event (`events: ["issues"]`). */
+export type IssuesEvent =
+  | IssueOpenedEvent
+  | IssueLabeledEvent
+  | IssueClosedEvent;
+
+/** Every pull-request event (`events: ["pull_request"]`). */
+export type PullRequestEvent =
+  | PullRequestOpenedEvent
+  | PullRequestMergedEvent
+  | PullRequestClosedEvent;
+
+/** Every repository event the typed wire delivers. */
+export type RepositoryEvent =
+  | IssuesEvent
+  | IssueCommentedEvent
+  | PullRequestEvent
+  | PushEvent;
+
+/**
+ * The natural identity key of a repository event — the ONE correlation
+ * function shared by routing (`send(item, { key })` names the run,
+ * seen key ⇒ `steer`), the ledger (dedupe), and exit delivery
+ * (`settle(key, event)`): `owner/repository#number` for issue- and
+ * PR-scoped events; `undefined` for keyless events (push).
+ */
+export const eventKey = (event: RepositoryEvent): string | undefined => {
+  const repo = `${event.repository.owner.login}/${event.repository.name}`;
+  switch (event._tag) {
+    case "IssueOpened":
+    case "IssueLabeled":
+    case "IssueCommented":
+    case "IssueClosed":
+      return `${repo}#${event.issue.number}`;
+    case "PullRequestOpened":
+    case "PullRequestMerged":
+    case "PullRequestClosed":
+      return `${repo}#${event.pullRequest.number}`;
+    case "Push":
+      return undefined;
+  }
+};
 
 // ─── scoped constructors ──────────────────────────────────────────
 
@@ -528,126 +673,122 @@ export const Push = (
   );
 };
 
-// ─── payload adapters: Octokit wire → the distilled catalog shapes ──
+// ─── the wire parser: one Octokit delivery → one typed event ────────
 
 /**
- * Push payloads type `repository.owner` as nullable; the source's own
+ * Some payloads type `repository.owner` as nullable; the consumer's
  * RESOLVED repo ref is the authority when the wire omits it.
  */
-const ownerLogin = (
-  owner: { login?: string } | null | undefined,
-  ref: RepositoryRef,
-): string => owner?.login ?? ref.owner;
+const repositoryInfo = (
+  repository: { name: string; owner?: { login?: string } | null },
+  ref: { owner: string; repository: string },
+): { name: string; owner: { login: string } } => ({
+  name: repository.name,
+  owner: { login: repository.owner?.login ?? ref.owner },
+});
 
 /**
- * Adapt one webhook delivery to a source's distilled payload shape —
- * the anti-corruption seam of the DERIVED front door (canon §5,
- * designs/ai/business-processes.md): match the source's `props.event` +
- * `props.filter` (action, label, branch as `refs/heads/…`, title prefix
- * against the head commit's first line) against the delivery, then map
- * the Octokit payload to the catalog schema shape ({@link IssueOpenedEvent},
- * {@link PushEvent}, …). `None` means "this delivery is not this
- * source's message" — the caller skips it (denial-by-skip lives at the
- * consuming site, never inside a process).
+ * Parse one webhook delivery into its typed {@link RepositoryEvent} —
+ * TOTAL translation, no filtering: routing decisions belong to the
+ * consumer (`Match.tag` in the process implementation), never to the
+ * parser. `None` means the delivery's event/action has no tag in the
+ * union yet (an `issues.edited`, a bot's noise) — extend the union
+ * when a consumer needs it.
  *
- * Takes the RESOLVED `{ owner, repository }` alongside the props: the
- * caller resolves `props.repo` once (any {@link RepositoryLike} form)
- * via {@link resolveRepositoryRef} before entering the delivery path,
- * so adaptation stays synchronous and pure.
+ * The entity objects on the returned event (`issue`, `comment`,
+ * `pullRequest`) are the wire's OWN objects, passed through by
+ * reference — every delivered field survives at runtime; the schemas
+ * type the principal fields.
  *
- * Internal-only: consumed by `GitHub.frontDoor`. It rides the barrel
- * with the rest of this module, but it is not part of the public
- * catalog surface — a hand-written front door adapts in its own
- * handler.
+ * This is `consumeRepositoryEvents`' internal seam — handlers already
+ * receive typed events and never see this function.
  */
-export const adaptWebhookEvent = (
-  ref: RepositoryRef,
-  props: GitHubSourceProps,
+export const parseWebhookEvent = (
+  ref: { owner: string; repository: string },
   event: WebhookEvent,
-): Option.Option<unknown> => {
-  if (event.name !== props.event) return Option.none();
-  const filter = props.filter ?? {};
+): Option.Option<RepositoryEvent> => {
   switch (event.name) {
     case "issues": {
       const payload = event.payload;
-      if (filter.action !== undefined && payload.action !== filter.action) {
-        return Option.none();
-      }
-      const base = {
-        owner: ownerLogin(payload.repository.owner, ref),
-        repository: payload.repository.name,
-        number: payload.issue.number,
-      };
-      if (payload.action === "opened") {
-        return Option.some({
-          ...base,
-          title: payload.issue.title,
-          body: payload.issue.body ?? "",
-        });
-      }
-      if (payload.action === "labeled") {
-        const label = payload.label?.name;
-        if (label === undefined) return Option.none();
-        if (filter.label !== undefined && label !== filter.label) {
+      const repository = repositoryInfo(payload.repository, ref);
+      const issue = payload.issue as IssueOpenedEvent["issue"];
+      switch (payload.action) {
+        case "opened":
+          return Option.some({
+            _tag: "IssueOpened",
+            repository,
+            issue,
+          } satisfies IssueOpenedEvent);
+        case "labeled":
+          return payload.label?.name === undefined
+            ? Option.none()
+            : Option.some({
+                _tag: "IssueLabeled",
+                repository,
+                issue,
+                label: { name: payload.label.name },
+              } satisfies IssueLabeledEvent);
+        case "closed":
+          return Option.some({
+            _tag: "IssueClosed",
+            repository,
+            issue,
+          } satisfies IssueClosedEvent);
+        default:
           return Option.none();
-        }
-        return Option.some({ ...base, label });
       }
-      if (payload.action === "closed") return Option.some(base);
-      return Option.none();
     }
     case "issue_comment": {
       const payload = event.payload;
-      if (filter.action !== undefined && payload.action !== filter.action) {
-        return Option.none();
-      }
+      if (payload.action !== "created") return Option.none();
       return Option.some({
-        owner: ownerLogin(payload.repository.owner, ref),
-        repository: payload.repository.name,
-        number: payload.issue.number,
-        author: payload.comment.user?.login ?? "unknown",
-        comment: payload.comment.body,
-      });
+        _tag: "IssueCommented",
+        repository: repositoryInfo(payload.repository, ref),
+        issue: payload.issue as IssueCommentedEvent["issue"],
+        comment: payload.comment as IssueCommentedEvent["comment"],
+      } satisfies IssueCommentedEvent);
     }
     case "pull_request": {
       const payload = event.payload;
-      if (filter.action !== undefined && payload.action !== filter.action) {
-        return Option.none();
+      const repository = repositoryInfo(payload.repository, ref);
+      const pullRequest =
+        payload.pull_request as PullRequestOpenedEvent["pullRequest"];
+      switch (payload.action) {
+        case "opened":
+          return Option.some({
+            _tag: "PullRequestOpened",
+            repository,
+            pullRequest,
+          } satisfies PullRequestOpenedEvent);
+        case "closed":
+          // GitHub signals merges as closed+merged — two DISTINCT tags,
+          // so consumers never re-derive the difference
+          return Option.some(
+            payload.pull_request.merged
+              ? ({
+                  _tag: "PullRequestMerged",
+                  repository,
+                  pullRequest,
+                } satisfies PullRequestMergedEvent)
+              : ({
+                  _tag: "PullRequestClosed",
+                  repository,
+                  pullRequest,
+                } satisfies PullRequestClosedEvent),
+          );
+        default:
+          return Option.none();
       }
-      // merges arrive as closed+merged (see PullRequestMerged): the
-      // filter carries the distinction; a close-without-merge skips
-      if (filter.merged === "true" && !payload.pull_request.merged) {
-        return Option.none();
-      }
-      const base = {
-        owner: ownerLogin(payload.repository.owner, ref),
-        repository: payload.repository.name,
-        number: payload.pull_request.number,
-      };
-      if (payload.action === "opened") {
-        return Option.some({ ...base, title: payload.pull_request.title });
-      }
-      return Option.some(base);
     }
     case "push": {
       const payload = event.payload;
-      const branch = payload.ref.replace("refs/heads/", "");
-      if (filter.branch !== undefined && branch !== filter.branch) {
-        return Option.none();
-      }
-      const title = payload.head_commit?.message.split("\n")[0] ?? "";
-      if (
-        filter.titlePrefix !== undefined &&
-        !title.startsWith(filter.titlePrefix)
-      ) {
-        return Option.none();
-      }
       return Option.some({
-        owner: ownerLogin(payload.repository.owner, ref),
-        repository: payload.repository.name,
-        branch,
-        title,
-      });
+        _tag: "Push",
+        repository: repositoryInfo(payload.repository, ref),
+        ref: payload.ref,
+        branch: payload.ref.replace("refs/heads/", ""),
+        headCommit: payload.head_commit ?? null,
+      } satisfies PushEvent);
     }
     default:
       return Option.none();

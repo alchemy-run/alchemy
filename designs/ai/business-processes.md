@@ -164,9 +164,24 @@ type, arranged as {inbound, outbound} × {continuing, terminal}:
   the framework). Code layout: `Trigger.ts` + `Emit.ts` + `Halt.ts`
   consolidate into `Signature.ts`.
 
-**Verbs** (`ProcessService`): `dispatch`, `send`, `steer(runKey, msg)`,
-`interrupt` (+ the Ask protocol). `run()`/the trigger-lift is
-vestigial once auto-delivery goes; the mailbox drain is kernel-internal.
+**Verbs** (`ProcessService`): `dispatch`, `send(item, { key? })`,
+`steer(runKey, msg)`, `settle(runKey, event)`, `interrupt` (+ the Ask
+protocol). `run()`/the trigger-lift is vestigial once auto-delivery
+goes; the mailbox drain is kernel-internal. Two rulings from the
+concept-elimination review (owner-decided): (a) **exit delivery is
+delivery** — the implementation Layer that consumed the wire hands the
+world's exit event to the run (`settle(key, event)`) exactly like a
+steer; the kernel subscribes to NOTHING for world-side sources (the
+internal harness bus survives only for channel-less test/same-harness
+stimuli), machine exits contribute no channel tag to `Req`, and
+`EventBus`/event-channel Layers vanish from every service's
+composition — core's public surface is Process, Agent, Tool, Skill,
+Kernel, with everything else Layers, Resources, Bindings. (b)
+**implementations name runs** — `send(item, { key })` records the
+run's world identity ("owner/repo#7", typically the event family's
+`EventSource.key`) so `steer`/`settle` address it without ever seeing
+the kernel session; unnamed runs stay addressable by the
+`run.admitted` row's session.
 
 ### 2a. The signature-reduction round (why v4.1)
 
@@ -218,7 +233,7 @@ the reasoning is preserved so it isn't relitigated:
 | `AI.key` + keyed ring families | the run **is** the instance; a second identity concept duplicated run identity | run keys (`(term, work item)`) + `steer(runKey, …)`; long-lived thing = long-lived run with a machine exit, or state in your DB |
 | `AI.state` / `AI.var` + staged commits | double-entry bookkeeping — write state AND emit events; once everything is facts, state is a **fold** | your DB (outside; your txn) or userland folds over the Trace (`deriveState` convention; snapshots are caches keyed by `seq`) |
 | business refusal from inside (`FixDeclined` emitted by the process) | the process was doing the outside's job | outside code denies (4xx before dispatch); `Refused` survives only as the bounded run's typed give-up |
-| auto-delivering triggers (`AI.on` wiring, `AI.every`, `AI.each` runtime) | hidden framework routing; underdetermined for addressed delivery | the front door: `consumeRepositoryEvents` etc. → adapt → `send`/`steer`; platform cron → `send`; the consuming call site carries the provisioning compile fence |
+| auto-delivering triggers (`AI.on` wiring, `AI.every`, `AI.each` runtime) | hidden framework routing; underdetermined for addressed delivery | the front door: `consumeRepositoryEvents` etc. → `Match.tag` → `send`/`steer`; platform cron → `send`; the consuming call site carries the provisioning compile fence |
 | `AI.policy`, `AI.context`, `AI.aggregate` / `AI.Entity` | DDD implemented instead of embedded | documented patterns: policy = a Process (deterministic OR AI) fed by the front door; bounded context = a responsibility directory + explicit Layers; entity/aggregate = state in your DB or a fold over facts, judged outside or by a process |
 | `effect/unstable/workflow` (Activities, DurableDeferred) | anti-serverless coupling; never an owner decision | kernel-owned durability: the Trace is the ledger; `ctx.*` staged emits commit atomically with the run's terminal; codemode replay serves completed calls from Trace rows |
 
@@ -254,19 +269,83 @@ the reasoning is preserved so it isn't relitigated:
   (create) vs `steer(runKey, …)` (input to a running actor). Doctrine:
   key match ⇒ steer; settled key ⇒ re-admit (new run, fold-seeded);
   else ⇒ new run. No model calls in routing.
-- **The front door may be DERIVED.** Hand-rolling the routing per app
-  is boilerplate; a provider integration may ship a **signature-driven
-  front-door Layer** — `GitHub.frontDoor(IssueWork)` — that walks the
-  term's declarations (`AI.when` sources, the machine-exit source),
-  provisions/consumes the wire underneath (`consumeRepositoryEvents`),
-  adapts payloads to the catalog schemas, and routes by the
-  virtual-actor rule (identity-scoped events key the run —
-  `owner/repo#number`; first message for a key creates via `send`,
-  later ones `steer(key, …)`; keyless events always `send`). This does
-  NOT reintroduce kernel auto-delivery: the Layer is explicit, opt-in,
-  world-side code you compose and can read — the declarations are its
-  *input*, the kernel remains delivery-free, and a hand-written front
-  door remains the escape hatch for custom validation/denial.
+- **Implementations own delivery** (supersedes the withdrawn "derived
+  front door" — `GitHub.frontDoor(term)` was built, reviewed, and
+  rejected as generic glue with no customization story). A process's
+  **implementation Layer** is where ingestion, dedupe, and domain
+  methods live: `Layer.effect(GitHubIssues, …)` yields resources,
+  bindings, `AI.Kernel`, and seam services, interprets the charter
+  internally (`kernel.interpret` — which resolves the charter's agent/
+  tool refs from ambient context), wraps it with delivery, and returns
+  the term's declared interface. The bindings pattern applied to
+  processes: one tag, proliferating implementations. Expressions
+  encode **interface only** — `AI.when` types what can be dispatched;
+  nothing in prose provisions anything.
+- **The GitHub API is bindings; the repository is the resource.**
+  `GitHub.RepositoryRef` is deleted — a repository is named ONE way:
+  the `GitHub.Repository` resource, yielded or as the exported
+  un-yielded constructor (whose declared identity is readable
+  statically via `deferredResourceMeta`, so nothing needs a Stack just
+  to know owner/name). API operations are capability bindings in core
+  (`GitHub.ListIssues(repo)`, `GitHub.GetIssue(repo)`,
+  `GitHub.SearchIssues(repo)`, `GitHub.CreateIssueComment(repo)`,
+  `GitHub.ListPullRequests(repo)`, `GitHub.ListPullRequestReviews(repo)`,
+  `GitHub.MergePullRequest(repo)`) with interchangeable `*Http` layers
+  (Octokit under the covers — `BindingHttp.make` owns the shared
+  resolve-once/call/wrap sandwich). Service code never touches Octokit:
+  tool physics and process domain methods consume binding tags;
+  entrypoints provide implementation layers + credentials. Bindings
+  fail with typed `GitHub.ApiError` (domain answers get their own tags
+  — `GitHub.IssueNotFound`); business rules (merge-needs-approval)
+  stay in the org's tool layers, never in the binding. Two
+  interchangeable implementations per operation (the Cloudflare
+  `*Http`/`*Local` convention): **`*Http`** captures the provider
+  credential as a `GitHub.PersonalAccessToken` resource — GitHub can't
+  MINT tokens, so the resource captures + validates one (login/scopes
+  recorded in the plan) — named `${host.LogicalId}GitHubToken`
+  (FQN-memoized: one token per host), whose `value` binds into the
+  host's environment; the deployed runtime authenticates with the
+  bound token. **`*Local`** runs the same operation off the provider's
+  ambient `GitHubCredentials` (laptop factory, Actions, tests) — no
+  resource, no bind. Each operation is declared ONCE
+  (`BindingHttp.operation`) and both layers share the sandwich.
+- **The wire parses; routing matches** (supersedes the per-source
+  `adaptWebhookEvent(ref, source.props, delivery)` adapter, rejected
+  as unreadable — consumers were re-deriving "which event is this"
+  from raw payloads the wire already understood).
+  `consumeRepositoryEvents` hands the handler a TYPED tagged union
+  (`GitHub.RepositoryEvent`: `IssueOpened`, `IssueCommented`,
+  `IssueClosed`, `PullRequestOpened`, `PullRequestMerged`,
+  `PullRequestClosed`, `Push`…), narrowed to the requested event names
+  (`GitHub.RepositoryEventFor<"issues" | "issue_comment">`). Events
+  carry the wire's own entity objects by reference (full data at
+  runtime; schemas type the principal fields); merges arrive as their
+  OWN tag, never as closed-plus-flag. A drive loop is a
+  `Match.type<…>().pipe(Match.tag(…), Match.orElse(() => Effect.void))`
+  — settle on the exit tag, offer-then-send/steer on the door tags,
+  denial-by-skip in the orElse. Identity is ONE function over the
+  union: `GitHub.eventKey(event)` (`owner/repo#number`). The catalog's
+  source schemas ARE these tagged events, so a charter's `AI.when`
+  types `In` as exactly what the handler routes.
+- **Processes declare domain interfaces.** `AI.Process<Self,
+  Interface>` — the term's tag resolves to `ProcessService &
+  Interface` (e.g. `listIssues()`, `getIssue(n)`). Charters that
+  splice the term, codemode, and deterministic code all consume the
+  typed interface; declaring one obligates a hand-written
+  implementation Layer (the kernel default can't invent domain
+  methods).
+- **Environments are Layer provide-lists over seams.** A factory
+  process is implemented ONCE against seam services — event arrival
+  (`GitHub.RepositoryEventSource`: webhook on Cloudflare, polling
+  locally), dedupe/liveness (`Ledger`: memory | sqlite | D1
+  transactions — never instance memory in a distributed environment),
+  execution (`AI.Kernel`: in-process memory kernel locally;
+  route-to-Durable-Object on Cloudflare, where the DO hosts the
+  execution stack — terms + agents + tools + model — and gives per-key
+  serialization). Swapping environments is swapping provides; the
+  routing doctrine (match on the typed tag → offer → send new keys /
+  steer live ones; identity from `GitHub.eventKey`) lives in the implementation, written
+  once per process.
 - **State lives where transactions live.** If you have a DB: validate +
   write + emit in *your* transaction; processes are pure reactors. If
   you don't: the Trace is the record — derive state as a fold over the
@@ -293,25 +372,35 @@ the reasoning is preserved so it isn't relitigated:
    §2a signature reduction (`AI.when`, event-mention publish grant,
    `Signature.ts` consolidation, `AI.on`/`AI.emit`/`AI.each`/`AI.every`
    deleted); align `examples/agent-chat-web`.
-2. **P0**: promote the GitHub event catalog + channel out of test
-   fixtures into `src/GitHub`, including **scoped event sources**
-   (`GitHub.IssueOpened(repo)` — §2a ruling 6); **Resource
-   expressions** (render resolved identity at interpretation via the
-   dynamic-prose seam, dependency edge in topology, owner-sensitive
-   mention gate); re-admission of settled keys; the minimal
-   self-hosting vertical (this repo's issues, sandbox account).
-3. **P1**: kernel seam refactor (`CompiledTool[]`, `ToolMode`,
+2. **P0 (done)**: the GitHub event catalog + channel in `src/GitHub`
+   with scoped, resource-first sources (§2a rulings 4–6), the
+   owner-sensitivity gate, `EventSource.key` correlation.
+3. **P0 (in flight — the software-factory slice; plan:
+   `.cursor/plans/software_factory_components_26133547.plan.md`)**:
+   `AI.Process<Self, Interface>`; FrontDoor deleted;
+   `RepositoryEventSourcePolling` (polling physics for the existing
+   wire tag); `services/alchemy-org` rebuilt as the factory —
+   `Ledger` seam (Memory/Sqlite/D1), one generic implementation per
+   process (`GitHubIssuesLive`, `GitHubPullRequestsLive`),
+   `local.ts`/`worker.ts` as provide-list environments; the factory
+   component catalog research report. Remaining from the old item:
+   Resource expressions (interpretation-time identity render);
+   re-admission of settled keys; the live self-hosting vertical.
+4. **P1**: kernel seam refactor (`CompiledTool[]`, `ToolMode`,
    protocol-tool terms, KernelPrompts dissolution); codemode local
    Layer (vendored interpreter bridge); Skills; open gap — a
    deterministic handler (`AI.process`) on a term with a
    machine-observed exit should park after the handler returns and
    wake on steer, like the prose path does.
-4. **P1**: the `alchemy/Coding` capability package; Discord provider;
-   prose-guide rewrites into the example.
-5. **P2/P3**: codemode durable Layer (Trace-as-ledger replay);
-   Phase-3 DO harness (one DO per run); human-declared exits; the
-   "model a business process" tutorial (DDD/Event Storming embedded —
-   the workshop grammar compiles to primitives + patterns, `tsc` as the
+5. **P1**: the `alchemy/Coding` capability package; Discord provider;
+   promote the proven `Ledger` contract into core; further factory
+   components per the catalog report (`Workspace`, `HumanGate`,
+   `Scheduler`, …).
+6. **P2/P3**: codemode durable Layer (Trace-as-ledger replay);
+   Phase-3 DO harness (one DO per run — the execution side of the
+   Cloudflare factory); human-declared exits; the "model a business
+   process" tutorial (DDD/Event Storming embedded — the workshop
+   grammar compiles to primitives + patterns, `tsc` as the
    completeness check).
 
 ## 7. The document map

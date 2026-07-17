@@ -19,7 +19,11 @@ import * as AI from "@/AI/index.ts";
 import * as GitHub from "@/GitHub/index.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 
-const repo = { owner: "alchemy-run", repository: "alchemy-effect" };
+// the deferred resource form — the ONE way a repository is named
+const repo = GitHub.Repository("world-owned-alchemy-effect", {
+  owner: "alchemy-run",
+  name: "alchemy-effect",
+});
 
 // a world-owned catalog source (the CORE GitHub catalog marks all of
 // its constructors `owner: "world"`)
@@ -79,11 +83,12 @@ describe("world-owned event sources (canon §2a ruling 4)", () => {
       const DeskLive = AI.process(Desk, (_item, ctx) =>
         Effect.gen(function* () {
           yield* ctx.emit(IssueOpened, {
-            owner: repo.owner,
-            repository: repo.repository,
-            number: 1,
-            title: "t",
-            body: "b",
+            _tag: "IssueOpened",
+            repository: {
+              name: "alchemy-effect",
+              owner: { login: "alchemy-run" },
+            },
+            issue: { number: 1, title: "t" },
           });
           return "unreachable";
         }),

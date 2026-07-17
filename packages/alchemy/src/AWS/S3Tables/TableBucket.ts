@@ -143,9 +143,9 @@ export const TableBucketProvider = () =>
         Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
       );
     }),
-    diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+    diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;
-      const oldName = yield* createBucketName(id, olds);
+      const oldName = yield* createBucketName(id, olds ?? {});
       const newName = yield* createBucketName(id, news);
       if (oldName !== newName) {
         return { action: "replace" } as const;
@@ -157,7 +157,7 @@ export const TableBucketProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+    reconcile: Effect.fn(function* ({ id, news, output, session }) {
       const { accountId, region } = yield* AWSEnvironment.current;
       const name = output?.name ?? (yield* createBucketName(id, news));
       const arn =
@@ -189,9 +189,10 @@ export const TableBucketProvider = () =>
         bucket = yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
           Effect.retry({
             while: (e) => e._tag === "NotFoundException",
-            schedule: Schedule.exponential(500).pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential(500),
+              Schedule.recurs(8),
+            ]),
           }),
         );
       }

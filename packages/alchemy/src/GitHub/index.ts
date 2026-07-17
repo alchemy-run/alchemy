@@ -1,13 +1,43 @@
 export * as Auth from "./AuthProvider.ts";
+export * from "./ApiError.ts";
 export * from "./Comment.ts";
-export { GitHubCredentials, fromEnv, fromToken } from "./Credentials.ts";
+export {
+  GitHubCredentials,
+  fromAuthProvider,
+  fromEnv,
+  fromToken,
+} from "./Credentials.ts";
+export { Octokit } from "./Octokit.ts";
+export * from "./CreateIssueComment.ts";
+export * from "./CreateIssueCommentHttp.ts";
+export * from "./CreateIssueCommentLocal.ts";
 export * from "./Env.ts";
 export * from "./Events.ts";
 export * from "./EventsLive.ts";
-export * from "./FrontDoor.ts";
+export * from "./GetIssue.ts";
+export * from "./GetIssueHttp.ts";
+export * from "./GetIssueLocal.ts";
+export * from "./ListIssues.ts";
+export * from "./ListIssuesHttp.ts";
+export * from "./ListIssuesLocal.ts";
+export * from "./ListPullRequestReviews.ts";
+export * from "./ListPullRequestReviewsHttp.ts";
+export * from "./ListPullRequestReviewsLocal.ts";
+export * from "./ListPullRequests.ts";
+export * from "./ListPullRequestsHttp.ts";
+export * from "./ListPullRequestsLocal.ts";
+export * from "./MergePullRequest.ts";
+export * from "./MergePullRequestHttp.ts";
+export * from "./MergePullRequestLocal.ts";
+export * from "./PersonalAccessToken.ts";
 export * from "./Providers.ts";
 export * from "./Repository.ts";
 export * from "./RepositoryEventSource.ts";
+export * from "./RepositoryEventSourcePolling.ts";
+export * from "./RepositoryLike.ts";
+export * from "./SearchIssues.ts";
+export * from "./SearchIssuesHttp.ts";
+export * from "./SearchIssuesLocal.ts";
 export * from "./Secret.ts";
 export * from "./Secrets.ts";
 export * from "./Variable.ts";

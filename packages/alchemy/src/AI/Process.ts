@@ -49,21 +49,40 @@ import type { Halt, When } from "./Signature.ts";
  * All five are runtime verbs, colored with `RuntimeContext`.
  */
 export interface ProcessService<Out = void, In = unknown, Err = never> {
-  /** Admit one work item and await its run's resolution (admit + join). */
-  dispatch(item: In): Effect.Effect<Out, Err, RuntimeContext>;
-  /** Admit one work item, fire-and-forget (the admission half alone). */
-  send(item: In): Effect.Effect<void, never, RuntimeContext>;
+  /**
+   * Admit one work item and await its run's resolution (admit + join).
+   * `options.key` names the run (see {@link ProcessService.send}).
+   */
+  dispatch(
+    item: In,
+    options?: { readonly key?: string },
+  ): Effect.Effect<Out, Err, RuntimeContext>;
+  /**
+   * Admit one work item, fire-and-forget (the admission half alone).
+   *
+   * `options.key` is the run's IMPLEMENTATION-CHOSEN name — the world
+   * identity the caller correlates by (`owner/repo#7`), typically the
+   * event family's own `EventSource.key`. Naming the run is what makes
+   * `steer(key, …)` and `settle(key, …)` addressable from outside code
+   * that never saw the kernel-minted session. Unnamed runs remain
+   * addressable by the `run.admitted` row's session.
+   */
+  send(
+    item: In,
+    options?: { readonly key?: string },
+  ): Effect.Effect<void, never, RuntimeContext>;
   /**
    * Join the ring's unbounded life (serves admissions until the Scope
    * closes). Vestigial: auto-delivery is demoted — delivery is always
-   * explicit outside code (`send`/`dispatch`/`steer`).
+   * explicit outside code (`send`/`dispatch`/`steer`/`settle`).
    */
   run(): Effect.Effect<never, Err, RuntimeContext>;
   /**
    * Run-key–addressed input: deliver a message to a SPECIFIC run. The
-   * run key is the session minted at admission (the `run.admitted`
-   * row's `session`). Delivered at the run's next boundary; wakes a
-   * parked machine-exit run for another work round.
+   * run key is the name given at admission (`send(item, { key })`) or
+   * the kernel session (the `run.admitted` row). Delivered at the run's
+   * next boundary; wakes a parked machine-exit run for another work
+   * round.
    */
   steer(
     runKey: string,
@@ -71,6 +90,21 @@ export interface ProcessService<Out = void, In = unknown, Err = never> {
   ): Effect.Effect<void, never, RuntimeContext>;
   /** Mid-run input to the active run, promoted at the next boundary. */
   steer(input: unknown): Effect.Effect<void, never, RuntimeContext>;
+  /**
+   * Deliver a machine-observed exit to a SPECIFIC run: the run parked on
+   * `AI.exit(AI.when(…))` resolves with `event` as its `Out`.
+   *
+   * Exit delivery is delivery (canon §5: implementations own it): the
+   * implementation Layer that received the world's event hands it to the
+   * run exactly like a steer — the kernel subscribes to nothing for
+   * world-side sources, and correlation IS the key the caller addressed.
+   * Settling a key with no parked run is an idempotent no-op (the run
+   * may have already settled — the world outranks the org's beliefs).
+   */
+  settle(
+    runKey: string,
+    event: unknown,
+  ): Effect.Effect<void, never, RuntimeContext>;
   /** Scope authority: settle in-flight work as interrupted, fold, mark. */
   interrupt(): Effect.Effect<void, never, RuntimeContext>;
 }
@@ -186,6 +220,17 @@ export type ProcessErr<Refs extends any[]> =
  * resolves the live `ProcessService<Out, In, Err>` from context;
  * `AI.layer(Fix)` is the kernel-derived default implementation.
  *
+ * **The declared interface** (`AI.Process<Self, Interface>()`): a process
+ * may declare domain operations *on top of* the actor verbs — the service
+ * shape its tag resolves to becomes `ProcessService<Out, In, Err> &
+ * Interface`. Declaring an interface obligates the implementation to
+ * supply those methods: `AI.layer(Term, (inner) => ({ …domain }))` is the
+ * lightweight form (the kernel interprets the charter, your `make` adds
+ * the domain methods over the verbs — omitting it is an arity error);
+ * `Layer.effect(Term, …)` remains the full-control form (interpret via
+ * `AI.Kernel` yourself, wrap ingestion, return the complete service).
+ * The default `{}` keeps every plain term exactly as before.
+ *
  * Capability denial by omission: a charter that never interpolates
  * `${Approve}` has no `Approve` anywhere in its Layer graph's
  * requirements; no Layer can grant it merge authority. Constitutional
@@ -199,6 +244,7 @@ export interface Process<
   Name extends string = string,
   Refs extends any[] = any[],
   Self = unknown,
+  Iface = {},
 > {
   "~alchemy/Kind": "Process";
   "~alchemy/Name": Name;
@@ -212,11 +258,12 @@ export interface Process<
   req: Req;
   /**
    * Instances are branded with the process's name so distinct processes
-   * remain distinct types (and therefore distinct tags).
+   * remain distinct types (and therefore distinct tags). The declared
+   * interface (if any) rides the instance shape alongside the verbs.
    */
   new (
     _: never,
-  ): ProcessService<Out, In, Err> & { readonly "~alchemy/Name": Name };
+  ): ProcessService<Out, In, Err> & Iface & { readonly "~alchemy/Name": Name };
   /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
   "~alchemy/Self": Self;
 }
@@ -367,7 +414,14 @@ export const Process: {
     definition: ProcessKindDefinition<ScaffoldRefs, Meta>,
   ): ProcessKind<KindName, ScaffoldRefs, Meta>;
   // ── the instance forms (the base constructor is the trivial kind) ──
-  <Self>(): {
+  //
+  // `Interface` (optional) declares the domain operations the term's tag
+  // resolves to ON TOP OF the actor verbs: the Context.Service shape
+  // becomes `ProcessService<Out, In, Err> & Interface`. A term that
+  // declares one must be implemented with the methods supplied —
+  // `AI.layer(Term, (inner) => ({ …domain }))` (the `make` argument
+  // becomes required) or a hand-written `Layer.effect(Term, …)`.
+  <Self, Interface = {}>(): {
     <Name extends string>(
       name: Name,
     ): {
@@ -381,11 +435,13 @@ export const Process: {
         Services<Refs>,
         Name,
         Refs,
-        Self
+        Self,
+        Interface
       > &
         Context.Service<
           Self,
-          ProcessService<ProcessOut<Refs>, ProcessIn<Refs>, ProcessErr<Refs>>
+          ProcessService<ProcessOut<Refs>, ProcessIn<Refs>, ProcessErr<Refs>> &
+            Interface
         >;
     };
   };

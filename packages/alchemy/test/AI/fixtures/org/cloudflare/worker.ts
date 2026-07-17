@@ -4,19 +4,21 @@
  * physics), the ResolveGitHubIssue process, the GitHub channel — composed as
  * Layers and provided onto the Worker's init Effect.
  *
- * Delivery is the DERIVED front door (canon §5): `GitHub.frontDoor(
- * ResolveGitHubIssue)` walks the charter's declarations (`AI.when` sources, the
- * machine-observed exit) and wires `consumeRepositoryEvents`
- * underneath — adapt, then `send` (create the case) or `steer` (the
- * conversation moving). No hand-written webhook routing anywhere; a
- * hand-written `consumeRepositoryEvents` handler remains the escape
- * hatch for custom validation/denial.
+ * Delivery is OWNED BY THE IMPLEMENTATION (the components doctrine —
+ * the derived front door is gone): a hand-wired
+ * `GitHub.consumeRepositoryEvents` call in the init Layer adapts each
+ * webhook delivery to the catalog shapes and picks the door — `send`
+ * (create the case) or `steer` (the conversation moving). The real
+ * pattern — one generic implementation Layer per process, with a
+ * Ledger deciding send-vs-steer transactionally — lives in
+ * services/alchemy-org; this fixture keeps a minimal ledgerless copy.
  */
 import * as AI from "@/AI/index.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as GitHub from "@/GitHub/index.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Engineer, Reviewer } from "../agents.ts";
@@ -76,20 +78,58 @@ const ResolveGitHubIssueLive = AI.layer(ResolveGitHubIssue).pipe(
   ),
 );
 
-// ─── the org: the ring + its derived front door ──────────────────
+// ─── the org: the ring + its hand-wired delivery ─────────────────
+//
+// Minimal, ledgerless delivery: adapt each webhook delivery to the
+// catalog shapes, then pick the door — first message for a case key
+// creates the run (`send`), later ones steer it (`steer(key, …)`).
+// The REAL pattern now lives in services/alchemy-org: one generic
+// implementation Layer per process, with a Ledger deciding
+// send-vs-steer transactionally instead of this in-memory Set.
 
-const OrgLive = GitHub.frontDoor(ResolveGitHubIssue).pipe(
-  // the front door resolves ResolveGitHubIssue's live service from the SAME
+const DeliveryLive = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const issues = yield* ResolveGitHubIssue;
+    const seen = new Set<string>();
+    // the wire delivers TYPED events; this is just routing
+    yield* GitHub.consumeRepositoryEvents(
+      testAlchemy,
+      { events: ["issues", "issue_comment"] },
+      (event) =>
+        Match.value(event).pipe(
+          // the machine exit: exit delivery IS delivery — hand GitHub's
+          // close to the run by its world key; the kernel subscribes to
+          // nothing
+          Match.tag("IssueClosed", (event) =>
+            issues.settle(GitHub.eventKey(event)!, event),
+          ),
+          Match.tag("IssueOpened", "IssueCommented", (event) =>
+            Effect.suspend(() => {
+              const key = GitHub.eventKey(event)!;
+              if (seen.has(key)) return issues.steer(key, event);
+              seen.add(key);
+              return issues.send(event, { key });
+            }),
+          ),
+          // labeled etc.: denial-by-skip
+          Match.orElse(() => Effect.void),
+        ),
+    );
+  }),
+);
+
+const OrgLive = DeliveryLive.pipe(
+  // the delivery resolves ResolveGitHubIssue's live service from the SAME
   // Layer instance the worker yields below (Layer memoization)
   Layer.provideMerge(ResolveGitHubIssueLive),
-  // GitHubEventsLive (CORE, src/GitHub/EventsLive.ts) satisfies the
-  // GitHub.Events channel tag that ResolveGitHubIssue's machine-observed exit
-  // put in Req; its own requirement on GitHub.RepositoryEventSource is
-  // the transitive compile fence — deliberately left OPEN so the wire
-  // below is shared with the front door (one instance, one set of
-  // delivery listeners).
-  Layer.provide(GitHub.GitHubEventsLive),
   Layer.provide(CloudflareKernelLive),
+  // the wire: provisions the repository webhook pointing at this
+  // Worker and claims the delivery path — ONE instance shared by the
+  // channel Layer and the hand-wired consuming call site. Composed
+  // here (owner convention: build the environment with Layer
+  // combinators, provide ONCE) — its own Worker requirement is
+  // ambient in the init Effect below.
+  Layer.provide(Cloudflare.Workers.GitHubRepositoryEventSourceLive),
 );
 
 export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
@@ -103,10 +143,10 @@ export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
     const rings = yield* Ring;
 
     // The exported resource resolved to its plain { owner, repository }
-    // in init — the same one resolver the front door and channel Layer
+    // in init — the same one resolver the delivery and channel Layer
     // use (the deferred form is legal here: init runs at plan time
     // under the Stack, the bindings precedent).
-    const repoRef = yield* GitHub.resolveRepositoryRef(testAlchemy);
+    const repoRef = yield* GitHub.resolveRepository(testAlchemy);
 
     return {
       fetch: Effect.gen(function* () {
@@ -115,7 +155,7 @@ export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
 
         // GitHub webhook deliveries never reach this handler — the
         // GitHubRepositoryEventSourceLive listener claims them first,
-        // and the front door routes them.
+        // and the hand-wired delivery routes them.
 
         // Manual case admission, typed end to end: In = the case's
         // accepted messages, Out = the IssueClosed event payload (the
@@ -125,11 +165,15 @@ export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
         if (request.method === "POST" && match) {
           const closed = yield* issues
             .dispatch({
-              owner: repoRef.owner,
-              repository: repoRef.repository,
-              number: Number(match[1]),
-              title: `manual dispatch of #${match[1]}`,
-              body: "",
+              _tag: "IssueOpened",
+              repository: {
+                name: repoRef.repository,
+                owner: { login: repoRef.owner },
+              },
+              issue: {
+                number: Number(match[1]),
+                title: `manual dispatch of #${match[1]}`,
+              },
             })
             .pipe(
               // both abnormal exits are typed: exhaustion is resumable,
@@ -158,12 +202,7 @@ export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(
-    Effect.provide(OrgLive),
-    // the wire: provisions the repository webhook pointing at this
-    // Worker and claims the delivery path — ONE instance shared by the
-    // channel Layer (through OrgLive's open requirement) and the front
-    // door's derived consuming call sites
-    Effect.provide(Cloudflare.Workers.GitHubRepositoryEventSourceLive),
-  ),
+    // ONE provide (owner convention): the environment was built above
+    // with Layer combinators — never chain Effect.provide calls.
+  }).pipe(Effect.provide(OrgLive)),
 ) {}

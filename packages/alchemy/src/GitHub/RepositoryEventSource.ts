@@ -4,24 +4,18 @@ import type {
 } from "@octokit/webhooks";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import { sanitizeKey } from "../RuntimeContext.ts";
+import {
+  type IssueCommentedEvent,
+  type IssuesEvent,
+  parseWebhookEvent,
+  type PullRequestEvent,
+  type PushEvent,
+} from "./Events.ts";
 import type { Providers } from "./Providers.ts";
-
-/**
- * A reference to the GitHub repository whose events you want to receive.
- */
-export interface RepositoryRef {
-  /**
-   * Repository owner (user or organization).
-   */
-  owner: string;
-
-  /**
-   * Repository name.
-   */
-  repository: string;
-}
+import { type RepositoryLike, resolveRepository } from "./RepositoryLike.ts";
 
 /**
  * The bare GitHub webhook event names (e.g. `push`, `pull_request`), sourced
@@ -59,9 +53,25 @@ export type WebhookEvent<Name extends GitHubEventName = GitHubEventName> =
 export type SelectedEvent<E extends readonly WebhookEventName[]> =
   "*" extends E[number] ? GitHubEventName : Exclude<E[number], "*">;
 
+/**
+ * The wire-level registration props the {@link RepositoryEventSource}
+ * SERVICE takes — resolved plain identity plus subscription options.
+ * Consumers never build this: {@link consumeRepositoryEvents} resolves
+ * the {@link RepositoryLike} and passes it down.
+ */
 export interface RepositoryEventSourceProps<
   E extends readonly WebhookEventName[] = readonly WebhookEventName[],
-> extends RepositoryRef {
+> extends RepositoryEventSourceOptions<E> {
+  /** Repository owner (user or organization). */
+  owner: string;
+
+  /** Repository name. */
+  repository: string;
+}
+
+export interface RepositoryEventSourceOptions<
+  E extends readonly WebhookEventName[] = readonly WebhookEventName[],
+> {
   /**
    * GitHub event names to subscribe to (e.g. `["push", "pull_request"]`).
    * Use `["*"]` to receive every event GitHub emits.
@@ -87,71 +97,74 @@ export interface RepositoryEventSourceProps<
 }
 
 /**
- * Subscribe to events emitted by a GitHub repository.
+ * The typed events a handler receives for each requested bare webhook
+ * name — parsing is the wire's job (`Match.tag` is the consumer's):
+ * `issues` ⇒ {@link IssuesEvent}, `issue_comment` ⇒
+ * {@link IssueCommentedEvent}, `pull_request` ⇒
+ * {@link PullRequestEvent}, `push` ⇒ {@link PushEvent}. Bare names with
+ * no tags in the union yet deliver nothing (extend
+ * `GitHub.RepositoryEvent` when a consumer needs them).
+ */
+export type RepositoryEventFor<Name extends GitHubEventName> =
+  Name extends "issues"
+    ? IssuesEvent
+    : Name extends "issue_comment"
+      ? IssueCommentedEvent
+      : Name extends "pull_request"
+        ? PullRequestEvent
+        : Name extends "push"
+          ? PushEvent
+          : never;
+
+/**
+ * Subscribe to events emitted by a GitHub repository — the repository
+ * is the {@link Repository} RESOURCE (yielded or the un-yielded exported
+ * const), and deliveries arrive ALREADY PARSED: the handler receives the
+ * typed {@link RepositoryEvent} union (narrowed to the requested
+ * `events`), never raw webhook payloads. Routing is `Match.tag`:
  *
- * Call it in the init phase of a host (e.g. a Cloudflare Worker) and pass a
- * `process` function that receives each {@link WebhookEvent} and returns an
- * `Effect`. The handler runs once per webhook delivery.
- *
- * Wiring the webhook (delivery URL, secret, IAM/bindings) is handled by the
- * host-specific runtime layer — see
- * `Cloudflare.Workers.GitHubRepositoryEventSourceLive` for the Cloudflare Worker
- * implementation.
+ * Call it in the init phase of a host (e.g. a Cloudflare Worker); the
+ * handler runs once per delivery. Wiring the webhook (delivery URL,
+ * secret, IAM/bindings) is the providing Layer's job —
+ * `Cloudflare.Workers.GitHubRepositoryEventSourceLive` provisions a
+ * verified webhook; `GitHub.RepositoryEventSourcePolling` polls the same
+ * events locally.
  * @binding
  * @example
  * ```typescript
- * // `event.name` is narrowed to "push" | "pull_request"
  * yield* GitHub.consumeRepositoryEvents(
- *   {
- *     owner: "my-org",
- *     repository: "my-repo",
- *     events: ["push", "pull_request"],
- *     secret,
- *   },
- *   (event) => Effect.log(`received ${event.name} (${event.id})`),
- * );
- * ```
- *
- * @example
- * ```typescript
- * // When you don't need to pass any options, the handler is the only argument.
- * yield* GitHub.consumeRepositoryEvents((event) =>
- *   Effect.log(`received ${event.name} (${event.id})`),
+ *   repo, // GitHub.Repository — yielded, or the exported un-yielded const
+ *   { events: ["issues", "issue_comment"] },
+ *   (event) =>
+ *     Match.value(event).pipe(
+ *       Match.tag("IssueOpened", (event) => issues.send(event)),
+ *       Match.tag("IssueCommented", (event) => issues.steer(GitHub.eventKey(event)!, event)),
+ *       Match.orElse(() => Effect.void), // denial-by-skip, in code
+ *     ),
  * );
  * ```
  */
-export function consumeRepositoryEvents<Req = never>(
-  process: (
-    event: WebhookEvent<SelectedEvent<readonly WebhookEventName[]>>,
-  ) => Effect.Effect<void, never, Req | Providers>,
-): Effect.Effect<void, never, RepositoryEventSource>;
 export function consumeRepositoryEvents<
   const E extends readonly WebhookEventName[] = readonly WebhookEventName[],
   Req = never,
 >(
-  props: RepositoryEventSourceProps<E>,
+  repo: RepositoryLike,
+  options: RepositoryEventSourceOptions<E>,
   process: (
-    event: WebhookEvent<SelectedEvent<E>>,
+    event: RepositoryEventFor<SelectedEvent<E>>,
   ) => Effect.Effect<void, never, Req | Providers>,
-): Effect.Effect<void, never, RepositoryEventSource>;
-export function consumeRepositoryEvents<
-  const E extends readonly WebhookEventName[] = readonly WebhookEventName[],
-  Req = never,
->(
-  propsOrProcess:
-    | RepositoryEventSourceProps<E>
-    | ((
-        event: WebhookEvent<SelectedEvent<E>>,
-      ) => Effect.Effect<void, never, Req | Providers>),
-  maybeProcess?: (
-    event: WebhookEvent<SelectedEvent<E>>,
-  ) => Effect.Effect<void, never, Req | Providers>,
-) {
-  const [props, process] =
-    typeof propsOrProcess === "function"
-      ? [{} as RepositoryEventSourceProps<E>, propsOrProcess]
-      : [propsOrProcess, maybeProcess!];
-  return RepositoryEventSource.use((source) => source(props, process));
+): Effect.Effect<void, never, RepositoryEventSource> {
+  return Effect.gen(function* () {
+    const identity = yield* resolveRepository(repo);
+    const source = yield* RepositoryEventSource;
+    yield* source({ ...identity, ...options }, (delivery) =>
+      Option.match(parseWebhookEvent(identity, delivery), {
+        onNone: () => Effect.void,
+        onSome: (event) =>
+          process(event as RepositoryEventFor<SelectedEvent<E>>),
+      }),
+    );
+  });
 }
 
 export type RepositoryEventSourceService = <
@@ -174,7 +187,11 @@ export class RepositoryEventSource extends Context.Service<
  * deploy-time policy (which registers the webhook URL) and the runtime
  * (which only claims requests on this path), so both sides agree.
  */
-export const webhookPath = (props: RepositoryRef & { path?: string }): string =>
+export const webhookPath = (props: {
+  owner: string;
+  repository: string;
+  path?: string;
+}): string =>
   props.path ?? `/__alchemy/github/${props.owner}/${props.repository}`;
 
 /**
@@ -182,7 +199,10 @@ export const webhookPath = (props: RepositoryRef & { path?: string }): string =>
  * webhook secret on the host, so the runtime can read it back to verify
  * signatures.
  */
-export const webhookSecretEnvName = (repository: RepositoryRef): string =>
+export const webhookSecretEnvName = (repository: {
+  owner: string;
+  repository: string;
+}): string =>
   `ALCHEMY_GITHUB_WEBHOOK_SECRET_${sanitizeKey(repository.owner)}_${sanitizeKey(
     repository.repository,
   )}`;

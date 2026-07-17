@@ -30,7 +30,7 @@ import * as Stream from "effect/Stream";
 import {
   GitHubEvents,
   type GitHubSourceProps,
-  resolveRepositoryRef,
+  resolveSourceRepo,
 } from "./Events.ts";
 import { RepositoryEventSource } from "./RepositoryEventSource.ts";
 
@@ -56,10 +56,11 @@ export const GitHubEventsLive: Layer.Layer<
       subscribe: (source) =>
         Effect.gen(function* () {
           const props = source.props as GitHubSourceProps;
-          // Resolve the source's repo FIRST (plain ref / yielded resource /
-          // deferred constructor Effect): subscribe runs in the host's init
-          // phase, where the deferred form's Stack context is ambient.
-          const repo = yield* resolveRepositoryRef(props.repo);
+          // Resolve the source's repo FIRST (plain identity, or a
+          // deferred constructor Effect): subscribe runs in the host's
+          // init phase, where the deferred form's Stack context is
+          // ambient.
+          const repo = yield* resolveSourceRepo(props.repo);
           const wireKey = `${repo.owner}/${repo.repository}#${props.event}`;
 
           if (!wired.has(wireKey)) {

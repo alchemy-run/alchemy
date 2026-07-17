@@ -144,15 +144,15 @@ export const ConfigurationRecorderProvider = () =>
           if (!rec) return undefined;
           return { recorderName: name, roleArn: rec.roleARN ?? "" };
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          const oldName = yield* createRecorderName(id, olds);
+          const oldName = yield* createRecorderName(id, olds ?? {});
           const newName = yield* createRecorderName(id, news);
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name =
             output?.recorderName ?? (yield* createRecorderName(id, news));
           // putConfigurationRecorder is an idempotent upsert — one flow covers
@@ -170,9 +170,10 @@ export const ConfigurationRecorderProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "InvalidRoleException",
-                schedule: Schedule.fixed(2000).pipe(
-                  Schedule.both(Schedule.recurs(15)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed(2000),
+                  Schedule.recurs(15),
+                ]),
               }),
             );
           yield* session.note(name);

@@ -174,7 +174,7 @@ export const TableProvider = () =>
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
         );
     }),
-    diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+    diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;
       if (
         news.tableBucket !== olds.tableBucket ||
@@ -182,7 +182,7 @@ export const TableProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      const oldName = yield* createTableName(id, olds);
+      const oldName = yield* createTableName(id, olds ?? {});
       const newName = yield* createTableName(id, news);
       if (oldName !== newName) {
         return { action: "replace" } as const;
@@ -232,9 +232,10 @@ export const TableProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "NotFoundException",
-              schedule: Schedule.exponential(500).pipe(
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential(500),
+                Schedule.recurs(8),
+              ]),
             }),
           );
       }

@@ -20,22 +20,26 @@ export const PullRequestRef = S.Struct({
 });
 
 export const issue = AI.Parameter("issue", IssueRef)`
-A reference to a GitHub issue in one of our repositories. A "ready"
-issue's acceptance criteria are a complete specification of the work.`;
+A reference to a GitHub issue in the repository. A "ready" issue's
+acceptance criteria are a complete specification of the work. A pull
+request's number addresses it here too — GitHub comments on both
+through the same door.`;
 
 export const pr = AI.Parameter("pr", PullRequestRef)`
-A reference to a pull request in one of our repositories.`;
+A reference to a pull request in the repository.`;
 
 export const path = AI.Parameter("path", S.String)`
-An absolute path to a file within the workspace checkout (the
-alchemy-effect superproject with the distilled submodule embedded at
-./distilled).`;
+A workspace-relative path to a file within the repository checkout.`;
+
+export const content = AI.Parameter("content", S.String)`
+The complete new contents of the file — always the COMPLETE file,
+never a patch.`;
 
 export const pattern = AI.Parameter("pattern", S.String)`
 A regular expression to search for.`;
 
 export const command = AI.Parameter("command", S.String)`
-A shell command to execute inside the sandboxed DevBox.`;
+A shell command to execute inside the workspace.`;
 
 export const message = AI.Parameter("message", S.String)`
 A message to post on the current surface (GitHub issue or pull
