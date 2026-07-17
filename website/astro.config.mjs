@@ -505,6 +505,10 @@ export default defineConfig({
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
                 {
+                  label: "Python Workers",
+                  link: "/cloudflare/compute/python-workers",
+                },
+                {
                   label: "Durable Objects",
                   link: "/cloudflare/compute/durable-objects",
                 },

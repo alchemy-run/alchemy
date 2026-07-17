@@ -775,6 +775,9 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * (e.g. produced by `pywrangler sync`), it is uploaded as-is and uv is
  * not invoked.
  *
+ * See the [Python Workers guide](/cloudflare/compute/python-workers)
+ * for the full walkthrough.
+ *
  * @example Defining a Python Worker in your stack
  * ```typescript
  * // alchemy.run.ts
