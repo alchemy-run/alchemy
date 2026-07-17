@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import { writeFileSync } from "node:fs";

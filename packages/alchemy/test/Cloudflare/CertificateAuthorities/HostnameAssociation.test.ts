@@ -2,16 +2,14 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as certificateAuthorities from "@distilled.cloud/cloudflare/certificate-authorities";
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { CA_CERT_1, CA_CERT_2 } from "./fixtures/certs.ts";
-import { describe } from "vitest";
-
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(

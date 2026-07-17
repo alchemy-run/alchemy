@@ -23,6 +23,12 @@ import {
   ALCHEMY_PROFILE,
   withProfileOverride,
 } from "../../Auth/Profile.ts";
+import { AwsAuth } from "../../AWS/AuthProvider.ts";
+import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
+import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
+import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
+import { NeonAuth } from "../../Neon/AuthProvider.ts";
+import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
 import * as Stack from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
@@ -440,3 +446,49 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   );
   return { authProviders, context, stackEffect };
 });
+
+/**
+ * The auth providers Alchemy ships with. Used as the baseline registry so
+ * `alchemy login` works from any folder (no `alchemy.run.ts` required) and
+ * `alchemy profile show` can pretty-print any provider a profile mentions,
+ * even one the current stack doesn't wire up.
+ */
+export const builtinAuth = Layer.mergeAll(
+  AwsAuth,
+  AxiomAuth,
+  CloudflareAuth,
+  GitHubAuth,
+  NeonAuth,
+  PlanetscaleAuth,
+);
+
+/**
+ * Build {@link builtinAuth} against `registry` so every built-in auth
+ * provider registers itself, without importing any stack entrypoint.
+ */
+export const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(
+  function* (options: {
+    envFile: Option.Option<string>;
+    profile: string;
+    /** Registry to populate. Defaults to a fresh empty registry. */
+    registry?: AuthProviders["Service"];
+  }) {
+    const authProviders = options.registry ?? {};
+    yield* Layer.build(
+      Layer.provide(
+        builtinAuth,
+        Layer.mergeAll(
+          Layer.succeed(AuthProviders, authProviders),
+          ConfigProvider.layer(
+            withProfileOverride(
+              yield* loadConfigProvider(options.envFile),
+              options.profile,
+            ),
+          ),
+          Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+        ),
+      ),
+    );
+    return authProviders;
+  },
+);

@@ -2,9 +2,9 @@ import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
 

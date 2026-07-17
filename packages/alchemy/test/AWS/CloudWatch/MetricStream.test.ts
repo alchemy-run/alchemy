@@ -1,12 +1,12 @@
 import * as AWS from "@/AWS";
 import { MetricStream } from "@/AWS/CloudWatch";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as firehose from "@distilled.cloud/aws/firehose";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

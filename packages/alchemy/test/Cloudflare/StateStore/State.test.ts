@@ -1,11 +1,9 @@
 import * as Cloudflare from "@/Cloudflare";
 import { STATE_STORE_VERSION } from "@/Cloudflare/StateStore/Api.ts";
 import { State } from "@/State/State.ts";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { describe } from "vitest";
-
 /**
  * Live-API tests for the deployed Cloudflare State Store at
  * `alchemy-state-store`. The State service is wired up via

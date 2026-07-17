@@ -1,6 +1,6 @@
 import { Docker, DockerLive } from "@/Docker";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "@effect/vitest";
+import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";

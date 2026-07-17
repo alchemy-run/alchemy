@@ -25,6 +25,38 @@ export default defineConfig({
 });
 ```
 
+## Remove `@cloudflare/vite-plugin`
+
+:::caution[Remove @cloudflare/vite-plugin if present]
+The TanStack CLI adds `@cloudflare/vite-plugin` to `vite.config.ts`
+automatically when scaffolding a new app. Alchemy appends its own
+Cloudflare Vite plugin and is **not compatible** with
+`@cloudflare/vite-plugin` — remove it:
+
+```diff lang="typescript"
+// vite.config.ts
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import viteReact from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+-import { cloudflare } from "@cloudflare/vite-plugin";
+
+export default defineConfig({
+-  plugins: [
+-    cloudflare({ viteEnvironment: { name: "ssr" } }),
+-    tanstackStart(),
+-    viteReact(),
+-  ],
++  plugins: [tanstackStart(), viteReact()],
+});
+```
+
+Also drop the dependency:
+
+```sh
+bun remove @cloudflare/vite-plugin
+```
+:::
+
 ## Declare the Website
 
 Use the class form of `Cloudflare.Website.Vite` so the app gets a named

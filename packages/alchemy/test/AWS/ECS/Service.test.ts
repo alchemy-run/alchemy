@@ -5,11 +5,11 @@ import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

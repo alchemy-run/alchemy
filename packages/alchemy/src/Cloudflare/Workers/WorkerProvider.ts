@@ -13,7 +13,7 @@ import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
+import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -27,7 +27,12 @@ import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
-import { Worker, type WorkerProps, type WorkerRouteConfig } from "./Worker.ts";
+import {
+  Worker,
+  type ViteOptions,
+  type WorkerProps,
+  type WorkerRouteConfig,
+} from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
@@ -1164,41 +1169,42 @@ export const LiveWorkerProvider = () =>
         // (~0.5s), which is only needed for vite-based workers at build time —
         // not for every Worker definition at module-load time.
         const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const { clientDirectory, serverBundle } = yield* Vite.viteBuild(
-          props.vite?.rootDir,
-          Object.fromEntries(
-            (yield* Effect.all(
-              Object.entries(props.env ?? {}).map(
-                Effect.fn(function* ([key, value]) {
-                  return [
-                    key,
-                    typeof value === "string"
-                      ? value
-                      : Redacted.isRedacted(value) &&
-                          typeof Redacted.value(value) === "string"
-                        ? Redacted.value(value)
-                        : // A `WorkerLoader` is a real Effect that also carries
-                          // the `~alchemy/Kind` marker — it is a binding, not a
-                          // runnable env value. Check it before `Effect.isEffect`
-                          // so we don't execute it as an inlined env entry.
-                          isWorkerLoader(value)
-                          ? undefined
-                          : Effect.isEffect(value)
-                            ? yield* value as any as Effect.Effect<any>
-                            : undefined,
-                  ];
-                }),
-              ),
-            )).filter(([_, value]) => value !== undefined),
-          ),
-          {
-            main: props.vite?.main,
-            compatibilityDate: compatibility.date,
-            compatibilityFlags: compatibility.flags,
-            viteEnvironments: props.vite?.viteEnvironments,
-          },
-        );
-        const [assets, bundle] = yield* Effect.all(
+        const { clientDirectory, serverBundle, externalWorkspaces } =
+          yield* Vite.viteBuild(
+            props.vite?.rootDir,
+            Object.fromEntries(
+              (yield* Effect.all(
+                Object.entries(props.env ?? {}).map(
+                  Effect.fn(function* ([key, value]) {
+                    return [
+                      key,
+                      typeof value === "string"
+                        ? value
+                        : Redacted.isRedacted(value) &&
+                            typeof Redacted.value(value) === "string"
+                          ? Redacted.value(value)
+                          : // A `WorkerLoader` is a real Effect that also carries
+                            // the `~alchemy/Kind` marker — it is a binding, not a
+                            // runnable env value. Check it before `Effect.isEffect`
+                            // so we don't execute it as an inlined env entry.
+                            isWorkerLoader(value)
+                            ? undefined
+                            : Effect.isEffect(value)
+                              ? yield* value as any as Effect.Effect<any>
+                              : undefined,
+                    ];
+                  }),
+                ),
+              )).filter(([_, value]) => value !== undefined),
+            ),
+            {
+              main: props.vite?.main,
+              compatibilityDate: compatibility.date,
+              compatibilityFlags: compatibility.flags,
+              viteEnvironments: props.vite?.viteEnvironments,
+            },
+          );
+        const [assets, bundle, input] = yield* Effect.all(
           [
             clientDirectory
               ? readAssets({
@@ -1212,6 +1218,11 @@ export const LiveWorkerProvider = () =>
                 })
               : Effect.undefined,
             serverBundle,
+            hashViteInput(
+              props.vite?.rootDir,
+              props.vite?.memo,
+              externalWorkspaces,
+            ),
           ],
           { concurrency: "unbounded" },
         );
@@ -1220,7 +1231,56 @@ export const LiveWorkerProvider = () =>
             new Error("Vite build produced neither assets nor server output"),
           );
         }
-        return { assets, bundle };
+        return {
+          assets,
+          bundle,
+          input: input.hash,
+          additionalWorkspaces: input.workspaces,
+        };
+      });
+
+      const hashViteInput = Effect.fn(function* <E>(
+        rootDir: string = process.cwd(),
+        options: ViteOptions["memo"],
+        additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
+      ) {
+        const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
+          hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
+            Effect.map((hash) => `${path.relative(rootDir, cwd)}:${hash}`),
+          );
+        const hashRoot = hashWorkspaceDirectory(rootDir, options);
+        if (Array.isArray(options?.workspaces)) {
+          return yield* Effect.all(
+            [
+              hashRoot,
+              ...options.workspaces.map(({ cwd, ...options }) =>
+                hashWorkspaceDirectory(cwd, options),
+              ),
+            ],
+            { concurrency: "unbounded" },
+          ).pipe(
+            Effect.flatMap(([root, ...workspaces]) =>
+              sha256Object([root, ...workspaces.sort()]),
+            ),
+            Effect.map((hash) => ({ hash, workspaces: undefined })),
+          );
+        }
+        const [root, workspaces] = yield* Effect.all(
+          [hashRoot, additionalWorkspaces],
+          { concurrency: "unbounded" },
+        );
+        const workspaceHashes = yield* Effect.forEach(
+          workspaces,
+          (cwd) => hashWorkspaceDirectory(cwd),
+          { concurrency: "unbounded" },
+        );
+        const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
+        return {
+          hash,
+          workspaces: Array.from(workspaces).map((cwd) =>
+            path.relative(rootDir, cwd),
+          ),
+        };
       });
 
       const prepareAssetsAndBundle = (
@@ -1245,27 +1305,12 @@ export const LiveWorkerProvider = () =>
                 files: [{ path: "main.js", content: props.script }],
                 hash: bundleHash,
               },
+              input: undefined,
+              additionalWorkspaces: undefined,
             };
           }
           if (props.vite) {
-            const [{ assets, bundle }, input] = yield* Effect.all(
-              [
-                viteBuild(props),
-                // hashDirectory expects `{ cwd, memo }`. The vite props
-                // store the project root under `rootDir`, so map it
-                // here. Without this, `cwd` falls back to
-                // `process.cwd()` and the input hash is computed over
-                // the wrong directory tree (often the entire monorepo
-                // root), making it both slow and unable to detect
-                // changes scoped to the actual Vite project.
-                hashDirectory({
-                  cwd: props.vite.rootDir,
-                  memo: props.vite.memo,
-                }),
-              ],
-              { concurrency: "unbounded" },
-            );
-            return { assets, bundle, input };
+            return yield* viteBuild(props);
           }
           const [assets, bundle] = yield* Effect.all(
             [
@@ -1276,9 +1321,14 @@ export const LiveWorkerProvider = () =>
             ],
             { concurrency: "unbounded" },
           );
-          return { assets, bundle };
+          return {
+            assets,
+            bundle,
+            input: undefined,
+            additionalWorkspaces: undefined,
+          };
         }).pipe(
-          Effect.map(({ assets, bundle, input }) => ({
+          Effect.map(({ assets, bundle, input, additionalWorkspaces }) => ({
             assets,
             bundle: {
               main: bundle?.files[0].path,
@@ -1293,6 +1343,7 @@ export const LiveWorkerProvider = () =>
               assets: assets?.hash,
               bundle: bundle?.hash,
               input,
+              additionalWorkspaces,
             } satisfies Worker["Attributes"]["hash"],
           })),
         );
@@ -2026,11 +2077,12 @@ export const LiveWorkerProvider = () =>
           return assetsHash !== output.hash?.assets;
         }
         if (props.vite) {
-          const input = yield* hashDirectory({
-            cwd: props.vite.rootDir,
-            memo: props.vite.memo,
-          });
-          return input !== output.hash?.input;
+          const { hash } = yield* hashViteInput(
+            props.vite.rootDir,
+            props.vite.memo,
+            Effect.succeed(output.hash?.additionalWorkspaces ?? []),
+          );
+          return hash !== output.hash?.input;
         }
         const bundleHash = yield* prepareBundle(id, props).pipe(
           Effect.map((b) => b.hash),

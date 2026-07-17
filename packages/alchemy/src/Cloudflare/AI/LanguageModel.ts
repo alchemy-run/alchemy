@@ -560,7 +560,7 @@ interface StreamState {
   readonly reasoningId: string | undefined;
   readonly toolCalls: ReadonlyMap<
     number,
-    { readonly id: string; readonly name: string }
+    { readonly id: string; readonly name: string; readonly arguments: string }
   >;
   readonly lastToolIndex: number | undefined;
   readonly closedToolIndices: ReadonlySet<number>;
@@ -699,7 +699,7 @@ const handleToolDeltas = (
           s = closeToolCall(s, s.lastToolIndex, parts);
         }
         const id = rawId || (yield* idGen.generateId());
-        const entry = { id, name };
+        const entry = { id, name, arguments: args };
         const next = new Map(s.toolCalls);
         next.set(idx, entry);
         s = { ...s, toolCalls: next, lastToolIndex: idx };
@@ -708,12 +708,23 @@ const handleToolDeltas = (
           parts.push({ type: "tool-params-delta", id, delta: args });
         }
       } else {
-        s = { ...s, lastToolIndex: idx };
-        if (args.length > 0) {
+        // OpenAI-compatible providers stream argument fragments, while
+        // Workers AI can resend the complete accumulated JSON on every
+        // chunk. Normalize both shapes to incremental deltas.
+        const delta = args.startsWith(existing.arguments)
+          ? args.slice(existing.arguments.length)
+          : args;
+        const accumulated = args.startsWith(existing.arguments)
+          ? args
+          : existing.arguments + args;
+        const next = new Map(s.toolCalls);
+        next.set(idx, { ...existing, arguments: accumulated });
+        s = { ...s, toolCalls: next, lastToolIndex: idx };
+        if (delta.length > 0) {
           parts.push({
             type: "tool-params-delta",
             id: existing.id,
-            delta: args,
+            delta,
           });
         }
       }
@@ -785,6 +796,15 @@ const handleNativeToolCalls = (
   parts: StreamParts,
   idGen: IdGenerator.Service,
 ): Effect.Effect<StreamState> => {
+  const openAiToolCalls = (
+    chunk.choices as
+      | Array<{ delta?: { tool_calls?: ReadonlyArray<unknown> } }>
+      | undefined
+  )?.[0]?.delta?.tool_calls;
+  // Workers AI can mirror the same fragments in both its top-level native
+  // field and the OpenAI-compatible delta. Prefer the latter so every
+  // fragment is emitted exactly once.
+  if (Array.isArray(openAiToolCalls)) return Effect.succeed(state);
   if (!Array.isArray(chunk.tool_calls)) return Effect.succeed(state);
   return Effect.gen(function* () {
     const s = closeReasoning(state, parts);

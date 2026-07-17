@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
-import * as Test from "@/Test/Vitest";
-import { describe, it } from "vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, it } from "alchemy-test";
 
 Test.make({ providers: AWS.providers() });
 

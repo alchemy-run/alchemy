@@ -1,8 +1,8 @@
 import * as Neon from "@/Neon";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { getProject } from "@distilled.cloud/neon";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

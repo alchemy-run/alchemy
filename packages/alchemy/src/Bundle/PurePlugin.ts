@@ -134,7 +134,7 @@ export const purePlugin = (
           markSideEffectFreeOpt &&
           !isEntry &&
           isSideEffectFree(info.sideEffects);
-        const annotated = annotateModule(code, id);
+        const annotated = annotateModuleCached(code, id);
         if (annotated === null) {
           return markSideEffectFree ? { code, moduleSideEffects: false } : null;
         }
@@ -432,6 +432,39 @@ interface AnnotatedModule {
   readonly code: string;
   readonly map: ReturnType<MagicString["generateMap"]>;
 }
+
+/**
+ * Process-wide memo of {@link annotateModule} results keyed by module id.
+ *
+ * Parsing with oxc + generating the sourcemap dominates bundling CPU (it
+ * showed up as ~60% of the main-thread profile of a test run), and the same
+ * modules — effect/alchemy dist files — are re-transformed for EVERY bundle
+ * built in the process. The single-process test runner builds dozens of
+ * worker bundles per run, so this cache eliminates all repeat parses. The
+ * stored `code` is compared on lookup, so a changed file (e.g. dev watch
+ * mode) never serves a stale result.
+ */
+const annotateCache = new Map<
+  string,
+  { readonly code: string; readonly result: AnnotatedModule | null }
+>();
+const ANNOTATE_CACHE_MAX = 10_000;
+
+const annotateModuleCached = (
+  code: string,
+  filename: string,
+): AnnotatedModule | null => {
+  const cached = annotateCache.get(filename);
+  if (cached !== undefined && cached.code === code) {
+    return cached.result;
+  }
+  const result = annotateModule(code, filename);
+  if (annotateCache.size >= ANNOTATE_CACHE_MAX) {
+    annotateCache.clear();
+  }
+  annotateCache.set(filename, { code, result });
+  return result;
+};
 
 /**
  * Parses `code` and inserts `/*#__PURE__*\/` before every top-level

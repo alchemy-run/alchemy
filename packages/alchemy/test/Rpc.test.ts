@@ -1,6 +1,6 @@
 import { safeHttpEffect } from "@/Http";
 import * as Rpc from "@/Rpc";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
