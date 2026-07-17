@@ -10,6 +10,7 @@ export * from "./EventBridgeEventSource.ts";
 export * from "./EventInvokeConfig.ts";
 export * from "./EventSourceMapping.ts";
 export * from "./Function.ts";
+export * from "./FunctionProvider.ts";
 export * from "./GetMicrovm.ts";
 export * from "./GetMicrovmHttp.ts";
 export * from "./GetMicrovmImage.ts";

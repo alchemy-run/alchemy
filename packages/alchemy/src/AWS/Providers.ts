@@ -45,6 +45,7 @@ import * as IdentityCenter from "./IdentityCenter/index.ts";
 import * as Kinesis from "./Kinesis/index.ts";
 import * as KMS from "./KMS/index.ts";
 import * as Lambda from "./Lambda/index.ts";
+import { localRuntimeServices } from "./LocalRuntime.ts";
 import * as Logs from "./Logs/index.ts";
 import * as Organizations from "./Organizations/index.ts";
 import * as RDS from "./RDS/index.ts";
@@ -358,6 +359,7 @@ export const providers = () =>
         DockerLive,
       ),
     ),
+    Layer.provideMerge(localRuntimeServices()),
     Layer.provideMerge(Region.fromEnvironment),
     Layer.provideMerge(Credentials.fromEnvironment),
     Layer.provideMerge(Endpoint.fromEnvironment),
