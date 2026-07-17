@@ -85,7 +85,7 @@ export class WorkersAIError extends Data.TaggedError("WorkersAIError")<{
  * );
  * ```
  *
- * @section Binding to a Worker (declarative)
+ * @section Binding to an Async Worker
  * @example
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {

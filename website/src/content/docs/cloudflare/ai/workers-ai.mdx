@@ -143,9 +143,10 @@ gateway-fronted model later is a layer-level change — the handler
 code doesn't move. See [Effect AI](/cloudflare/ai/effect-ai) for the
 full pattern, including chat persistence.
 
-## Declarative Worker (`env.AI`)
+## Async Workers: bind via `env`
 
-For a plain async Worker, declare the binding on `env` instead.
+A plain async Worker (no Effect runtime) declares the binding on
+`env` instead.
 `InferEnv` maps it to the native `Ai` runtime handle — exactly what
 `wrangler` would give you:
 
