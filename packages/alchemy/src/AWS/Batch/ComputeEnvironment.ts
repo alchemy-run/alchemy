@@ -190,6 +190,26 @@ const observedTagsOf = (ce: { tags?: { [key: string]: string | undefined } }) =>
   );
 
 /**
+ * IAM eventual-consistency race: a CE validated against a service role (or
+ * its policy attachment) created moments earlier in the same deploy can
+ * settle INVALID with a CLIENT_ERROR authorization statusReason (e.g.
+ * "... is not authorized to perform: ecs:DescribeClusters ...
+ * AccessDeniedException") even though the role and policy are correct.
+ * Batch only re-validates an INVALID CE on its slow periodic health check
+ * (tens of minutes), so waiting on the same CE cannot recover in deploy
+ * time — the recovery is to delete the freshly-created CE and re-create.
+ */
+const isAuthPropagationInvalid = (
+  ce: batch.ComputeEnvironmentDetail | undefined,
+): boolean =>
+  ce?.status === "INVALID" &&
+  ce.statusReason !== undefined &&
+  ce.statusReason.includes("CLIENT_ERROR") &&
+  (ce.statusReason.includes("is not authorized to perform") ||
+    ce.statusReason.includes("AccessDeniedException") ||
+    ce.statusReason.includes("AccessDenied"));
+
+/**
  * Resolve the default VPC's subnets and default security group — used when
  * the user doesn't pin networking explicitly.
  */
@@ -642,6 +662,88 @@ export const ComputeEnvironmentProvider = () =>
             });
           });
 
+          /**
+           * Tear down a CE we created in *this* reconcile that settled
+           * INVALID from an IAM propagation race (see
+           * {@link isAuthPropagationInvalid}). The CE carries no user state
+           * yet, so delete-and-recreate is safe. Mirrors the delete
+           * lifecycle's recovery: the async teardown itself can fail once on
+           * the same not-yet-propagated role, in which case the CE re-settles
+           * INVALID and the delete is re-issued.
+           */
+          const reapInvalidCreate = Effect.fn(function* () {
+            yield* retryBatch(
+              batch.updateComputeEnvironment({
+                computeEnvironment: name,
+                state: "DISABLED",
+              }),
+              (e) => e._tag === "ComputeEnvironmentBeingModified",
+            ).pipe(
+              Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void),
+            );
+            const disabled = yield* awaitDisabled(name);
+            if (!disabled || disabled.status === "DELETED") return;
+            const requestDelete = retryBatch(
+              batch.deleteComputeEnvironment({ computeEnvironment: name }),
+              (e) =>
+                e._tag === "ComputeEnvironmentInUse" ||
+                e._tag === "ComputeEnvironmentBeingModified",
+            ).pipe(
+              Effect.catchTag("ComputeEnvironmentNotFound", () => Effect.void),
+            );
+            if (disabled.status !== "DELETING") {
+              yield* requestDelete;
+              // Describe can briefly return the pre-delete record before the
+              // DELETING transition becomes visible.
+              yield* Effect.sleep("3 seconds");
+            }
+            const awaitGone = pollBatch(
+              describeOne(name),
+              (c) =>
+                c === undefined ||
+                c.status === "DELETED" ||
+                c.status === "INVALID",
+            );
+            let final = yield* awaitGone;
+            if (final && final.status === "INVALID") {
+              // The async deletion attempt failed (likely the same IAM
+              // propagation lag) — re-issue once and wait again.
+              yield* requestDelete;
+              yield* Effect.sleep("3 seconds");
+              final = yield* awaitGone;
+            }
+            if (final && final.status !== "DELETED") {
+              return yield* Effect.fail(invalid(name, final));
+            }
+          });
+
+          /**
+           * Create and wait for the CE to settle, recovering (bounded) from
+           * the freshly-created-INVALID IAM propagation race by deleting the
+           * INVALID CE and re-creating. Each delete cycle takes ~1-2 minutes,
+           * which is itself ample IAM propagation time. A CE that settles
+           * INVALID for any other reason — or is still auth-INVALID after 3
+           * total create attempts — is returned as-is so the caller's
+           * awaitValid path fails loudly with the typed
+           * ComputeEnvironmentInvalidError.
+           */
+          const createAndSettle = Effect.gen(function* () {
+            yield* create;
+            let settled = yield* awaitSettled(name);
+            for (
+              let attempt = 0;
+              attempt < 2 && isAuthPropagationInvalid(settled);
+              attempt++
+            ) {
+              yield* reapInvalidCreate();
+              // Small grace beyond the deletion window before re-validating.
+              yield* Effect.sleep("5 seconds");
+              yield* create;
+              settled = yield* awaitSettled(name);
+            }
+            return settled;
+          });
+
           if (ce?.computeEnvironmentArn && ce.status === "DELETING") {
             // An interrupted destroy left the environment mid-deletion — let
             // it finish, then fall through to a fresh create below.
@@ -649,8 +751,7 @@ export const ComputeEnvironmentProvider = () =>
             if (ce?.status === "DELETED") ce = undefined;
           }
           if (!ce?.computeEnvironmentArn) {
-            yield* create;
-            ce = yield* awaitSettled(name);
+            ce = yield* createAndSettle;
           } else if (ce.status !== "VALID" && ce.status !== "INVALID") {
             // A prior modification is still settling — wait before diffing.
             ce = yield* awaitSettled(name);
@@ -658,8 +759,7 @@ export const ComputeEnvironmentProvider = () =>
           if (ce?.status === "DELETED") {
             // The settle above can still land on a tombstone (deletion that
             // completed between observe and settle) — one more create pass.
-            yield* create;
-            ce = yield* awaitSettled(name);
+            ce = yield* createAndSettle;
           }
 
           if (!ce?.computeEnvironmentArn) {
