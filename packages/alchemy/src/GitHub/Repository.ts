@@ -10,8 +10,13 @@ export interface RepositoryProps {
   /**
    * Repository owner — a user or organization login.
    *
-   * Changing the owner replaces the repository (the old one is deleted and a
-   * new one created under the new owner).
+   * Changing the owner replaces the repository: a NEW, EMPTY repository is
+   * created under the new owner — history, issues, and pull requests are
+   * not carried over. The old repository is retained on GitHub under the
+   * default `retain` removal policy; it is only deleted when the resource
+   * opted into deletion via `destroy()`. To actually move a repository
+   * between owners with its history, transfer it in the GitHub UI/API
+   * first, then update `owner` here and deploy with `--adopt`.
    */
   owner: string;
 
@@ -361,10 +366,16 @@ export const RepositoryProvider = () =>
   Provider.succeed(Repository, {
     stables: ["repoId", "nodeId"],
 
-    // Structural changes are the owner (a repository cannot be moved between
-    // owners by an update) and the host (the same repo name on a different
-    // GitHub instance is a different repository). A `name` change is a
-    // rename, handled in `reconcile`, not a replacement.
+    // Structural changes are the owner (we deliberately do NOT call GitHub's
+    // transfer API — user-to-user transfers require out-of-band acceptance
+    // and cannot converge deterministically) and the host (the same repo
+    // name on a different GitHub instance is a different repository). A
+    // `name` change is a rename, handled in `reconcile`, not a replacement.
+    //
+    // Replacement is guarded by the resource's default `retain` removal
+    // policy: the engine creates the new repository and RETAINS the old one
+    // on GitHub (Apply honors `retain` for the replaced old generation), so
+    // history is never destroyed unless the user opted into `destroy()`.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
       if (olds === undefined) return;

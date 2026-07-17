@@ -151,11 +151,21 @@ export const WebhookProvider = () =>
   Provider.succeed(Webhook, {
     stables: ["webhookId"],
 
-    // The only structural change is the host: the same webhook on a
-    // different GitHub instance is a different physical webhook.
+    // A webhook belongs to (host, owner, repository) — its server-assigned
+    // id is meaningless in any other repo, so moving it replaces the
+    // resource: the engine creates the new webhook first, then `delete`
+    // removes the old one from the old repo. Everything else (url, events,
+    // secret, active) is mutated in place by `reconcile`. Replacement is
+    // safe here — a webhook is declarative config that is fully
+    // re-creatable from props.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
-      if (olds !== undefined && (yield* gitHubBaseUrlChanged(olds, news))) {
+      if (olds === undefined) return;
+      if (
+        news.owner !== olds.owner ||
+        news.repository !== olds.repository ||
+        (yield* gitHubBaseUrlChanged(olds, news))
+      ) {
         return { action: "replace" };
       }
     }),

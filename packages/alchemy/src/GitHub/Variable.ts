@@ -139,19 +139,33 @@ export const Variable = Resource<Variable>("GitHub.Variable");
 
 export const VariableProvider = () =>
   Provider.succeed(Variable, {
-    // The only structural change is the host: the same variable name on a
-    // different GitHub instance is a different physical variable.
+    // A variable's entire identity is (host, owner, repository, environment,
+    // name) — GitHub has no rename/move API for variables, so changing any
+    // of them replaces the resource: the engine creates the new variable
+    // first, then `delete` removes the old one from its old location.
+    // Replacement is safe here — a variable is declarative config that is
+    // fully re-creatable from props.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
-      if (olds !== undefined && (yield* gitHubBaseUrlChanged(olds, news))) {
+      if (olds === undefined) return;
+      if (
+        news.owner !== olds.owner ||
+        news.repository !== olds.repository ||
+        news.name !== olds.name ||
+        resolveEnvironmentName(news.environment) !==
+          resolveEnvironmentName(olds.environment) ||
+        (yield* gitHubBaseUrlChanged(olds, news))
+      ) {
         return { action: "replace" };
       }
     }),
 
     reconcile: Effect.fn(function* ({ news, olds }) {
-      // A variable is keyed by its location (repo vs. environment). When the
-      // location changed, the previous variable is orphaned: delete it before
-      // converging the new one, otherwise it stays in GitHub as dead state.
+      // A variable is keyed by its location (repo vs. environment). A
+      // location change normally arrives as a replacement (see `diff`); this
+      // guard is the safety net for the plan-time path where `news` contained
+      // unresolved outputs and diff could not compare — delete the orphaned
+      // variable from its old location before converging the new one.
       if (
         olds !== undefined &&
         resolveEnvironmentName(olds.environment) !==

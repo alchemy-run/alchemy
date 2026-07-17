@@ -165,11 +165,20 @@ export const CommentProvider = () =>
     // ambient scope to enumerate from, this collapses to the empty list.
     list: () => Effect.succeed([]),
 
-    // The only structural change is the host: the same comment on a
-    // different GitHub instance is a different physical comment.
+    // A comment belongs to (host, owner, repository, issueNumber) — its
+    // server-assigned id is meaningless anywhere else, so moving it replaces
+    // the resource: a fresh comment is posted on the new issue, and the old
+    // one is deleted only when `allowDelete` is set (the provider's `delete`
+    // no-ops otherwise, preserving discussion history — the default).
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
-      if (olds !== undefined && (yield* gitHubBaseUrlChanged(olds, news))) {
+      if (olds === undefined) return;
+      if (
+        news.owner !== olds.owner ||
+        news.repository !== olds.repository ||
+        news.issueNumber !== olds.issueNumber ||
+        (yield* gitHubBaseUrlChanged(olds, news))
+      ) {
         return { action: "replace" };
       }
     }),
