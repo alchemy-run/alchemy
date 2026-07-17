@@ -516,9 +516,13 @@ export const VpcProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.Vpcs ?? []).map((vpc) =>
-                    vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
-                  ),
+                  (page.Vpcs ?? [])
+                    // The default VPC is account furniture AWS provisions (and
+                    // test/AWS/DefaultVpc.ts recreates); never census/nuke it.
+                    .filter((vpc) => !vpc.IsDefault)
+                    .map((vpc) =>
+                      vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
+                    ),
                 ),
               ),
             );

@@ -11,6 +11,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type DhcpOptionsId<ID extends string = string> = `dopt-${ID}`;
@@ -228,6 +229,9 @@ export const DhcpOptionsProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const env = yield* AWSEnvironment.current;
+            // The options set the default VPC references is the account
+            // default AWS provisions; never census/nuke it.
+            const defaultVpc = yield* getDefaultVpcScope;
             const items = yield* ec2.describeDhcpOptions.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -236,6 +240,11 @@ export const DhcpOptionsProvider = () =>
                     .filter(
                       (o): o is ec2.DhcpOptions & { DhcpOptionsId: string } =>
                         o.DhcpOptionsId != null,
+                    )
+                    .filter(
+                      (o) =>
+                        defaultVpc.dhcpOptionsId === undefined ||
+                        o.DhcpOptionsId !== defaultVpc.dhcpOptionsId,
                     )
                     .map((o) => ({
                       dhcpOptionsId: o.DhcpOptionsId as DhcpOptionsId,

@@ -15,6 +15,7 @@ import {
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type InternetGatewayId<ID extends string = string> = `igw-${ID}`;
@@ -163,6 +164,9 @@ export const InternetGatewayProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
+            // The default VPC's internet gateway is account furniture AWS
+            // provisions; never census/nuke it.
+            const defaultVpc = yield* getDefaultVpcScope;
             return yield* ec2.describeInternetGateways.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -174,6 +178,13 @@ export const InternetGatewayProvider = () =>
                       ): igw is ec2.InternetGateway & {
                         InternetGatewayId: string;
                       } => igw.InternetGatewayId != null,
+                    )
+                    .filter(
+                      (igw) =>
+                        defaultVpc.vpcId === undefined ||
+                        !igw.Attachments?.some(
+                          (a) => a.VpcId === defaultVpc.vpcId,
+                        ),
                     )
                     .map((igw) => {
                       const internetGatewayId =

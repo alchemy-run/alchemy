@@ -6,6 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 import type { SubnetId } from "./Subnet.ts";
 
@@ -110,34 +111,47 @@ export const NetworkAclAssociationProvider = () =>
         // carries an Associations[] of {subnet, acl, associationId}; flatten
         // every page's associations to enumerate them all in the region.
         list: () =>
-          ec2.describeNetworkAcls.pages({}).pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.NetworkAcls ?? []).flatMap((acl) =>
-                  (acl.Associations ?? [])
+          Effect.gen(function* () {
+            // Associations on the default VPC's default network ACL are
+            // furniture AWS auto-provisions for its subnets; never
+            // census/nuke them. Associations to user-created (non-default)
+            // ACLs inside the default VPC are still listed.
+            const defaultVpc = yield* getDefaultVpcScope;
+            return yield* ec2.describeNetworkAcls.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.NetworkAcls ?? [])
                     .filter(
-                      (
-                        a,
-                      ): a is ec2.NetworkAclAssociation & {
-                        NetworkAclAssociationId: string;
-                        NetworkAclId: string;
-                        SubnetId: string;
-                      } =>
-                        a.NetworkAclAssociationId != null &&
-                        a.NetworkAclId != null &&
-                        a.SubnetId != null,
+                      (acl) =>
+                        defaultVpc.vpcId === undefined ||
+                        !(acl.VpcId === defaultVpc.vpcId && acl.IsDefault),
                     )
-                    .map((a) => ({
-                      associationId:
-                        a.NetworkAclAssociationId as NetworkAclAssociationId,
-                      networkAclId: a.NetworkAclId as NetworkAclId,
-                      subnetId: a.SubnetId as SubnetId,
-                    })),
+                    .flatMap((acl) =>
+                      (acl.Associations ?? [])
+                        .filter(
+                          (
+                            a,
+                          ): a is ec2.NetworkAclAssociation & {
+                            NetworkAclAssociationId: string;
+                            NetworkAclId: string;
+                            SubnetId: string;
+                          } =>
+                            a.NetworkAclAssociationId != null &&
+                            a.NetworkAclId != null &&
+                            a.SubnetId != null,
+                        )
+                        .map((a) => ({
+                          associationId:
+                            a.NetworkAclAssociationId as NetworkAclAssociationId,
+                          networkAclId: a.NetworkAclId as NetworkAclId,
+                          subnetId: a.SubnetId as SubnetId,
+                        })),
+                    ),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
 
         read: Effect.fn(function* ({ olds }) {
           if (!olds) return undefined;
