@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { AiAsyncWorker } from "./fixtures/AiAsyncWorker.ts";
 import AiBindingTestWorker from "./fixtures/AiBindingWorker.ts";
 
 // Fresh `workers.dev` URLs return non-200 (404 / 500 "Script not found") for
@@ -30,8 +31,10 @@ const Stack = Alchemy.Stack(
   },
   Effect.gen(function* () {
     const worker = yield* AiBindingTestWorker;
+    const asyncWorker = yield* AiAsyncWorker;
     return {
       url: worker.url.as<string>(),
+      asyncUrl: asyncWorker.url.as<string>(),
     };
   }),
 );
@@ -134,6 +137,64 @@ test(
     expect(body.usage.inputTokens).toBeGreaterThan(0);
     expect(body.usage.outputTokens).toBeGreaterThan(0);
     expect(body.finishReason).toBe("stop");
+  }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test(
+  "async worker runs a Workers AI model via env AI binding",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    const res = yield* client
+      .get(`${out.asyncUrl}/run?prompt=${encodeURIComponent("Say pong.")}`)
+      .pipe(
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
+    expect(res.status).toBe(200);
+
+    const body = (yield* res.json) as {
+      mode: string;
+      result: {
+        response?: string;
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+    };
+    expect(body.mode).toBe("async");
+    const text =
+      body.result.response ?? body.result.choices?.[0]?.message?.content;
+    expect(typeof text).toBe("string");
+    expect((text as string).length).toBeGreaterThan(0);
+  }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test(
+  "async worker lists Workers AI models via env AI binding",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${out.asyncUrl}/models`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    const body = (yield* res.json) as {
+      mode: string;
+      count: number;
+      names: string[];
+    };
+    expect(body.mode).toBe("async");
+    expect(body.count).toBeGreaterThan(0);
+    expect(body.names.some((name) => name.includes("llama-3.3"))).toBe(true);
   }).pipe(logLevel),
   { timeout: 180_000 },
 );
