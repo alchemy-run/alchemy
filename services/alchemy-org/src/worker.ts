@@ -88,6 +88,7 @@ const ModelLive = AnthropicLanguageModel.layer({
   Layer.provide(
     AnthropicClient.layer({
       apiKey:
+        // TODO(sam): use effect/Config
         process.env.ANTHROPIC_API_KEY === undefined
           ? undefined
           : Redacted.make(process.env.ANTHROPIC_API_KEY),
@@ -100,14 +101,7 @@ const KernelLive = AI.memory.pipe(Layer.provide(ModelLive));
 // ─── the org: the ring + its derived front door ──────────────────
 
 const OrgLive = GitHub.frontDoor(ResolveGitHubIssue).pipe(
-  // the front door resolves ResolveGitHubIssue's live service from the
-  // SAME Layer instance the worker yields below (Layer memoization)
   Layer.provideMerge(ResolveGitHubIssueLive),
-  // GitHubEventsLive (core catalog) satisfies the GitHub.Events channel
-  // tag that the machine-observed exit put in Req; its own requirement
-  // on GitHub.RepositoryEventSource is the transitive compile fence —
-  // deliberately left OPEN so the wire below is shared with the front
-  // door (one instance, one set of delivery listeners).
   Layer.provide(GitHub.GitHubEventsLive),
   Layer.provide(KernelLive),
 );

@@ -14,6 +14,9 @@
  * handler (the send door admits a real run — `run.admitted` in the
  * Trace).
  */
+import * as AI from "@/AI/index.ts";
+import * as GitHub from "@/GitHub/index.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -21,9 +24,6 @@ import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import * as AI from "@/AI/index.ts";
-import * as GitHub from "@/GitHub/index.ts";
-import { RuntimeContext } from "@/RuntimeContext.ts";
 
 const repo = { owner: "alchemy-run", repository: "alchemy-effect" };
 

@@ -16,11 +16,11 @@
  *    requiring exactly the term's tag + the wire; the delivery compile
  *    fence rides the consuming call site, never the term.
  */
+import * as AI from "@/AI/index.ts";
+import * as GitHub from "@/GitHub/index.ts";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import * as AI from "@/AI/index.ts";
-import * as GitHub from "@/GitHub/index.ts";
 import { Engineer, Reviewer } from "./fixtures/org/agents.ts";
 import { ResolveGitHubIssue } from "./fixtures/org/processes.ts";
 import { testAlchemy } from "./fixtures/org/repos.ts";
@@ -28,12 +28,12 @@ import type {
   Approve,
   AskHuman,
   Bash,
+  Comment,
   EditFile,
   Grep,
   MergePullRequest,
   OpenPullRequest,
   ReadFile,
-  Comment,
   SearchIssues,
 } from "./fixtures/org/tools.ts";
 

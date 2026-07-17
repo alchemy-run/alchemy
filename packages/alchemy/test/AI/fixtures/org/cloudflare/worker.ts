@@ -12,13 +12,13 @@
  * hand-written `consumeRepositoryEvents` handler remains the escape
  * hatch for custom validation/denial.
  */
+import * as AI from "@/AI/index.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as GitHub from "@/GitHub/index.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as AI from "@/AI/index.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as GitHub from "@/GitHub/index.ts";
 import { Engineer, Reviewer } from "../agents.ts";
 import { ResolveGitHubIssue } from "../processes.ts";
 import { testAlchemy } from "../repos.ts";
@@ -26,13 +26,12 @@ import { CloudflareKernelLive, Ring } from "./kernel.ts";
 import {
   ApproveHumanLive,
   BashDevBox,
-  CreateIssueLive,
+  CommentLive,
   EditFileLive,
   GrepLive,
   MergePullRequestLive,
   OpenPullRequestLive,
   ReadFileLive,
-  CommentLive,
   SearchIssuesLive,
 } from "./tools.ts";
 

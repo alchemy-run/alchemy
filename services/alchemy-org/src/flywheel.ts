@@ -59,6 +59,7 @@ export const IssueParked = AI.EventSource(
  * (`AI.exit(AI.when(IssueClosed(...)))`) correlates runs by the
  * source's natural key, so the charter never restates the plumbing.
  */
+// TODO(sam): it's implicit that this is keyed by issue ID, what if we don't want that? What if we want many different ways of routing events
 export class ResolveGitHubIssue extends AI.Process<ResolveGitHubIssue>()(
   "ResolveGitHubIssue",
 )`
