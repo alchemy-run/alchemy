@@ -101,7 +101,12 @@ const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
     Effect.exit,
     Effect.map((exit): RpcSerializedExit<Success, Error> => {
       if (exit._tag === "Success") {
-        return { _tag: "Success", value: exit.value };
+        // Success values cross the same capnweb wire as args — raw Redacted/Output
+        // instances are not serializable and crash the session.
+        return {
+          _tag: "Success",
+          value: serializeRpcArgs(exit.value) as Success,
+        };
       }
       return {
         _tag: "Failure",
@@ -140,7 +145,7 @@ const unwrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
     (args) => Effect.promise(() => handler(args)),
     Effect.flatMap((exit): Exit.Exit<Success, Error> => {
       if (exit._tag === "Success") {
-        return Exit.succeed(exit.value);
+        return Exit.succeed(deserializeRpcArgs(exit.value) as Success);
       }
       return Exit.failCause(
         Cause.fromReasons(

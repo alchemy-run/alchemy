@@ -191,6 +191,36 @@ describe("Local.RpcSerialization", () => {
     );
   });
 
+  describe("return value serialization", () => {
+    it.effect("round-trips a Redacted return value", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          secret: () => Effect.succeed(Redacted.make("hush")),
+        };
+        const client = roundTrip(handlers);
+        const result = yield* client.secret();
+        expect(Redacted.isRedacted(result)).toBe(true);
+        expect(Redacted.value(result)).toBe("hush");
+      }),
+    );
+
+    it.effect("round-trips Redacted values nested in a returned object", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          env: () =>
+            Effect.succeed({
+              env: { TOKEN: Redacted.make("t0k3n") },
+              plain: "value",
+            }),
+        };
+        const client = roundTrip(handlers);
+        const result = yield* client.env();
+        expect(Redacted.value(result.env.TOKEN)).toBe("t0k3n");
+        expect(result.plain).toBe("value");
+      }),
+    );
+  });
+
   describe("streams", () => {
     it.effect("round-trips a stream when streamKeys is honored", () =>
       Effect.gen(function* () {
