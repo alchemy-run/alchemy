@@ -2,6 +2,7 @@ import cloudflare, {
   type CloudflareVitePluginOptions,
 } from "@distilled.cloud/cloudflare-vite-plugin";
 import * as ConsoleService from "effect/Console";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { createRequire } from "node:module";
@@ -10,29 +11,34 @@ import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
 import { viteBuildOutputPlugin } from "../../Bundle/Vite.ts";
 
+const VITE_TAG = "[vite] ";
+
 /**
  * Route Vite's logger through the ambient Effect `Console` service instead of
  * its default stdout logger. Under the CLI this is the global console
  * (identical output); under environments that override the Console — e.g.
  * alchemy-test's per-test buffering console — the build output is captured
  * with the test instead of leaking to the terminal.
+ *
+ * Each line is prefixed with `[vite]` so the user can tell Vite's chatter
+ * apart from Alchemy's own log lines (apply events, Cloudflare API calls…).
  */
 const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
   const loggedErrors = new WeakSet<object>();
   let hasWarned = false;
   return {
-    info: (msg) => console.log(msg),
+    info: (msg) => console.log(`${VITE_TAG}${msg}`),
     warn: (msg) => {
       hasWarned = true;
-      console.warn(msg);
+      console.warn(`${VITE_TAG}${msg}`);
     },
     warnOnce: (msg) => {
       hasWarned = true;
-      console.warn(msg);
+      console.warn(`${VITE_TAG}${msg}`);
     },
     error: (msg, options) => {
       if (options?.error != null) loggedErrors.add(options.error);
-      console.error(msg);
+      console.error(`${VITE_TAG}${msg}`);
     },
     clearScreen: () => {},
     hasErrorLogged: (error) => loggedErrors.has(error),
@@ -85,17 +91,36 @@ export const viteDev = (
 ) =>
   Effect.acquireRelease(
     ConsoleService.consoleWith((console) =>
-      Effect.promise(async () => {
+      Effect.gen(function* () {
         process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
-        const vite = await loadVite(rootDir);
-        const devServer = await vite.createServer({
-          root: rootDir,
-          define: getDefine(env),
-          plugins: [cloudflare(pluginOptions)],
-          server: serverOptions,
-          customLogger: makeViteLogger(console),
-        });
-        await devServer.listen();
+        const [elapsed, [version, devServer]] = yield* Effect.timed(
+          Effect.promise(async () => {
+            const vite = await loadVite(rootDir);
+            const version = vite.version;
+            const server = await vite.createServer({
+              root: rootDir,
+              define: getDefine(env),
+              plugins: [cloudflare(pluginOptions)],
+              server: serverOptions,
+              customLogger: makeViteLogger(console),
+            });
+            await server.listen();
+            return [version, server] as const;
+          }),
+        );
+
+        // Match `vite dev` from the CLI: print the startup banner, then the
+        // Local / Network URLs, then bind the `h + enter` help shortcut. The
+        // programmatic API does NONE of these automatically — the CLI does
+        // them all manually after `await server.listen()`. Without these three
+        // calls Alchemy's vite dev is silent and users don't see anything.
+        // https://github.com/vitejs/vite/blob/main/packages/vite/src/node/cli.ts
+        const ms = Math.ceil(Duration.toMillis(elapsed));
+        const banner = `VITE v${version} ready in ${ms} ms\n`;
+        devServer.config.logger.info(banner);
+        devServer.printUrls();
+        devServer.bindCLIShortcuts({ print: true });
+
         return devServer;
       }),
     ),
