@@ -73,6 +73,7 @@ export default CodeArtifactTestFunction.make(
     const publish = yield* CodeArtifact.PublishPackageVersion(repo);
     const updateStatus = yield* CodeArtifact.UpdatePackageVersionsStatus(repo);
     const putOrigin = yield* CodeArtifact.PutPackageOriginConfiguration(repo);
+    const deletePackage = yield* CodeArtifact.DeletePackage(repo);
 
     // --- mirror-scoped bindings (destination of the copy) ---
     const copyToMirror = yield* CodeArtifact.CopyPackageVersions(mirror);
@@ -143,6 +144,27 @@ export default CodeArtifactTestFunction.make(
           return yield* HttpServerResponse.json({
             endpoint: res.repositoryEndpoint,
           });
+        }
+
+        // Delete the test package from both repositories so a retried test
+        // body starts from a clean slate — republishing an already-Published
+        // generic version raises the (deterministic) ConflictException.
+        if (request.method === "POST" && pathname === "/reset") {
+          yield* deletePackage({
+            format: FORMAT,
+            namespace: NAMESPACE,
+            package: PKG,
+          }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          yield* deleteMirrorPackage({
+            format: FORMAT,
+            namespace: NAMESPACE,
+            package: PKG,
+          }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          return yield* HttpServerResponse.json({ reset: true });
         }
 
         if (request.method === "POST" && pathname === "/publish") {

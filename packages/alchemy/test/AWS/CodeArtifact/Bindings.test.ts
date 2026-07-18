@@ -24,11 +24,41 @@ let baseUrl: string;
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
-}> {}
+  readonly retryable: boolean;
+}> {
+  override get message() {
+    return `HTTP ${this.status} (retryable=${this.retryable}): ${this.body}`;
+  }
+}
 
-// Fresh Lambda role + CodeArtifact/S3 permissions propagate eventually — the
-// first calls can 500 with AccessDenied. Retry 5xx only (the handler surfaces
-// typed errors as a 500 JSON body); a genuine 4xx fails immediately.
+// The handler surfaces every typed error as a 500 JSON body ({ error: _tag }).
+// Only some of those are actually transient — retrying a deterministic tag
+// (ConflictException from a re-published version, ValidationException from a
+// wiring bug) just burns the whole budget and hides the real failure.
+const RETRYABLE_ERROR_TAGS: ReadonlySet<string> = new Set([
+  // Fresh Lambda role + CodeArtifact/S3 permission propagation — the first
+  // calls after a cold deploy can 500 with AccessDenied for tens of seconds.
+  "AccessDeniedException",
+  "ThrottlingException",
+  "InternalServerException",
+  "ServiceUnavailableException",
+  // The handler's fallback tag for untyped defects.
+  "UnknownError",
+]);
+
+const isRetryableBody = (body: string): boolean => {
+  try {
+    const parsed = JSON.parse(body) as { error?: string };
+    // No tag at all (e.g. a raw gateway body) — assume transient.
+    return parsed.error === undefined || RETRYABLE_ERROR_TAGS.has(parsed.error);
+  } catch {
+    // Non-JSON 5xx: function-URL cold start / gateway errors — transient.
+    return true;
+  }
+};
+
+// Retry transient 5xx only; a deterministic typed error or a genuine 4xx
+// fails immediately (loud, with the body in the error message).
 const send = (request: HttpClientRequest.HttpClientRequest) =>
   HttpClient.execute(request).pipe(
     Effect.flatMap((response) =>
@@ -36,18 +66,24 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
         ? response.text.pipe(
             Effect.flatMap((body) =>
               Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
+                new TransientUpstream({
+                  status: response.status,
+                  body,
+                  retryable: isRetryableBody(body),
+                }),
               ),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
-      while: (e) => e._tag === "TransientUpstream",
+      while: (e) => e._tag === "TransientUpstream" && e.retryable,
       // Bounded well under the test timeouts (~63s of sleeps) so a
       // persistent 500 surfaces its body instead of an opaque timeout.
       // Fresh-role AccessDenied propagation has been observed to outlive
-      // a 31s budget on cold deploys.
+      // a 31s budget on cold deploys; the runner's whole-body retries
+      // (with the /reset pre-clean keeping them idempotent) extend the
+      // effective window without violating the bounded-backoff doctrine.
       schedule: Schedule.max([
         Schedule.exponential("1 second"),
         Schedule.recurs(6),
@@ -169,6 +205,11 @@ describe("CodeArtifact Bindings", () => {
       "publish -> inspect -> promote -> dispose -> delete through the bindings",
       () =>
         Effect.gen(function* () {
+          // Clean slate — a retried test body (alchemy-test re-runs failing
+          // bodies) must not trip ConflictException on the re-publish of an
+          // already-Published generic version.
+          yield* postJson<{ reset: boolean }>("/reset");
+
           // PublishPackageVersion — a generic package version.
           const published = yield* postJson<{ status: string }>(
             "/publish?version=1.0.0",
