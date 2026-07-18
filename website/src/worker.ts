@@ -243,10 +243,10 @@ export default {
 };
 
 /**
- * `llms.txt` is generated at build time with absolute canonical URLs, so a
- * PR preview would hand agents an index that points back at production.
- * Rewrite the baked origin to the request's own origin — the same treatment
- * `rewriteCanonicalHost` gives HTML meta tags.
+ * `llms.txt` / `llms-full.txt` are generated at build time with absolute
+ * canonical URLs, so a PR preview would hand agents an index that points back
+ * at production. Rewrite the baked origin to the request's own origin — the
+ * same treatment `rewriteCanonicalHost` gives HTML meta tags.
  */
 const rewriteLlmsTxtOrigin = async (
   request: Request,
@@ -254,7 +254,7 @@ const rewriteLlmsTxtOrigin = async (
 ): Promise<Response> => {
   const reqUrl = new URL(request.url);
   if (
-    reqUrl.pathname !== "/llms.txt" ||
+    (reqUrl.pathname !== "/llms.txt" && reqUrl.pathname !== "/llms-full.txt") ||
     reqUrl.host === CANONICAL_HOST ||
     !res.ok
   ) {
