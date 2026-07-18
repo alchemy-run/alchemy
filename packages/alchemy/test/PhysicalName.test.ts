@@ -113,6 +113,49 @@ describe("createPhysicalName", () => {
     }),
   );
 
+  it.effect(
+    "keeps the full hash under tight limits (DAX-style maxLength 20)",
+    () =>
+      provide(
+        Effect.gen(function* () {
+          // maxLength 20 with the default 16-char instance suffix leaves no
+          // room for prefix + hash + suffix; the hash must survive in full
+          // (the suffix shrinks) or same-resource names collide again.
+          const longId = "c".repeat(60);
+          const names = yield* Effect.forEach(["alpha", "beta"], (suffix) =>
+            createPhysicalName({
+              id: `${longId}-${suffix}`,
+              maxLength: 20,
+              lowercase: true,
+            }),
+          );
+          expect(names[0]!.length).toBe(20);
+          expect(names[1]!.length).toBe(20);
+          expect(names[0]).not.toBe(names[1]);
+        }),
+      ),
+  );
+
+  it.effect(
+    "keeps uniqueness with a shortened suffixLength (Canary-style 21/8)",
+    () =>
+      provide(
+        Effect.gen(function* () {
+          const longId = "d".repeat(60);
+          const names = yield* Effect.forEach(["alpha", "beta"], (suffix) =>
+            createPhysicalName({
+              id: `${longId}-${suffix}`,
+              maxLength: 21,
+              suffixLength: 8,
+              lowercase: true,
+            }),
+          );
+          expect(names[0]!.length).toBe(21);
+          expect(names[0]).not.toBe(names[1]);
+        }),
+      ),
+  );
+
   it.effect("lowercase truncated names stay DNS-safe", () =>
     provide(
       Effect.gen(function* () {

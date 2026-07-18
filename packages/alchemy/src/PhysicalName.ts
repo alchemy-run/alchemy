@@ -75,7 +75,11 @@ export const createPhysicalName = Effect.fn(function* ({
         TRUNCATION_HASH_LENGTH,
       ),
     );
-    const tail = `${hash}${suffix}`.slice(-maxLength);
+    // The hash is what keeps same-resource names distinct, so it always
+    // survives in full; when maxLength is tight (e.g. DAX's 20-char limit)
+    // the instance suffix shrinks instead — 12 base32 chars still carry 60
+    // bits of instance entropy.
+    const tail = `${hash}${suffix}`.slice(0, maxLength);
     return sanitize(
       `${prefix.slice(0, Math.max(0, maxLength - tail.length))}${tail}`,
     );
