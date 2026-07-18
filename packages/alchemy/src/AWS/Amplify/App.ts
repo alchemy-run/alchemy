@@ -154,6 +154,17 @@ export interface App extends Resource<
  */
 export const App = Resource<App>("AWS.Amplify.App");
 
+// Amplify throttles control-plane writes account-wide in roughly per-minute
+// buckets and surfaces it as a BadRequestException with a "Rate exceeded"
+// message (not a throttling error class). A burst elsewhere in the account
+// (e.g. a mass delete) can keep the bucket exhausted for most of a minute, so
+// spread bounded retries evenly across ~80s instead of front-loading an
+// exponential that spends its whole budget in the first few seconds.
+const amplifyWriteRetrySchedule = Schedule.max([
+  Schedule.spaced("8 seconds"),
+  Schedule.recurs(10),
+]);
+
 export const AppProvider = () =>
   Provider.effect(
     App,
@@ -239,13 +250,11 @@ export const AppProvider = () =>
           let app = output?.appId ? yield* observe(output.appId) : undefined;
 
           if (!app) {
-            // Amplify throttles CreateApp aggressively (surfaced as a
-            // BadRequestException with a "Rate exceeded" message rather than
-            // a throttling error class) and the quota is roughly per-minute
-            // account-wide — retry with bounded backoff spanning ~1 minute.
-            // Its API Gateway front door can also time out a slow CreateApp
-            // (typed TimeoutException, "Endpoint request timed out") with
-            // the outcome unknown — the backend may still have created the
+            // CreateApp is subject to the account-wide "Rate exceeded"
+            // throttle (see amplifyWriteRetrySchedule). Its API Gateway
+            // front door can also time out a slow CreateApp (typed
+            // TimeoutException, "Endpoint request timed out") with the
+            // outcome unknown — the backend may still have created the
             // app. Observe by name + internal tags before every (re)try so
             // a retry never creates a duplicate app.
             app = yield* findOwnApp(id, name).pipe(
@@ -271,8 +280,7 @@ export const AppProvider = () =>
                   e._tag === "TimeoutException" ||
                   (e._tag === "BadRequestException" &&
                     (e.message ?? "").includes("Rate exceeded")),
-                schedule: Schedule.exponential("2 seconds"),
-                times: 5,
+                schedule: amplifyWriteRetrySchedule,
               }),
             );
           } else {
@@ -296,8 +304,7 @@ export const AppProvider = () =>
                     e._tag === "TimeoutException" ||
                     (e._tag === "BadRequestException" &&
                       (e.message ?? "").includes("Rate exceeded")),
-                  schedule: Schedule.exponential("2 seconds"),
-                  times: 5,
+                  schedule: amplifyWriteRetrySchedule,
                 }),
               );
             yield* syncTags(app.appArn, desiredTags, tagRecord(app.tags));
@@ -331,14 +338,17 @@ export const AppProvider = () =>
             }));
           }),
         delete: Effect.fn(function* ({ output }) {
-          // DeleteApp is idempotent — retry front-door timeouts; a timed-out
-          // delete that actually landed resolves to NotFoundException on the
-          // retry, which is swallowed below.
+          // DeleteApp is idempotent — retry front-door timeouts and the
+          // account-wide "Rate exceeded" throttle; a timed-out delete that
+          // actually landed resolves to NotFoundException on the retry,
+          // which is swallowed below.
           yield* amplify.deleteApp({ appId: output.appId }).pipe(
             Effect.retry({
-              while: (e): boolean => e._tag === "TimeoutException",
-              schedule: Schedule.exponential("2 seconds"),
-              times: 3,
+              while: (e): boolean =>
+                e._tag === "TimeoutException" ||
+                (e._tag === "BadRequestException" &&
+                  (e.message ?? "").includes("Rate exceeded")),
+              schedule: amplifyWriteRetrySchedule,
             }),
             Effect.catchTag("NotFoundException", () => Effect.void),
           );

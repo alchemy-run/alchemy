@@ -151,6 +151,17 @@ export interface Branch extends Resource<
  */
 export const Branch = Resource<Branch>("AWS.Amplify.Branch");
 
+// Amplify throttles control-plane writes account-wide in roughly per-minute
+// buckets and surfaces it as a BadRequestException with a "Rate exceeded"
+// message (not a throttling error class). A burst elsewhere in the account
+// (e.g. a mass delete) can keep the bucket exhausted for most of a minute, so
+// spread bounded retries evenly across ~80s instead of front-loading an
+// exponential that spends its whole budget in the first few seconds.
+const amplifyWriteRetrySchedule = Schedule.max([
+  Schedule.spaced("8 seconds"),
+  Schedule.recurs(10),
+]);
+
 export const BranchProvider = () =>
   Provider.effect(
     Branch,
@@ -245,12 +256,11 @@ export const BranchProvider = () =>
           let branch = yield* observe(news.appId, branchName);
 
           if (!branch) {
-            // Amplify throttles writes aggressively (surfaced as a
-            // BadRequestException with a "Rate exceeded" message rather than
-            // a throttling error class) — retry with bounded backoff. Its
-            // API Gateway front door can also time out a slow CreateBranch
-            // (typed TimeoutException, "Endpoint request timed out") with
-            // the outcome unknown — re-observe before every (re)try so a
+            // CreateBranch is subject to the account-wide "Rate exceeded"
+            // throttle (see amplifyWriteRetrySchedule). Its API Gateway
+            // front door can also time out a slow CreateBranch (typed
+            // TimeoutException, "Endpoint request timed out") with the
+            // outcome unknown — re-observe before every (re)try so a
             // retry converges on the branch the timed-out call created.
             branch = yield* observe(news.appId, branchName).pipe(
               Effect.flatMap((existing) =>
@@ -270,8 +280,7 @@ export const BranchProvider = () =>
                   e._tag === "TimeoutException" ||
                   (e._tag === "BadRequestException" &&
                     (e.message ?? "").includes("Rate exceeded")),
-                schedule: Schedule.exponential("2 seconds"),
-                times: 5,
+                schedule: amplifyWriteRetrySchedule,
               }),
             );
           } else {
@@ -289,8 +298,7 @@ export const BranchProvider = () =>
                     e._tag === "TimeoutException" ||
                     (e._tag === "BadRequestException" &&
                       (e.message ?? "").includes("Rate exceeded")),
-                  schedule: Schedule.exponential("2 seconds"),
-                  times: 5,
+                  schedule: amplifyWriteRetrySchedule,
                 }),
               );
             yield* syncTags(
@@ -344,9 +352,10 @@ export const BranchProvider = () =>
             return branches;
           }),
         delete: Effect.fn(function* ({ output }) {
-          // DeleteBranch is idempotent — retry front-door timeouts; a
-          // timed-out delete that actually landed resolves to
-          // NotFoundException on the retry, which is swallowed below.
+          // DeleteBranch is idempotent — retry front-door timeouts and the
+          // account-wide "Rate exceeded" throttle; a timed-out delete that
+          // actually landed resolves to NotFoundException on the retry,
+          // which is swallowed below.
           yield* amplify
             .deleteBranch({
               appId: output.appId,
@@ -354,9 +363,11 @@ export const BranchProvider = () =>
             })
             .pipe(
               Effect.retry({
-                while: (e): boolean => e._tag === "TimeoutException",
-                schedule: Schedule.exponential("2 seconds"),
-                times: 3,
+                while: (e): boolean =>
+                  e._tag === "TimeoutException" ||
+                  (e._tag === "BadRequestException" &&
+                    (e.message ?? "").includes("Rate exceeded")),
+                schedule: amplifyWriteRetrySchedule,
               }),
               Effect.catchTag("NotFoundException", () => Effect.void),
             );
