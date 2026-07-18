@@ -105,7 +105,6 @@ const SECTIONS: Section[] = [
         "infrastructure-as-effects/sinks",
         "infrastructure-as-effects/phases",
         "infrastructure-as-effects/layers",
-        "infrastructure-as-effects/infrastructure-layers",
         "infrastructure-as-effects/circular-bindings",
         "infrastructure-as-effects/custom-runtime",
       ],

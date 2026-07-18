@@ -135,6 +135,31 @@ deploy, the `MyKV` namespace is created in the
 The inner `Layer.provide` satisfies `JobServiceKV`'s dependency on the KV
 runtime binding privately. The handler sees only `JobService`.
 
+## Reuse across Workers
+
+A Layer is a value. Provide `JobServiceKV` to a second Worker and both
+share the same namespace, because `KV.Namespace("MyKV")` has a stable
+logical id:
+
+```typescript
+// src/Admin.ts
+export default Cloudflare.Worker(
+  "Admin",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const jobs = yield* JobService;
+    // ...
+  }).pipe(
+    Effect.provide(
+      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+    ),
+  ),
+);
+```
+
+The Stack ends up with one `MyKV` namespace, bound to both `Api` and
+`Admin`.
+
 ## The swap
 
 Changing the implementation is a one-line change:
@@ -207,8 +232,6 @@ another.
 
 ## Where next
 
-- [Building with Layers](/infrastructure-as-effects/infrastructure-layers) —
-  build a `JobService` Layer end to end, then swap KV for R2.
 - [Circular Bindings](/infrastructure-as-effects/circular-bindings) —
   the tag/Layer split applied to two services that reference each other.
 - [Bindings](/infrastructure-as-effects/binding) — the deploy-time

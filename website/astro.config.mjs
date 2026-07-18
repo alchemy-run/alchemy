@@ -339,10 +339,6 @@ export default defineConfig({
                 { label: "Phases", link: "/infrastructure-as-effects/phases" },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
-                  label: "Building with Layers",
-                  link: "/infrastructure-as-effects/infrastructure-layers",
-                },
-                {
                   label: "Circular Bindings",
                   link: "/infrastructure-as-effects/circular-bindings",
                 },
