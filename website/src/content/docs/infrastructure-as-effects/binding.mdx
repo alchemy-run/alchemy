@@ -43,11 +43,6 @@ resource itself, presented as a typed client. The binding is the SDK.
 `Effect.provide(ReadWriteBucketBinding)` on the last line chooses how
 the binding is implemented.
 
-Bindings work in async-style handlers too, declared on `env` and typed
-with `InferEnv` — see
-[Functions & Servers](/infrastructure-as-effects/functions-and-servers#effect-handlers-vs-async-handlers).
-This page uses the Effect style; the mechanics are identical in both.
-
 ## A contract and a Layer
 
 A binding has two halves. The declaration is a contract:
