@@ -67,6 +67,13 @@ Alchemy avoids this. Your R2 Bucket is a real R2 Bucket. Your D1
 Database is a real D1 Database. The only thing running locally is
 your application code.
 
+This includes bindings whose side effects leave your account:
+a [`send_email` binding](/cloudflare/email/send-and-receive) sends
+real mail from your domain in dev, exactly as it does in production.
+For storage a stray dev write is recoverable; for outbound email it
+isn't — gate side-effectful calls yourself (an env var, or the
+injected `ALCHEMY_STAGE` binding) when dev runs shouldn't fire them.
+
 ## Debugging
 
 Because Workers run locally in workerd, you can attach a debugger:
