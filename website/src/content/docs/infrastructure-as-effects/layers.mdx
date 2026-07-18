@@ -17,7 +17,7 @@ codebase, across packages, or publish them to npm for others to consume.
 
 Let's look at how they work.
 
-## A service is a contract
+## The contract
 
 A service is a `Context.Service` — a typed tag that names a capability:
 
@@ -38,7 +38,7 @@ Consumers write `yield* JobService` and get this typed object. The
 signature mentions `Alchemy.RuntimeContext` (covered below) and nothing
 cloud-specific.
 
-## A Layer encapsulates the infrastructure
+## The implementation
 
 `Layer.effect(JobService, …)` builds the service — "to construct
 `JobService`, run this Effect":
@@ -103,7 +103,7 @@ Implement the contract against the client:
      };
 ```
 
-## Cloud-agnostic consumers
+## The consumer
 
 A Worker yields the service and provides the Layer:
 
@@ -133,8 +133,7 @@ deploy, the `MyKV` namespace is created in the
 `kv.get` works inside its handlers.
 
 The inner `Layer.provide` satisfies `JobServiceKV`'s dependency on the KV
-runtime binding privately. The handler sees only `JobService` — nothing
-cloud-specific reaches it.
+runtime binding privately. The handler sees only `JobService`.
 
 ## Reuse across Workers
 
