@@ -3,16 +3,18 @@ title: Bindings
 description: A Binding connects a Resource to a Worker or Lambda. One line declares the capability and generates the permissions, the configuration, and a typed client.
 ---
 
-Code that uses a resource — a Worker reading from a bucket, a Lambda
-writing to a queue — needs three things wired up: permission to access
-the resource, configuration to find it, and a client to call it. A
-**Binding** generates all three from one line.
+A **Binding** connects a [Resource](/infrastructure-as-code/resource)
+to a Worker, Lambda Function, or Container. You yield the resource and
+get back a typed client:
 
-Bindings work the same on every cloud. On AWS a binding attaches
-least-privilege IAM policies; on Cloudflare it attaches native Worker
-bindings. Either way, the client you get back is a typed Effect API.
+```typescript
+const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+```
 
-Let's look at how they work.
+Everything else the connection needs is derived from this line: the
+permission grant — least-privilege IAM on AWS, a native binding on
+Cloudflare — and the environment configuration that points the client
+at the deployed resource.
 
 ## A binding in one line
 
