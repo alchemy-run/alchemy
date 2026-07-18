@@ -12,8 +12,8 @@ const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 ```
 
 Everything else the connection needs is derived from this line: the
-permission grant — least-privilege IAM on AWS, a native binding on
-Cloudflare — and the environment configuration that points the client
+permission grant (least-privilege IAM on AWS, a native binding on
+Cloudflare) and the environment configuration that points the client
 at the deployed resource.
 
 ## A binding in one line
