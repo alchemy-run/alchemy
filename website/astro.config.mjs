@@ -893,7 +893,6 @@ export default defineConfig({
               label: "How objects deploy",
               link: "/kubernetes/objects-as-bindings",
             },
-            providerResourcesEntry("Kubernetes"),
           ],
         },
         {
