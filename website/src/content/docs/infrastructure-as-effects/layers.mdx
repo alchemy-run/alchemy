@@ -5,15 +5,25 @@ description: A Layer packages resources, bindings, and runtime code behind a typ
 
 A [Binding](/infrastructure-as-effects/binding) connects one
 [Resource](/infrastructure-as-code/resource) to one Function. A **Layer**
-works one level up: it packages resources, bindings, and runtime code
-behind a typed service interface.
+works one level up: it bundles resources, bindings, and client code into
+a unit that provides one service.
 
-Your code depends on the interface. The infrastructure lives in the
-Layer. A Worker calls `jobs.getJob(id)`; the Layer decides whether that
-reads from KV, DynamoDB, or an in-memory `Map`. Swap the Layer to change
-the backend, move clouds, or fake it in tests — the Worker stays the
-same. And a Layer is just a value, so you can publish one to npm and
-install it like any other package.
+The consumer asks for a capability:
+
+```typescript
+const jobs = yield* JobService;
+```
+
+A Layer answers with an implementation, and its infrastructure comes
+along. Provide the KV-backed Layer and the deploy includes a KV
+namespace, bound to the Worker. Provide a DynamoDB-backed one and the
+deploy includes a table instead. Provide an in-memory fake in tests and
+there is nothing to deploy. The consumer's code is identical in all
+three.
+
+And because a Layer is a value in a module, whole capabilities ship as
+packages — auth backed by D1, rate limiting backed by a Durable Object —
+installed from npm and provided with one line.
 
 ## The contract
 
