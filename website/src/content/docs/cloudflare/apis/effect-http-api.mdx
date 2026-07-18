@@ -149,8 +149,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 export const Tasks = Cloudflare.R2.Bucket("Tasks");
 ```
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
 +import { Tasks } from "./bucket.ts";
 
 export default Cloudflare.Worker(
@@ -179,8 +178,7 @@ safe to call inside Init.
 > incoming request. Init only does construction; the work happens
 > later, on each `fetch` call.
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
   Effect.gen(function* () {
     const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
@@ -251,8 +249,7 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
 });
 ```
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
     return {
 +     fetch: yield* HttpRouter.toHttpEffect(
 +       HttpApiBuilder.layer(TaskApi).pipe(

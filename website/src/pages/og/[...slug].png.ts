@@ -15,13 +15,14 @@
  * arrows, em-dashes, fancy quotes, etc. all render verbatim.
  */
 
-import { Resvg } from "@resvg/resvg-js";
 import type { APIRoute, GetStaticPaths } from "astro";
 import { getCollection } from "astro:content";
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import satori from "satori";
+import { Worker } from "node:worker_threads";
 import { OgCard, type OgCardKind, type TitlePart } from "../../brand/OgCard";
 
 interface Entry {
@@ -52,112 +53,234 @@ const publicFontsDir = fileURLToPath(
   new URL("../../../public/fonts/", import.meta.url),
 );
 
-async function readFont(
-  filename: string,
-  publicScope = false,
-): Promise<Buffer> {
-  return fs.readFile(
-    path.join(publicScope ? publicFontsDir : buildFontsDir, filename),
-  );
+/**
+ * Font metadata only — the actual files are read by the render workers
+ * (scripts/og-worker.mjs), once per worker. Family/weight/style choices are
+ * documented in the git history of this file; the short version: Source
+ * Serif 4 Display mirrors the website hero, Tinos supplies the TNR-style
+ * arrow glyph, JetBrains Mono the eyebrow, Caveat the URL stamp.
+ */
+const FONTS = [
+  {
+    name: "Source Serif 4",
+    file: "SourceSerif4-Regular.ttf",
+    weight: 400,
+    style: "normal",
+  },
+  {
+    name: "Source Serif 4",
+    file: "SourceSerif4-It.ttf",
+    weight: 400,
+    style: "italic",
+  },
+  {
+    name: "Source Serif 4 Display",
+    file: "SourceSerif4Display-Light.ttf",
+    weight: 300,
+    style: "normal",
+  },
+  {
+    name: "Source Serif 4 Display",
+    file: "SourceSerif4Display-LightIt.ttf",
+    weight: 300,
+    style: "italic",
+  },
+  {
+    name: "Source Serif 4 Display",
+    file: "SourceSerif4Display-Regular.ttf",
+    weight: 400,
+    style: "normal",
+  },
+  {
+    name: "Source Serif 4 Display",
+    file: "SourceSerif4Display-It.ttf",
+    weight: 400,
+    style: "italic",
+  },
+  {
+    name: "Source Serif 4 Display",
+    file: "SourceSerif4Display-Semibold.ttf",
+    weight: 600,
+    style: "normal",
+  },
+  {
+    name: "Source Serif 4 Display",
+    file: "SourceSerif4Display-SemiboldIt.ttf",
+    weight: 600,
+    style: "italic",
+  },
+  {
+    name: "Tinos",
+    file: "Tinos-Regular.ttf",
+    weight: 400,
+    style: "normal",
+    public: true,
+  },
+  {
+    name: "JetBrains Mono",
+    file: "JetBrainsMono-Regular.ttf",
+    weight: 400,
+    style: "normal",
+  },
+  { name: "Caveat", file: "Caveat-Regular.ttf", weight: 400, style: "normal" },
+] as const;
+
+const workerFonts = FONTS.map(({ file, public: pub, ...font }) => ({
+  ...font,
+  path: path.join(pub ? publicFontsDir : buildFontsDir, file),
+}));
+
+// ────────────────────────────────────────────────────────────────────────────
+// Render pool + disk cache.
+//
+// Rendering a satori→resvg PNG per page is (was) the single most expensive
+// build step: ~130ms × ~4k pages ≈ 9 minutes, serially, on the build's main
+// thread. Two fixes:
+//
+// 1. All renders run in a pool of worker threads (scripts/og-worker.mjs) —
+//    the element tree is plain JSON, so the main thread just ships
+//    `OgCard(props)` to a worker. The pool is pre-warmed from
+//    `getStaticPaths`, so workers crunch OG images concurrently while the
+//    main thread prerenders HTML pages.
+//
+// 2. Finished PNGs are cached in node_modules/.cache/alchemy-og keyed by a
+//    hash of the element tree + font files, so warm rebuilds skip
+//    rendering entirely. The tree hash covers everything visual (props AND
+//    OgCard markup/styles); bump CACHE_VERSION when changing the renderer
+//    setup itself (satori/resvg versions or render options).
+// ────────────────────────────────────────────────────────────────────────────
+
+const CACHE_VERSION = 1;
+const cacheDir = path.resolve("node_modules/.cache/alchemy-og");
+
+let fontFingerprintPromise: Promise<string> | undefined;
+function getFontFingerprint() {
+  return (fontFingerprintPromise ??= (async () => {
+    const stats = await Promise.all(
+      workerFonts.map(async (f) => {
+        const s = await fs.stat(f.path);
+        return `${path.basename(f.path)}:${s.size}`;
+      }),
+    );
+    return createHash("sha256").update(stats.join("\n")).digest("hex");
+  })());
 }
 
-let fontsPromise: ReturnType<typeof loadFonts> | undefined;
-/** Lazily load (and memoize) the OG fonts on first render. Kept lazy so that
- * importing this module (e.g. during a `DOCS_FAST` build that emits no OG
- * images) doesn't eagerly read fonts that haven't been downloaded. */
-function getFonts() {
-  return (fontsPromise ??= loadFonts());
+class RenderPool {
+  private workers: Worker[] = [];
+  private pending = new Map<
+    number,
+    { resolve: (png: Buffer) => void; reject: (error: Error) => void }
+  >();
+  private nextId = 0;
+
+  // ref() the workers only while renders are in flight. Permanently
+  // unref'd workers let Node exit mid-build (an awaited postMessage reply
+  // doesn't hold the event loop); permanently ref'd ones hang the build
+  // at the end. Toggling on the in-flight count gives both properties.
+  private setRef(on: boolean) {
+    for (const w of this.workers) (on ? w.ref : w.unref).call(w);
+  }
+
+  constructor(size: number) {
+    // Resolves to website/scripts/og-worker.mjs both from src/pages/og/
+    // (dev) and from dist/.prerender/chunks/ (build) — same 3-level walk
+    // the font dirs rely on.
+    const workerPath = fileURLToPath(
+      new URL("../../../scripts/og-worker.mjs", import.meta.url),
+    );
+    for (let i = 0; i < size; i++) {
+      const worker = new Worker(workerPath, {
+        workerData: { fonts: workerFonts },
+      });
+      worker.on("message", ({ id, png, error }) => {
+        const entry = this.pending.get(id);
+        if (!entry) return;
+        this.pending.delete(id);
+        if (this.pending.size === 0) this.setRef(false);
+        if (error) entry.reject(new Error(error));
+        else entry.resolve(Buffer.from(png));
+      });
+      worker.unref();
+      this.workers.push(worker);
+    }
+  }
+
+  render(tree: unknown): Promise<Buffer> {
+    const id = this.nextId++;
+    const worker = this.workers[id % this.workers.length];
+    return new Promise((resolve, reject) => {
+      if (this.pending.size === 0) this.setRef(true);
+      this.pending.set(id, { resolve, reject });
+      worker.postMessage({ id, tree });
+    });
+  }
 }
 
-function loadFonts() {
-  return (async () => {
-    const [
-      serif,
-      serifIt,
-      displayLight,
-      displayLightIt,
-      displayReg,
-      displayRegIt,
-      displaySemi,
-      displaySemiIt,
-      tinos,
-      mono,
-      caveat,
-    ] = await Promise.all([
-      readFont("SourceSerif4-Regular.ttf"),
-      readFont("SourceSerif4-It.ttf"),
-      readFont("SourceSerif4Display-Light.ttf"),
-      readFont("SourceSerif4Display-LightIt.ttf"),
-      readFont("SourceSerif4Display-Regular.ttf"),
-      readFont("SourceSerif4Display-It.ttf"),
-      readFont("SourceSerif4Display-Semibold.ttf"),
-      readFont("SourceSerif4Display-SemiboldIt.ttf"),
-      readFont("Tinos-Regular.ttf", true),
-      readFont("JetBrainsMono-Regular.ttf"),
-      readFont("Caveat-Regular.ttf"),
-    ]);
+let pool: RenderPool | undefined;
+function getPool() {
+  return (pool ??= new RenderPool(
+    Math.max(1, Math.min(os.availableParallelism() - 1, 12)),
+  ));
+}
 
-    return [
-      // Text optical-size variant (description, wordmark, etc.).
-      { name: "Source Serif 4", data: serif, weight: 400, style: "normal" },
-      { name: "Source Serif 4", data: serifIt, weight: 400, style: "italic" },
+/** Cache filenames referenced by the current build, for pruning. */
+const usedCacheFiles = new Set<string>();
 
-      // Display optical-size variant for the headline. Carries chunkier
-      // serifs and more stroke contrast at large sizes — matches the
-      // website hero, which uses the variable font's display optical axis
-      // automatically. Light (300) is what the hero renders at ~72px;
-      // Regular (400) is the default fallback.
-      {
-        name: "Source Serif 4 Display",
-        data: displayLight,
-        weight: 300,
-        style: "normal",
-      },
-      {
-        name: "Source Serif 4 Display",
-        data: displayLightIt,
-        weight: 300,
-        style: "italic",
-      },
-      {
-        name: "Source Serif 4 Display",
-        data: displayReg,
-        weight: 400,
-        style: "normal",
-      },
-      {
-        name: "Source Serif 4 Display",
-        data: displayRegIt,
-        weight: 400,
-        style: "italic",
-      },
+/** Render (or cache-read) one card; returns the PNG. */
+async function renderCard(entry: Entry): Promise<Buffer> {
+  const { title, description, kind, eyebrow, date } = entry;
+  // OgCard is a pure function of its props; the element tree it returns is
+  // plain data, so it both ships to the worker AND serves as the cache key
+  // (it captures card markup/style changes, not just prop changes).
+  const tree = OgCard({ title, description, eyebrow, kind, date });
+  const json = JSON.stringify(tree);
+  const key = createHash("sha256")
+    .update(`v${CACHE_VERSION}\n${await getFontFingerprint()}\n${json}`)
+    .digest("hex");
+  const cacheFile = `${key}.png`;
+  usedCacheFiles.add(cacheFile);
+  const cachePath = path.join(cacheDir, cacheFile);
+  try {
+    return await fs.readFile(cachePath);
+  } catch {
+    // cache miss
+  }
+  const png = await getPool().render(JSON.parse(json));
+  await fs.mkdir(cacheDir, { recursive: true });
+  await fs.writeFile(cachePath, png);
+  return png;
+}
 
-      // Semibold (600) approximates the website hero's runtime "Medium"
-      // (500) — Adobe doesn't ship a static Medium Display cut, so we
-      // snap up. Used by the title.
-      {
-        name: "Source Serif 4 Display",
-        data: displaySemi,
-        weight: 600,
-        style: "normal",
-      },
-      {
-        name: "Source Serif 4 Display",
-        data: displaySemiIt,
-        weight: 600,
-        style: "italic",
-      },
+/** slug → in-flight render, primed for every entry from getStaticPaths. */
+const prewarmed = new Map<string, Promise<Buffer>>();
 
-      // Tinos — TNR-equivalent. Used only for the marketing arrow glyph
-      // so the OG matches the website's font stack (which lands on Times
-      // New Roman for U+2192). See OgCard.tsx — this family is opted into
-      // explicitly via fontFamily on individual title spans.
-      { name: "Tinos", data: tinos, weight: 400, style: "normal" },
-
-      { name: "JetBrains Mono", data: mono, weight: 400, style: "normal" },
-      { name: "Caveat", data: caveat, weight: 400, style: "normal" },
-    ] as const;
-  })();
+function prewarm(entries: Entry[]) {
+  // `astro dev` also calls getStaticPaths — don't rasterize 4k cards on
+  // dev-server startup. Dev GETs render on demand (and still use the
+  // cache).
+  if (import.meta.env.DEV) return;
+  for (const entry of entries) {
+    prewarmed.set(entry.slug, renderCard(entry));
+  }
+  // Surface failures per-route (each GET awaits its own slug), not as
+  // unhandled rejections here. Once every render settles, prune cache
+  // entries this build no longer references — deleted pages and edited
+  // cards would otherwise accumulate forever (locally and in the CI
+  // cache, which round-trips this directory between runs).
+  void Promise.allSettled(prewarmed.values()).then(async () => {
+    let names: string[];
+    try {
+      names = await fs.readdir(cacheDir);
+    } catch {
+      return;
+    }
+    await Promise.all(
+      names
+        .filter((n) => n.endsWith(".png") && !usedCacheFiles.has(n))
+        .map((n) => fs.rm(path.join(cacheDir, n), { force: true })),
+    );
+  });
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -253,27 +376,17 @@ export const getStaticPaths: GetStaticPaths = async () => {
     }),
   );
 
-  return [...marketingPaths, ...docPaths];
+  const paths = [...marketingPaths, ...docPaths];
+  // Kick off every render now: workers rasterize OG cards in parallel
+  // while Astro's main thread prerenders HTML pages. Each GET below just
+  // awaits its slug's already-running (or already-cached) render.
+  prewarm(paths.map((p) => p.props));
+  return paths;
 };
 
 export const GET: APIRoute = async ({ props }) => {
-  const { title, description, kind, eyebrow, date } = props as Entry;
-  const fonts = await getFonts();
-
-  const element = OgCard({ title, description, eyebrow, kind, date });
-
-  const svg = await satori(element, {
-    width: 1200,
-    height: 630,
-    fonts: fonts as any,
-  });
-
-  const png = new Resvg(svg, {
-    fitTo: { mode: "width", value: 1200 },
-  })
-    .render()
-    .asPng();
-
+  const entry = props as Entry;
+  const png = await (prewarmed.get(entry.slug) ?? renderCard(entry));
   return new Response(png as any, {
     headers: {
       "Content-Type": "image/png",

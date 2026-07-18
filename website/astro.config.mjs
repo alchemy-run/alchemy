@@ -4,7 +4,6 @@ import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
-import astroBrokenLinksChecker from "astro-broken-links-checker";
 import { defineConfig } from "astro/config";
 import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
@@ -73,7 +72,9 @@ function providerResourcesEntry(provider) {
   return {
     label: "Resources",
     collapsed: false,
-    autogenerate: { directory: `providers/${provider}`, collapsed: true },
+    items: [
+      { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
+    ],
   };
 }
 
@@ -103,26 +104,27 @@ function copyMarkdownSources() {
           } catch {
             return;
           }
-          for (const entry of entries) {
-            const full = path.join(srcDir, entry.name);
-            if (entry.isDirectory()) {
-              await walk(full, opts, relTo);
-              continue;
-            }
-            if (!entry.isFile()) continue;
-            const ext = path.extname(entry.name).toLowerCase();
-            if (ext !== ".md" && ext !== ".mdx") continue;
-            let rel = path.relative(relTo, full);
-            rel = rel.slice(0, rel.length - ext.length) + ".md";
-            // Starlight lowercases doc URLs (e.g. CamelCase source
-            // `providers/AWS/S3/Bucket.md` is served at `/providers/aws/s3/bucket`),
-            // so the raw-markdown copy must live at the lowercased path or the
-            // worker's `/providers/aws/s3/bucket.md` lookup 404s into HTML.
-            if (opts.lowercase) rel = rel.toLowerCase();
-            const target = path.join(outDir, rel);
-            await fs.mkdir(path.dirname(target), { recursive: true });
-            await fs.copyFile(full, target);
-          }
+          // Fan the copies out — thousands of tiny files; serial awaits
+          // dominate the hook's runtime otherwise.
+          await Promise.all(
+            entries.map(async (entry) => {
+              const full = path.join(srcDir, entry.name);
+              if (entry.isDirectory()) return walk(full, opts, relTo);
+              if (!entry.isFile()) return;
+              const ext = path.extname(entry.name).toLowerCase();
+              if (ext !== ".md" && ext !== ".mdx") return;
+              let rel = path.relative(relTo, full);
+              rel = rel.slice(0, rel.length - ext.length) + ".md";
+              // Starlight lowercases doc URLs (e.g. CamelCase source
+              // `providers/AWS/S3/Bucket.md` is served at `/providers/aws/s3/bucket`),
+              // so the raw-markdown copy must live at the lowercased path or the
+              // worker's `/providers/aws/s3/bucket.md` lookup 404s into HTML.
+              if (opts.lowercase) rel = rel.toLowerCase();
+              const target = path.join(outDir, rel);
+              await fs.mkdir(path.dirname(target), { recursive: true });
+              await fs.copyFile(full, target);
+            }),
+          );
         }
 
         // Docs (Starlight content collection) — preserves nested layout under
@@ -141,11 +143,11 @@ function copyMarkdownSources() {
 }
 
 /**
- * Case-sensitive internal-link checker. astro-broken-links-checker uses
- * `fs.existsSync`, which is case-insensitive on macOS — so `/foo/Bar` will
- * resolve to `/foo/bar` locally but 404 on Linux CI. This integration walks
- * the build output once into a case-sensitive Set of paths and validates
- * every `href`/`src` against it.
+ * Internal-link checker. Walks the build output once into a case-sensitive
+ * Set of paths and validates every internal `<a href>` / `<img src>`
+ * against it. Case-sensitivity matters: `fs.existsSync`-based checkers
+ * (e.g. astro-broken-links-checker, which this replaced) resolve
+ * `/foo/Bar` to `/foo/bar` on macOS but 404 on Linux CI.
  *
  * @returns {import("astro").AstroIntegration}
  */
@@ -181,7 +183,8 @@ function caseSensitiveLinkChecker() {
         const broken = new Map();
         const htmlFiles = [...paths].filter((p) => p.endsWith(".html"));
 
-        for (const htmlFile of htmlFiles) {
+        /** @param {string} htmlFile */
+        async function checkFile(htmlFile) {
           const html = await fs.readFile(
             path.join(distPath, htmlFile.slice(1)),
             "utf8",
@@ -206,6 +209,13 @@ function caseSensitiveLinkChecker() {
               broken.get(link)?.add(htmlFile);
             }
           }
+        }
+
+        // Read/scan in bounded parallel batches — serial reads dominate
+        // the checker's runtime on 4k+ pages.
+        const BATCH = 64;
+        for (let i = 0; i < htmlFiles.length; i += BATCH) {
+          await Promise.all(htmlFiles.slice(i, i + BATCH).map(checkFile));
         }
 
         if (broken.size > 0) {
@@ -235,10 +245,6 @@ export default defineConfig({
     react(),
     pagefindIgnoreNoise(),
     copyMarkdownSources(),
-    astroBrokenLinksChecker({
-      checkExternalLinks: false,
-      throwError: true,
-    }),
     caseSensitiveLinkChecker(),
     sitemap({
       filter: (page) =>
@@ -494,7 +500,7 @@ export default defineConfig({
             { label: "Setup", link: "/cloudflare/setup" },
             {
               label: "Tutorial",
-              autogenerate: { directory: "cloudflare/tutorial" },
+              items: [{ autogenerate: { directory: "cloudflare/tutorial" } }],
             },
             {
               label: "Compute",
@@ -693,7 +699,7 @@ export default defineConfig({
             { label: "Setup", link: "/aws/setup" },
             {
               label: "Tutorial",
-              autogenerate: { directory: "aws/tutorial" },
+              items: [{ autogenerate: { directory: "aws/tutorial" } }],
             },
             {
               label: "Compute",
@@ -931,5 +937,13 @@ export default defineConfig({
   ],
   vite: {
     plugins: [tailwindcss()],
+    ssr: {
+      // Sätteri (Astro 7's markdown processor) loads a platform-native
+      // binding via CJS require. Bundling its JS loader into the prerender
+      // chunks breaks that resolution under bun's isolated node_modules
+      // layout, so keep it external — it resolves from website/node_modules
+      // (declared as a direct dependency) instead.
+      external: ["satteri"],
+    },
   },
 });
