@@ -1,6 +1,9 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as iam from "@distilled.cloud/aws/iam";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
@@ -17,8 +20,13 @@ import { Resource } from "../../Resource.ts";
 import type { HostRuntimeContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
+import { toSeconds, toWireSeconds } from "../../Util/Duration.ts";
+import { Certificate } from "../ACM/Certificate.ts";
+import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
+import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
+import { Service as CloudMapService } from "../CloudMap/Service.ts";
 import type { Credentials } from "../Credentials.ts";
+import { Record as Route53Record } from "../Route53/Record.ts";
 import {
   SecurityGroup,
   type SecurityGroupId,
@@ -32,7 +40,6 @@ import { ListenerRule } from "../ELBv2/ListenerRule.ts";
 import { LoadBalancer } from "../ELBv2/LoadBalancer.ts";
 import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import {
-  computeStaticSourceHash,
   makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
@@ -40,7 +47,7 @@ import {
   type ImageSourceLike,
   type RegistryImageSource,
 } from "../ECR/ImageSource.ts";
-import type { AWSEnvironment, AccountID } from "../Environment.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import type { Providers } from "../Providers.ts";
 import type { ClusterArn } from "./Cluster.ts";
@@ -75,12 +82,28 @@ export const isService = (value: any): value is Service => {
 // Managed load balancer (owned + shared) — types
 // ───────────────────────────────────────────────────────────────────────────
 
+/** ALB (layer-7) listener protocols. */
+export type ServiceApplicationProtocol = "http" | "https";
+
+/** NLB (layer-4) listener protocols. */
+export type ServiceNetworkProtocol = "tcp" | "udp" | "tcp_udp" | "tls";
+
 /**
- * Listener protocols supported by managed service ingress. Phase 1 covers the
- * ALB protocols; NLB protocols (`tcp` / `udp` / `tls`) slot into this union in
- * a later phase.
+ * Listener protocols supported by managed service ingress. `http`/`https`
+ * compose an Application Load Balancer; `tcp`/`udp`/`tcp_udp`/`tls` compose a
+ * Network Load Balancer. Mixing the two families in one service is a typed
+ * error ({@link MixedLoadBalancerProtocols}).
  */
-export type ServiceListenerProtocol = "http" | "https";
+export type ServiceListenerProtocol =
+  | ServiceApplicationProtocol
+  | ServiceNetworkProtocol;
+
+const NETWORK_PROTOCOLS: ReadonlySet<string> = new Set([
+  "tcp",
+  "udp",
+  "tcp_udp",
+  "tls",
+]);
 
 /** A `"80/http"`-style port/protocol spec. */
 export type ServiceListenSpec = `${number}/${ServiceListenerProtocol}`;
@@ -136,6 +159,43 @@ export interface ServiceLoadBalancerRule {
   priority?: number;
 }
 
+/** Object form of the {@link ServiceLoadBalancerConfig.domain} prop. */
+export interface ServiceDomainConfig {
+  /** Domain name pointed at the owned load balancer, e.g. `api.example.com`. */
+  name: string;
+  /**
+   * Additional domain names aliased to the load balancer. Each alias gets
+   * its own Route 53 alias records and (when the certificate is composed) a
+   * subject alternative name on the ACM certificate.
+   */
+  aliases?: string[];
+  /**
+   * ARN of an existing ACM certificate (in the service's region) for the
+   * HTTPS/TLS listener. When omitted, a DNS-validated `AWS.ACM.Certificate`
+   * is composed in the matching Route 53 hosted zone.
+   */
+  cert?: string;
+}
+
+/**
+ * Per-target-group health-check overrides, keyed by the target's
+ * `"{port}/{protocol}"` spec (see {@link ServiceLoadBalancerConfig.health}).
+ */
+export interface ServiceTargetHealthCheck {
+  /** Health-check path (HTTP/HTTPS checks). */
+  path?: string;
+  /** Approximate interval between checks, e.g. `"15 seconds"`. */
+  interval?: Duration.Input;
+  /** Time to wait for a response, e.g. `"5 seconds"`. */
+  timeout?: Duration.Input;
+  /** Consecutive successes before a target is healthy. */
+  healthyThreshold?: number;
+  /** Consecutive failures before a target is unhealthy. */
+  unhealthyThreshold?: number;
+  /** HTTP codes counted as healthy, e.g. `"200-299"`. */
+  successCodes?: string;
+}
+
 /** Object form of the {@link ServicePropsBase.loadBalancer} prop. */
 export interface ServiceLoadBalancerConfig {
   /**
@@ -151,8 +211,27 @@ export interface ServiceLoadBalancerConfig {
    * default) or internal (`false`). A typed error on shared listeners.
    */
   public?: boolean;
-  // Phase 2 slots: `domain` (Route53 + ACM) and `health` (per-target-group
-  // health checks) land here without disturbing this shape.
+  /**
+   * Owned-only: point a custom domain at the composed load balancer.
+   *
+   * A matching Route 53 hosted zone must exist (looked up by walking the
+   * domain's labels); alias A + AAAA records are composed for the domain and
+   * every alias. Unless {@link ServiceDomainConfig.cert} supplies an
+   * existing certificate ARN, a DNS-validated `AWS.ACM.Certificate` is
+   * composed in the service's region and attached to the HTTPS listener
+   * (the default listener becomes `443/https`). The service `url` prefers
+   * the domain.
+   */
+  domain?: string | ServiceDomainConfig;
+  /**
+   * Per-target-group health-check overrides, keyed by the target's
+   * `"{port}/{protocol}"` spec — the rule's `forward` spec, or
+   * `"{containerPort}/http"` (`/tcp` for network load balancers) for the
+   * default target group. Overrides the fast-converge defaults
+   * (10s interval / 2 healthy / 2 unhealthy). A key matching no target
+   * group is a typed error ({@link ServiceHealthTargetNotFound}).
+   */
+  health?: Record<string, ServiceTargetHealthCheck>;
 }
 
 /**
@@ -173,6 +252,8 @@ export interface ServiceManagedIngress {
   listenerProtocol?: string;
   /** Id of the composed managed security group, when no `securityGroups` were supplied. */
   securityGroupId?: string;
+  /** Custom domain pointed at the owned load balancer (URL derivation prefers it). */
+  domain?: string;
   /** Target groups to wire into the ECS service definition. */
   targets: {
     /** ARN of the composed target group. */
@@ -237,6 +318,49 @@ export class MissingRuleListener extends Data.TaggedError(
   readonly message: string;
 }> {}
 
+/** Application (`http`/`https`) and network (`tcp`/`udp`/`tls`/`tcp_udp`) protocols mixed in one service. */
+export class MixedLoadBalancerProtocols extends Data.TaggedError(
+  "MixedLoadBalancerProtocols",
+)<{
+  readonly serviceId: string;
+  readonly message: string;
+}> {}
+
+/** A network (NLB) rule used a feature NLB listeners don't support (conditions, `redirect`, shared listeners, or a missing/duplicate `listen`). */
+export class NetworkListenerRuleUnsupported extends Data.TaggedError(
+  "NetworkListenerRuleUnsupported",
+)<{
+  readonly serviceId: string;
+  readonly ruleIndex: number;
+  readonly message: string;
+}> {}
+
+/** No public Route 53 hosted zone matches the requested `domain`. */
+export class ServiceHostedZoneNotFound extends Data.TaggedError(
+  "ServiceHostedZoneNotFound",
+)<{
+  readonly serviceId: string;
+  readonly domainName: string;
+  readonly message: string;
+}> {}
+
+/** A `health` key matched none of the service's composed target groups. */
+export class ServiceHealthTargetNotFound extends Data.TaggedError(
+  "ServiceHealthTargetNotFound",
+)<{
+  readonly serviceId: string;
+  readonly key: string;
+  readonly message: string;
+}> {}
+
+/** `scaling.requestCount` needs a managed (owned or shared) target group to track. */
+export class RequestCountScalingRequiresLoadBalancer extends Data.TaggedError(
+  "RequestCountScalingRequiresLoadBalancer",
+)<{
+  readonly serviceId: string;
+  readonly message: string;
+}> {}
+
 /**
  * Derive a deterministic listener-rule priority (1–50000) from the rule's
  * namespaced logical id (FNV-1a 32-bit). Stable across deploys for the same
@@ -251,6 +375,132 @@ export const deriveRulePriority = (namespacedLogicalId: string): number => {
   }
   return (hash % 50000) + 1;
 };
+
+/**
+ * Autoscaling configuration for the service's desired count. Composes an
+ * `AWS.ApplicationAutoScaling.ScalableTarget` plus one target-tracking
+ * `ScalingPolicy` per declared metric under the service's namespace.
+ */
+export interface ServiceScalingConfig {
+  /**
+   * Minimum number of running tasks Application Auto Scaling may scale in to.
+   * @default 1
+   */
+  min?: number;
+  /**
+   * Maximum number of running tasks Application Auto Scaling may scale out to.
+   * @default `min`
+   */
+  max?: number;
+  /** Target average CPU utilization (percent) to track. */
+  cpuUtilization?: number;
+  /** Target average memory utilization (percent) to track. */
+  memoryUtilization?: number;
+  /**
+   * Target `ALBRequestCountPerTarget` to track. Requires a managed load
+   * balancer target group ({@link ServicePropsBase.loadBalancer}) — a typed
+   * error ({@link RequestCountScalingRequiresLoadBalancer}) otherwise.
+   */
+  requestCount?: number;
+  /** Cooldown after a scale-in activity, e.g. `"5 minutes"`. */
+  scaleInCooldown?: Duration.Input;
+  /** Cooldown after a scale-out activity, e.g. `"1 minute"`. */
+  scaleOutCooldown?: Duration.Input;
+}
+
+/**
+ * Fargate capacity split for the service. `"spot"` runs everything on
+ * `FARGATE_SPOT`; the object form weights on-demand (`fargate`) against
+ * `spot` capacity. Normalized into
+ * {@link ServicePropsBase.capacityProviderStrategy}. The cluster must have
+ * the `FARGATE` / `FARGATE_SPOT` capacity providers associated (see
+ * `AWS.ECS.Cluster`'s `capacityProviders` prop).
+ */
+export type ServiceCapacityConfig =
+  | "spot"
+  | {
+      /** On-demand Fargate share. */
+      fargate?: {
+        /** Baseline task count placed on this provider before weights apply. */
+        base?: number;
+        /** Relative share of tasks placed on this provider. */
+        weight: number;
+      };
+      /** Fargate Spot share. */
+      spot?: {
+        /** Baseline task count placed on this provider before weights apply. */
+        base?: number;
+        /** Relative share of tasks placed on this provider. */
+        weight: number;
+      };
+    };
+
+/**
+ * Cloud Map service-discovery registration. Composes an
+ * `AWS.CloudMap.Service` in the given namespace and wires it into the ECS
+ * service's `serviceRegistries`.
+ */
+export interface ServiceRegistryConfig {
+  /**
+   * The Cloud Map namespace to register in — an
+   * `AWS.CloudMap.PrivateDnsNamespace` or `HttpNamespace` (anything with a
+   * `namespaceId`).
+   */
+  namespace: { namespaceId: string };
+  /**
+   * SRV port to publish. When set, the composed Cloud Map service uses SRV
+   * records; otherwise A records (DNS namespaces) or API-only discovery
+   * (HTTP namespaces).
+   */
+  port?: number;
+}
+
+/** Container-level health check (Docker `HEALTHCHECK` shape) for the primary container. */
+export interface ServiceContainerHealthCheck {
+  /**
+   * The check command, e.g.
+   * `["CMD-SHELL", "curl -f http://localhost/ || exit 1"]`.
+   */
+  command: string[];
+  /** Seconds-granularity period between checks, e.g. `"30 seconds"`. */
+  interval?: Duration.Input;
+  /** Time to wait for a check before counting it failed, e.g. `"5 seconds"`. */
+  timeout?: Duration.Input;
+  /** Consecutive failures before the container is unhealthy. */
+  retries?: number;
+  /** Grace period before failed checks count, e.g. `"10 seconds"`. */
+  startPeriod?: Duration.Input;
+}
+
+/** Retention policy for the service's auto-created CloudWatch log group. */
+export interface ServiceLoggingConfig {
+  /**
+   * How long to retain logs, e.g. `"2 weeks"`, or `"forever"` to clear the
+   * retention policy. Rounded up to the nearest CloudWatch-supported
+   * retention. When omitted the log group's existing retention is left
+   * untouched (new log groups default to never-expire).
+   */
+  retention?: Duration.Input | "forever";
+}
+
+/** EFS volume sugar for {@link ImageOwningServicePropsBase.volumes}. */
+export interface ServiceEfsVolume {
+  /**
+   * The EFS file system to mount — an `AWS.EFS.FileSystem` (anything with a
+   * `fileSystemId`), or `{ fileSystem, accessPoint }` to mount through an
+   * `AWS.EFS.AccessPoint`. Transit encryption is always enabled.
+   */
+  efs:
+    | { fileSystemId: string }
+    | {
+        /** The EFS file system. */
+        fileSystem: { fileSystemId: string };
+        /** Optional access point to mount through. */
+        accessPoint?: { accessPointId: string };
+      };
+  /** Container path to mount the file system at, e.g. `"/mnt/data"`. */
+  path: string;
+}
 
 export interface ServicePropsBase extends PlatformProps {
   /**
@@ -316,6 +566,30 @@ export interface ServicePropsBase extends PlatformProps {
    * weight/base changes apply in place.
    */
   capacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
+
+  /**
+   * Fargate capacity sugar: `"spot"` runs every task on `FARGATE_SPOT`, or
+   * weight on-demand against spot capacity. Normalized into
+   * {@link capacityProviderStrategy} (which it must not be combined with).
+   * The cluster needs the Fargate capacity providers associated.
+   */
+  capacity?: ServiceCapacityConfig;
+
+  /**
+   * Autoscale the service's desired count: composes an Application Auto
+   * Scaling scalable target (bounded by `min`/`max`) plus a target-tracking
+   * policy per declared metric (`cpuUtilization`, `memoryUtilization`,
+   * `requestCount`). While set, deploys stop pinning `desiredCount` so the
+   * autoscaler's decisions survive redeploys.
+   */
+  scaling?: ServiceScalingConfig;
+
+  /**
+   * Register the service in an AWS Cloud Map namespace: composes an
+   * `AWS.CloudMap.Service` and wires it into the ECS service's
+   * {@link serviceRegistries}.
+   */
+  serviceRegistry?: ServiceRegistryConfig;
 
   /**
    * Load balancer target groups to wire to the service. **User-supplied** —
@@ -514,13 +788,45 @@ export interface TaskReferenceServiceProps extends ServicePropsBase {
  * {@link TaskDefinitionConfig} surface.
  */
 export interface ImageOwningServicePropsBase
-  extends ServicePropsBase, Omit<TaskDefinitionConfig, "placementConstraints"> {
+  extends
+    ServicePropsBase,
+    Omit<TaskDefinitionConfig, "placementConstraints" | "volumes"> {
   /**
    * Task definition placement constraints (`memberOf` expressions) for the
    * synthesized task definition. (`placementConstraints` on the service
    * itself remains the service-level ECS placement constraint list.)
    */
   taskPlacementConstraints?: ecs.TaskDefinitionPlacementConstraint[];
+
+  /**
+   * Secrets injected into the primary container as environment variables:
+   * env-var name → SSM Parameter Store parameter ARN or Secrets Manager
+   * secret ARN. Wired as container `secrets` (`valueFrom`), with the
+   * execution role granted `ssm:GetParameters` /
+   * `secretsmanager:GetSecretValue` on exactly the referenced ARNs.
+   */
+  secrets?: Record<string, string>;
+
+  /**
+   * Retention for the auto-created CloudWatch log group, e.g.
+   * `{ retention: "2 weeks" }` or `{ retention: "forever" }`.
+   */
+  logging?: ServiceLoggingConfig;
+
+  /**
+   * Container-level health check (Docker `HEALTHCHECK`) for the primary
+   * container, e.g.
+   * `{ command: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"] }`.
+   */
+  healthCheck?: ServiceContainerHealthCheck;
+
+  /**
+   * Task-level data volumes. Accepts raw {@link ecs.Volume} entries
+   * (referenced by the container via `mountPoints`) or the EFS sugar
+   * `{ efs, path }`, which composes the volume AND mounts it at `path` on
+   * the primary container with transit encryption enabled.
+   */
+  volumes?: (ecs.Volume | ServiceEfsVolume)[];
 }
 
 /** Bundle an inline Effect program (`main`) into the service's image. */
@@ -788,6 +1094,157 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * @section Custom Domains
+ * @example Domain with a Composed Certificate
+ * ```typescript
+ * // Looks up the matching Route 53 hosted zone, composes a DNS-validated
+ * // ACM certificate in the service's region, wires it to the HTTPS
+ * // listener, and creates alias A/AAAA records. `url` becomes
+ * // https://api.example.com.
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   loadBalancer: { domain: "api.example.com" },
+ * });
+ * ```
+ *
+ * @example Domain with an Existing Certificate
+ * ```typescript
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   loadBalancer: {
+ *     domain: { name: "api.example.com", aliases: ["www.api.example.com"], cert: certificateArn },
+ *   },
+ * });
+ * ```
+ *
+ * @section Network Load Balancers
+ * @example TCP Service Behind an NLB
+ * ```typescript
+ * // tcp/udp/tls/tcp_udp listen protocols compose a Network Load Balancer;
+ * // each rule's action becomes its listener's default forward (NLB
+ * // listeners route by port alone).
+ * const svc = yield* Service("Tcp", {
+ *   cluster,
+ *   image: "my-org/tcp-echo:latest",
+ *   port: 9000,
+ *   loadBalancer: { rules: [{ listen: "80/tcp" }] },
+ * });
+ * ```
+ *
+ * @section Health Checks
+ * @example Per-Target-Group Health Overrides
+ * ```typescript
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   loadBalancer: {
+ *     rules: [{ listen: "80/http" }],
+ *     health: {
+ *       "3000/http": {
+ *         path: "/healthz",
+ *         interval: "15 seconds",
+ *         healthyThreshold: 3,
+ *         successCodes: "200-299",
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * @example Container Health Check
+ * ```typescript
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   healthCheck: {
+ *     command: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"],
+ *     interval: "30 seconds",
+ *     retries: 3,
+ *   },
+ * });
+ * ```
+ *
+ * @section Autoscaling
+ * @example Target-Tracking Autoscaling
+ * ```typescript
+ * // Composes a ScalableTarget (min/max) plus one target-tracking policy
+ * // per metric. Redeploys stop pinning desiredCount while scaling is set.
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   loadBalancer: true,
+ *   scaling: {
+ *     min: 1,
+ *     max: 4,
+ *     cpuUtilization: 70,
+ *     requestCount: 200,
+ *     scaleInCooldown: "5 minutes",
+ *   },
+ * });
+ * ```
+ *
+ * @section Secrets & Logging
+ * @example Inject SSM / Secrets Manager Secrets
+ * ```typescript
+ * // Values are ARNs; the container gets them as env vars via `valueFrom`
+ * // and the execution role is granted read on exactly these ARNs.
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   secrets: {
+ *     DB_PASSWORD: dbPasswordSecret.secretArn,
+ *     API_KEY: apiKeyParameter.parameterArn,
+ *   },
+ *   logging: { retention: "2 weeks" },
+ * });
+ * ```
+ *
+ * @section Service Discovery
+ * @example Register in a Cloud Map Namespace
+ * ```typescript
+ * const namespace = yield* AWS.CloudMap.PrivateDnsNamespace("AppNs", {
+ *   name: "internal.example.com",
+ *   vpc: vpc.vpcId,
+ * });
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   serviceRegistry: { namespace },
+ * });
+ * ```
+ *
+ * @section Volumes
+ * @example Mount an EFS File System
+ * ```typescript
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   volumes: [{ efs: fileSystem, path: "/mnt/data" }],
+ * });
+ * ```
+ *
+ * @section Capacity
+ * @example Fargate Spot
+ * ```typescript
+ * // The cluster must have the Fargate capacity providers associated:
+ * // Cluster("C", { capacityProviders: ["FARGATE", "FARGATE_SPOT"] }).
+ * const svc = yield* Service("Worker", {
+ *   cluster,
+ *   image: "my-org/worker:latest",
+ *   capacity: { fargate: { weight: 1, base: 1 }, spot: { weight: 4 } },
+ * });
+ * ```
+ *
  * @section Load Balancing
  * @example Manual (User-Supplied) Target Group
  * ```typescript
@@ -854,6 +1311,15 @@ export const Service: Platform<
   // rules + target groups) as REAL namespaced child resources before the core
   // service resource is declared.
   transformProps: (id, props) => transformServiceProps(id, props),
+  // Autoscaling references the service's own Output attributes (cluster/name/
+  // target-group ARNs), so it composes AFTER the resource exists.
+  onCreate: (resource, props) =>
+    composeServiceScaling(
+      resource as Service,
+      props as ServiceProps,
+      // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
+      // surface through the deploy like any resource-construction error.
+    ) as Effect.Effect<void, never, any>,
 });
 
 /** The BYO task reference, when the props use the `task:` form. */
@@ -875,6 +1341,15 @@ interface ParsedListen {
   protocol: ServiceListenerProtocol;
 }
 
+const LISTENER_PROTOCOLS: ReadonlySet<string> = new Set([
+  "http",
+  "https",
+  "tcp",
+  "udp",
+  "tcp_udp",
+  "tls",
+]);
+
 const parseListenSpec = (serviceId: string, spec: string, kind: string) =>
   Effect.gen(function* () {
     const [portString, protocol] = spec.split("/");
@@ -883,13 +1358,14 @@ const parseListenSpec = (serviceId: string, spec: string, kind: string) =>
       !Number.isInteger(port) ||
       port <= 0 ||
       port > 65535 ||
-      (protocol !== "http" && protocol !== "https")
+      protocol === undefined ||
+      !LISTENER_PROTOCOLS.has(protocol)
     ) {
       return yield* Effect.fail(
         new UnsupportedListenerProtocol({
           serviceId,
           spec,
-          message: `AWS.ECS.Service "${serviceId}": unsupported ${kind} spec '${spec}' — expected "<port>/http" or "<port>/https" (NLB protocols tcp/udp/tls arrive in a later phase)`,
+          message: `AWS.ECS.Service "${serviceId}": unsupported ${kind} spec '${spec}' — expected "<port>/<protocol>" with protocol one of http, https (ALB) or tcp, udp, tcp_udp, tls (NLB)`,
         }),
       );
     }
@@ -932,6 +1408,35 @@ const lookupDefaultNetwork = Effect.gen(function* () {
   return { vpcId: vpc.VpcId, subnets: subnetIds };
 });
 
+/**
+ * Find the most specific PUBLIC Route 53 hosted zone containing
+ * `domainName`, walking up its labels (`svc.api.example.com` →
+ * `api.example.com` → `example.com`). Returns the bare zone id (no
+ * `/hostedzone/` prefix), or undefined when no zone matches.
+ */
+const findHostedZoneId = Effect.fn(function* (domainName: string) {
+  const labels = domainName
+    .replace(/\.$/, "")
+    .split(".")
+    .filter((label) => label.length > 0);
+  for (let i = 0; i < labels.length - 1; i++) {
+    const candidate = `${labels.slice(i).join(".")}.`;
+    const listed = yield* route53.listHostedZonesByName({
+      DNSName: candidate,
+      MaxItems: 1,
+    });
+    const zone = listed.HostedZones?.[0];
+    if (
+      zone?.Id !== undefined &&
+      zone.Name === candidate &&
+      zone.Config?.PrivateZone !== true
+    ) {
+      return zone.Id.replace(/^\/hostedzone\//, "");
+    }
+  }
+  return undefined;
+});
+
 const toValuesArray = (value: string | string[] | undefined) =>
   value === undefined ? undefined : Array.isArray(value) ? value : [value];
 
@@ -953,40 +1458,128 @@ const ruleConditionsOf = (
   return conditions;
 };
 
+/** IP protocols a listener protocol admits through the managed security group. */
+const sgProtocolsOf = (protocol: string): string[] =>
+  protocol === "udp"
+    ? ["udp"]
+    : protocol === "tcp_udp"
+      ? ["tcp", "udp"]
+      : ["tcp"];
+
+interface ManagedSgPort {
+  port: number;
+  ipProtocol: string;
+}
+
 /**
  * Ingress rules for the managed security group. `dynamicPort` is the main
  * container's port when it is only known as an Output (the `task:` form) —
  * the rule list is then computed at resolve time so ports can be deduped.
  */
 const managedSgIngress = (
-  staticPorts: number[],
+  staticPorts: ManagedSgPort[],
   dynamicPort: number | unknown | undefined,
 ): SecurityGroupRuleData[] => {
-  const rulesOf = (ports: number[]): SecurityGroupRuleData[] =>
-    [...new Set(ports)].map((port) => ({
-      ipProtocol: "tcp",
-      fromPort: port,
-      toPort: port,
-      cidrIpv4: "0.0.0.0/0",
-      description: "Alchemy-managed ECS service ingress",
-    }));
+  const rulesOf = (entries: ManagedSgPort[]): SecurityGroupRuleData[] => {
+    const seen = new Set<string>();
+    return entries.flatMap(({ port, ipProtocol }) => {
+      const dedupeKey = `${ipProtocol}:${port}`;
+      if (seen.has(dedupeKey)) {
+        return [];
+      }
+      seen.add(dedupeKey);
+      return [
+        {
+          ipProtocol,
+          fromPort: port,
+          toPort: port,
+          cidrIpv4: "0.0.0.0/0",
+          description: "Alchemy-managed ECS service ingress",
+        },
+      ];
+    });
+  };
   if (dynamicPort === undefined) {
     return rulesOf(staticPorts);
   }
   if (typeof dynamicPort === "number") {
-    return rulesOf([...staticPorts, dynamicPort]);
+    return rulesOf([...staticPorts, { port: dynamicPort, ipProtocol: "tcp" }]);
   }
   return Output.map(dynamicPort as Output.Output<number>, (port) =>
-    rulesOf([...staticPorts, port]),
+    rulesOf([...staticPorts, { port, ipProtocol: "tcp" }]),
   ) as unknown as SecurityGroupRuleData[];
 };
 
+/** Normalize the {@link ServiceCapacityConfig} sugar into a capacity provider strategy. */
+const capacityProviderStrategyOf = (
+  capacity: ServiceCapacityConfig,
+): ecs.CapacityProviderStrategyItem[] =>
+  capacity === "spot"
+    ? [{ capacityProvider: "FARGATE_SPOT", weight: 1 }]
+    : [
+        ...(capacity.fargate
+          ? [
+              {
+                capacityProvider: "FARGATE",
+                weight: capacity.fargate.weight,
+                base: capacity.fargate.base,
+              },
+            ]
+          : []),
+        ...(capacity.spot
+          ? [
+              {
+                capacityProvider: "FARGATE_SPOT",
+                weight: capacity.spot.weight,
+                base: capacity.spot.base,
+              },
+            ]
+          : []),
+      ];
+
 /**
- * The `transformProps` hook: when managed load balancing is requested,
- * compose the ELBv2 (and security group) child resources under the service's
- * namespace and rewrite the props to reference their outputs via the
- * internal `ingress` prop. A no-op at runtime and when no `loadBalancer` is
- * requested.
+ * Compose the Cloud Map service for {@link ServicePropsBase.serviceRegistry}
+ * and rewrite it into the raw `serviceRegistries` list.
+ */
+const composeServiceRegistry = (id: string, props: ServiceProps) =>
+  Effect.gen(function* () {
+    const registry = props.serviceRegistry!;
+    const namespace = registry.namespace;
+    const isHttpNamespace =
+      typeof namespace === "object" &&
+      namespace !== null &&
+      "Type" in namespace &&
+      (namespace as { Type?: unknown }).Type === "AWS.CloudMap.HttpNamespace";
+    const cloudMapService = yield* CloudMapService("ServiceRegistry", {
+      namespaceId: namespace.namespaceId,
+      dnsRecords: isHttpNamespace
+        ? undefined
+        : [
+            registry.port !== undefined
+              ? { type: "SRV", ttl: "10 seconds" }
+              : { type: "A", ttl: "10 seconds" },
+          ],
+      tags: props.tags,
+    });
+    return {
+      ...props,
+      serviceRegistry: undefined,
+      serviceRegistries: [
+        ...(props.serviceRegistries ?? []),
+        {
+          registryArn: cloudMapService.serviceArn as unknown as string,
+          port: registry.port,
+        },
+      ],
+    } as ServiceProps;
+  });
+
+/**
+ * The `transformProps` hook: normalize the `capacity` sugar, then — when
+ * service discovery or managed load balancing is requested — compose the
+ * Cloud Map / ELBv2 (and security group) child resources under the service's
+ * namespace and rewrite the props to reference their outputs (the internal
+ * `ingress` prop and `serviceRegistries`). A no-op at runtime.
  */
 const transformServiceProps = (
   id: string,
@@ -997,16 +1590,37 @@ const transformServiceProps = (
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return props;
     }
-    const lbProp =
-      props.loadBalancer !== undefined
-        ? props.loadBalancer
-        : ((props.public ?? false) as boolean);
-    if (lbProp === false || lbProp === undefined) {
-      return props;
+    let next: ServiceProps = props;
+    if (next.capacity !== undefined) {
+      next = {
+        ...next,
+        capacityProviderStrategy:
+          next.capacityProviderStrategy ??
+          capacityProviderStrategyOf(next.capacity),
+        capacity: undefined,
+      };
     }
-    return yield* composeManagedIngress(id, props, lbProp).pipe(
-      Namespace.push(id),
-    );
+    const lbProp =
+      next.loadBalancer !== undefined
+        ? next.loadBalancer
+        : ((next.public ?? false) as boolean);
+    const wantsIngress = lbProp !== false && lbProp !== undefined;
+    if (!wantsIngress && next.serviceRegistry === undefined) {
+      return next;
+    }
+    return yield* Effect.gen(function* () {
+      if (next.serviceRegistry !== undefined) {
+        next = yield* composeServiceRegistry(id, next);
+      }
+      if (wantsIngress) {
+        next = yield* composeManagedIngress(
+          id,
+          next,
+          lbProp as true | Listener | ServiceLoadBalancerConfig,
+        );
+      }
+      return next;
+    }).pipe(Namespace.push(id));
   });
 
 const composeManagedIngress = (
@@ -1052,6 +1666,139 @@ const composeManagedIngress = (
     // listener forwarding to the container port.
     const trueLike = owned && rules.length === 0;
 
+    // ── protocol family: ALB (http/https) vs NLB (tcp/udp/tls/tcp_udp) ──
+    const families = new Set<"application" | "network">();
+    for (const rule of rules) {
+      const specs: [string | Listener | undefined, string][] = [
+        [rule.listen, "listen"],
+        [rule.forward, "forward"],
+        [rule.redirect, "redirect"],
+      ];
+      for (const [spec, kind] of specs) {
+        if (typeof spec === "string") {
+          const parsed = yield* parseListenSpec(id, spec, kind);
+          families.add(
+            NETWORK_PROTOCOLS.has(parsed.protocol) ? "network" : "application",
+          );
+        }
+      }
+    }
+    if (families.size > 1) {
+      return yield* Effect.fail(
+        new MixedLoadBalancerProtocols({
+          serviceId: id,
+          message: `AWS.ECS.Service "${id}": rules mix application (http/https) and network (tcp/udp/tls/tcp_udp) protocols — one service composes exactly one load balancer type`,
+        }),
+      );
+    }
+    const lbType: "application" | "network" = families.has("network")
+      ? "network"
+      : "application";
+    if (lbType === "network") {
+      // NLB listeners route by port alone: no rule conditions, no redirect
+      // actions, no attaching rules to shared listeners, and exactly one
+      // rule per listener port (it becomes the listener's default action).
+      const failNetworkRule = (ruleIndex: number, reason: string) =>
+        Effect.fail(
+          new NetworkListenerRuleUnsupported({
+            serviceId: id,
+            ruleIndex,
+            message: `AWS.ECS.Service "${id}": rule ${ruleIndex} ${reason}`,
+          }),
+        );
+      if (!owned) {
+        return yield* failNetworkRule(
+          0,
+          "uses network (tcp/udp/tls/tcp_udp) protocols with a shared listener — NLB listeners have no rules, so network ingress is always owned",
+        );
+      }
+      const seenPorts = new Set<number>();
+      for (const [index, rule] of rules.entries()) {
+        if (typeof rule.listen !== "string") {
+          return yield* failNetworkRule(
+            index,
+            "must declare an explicit `listen` — network listeners have no default",
+          );
+        }
+        if (rule.redirect !== undefined) {
+          return yield* failNetworkRule(
+            index,
+            "sets `redirect` — NLB listeners cannot redirect",
+          );
+        }
+        if (
+          rule.path !== undefined ||
+          rule.host !== undefined ||
+          rule.header !== undefined ||
+          rule.query !== undefined
+        ) {
+          return yield* failNetworkRule(
+            index,
+            "sets routing conditions — NLB listeners route by port alone",
+          );
+        }
+        const { port } = yield* parseListenSpec(id, rule.listen, "listen");
+        if (seenPorts.has(port)) {
+          return yield* failNetworkRule(
+            index,
+            `re-declares listener port ${port} — a network listener forwards to exactly one target group`,
+          );
+        }
+        seenPorts.add(port);
+      }
+    }
+
+    // ── custom domain (owned only): hosted zones + certificate ──────────
+    const domain =
+      config.domain === undefined
+        ? undefined
+        : typeof config.domain === "string"
+          ? { name: config.domain }
+          : config.domain;
+    if (domain !== undefined && !owned) {
+      return yield* Effect.fail(
+        new OwnedOnlyLoadBalancerOption({
+          serviceId: id,
+          option: "domain",
+          message: `AWS.ECS.Service "${id}": \`domain\` only applies to an owned load balancer — the shared listener's ALB owns its DNS and certificates`,
+        }),
+      );
+    }
+    let certificateArn: string | undefined = props.certificateArn;
+    const domainNames =
+      domain !== undefined ? [domain.name, ...(domain.aliases ?? [])] : [];
+    const domainZones = new Map<string, string>();
+    if (domain !== undefined) {
+      for (const name of domainNames) {
+        const zoneId = yield* findHostedZoneId(name);
+        if (zoneId === undefined) {
+          return yield* Effect.fail(
+            new ServiceHostedZoneNotFound({
+              serviceId: id,
+              domainName: name,
+              message: `AWS.ECS.Service "${id}": no public Route 53 hosted zone contains '${name}' — create the hosted zone first (alias records land in it)`,
+            }),
+          );
+        }
+        domainZones.set(name, zoneId);
+      }
+      if (domain.cert !== undefined) {
+        certificateArn = domain.cert;
+      } else {
+        // DNS-validated certificate in the service's own region (an ALB/NLB
+        // listener requires an in-region certificate).
+        const { region } = yield* AWSEnvironment.current;
+        const certificate = yield* Certificate("Certificate", {
+          domainName: domain.name,
+          subjectAlternativeNames: domain.aliases,
+          hostedZoneId: domainZones.get(domain.name)!,
+          region,
+          tags: props.tags,
+        });
+        certificateArn = certificate.certificateArn as unknown as string;
+      }
+    }
+
     // ── normalize rules + target-group specs ────────────────────────────
     const byoTask = taskRefOf(props);
     const defaultContainerPort: unknown =
@@ -1063,9 +1810,10 @@ const composeManagedIngress = (
       key: string;
       logicalId: string;
       port: unknown;
-      protocol: "HTTP" | "HTTPS";
+      protocol: "HTTP" | "HTTPS" | "TCP" | "UDP" | "TCP_UDP" | "TLS";
       container: string | undefined;
       forwardPort: number | undefined;
+      forwardProtocol: ServiceListenerProtocol | undefined;
     }
     const tgSpecs = new Map<string, TgSpec>();
     const ensureTgSpec = (
@@ -1085,10 +1833,13 @@ const composeManagedIngress = (
             .join("-"),
           port: forward?.port ?? defaultContainerPort,
           protocol: forward
-            ? (forward.protocol.toUpperCase() as "HTTP" | "HTTPS")
-            : "HTTP",
+            ? (forward.protocol.toUpperCase() as TgSpec["protocol"])
+            : lbType === "network"
+              ? "TCP"
+              : "HTTP",
           container,
           forwardPort: forward?.port,
+          forwardProtocol: forward?.protocol,
         });
       }
       return key;
@@ -1157,9 +1908,11 @@ const composeManagedIngress = (
     }
 
     // ── owned listener specs ────────────────────────────────────────────
+    // Network rules always declare an explicit `listen` (validated above),
+    // so the implicit default listener is application-only.
     const defaultOwnedListen: ParsedListen = {
-      port: props.listenerPort ?? (props.certificateArn ? 443 : 80),
-      protocol: props.certificateArn ? "https" : "http",
+      port: props.listenerPort ?? (certificateArn !== undefined ? 443 : 80),
+      protocol: certificateArn !== undefined ? "https" : "http",
     };
     const ownedListenSpecs = new Map<number, ParsedListen>();
     if (owned) {
@@ -1183,12 +1936,15 @@ const composeManagedIngress = (
         }
       }
       for (const spec of ownedListenSpecs.values()) {
-        if (spec.protocol === "https" && !props.certificateArn) {
+        if (
+          (spec.protocol === "https" || spec.protocol === "tls") &&
+          certificateArn === undefined
+        ) {
           return yield* Effect.fail(
             new MissingListenerCertificate({
               serviceId: id,
               spec: `${spec.port}/${spec.protocol}`,
-              message: `AWS.ECS.Service "${id}": listener "${spec.port}/https" requires \`certificateArn\``,
+              message: `AWS.ECS.Service "${id}": listener "${spec.port}/${spec.protocol}" requires a certificate — pass \`certificateArn\` or a \`domain\``,
             }),
           );
         }
@@ -1208,10 +1964,22 @@ const composeManagedIngress = (
         : yield* lookupDefaultNetwork;
 
     // ── managed security group ──────────────────────────────────────────
-    const staticPorts: number[] = [
-      ...(owned ? [...ownedListenSpecs.keys()] : []),
+    const staticPorts: ManagedSgPort[] = [
+      ...(owned
+        ? [...ownedListenSpecs.values()].flatMap((spec) =>
+            sgProtocolsOf(spec.protocol).map((ipProtocol) => ({
+              port: spec.port,
+              ipProtocol,
+            })),
+          )
+        : []),
       ...[...tgSpecs.values()].flatMap((spec) =>
-        spec.forwardPort !== undefined ? [spec.forwardPort] : [],
+        spec.forwardPort !== undefined
+          ? sgProtocolsOf(spec.forwardProtocol ?? "tcp").map((ipProtocol) => ({
+              port: spec.forwardPort!,
+              ipProtocol,
+            }))
+          : [],
       ),
     ];
     const usesDefaultPort = [...tgSpecs.values()].some(
@@ -1230,8 +1998,38 @@ const composeManagedIngress = (
         });
 
     // ── target groups (one per distinct forward + container pair) ───────
+    // Per-TG health overrides are keyed by the target's "{port}/{protocol}"
+    // spec: the rule's `forward` spec, or the container port + the LB
+    // type's default protocol for the default target group.
+    const healthOverrides = config.health ?? {};
+    const healthKeyOf = (spec: TgSpec): string | undefined => {
+      const protocol =
+        spec.forwardProtocol ?? (lbType === "network" ? "tcp" : "http");
+      const port =
+        spec.forwardPort ??
+        (typeof defaultContainerPort === "number"
+          ? defaultContainerPort
+          : undefined);
+      return port === undefined ? undefined : `${port}/${protocol}`;
+    };
+    const matchedHealthKeys = new Set<string>();
     const targetGroups = new Map<string, TargetGroup>();
     for (const spec of tgSpecs.values()) {
+      const healthKey = healthKeyOf(spec);
+      const health =
+        healthKey !== undefined ? healthOverrides[healthKey] : undefined;
+      if (healthKey !== undefined && health !== undefined) {
+        matchedHealthKeys.add(healthKey);
+      }
+      const isNetworkTg =
+        spec.protocol === "TCP" ||
+        spec.protocol === "UDP" ||
+        spec.protocol === "TCP_UDP" ||
+        spec.protocol === "TLS";
+      // A path/successCodes override on a network target group opts its
+      // health check into HTTP; otherwise NLB targets get TCP checks.
+      const wantsHttpCheck =
+        health?.path !== undefined || health?.successCodes !== undefined;
       targetGroups.set(
         spec.key,
         yield* TargetGroup(spec.logicalId, {
@@ -1239,16 +2037,41 @@ const composeManagedIngress = (
           port: spec.port as number,
           protocol: spec.protocol,
           targetType: "ip",
-          healthCheckPath: props.healthCheckPath ?? "/",
+          healthCheckPath: isNetworkTg
+            ? wantsHttpCheck
+              ? (health?.path ?? "/")
+              : undefined
+            : (health?.path ?? props.healthCheckPath ?? "/"),
+          healthCheckProtocol:
+            isNetworkTg && wantsHttpCheck ? "HTTP" : undefined,
           // Fast-converge defaults: targets go healthy in ~20s instead of
           // the AWS default ~150s, and drain in 30s instead of 300s.
-          healthCheckInterval: "10 seconds",
-          healthyThresholdCount: 2,
-          unhealthyThresholdCount: 2,
+          healthCheckInterval: health?.interval ?? "10 seconds",
+          healthCheckTimeout: health?.timeout,
+          healthyThresholdCount: health?.healthyThreshold ?? 2,
+          unhealthyThresholdCount: health?.unhealthyThreshold ?? 2,
+          matcher:
+            health?.successCodes !== undefined
+              ? { HttpCode: health.successCodes }
+              : undefined,
           attributes: { "deregistration_delay.timeout_seconds": "30" },
           tags: props.tags,
         }),
       );
+    }
+    for (const key of Object.keys(healthOverrides)) {
+      if (!matchedHealthKeys.has(key)) {
+        const validKeys = [...tgSpecs.values()]
+          .map(healthKeyOf)
+          .filter((candidate): candidate is string => candidate !== undefined);
+        return yield* Effect.fail(
+          new ServiceHealthTargetNotFound({
+            serviceId: id,
+            key,
+            message: `AWS.ECS.Service "${id}": \`health\` key '${key}' matches no target group — valid keys: ${validKeys.length > 0 ? validKeys.join(", ") : "(none statically derivable)"}`,
+          }),
+        );
+      }
     }
 
     const actionToListenerAction = (action: NormalizedAction): ListenerAction =>
@@ -1276,7 +2099,7 @@ const composeManagedIngress = (
     const defaultsTaken = new Set<NormalizedRule>();
     if (owned) {
       alb = yield* LoadBalancer("LoadBalancer", {
-        type: "application",
+        type: lbType,
         scheme: config.public === false ? "internal" : "internet-facing",
         subnets: (props.subnets ?? network.subnets) as unknown as SubnetId[],
         securityGroups: (props.securityGroups ?? [
@@ -1321,12 +2144,40 @@ const composeManagedIngress = (
           yield* Listener(`Listener-${spec.port}`, {
             loadBalancerArn: alb.loadBalancerArn as any,
             port: spec.port,
-            protocol: spec.protocol.toUpperCase() as "HTTP" | "HTTPS",
+            protocol: spec.protocol.toUpperCase() as
+              | "HTTP"
+              | "HTTPS"
+              | "TCP"
+              | "UDP"
+              | "TCP_UDP"
+              | "TLS",
             certificateArn:
-              spec.protocol === "https" ? props.certificateArn : undefined,
+              spec.protocol === "https" || spec.protocol === "tls"
+                ? certificateArn
+                : undefined,
             defaultActions,
           }),
         );
+      }
+    }
+
+    // ── domain: alias records pointing at the owned load balancer ───────
+    if (domain !== undefined && alb !== undefined) {
+      for (const name of domainNames) {
+        const zoneId = domainZones.get(name)!;
+        const sanitizedName = name.replaceAll(/[^a-zA-Z0-9-]/g, "-");
+        for (const recordType of ["A", "AAAA"] as const) {
+          yield* Route53Record(`Domain-${sanitizedName}-${recordType}`, {
+            hostedZoneId: zoneId,
+            name,
+            type: recordType,
+            aliasTarget: {
+              hostedZoneId: alb.canonicalHostedZoneId,
+              dnsName: alb.dnsName,
+              evaluateTargetHealth: false,
+            },
+          });
+        }
       }
     }
 
@@ -1393,6 +2244,7 @@ const composeManagedIngress = (
       listenerPort: primary.port as number,
       listenerProtocol: primary.protocol as string,
       securityGroupId: managedSg?.groupId as unknown as string | undefined,
+      domain: domain?.name,
       targets: [...tgSpecs.values()].map((spec) => ({
         targetGroupArn: targetGroups.get(spec.key)!
           .targetGroupArn as unknown as string,
@@ -1408,6 +2260,258 @@ const composeManagedIngress = (
       ingress,
     } as ServiceProps;
   });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Autoscaling — composition (the `onCreate` hook)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compose the Application Auto Scaling resources for the `scaling` prop:
+ * a `ScalableTarget` bounding the service's desired count plus one
+ * target-tracking `ScalingPolicy` per declared metric. Runs as the
+ * platform's `onCreate` hook (AFTER the service resource is declared)
+ * because the scalable target's `resourceId` and the request-count metric's
+ * `ResourceLabel` are derived from the service's own Output attributes.
+ */
+const composeServiceScaling = (
+  service: Service,
+  props: ServiceProps | undefined,
+): Effect.Effect<void, unknown, any> =>
+  Effect.gen(function* () {
+    // Composition is a plan/deploy concern — never runs inside bundles.
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return;
+    }
+    const scaling = props?.scaling;
+    if (scaling === undefined) {
+      return;
+    }
+    const id = service.LogicalId;
+    if (
+      scaling.requestCount !== undefined &&
+      props?.loadBalancer === undefined &&
+      props?.public === undefined &&
+      props?.ingress === undefined
+    ) {
+      return yield* Effect.fail(
+        new RequestCountScalingRequiresLoadBalancer({
+          serviceId: id,
+          message: `AWS.ECS.Service "${id}": \`scaling.requestCount\` tracks ALBRequestCountPerTarget, which needs a managed target group — set \`loadBalancer\``,
+        }),
+      );
+    }
+    yield* Effect.gen(function* () {
+      const clusterName = Output.map(
+        service.clusterArn as unknown as Output.Output<string>,
+        (arn) => arn.split("/").pop()!,
+      );
+      const min = scaling.min ?? 1;
+      const max = scaling.max ?? min;
+      const target = yield* ScalableTarget("ScalableTarget", {
+        serviceNamespace: "ecs",
+        resourceId:
+          Output.interpolate`service/${clusterName}/${service.serviceName}` as unknown as string,
+        scalableDimension: "ecs:service:DesiredCount",
+        minCapacity: min,
+        maxCapacity: max,
+        tags: props?.tags,
+      });
+      // Reference the target's outputs so policies deploy after (and are
+      // destroyed before) the scalable target.
+      const policyBase = {
+        serviceNamespace: "ecs" as const,
+        resourceId: target.resourceId as unknown as string,
+        scalableDimension: "ecs:service:DesiredCount" as const,
+      };
+      const cooldowns = {
+        ScaleInCooldown: toWireSeconds(scaling.scaleInCooldown),
+        ScaleOutCooldown: toWireSeconds(scaling.scaleOutCooldown),
+      };
+      if (scaling.cpuUtilization !== undefined) {
+        yield* ScalingPolicy("CpuScaling", {
+          ...policyBase,
+          targetTracking: {
+            TargetValue: scaling.cpuUtilization,
+            PredefinedMetricSpecification: {
+              PredefinedMetricType: "ECSServiceAverageCPUUtilization",
+            },
+            ...cooldowns,
+          },
+        });
+      }
+      if (scaling.memoryUtilization !== undefined) {
+        yield* ScalingPolicy("MemoryScaling", {
+          ...policyBase,
+          targetTracking: {
+            TargetValue: scaling.memoryUtilization,
+            PredefinedMetricSpecification: {
+              PredefinedMetricType: "ECSServiceAverageMemoryUtilization",
+            },
+            ...cooldowns,
+          },
+        });
+      }
+      if (scaling.requestCount !== undefined) {
+        // ALBRequestCountPerTarget's ResourceLabel is
+        // `app/{lb-name}/{lb-id}/targetgroup/{tg-name}/{tg-id}` — both
+        // halves parsed from the managed-ingress ARNs on the service.
+        const loadBalancerPart = Output.map(
+          service.loadBalancerArn as unknown as Output.Output<string>,
+          (arn) =>
+            arn.slice(arn.indexOf("loadbalancer/") + "loadbalancer/".length),
+        );
+        const targetGroupPart = Output.map(
+          service.targetGroupArn as unknown as Output.Output<string>,
+          (arn) => arn.slice(arn.indexOf("targetgroup/")),
+        );
+        yield* ScalingPolicy("RequestCountScaling", {
+          ...policyBase,
+          targetTracking: {
+            TargetValue: scaling.requestCount,
+            PredefinedMetricSpecification: {
+              PredefinedMetricType: "ALBRequestCountPerTarget",
+              ResourceLabel:
+                Output.interpolate`${loadBalancerPart}/${targetGroupPart}` as unknown as string,
+            },
+            ...cooldowns,
+          },
+        });
+      }
+    }).pipe(Namespace.push(id));
+  });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task-definition sugar (secrets / logging / volumes) — helpers
+// ───────────────────────────────────────────────────────────────────────────
+
+const SECRETS_POLICY_NAME = "alchemy-secrets";
+
+/**
+ * Sync the execution role's inline secrets-read policy to exactly the
+ * SSM parameter / Secrets Manager ARNs referenced by the `secrets` prop
+ * (deleted when no secrets remain).
+ */
+const syncTaskSecretsPolicy = Effect.fn(function* ({
+  roleName,
+  secretArns,
+}: {
+  roleName: string;
+  secretArns: string[];
+}) {
+  if (secretArns.length === 0) {
+    yield* iam
+      .deleteRolePolicy({
+        RoleName: roleName,
+        PolicyName: SECRETS_POLICY_NAME,
+      })
+      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+    return;
+  }
+  const serviceOf = (arn: string) => arn.split(":")[2];
+  const ssmArns = secretArns.filter((arn) => serviceOf(arn) === "ssm");
+  const secretsManagerArns = secretArns.filter(
+    (arn) => serviceOf(arn) === "secretsmanager",
+  );
+  yield* iam.putRolePolicy({
+    RoleName: roleName,
+    PolicyName: SECRETS_POLICY_NAME,
+    PolicyDocument: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        ...(ssmArns.length > 0
+          ? [
+              {
+                Effect: "Allow",
+                Action: ["ssm:GetParameters"],
+                Resource: ssmArns,
+              },
+            ]
+          : []),
+        ...(secretsManagerArns.length > 0
+          ? [
+              {
+                Effect: "Allow",
+                Action: ["secretsmanager:GetSecretValue"],
+                Resource: secretsManagerArns,
+              },
+            ]
+          : []),
+      ],
+    }),
+  });
+});
+
+/** CloudWatch Logs' allowed retention values, in days, ascending. */
+const LOG_RETENTION_DAYS = [
+  1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827,
+  2192, 2557, 2922, 3288, 3653,
+];
+
+/**
+ * Apply the `logging.retention` prop to the auto-created log group: round
+ * the duration UP to the nearest CloudWatch-supported retention, or clear
+ * the policy for `"forever"`. Leaves the group untouched when unset.
+ */
+const syncLogGroupRetention = Effect.fn(function* ({
+  logGroupName,
+  retention,
+}: {
+  logGroupName: string;
+  retention: Duration.Input | "forever" | undefined;
+}) {
+  if (retention === undefined) {
+    return;
+  }
+  if (retention === "forever") {
+    yield* logs
+      .deleteRetentionPolicy({ logGroupName })
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+    return;
+  }
+  const days = Math.max(1, Math.ceil((toSeconds(retention) ?? 0) / 86_400));
+  yield* logs.putRetentionPolicy({
+    logGroupName,
+    retentionInDays:
+      LOG_RETENTION_DAYS.find((allowed) => allowed >= days) ??
+      LOG_RETENTION_DAYS[LOG_RETENTION_DAYS.length - 1]!,
+  });
+});
+
+/**
+ * Desugar the `volumes` prop: raw {@link ecs.Volume} entries pass through;
+ * `{ efs, path }` entries become an EFS task volume (transit encryption
+ * enabled, access-point auth when given) plus a primary-container mount
+ * point at `path`.
+ */
+const resolveServiceVolumes = (
+  volumes: (ecs.Volume | ServiceEfsVolume)[] | undefined,
+): { volumes: ecs.Volume[]; mountPoints: ecs.MountPoint[] } => {
+  const resolved: ecs.Volume[] = [];
+  const mountPoints: ecs.MountPoint[] = [];
+  for (const [index, volume] of (volumes ?? []).entries()) {
+    if ("efs" in volume) {
+      const efs = volume.efs;
+      const fileSystemId =
+        "fileSystemId" in efs ? efs.fileSystemId : efs.fileSystem.fileSystemId;
+      const accessPointId =
+        "fileSystemId" in efs ? undefined : efs.accessPoint?.accessPointId;
+      const name = `efs-${index}`;
+      resolved.push({
+        name,
+        efsVolumeConfiguration: {
+          fileSystemId,
+          transitEncryption: "ENABLED",
+          authorizationConfig:
+            accessPointId !== undefined ? { accessPointId } : undefined,
+        },
+      });
+      mountPoints.push({ sourceVolume: name, containerPath: volume.path });
+    } else {
+      resolved.push(volume);
+    }
+  }
+  return { volumes: resolved, mountPoints };
+};
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -1489,6 +2593,19 @@ export const ServiceProvider = () =>
       const deriveIngressUrl = Effect.fn(function* (
         ingress: ServiceManagedIngress | undefined,
       ) {
+        // A custom domain wins: it aliases the load balancer and carries
+        // the listener's protocol/port.
+        if (ingress?.domain !== undefined) {
+          const domainProtocol = (
+            ingress.listenerProtocol ?? "HTTPS"
+          ).toLowerCase();
+          const domainPort = ingress.listenerPort;
+          const isWellKnownPort =
+            domainPort === undefined ||
+            (domainProtocol === "http" && domainPort === 80) ||
+            (domainProtocol === "https" && domainPort === 443);
+          return `${domainProtocol}://${ingress.domain}${isWellKnownPort ? "" : `:${domainPort}`}`;
+        }
         if (!ingress?.loadBalancerArn) {
           return undefined;
         }
@@ -1680,9 +2797,21 @@ export const ServiceProvider = () =>
           bindings,
         });
 
+        // Secrets: container `secrets` (valueFrom) + the execution role's
+        // read permissions on exactly the referenced ARNs.
+        const secretEntries = Object.entries(news.secrets ?? {});
+        yield* syncTaskSecretsPolicy({
+          roleName: executionRoleName,
+          secretArns: secretEntries.map(([, arn]) => arn),
+        });
+
         const logGroupArn =
           output?.logGroupArn ??
           (yield* ensureTaskLogGroup({ id, logGroupName }));
+        yield* syncLogGroupRetention({
+          logGroupName,
+          retention: news.logging?.retention,
+        });
 
         const source = news as ImageSourceLike;
         const resolved = yield* imageSource.resolve({
@@ -1701,10 +2830,51 @@ export const ServiceProvider = () =>
           session,
         });
 
+        // Desugar `{ efs, path }` volumes into task volumes + primary
+        // container mount points, then fold the secrets / container health
+        // check sugar into the primary-container overrides.
+        const { volumes: resolvedVolumes, mountPoints: efsMountPoints } =
+          resolveServiceVolumes(news.volumes);
+        const containerOverrides: Partial<ecs.ContainerDefinition> = {
+          ...news.container,
+          ...(secretEntries.length > 0
+            ? {
+                secrets: [
+                  ...(news.container?.secrets ?? []),
+                  ...secretEntries.map(([name, valueFrom]) => ({
+                    name,
+                    valueFrom,
+                  })),
+                ],
+              }
+            : {}),
+          ...(news.healthCheck !== undefined
+            ? {
+                healthCheck: {
+                  command: news.healthCheck.command,
+                  interval: toWireSeconds(news.healthCheck.interval),
+                  timeout: toWireSeconds(news.healthCheck.timeout),
+                  retries: news.healthCheck.retries,
+                  startPeriod: toWireSeconds(news.healthCheck.startPeriod),
+                },
+              }
+            : {}),
+          ...(efsMountPoints.length > 0
+            ? {
+                mountPoints: [
+                  ...(news.container?.mountPoints ?? []),
+                  ...efsMountPoints,
+                ],
+              }
+            : {}),
+        };
+
         const taskDefinition = yield* registerTaskDefinitionRevision({
           props: {
             ...news,
             placementConstraints: news.taskPlacementConstraints,
+            volumes: resolvedVolumes.length > 0 ? resolvedVolumes : undefined,
+            container: containerOverrides,
             env: {
               ...bindingEnv,
               ...alchemyEnv,
@@ -1787,7 +2957,6 @@ export const ServiceProvider = () =>
         securityGroups: string[] | undefined,
       ) => ({
         taskDefinition: task.taskDefinitionArn,
-        desiredCount: news.desiredCount ?? 1,
         platformVersion: news.platformVersion,
         deploymentConfiguration: news.deploymentConfiguration,
         healthCheckGracePeriodSeconds: toWireSeconds(
@@ -1861,17 +3030,21 @@ export const ServiceProvider = () =>
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }
-          // Content drift for image-owning `context`/`image` sources: props
-          // don't change when the files under `context` do, so surface hash
-          // drift as an update. (`main` sources hash from the bundle output
-          // inside reconcile.)
+          // Content drift for image-owning sources: props don't change when
+          // the files under `context`/`main` do, so hash the source at plan
+          // time (`main` runs the bundler, covering the bootstrap entry) and
+          // surface drift as an update; without this a bootstrap or code-only
+          // change would silently no-op until `--force`.
           if (output?.code && taskRefOf(news) === undefined) {
-            const hash = yield* computeStaticSourceHash(
-              news as ImageSourceLike,
-              taskImagePlatform(
-                (news as ImageOwningServicePropsBase).runtimePlatform,
-              ),
-            );
+            const imageNews = news as ImageOwningServicePropsBase;
+            const source = news as ImageSourceLike;
+            const hash = yield* imageSource.hash({
+              source,
+              platform: taskImagePlatform(imageNews.runtimePlatform),
+              port: imageNews.port,
+              isExternal: imageNews.isExternal,
+              bootstrap: makeBunBootstrap(source.handler ?? "default"),
+            });
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
             }
@@ -1987,6 +3160,7 @@ export const ServiceProvider = () =>
         reconcile: Effect.fn(function* ({
           id,
           news,
+          olds,
           output,
           bindings,
           session,
@@ -2085,6 +3259,10 @@ export const ServiceProvider = () =>
           if (!observed?.serviceArn) {
             const created = yield* ecs.createService({
               ...mutableInput(news, task, network, securityGroups),
+              // With autoscaling, `desiredCount` is only the initial size
+              // (defaulting to `scaling.min`) — the scalable target owns it
+              // from then on.
+              desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
               serviceName,
               cluster: clusterArn,
               loadBalancers: loadBalancersOf(news, task),
@@ -2122,6 +3300,13 @@ export const ServiceProvider = () =>
           const updated = yield* ecs
             .updateService({
               ...mutableInput(news, task, network, securityGroups),
+              // While autoscaling manages the desired count, leave it
+              // unchanged on updates (undefined on the wire) so redeploys
+              // don't fight the autoscaler's decisions.
+              desiredCount:
+                news.scaling !== undefined
+                  ? undefined
+                  : (news.desiredCount ?? 1),
               service: serviceName,
               cluster: clusterArn,
               // `undefined` means "leave unchanged" on the wire, so pass an
@@ -2130,6 +3315,12 @@ export const ServiceProvider = () =>
               loadBalancers:
                 loadBalancersOf(news, task) ??
                 (output?.targetGroupArn !== undefined ? [] : undefined),
+              // Same wire semantics for service registries: detach with an
+              // explicit empty list when a previously-declared registry is
+              // no longer desired.
+              serviceRegistries:
+                news.serviceRegistries ??
+                ((olds?.serviceRegistries?.length ?? 0) > 0 ? [] : undefined),
               enableExecuteCommand: news.enableExecuteCommand,
               forceNewDeployment: true,
             })

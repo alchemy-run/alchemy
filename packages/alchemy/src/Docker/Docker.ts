@@ -92,7 +92,15 @@ export class Docker extends Context.Service<
         ref: string,
         platform?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
-      /** Pushes an image to a registry. */
+      /**
+       * Pushes an image to a registry. When `platform` is given, only that
+       * platform's manifest is pushed (`docker push --platform`) — with the
+       * containerd image store, a bare push sends every locally-present
+       * variant of a multi-arch tag, so a stale other-arch variant in the
+       * local cache would otherwise reach the registry. Engines whose store
+       * doesn't support the flag fall back to a plain push (their local tag
+       * is already narrowed by `pull --platform`).
+       */
       readonly push: (
         ref: string,
         credentials: {
@@ -100,6 +108,7 @@ export class Docker extends Context.Service<
           username: string;
           password: string | Redacted.Redacted<string>;
         },
+        platform?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Tags an image. */
       readonly tag: (
@@ -429,7 +438,7 @@ export const DockerLive = Layer.effect(
             ...(force ? ["-f"] : []),
           ]),
         tag: (source, target) => run(["image", "tag", source, target]),
-        push: Effect.fn(function* (ref, credentials) {
+        push: Effect.fn(function* (ref, credentials, platform) {
           // Write the registry credentials directly into an isolated docker config
           // as a plaintext `auths` entry and skip `docker login` entirely.
           //
@@ -461,7 +470,21 @@ export const DockerLive = Layer.effect(
             });
           });
           yield* fs.writeFileString(path.join(dir, "config.json"), config);
-          return yield* run(["push", ref], { DOCKER_CONFIG: dir });
+          if (platform === undefined) {
+            return yield* run(["push", ref], { DOCKER_CONFIG: dir });
+          }
+          return yield* run(["push", "--platform", platform, ref], {
+            DOCKER_CONFIG: dir,
+          }).pipe(
+            // Engines without the containerd image store reject `--platform`
+            // on push; their local tag is already narrowed to the requested
+            // platform by `pull --platform`, so a plain push is equivalent.
+            Effect.catchIf(
+              (error) =>
+                /--platform|unknown flag|containerd/i.test(String(error)),
+              () => run(["push", ref], { DOCKER_CONFIG: dir }),
+            ),
+          );
         }, Effect.scoped),
       },
       volume: {
