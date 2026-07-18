@@ -1785,11 +1785,12 @@ export default handler;
           if (!output) {
             return undefined;
           }
-          if (
-            // function name changed
-            output.functionName !==
-            (yield* createFunctionName(id, news.functionName))
-          ) {
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id
+          // differently today. Only an explicit user-provided functionName
+          // can force a replace.
+          const newFunctionName = news.functionName ?? output.functionName;
+          if (output.functionName !== newFunctionName) {
             return { action: "replace" };
           }
           if (!!olds.durableConfig !== !!news.durableConfig) {
@@ -1986,8 +1987,15 @@ export default handler;
           output,
           session,
         }) {
-          const { roleName, policyName, functionName, functionArn } =
-            yield* createNames(id, news.functionName);
+          const generated = yield* createNames(id, news.functionName);
+          // Prefer the deployed identifiers: regenerating would target
+          // different physical resources if the generator's output for this
+          // id ever drifts. (An explicit functionName change arrives here as
+          // a fresh replacement instance with no output.)
+          const functionName = output?.functionName ?? generated.functionName;
+          const roleName = output?.roleName ?? generated.roleName;
+          const functionArn = output?.functionArn ?? generated.functionArn;
+          const policyName = generated.policyName;
 
           // State is only a cache: the execution role may have been removed
           // out-of-band (or by a previously interrupted cleanup) while the

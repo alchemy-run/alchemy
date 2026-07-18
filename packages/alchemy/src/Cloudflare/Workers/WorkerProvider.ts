@@ -1374,7 +1374,10 @@ export const LiveWorkerProvider = () =>
         existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const name = yield* createWorkerName(id, news.name);
+        // Prefer the deployed name: regenerating would target a different
+        // script if the generator's output for this id ever drifts.
+        const name =
+          output?.workerName ?? (yield* createWorkerName(id, news.name));
         // When set, this Worker is a Workers for Platforms "user worker"
         // uploaded into a dispatch namespace rather than a routable
         // account-level script. The put/settings calls switch endpoints and
@@ -2194,10 +2197,14 @@ export const LiveWorkerProvider = () =>
           if (newNamespace !== oldNamespace) {
             return { action: "replace" };
           }
-          const workerName = yield* createWorkerName(id, news.name);
-          const oldWorkerName = output?.workerName
-            ? output.workerName
-            : yield* createWorkerName(id, olds?.name);
+          const oldWorkerName =
+            output?.workerName ?? (yield* createWorkerName(id, olds?.name));
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id
+          // differently today (a Worker replace would also destroy its
+          // Durable Object storage). Only an explicit user-provided name
+          // can force a replace.
+          const workerName = news.name ?? oldWorkerName;
           if (workerName !== oldWorkerName) {
             return { action: "replace" };
           }

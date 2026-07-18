@@ -664,10 +664,13 @@ export const LiveContainerProvider = () =>
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
 
-          const name = yield* createApplicationName(id, news.name);
-          const oldName = output?.applicationName
-            ? output.applicationName
-            : yield* createApplicationName(id, olds.name);
+          const oldName =
+            output?.applicationName ??
+            (yield* createApplicationName(id, olds.name));
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id differently
+          // today. Only an explicit user-provided name can force a replace.
+          const name = news.name ?? oldName;
 
           if (
             (output?.accountId ?? accountId) !== accountId ||
@@ -750,7 +753,11 @@ export const LiveContainerProvider = () =>
           output,
           session,
         }) {
-          const name = yield* createApplicationName(id, news.name);
+          // Prefer the deployed name: regenerating would target a different
+          // resource if the generator's output for this id ever drifts.
+          const name =
+            output?.applicationName ??
+            (yield* createApplicationName(id, news.name));
           yield* Effect.logInfo(
             `Cloudflare Container reconcile: starting ${name}`,
           );

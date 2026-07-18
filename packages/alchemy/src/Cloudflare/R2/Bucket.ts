@@ -922,10 +922,13 @@ export const BucketProvider = () =>
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const name = yield* createBucketName(id, news.name);
-          const oldName = output?.bucketName
-            ? output.bucketName
-            : yield* createBucketName(id, olds.name);
+          const oldName =
+            output?.bucketName ?? (yield* createBucketName(id, olds.name));
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id
+          // differently today. Only an explicit user-provided name can
+          // force a replace.
+          const name = news.name ?? oldName;
           const oldJurisdiction =
             output?.jurisdiction ?? olds.jurisdiction ?? "default";
           const oldStorageClass =
@@ -960,7 +963,10 @@ export const BucketProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const name = yield* createBucketName(id, news.name);
+          // Prefer the deployed name: regenerating would target a different
+          // bucket if the generator's output for this id ever drifts.
+          const name =
+            output?.bucketName ?? (yield* createBucketName(id, news.name));
           const acct = output?.accountId ?? accountId;
           const jurisdiction =
             output?.jurisdiction ?? news.jurisdiction ?? "default";

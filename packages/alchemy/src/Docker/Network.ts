@@ -104,8 +104,12 @@ export const NetworkProvider = () =>
         diff: Effect.fn(function* ({ id, output, instanceId, news }) {
           if (!isResolved(news) || !output) return undefined;
           const args = yield* makeNetworkArgs(id, news, instanceId);
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id differently
+          // today. Only an explicit user-provided name can force a replace.
+          const desiredName = news.name ?? output.name;
           if (
-            output.name !== args.name ||
+            output.name !== desiredName ||
             output.driver !== args.driver ||
             output.enableIPv6 !== args.ipv6 ||
             // Compare only user labels; internal `alchemy::*` branding lives on
