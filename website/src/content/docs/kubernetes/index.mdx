@@ -1,92 +1,119 @@
 ---
 title: Kubernetes
-description: Kubernetes objects defined in TypeScript and applied to your EKS cluster — no YAML, no kubectl, no kubeconfig.
+description: Kubernetes in TypeScript — per-cloud platforms for Deployments and Jobs, server-side apply for any manifest or CRD, and opt-in zero-runtime typed builders. No YAML, no kubectl, no kubeconfig.
 ---
 
-Each helper builds a Kubernetes object definition and attaches it to
-an `AWS.EKS.Cluster` as a binding. The cluster's reconcile converges
-the bound objects via server-side apply under the `alchemy` field
-manager and prunes objects that drop out of the desired set — so
-Kubernetes manifests deploy and diff like the rest of your Stack.
-This is EKS-only today: the `cluster` prop is an `AWS.EKS.Cluster`.
+`alchemy/Kubernetes` is **types and builders only**: 1:1 TypeScript
+mirrors of the Kubernetes API object model plus zero-runtime typed
+constructors. There are no resource providers, no apply engine, and
+no cluster abstraction in it — deploying to Kubernetes is per-cloud.
+On AWS that means three `AWS.EKS` resources:
+[`Deployment`](/providers/aws/eks/deployment) for replicated
+servers, [`Job`](/providers/aws/eks/job) for run-to-completion work,
+and [`Manifest`](/providers/aws/eks/manifest) for any raw object.
 
 New here? [Set up](/kubernetes/setup) — your AWS credentials are the
 credentials.
 
-## Resources
+## Typed builders
 
-`Namespace` and `Job` bind directly onto the cluster:
+Each builder fills in `apiVersion`/`kind` and hands back the
+fully-typed object — nothing more:
 
 ```typescript
-const demoNamespace = yield* Kubernetes.Namespace("DemoNamespace", {
-  cluster: cluster.cluster,
-  name: "demo",
-});
+import * as Kubernetes from "alchemy/Kubernetes";
 
-const clusterInfoJob = yield* Kubernetes.Job("ClusterInfoJob", {
-  cluster: cluster.cluster,
-  namespace: demoNamespace,
-  name: "cluster-info",
-  containers: [
-    {
-      name: "cluster-info",
-      image: "public.ecr.aws/docker/library/busybox:1.36",
-      command: ["/bin/sh", "-lc"],
-      args: ['echo "demo workload is running on EKS Auto Mode"'],
+const manifest = Kubernetes.statefulSet({
+  metadata: { name: "cache", namespace: "apps" },
+  spec: {
+    serviceName: "cache",
+    replicas: 3,
+    selector: { matchLabels: { app: "cache" } },
+    template: {
+      metadata: { labels: { app: "cache" } },
+      spec: { containers: [{ name: "redis", image: "redis:7" }] },
     },
-  ],
+  },
 });
 ```
 
-`namespace` (and `serviceAccountName`) accept the ref returned by
-`Namespace`/`ServiceAccount` directly — no name plumbing. How the
-binding-and-apply mechanism works is covered in
-[Objects as bindings](/kubernetes/objects-as-bindings).
+Builders exist for `pod`, `deployment`, `statefulSet`, `daemonSet`,
+`job`, `cronJob`, `service`, `configMap`, `secret`, `namespace`,
+`serviceAccount`, and `podTemplate`. Use them wherever a
+Kubernetes-typed value is accepted — `AWS.EKS.Manifest.manifest`,
+`AWS.EKS.Deployment.podTemplate` — or skip them and write the
+object literal; the types are the same either way.
 
-`Deployment` and `Service` cover long-running workloads:
+## Apply any manifest
+
+`AWS.EKS.Manifest` applies the object onto a cluster via
+server-side apply. Any kind works — the typed kinds above, or an
+untyped custom resource (CRDs are resolved through the Kubernetes
+API discovery endpoint, so they need no registration):
 
 ```typescript
-const app = yield* Deployment("api", {
+const sts = yield* AWS.EKS.Manifest("Cache", {
   cluster,
-  namespace: "default",
-  containers: [
-    {
-      name: "api",
-      image: "nginx:latest",
-    },
-  ],
+  manifest, // the typed StatefulSet from above — or any raw object
+});
+
+const widget = yield* AWS.EKS.Manifest("Widget", {
+  cluster,
+  manifest: {
+    apiVersion: "acme.io/v1",
+    kind: "Widget",
+    metadata: { name: "w", namespace: "default" },
+    spec: { size: 3 },
+  },
 });
 ```
 
-`Deployment` defaults to 1 replica and labels the pods
-`app.kubernetes.io/name: <name>`; a `Service` selects those pods via
-`selector` and exposes `ports` (`type` defaults to `ClusterIP`). See
-[Objects as bindings](/kubernetes/objects-as-bindings) for the full
-apply ordering across kinds.
+How apply, ordering, and pruning work is covered in
+[How objects deploy](/kubernetes/objects-as-bindings).
 
-:::caution
-Exactly six kinds are supported: `v1/Namespace`, `v1/ServiceAccount`,
-`v1/ConfigMap`, `v1/Service`, `apps/v1/Deployment`, and
-`batch/v1/Job`. Anything else fails (`getKubernetesKindSpec` throws),
-including through the low-level `Kubernetes.Object` escape hatch.
-Apply does not wait for rollout or readiness.
-:::
+## Platforms for the common shapes
 
-## Compose with your cloud
+You rarely need raw manifests for your own code.
+`AWS.EKS.Deployment` and `AWS.EKS.Job` synthesize the Kubernetes
+objects (Deployment + Service + ServiceAccount; Job or CronJob) plus
+the container image, ECR repository, and pod-identity IAM wiring in
+one resource — with the same authoring triad as Lambda and
+Cloudflare Workers (external image, inline Effect, tagged Effect):
 
-Provisioning lives in the AWS hub: [EKS](/aws/compute/eks) covers
-`EKS.AutoCluster`, `EKS.LoadBalancedWorkload`, and
-`EKS.PodIdentityWorkload` / `PodIdentityServiceAccount`. There is no
-kubeconfig step — Alchemy authenticates to the cluster's API with
-your AWS credentials (a presigned STS token) and applies objects via
-server-side apply, so the helpers on this page slot into that guide
-unchanged.
+```typescript
+const api = yield* AWS.EKS.Deployment("Api", {
+  cluster,
+  image: "registry.k8s.io/echoserver:1.10",
+  replicas: 2,
+  port: 8080,
+  serviceType: "LoadBalancer",
+});
+```
+
+The [EKS guide](/aws/compute/eks) covers both platforms, bindings,
+and pod identity. When a platform's synthesized pod template needs
+tuning, the escape hatch is typed too:
+
+```typescript
+const tuned = yield* AWS.EKS.Deployment("Api", {
+  cluster,
+  main: import.meta.url,
+  port: 3000,
+  podTemplate: Kubernetes.podTemplate({
+    spec: {
+      tolerations: [{ key: "gpu", operator: "Exists" }],
+      nodeSelector: { pool: "arm" },
+    },
+  }),
+});
+```
+
+`podTemplate` is a deep-partial merge into the synthesized template:
+objects merge recursively, arrays and primitives replace.
 
 ## Reference
 
-[Namespace](/providers/kubernetes/namespace) ·
-[ServiceAccount](/providers/kubernetes/serviceaccount) ·
-[ConfigMap](/providers/kubernetes/configmap) ·
-[Service](/providers/kubernetes/service) ·
-[Deployment](/providers/kubernetes/deployment) ·
-[Job](/providers/kubernetes/job)
+[Deployment](/providers/aws/eks/deployment) ·
+[Job](/providers/aws/eks/job) ·
+[Manifest](/providers/aws/eks/manifest) ·
+[Cluster](/providers/aws/eks/cluster)
