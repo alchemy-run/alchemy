@@ -113,23 +113,15 @@ one-line diff ([a contract and a Layer](/infrastructure-as-effects/binding#a-con
 
 ## The types hold the boundary
 
-Two guarantees make the swap safe.
+**Cloud requirements stay inside the Layer.** The KV Layer resolves
+`WorkerEnvironment` internally; callers see only `RuntimeContext`.
+Provide a DynamoDB-backed Layer on a Cloudflare Worker and the program
+fails to type-check — the Worker can't satisfy AWS `Credentials`.
 
-**Cloud requirements stay inside the Layer.** `ReadWriteNamespaceBinding`
-resolves `WorkerEnvironment` once, during Layer construction, and the
-client closes over it. Downstream callers see only `RuntimeContext`. The
-constraint is checked, not conventional: provide a DynamoDB-backed Layer
-on a Cloudflare Worker and the program fails to type-check, because the
-Layer requires AWS `Credentials` and `Region` that a Worker's constructor
-can never satisfy.
-
-**Runtime-only methods are marked.** As
-[Phases](/infrastructure-as-effects/phases) covered, the init closure
-runs at plantime and cold start; the runtime closure runs only inside the
-deployed handler. `Alchemy.RuntimeContext` is the Effect service that
-exists only in that runtime closure, so any method requiring it can only
-be called from a handler — move a `kv.get` up into init and the compiler
-rejects it. It works like a
+**Runtime-only methods are marked.** `Alchemy.RuntimeContext` exists only
+inside the runtime closure ([Phases](/infrastructure-as-effects/phases)),
+so `kv.get` can only be called from a handler — move it into init and the
+compiler rejects it. A
 [colored function](https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/),
 with the color encoded as an Effect requirement.
 
