@@ -11,11 +11,12 @@ get back a typed client:
 const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 ```
 
-Everything else the connection needs is derived from this line: the
-permission grant (least-privilege IAM on AWS, a native binding on
-Cloudflare) and the environment configuration that points the client
-at the deployed resource (a table ARN, a queue URL, a sensitive API
-key).
+Everything else the connection needs is derived from this line:
+
+1. **permission grant** — least-privilege IAM on AWS, a native binding
+   on Cloudflare
+2. **environment configuration** — points the client at the deployed
+   resource: a table ARN, a queue URL, a sensitive API key
 
 ## A binding in one line
 
