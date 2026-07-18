@@ -227,8 +227,11 @@ export const RepositoryProvider = () =>
             ? attrs
             : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({ id, news, session }) {
-          const repositoryName = yield* toRepositoryName(id, news);
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          // Prefer the deployed name: regenerating would target a different
+          // repository if the generator's output for this id ever drifts.
+          const repositoryName =
+            output?.repositoryName ?? (yield* toRepositoryName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 

@@ -80,8 +80,14 @@ export const NamespaceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const title = yield* createTitle(id, news.title);
       const oldTitle = output?.title ?? (yield* createTitle(id, olds.title));
+      // Auto-generated titles are engine-owned: the deployed title stays
+      // authoritative even if the generator would title this id differently
+      // today. Only an explicit user-provided title can force a rename.
+      const title =
+        news.title !== undefined || olds.title !== undefined
+          ? yield* createTitle(id, news.title)
+          : oldTitle;
       if (title !== oldTitle) {
         return { action: "update" } as const;
       }

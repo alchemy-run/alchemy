@@ -982,7 +982,11 @@ await Effect.runPromise(program).catch((err) => {
           output,
           session,
         }) {
-          const family = yield* toTaskFamily(id, news);
+          // Prefer the deployed name: regenerating would target a different
+          // resource if the generator's output for this id ever drifts. (An
+          // explicit taskName change arrives here as a fresh replacement
+          // instance with no output.)
+          const family = output?.taskFamily ?? (yield* toTaskFamily(id, news));
           const taskRoleName =
             output?.taskRoleName ?? (yield* createRoleName(id, "task-role"));
           const executionRoleName =

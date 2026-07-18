@@ -209,10 +209,16 @@ export const TunnelProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createTunnelName(id, news.name);
       const oldName = output?.tunnelName
         ? output.tunnelName
         : yield* createTunnelName(id, olds.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name =
+        news.name !== undefined || olds.name !== undefined
+          ? yield* createTunnelName(id, news.name)
+          : oldName;
       if (name !== oldName) {
         return { action: "replace" } as const;
       }
@@ -233,7 +239,9 @@ export const TunnelProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createTunnelName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const name = yield* createTunnelName(id, news.name ?? output?.tunnelName);
       const configSrc = news.configSrc ?? output?.configSrc ?? "cloudflare";
       const tunnelSecret = news.tunnelSecret
         ? Redacted.value(news.tunnelSecret)
