@@ -1,19 +1,29 @@
+/**
+ * Internal EKS Kubernetes API client: SigV4-token auth against the cluster
+ * endpoint, server-side apply, and kind discovery for arbitrary (CRD)
+ * manifests. Powers `AWS.EKS.Manifest`, `AWS.EKS.Deployment`, `AWS.EKS.Job`,
+ * and the `AWS.EKS.Cluster` kubernetes-object binding channel. Not exported
+ * from the EKS index.
+ */
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { AwsClient } from "aws4fetch";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as https from "node:https";
-import { AWSEnvironment } from "../AWS/Environment.ts";
+import { AWSEnvironment } from "../../Environment.ts";
 import {
-  buildKubernetesObjectPath,
+  buildKubernetesObjectPathWithSpec,
   chunkByApplyRank,
+  DEFAULT_APPLY_RANK,
   kubernetesObjectKey,
+  lookupKubernetesKindSpec,
   sortRefsForDelete,
   toKubernetesObjectRef,
   type KubernetesObjectDefinition,
+  type KubernetesObjectKindSpec,
   type KubernetesObjectRef,
-} from "./types.ts";
+} from "./objects.ts";
 
 export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
   method: string;
@@ -156,6 +166,93 @@ const requestJson = Effect.fn(function* ({
   });
 });
 
+// ─────────────────────────────────────────────────────── kind discovery ──
+
+interface ApiResourceList {
+  resources?: {
+    name?: string;
+    kind?: string;
+    namespaced?: boolean;
+  }[];
+}
+
+// One resolution per (endpoint, apiVersion, kind) per process. Plain cached
+// values (no finalizers), so module scope is safe.
+const discoveredKinds = new Map<string, KubernetesObjectKindSpec>();
+
+/**
+ * Resolve the REST mapping (plural + scope) for an arbitrary kind: static
+ * table fast path, then the Kubernetes discovery API (`/apis/{g}/{v}` or
+ * `/api/v1`). This is what lets `AWS.EKS.Manifest` apply any CRD.
+ */
+export const resolveKindSpec = Effect.fn(function* ({
+  connection,
+  input,
+}: {
+  connection: KubernetesClusterConnection;
+  input: Pick<KubernetesObjectRef, "apiVersion" | "kind">;
+}) {
+  const staticSpec = lookupKubernetesKindSpec(input);
+  if (staticSpec) return staticSpec;
+
+  const cacheKey = `${connection.endpoint}|${input.apiVersion}|${input.kind}`;
+  const cached = discoveredKinds.get(cacheKey);
+  if (cached) return cached;
+
+  const discoveryPath = input.apiVersion.includes("/")
+    ? `/apis/${input.apiVersion}`
+    : `/api/${input.apiVersion}`;
+
+  const listed = (yield* requestJson({
+    connection,
+    method: "GET",
+    path: discoveryPath,
+  })) as ApiResourceList;
+
+  const resource = listed.resources?.find(
+    (candidate) =>
+      candidate.kind === input.kind &&
+      typeof candidate.name === "string" &&
+      !candidate.name.includes("/"),
+  );
+
+  if (!resource?.name) {
+    return yield* Effect.fail(
+      new KubernetesApiError({
+        method: "GET",
+        path: discoveryPath,
+        statusCode: 404,
+        body: `Kind '${input.kind}' not found in API group '${input.apiVersion}'`,
+      }),
+    );
+  }
+
+  const spec: KubernetesObjectKindSpec = {
+    plural: resource.name,
+    scope: resource.namespaced ? "Namespaced" : "Cluster",
+    applyRank: DEFAULT_APPLY_RANK,
+  };
+  discoveredKinds.set(cacheKey, spec);
+  return spec;
+});
+
+const buildPath = Effect.fn(function* ({
+  connection,
+  object,
+}: {
+  connection: KubernetesClusterConnection;
+  object: KubernetesObjectRef;
+}) {
+  const spec = yield* resolveKindSpec({ connection, input: object });
+  return yield* Effect.try({
+    try: () => buildKubernetesObjectPathWithSpec(object, spec),
+    catch: (error) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
+});
+
+// ─────────────────────────────────────────────────────────── object ops ──
+
 export const readObject = Effect.fn(function* ({
   connection,
   object,
@@ -166,7 +263,7 @@ export const readObject = Effect.fn(function* ({
   return yield* requestJson({
     connection,
     method: "GET",
-    path: buildKubernetesObjectPath(object),
+    path: yield* buildPath({ connection, object }),
   });
 });
 
@@ -177,7 +274,11 @@ export const applyObject = Effect.fn(function* ({
   connection: KubernetesClusterConnection;
   object: KubernetesObjectDefinition;
 }) {
-  const path = `${buildKubernetesObjectPath(toKubernetesObjectRef(object))}?fieldManager=${fieldManager}&force=true`;
+  const basePath = yield* buildPath({
+    connection,
+    object: toKubernetesObjectRef(object),
+  });
+  const path = `${basePath}?fieldManager=${fieldManager}&force=true`;
 
   return yield* requestJson({
     connection,
@@ -194,11 +295,14 @@ export const deleteObject = Effect.fn(function* ({
   connection: KubernetesClusterConnection;
   object: KubernetesObjectRef;
 }) {
-  yield* requestJson({
-    connection,
-    method: "DELETE",
-    path: buildKubernetesObjectPath(object),
-  }).pipe(
+  yield* buildPath({ connection, object }).pipe(
+    Effect.flatMap((path) =>
+      requestJson({
+        connection,
+        method: "DELETE",
+        path,
+      }),
+    ),
     Effect.catchIf(
       (error): error is KubernetesApiError =>
         error instanceof KubernetesApiError,
@@ -260,39 +364,4 @@ export const deleteObjects = Effect.fn(function* ({
       object,
     });
   }
-});
-
-export const createClient = (connection: KubernetesClusterConnection) => ({
-  readObject: (object: KubernetesObjectRef) =>
-    readObject({
-      connection,
-      object,
-    }),
-  applyObject: (object: KubernetesObjectDefinition) =>
-    applyObject({
-      connection,
-      object,
-    }),
-  deleteObject: (object: KubernetesObjectRef) =>
-    deleteObject({
-      connection,
-      object,
-    }),
-  reconcileObjects: ({
-    previousObjects,
-    desiredObjects,
-  }: {
-    previousObjects: ReadonlyArray<KubernetesObjectRef>;
-    desiredObjects: ReadonlyArray<KubernetesObjectDefinition>;
-  }) =>
-    reconcileObjects({
-      connection,
-      previousObjects,
-      desiredObjects,
-    }),
-  deleteObjects: (objects: ReadonlyArray<KubernetesObjectRef>) =>
-    deleteObjects({
-      connection,
-      objects,
-    }),
 });

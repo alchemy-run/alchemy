@@ -1,77 +1,64 @@
+/**
+ * Internal composite: a Kubernetes service account (bound onto the cluster)
+ * wired to EKS Pod Identity through an IAM role + `PodIdentityAssociation`.
+ * Un-exported — the platforms (`AWS.EKS.Deployment`, `AWS.EKS.Job`) provision
+ * the same triple inside their reconcilers; this helper remains for
+ * composition-style stacks that assemble the pieces from resources.
+ */
 import * as Effect from "effect/Effect";
-import type { Input } from "../../Input.ts";
-import * as Kubernetes from "../../Kubernetes/index.ts";
-import * as Namespace from "../../Namespace.ts";
-import type { PolicyDocument } from "../IAM/Policy.ts";
-import { Role, type RoleArn, type Role as RoleResource } from "../IAM/Role.ts";
-import type { Cluster } from "./Cluster.ts";
+import type { Input } from "../../../Input.ts";
+import * as Namespace from "../../../Namespace.ts";
+import type { PolicyDocument } from "../../IAM/Policy.ts";
+import {
+  Role,
+  type RoleArn,
+  type Role as RoleResource,
+} from "../../IAM/Role.ts";
+import type { Cluster } from "../Cluster.ts";
 import {
   PodIdentityAssociation,
   type PodIdentityAssociation as PodIdentityAssociationResource,
-} from "./PodIdentityAssociation.ts";
+} from "../PodIdentityAssociation.ts";
+import {
+  clusterServiceAccount,
+  namespaceNameOf,
+  type ClusterObjectRef,
+} from "./ClusterObject.ts";
 
 export interface PodIdentityServiceAccountProps {
-  /**
-   * Target EKS cluster.
-   */
+  /** Target EKS cluster. */
   cluster: Cluster;
-  /**
-   * Namespace name or namespace helper result.
-   */
-  namespace: string | { name: string } | Kubernetes.ObjectRef;
-  /**
-   * Optional explicit service account name. Defaults to the logical id.
-   */
+  /** Namespace name or namespace helper result. */
+  namespace: string | { name: string } | ClusterObjectRef;
+  /** Optional explicit service account name. Defaults to the logical id. */
   serviceAccountName?: string;
-  /**
-   * Existing IAM role ARN to use for pod identity.
-   */
+  /** Existing IAM role ARN to use for pod identity. */
   roleArn?: string;
-  /**
-   * Optional role name when Alchemy creates the IAM role.
-   */
+  /** Optional role name when Alchemy creates the IAM role. */
   roleName?: string;
-  /**
-   * Managed policy ARNs to attach when creating the IAM role.
-   */
+  /** Managed policy ARNs to attach when creating the IAM role. */
   managedPolicyArns?: string[];
-  /**
-   * Inline policies to attach when creating the IAM role.
-   */
+  /** Inline policies to attach when creating the IAM role. */
   inlinePolicies?: Record<string, PolicyDocument>;
-  /**
-   * Optional role description when Alchemy creates the IAM role.
-   */
+  /** Optional role description when Alchemy creates the IAM role. */
   description?: string;
-  /**
-   * Disable session tags for the pod identity association.
-   */
+  /** Disable session tags for the pod identity association. */
   disableSessionTags?: boolean;
-  /**
-   * Optional target role ARN for chained role assumption.
-   */
+  /** Optional target role ARN for chained role assumption. */
   targetRoleArn?: string;
-  /**
-   * Optional inline session policy JSON.
-   */
+  /** Optional inline session policy JSON. */
   policy?: string;
-  /**
-   * Labels applied to the Kubernetes service account.
-   */
+  /** Labels applied to the Kubernetes service account. */
   labels?: Record<string, string>;
-  /**
-   * Annotations applied to the Kubernetes service account.
-   */
+  /** Annotations applied to the Kubernetes service account. */
   annotations?: Record<string, string>;
-  /**
-   * Tags applied to AWS resources.
-   */
+  /** Tags applied to AWS resources. */
   tags?: Record<string, string>;
 }
 
 export interface PodIdentityServiceAccountResources {
   /** Reference to the created Kubernetes service account. */
-  serviceAccount: Kubernetes.ObjectRef;
+  serviceAccount: ClusterObjectRef;
   /** The Pod Identity association binding the role to the service account. */
   podIdentityAssociation: PodIdentityAssociationResource;
   /** The generated IAM role, or `undefined` when `roleArn` was supplied. */
@@ -80,18 +67,6 @@ export interface PodIdentityServiceAccountResources {
   roleArn: Input<string> | RoleArn;
 }
 
-/**
- * Creates a Kubernetes service account and binds it to EKS Pod Identity.
- * @resource
- * @example Service account with generated IAM role
- * ```typescript
- * const identity = yield* PodIdentityServiceAccount("ApiIdentity", {
- *   cluster: cluster.cluster,
- *   namespace: "default",
- *   managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"],
- * });
- * ```
- */
 export const PodIdentityServiceAccount = (
   id: string,
   props: PodIdentityServiceAccountProps,
@@ -125,22 +100,19 @@ export const PodIdentityServiceAccount = (
             tags: props.tags,
           });
 
-      const serviceAccount = yield* Kubernetes.ServiceAccount(
-        "ServiceAccount",
-        {
-          cluster: props.cluster,
-          namespace: props.namespace,
-          name: serviceAccountName,
-          labels: props.labels,
-          annotations: props.annotations,
-        },
-      );
+      const serviceAccount = yield* clusterServiceAccount("ServiceAccount", {
+        cluster: props.cluster,
+        namespace: props.namespace,
+        name: serviceAccountName,
+        labels: props.labels,
+        annotations: props.annotations,
+      });
 
       const podIdentityAssociation = yield* PodIdentityAssociation(
         "PodIdentityAssociation",
         {
           clusterName: props.cluster.clusterName,
-          namespace: Kubernetes.namespaceNameOf(props.namespace),
+          namespace: namespaceNameOf(props.namespace),
           serviceAccount: serviceAccount.name,
           roleArn: props.roleArn ?? role!.roleArn,
           disableSessionTags: props.disableSessionTags,

@@ -1,4 +1,5 @@
 import * as eks from "@distilled.cloud/aws/eks";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -9,17 +10,22 @@ import {
   deleteObjects,
   reconcileObjects,
   type KubernetesClusterConnection,
-} from "../../Kubernetes/client.ts";
+} from "./internal/client.ts";
 import {
   type KubernetesObjectBinding,
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
-} from "../../Kubernetes/types.ts";
+} from "./internal/objects.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  diffTags,
+  hasAlchemyTags,
+  hasTags,
+} from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -33,9 +39,21 @@ export interface ClusterProps {
    */
   clusterName?: string;
   /**
-   * IAM role ARN assumed by the EKS control plane.
+   * `"auto"` turns on EKS Auto Mode with sensible defaults: managed compute
+   * (`system` + `general-purpose` node pools), block storage, elastic load
+   * balancing, and `API` authentication with bootstrap admin permissions.
+   * When `roleArn` (or `computeConfig.nodeRoleArn`) is omitted, the cluster
+   * provisions and owns the required IAM roles with the standard Auto Mode
+   * managed policies. Explicit `accessConfig` / `computeConfig` /
+   * `storageConfig` / `kubernetesNetworkConfig` props override the defaults.
    */
-  roleArn: string;
+  compute?: "auto";
+  /**
+   * IAM role ARN assumed by the EKS control plane. Required unless
+   * `compute: "auto"`, in which case an Auto Mode cluster role is created
+   * and managed automatically when omitted.
+   */
+  roleArn?: string;
   /**
    * VPC configuration for the cluster control plane.
    */
@@ -121,6 +139,10 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
     /** References to Kubernetes objects applied via `kubernetes` props. */
     kubernetesObjects: KubernetesObjectRef[];
+    /** The name of the cluster IAM role created for `compute: "auto"`, if managed by alchemy. */
+    managedClusterRoleName: string | undefined;
+    /** The name of the node IAM role created for `compute: "auto"`, if managed by alchemy. */
+    managedNodeRoleName: string | undefined;
   },
   KubernetesObjectBinding,
   Providers
@@ -130,6 +152,16 @@ export interface Cluster extends Resource<
  * An Amazon EKS cluster with support for EKS Auto Mode settings.
  * @resource
  * @section Creating Clusters
+ * @example Auto Mode Cluster (managed roles)
+ * ```typescript
+ * const cluster = yield* Cluster("AppCluster", {
+ *   compute: "auto",
+ *   resourcesVpcConfig: {
+ *     subnetIds: network.privateSubnetIds,
+ *   },
+ * });
+ * ```
+ *
  * @example Auto Mode Cluster from Existing Roles and Subnets
  * ```typescript
  * const cluster = yield* Cluster("AppCluster", {
@@ -239,6 +271,58 @@ const getDesiredKubernetesObjects = (
     )
     .map((binding) => binding.data.object);
 
+const autoClusterManagedPolicyArns = [
+  "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
+  "arn:aws:iam::aws:policy/AmazonEKSComputePolicy",
+  "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy",
+  "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy",
+  "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy",
+];
+
+const autoNodeManagedPolicyArns = [
+  "arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy",
+  "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly",
+];
+
+/**
+ * Expand `compute: "auto"` into the concrete EKS Auto Mode configuration
+ * (explicit user props always win over the defaults).
+ */
+const applyAutoModeDefaults = (
+  news: ClusterProps,
+  roles: { roleArn: string; nodeRoleArn: string | undefined },
+): ClusterProps & { roleArn: string } =>
+  news.compute === "auto"
+    ? {
+        ...news,
+        roleArn: roles.roleArn,
+        accessConfig: {
+          bootstrapClusterCreatorAdminPermissions: true,
+          authenticationMode: "API",
+          ...news.accessConfig,
+        },
+        computeConfig: {
+          enabled: true,
+          nodePools: ["system", "general-purpose"],
+          ...news.computeConfig,
+          nodeRoleArn: roles.nodeRoleArn,
+        },
+        kubernetesNetworkConfig: {
+          ...news.kubernetesNetworkConfig,
+          elasticLoadBalancing: {
+            enabled: true,
+            ...news.kubernetesNetworkConfig?.elasticLoadBalancing,
+          },
+        },
+        storageConfig: {
+          blockStorage: {
+            enabled: true,
+            ...news.storageConfig?.blockStorage,
+          },
+        },
+      }
+    : { ...news, roleArn: roles.roleArn };
+
 const clusterConfigChanged = (olds: ClusterProps, news: ClusterProps) =>
   !jsonEqual(olds.resourcesVpcConfig, news.resourcesVpcConfig) ||
   !jsonEqual(
@@ -256,7 +340,13 @@ const mapClusterState = (
   cluster: eks.Cluster,
   tags: Record<string, string>,
   kubernetesObjects: KubernetesObjectRef[],
+  managedRoles: {
+    managedClusterRoleName?: string;
+    managedNodeRoleName?: string;
+  } = {},
 ): Cluster["Attributes"] => ({
+  managedClusterRoleName: managedRoles.managedClusterRoleName,
+  managedNodeRoleName: managedRoles.managedNodeRoleName,
   clusterArn: cluster.arn as ClusterArn,
   clusterName: cluster.name!,
   status: cluster.status ?? "CREATING",
@@ -312,6 +402,13 @@ export const ClusterProvider = () =>
             new Error("AWS.EKS.Cluster requires at least two subnet IDs"),
           );
         }
+        if (!props.roleArn && props.compute !== "auto") {
+          return yield* Effect.fail(
+            new Error(
+              "AWS.EKS.Cluster requires roleArn unless compute is 'auto'",
+            ),
+          );
+        }
         if (
           props.computeConfig?.enabled &&
           props.accessConfig?.authenticationMode === "CONFIG_MAP"
@@ -324,12 +421,118 @@ export const ClusterProvider = () =>
         }
       });
 
+      // Ensure an alchemy-managed IAM role for `compute: "auto"` (cluster or
+      // node role). Idempotent: creates on miss, adopts our own role on race,
+      // and converges managed policy attachments.
+      const ensureManagedRole = Effect.fn(function* ({
+        id,
+        roleName,
+        service,
+        actions,
+        managedPolicyArns,
+        userTags,
+      }: {
+        id: string;
+        roleName: string;
+        service: string;
+        actions: string[];
+        managedPolicyArns: string[];
+        userTags: Record<string, string> | undefined;
+      }) {
+        const tags = yield* createInternalTags(id);
+        const role = yield* iam
+          .createRole({
+            RoleName: roleName,
+            AssumeRolePolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: service },
+                  Action: actions,
+                },
+              ],
+            }),
+            Tags: Object.entries({ ...tags, ...userTags }).map(
+              ([Key, Value]) => ({ Key, Value }),
+            ),
+          })
+          .pipe(
+            Effect.catchTag("EntityAlreadyExistsException", () =>
+              iam.getRole({ RoleName: roleName }).pipe(
+                Effect.filterOrFail(
+                  (existing) => hasTags(tags, existing.Role?.Tags),
+                  () =>
+                    new Error(
+                      `Role '${roleName}' already exists and is not managed by alchemy`,
+                    ),
+                ),
+              ),
+            ),
+          );
+        for (const policyArn of managedPolicyArns) {
+          yield* iam
+            .attachRolePolicy({ RoleName: roleName, PolicyArn: policyArn })
+            .pipe(Effect.catchTag("LimitExceededException", () => Effect.void));
+        }
+        return role.Role!.Arn!;
+      });
+
+      const deleteManagedRole = Effect.fn(function* (roleName: string) {
+        yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed({ AttachedPolicies: [] }),
+          ),
+          Effect.flatMap((policies) =>
+            Effect.all(
+              (policies.AttachedPolicies ?? []).map((policy) =>
+                iam
+                  .detachRolePolicy({
+                    RoleName: roleName,
+                    PolicyArn: policy.PolicyArn!,
+                  })
+                  .pipe(
+                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                  ),
+              ),
+            ),
+          ),
+        );
+        yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed({ PolicyNames: [] as string[] }),
+          ),
+          Effect.flatMap((policies) =>
+            Effect.all(
+              (policies.PolicyNames ?? []).map((policyName) =>
+                iam
+                  .deleteRolePolicy({
+                    RoleName: roleName,
+                    PolicyName: policyName,
+                  })
+                  .pipe(
+                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                  ),
+              ),
+            ),
+          ),
+        );
+        yield* iam
+          .deleteRole({ RoleName: roleName })
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+      });
+
       const readCluster = Effect.fn(function* ({
         clusterName,
         kubernetesObjects,
+        managedRoles,
       }: {
         clusterName: string;
         kubernetesObjects?: KubernetesObjectRef[];
+        managedRoles?: {
+          managedClusterRoleName?: string;
+          managedNodeRoleName?: string;
+        };
       }) {
         const described = yield* eks
           .describeCluster({
@@ -354,16 +557,26 @@ export const ClusterProvider = () =>
             ),
           );
         const tags = normalizeTags(listedTags?.tags ?? cluster.tags);
-        return mapClusterState(cluster, tags, kubernetesObjects ?? []);
+        return mapClusterState(
+          cluster,
+          tags,
+          kubernetesObjects ?? [],
+          managedRoles,
+        );
       });
 
       const waitForClusterActive = (
         clusterName: string,
         kubernetesObjects: KubernetesObjectRef[] = [],
+        managedRoles?: {
+          managedClusterRoleName?: string;
+          managedNodeRoleName?: string;
+        },
       ) =>
         readCluster({
           clusterName,
           kubernetesObjects,
+          managedRoles,
         }).pipe(
           Effect.flatMap((state) => {
             if (!state) {
@@ -504,6 +717,7 @@ export const ClusterProvider = () =>
           const state = yield* readCluster({
             clusterName,
             kubernetesObjects: output?.kubernetesObjects,
+            managedRoles: output,
           });
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.tags))
@@ -526,11 +740,65 @@ export const ClusterProvider = () =>
             ...news.tags,
           };
 
+          // Ensure `compute: "auto"` managed IAM roles before touching the
+          // cluster. Physical names are cached in the output so re-runs and
+          // updates converge on the same roles.
+          const auto = news.compute === "auto";
+          let managedClusterRoleName = output?.managedClusterRoleName;
+          let managedNodeRoleName = output?.managedNodeRoleName;
+          let roleArn = news.roleArn;
+          if (!roleArn && auto) {
+            managedClusterRoleName ??= yield* createPhysicalName({
+              id: `${id}-cluster-role`,
+              maxLength: 64,
+            });
+            roleArn = yield* ensureManagedRole({
+              id,
+              roleName: managedClusterRoleName,
+              service: "eks.amazonaws.com",
+              actions: ["sts:AssumeRole", "sts:TagSession"],
+              managedPolicyArns: autoClusterManagedPolicyArns,
+              userTags: news.tags,
+            });
+          } else if (roleArn) {
+            managedClusterRoleName = undefined;
+          }
+          let nodeRoleArn = news.computeConfig?.nodeRoleArn;
+          if (!nodeRoleArn && auto) {
+            managedNodeRoleName ??= yield* createPhysicalName({
+              id: `${id}-node-role`,
+              maxLength: 64,
+            });
+            nodeRoleArn = yield* ensureManagedRole({
+              id,
+              roleName: managedNodeRoleName,
+              service: "ec2.amazonaws.com",
+              actions: ["sts:AssumeRole"],
+              managedPolicyArns: autoNodeManagedPolicyArns,
+              userTags: news.tags,
+            });
+          } else if (nodeRoleArn) {
+            managedNodeRoleName = undefined;
+          }
+          if (!roleArn) {
+            return yield* Effect.fail(
+              new Error(
+                "AWS.EKS.Cluster requires roleArn unless compute is 'auto'",
+              ),
+            );
+          }
+          const managedRoles = { managedClusterRoleName, managedNodeRoleName };
+          const effective = applyAutoModeDefaults(news, {
+            roleArn,
+            nodeRoleArn,
+          });
+
           // Observe — fetch live cloud state. We always fetch fresh so
           // adoption, drift, and partial-prior-runs all converge.
           let state = yield* readCluster({
             clusterName,
             kubernetesObjects: output?.kubernetesObjects,
+            managedRoles,
           });
 
           // Ensure — create cluster if missing. Tolerate
@@ -541,16 +809,16 @@ export const ClusterProvider = () =>
             yield* eks
               .createCluster({
                 name: clusterName,
-                version: news.version,
-                roleArn: news.roleArn,
-                resourcesVpcConfig: news.resourcesVpcConfig,
-                kubernetesNetworkConfig: news.kubernetesNetworkConfig,
-                logging: news.logging,
-                accessConfig: news.accessConfig,
-                computeConfig: news.computeConfig,
-                storageConfig: news.storageConfig,
-                deletionProtection: news.deletionProtection,
-                upgradePolicy: news.upgradePolicy,
+                version: effective.version,
+                roleArn: effective.roleArn,
+                resourcesVpcConfig: effective.resourcesVpcConfig,
+                kubernetesNetworkConfig: effective.kubernetesNetworkConfig,
+                logging: effective.logging,
+                accessConfig: effective.accessConfig,
+                computeConfig: effective.computeConfig,
+                storageConfig: effective.storageConfig,
+                deletionProtection: effective.deletionProtection,
+                upgradePolicy: effective.upgradePolicy,
                 tags: desiredTags,
                 clientRequestToken: yield* toClientRequestToken(id, "create"),
               })
@@ -559,7 +827,7 @@ export const ClusterProvider = () =>
               );
 
             yield* session.note(`Creating EKS cluster ${clusterName}...`);
-            state = yield* waitForClusterActive(clusterName);
+            state = yield* waitForClusterActive(clusterName, [], managedRoles);
           }
 
           const clusterArn = state.clusterArn;
@@ -580,21 +848,22 @@ export const ClusterProvider = () =>
             upgradePolicy: state.upgradePolicy,
             deletionProtection: state.deletionProtection,
           };
-          if (clusterConfigChanged(observedAsProps, news)) {
+          if (clusterConfigChanged(observedAsProps, effective)) {
             const configUpdate = yield* eks.updateClusterConfig({
               name: clusterName,
-              resourcesVpcConfig: news.resourcesVpcConfig,
-              logging: news.logging,
-              accessConfig: news.accessConfig
+              resourcesVpcConfig: effective.resourcesVpcConfig,
+              logging: effective.logging,
+              accessConfig: effective.accessConfig
                 ? {
-                    authenticationMode: news.accessConfig.authenticationMode,
+                    authenticationMode:
+                      effective.accessConfig.authenticationMode,
                   }
                 : undefined,
-              upgradePolicy: news.upgradePolicy,
-              computeConfig: news.computeConfig,
-              kubernetesNetworkConfig: news.kubernetesNetworkConfig,
-              storageConfig: news.storageConfig,
-              deletionProtection: news.deletionProtection,
+              upgradePolicy: effective.upgradePolicy,
+              computeConfig: effective.computeConfig,
+              kubernetesNetworkConfig: effective.kubernetesNetworkConfig,
+              storageConfig: effective.storageConfig,
+              deletionProtection: effective.deletionProtection,
               clientRequestToken: yield* toClientRequestToken(id, "config"),
             });
             if (configUpdate.update?.id) {
@@ -606,15 +875,16 @@ export const ClusterProvider = () =>
                 (yield* waitForClusterActive(
                   clusterName,
                   output?.kubernetesObjects ?? [],
+                  managedRoles,
                 )) ?? state;
             }
           }
 
           // Sync version — observed ↔ desired.
-          if (news.version && state.version !== news.version) {
+          if (effective.version && state.version !== effective.version) {
             const versionUpdate = yield* eks.updateClusterVersion({
               name: clusterName,
-              version: news.version,
+              version: effective.version,
               clientRequestToken: yield* toClientRequestToken(id, "version"),
             });
             if (versionUpdate.update?.id) {
@@ -626,6 +896,7 @@ export const ClusterProvider = () =>
                 (yield* waitForClusterActive(
                   clusterName,
                   output?.kubernetesObjects ?? [],
+                  managedRoles,
                 )) ?? state;
             }
           }
@@ -654,6 +925,7 @@ export const ClusterProvider = () =>
           const final = yield* readCluster({
             clusterName,
             kubernetesObjects: output?.kubernetesObjects ?? [],
+            managedRoles,
           });
           if (!final) {
             return yield* Effect.fail(
@@ -712,6 +984,14 @@ export const ClusterProvider = () =>
             );
 
           yield* waitForClusterDeleted(output.clusterName);
+
+          // Delete the `compute: "auto"` managed IAM roles this cluster owns.
+          if (output.managedClusterRoleName) {
+            yield* deleteManagedRole(output.managedClusterRoleName);
+          }
+          if (output.managedNodeRoleName) {
+            yield* deleteManagedRole(output.managedNodeRoleName);
+          }
         }),
       };
     }),

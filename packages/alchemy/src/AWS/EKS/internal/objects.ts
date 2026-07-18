@@ -1,3 +1,9 @@
+/**
+ * Internal Kubernetes object model + ordering/path helpers powering
+ * `AWS.EKS.Manifest` and the EKS platforms (`Deployment`, `Job`). Not part of
+ * the public surface — the public Kubernetes types live in `src/Kubernetes`.
+ */
+
 export interface KubernetesObjectMetadata {
   name: string;
   namespace?: string;
@@ -23,13 +29,16 @@ export interface KubernetesObjectBinding {
   object: KubernetesObjectDefinition;
 }
 
-type KubernetesObjectScope = "Cluster" | "Namespaced";
+export type KubernetesObjectScope = "Cluster" | "Namespaced";
 
-interface KubernetesObjectKindSpec {
+export interface KubernetesObjectKindSpec {
   plural: string;
   scope: KubernetesObjectScope;
   applyRank: number;
 }
+
+/** Apply rank for kinds not in the static table (applied last, deleted first). */
+export const DEFAULT_APPLY_RANK = 100;
 
 const supportedKinds: Record<string, KubernetesObjectKindSpec> = {
   "v1/Namespace": {
@@ -47,6 +56,11 @@ const supportedKinds: Record<string, KubernetesObjectKindSpec> = {
     scope: "Namespaced",
     applyRank: 30,
   },
+  "v1/Secret": {
+    plural: "secrets",
+    scope: "Namespaced",
+    applyRank: 30,
+  },
   "v1/Service": {
     plural: "services",
     scope: "Namespaced",
@@ -57,8 +71,28 @@ const supportedKinds: Record<string, KubernetesObjectKindSpec> = {
     scope: "Namespaced",
     applyRank: 50,
   },
+  "apps/v1/StatefulSet": {
+    plural: "statefulsets",
+    scope: "Namespaced",
+    applyRank: 50,
+  },
+  "apps/v1/DaemonSet": {
+    plural: "daemonsets",
+    scope: "Namespaced",
+    applyRank: 50,
+  },
   "batch/v1/Job": {
     plural: "jobs",
+    scope: "Namespaced",
+    applyRank: 60,
+  },
+  "batch/v1/CronJob": {
+    plural: "cronjobs",
+    scope: "Namespaced",
+    applyRank: 60,
+  },
+  "v1/Pod": {
+    plural: "pods",
     scope: "Namespaced",
     applyRank: 60,
   },
@@ -68,10 +102,15 @@ const objectTypeKey = (
   input: Pick<KubernetesObjectRef, "apiVersion" | "kind">,
 ) => `${input.apiVersion}/${input.kind}`;
 
+/** Look up the static kind table; `undefined` for kinds needing discovery. */
+export const lookupKubernetesKindSpec = (
+  input: Pick<KubernetesObjectRef, "apiVersion" | "kind">,
+): KubernetesObjectKindSpec | undefined => supportedKinds[objectTypeKey(input)];
+
 export const getKubernetesKindSpec = (
   input: Pick<KubernetesObjectRef, "apiVersion" | "kind">,
 ) => {
-  const spec = supportedKinds[objectTypeKey(input)];
+  const spec = lookupKubernetesKindSpec(input);
   if (!spec) {
     throw new Error(
       `Unsupported Kubernetes object ${input.apiVersion}/${input.kind}`,
@@ -79,6 +118,9 @@ export const getKubernetesKindSpec = (
   }
   return spec;
 };
+
+const applyRankOf = (input: Pick<KubernetesObjectRef, "apiVersion" | "kind">) =>
+  lookupKubernetesKindSpec(input)?.applyRank ?? DEFAULT_APPLY_RANK;
 
 export const toKubernetesObjectRef = (
   object: KubernetesObjectDefinition,
@@ -102,9 +144,6 @@ export const kubernetesObjectKey = (
     input.name,
   ].join("/");
 
-export const kubernetesBindingSid = (object: KubernetesObjectDefinition) =>
-  `Kubernetes.Object(${kubernetesObjectKey(toKubernetesObjectRef(object))})`;
-
 const compareRefs = (a: KubernetesObjectRef, b: KubernetesObjectRef) =>
   kubernetesObjectKey(a).localeCompare(kubernetesObjectKey(b));
 
@@ -113,7 +152,7 @@ export const sortObjectsForApply = (
 ) =>
   [...objects].sort(
     (a, b) =>
-      getKubernetesKindSpec(a).applyRank - getKubernetesKindSpec(b).applyRank ||
+      applyRankOf(a) - applyRankOf(b) ||
       compareRefs(toKubernetesObjectRef(a), toKubernetesObjectRef(b)),
   );
 
@@ -121,9 +160,7 @@ export const sortRefsForDelete = (
   objects: ReadonlyArray<KubernetesObjectRef>,
 ) =>
   [...objects].sort(
-    (a, b) =>
-      getKubernetesKindSpec(b).applyRank - getKubernetesKindSpec(a).applyRank ||
-      compareRefs(a, b),
+    (a, b) => applyRankOf(b) - applyRankOf(a) || compareRefs(a, b),
   );
 
 export const chunkByApplyRank = (
@@ -132,14 +169,14 @@ export const chunkByApplyRank = (
   const chunks: KubernetesObjectDefinition[][] = [];
 
   for (const object of sortObjectsForApply(objects)) {
-    const rank = getKubernetesKindSpec(object).applyRank;
+    const rank = applyRankOf(object);
     const current = chunks[chunks.length - 1];
     if (!current) {
       chunks.push([object]);
       continue;
     }
 
-    const currentRank = getKubernetesKindSpec(current[0]).applyRank;
+    const currentRank = applyRankOf(current[0]);
     if (currentRank === rank) {
       current.push(object);
     } else {
@@ -150,13 +187,17 @@ export const chunkByApplyRank = (
   return chunks;
 };
 
-export const buildKubernetesObjectPath = (
+/**
+ * Build the REST path for an object given its (statically-known or
+ * discovered) kind spec.
+ */
+export const buildKubernetesObjectPathWithSpec = (
   input: Pick<
     KubernetesObjectRef,
     "apiVersion" | "kind" | "name" | "namespace"
   >,
+  spec: KubernetesObjectKindSpec,
 ) => {
-  const spec = getKubernetesKindSpec(input);
   const [group, version] = input.apiVersion.includes("/")
     ? input.apiVersion.split("/", 2)
     : [undefined, input.apiVersion];
@@ -175,3 +216,10 @@ export const buildKubernetesObjectPath = (
 
   return `${base}/${spec.plural}/${input.name}`;
 };
+
+export const buildKubernetesObjectPath = (
+  input: Pick<
+    KubernetesObjectRef,
+    "apiVersion" | "kind" | "name" | "namespace"
+  >,
+) => buildKubernetesObjectPathWithSpec(input, getKubernetesKindSpec(input));

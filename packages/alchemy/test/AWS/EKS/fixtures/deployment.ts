@@ -4,12 +4,12 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
- * End-to-end fixture for `AWS.EKS.ServerHost`: an Effect HTTP server deployed
+ * End-to-end fixture for `AWS.EKS.Deployment`: an Effect HTTP server deployed
  * as a Kubernetes Deployment + LoadBalancer Service on an EKS cluster.
  *
  * - The target cluster is deployed by the test's phase-1 program and referenced
  *   here via `AWS.EKS.Cluster.ref("EksHostCluster")` (props are an Effect).
- *   Refs resolve from stack state, giving the ServerHost the cluster endpoint +
+ *   Refs resolve from stack state, giving the Deployment the cluster endpoint +
  *   CA at deploy — the reconciler applies the Deployment/Service via
  *   server-side apply against it.
  * - The DynamoDB `Table` is yielded inline (a plain Resource, safe to nest) and
@@ -20,7 +20,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * - `/put?id=x` writes an item so the test can prove the binding worked by
  *   reading it back out-of-band; `/health` gates readiness.
  */
-export default class EksHostApi extends AWS.EKS.ServerHost<EksHostApi>()(
+export default class EksHostApi extends AWS.EKS.Deployment<EksHostApi>()(
   "EksHostApi",
   Effect.gen(function* () {
     const cluster = yield* AWS.EKS.Cluster.ref("EksHostCluster");
@@ -54,7 +54,7 @@ export default class EksHostApi extends AWS.EKS.ServerHost<EksHostApi>()(
             table: yield* TableName,
           });
         }
-        return HttpServerResponse.text("eks server host");
+        return HttpServerResponse.text("eks deployment");
       }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
