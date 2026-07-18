@@ -3413,8 +3413,12 @@ describe("read is never handed unresolved persisted props", () => {
   );
 
   test(
-    "resolved persisted creating props still go through read recovery on destroy (control)",
+    "destroy of a creating row defers read recovery to apply even with resolved props",
     Effect.gen(function* () {
+      // Plan never probes a deleted attr-less row — resolved or not. Apply's
+      // `deleteResource` owns the authoritative read-then-delete recovery
+      // (it also covers replaced-chain old generations that never pass
+      // through plan); see the apply.test.ts destroy-recovery cases.
       yield* seed({
         Zombie: {
           ...creatingWithUnresolvedProps("Zombie"),
@@ -3423,8 +3427,29 @@ describe("read is never handed unresolved persisted props", () => {
       });
       const { reads, layer } = trackReads();
       const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
-      expect(reads).toContain("Zombie");
+      expect(reads).not.toContain("Zombie");
       expect(plan.deletions.Zombie).toMatchObject({ action: "delete" });
+      expect((plan.deletions.Zombie as any).state.attr).toBeUndefined();
+    }),
+  );
+
+  test(
+    "resolved persisted creating props still go through read recovery when re-declared (control)",
+    Effect.gen(function* () {
+      yield* seed({
+        Half: {
+          ...creatingWithUnresolvedProps("Half"),
+          props: { string: "resolved" },
+        },
+      });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved-now" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toContain("Half");
+      expect(plan.resources.Half!.action).toBe("create");
     }),
   );
 });
