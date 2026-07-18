@@ -24,7 +24,7 @@ export interface Author {
   readonly bot?: boolean;
 }
 
-const AuthorSchema: S.Top & { readonly Type: Author } = S.Struct({
+export const Author: S.Schema<Author> = S.Struct({
   id: S.String,
   username: S.String,
   bot: S.optionalKey(S.Boolean),
@@ -39,7 +39,7 @@ export class Mentioned extends Event("Mentioned", {
   serverId: S.NullOr(S.String),
   channelId: S.String,
   messageId: S.String,
-  author: AuthorSchema,
+  author: Author,
   content: S.String,
   timestamp: S.optionalKey(S.String),
 })`
@@ -52,7 +52,7 @@ export class MessageCreated extends Event("MessageCreated", {
   serverId: S.NullOr(S.String),
   channelId: S.String,
   messageId: S.String,
-  author: AuthorSchema,
+  author: Author,
   content: S.String,
   timestamp: S.optionalKey(S.String),
 })`

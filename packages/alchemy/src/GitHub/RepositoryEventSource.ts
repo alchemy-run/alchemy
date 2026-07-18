@@ -8,11 +8,15 @@ import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import { sanitizeKey } from "../RuntimeContext.ts";
 import {
-  type IssueCommentedEvent,
-  type IssuesEvent,
+  IssueClosed,
+  IssueCommented,
+  IssueLabeled,
+  IssueOpened,
   parseWebhookEvent,
-  type PullRequestEvent,
-  type PushEvent,
+  PullRequestClosed,
+  PullRequestMerged,
+  PullRequestOpened,
+  Push,
 } from "./Events.ts";
 import type { Providers } from "./Providers.ts";
 import { type RepositoryLike, resolveRepository } from "./RepositoryLike.ts";
@@ -96,32 +100,48 @@ export interface RepositoryEventSourceOptions<
   path?: string;
 }
 
-/**
- * The typed events a handler receives for each requested bare webhook
- * name — parsing is the wire's job (`Match.tag` is the consumer's):
- * `issues` ⇒ {@link IssuesEvent}, `issue_comment` ⇒
- * {@link IssueCommentedEvent}, `pull_request` ⇒
- * {@link PullRequestEvent}, `push` ⇒ {@link PushEvent}. Bare names with
- * no tags in the union yet deliver nothing (extend
- * `GitHub.RepositoryEvent` when a consumer needs them).
- */
-export type RepositoryEventFor<Name extends GitHubEventName> =
-  Name extends "issues"
-    ? IssuesEvent
-    : Name extends "issue_comment"
-      ? IssueCommentedEvent
-      : Name extends "pull_request"
-        ? PullRequestEvent
-        : Name extends "push"
-          ? PushEvent
-          : never;
+/** The event terms a subscription can select. */
+export type RepositoryEventClass =
+  | typeof IssueOpened
+  | typeof IssueLabeled
+  | typeof IssueCommented
+  | typeof IssueClosed
+  | typeof PullRequestOpened
+  | typeof PullRequestMerged
+  | typeof PullRequestClosed
+  | typeof Push;
+
+/** Which bare webhook each event term rides — the wire subscription. */
+const WIRE_NAME = {
+  IssueOpened: "issues",
+  IssueLabeled: "issues",
+  IssueClosed: "issues",
+  IssueCommented: "issue_comment",
+  PullRequestOpened: "pull_request",
+  PullRequestMerged: "pull_request",
+  PullRequestClosed: "pull_request",
+  Push: "push",
+} as const satisfies Record<string, GitHubEventName>;
+
+/** The consumer-facing subscription options: typed event terms. */
+export interface ConsumeRepositoryEventsOptions<
+  E extends readonly RepositoryEventClass[] = readonly RepositoryEventClass[],
+> extends Omit<RepositoryEventSourceOptions, "events"> {
+  /**
+   * The typed EVENT TERMS to deliver (`[GitHub.IssueOpened]`) — the
+   * handler's parameter type is exactly the union of their payloads.
+   * The wire subscription (which bare webhooks to provision or poll)
+   * is derived from the selection.
+   */
+  readonly events: E;
+}
 
 /**
  * Subscribe to events emitted by a GitHub repository — the repository
  * is the {@link Repository} RESOURCE (yielded or the un-yielded exported
- * const), and deliveries arrive ALREADY PARSED: the handler receives the
- * typed {@link RepositoryEvent} union (narrowed to the requested
- * `events`), never raw webhook payloads. Routing is `Match.tag`:
+ * const), and deliveries arrive ALREADY PARSED and PRE-SELECTED:
+ * `events` names the typed event terms to deliver, and the handler
+ * receives exactly that union, never raw webhook payloads.
  *
  * Call it in the init phase of a host (e.g. a Cloudflare Worker); the
  * handler runs once per delivery. Wiring the webhook (delivery URL,
@@ -134,34 +154,50 @@ export type RepositoryEventFor<Name extends GitHubEventName> =
  * ```typescript
  * yield* GitHub.consumeRepositoryEvents(
  *   repo, // GitHub.Repository — yielded, or the exported un-yielded const
- *   { events: ["issues", "issue_comment"] },
+ *   { events: [GitHub.IssueOpened, GitHub.IssueCommented] },
  *   (event) =>
  *     Match.value(event).pipe(
  *       Match.tag("IssueOpened", (event) => issues.send(event)),
  *       Match.tag("IssueCommented", (event) => issues.steer(GitHub.eventKey(event)!, event)),
- *       Match.orElse(() => Effect.void), // denial-by-skip, in code
+ *       Match.exhaustive, // the selection IS the routing table
  *     ),
  * );
  * ```
  */
 export function consumeRepositoryEvents<
-  const E extends readonly WebhookEventName[] = readonly WebhookEventName[],
+  const E extends readonly RepositoryEventClass[] =
+    readonly RepositoryEventClass[],
   Req = never,
 >(
   repo: RepositoryLike,
-  options: RepositoryEventSourceOptions<E>,
+  options: ConsumeRepositoryEventsOptions<E>,
   process: (
-    event: RepositoryEventFor<SelectedEvent<E>>,
+    event: InstanceType<E[number]>,
   ) => Effect.Effect<void, never, Req | Providers>,
 ): Effect.Effect<void, never, RepositoryEventSource> {
   return Effect.gen(function* () {
     const identity = yield* resolveRepository(repo);
     const source = yield* RepositoryEventSource;
-    yield* source({ ...identity, ...options }, (delivery) =>
+    const { events, ...rest } = options;
+    const selected = new Set<string>(
+      events.map((term) => term["~alchemy/Name"]),
+    );
+    const names = [
+      ...new Set(
+        events.map(
+          (term) => WIRE_NAME[term["~alchemy/Name"] as keyof typeof WIRE_NAME],
+        ),
+      ),
+    ];
+    yield* source({ ...identity, ...rest, events: names }, (delivery) =>
       Option.match(parseWebhookEvent(identity, delivery), {
         onNone: () => Effect.void,
         onSome: (event) =>
-          process(event as RepositoryEventFor<SelectedEvent<E>>),
+          // finer than the wire: [IssueOpened] rides the `issues`
+          // webhook but never delivers an IssueClosed
+          selected.has(event._tag)
+            ? process(event as InstanceType<E[number]>)
+            : Effect.void,
       }),
     );
   });

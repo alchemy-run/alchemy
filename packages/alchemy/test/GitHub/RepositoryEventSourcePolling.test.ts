@@ -24,7 +24,7 @@
  *     the delta, never a re-delivery of what an earlier poll saw.
  */
 import * as GitHub from "@/GitHub/index.ts";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -163,7 +163,13 @@ describe("GitHub.RepositoryEventSourcePolling", () => {
         const inbox = yield* Queue.unbounded<GitHub.IssuesEvent>();
         yield* GitHub.consumeRepositoryEvents(
           testAlchemy,
-          { events: ["issues"] },
+          {
+            events: [
+              GitHub.IssueOpened,
+              GitHub.IssueLabeled,
+              GitHub.IssueClosed,
+            ],
+          },
           (event) => Queue.offer(inbox, event).pipe(Effect.asVoid),
         );
 
@@ -203,13 +209,21 @@ describe("GitHub.RepositoryEventSourcePolling", () => {
 
       return Effect.gen(function* () {
         const inbox = yield* Queue.unbounded<
-          | GitHub.IssuesEvent
-          | GitHub.IssueCommentedEvent
-          | GitHub.PullRequestEvent
+          GitHub.IssuesEvent | GitHub.IssueCommented | GitHub.PullRequestEvent
         >();
         yield* GitHub.consumeRepositoryEvents(
           testAlchemy,
-          { events: ["issues", "issue_comment", "pull_request"] },
+          {
+            events: [
+              GitHub.IssueOpened,
+              GitHub.IssueLabeled,
+              GitHub.IssueClosed,
+              GitHub.IssueCommented,
+              GitHub.PullRequestOpened,
+              GitHub.PullRequestMerged,
+              GitHub.PullRequestClosed,
+            ],
+          },
           (event) => Queue.offer(inbox, event).pipe(Effect.asVoid),
         );
 

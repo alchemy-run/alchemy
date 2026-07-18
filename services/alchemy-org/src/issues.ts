@@ -20,7 +20,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import { Engineer } from "./engineer.ts";
-import { IssueClosed, IssueCommented, IssueOpened } from "./events.ts";
 import { Ledger } from "./ledger.ts";
 import { testAlchemy } from "./repos.ts";
 import { CloseIssue, Comment, LinkIssues, SearchIssues } from "./tools.ts";
@@ -38,12 +37,12 @@ export class Issues extends AI.Process<Issues, IssuesService>()("Issues")`
 This process manages GitHub issues for ${testAlchemy} from open to
 close.
 
-Every ${IssueOpened} is checked for prior art with ${SearchIssues}.
-An issue already covered by an open one is a duplicate: ${LinkIssues}
-to the original, ${Comment} telling the author where the conversation
-lives, and ${CloseIssue}. An issue that is related but distinct is
-linked and stays open — an unlinked relation is how the org solves
-the same problem twice.
+Every ${GitHub.IssueOpened} is checked for prior art with
+${SearchIssues}. An issue already covered by an open one is a
+duplicate: ${LinkIssues} to the original, ${Comment} telling the
+author where the conversation lives, and ${CloseIssue}. An issue
+that is related but distinct is linked and stays open — an unlinked
+relation is how the org solves the same problem twice.
 
 An issue is READY when its acceptance criteria are precise enough
 that someone who has read nothing else could start work. Until it
@@ -53,8 +52,8 @@ question per gap, no boilerplate — and the process waits.
 A ready issue is handed to ${Engineer}, whose pull request must cite
 the issue. Review and merging happen elsewhere: the PullRequests
 process drives every pull request to its verdict. This process
-resumes when the world moves — an ${IssueCommented} from the author,
-the pull request merging, an ${IssueClosed} by hand.
+resumes when the world moves — a ${GitHub.IssueCommented} from the
+author, the pull request merging, a ${GitHub.IssueClosed} by hand.
 
 A merged fix closes its issue with ${CloseIssue}, citing the pull
 request; an author confirming the problem is gone does the same. An
@@ -76,9 +75,17 @@ export const IssuesLive = Layer.effect(
     const listIssues = yield* GitHub.ListIssues(testAlchemy);
     const issues = yield* AI.interpret(Issues);
 
+    // the selection IS the routing table — unselected events
+    // (labeled etc.) never arrive, and the Match is exhaustive
     yield* GitHub.consumeRepositoryEvents(
       testAlchemy,
-      { events: ["issues", "issue_comment"] },
+      {
+        events: [
+          GitHub.IssueOpened,
+          GitHub.IssueCommented,
+          GitHub.IssueClosed,
+        ],
+      },
       (event) =>
         Match.value(event).pipe(
           Match.tag("IssueOpened", (event) =>
@@ -100,8 +107,7 @@ export const IssuesLive = Layer.effect(
               yield* ledger.settle("issues", key);
             }),
           ),
-          // denial-by-skip, in code (labeled etc.)
-          Match.orElse(() => Effect.void),
+          Match.exhaustive,
         ),
     );
 

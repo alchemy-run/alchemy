@@ -17,11 +17,6 @@ import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
-import {
-  PullRequestClosed,
-  PullRequestMerged,
-  PullRequestOpened,
-} from "./events.ts";
 import { Ledger } from "./ledger.ts";
 import { testAlchemy } from "./repos.ts";
 import { Reviewer } from "./reviewer.ts";
@@ -43,10 +38,11 @@ export class PullRequests extends AI.Process<
 This process drives every pull request in ${testAlchemy} to a
 verdict — the factory's own and human contributors' alike.
 
-Each ${PullRequestOpened} receives a review from ${Reviewer} against
-its originating issue. A pull request that names no issue gets one
-chance: ${Comment} asks the author to link or state the intent, and
-the review proceeds against that statement when it arrives.
+Each ${GitHub.PullRequestOpened} receives a review from ${Reviewer}
+against its originating issue. A pull request that names no issue
+gets one chance: ${Comment} asks the author to link or state the
+intent, and the review proceeds against that statement when it
+arrives.
 
 A review that requests changes is relayed with ${Comment}, exactly —
 the author hears the Reviewer's words, not a summary. A review that
@@ -54,11 +50,11 @@ approves, with green checks, is followed by ${MergePullRequest}. The
 merge tool itself refuses without an approved review; a refusal is a
 fact about the world to fix, never to work around.
 
-A ${PullRequestMerged} or ${PullRequestClosed} ends this process's
-involvement — the verdict was delivered, however it happened. A pull
-request whose author has gone quiet after requested changes stays
-open with its review attached — closing other people's work is a
-human's call, and this process never makes it.` {}
+A ${GitHub.PullRequestMerged} or ${GitHub.PullRequestClosed} ends
+this process's involvement — the verdict was delivered, however it
+happened. A pull request whose author has gone quiet after requested
+changes stays open with its review attached — closing other people's
+work is a human's call, and this process never makes it.` {}
 
 /**
  * The implementation: one run per pull request, keyed `owner/repo#n`.
@@ -75,7 +71,13 @@ export const PullRequestsLive = Layer.effect(
 
     yield* GitHub.consumeRepositoryEvents(
       testAlchemy,
-      { events: ["pull_request"] },
+      {
+        events: [
+          GitHub.PullRequestOpened,
+          GitHub.PullRequestMerged,
+          GitHub.PullRequestClosed,
+        ],
+      },
       (event) =>
         Match.value(event).pipe(
           Match.tag("PullRequestOpened", (event) =>
