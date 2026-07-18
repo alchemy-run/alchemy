@@ -1,51 +1,66 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import type { Region } from "@distilled.cloud/aws/Region";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
-import { createInternalTags, diffTags } from "../../Tags.ts";
+import type { HostRuntimeContext, ServerHost } from "../../Server/Process.ts";
+import { Stack } from "../../Stack.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import type { AccountID } from "../Environment.ts";
+import type { Credentials } from "../Credentials.ts";
+import {
+  computeStaticSourceHash,
+  makeBunBootstrap,
+  makeImageSource,
+  type BundledImageSource,
+  type DockerfileImageSource,
+  type ImageSourceLike,
+  type RegistryImageSource,
+} from "../ECR/ImageSource.ts";
+import type { AWSEnvironment, AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
+import type { Providers } from "../Providers.ts";
 import type { ClusterArn } from "./Cluster.ts";
+import {
+  attachTaskBindings,
+  createContainerRuntimeContext,
+  createTaskRoleIfNotExists,
+  deleteTaskDefinitionInfrastructure,
+  ensureTaskExecutionRole,
+  ensureTaskLogGroup,
+  registerTaskDefinitionRevision,
+  syncTaskDefinitionTags,
+  taskImagePlatform,
+  type TaskBindingContract,
+  type TaskDefinitionConfig,
+} from "./Task.ts";
 
 export type ServiceName = string;
 export type ServiceArn =
   `arn:aws:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
 
-export interface ServiceProps {
+export const isService = (value: any): value is Service => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "Type" in value &&
+    value.Type === "AWS.ECS.Service"
+  );
+};
+
+export interface ServicePropsBase extends PlatformProps {
   /**
    * ECS cluster that will own the service.
    */
-  cluster: Input<ClusterArn> | { clusterArn: Input<ClusterArn> };
-
-  /**
-   * Bundled ECS task to run for each service replica.
-   *
-   * This is the runtime-facing subset of `AWS.ECS.Task` attributes that the
-   * service needs in order to deploy and wire load balancer traffic.
-   */
-  task: {
-    /**
-     * Registered task definition ARN to deploy.
-     */
-    taskDefinitionArn: string;
-    /**
-     * Container name inside the task definition that should receive traffic.
-     */
-    containerName: string;
-    /**
-     * Container port that the service should expose and forward traffic to.
-     */
-    port: number;
-  };
+  cluster: ClusterArn | { clusterArn: ClusterArn };
 
   /**
    * Name of the ECS service.
@@ -63,24 +78,30 @@ export interface ServiceProps {
 
   /**
    * VPC that hosts the service networking and optional public ingress.
+   * When omitted (together with {@link subnets}), the account's default VPC
+   * is used.
    */
-  vpcId: string;
+  vpcId?: string;
 
   /**
    * Subnets used by the service's awsvpc network configuration. Updated in
-   * place via `updateService`.
+   * place via `updateService`. When omitted (together with {@link vpcId}),
+   * the default VPC's per-AZ default subnets are used.
    */
-  subnets: string[];
+  subnets?: string[];
 
   /**
-   * Security groups attached to the service ENIs and, when `public: true`, the
-   * generated Application Load Balancer. Updated in place.
+   * Security groups attached to the service ENIs and any Alchemy-managed
+   * load balancer. When omitted and {@link loadBalancer} is set, Alchemy
+   * provisions (and owns) a security group that admits the listener port
+   * from anywhere and the container port from within the group.
    */
   securityGroups?: string[];
 
   /**
-   * Whether the service ENIs should receive public IPs. Updated in place.
-   * @default false
+   * Whether the service ENIs should receive public IPs.
+   * @default false — but `true` when networking defaulted to the default
+   * VPC (public subnets need a public IP to pull images without a NAT).
    */
   assignPublicIp?: boolean;
 
@@ -106,7 +127,8 @@ export interface ServiceProps {
    * target group (or CLB) plus the container/port that receives traffic.
    * Updated in place for rolling deployments.
    *
-   * For an Alchemy-managed public ALB instead, set {@link public} to `true`.
+   * For an Alchemy-managed public ALB instead, set {@link loadBalancer} to
+   * `true`.
    */
   loadBalancers?: ecs.LoadBalancer[];
 
@@ -117,10 +139,16 @@ export interface ServiceProps {
   serviceRegistries?: ecs.ServiceRegistry[];
 
   /**
-   * Whether Alchemy should provision a public Application Load Balancer and
-   * listener in front of the service. When set, the generated target group is
-   * appended to {@link loadBalancers}.
+   * Whether Alchemy should provision a public Application Load Balancer,
+   * target group, and listener in front of the service. The service's `url`
+   * attribute is populated from the ALB's DNS name.
    * @default false
+   */
+  loadBalancer?: boolean;
+
+  /**
+   * Legacy alias for {@link loadBalancer}.
+   * @deprecated use `loadBalancer: true`
    */
   public?: boolean;
 
@@ -230,6 +258,69 @@ export interface ServiceProps {
   tags?: Record<string, string>;
 }
 
+/**
+ * Deploy an existing `AWS.ECS.Task`'s definition as a service (shared
+ * image/roles/config; the Service adds `desiredCount` / load balancing /
+ * deployment configuration).
+ */
+export interface TaskReferenceServiceProps extends ServicePropsBase {
+  /**
+   * Bundled ECS task to run for each service replica: the runtime-facing
+   * subset of `AWS.ECS.Task` attributes the service needs to deploy and
+   * wire load balancer traffic (a full `Task` satisfies it structurally).
+   */
+  task: {
+    /**
+     * Registered task definition ARN to deploy.
+     */
+    taskDefinitionArn: string;
+    /**
+     * Container name inside the task definition that should receive traffic.
+     */
+    containerName: string;
+    /**
+     * Container port that the service should expose and forward traffic to.
+     */
+    port: number;
+  };
+}
+
+/**
+ * Image-owning base: the Service synthesizes its own task definition
+ * (roles, log group, ECR repository, image) from the shared
+ * {@link TaskDefinitionConfig} surface.
+ */
+export interface ImageOwningServicePropsBase
+  extends ServicePropsBase, Omit<TaskDefinitionConfig, "placementConstraints"> {
+  /**
+   * Task definition placement constraints (`memberOf` expressions) for the
+   * synthesized task definition. (`placementConstraints` on the service
+   * itself remains the service-level ECS placement constraint list.)
+   */
+  taskPlacementConstraints?: ecs.TaskDefinitionPlacementConstraint[];
+}
+
+/** Bundle an inline Effect program (`main`) into the service's image. */
+export interface BundledServiceProps
+  extends ImageOwningServicePropsBase, BundledImageSource {}
+/** Build the user's own Dockerfile into the service's image. */
+export interface DockerfileServiceProps
+  extends ImageOwningServicePropsBase, DockerfileImageSource {}
+/** Run a pre-built registry image, mirrored into ECR. */
+export interface ImageServiceProps
+  extends ImageOwningServicePropsBase, RegistryImageSource {}
+
+/**
+ * Service props — either reference an existing task definition (`task:`) or
+ * own the image via exactly one of `main` / `context` / `image` (the
+ * Service then synthesizes its own task definition).
+ */
+export type ServiceProps =
+  | TaskReferenceServiceProps
+  | BundledServiceProps
+  | DockerfileServiceProps
+  | ImageServiceProps;
+
 export interface Service extends Resource<
   "AWS.ECS.Service",
   ServiceProps,
@@ -261,37 +352,98 @@ export interface Service extends Resource<
 
     /**
      * Public URL exposed by the generated Application Load Balancer, when
-     * `public: true`.
+     * `loadBalancer: true`.
      */
     url?: string;
 
     /**
-     * ARN of the generated load balancer, when `public: true`.
+     * ARN of the generated load balancer, when `loadBalancer: true`.
      */
     loadBalancerArn?: string;
 
     /**
-     * ARN of the generated target group, when `public: true`.
+     * ARN of the generated target group, when `loadBalancer: true`.
      */
     targetGroupArn?: string;
 
     /**
-     * ARN of the generated listener, when `public: true`.
+     * ARN of the generated listener, when `loadBalancer: true`.
      */
     listenerArn?: string;
+
+    /**
+     * Id of the Alchemy-owned security group created for managed ingress
+     * (only when `loadBalancer: true` and no `securityGroups` supplied).
+     */
+    securityGroupId?: string;
+
+    /** Family of the synthesized task definition (image-owning form only). */
+    taskFamily?: string;
+    /** Name of the primary container (image-owning form only). */
+    containerName?: string;
+    /** Container port receiving traffic (image-owning form only). */
+    port?: number;
+    /** Image URI the synthesized task definition runs. */
+    imageUri?: string;
+    /** ECR repository name holding the service's image. */
+    repositoryName?: string;
+    /** ECR repository URI holding the service's image. */
+    repositoryUri?: string;
+    /** ARN of the synthesized task role. */
+    taskRoleArn?: string;
+    /** Name of the synthesized task role. */
+    taskRoleName?: string;
+    /** ARN of the synthesized execution role. */
+    executionRoleArn?: string;
+    /** Name of the synthesized execution role. */
+    executionRoleName?: string;
+    /** CloudWatch log group of the synthesized task definition. */
+    logGroupName?: string;
+    /** ARN of the CloudWatch log group. */
+    logGroupArn?: string;
+    /** Content hash of the service's container image. */
+    code?: {
+      /** Content hash of the service's container image. */
+      hash: string;
+    };
   },
-  never,
+  TaskBindingContract,
   Providers
 > {}
 
+export type ServiceServices =
+  | Credentials
+  | Region
+  | ServerHost
+  | AWSEnvironment;
+
 /**
- * An ECS service for running long-lived tasks.
+ * The impl shape for an effectful `Service`: a long-running server returning
+ * `{ fetch }` (plus optional RPC methods).
+ */
+export type ServiceShape = Main<ServiceServices>;
+
+export interface ServiceRuntimeContext extends HostRuntimeContext {
+  readonly Type: "AWS.ECS.Service";
+}
+
+/**
+ * An ECS service: N copies of a container kept alive, optionally behind a
+ * load balancer.
  *
- * `Service` keeps a registered task definition running with awsvpc networking.
- * Load balancing is **explicit**: pass user-supplied `loadBalancers` target
- * groups, or set `public: true` to have Alchemy provision a public ALB +
- * listener + target group as a convenience. Launch behavior is controlled via
- * `launchType` (default `FARGATE`) or a `capacityProviderStrategy`.
+ * The service's image comes from one of four sources:
+ *
+ * - `image` — run a pre-built registry image, mirrored into ECR.
+ * - `context` — build your own Dockerfile.
+ * - `main` — bundle an inline Effect program (servers return `{ fetch }`).
+ * - `task:` — deploy an existing `AWS.ECS.Task`'s definition; the Service
+ *   adds `desiredCount` / load balancing / deployment configuration.
+ *
+ * With any of the first three the Service synthesizes its own task
+ * definition (task + execution roles, log group, ECR repository).
+ * `loadBalancer: true` wires a public ALB + target group + listener and
+ * populates the `url` attribute. When `vpcId`/`subnets` are omitted the
+ * account's default VPC (and its per-AZ subnets) is used.
  *
  * Most configuration is updated **in place** via `updateService`
  * (desiredCount, task definition, network, deployment config, placement,
@@ -301,28 +453,42 @@ export interface Service extends Resource<
  * service.
  * @resource
  * @section Creating Services
- * @example Internal Service
+ * @example Remote Image Behind a Load Balancer
  * ```typescript
- * const service = yield* Service("WorkerService", {
+ * const nginx = yield* Service("Edge", {
  *   cluster,
- *   task: workerTask,
- *   vpcId: vpc.vpcId,
- *   subnets: [privateSubnet1.subnetId, privateSubnet2.subnetId],
- *   securityGroups: [workerSecurityGroup.groupId],
+ *   image: "public.ecr.aws/nginx/nginx:1.27",
+ *   port: 80,
  *   desiredCount: 2,
+ *   loadBalancer: true,   // ALB + target group + listener wiring
+ * });
+ * nginx.url; // http://<alb-dns-name>
+ * ```
+ *
+ * @example Run an Existing Task's Definition
+ * ```typescript
+ * const api = yield* Service("Api", {
+ *   cluster,
+ *   task: apiTask,        // shared image/roles/config; Service adds
+ *   desiredCount: 2,      // desiredCount / LB / deployment config
+ *   loadBalancer: true,
  * });
  * ```
  *
- * @example Public HTTP Service (Alchemy-managed ALB)
+ * @example Inline Effect Server
  * ```typescript
- * const service = yield* Service("ApiService", {
- *   cluster,
- *   task: apiTask,
- *   vpcId: vpc.vpcId,
- *   subnets: [publicSubnet1.subnetId, publicSubnet2.subnetId],
- *   securityGroups: [serviceSecurityGroup.groupId],
- *   public: true,
- * });
+ * const api = yield* Service(
+ *   "Api",
+ *   { cluster, main: import.meta.url, port: 3000, desiredCount: 2, cpu: 256, memory: 512 },
+ *   Effect.gen(function* () {
+ *     const putItem = yield* AWS.DynamoDB.PutItem(table);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         return yield* HttpServerResponse.json({ ok: true });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+ * );
  * ```
  *
  * @section Load Balancing
@@ -378,12 +544,40 @@ export interface Service extends Resource<
  * });
  * ```
  */
-export const Service = Resource<Service>("AWS.ECS.Service");
+export const Service: Platform<
+  Service,
+  ServiceServices,
+  ServiceShape,
+  ServiceRuntimeContext
+> = Platform("AWS.ECS.Service", {
+  createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
+    id: string,
+  ) => ServiceRuntimeContext,
+});
+
+/** The BYO task reference, when the props use the `task:` form. */
+const taskRefOf = (props: ServiceProps | undefined) =>
+  props !== undefined && "task" in props ? props.task : undefined;
+
+/** Whether the props request Alchemy-managed ALB ingress. */
+const wantsManagedIngress = (props: {
+  loadBalancer?: boolean;
+  public?: boolean;
+}) => props.loadBalancer ?? props.public ?? false;
 
 export const ServiceProvider = () =>
   Provider.effect(
     Service,
     Effect.gen(function* () {
+      const stack = yield* Stack;
+      const imageSource = yield* makeImageSource;
+
+      const alchemyEnv = {
+        ALCHEMY_STACK_NAME: stack.name,
+        ALCHEMY_STAGE: stack.stage,
+        ALCHEMY_PHASE: "runtime",
+      };
+
       // Derive the cluster ARN from either form of the `cluster` prop. May
       // legitimately receive `undefined`: a `creating` state row persisted
       // before upstream Outputs resolved can't round-trip an Output-valued
@@ -413,6 +607,172 @@ export const ServiceProvider = () =>
               lowercase: true,
             });
 
+      // ── networking ────────────────────────────────────────────────────
+
+      /**
+       * Resolve the VPC + subnets the service runs in. Explicit props win;
+       * otherwise fall back to the account's default VPC and its per-AZ
+       * default subnets (public — so `assignPublicIp` then defaults to true
+       * to allow image pulls without a NAT).
+       */
+      const resolveNetwork = Effect.fn(function* (news: {
+        vpcId?: string;
+        subnets?: string[];
+        assignPublicIp?: boolean;
+      }) {
+        if (news.vpcId !== undefined && news.subnets !== undefined) {
+          return {
+            vpcId: news.vpcId,
+            subnets: news.subnets,
+            assignPublicIp: news.assignPublicIp ?? false,
+          };
+        }
+        const vpcs = yield* ec2.describeVpcs({
+          Filters: [{ Name: "isDefault", Values: ["true"] }],
+        });
+        const vpc = (vpcs.Vpcs ?? []).find((v) => v.IsDefault);
+        if (!vpc?.VpcId) {
+          return yield* Effect.die(
+            new Error(
+              "AWS.ECS.Service: no default VPC in this account/region — pass `vpcId` and `subnets` explicitly",
+            ),
+          );
+        }
+        const subnets = yield* ec2.describeSubnets({
+          Filters: [
+            { Name: "vpc-id", Values: [vpc.VpcId] },
+            { Name: "default-for-az", Values: ["true"] },
+          ],
+        });
+        const subnetIds = (subnets.Subnets ?? [])
+          .map((s) => s.SubnetId)
+          .filter((s): s is string => s !== undefined);
+        if (subnetIds.length === 0) {
+          return yield* Effect.die(
+            new Error(
+              "AWS.ECS.Service: the default VPC has no default subnets — pass `subnets` explicitly",
+            ),
+          );
+        }
+        return {
+          vpcId: vpc.VpcId,
+          subnets: news.subnets ?? subnetIds,
+          assignPublicIp: news.assignPublicIp ?? true,
+        };
+      });
+
+      /**
+       * Ensure the Alchemy-owned ingress security group (managed ALB with no
+       * user-supplied `securityGroups`): admits the listener port from
+       * anywhere and the container port from within the group. Observe-first
+       * so re-runs never trip duplicate-rule errors.
+       */
+      const ensureIngressSecurityGroup = Effect.fn(function* ({
+        id,
+        vpcId,
+        listenerPort,
+        containerPort,
+        tags,
+      }: {
+        id: string;
+        vpcId: string;
+        listenerPort: number;
+        containerPort: number;
+        tags: Record<string, string>;
+      }) {
+        const groupName = yield* createPhysicalName({
+          id: `${id}-sg`,
+          maxLength: 255,
+          lowercase: true,
+        });
+
+        const existing = yield* ec2.describeSecurityGroups({
+          Filters: [
+            { Name: "vpc-id", Values: [vpcId] },
+            { Name: "group-name", Values: [groupName] },
+          ],
+        });
+        const groupId =
+          existing.SecurityGroups?.[0]?.GroupId ??
+          (yield* ec2
+            .createSecurityGroup({
+              GroupName: groupName,
+              Description: `Alchemy-managed ingress for ECS service ${id}`,
+              VpcId: vpcId,
+              TagSpecifications: [
+                {
+                  ResourceType: "security-group",
+                  Tags: createTagsList(tags),
+                },
+              ],
+            })
+            .pipe(
+              Effect.catchTag("InvalidGroup.Duplicate", () =>
+                ec2
+                  .describeSecurityGroups({
+                    Filters: [
+                      { Name: "vpc-id", Values: [vpcId] },
+                      { Name: "group-name", Values: [groupName] },
+                    ],
+                  })
+                  .pipe(
+                    Effect.map((r) => ({
+                      GroupId: r.SecurityGroups?.[0]?.GroupId,
+                    })),
+                  ),
+              ),
+              Effect.map((r) => r.GroupId),
+            ));
+        if (!groupId) {
+          return yield* Effect.die(
+            new Error(`Failed to resolve security group '${groupName}'`),
+          );
+        }
+
+        // Authorize only the missing rules (observe-first, so no
+        // duplicate-permission errors on re-runs).
+        const rules = yield* ec2.describeSecurityGroupRules({
+          Filters: [{ Name: "group-id", Values: [groupId] }],
+        });
+        const hasIngress = (port: number) =>
+          (rules.SecurityGroupRules ?? []).some(
+            (rule) => !rule.IsEgress && rule.FromPort === port,
+          );
+        if (!hasIngress(listenerPort)) {
+          yield* ec2.authorizeSecurityGroupIngress({
+            GroupId: groupId,
+            IpPermissions: [
+              {
+                IpProtocol: "tcp",
+                FromPort: listenerPort,
+                ToPort: listenerPort,
+                IpRanges: [
+                  { CidrIp: "0.0.0.0/0", Description: "listener ingress" },
+                ],
+              },
+            ],
+          });
+        }
+        if (containerPort !== listenerPort && !hasIngress(containerPort)) {
+          yield* ec2.authorizeSecurityGroupIngress({
+            GroupId: groupId,
+            IpPermissions: [
+              {
+                IpProtocol: "tcp",
+                FromPort: containerPort,
+                ToPort: containerPort,
+                UserIdGroupPairs: [
+                  { GroupId: groupId, Description: "ALB to container" },
+                ],
+              },
+            ],
+          });
+        }
+        return groupId;
+      });
+
+      // ── managed ingress (ALB + target group + listener) ───────────────
+
       const ingressNames = (id: string) =>
         Effect.gen(function* () {
           const loadBalancerName = yield* createPhysicalName({
@@ -434,9 +794,15 @@ export const ServiceProvider = () =>
       const createIngress = Effect.fn(function* ({
         id,
         news,
+        network,
+        securityGroups,
+        containerPort,
       }: {
         id: string;
         news: ServiceProps;
+        network: { vpcId: string; subnets: string[] };
+        securityGroups: string[] | undefined;
+        containerPort: number;
       }) {
         const names = yield* ingressNames(id);
         const tags = {
@@ -448,8 +814,8 @@ export const ServiceProvider = () =>
           Name: names.loadBalancerName,
           Type: "application",
           Scheme: "internet-facing",
-          Subnets: news.subnets,
-          SecurityGroups: news.securityGroups,
+          Subnets: network.subnets,
+          SecurityGroups: securityGroups,
           Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
         });
         const lb = loadBalancer.LoadBalancers?.[0];
@@ -461,10 +827,10 @@ export const ServiceProvider = () =>
 
         const targetGroup = yield* elbv2.createTargetGroup({
           Name: names.targetGroupName,
-          VpcId: news.vpcId,
+          VpcId: network.vpcId,
           TargetType: "ip",
           Protocol: "HTTP",
-          Port: news.task.port ?? 3000,
+          Port: containerPort,
           HealthCheckPath: news.healthCheckPath ?? "/",
           Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
         });
@@ -504,29 +870,183 @@ export const ServiceProvider = () =>
         };
       });
 
-      const networkConfigurationOf = (news: ServiceProps) => ({
+      // ── task definition synthesis (image-owning forms) ────────────────
+
+      /**
+       * Synthesize (or roll) the service-owned task definition from the
+       * image source + `TaskDefinitionConfig` surface. Mirrors the
+       * `AWS.ECS.Task` reconcile flow.
+       */
+      const synthesizeTaskDefinition = Effect.fn(function* ({
+        id,
+        news,
+        output,
+        bindings,
+        tags,
+        session,
+      }: {
+        id: string;
+        news: BundledServiceProps | DockerfileServiceProps | ImageServiceProps;
+        output: Service["Attributes"] | undefined;
+        bindings: Parameters<typeof attachTaskBindings>[0]["bindings"];
+        tags: Record<string, string>;
+        session: { note: (message: string) => Effect.Effect<void> };
+      }) {
+        const family =
+          output?.taskFamily ??
+          (yield* createPhysicalName({
+            id: `${id}-task`,
+            maxLength: 255,
+            lowercase: true,
+          }));
+        const taskRoleName =
+          output?.taskRoleName ??
+          (yield* createPhysicalName({
+            id: `${id}-task-role`,
+            maxLength: 64,
+          }));
+        const executionRoleName =
+          output?.executionRoleName ??
+          (yield* createPhysicalName({
+            id: `${id}-execution-role`,
+            maxLength: 64,
+          }));
+        const taskPolicyName = yield* createPhysicalName({
+          id: `${id}-task-policy`,
+          maxLength: 128,
+        });
+        const repositoryName =
+          output?.repositoryName ??
+          (yield* createPhysicalName({
+            id: `${id}-repo`,
+            maxLength: 256,
+            lowercase: true,
+          }));
+        const logGroupName =
+          output?.logGroupName ??
+          (yield* createPhysicalName({
+            id: `${id}-logs`,
+            maxLength: 512,
+            lowercase: true,
+          }));
+
+        const taskRoleArn =
+          output?.taskRoleArn ??
+          (yield* createTaskRoleIfNotExists({ id, roleName: taskRoleName }));
+        const executionRoleArn =
+          output?.executionRoleArn ??
+          (yield* ensureTaskExecutionRole({
+            id,
+            roleName: executionRoleName,
+            managedPolicyArns: news.executionRoleManagedPolicyArns,
+          }));
+
+        const {
+          env: bindingEnv,
+          volumes: bindingVolumes,
+          mountPoints: bindingMountPoints,
+        } = yield* attachTaskBindings({
+          roleName: taskRoleName,
+          policyName: taskPolicyName,
+          bindings,
+        });
+
+        const logGroupArn =
+          output?.logGroupArn ??
+          (yield* ensureTaskLogGroup({ id, logGroupName }));
+
+        const source = news as ImageSourceLike;
+        const resolved = yield* imageSource.resolve({
+          id,
+          source,
+          repositoryName,
+          repositoryUri:
+            output?.repositoryUri && output.repositoryName === repositoryName
+              ? output.repositoryUri
+              : undefined,
+          tags,
+          platform: taskImagePlatform(news.runtimePlatform),
+          port: news.port,
+          isExternal: news.isExternal,
+          bootstrap: makeBunBootstrap(source.handler ?? "default"),
+          session,
+        });
+
+        const taskDefinition = yield* registerTaskDefinitionRevision({
+          props: {
+            ...news,
+            placementConstraints: news.taskPlacementConstraints,
+            env: {
+              ...bindingEnv,
+              ...alchemyEnv,
+              ...news.env,
+            },
+          },
+          family,
+          imageUri: resolved.imageUri,
+          taskRoleArn,
+          executionRoleArn,
+          logGroupName,
+          tags,
+          bindingVolumes,
+          bindingMountPoints,
+        });
+
+        yield* syncTaskDefinitionTags({
+          revisionArn: taskDefinition.taskDefinitionArn!,
+          tags,
+        });
+
+        const containerName =
+          taskDefinition.containerDefinitions?.[0]?.name ?? family;
+        return {
+          taskDefinitionArn: taskDefinition.taskDefinitionArn!,
+          taskFamily: family,
+          containerName,
+          port: news.port ?? 3000,
+          imageUri: resolved.imageUri,
+          repositoryName: resolved.repositoryName,
+          repositoryUri: resolved.repositoryUri,
+          taskRoleArn,
+          taskRoleName,
+          executionRoleArn,
+          executionRoleName,
+          logGroupName,
+          logGroupArn,
+          code: { hash: resolved.codeHash },
+        };
+      });
+
+      const networkConfigurationOf = (
+        network: {
+          subnets: string[];
+          assignPublicIp: boolean;
+        },
+        securityGroups: string[] | undefined,
+      ) => ({
         awsvpcConfiguration: {
-          subnets: news.subnets,
-          securityGroups: news.securityGroups,
-          assignPublicIp: (news.assignPublicIp ? "ENABLED" : "DISABLED") as
+          subnets: network.subnets,
+          securityGroups,
+          assignPublicIp: (network.assignPublicIp ? "ENABLED" : "DISABLED") as
             | "ENABLED"
             | "DISABLED",
         },
       });
 
       // load balancers passed to create/update: explicit user-supplied list
-      // plus the Alchemy-managed ingress target group (when `public: true`).
+      // plus the Alchemy-managed ingress target group (when requested).
       const loadBalancersOf = (
         news: ServiceProps,
+        task: { containerName: string; port: number },
         ingress: { targetGroupArn?: string } | undefined,
       ): ecs.LoadBalancer[] | undefined => {
         const managed: ecs.LoadBalancer[] =
-          ingress?.targetGroupArn && news.public
+          ingress?.targetGroupArn && wantsManagedIngress(news)
             ? [
                 {
                   targetGroupArn: ingress.targetGroupArn,
-                  containerName: news.task.containerName,
-                  containerPort: news.task.port ?? 3000,
+                  containerName: task.containerName,
+                  containerPort: task.port,
                 },
               ]
             : [];
@@ -535,15 +1055,20 @@ export const ServiceProvider = () =>
       };
 
       // In-place mutable fields shared by createService and updateService.
-      const mutableInput = (news: ServiceProps) => ({
-        taskDefinition: news.task.taskDefinitionArn,
+      const mutableInput = (
+        news: ServiceProps,
+        task: { taskDefinitionArn: string },
+        network: { subnets: string[]; assignPublicIp: boolean },
+        securityGroups: string[] | undefined,
+      ) => ({
+        taskDefinition: task.taskDefinitionArn,
         desiredCount: news.desiredCount ?? 1,
         platformVersion: news.platformVersion,
         deploymentConfiguration: news.deploymentConfiguration,
         healthCheckGracePeriodSeconds: toWireSeconds(
           news.healthCheckGracePeriod,
         ),
-        networkConfiguration: networkConfigurationOf(news),
+        networkConfiguration: networkConfigurationOf(network, securityGroups),
         capacityProviderStrategy: news.capacityProviderStrategy,
         placementConstraints: news.placementConstraints,
         placementStrategy: news.placementStrategy,
@@ -561,7 +1086,7 @@ export const ServiceProvider = () =>
 
       return {
         stables: ["serviceArn", "serviceName", "clusterArn"],
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
           // serviceName change → delete-first replace (name is the identity).
           if (
@@ -575,7 +1100,7 @@ export const ServiceProvider = () =>
           // lost an Output-valued `cluster` (see `clusterArnOf`), and an
           // unknown old cluster must fall through to the create/update
           // recovery path rather than force a replacement.
-          const oldClusterArn = clusterArnOf(olds.cluster);
+          const oldClusterArn = clusterArnOf(olds?.cluster);
           const newClusterArn = clusterArnOf(news.cluster);
           if (
             oldClusterArn !== undefined &&
@@ -588,6 +1113,7 @@ export const ServiceProvider = () =>
           // taskDefinition, network, deployment config, placement, loadBalancers,
           // exec, tags, …) is applied in place by `updateService`.
           if (
+            olds !== undefined &&
             !deepEqual(
               {
                 // launchType ↔ capacityProviderStrategy switch is immutable.
@@ -609,6 +1135,21 @@ export const ServiceProvider = () =>
             )
           ) {
             return { action: "replace", deleteFirst: true } as const;
+          }
+          // Content drift for image-owning `context`/`image` sources: props
+          // don't change when the files under `context` do, so surface hash
+          // drift as an update. (`main` sources hash from the bundle output
+          // inside reconcile.)
+          if (output?.code && taskRefOf(news) === undefined) {
+            const hash = yield* computeStaticSourceHash(
+              news as ImageSourceLike,
+              taskImagePlatform(
+                (news as ImageOwningServicePropsBase).runtimePlatform,
+              ),
+            );
+            if (hash !== undefined && hash !== output.code.hash) {
+              return { action: "update" } as const;
+            }
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -718,13 +1259,64 @@ export const ServiceProvider = () =>
 
             return perCluster.flat();
           }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          news,
+          output,
+          bindings,
+          session,
+        }) {
           const serviceName = yield* toServiceName(id, news);
           const clusterArn = clusterArnOf(news.cluster) as ClusterArn;
           const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
+
+          // Resolve the task definition: BYO reference, or synthesize the
+          // service-owned definition from the image source.
+          const byoTask = taskRefOf(news);
+          const owned =
+            byoTask === undefined
+              ? yield* synthesizeTaskDefinition({
+                  id,
+                  news: news as
+                    | BundledServiceProps
+                    | DockerfileServiceProps
+                    | ImageServiceProps,
+                  output,
+                  bindings,
+                  tags: desiredTags,
+                  session,
+                })
+              : undefined;
+          const task = byoTask ?? {
+            taskDefinitionArn: owned!.taskDefinitionArn,
+            containerName: owned!.containerName,
+            port: owned!.port,
+          };
+
+          // Resolve networking (explicit props or the default VPC).
+          const network = yield* resolveNetwork(news);
+
+          // Managed ingress security group: only when requested AND the user
+          // supplied no securityGroups of their own.
+          const ingressRequested = wantsManagedIngress(news);
+          const securityGroupId =
+            ingressRequested && !news.securityGroups
+              ? (output?.securityGroupId ??
+                (yield* ensureIngressSecurityGroup({
+                  id,
+                  vpcId: network.vpcId,
+                  listenerPort:
+                    news.listenerPort ?? (news.certificateArn ? 443 : 80),
+                  containerPort: task.port,
+                  tags: desiredTags,
+                })))
+              : undefined;
+          const securityGroups =
+            news.securityGroups ??
+            (securityGroupId ? [securityGroupId] : undefined);
 
           // Observe — describe service in target cluster. The cluster may
           // not yet exist on first reconcile, so we tolerate
@@ -766,18 +1358,39 @@ export const ServiceProvider = () =>
                 url: output.url,
               }
             : undefined;
+          if (ingressRequested && !ingress) {
+            ingress = yield* createIngress({
+              id,
+              news,
+              network,
+              securityGroups,
+              containerPort: task.port,
+            });
+          }
+
+          const ownedAttributes = {
+            securityGroupId,
+            taskFamily: owned?.taskFamily,
+            containerName: owned?.containerName,
+            port: owned?.port,
+            imageUri: owned?.imageUri,
+            repositoryName: owned?.repositoryName,
+            repositoryUri: owned?.repositoryUri,
+            taskRoleArn: owned?.taskRoleArn,
+            taskRoleName: owned?.taskRoleName,
+            executionRoleArn: owned?.executionRoleArn,
+            executionRoleName: owned?.executionRoleName,
+            logGroupName: owned?.logGroupName,
+            logGroupArn: owned?.logGroupArn,
+            code: owned?.code,
+          };
 
           if (!observed?.serviceArn) {
-            // Provision Alchemy-managed ALB ingress only when requested.
-            if (news.public && !ingress) {
-              ingress = yield* createIngress({ id, news });
-            }
-
             const created = yield* ecs.createService({
-              ...mutableInput(news),
+              ...mutableInput(news, task, network, securityGroups),
               serviceName,
               cluster: clusterArn,
-              loadBalancers: loadBalancersOf(news, ingress),
+              loadBalancers: loadBalancersOf(news, task, ingress),
               serviceRegistries: news.serviceRegistries,
               deploymentController: news.deploymentController,
               schedulingStrategy: news.schedulingStrategy,
@@ -802,6 +1415,7 @@ export const ServiceProvider = () =>
               loadBalancerArn: ingress?.loadBalancerArn,
               targetGroupArn: ingress?.targetGroupArn,
               listenerArn: ingress?.listenerArn,
+              ...ownedAttributes,
             };
           }
 
@@ -810,10 +1424,10 @@ export const ServiceProvider = () =>
           // load-balancer wiring rolls out.
           const updated = yield* ecs
             .updateService({
-              ...mutableInput(news),
+              ...mutableInput(news, task, network, securityGroups),
               service: serviceName,
               cluster: clusterArn,
-              loadBalancers: loadBalancersOf(news, ingress),
+              loadBalancers: loadBalancersOf(news, task, ingress),
               enableExecuteCommand: news.enableExecuteCommand,
               forceNewDeployment: true,
             })
@@ -873,9 +1487,10 @@ export const ServiceProvider = () =>
             loadBalancerArn: ingress?.loadBalancerArn,
             targetGroupArn: ingress?.targetGroupArn,
             listenerArn: ingress?.listenerArn,
+            ...ownedAttributes,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, session }) {
           // Scale to zero first so `deleteService` has no running tasks to
           // drain. If the service is mid-transition (`ServiceNotActiveException`)
           // we skip the scale-down — `deleteService({ force: true })` below
@@ -930,6 +1545,48 @@ export const ServiceProvider = () =>
                   () => Effect.void,
                 ),
               );
+          }
+
+          // Owned ingress security group: the ALB/service ENIs release it
+          // asynchronously, so retry the dependency violation, bounded.
+          if (output.securityGroupId) {
+            yield* ec2
+              .deleteSecurityGroup({
+                GroupId: output.securityGroupId,
+              })
+              .pipe(
+                Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
+                Effect.retry({
+                  while: (e) => e._tag === "DependencyViolation",
+                  schedule: Schedule.max([
+                    Schedule.spaced("5 seconds"),
+                    Schedule.recurs(24),
+                  ]).pipe(
+                    Schedule.tap(() =>
+                      session.note(
+                        "Waiting for ENIs to release the ingress security group...",
+                      ),
+                    ),
+                  ),
+                }),
+              );
+          }
+
+          // Synthesized task definition infrastructure (image-owning form).
+          if (
+            output.taskFamily &&
+            output.repositoryName &&
+            output.logGroupName &&
+            output.taskRoleName &&
+            output.executionRoleName
+          ) {
+            yield* deleteTaskDefinitionInfrastructure({
+              taskDefinitionArn: output.taskDefinitionArn,
+              repositoryName: output.repositoryName,
+              logGroupName: output.logGroupName,
+              taskRoleName: output.taskRoleName,
+              executionRoleName: output.executionRoleName,
+            });
           }
         }),
       };
