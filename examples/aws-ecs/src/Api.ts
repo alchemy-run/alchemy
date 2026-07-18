@@ -12,11 +12,19 @@ import {
 import SeedTask from "./SeedTask.ts";
 
 /**
- * The orders API: an `AWS.ECS.Service` in the EFFECT (class) form — props
- * plus an init Effect whose impl returns `{ fetch }`, bundled into a
- * generated image (`main: import.meta.url`). The Service synthesizes its own
- * task definition (task + execution roles, log group, ECR repository) from
- * the same surface as `AWS.ECS.Task`.
+ * The orders API: an `AWS.ECS.Service` in the TAGGED form — the class
+ * declares the service identity, and the default export is
+ * `Api.make(props, impl)`: a Layer pairing the props with an init Effect
+ * whose impl returns `{ fetch }`, bundled into a generated image
+ * (`main: import.meta.url`). The Service synthesizes its own task
+ * definition (task + execution roles, log group, ECR repository) from the
+ * same surface as `AWS.ECS.Task`.
+ *
+ * The stack provides the Layer and yields the class (see `alchemy.run.ts`):
+ *
+ * ```typescript
+ * const api = yield* Api;         // with Effect.provide(ApiLive)
+ * ```
  *
  * Ingress is the SHARED listener composed at the stack level (see
  * `src/infra.ts`): this service only adds its own target group and a
@@ -30,8 +38,9 @@ import SeedTask from "./SeedTask.ts";
  *   task's definition (plus `iam:PassRole` on its roles), so
  *   `POST /api/seed` can launch the one-shot seeding task on Fargate.
  */
-export default class Api extends AWS.ECS.Service<Api>()(
-  "Api",
+export class Api extends AWS.ECS.Service<Api>()("Api") {}
+
+export default Api.make(
   // Props are themselves an Effect so they can reference shared resources.
   Effect.gen(function* () {
     const cluster = yield* OrdersCluster;
@@ -155,4 +164,4 @@ export default class Api extends AWS.ECS.Service<Api>()(
       ),
     ),
   ),
-) {}
+);

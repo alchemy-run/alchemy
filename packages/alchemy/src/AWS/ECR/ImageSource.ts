@@ -12,6 +12,7 @@ import {
 } from "../../Bundle/TempRoot.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { Docker } from "../../Docker/Docker.ts";
+import { Self } from "../../Self.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { buildAndPushEcrImage, getEcrRegistryCredentials } from "./Image.ts";
 
@@ -201,9 +202,10 @@ export const makeBunBootstrap =
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -211,7 +213,15 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
+
+// Normalize the entrypoint export: an inline-effect class default export is
+// an Effect resolving the platform instance, while the tagged form
+// (X.make(props, impl)) exports a Layer providing the Self tag. Both fold
+// into a Layer via makeEntrypointLayer (same pattern as the Lambda and
+// Cloudflare Container bridges).
+const tag = Context.Service("${Self.key}");
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   BunServices.layer,
@@ -219,28 +229,31 @@ const platform = Layer.mergeAll(
   Logger.layer([Logger.consolePretty()]),
 );
 
+const stack = Layer.effect(
+  Stack,
+  Effect.all([
+    Config.string("ALCHEMY_STACK_NAME"),
+    Config.string("ALCHEMY_STAGE")
+  ]).pipe(
+    Effect.map(([name, stage]) => ({
+      name,
+      stage,
+      bindings: {},
+      resources: {}
+    }))
+  )
+);
+
 // Resolve the bundled program (the runners registered via host.run / serve)
 // and run it with a Bun HTTP server bound to PORT, so a returned { fetch }
 // handler is actually served and host.run loops stay alive. A pure one-shot
 // { run } program completes and the process exits 0.
-const program = handler.pipe(
+const program = tag.pipe(
   Effect.flatMap((task) => task.RuntimeContext.exports),
   Effect.flatMap((exports) => exports.program),
   Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
+    layer.pipe(
+      Layer.provideMerge(stack),
       // Full provider chain, not fromEnv: Fargate tasks receive credentials
       // from the container-credentials endpoint
       // (AWS_CONTAINER_CREDENTIALS_RELATIVE_URI), not environment variables.
@@ -408,6 +421,36 @@ export const makeImageSource = Effect.gen(function* () {
     return { files, hash: bundleOutput.hash };
   });
 
+  /**
+   * Bundle a `main` source and compute its content-addressed code hash.
+   *
+   * The hash covers the FULL image identity: the bundle output (which
+   * includes the generated bootstrap entry, so bootstrap-template changes
+   * invalidate it), the generated Dockerfile, and the target platform.
+   * `resolve` and `hash` share this so the plan-time diff hash and the
+   * pushed image tag always agree.
+   */
+  const computeMainCodeHash = Effect.fn(function* (options: {
+    source: BundledImageSource;
+    isExternal?: boolean;
+    bootstrap: (importPath: string) => string;
+    port?: number;
+    platform: string;
+  }) {
+    const bundled = yield* bundleProgram({
+      source: options.source,
+      isExternal: options.isExternal,
+      bootstrap: options.bootstrap,
+    });
+    const dockerfile = generateDockerfile(options.source, options.port);
+    const codeHash = (yield* sha256Object({
+      bundleHash: bundled.hash,
+      dockerfile,
+      platform: options.platform,
+    })).slice(0, 16);
+    return { bundled, dockerfile, codeHash };
+  });
+
   /** Generated Dockerfile for a bundled `main` program. */
   const generateDockerfile = (source: BundledImageSource, port?: number) => {
     const base = source.baseImage ?? "public.ecr.aws/docker/library/bun:1";
@@ -514,20 +557,13 @@ export const makeImageSource = Effect.gen(function* () {
       // Bundle → hash → (skip if pushed) → materialize generated Dockerfile
       // → build + push.
       yield* session.note(`Bundling ${id} program...`);
-      const bundled = yield* bundleProgram({
+      const { bundled, dockerfile, codeHash } = yield* computeMainCodeHash({
         source: source as BundledImageSource,
         isExternal: options.isExternal,
         bootstrap: options.bootstrap,
-      });
-      const dockerfile = generateDockerfile(
-        source as BundledImageSource,
-        options.port,
-      );
-      const codeHash = (yield* sha256Object({
-        bundleHash: bundled.hash,
-        dockerfile,
+        port: options.port,
         platform,
-      })).slice(0, 16);
+      });
       const imageUri = `${repositoryUri}:${codeHash}`;
 
       if (yield* describeImage(repositoryName, codeHash)) {
@@ -581,7 +617,11 @@ export const makeImageSource = Effect.gen(function* () {
       yield* docker.image.tag(ref, imageUri);
       yield* session.note(`Pushing mirrored image ${imageUri}...`);
       const credentials = yield* getEcrRegistryCredentials;
-      yield* docker.image.push(imageUri, credentials);
+      // Pin the platform on push: with the containerd image store a bare
+      // push of a multi-arch tag sends every locally-present variant — a
+      // stale other-arch variant in the local cache would reach ECR and the
+      // task would crash with `exec format error`.
+      yield* docker.image.push(imageUri, credentials, platform);
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryName, repositoryUri, codeHash };
     }
@@ -609,7 +649,38 @@ export const makeImageSource = Effect.gen(function* () {
     return { imageUri, repositoryName, repositoryUri, codeHash };
   });
 
-  return { resolve };
+  /**
+   * Content hash for ANY source kind without building or pushing an image.
+   *
+   * For `main` sources this runs the bundler (bootstrap entry included) so
+   * the hash reflects the exact image `resolve` would push — bootstrap
+   * template changes and user-code edits both surface as drift. Providers
+   * call this from `diff` and compare against `output.code.hash`; static
+   * sources (`context` / `image`) delegate to
+   * {@link computeStaticSourceHash}.
+   */
+  const hash = Effect.fn(function* (options: {
+    source: ImageSourceLike;
+    platform?: string;
+    port?: number;
+    isExternal?: boolean;
+    bootstrap: (importPath: string) => string;
+  }) {
+    const platform = options.platform ?? "linux/amd64";
+    if (imageSourceKind(options.source) === "main") {
+      const { codeHash } = yield* computeMainCodeHash({
+        source: options.source as BundledImageSource,
+        isExternal: options.isExternal,
+        bootstrap: options.bootstrap,
+        port: options.port,
+        platform,
+      });
+      return codeHash;
+    }
+    return yield* computeStaticSourceHash(options.source, platform);
+  });
+
+  return { resolve, hash };
 });
 
 /** The resolver service returned by {@link makeImageSource}. */

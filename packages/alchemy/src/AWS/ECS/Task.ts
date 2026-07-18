@@ -32,7 +32,6 @@ import {
 } from "../../Tags.ts";
 import type { Credentials } from "../Credentials.ts";
 import {
-  computeStaticSourceHash,
   makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
@@ -981,15 +980,22 @@ export const TaskProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Content drift for `context`/`image` sources: the props don't
-          // change when files under the context (or the mirrored ref's
-          // meaning) do, so surface hash drift as an update. `main` sources
-          // are hashed from the bundle output inside reconcile.
+          // Content drift: the props don't change when files under a
+          // `context` path (or the mirrored `image` ref's meaning) change —
+          // nor, for `main` sources, when the user's program or the
+          // generated bootstrap template changes. Hash the source (running
+          // the bundler for `main`, so the hash covers the bootstrap entry)
+          // and surface drift as an update; without this a bootstrap or
+          // code-only change would silently no-op until `--force`.
           if (output) {
-            const hash = yield* computeStaticSourceHash(
-              news as ImageSourceLike,
-              taskImagePlatform(news.runtimePlatform),
-            );
+            const source = news as ImageSourceLike;
+            const hash = yield* imageSource.hash({
+              source,
+              platform: taskImagePlatform(news.runtimePlatform),
+              port: news.port,
+              isExternal: news.isExternal,
+              bootstrap: makeBunBootstrap(source.handler ?? "default"),
+            });
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
             }

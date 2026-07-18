@@ -18,7 +18,7 @@ import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import Api from "./src/Api.ts";
+import ApiLive, { Api } from "./src/Api.ts";
 import {
   OrdersCluster,
   OrdersIngress,
@@ -38,9 +38,11 @@ export default Alchemy.Stack(
     const table = yield* OrdersTable;
     const { alb, listener } = yield* OrdersIngress;
 
-    // ── Api — effectful service (bundled `main:`), /api/* on the shared ALB.
-    // Its init also declares SeedTask (for the RunTask binding) and the
-    // DynamoDB bindings; see src/Api.ts.
+    // ── Api — effectful service in the TAGGED form (bundled `main:`),
+    // /api/* on the shared ALB. `ApiLive` (the `Api.make(...)` Layer,
+    // provided below) carries the props + init program; its init also
+    // declares SeedTask (for the RunTask binding) and the DynamoDB
+    // bindings; see src/Api.ts.
     const api = yield* Api;
 
     // ── Web — EXTERNAL service: a pre-built registry image (mirrored into
@@ -88,18 +90,10 @@ export default Alchemy.Stack(
       cpu: 256,
       memory: 512,
     });
-    // NOTE: `every`'s ScheduleProps are currently typed as plain strings,
-    // while Task/Network attributes are Outputs. The engine resolves the
-    // Outputs in these positions correctly — cast until ScheduleProps
-    // accepts Inputs.
     yield* AWS.ECS.every("HeartbeatSchedule", "cron(0 3 * * ? *)", {
       cluster,
-      task: heartbeatTask as unknown as {
-        taskDefinitionArn: string;
-        taskRoleArn: string;
-        executionRoleArn: string;
-      },
-      subnets: network.publicSubnetIds as unknown as string[],
+      task: heartbeatTask,
+      subnets: network.publicSubnetIds,
       assignPublicIp: true,
     });
 
@@ -113,5 +107,5 @@ export default Alchemy.Stack(
       reportTaskDefinitionArn: reportTask.taskDefinitionArn,
       heartbeatTaskDefinitionArn: heartbeatTask.taskDefinitionArn,
     };
-  }),
+  }).pipe(Effect.provide(ApiLive)),
 );
