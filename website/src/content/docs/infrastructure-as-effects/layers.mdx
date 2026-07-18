@@ -38,36 +38,68 @@ cloud-specific.
 
 ## The implementation
 
-A Layer builds the service. Three lines do all the work:
+`Layer.effect(JobService, …)` builds the service — "to construct
+`JobService`, run this Effect":
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 export const JobServiceKV = Layer.effect(
   JobService,
   Effect.gen(function* () {
-    const MyKV = yield* Cloudflare.KV.Namespace("MyKV");
-    const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
-
     return {
       getJob: Effect.fn(function* (id: string) {
-        return yield* kv.get<Job>(id, "json");
+        // TODO: read the job from storage
       }),
     };
   }),
 );
 ```
 
-`KV.Namespace("MyKV")` declares the storage — a real KV namespace, owned
-by the Layer.
+Declare the storage — a real KV namespace, owned by the Layer:
 
-`ReadWriteNamespace(MyKV)` binds it — `kv` is a typed client for reading
-and writing that namespace at runtime.
+```diff lang="typescript"
++import * as Cloudflare from "alchemy/Cloudflare";
+ import * as Effect from "effect/Effect";
+ import * as Layer from "effect/Layer";
 
-The returned object implements the `JobService` contract against that
-client.
+ export const JobServiceKV = Layer.effect(
+   JobService,
+   Effect.gen(function* () {
++    const MyKV = yield* Cloudflare.KV.Namespace("MyKV");
++
+     return {
+       // ...
+     };
+   }),
+ );
+```
+
+Bind it — `kv` is a typed client for reading and writing that namespace
+at runtime:
+
+```diff lang="typescript"
+   Effect.gen(function* () {
+     const MyKV = yield* Cloudflare.KV.Namespace("MyKV");
++    const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
+
+     return {
+       // ...
+     };
+   }),
+```
+
+Implement the contract against the client:
+
+```diff lang="typescript"
+     return {
+       getJob: Effect.fn(function* (id: string) {
+-        // TODO: read the job from storage
++        return yield* kv.get<Job>(id, "json");
+       }),
+     };
+```
 
 ## The consumer
 
