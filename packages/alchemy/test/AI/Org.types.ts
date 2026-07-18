@@ -48,7 +48,16 @@ type IsEqual<A, B> =
     : false;
 
 type ChannelsOf<L> =
-  L extends AI.Process<infer Out, infer In, infer Err, infer Req, any, any, any>
+  L extends AI.Process<
+    infer Out,
+    infer In,
+    infer Err,
+    infer Req,
+    any,
+    any,
+    any,
+    any
+  >
     ? { out: Out; in: In; err: Err; req: Req }
     : never;
 
@@ -71,12 +80,11 @@ type _iw_in_issue = Assert<
   >
 >;
 
-// Out = the machine-observed exit's EVENT (AI.exit(AI.when(source))):
-// dispatch resolves with the typed IssueClosed the world delivered.
-type _iw_out = Assert<
-  IsEqual<ResolveGitHubIssueC["out"]["_tag"], "IssueClosed">
->;
-type _iw_out_issue = Assert<Has<keyof ResolveGitHubIssueC["out"], "issue">>;
+// Out = unknown: the charter has NO halt — it is EXTERNALLY SETTLED
+// (kernel-pruning ruling). The implementation Layer that consumed the
+// wire ends the run with `settle(key, event)`; the settled event's
+// type is the component's knowledge, never the charter's.
+type _iw_out = Assert<IsEqual<ResolveGitHubIssueC["out"], unknown>>;
 type _iw_err = Assert<
   IsEqual<ResolveGitHubIssueC["err"], AI.BudgetExceeded | AI.Refused>
 >;
@@ -89,13 +97,17 @@ type _iw_reviewer = Assert<Has<ResolveGitHubIssueC["req"], Reviewer>>;
 type _iw_reply = Assert<Has<ResolveGitHubIssueC["req"], Comment>>;
 type _iw_search = Assert<Has<ResolveGitHubIssueC["req"], SearchIssues>>;
 type _iw_merge = Assert<Has<ResolveGitHubIssueC["req"], MergePullRequest>>;
-// …and NO channel obligation at all: the machine-observed exit
-// (`AI.exit(AI.when(GitHub.IssueClosed(repo)))`) is DELIVERED by the
-// implementation Layer (`settle(key, event)`) — the kernel never
-// subscribes the world, so the exit contributes no channel tag and the
-// wire's compile fence rides the consuming call site (canon §5).
-type _iw_channel = Assert<
-  Not<Has<ResolveGitHubIssueC["req"], GitHub.GitHubEvents>>
+// …and nothing else: event refs contribute NOTHING to Req
+// (kernel-pruning ruling — sources are pure vocabulary). The
+// machine-observed exit (`AI.exit(AI.when(GitHub.IssueClosed(repo)))`)
+// is DELIVERED by the implementation Layer (`settle(key, event)`);
+// the wire's compile fence rides the consuming Layer's own
+// requirements (canon §5).
+type _iw_only_declared = Assert<
+  IsEqual<
+    ResolveGitHubIssueC["req"],
+    Engineer | Reviewer | Comment | SearchIssues | MergePullRequest
+  >
 >;
 
 // Capability by omission — the merge gate: ResolveGitHubIssue holds
@@ -113,41 +125,36 @@ type _iw_no_openPr = Assert<
 >;
 type _iw_no_askHuman = Assert<Not<Has<ResolveGitHubIssueC["req"], AskHuman>>>;
 
-// AI.when contributes NO channel tag (delivery is outside code): the
-// GitHub.Events obligation above comes from the halt alone. WhenOnly
-// proves the negative — `when` on channel-backed world sources with no
-// machine exit leaves Req channel-free. (testAlchemy is the DEFERRED
-// form — the exported un-yielded resource Effect — proving the widened
+// AI.when contributes NOTHING to Req (delivery is outside code).
+// WhenOnly proves the negative. (testAlchemy is the DEFERRED form —
+// the exported un-yielded resource Effect — proving the widened
 // constructor changes no Req derivation.)
 class WhenOnly extends AI.Process<WhenOnly>()("WhenOnly")`
 ${AI.when(GitHub.IssueOpened(testAlchemy))} accepted, never
 auto-delivered. ${AI.never`perpetual demo ring`}` {}
-type _when_no_channel = Assert<
-  Not<Has<ChannelsOf<typeof WhenOnly>["req"], GitHub.GitHubEvents>>
->;
+type _when_nothing = Assert<IsEqual<ChannelsOf<typeof WhenOnly>["req"], never>>;
 
 // World-owned mentions contribute no publish topology (canon §2a ruling
 // 4, held at the TYPE level): a bare mention of a world-owned catalog
-// source is inert vocabulary — no publish grant, no channel obligation.
+// source is inert vocabulary — no publish grant, no obligation.
 class Vocabulary extends AI.Process<Vocabulary>()("Vocabulary")`
 ${GitHub.IssueOpened(testAlchemy)} is vocabulary here — the world
 publishes it; this process never can.
 ${AI.never`perpetual demo ring`}` {}
-type _vocab_no_channel = Assert<
-  Not<Has<ChannelsOf<typeof Vocabulary>["req"], GitHub.GitHubEvents>>
+type _vocab_nothing = Assert<
+  IsEqual<ChannelsOf<typeof Vocabulary>["req"], never>
 >;
 
-// …while an ORG-internal channel-backed mention IS the publish grant:
-// the channel tag joins Req (publishing needs the channel's physics).
-class OrgChat extends Context.Service<OrgChat, AI.EventChannelService>()(
-  "org/Chat",
-) {}
-const OrgAnnounce = AI.EventSource("org.announce", S.Void, OrgChat);
+// …and an ORG-internal mention is the publish grant as an AFFORDANCE
+// (emits topology + ctx.emit) — never a requirement (kernel-pruning
+// ruling: sources are pure vocabulary; where emissions route is the
+// kernel ASSEMBLY's business, e.g. the AI.EventBus component).
+const OrgAnnounce = AI.Event("org.announce", S.Void);
 class Announcer extends AI.Process<Announcer>()("Announcer")`
 Publish ${OrgAnnounce} when anything noteworthy happens.
 ${AI.never`perpetual demo ring`}` {}
-type _announcer_channel = Assert<
-  Has<ChannelsOf<typeof Announcer>["req"], OrgChat>
+type _announcer_nothing = Assert<
+  IsEqual<ChannelsOf<typeof Announcer>["req"], never>
 >;
 
 // ─── Layer level: merge authority enters through exactly one door ──
@@ -170,14 +177,9 @@ type _iwl_editFile = Assert<Has<ResolveGitHubIssueClosure, EditFile>>;
 type _iwl_openPr = Assert<Has<ResolveGitHubIssueClosure, OpenPullRequest>>;
 type _iwl_readFile = Assert<Has<ResolveGitHubIssueClosure, ReadFile>>;
 type _iwl_kernel = Assert<Has<ResolveGitHubIssueClosure, AI.Kernel>>;
-// …the agent tags are eliminated…
+// …the agent tags are eliminated.
 type _iwl_no_engineer = Assert<Not<Has<ResolveGitHubIssueClosure, Engineer>>>;
 type _iwl_no_reviewer = Assert<Not<Has<ResolveGitHubIssueClosure, Reviewer>>>;
-// …and no channel tag anywhere in the closure — exits are delivered,
-// never subscribed (see _iw_channel above).
-type _iwl_channel = Assert<
-  Not<Has<ResolveGitHubIssueClosure, GitHub.GitHubEvents>>
->;
 
 // WITHOUT the Reviewer's layer, no composition can demand Approve: the
 // Reviewer tag stays open, but Approve appears nowhere.
@@ -195,31 +197,21 @@ type _iwnr_no_approve = Assert<
   Not<Has<ResolveGitHubIssueNoReviewerClosure, Approve>>
 >;
 
-// The transitive compile fence: discharging GitHub.Events with the CORE
-// channel Layer surfaces its own requirement on the substrate binding —
-// forgetting GitHubRepositoryEventSourceLive on the Worker fails to
-// type-check.
-const ResolveGitHubIssueWired = ResolveGitHubIssueLive.pipe(
-  Layer.provide(GitHub.GitHubEventsLive),
-);
-type ResolveGitHubIssueWiredClosure =
-  typeof ResolveGitHubIssueWired extends Layer.Layer<any, any, infer R>
-    ? R
-    : never;
-type _iww_no_channel = Assert<
-  Not<Has<ResolveGitHubIssueWiredClosure, GitHub.GitHubEvents>>
->;
-type _iww_fence = Assert<
-  Has<ResolveGitHubIssueWiredClosure, GitHub.RepositoryEventSource>
->;
+// The wire's compile fence lives in USER SPACE (kernel-pruning ruling):
+// an implementation Layer that consumes the wire carries its own
+// requirement on the seam — e.g. services/alchemy-org's
+// `GitHubIssuesLive` requires `GitHub.RepositoryEventSource`, so
+// forgetting the webhook/polling Layer fails the deploy's type-check
+// through the seam, never through prose-derived Req.
 
 // ─── the declared interface (AI.Process<Self, Interface>) ─────────
 // A process may declare domain operations ON TOP OF the actor verbs:
 // its tag then resolves to `ProcessService & Interface`. Declaring an
 // interface makes `AI.layer`'s `make` argument REQUIRED (the kernel
 // interprets the charter; `make` builds the domain methods over the
-// verbs) — omission is an ordinary arity error. `Layer.effect(Term, …)`
-// remains the full-control implementation form.
+// SEALED verbs — the interface is the whole public service) — omission
+// is an ordinary arity error. `Layer.effect(Term, …)` remains the
+// full-control implementation form.
 
 interface IssueRef {
   readonly number: number;
@@ -238,11 +230,14 @@ class IssueDesk extends AI.Process<
 ${AI.when(GitHub.IssueOpened(testAlchemy))} a new issue opens the case.
 ${AI.never`perpetual demo ring`}` {}
 
-// the tag's Shape is the verbs AND the domain methods…
+// the tag's Shape is SEALED to the declared interface (replace, not
+// extend — owner ruling): the domain methods are there, the actor
+// verbs are NOT — delivery cannot be bypassed from outside the
+// implementation Layer…
 type IssueDeskShape = (typeof IssueDesk)["Service"];
-type _id_verb_send = Assert<Has<keyof IssueDeskShape, "send">>;
-type _id_verb_dispatch = Assert<Has<keyof IssueDeskShape, "dispatch">>;
-type _id_verb_steer = Assert<Has<keyof IssueDeskShape, "steer">>;
+type _id_verb_send = Assert<Not<Has<keyof IssueDeskShape, "send">>>;
+type _id_verb_dispatch = Assert<Not<Has<keyof IssueDeskShape, "dispatch">>>;
+type _id_verb_steer = Assert<Not<Has<keyof IssueDeskShape, "steer">>>;
 type _id_list = Assert<Has<keyof IssueDeskShape, "listIssues">>;
 type _id_get = Assert<Has<keyof IssueDeskShape, "getIssue">>;
 // …the domain methods keep their declared channels…
@@ -252,16 +247,22 @@ type _id_get_err = Assert<
     Effect.Effect<IssueRef, IssueNotFound>
   >
 >;
-// …and the instance type (what `yield* IssueDesk` resolves) carries both.
-// (Class name as the type — never `InstanceType<typeof …>`, which the
-// circular `class X extends AI.Process<X>()` heritage collapses.)
+// …and the instance type (what `yield* IssueDesk` resolves) is the
+// same sealed interface. (Class name as the type — never
+// `InstanceType<typeof …>`, which the circular
+// `class X extends AI.Process<X>()` heritage collapses.)
 type _id_instance_list = Assert<Has<keyof IssueDesk, "listIssues">>;
-type _id_instance_send = Assert<Has<keyof IssueDesk, "send">>;
+type _id_instance_send = Assert<Not<Has<keyof IssueDesk, "send">>>;
+
+// a PLAIN term's tag still resolves to the actor verbs — a process is
+// an actor, and `dispatch` is its In → Out function nature
+type WhenOnlyShape = (typeof WhenOnly)["Service"];
+type _plain_verb_send = Assert<Has<keyof WhenOnlyShape, "send">>;
+type _plain_verb_dispatch = Assert<Has<keyof WhenOnlyShape, "dispatch">>;
 
 // the charter's Req derivation is untouched by the Interface parameter
-type _id_channel_free = Assert<
-  Not<Has<ChannelsOf<typeof IssueDesk>["req"], GitHub.GitHubEvents>>
->;
+// (event refs contribute nothing — kernel-pruning ruling)
+type _id_req_free = Assert<IsEqual<ChannelsOf<typeof IssueDesk>["req"], never>>;
 
 // the verbs the kernel's interpretation yields for IssueDesk (In is the
 // IssueOpened payload; the AI.never halt makes Out = never)
@@ -336,7 +337,7 @@ type _id_handled_out = Assert<
 >;
 
 // a hand-written Layer.effect remains the full-control form: it DEMANDS
-// the full shape (verbs + interface)…
+// the sealed shape (the declared interface, nothing else)…
 declare const issueDeskImpl: Effect.Effect<IssueDeskShape>;
 const IssueDeskLive = Layer.effect(IssueDesk, issueDeskImpl);
 type _id_layer_out = Assert<
@@ -355,6 +356,7 @@ declare const verbsOnlyImpl: Effect.Effect<
 // @ts-expect-error — the Layer must implement the declared domain methods
 Layer.effect(IssueDesk, verbsOnlyImpl);
 
-// plain terms (Interface = {}) are untouched — no `make` argument, same
-// call the Layer-level section above already exercises.
+// plain terms (no declared interface) are untouched — the tag IS the
+// actor; no `make` argument, same call the Layer-level section above
+// already exercises.
 AI.layer(ResolveGitHubIssue);

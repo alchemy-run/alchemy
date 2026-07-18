@@ -1,5 +1,5 @@
 import type * as Effect from "effect/Effect";
-import type { EventSource } from "./EventSource.ts";
+import type { Event } from "./Event.ts";
 
 /**
  * The handle a **deterministic** process handler receives (reassess §C):
@@ -19,7 +19,7 @@ import type { EventSource } from "./EventSource.ts";
  */
 export interface ProcessContext {
   /**
-   * Publish a typed message on a declared {@link EventSource} (canon §4
+   * Publish a typed message on a declared {@link Event} (canon §4
    * addition 1): ONE durable `message.emitted` Trace row AND a typed
    * publication on the EventBus, so subscribers (machine-observed halts,
    * front doors tailing the bus) see exactly what the Trace records.
@@ -31,11 +31,11 @@ export interface ProcessContext {
    * publish on the harness bus in the memory kernel (the per-cloud
    * channel Layer owns real-world publication).
    *
-   * The declared publications of a term are its bare `${X}` EventSource
+   * The declared publications of a term are its bare `${X}` Event
    * mentions (the publish grant, canon §2a) — topology metadata; this
    * method accepts any source at the type level.
    */
-  emit<In>(source: EventSource<In, any, any>, payload: In): Effect.Effect<void>;
+  emit<In>(source: Event<In>, payload: In): Effect.Effect<void>;
   /** Write a durable event row to this run's Trace (observability). */
   emit(type: string, payload?: unknown): Effect.Effect<void>;
   /**

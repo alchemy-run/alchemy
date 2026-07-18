@@ -13,7 +13,6 @@ export * from "./CreateIssueCommentHttp.ts";
 export * from "./CreateIssueCommentLocal.ts";
 export * from "./Env.ts";
 export * from "./Events.ts";
-export * from "./EventsLive.ts";
 export * from "./GetIssue.ts";
 export * from "./GetIssueHttp.ts";
 export * from "./GetIssueLocal.ts";

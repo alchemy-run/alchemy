@@ -77,24 +77,21 @@ ${SearchIssues} to confirm the issue's criteria are all addressed.` {}
 
 // ─── event sources ───────────────────────────────────────────────
 
-const IssueOpened = AI.EventSource("github.issue.opened", IssueRef);
-const IssueLabeled = AI.EventSource(
+const IssueOpened = AI.Event("github.issue.opened", IssueRef);
+const IssueLabeled = AI.Event(
   "github.issue.labeled",
   S.Struct({ repo: S.String, label: S.String }),
 );
-const PullRequestOpened = AI.EventSource(
-  "github.pull_request.opened",
-  IssueRef,
-);
-const ThreadCreated = AI.EventSource(
+const PullRequestOpened = AI.Event("github.pull_request.opened", IssueRef);
+const ThreadCreated = AI.Event(
   "discord.thread.created",
   S.Struct({ channel: S.String, thread: S.String }),
 );
 // the addressed work item of a Fix run — a broadcast the front door
 // delivers explicitly (AI.when is declaration-only)
-const FixRequested = AI.EventSource("org.fix.requested", IssueRef);
+const FixRequested = AI.Event("org.fix.requested", IssueRef);
 // platform cron sends this tick explicitly — the kernel serves no cron
-const WeeklyTick = AI.EventSource("org.cron.weekly", S.Void);
+const WeeklyTick = AI.Event("org.cron.weekly", S.Void);
 
 // ─── loops — charters with typed control refs ────────────────────
 
@@ -258,15 +255,15 @@ type _dispatch_in = Assert<
   >
 >;
 
-// ── unhalted charters are typed as perpetual, not rejected ──
-// (mirrors Effect's data flow: construction is total; the missing exit
-// signal makes the loop's runs Effect<never, …>, and the Kernel lints
-// undeclared perpetuity at interpretation time)
+// ── unhalted charters are EXTERNALLY SETTLED (kernel-pruning ruling):
+// the kernel runs the loop (work round → park → steer wakes another);
+// the implementation Layer that consumed the wire ends the run with
+// `settle(key, event)` — so Out = unknown, the settled event
 
 class NoHalt extends AI.Process<NoHalt>()("NoHalt")`
-${AI.when(FixRequested)} run ${Engineer} forever, unsupervised.` {}
+${AI.when(FixRequested)} run ${Engineer} until the world says done.` {}
 
-type _nohalt_out = Assert<IsEqual<ChannelsOf<typeof NoHalt>["out"], never>>;
+type _nohalt_out = Assert<IsEqual<ChannelsOf<typeof NoHalt>["out"], unknown>>;
 
 // a Process with a halt but no accepted-message declaration still
 // compiles (`AI.when` is not required — dispatch types the input)
@@ -298,7 +295,7 @@ describe("AI term language", () => {
     expect(accepted).toHaveLength(3);
     // variadic when: one declaration accepting two event sources
     expect(accepted[0]!.sources).toHaveLength(2);
-    expect((accepted[0]!.sources[0] as AI.EventSource)["~alchemy/Name"]).toBe(
+    expect((accepted[0]!.sources[0] as AI.Event)["~alchemy/Name"]).toBe(
       "github.issue.opened",
     );
   });

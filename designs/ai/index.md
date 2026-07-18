@@ -59,9 +59,14 @@ Storming are embedded patterns, never constructs. Removed concepts
    releases) on these primitives; front-door doctrine; file layout.
 6. [reports/bp-prose-authoring.md](./reports/bp-prose-authoring.md) —
    how to write charter prose; every splice earns a sentence.
-7. Skim the rest as needed (map below).
-8. Then the code: `packages/alchemy/src/AI/` (Process, Agent, Tool,
-   EventSource, Trigger, Halt, Kernel, KernelMemory, Render,
+7. [reports/kernel-pruning.md](./reports/kernel-pruning.md) — the
+   minimal kernel (adopted 2026-07-17): AI.Event (né EventSource) = pure vocabulary
+   (channel machinery deleted); event refs contribute nothing to Req;
+   kernel components (EventBus, AskHub) are Layers an assembly names —
+   `memoryCore` vs the `AI.memory` reference assembly.
+8. Skim the rest as needed (map below).
+9. Then the code: `packages/alchemy/src/AI/` (Process, Agent, Tool,
+   Event, Signature, Kernel, KernelMemory, Render,
    ProcessContext) and the tutorial example
    `examples/agent-chat-web/` (org.ts, server.ts).
 

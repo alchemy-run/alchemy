@@ -30,7 +30,7 @@ ${AI.until(S.String)`the desk has answered`}` {}
 
 // a typed broadcast the desk may publish (kernel-internal source), and
 // a term whose bare ${X} mention IS the publish grant (canon §2a)
-const Routed = AI.EventSource(
+const Routed = AI.Event(
   "desk.routed",
   S.Struct({ to: S.String, reason: S.String }),
 );

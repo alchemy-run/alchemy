@@ -631,10 +631,7 @@ status in one short sentence.` {}
     "front-door delivery: a world event is sent explicitly to a perpetual ring",
     () =>
       Effect.gen(function* () {
-        const Alarm = AI.EventSource(
-          "live.alarm",
-          S.Struct({ question: S.String }),
-        );
+        const Alarm = AI.Event("live.alarm", S.Struct({ question: S.String }));
         const note = AI.Parameter("note", S.String)`your answer, tersely`;
         class LogAnswer extends AI.Tool<LogAnswer>()("log_answer")`
 Log ${note} as the answer to the work item. Call exactly once per item.` {}

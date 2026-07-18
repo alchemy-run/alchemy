@@ -106,39 +106,25 @@ type, arranged as {inbound, outbound} × {continuing, terminal}:
   **broadcast** messages; an *addressed* instruction needs no
   declaration — its plain schema types `In`, delivered by
   `dispatch`/`send`/`steer`. (b) The provisioning compile fence rides
-  the consuming call site, so `AI.when` contributes no channel tag to
-  `Req` (machine-observed halts and event mentions do — those stay
-  process-side). (c) An AI-direct process reads org state through a
-  read tool or a front-door-seeded snapshot — never a framework state
-  construct.
-- **Exits** — `AI.until(schema)` (model-declared, graded),
-  `AI.exit(AI.when(source, …))` (machine-observed — a **combinator**
-  over the signature's own acceptance expression), `AI.never`
-  (health-inviolant perpetual). Three rulings from the exit-ergonomics
-  review (owner-decided): (a) **correlation is the catalog's, not the
-  charter's** — an `EventSource` carries its natural identity `key`
-  ("owner/repo#number" for issue events), declared once by the event
-  family; the kernel correlates exits by key equality and the front
-  door addresses steers with the SAME key, so the charter never writes
-  a `match` callback (explicit `match` survives only as an override).
-  (b) **The machine-observed exit is `AI.exit(AI.when(…))`** — it
-  repurposes `AI.when` rather than adding a second source-taking form,
-  composes (variadic `when` ⇒ multi-source exits for free, which
-  `until(source)` could never express; more combinators can slot in as
-  needed), and carries prose as a template tag (``AI.exit(AI.when(
-  IssueClosed(repo)))`whether the merge closed it or a maintainer
-  did` ``), rendering "This run ends when {description} — {prose}" —
-  no naked block ever sits in a charter. The old machine-observed
-  `AI.until(source, match)` overload is deleted. (c) **Budget leaves
-  prose** — a ceiling is the *caller's* operational concern, not
-  process doctrine (the same argument that moved denial and routing
-  out): `AI.budget({…})` is now a **Layer** provided at composition
-  (`AI.layer(Term).pipe(Layer.provide(AI.budget({…})))`) with the
-  kernel's default guard as fallback; `BudgetExceeded` is
-  unconditionally in `Err` since some ceiling always governs a run.
-  This supersedes round-1's "budget renders in prose" for the splice —
-  the model can still be told its allowance by kernel prose at
-  interpretation, but the *setting* is deployment configuration.
+  the consuming call site — event refs contribute nothing to `Req`.
+  (c) An AI-direct process reads org state through a read tool or a
+  seeded snapshot — never a framework state construct.
+- **Exits** — `AI.until(schema)` (model-declared, graded), `AI.never`
+  (health-inviolant perpetual), or **no halt at all: externally
+  settled** (kernel-pruning follow-on, 2026-07-17 — supersedes the
+  `AI.exit(AI.when(source))` combinator, DELETED as combinator abuse:
+  it put exit correlation, a delivery concern, into the charter). A
+  charter with no halt is a run the kernel just loops — work round,
+  park, steer wakes another round — until the COMPONENT (the
+  implementation Layer that consumed the wire) ends it with
+  `settle(key, event)`. `Out = unknown` (the settled event's type is
+  the component's knowledge); correlation IS the admission key
+  (`send/dispatch(item, { key })` ↔ `settle(key, event)` — no kernel
+  subscription, no `match` callbacks, no key-equality machinery in the
+  kernel); how the ending reads is ORDINARY PROSE ("GitHub closing the
+  issue is what ends this work — …"), never a combinator. Budget
+  ruling unchanged: `AI.budget({…})` is a Layer provided at
+  composition; `BudgetExceeded` is unconditionally in `Err`.
   `AI.check` / `AI.fold` / `AI.concurrency` unchanged.
 - **`${Skill}`** — dormant capability bundles (unchanged from the
   kernel report: `Req` upper bound, normative activation protocol).
@@ -152,17 +138,18 @@ type, arranged as {inbound, outbound} × {continuing, terminal}:
   topology. It grants **no capability** — a resource mention is a
   noun; acting on it requires a Tool/Skill that closes over the
   resource (capability-by-omission stands).
-- **Scoped event sources.** Provider catalogs are repo/resource-
-  *generic*; charters consume *this* resource's events. Providers
-  expose scoped constructors — `GitHub.IssueOpened(alchemy)` — an
-  `EventSource` **instance** carrying the resource's provisioning
-  props: it is what `AI.when` accepts, what the front door's
-  `consumeRepositoryEvents(alchemy, …)` provisions, and it aligns the
-  compile fence per-resource instead of per-provider.
+- **Scoped events.** Provider catalogs are repo/resource-*generic*;
+  charters consume *this* resource's events. Providers expose scoped
+  constructors — `GitHub.IssueOpened(alchemy)` — an `AI.Event`
+  **instance** (renamed from `EventSource`, 2026-07-17: nothing is
+  sourced from it — it is the event-storming sticky note, a pure
+  message declaration): what `AI.when` accepts, deriving its
+  name/description/key from the resource's static identity.
 - **Deleted outright** (not deprecated): `AI.on` (renamed), `AI.emit`
   (subsumed by event mention), `AI.each`, `AI.every` (delivery left
-  the framework). Code layout: `Trigger.ts` + `Emit.ts` + `Halt.ts`
-  consolidate into `Signature.ts`.
+  the framework), `AI.exit` (the component owns run endings —
+  `settle`). Code layout: `Trigger.ts` + `Emit.ts` + `Halt.ts`
+  consolidate into `Signature.ts`; `EventSource.ts` → `Event.ts`.
 
 **Verbs** (`ProcessService`): `dispatch`, `send(item, { key? })`,
 `steer(runKey, msg)`, `settle(runKey, event)`, `interrupt` (+ the Ask
@@ -171,17 +158,16 @@ goes; the mailbox drain is kernel-internal. Two rulings from the
 concept-elimination review (owner-decided): (a) **exit delivery is
 delivery** — the implementation Layer that consumed the wire hands the
 world's exit event to the run (`settle(key, event)`) exactly like a
-steer; the kernel subscribes to NOTHING for world-side sources (the
-internal harness bus survives only for channel-less test/same-harness
-stimuli), machine exits contribute no channel tag to `Req`, and
-`EventBus`/event-channel Layers vanish from every service's
-composition — core's public surface is Process, Agent, Tool, Skill,
-Kernel, with everything else Layers, Resources, Bindings. (b)
-**implementations name runs** — `send(item, { key })` records the
-run's world identity ("owner/repo#7", typically the event family's
-`EventSource.key`) so `steer`/`settle` address it without ever seeing
-the kernel session; unnamed runs stay addressable by the
-`run.admitted` row's session.
+steer; the kernel subscribes to NOTHING (kernel-pruning follow-on: not
+even org-internal sources — the bus component is `ctx.emit` fan-out
+only), events contribute nothing to `Req`, and event-channel Layers
+vanish from every service's composition — core's public surface is
+Process, Agent, Tool, Skill, Kernel, with everything else Layers,
+Resources, Bindings. (b) **implementations name runs** —
+`send(item, { key })` records the run's world identity
+("owner/repo#7", typically the event family's `Event.key`) so
+`steer`/`settle` address it without ever seeing the kernel session;
+unnamed runs stay addressable by the `run.admitted` row's session.
 
 ### 2a. The signature-reduction round (why v4.1)
 
@@ -281,6 +267,24 @@ the reasoning is preserved so it isn't relitigated:
   processes: one tag, proliferating implementations. Expressions
   encode **interface only** — `AI.when` types what can be dispatched;
   nothing in prose provisions anything.
+- **The kernel prune: sources are vocabulary; components are named**
+  (reports/kernel-pruning.md, adopted 2026-07-17). `AI.EventSource` is
+  a pure message declaration — `{ name, schema, owner, description?,
+  key? }`; the channel machinery (`EventChannelService`, the `Channel`
+  phantom, source `props`, `GitHubEvents` + its `Stream.never` stub
+  Layer) is deleted. Event refs contribute NOTHING to a term's `Req` —
+  the wire's compile fence is the implementation Layer's own seam
+  requirement (`GitHubIssuesLive` requires
+  `GitHub.RepositoryEventSource`). The kernel CONTRACT stays minimal:
+  `ctx.emit` = one durable Trace row (owner-gated); exits settle by
+  explicit `settle(key, event)`. Kernel capability beyond that comes
+  from COMPONENT Layers an assembly names — no implementation
+  fabricates defaults, and no `serviceOption` polling either (a soft
+  default in disguise): `memoryCore` REQUIRES its components
+  (`TraceStore | AskHub | EventBus`), absence is a NAMED
+  implementation (`EventBusNone`: settle-only delivery; `AskHubNone`:
+  the first ask is an assembly error), and `AI.memory` is the
+  reference assembly that names the memory components explicitly.
 - **The GitHub API is bindings; the repository is the resource.**
   `GitHub.RepositoryRef` is deleted — a repository is named ONE way:
   the `GitHub.Repository` resource, yielded or as the exported
@@ -327,13 +331,22 @@ the reasoning is preserved so it isn't relitigated:
   union: `GitHub.eventKey(event)` (`owner/repo#number`). The catalog's
   source schemas ARE these tagged events, so a charter's `AI.when`
   types `In` as exactly what the handler routes.
-- **Processes declare domain interfaces.** `AI.Process<Self,
-  Interface>` — the term's tag resolves to `ProcessService &
-  Interface` (e.g. `listIssues()`, `getIssue(n)`). Charters that
-  splice the term, codemode, and deterministic code all consume the
-  typed interface; declaring one obligates a hand-written
-  implementation Layer (the kernel default can't invent domain
-  methods).
+- **Processes declare domain interfaces — REPLACE, not extend**
+  (supersedes "tag resolves to `ProcessService & Interface`", rejected
+  because the raw actor verbs on the tag let any consumer bypass the
+  implementation's delivery discipline — `issues.send(event)` around
+  the ledger double-creates the runs the dedupe exists to collapse). A
+  PLAIN term's tag resolves to `ProcessService` — a process is an
+  actor, and `dispatch` is its In → Out function nature. Declaring an
+  interface (`AI.Process<Self, Interface>`) SEALS the actor: the tag
+  resolves to `Interface` ONLY (e.g. `listIssues()`, `getIssue(n)`);
+  the verbs stay internal to the implementation Layer, which still
+  gets them from `kernel.interpret` and closes over them for delivery.
+  A term that wants to be externally addressable declares it — a
+  domain-shaped method (`resolve(issue)`), or an explicitly included
+  verb. Declaring an interface obligates an implementation that
+  supplies exactly those methods (`AI.layer(Term, (inner) => ({…}))`
+  or a hand-written `Layer.effect(Term, …)`).
 - **Environments are Layer provide-lists over seams.** A factory
   process is implemented ONCE against seam services — event arrival
   (`GitHub.RepositoryEventSource`: webhook on Cloudflare, polling

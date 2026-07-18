@@ -1607,11 +1607,16 @@ ${AI.check(Rubber)}` {}
   );
 
   it.effect(
-    "undeclared perpetuity (no halt at all) is linted at interpret",
+    "no halt = externally settled: interpretation succeeds; the component ends runs",
     () =>
       Effect.gen(function* () {
+        // kernel-pruning ruling (2026-07-17): a charter with no halt is
+        // NOT an error — it is the externally-settled shape. The kernel
+        // runs the loop; the implementation Layer that consumed the
+        // wire ends each run with `settle(key, event)` (see
+        // Settle.test.ts for the full loop semantics).
         class NoHalt extends AI.Process<NoHalt>()("NoHalt")`
-Just keep working with ${Grep}.` {}
+Just keep working with ${Grep}. The component ends this work.` {}
         const model = scriptedModel([]);
         const result = yield* Effect.result(
           Effect.scoped(
@@ -1629,13 +1634,7 @@ Just keep working with ${Grep}.` {}
             ),
           ),
         );
-        expect(result._tag).toBe("Failure");
-        if (result._tag === "Failure") {
-          expect(result.failure).toBeInstanceOf(AI.KernelError);
-          expect((result.failure as AI.KernelError).message).toContain(
-            "undeclared perpetuity",
-          );
-        }
+        expect(result._tag).toBe("Success");
       }),
   );
 });
@@ -1646,10 +1645,7 @@ Just keep working with ${Grep}.` {}
 // auto-subscribes accepted-message sources. The front door subscribes
 // to the world itself, adapts, and delivers with explicit `send`.
 
-const Ping = AI.EventSource(
-  "test.ping",
-  S.Struct({ n: S.Number, note: S.String }),
-);
+const Ping = AI.Event("test.ping", S.Struct({ n: S.Number, note: S.String }));
 
 const observation = AI.Parameter(
   "observation",

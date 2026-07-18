@@ -38,8 +38,8 @@ nothing else. If the review requests changes, ${Comment} them on the
 pull request and wait for the conversation to move. Once approved,
 ${MergePullRequest} — it refuses to merge without an approved review.
 
-${AI.exit(AI.when(GitHub.PullRequestMerged(testAlchemy)))`or a
-maintainer closes it unmerged`}` {}
+The merge is what ends this work — or a maintainer closing the pull
+request unmerged. You never declare it done yourself.` {}
 
 // ─── the ONE implementation ────────────────────────────────────────
 
@@ -88,8 +88,10 @@ export const GitHubPullRequestsLive = Layer.effect(
         ),
     );
 
+    // the declared interface is the WHOLE service (the tag is sealed):
+    // the actor verbs stay internal — delivery goes through the drive
+    // loop above, never around the ledger
     return {
-      ...inner,
       // wire failures are defects — the interface declares no
       // wire-error channel
       listOpen: () =>

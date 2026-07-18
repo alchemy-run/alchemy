@@ -92,11 +92,11 @@ export interface KernelEvent {
  */
 export type InterpretableTerm =
   | Agent<any, any[], any, any>
-  | Process<any, any, any, any, any, any[], any>;
+  | Process<any, any, any, any, any, any[], any, any>;
 
 /** The service an interpreted process term produces. */
 export type TermService<T> =
-  T extends Process<infer Out, infer In, infer Err, any, any, any[], any>
+  T extends Process<infer Out, infer In, infer Err, any, any, any[], any, any>
     ? ProcessService<Out, In, Err>
     : T extends Agent<any, any[], any, any>
       ? AgentService
@@ -104,7 +104,7 @@ export type TermService<T> =
 
 /** The term's construction requirements (its refs' tags). */
 export type TermReq<T> =
-  T extends Process<any, any, any, infer Req, any, any[], any>
+  T extends Process<any, any, any, infer Req, any, any[], any, any>
     ? Req
     : T extends Agent<any, any[], any, infer Req>
       ? Req
@@ -136,7 +136,7 @@ export interface KernelService {
    * term's tool tags); `AI.process(term, handler)` packages this.
    */
   readonly process: <Out, In, Err>(
-    term: Process<Out, In, Err, any, any, any[], any>,
+    term: Process<Out, In, Err, any, any, any[], any, any>,
     handler: (item: In, ctx: ProcessContext) => Effect.Effect<Out, Err, never>,
   ) => Effect.Effect<ProcessService<Out, In, Err>, KernelError, Scope.Scope>;
   /** Live firehose: all interpreted process terms' events, deltas included. */
@@ -153,9 +153,12 @@ export class Kernel extends Context.Service<Kernel, KernelService>()(
 ) {}
 
 /**
- * The domain half of a process term's service shape — the operations an
- * interface-bearing term (`AI.Process<Self, Interface>()`) declares
- * beyond the five actor verbs. `{}` (no keys) for a plain term.
+ * The domain shape of a process term's tag — `{}` (no keys) for a plain
+ * term (whose tag IS the actor verbs), the declared interface for an
+ * interface-bearing term (whose tag is SEALED to it). Verb-named keys
+ * are reserved: `AI.layer`/`AI.process`'s lightweight `make` form can't
+ * re-expose `send`/`steer`/… under their own names — use the
+ * full-control `Layer.effect(Term, …)` form for that.
  */
 export type ProcessDomain<Shape> = Omit<
   Shape,
@@ -164,7 +167,7 @@ export type ProcessDomain<Shape> = Omit<
 
 /** The verbs half of a term's service — what interpretation yields. */
 type ProcessVerbsOf<L> =
-  L extends Process<infer Out, infer In, infer Err, any, any, any[], any>
+  L extends Process<infer Out, infer In, infer Err, any, any, any[], any, any>
     ? ProcessService<Out, In, Err>
     : never;
 
@@ -178,10 +181,9 @@ type ProcessVerbsOf<L> =
  * Effect, so it can `yield*` services; its requirements (`RMake`) join
  * the Layer's requirements.
  */
-export type ProcessDomainArgs<
-  L extends Context.Service<any, ProcessService<any, any, any>>,
-  RMake,
-> = [keyof ProcessDomain<L["Service"]>] extends [never]
+export type ProcessDomainArgs<L extends Context.Service<any, any>, RMake> = [
+  keyof ProcessDomain<L["Service"]>,
+] extends [never]
   ? []
   : [
       make: (
@@ -215,13 +217,17 @@ export type ProcessDomainArgs<
  */
 /** The deterministic handler shape `AI.process` lifts onto a term's ring. */
 export type ProcessHandler<P, R = never> = (
-  item: P extends Process<any, infer In, any, any, any, any[], any>
+  item: P extends Process<any, infer In, any, any, any, any[], any, any>
     ? In
     : unknown,
   ctx: ProcessContext,
 ) => Effect.Effect<
-  P extends Process<infer Out, any, any, any, any, any[], any> ? Out : never,
-  P extends Process<any, any, infer Err, any, any, any[], any> ? Err : never,
+  P extends Process<infer Out, any, any, any, any, any[], any, any>
+    ? Out
+    : never,
+  P extends Process<any, any, infer Err, any, any, any[], any, any>
+    ? Err
+    : never,
   R
 >;
 
@@ -258,14 +264,14 @@ export type ProcessHandler<P, R = never> = (
  * An interface-bearing term (`AI.Process<Self, Interface>()`)
  * additionally REQUIRES a trailing `make` argument — same contract as
  * `AI.layer`'s ({@link ProcessDomainArgs}): the ring is built from the
- * handler as always, then the term's service is `{ ...ring,
- * ...make(ring) }` — the actor verbs plus your domain methods.
+ * handler as always, then the term's service is `make(ring)` — the
+ * declared interface ONLY, closing over the sealed ring for delivery.
  */
 export const process: {
   // effectful constructor: resolve dependencies once at Layer build
   <
-    P extends Process<any, any, any, any, any, any[], any> &
-      Context.Service<any, ProcessService<any, any, any>>,
+    P extends Process<any, any, any, any, any, any[], any, any> &
+      Context.Service<any, any>,
     R = never,
     RMake = never,
     RDomain = never,
@@ -276,8 +282,8 @@ export const process: {
   ): Layer.Layer<P["Identifier"], never, Kernel | R | RMake | RDomain>;
   // bare-function sugar
   <
-    P extends Process<any, any, any, any, any, any[], any> &
-      Context.Service<any, ProcessService<any, any, any>>,
+    P extends Process<any, any, any, any, any, any[], any, any> &
+      Context.Service<any, any>,
     R = never,
     RDomain = never,
   >(
@@ -296,10 +302,9 @@ export const process: {
       const ring = yield* kernel.process(term, resolved);
       if (makeDomain === undefined) return ring;
       const made = makeDomain(ring);
-      const domain = Effect.isEffect(made)
-        ? yield* made as Effect.Effect<any>
-        : made;
-      return { ...ring, ...domain };
+      // sealed: the interface is the WHOLE service — the ring stays
+      // internal, reachable only through what `make` chose to expose
+      return Effect.isEffect(made) ? yield* made as Effect.Effect<any> : made;
     }) as any,
   )) as any;
 
@@ -308,12 +313,14 @@ export const layer: {
     term: A,
   ): Layer.Layer<A["Identifier"], never, Kernel | A["~alchemy/Req"]>;
   /**
-   * A plain term takes no further argument. An interface-bearing term
-   * (`AI.Process<Self, Interface>()`) additionally REQUIRES `make` —
-   * the kernel interprets the charter as always, then the term's
-   * service is `{ ...inner, ...make(inner) }`: the interpreted verbs
-   * plus your domain methods. This is the lightweight way to implement
-   * a declared interface:
+   * A plain term takes no further argument (its tag IS the actor). An
+   * interface-bearing term (`AI.Process<Self, Interface>()`)
+   * additionally REQUIRES `make` — the kernel interprets the charter as
+   * always, then the term's service is `make(inner)`: the declared
+   * interface ONLY. The interpreted verbs are SEALED inside — `make`
+   * closes over `inner` for whatever delivery its methods need, and no
+   * consumer can bypass the implementation with a raw `send`/`steer`.
+   * This is the lightweight way to implement a declared interface:
    *
    * ```ts
    * const GitHubIssuesLive = AI.layer(GitHubIssues, (inner) => ({
@@ -325,11 +332,11 @@ export const layer: {
    * `make` may return an Effect (to `yield*` services once at Layer
    * build — its requirements join the Layer's). `Layer.effect(Term, …)`
    * remains the full-control form: interpret via `AI.Kernel` yourself,
-   * wrap ingestion around it, return the complete service.
+   * wrap ingestion around it, return the interface.
    */
   <
-    L extends Process<any, any, any, any, any, any[], any> &
-      Context.Service<any, ProcessService<any, any, any>>,
+    L extends Process<any, any, any, any, any, any[], any, any> &
+      Context.Service<any, any>,
     RMake = never,
   >(
     term: L,
@@ -343,9 +350,8 @@ export const layer: {
       const inner = yield* kernel.interpret(term as any);
       if (make === undefined) return inner;
       const made = make(inner);
-      const domain = Effect.isEffect(made)
-        ? yield* made as Effect.Effect<any>
-        : made;
-      return { ...inner, ...domain };
+      // sealed: the interface is the WHOLE service — the verbs stay
+      // internal, reachable only through what `make` chose to expose
+      return Effect.isEffect(made) ? yield* made as Effect.Effect<any> : made;
     }) as any,
   );

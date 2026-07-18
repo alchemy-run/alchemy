@@ -140,3 +140,28 @@ export const AskHubMemory: Layer.Layer<AskHub> = Layer.effect(
   AskHub,
   Effect.map(makeMemoryAskHub, (hub) => AskHub.of(hub)),
 );
+
+/**
+ * The NAMED absence of the component — an assembly without
+ * asks/approvals says so explicitly (kernel-pruning ruling: no silent
+ * defaults, no optional polling). The first ask dies with an assembly
+ * error, never a silent park.
+ */
+export const AskHubNone: Layer.Layer<AskHub> = Layer.succeed(
+  AskHub,
+  AskHub.of({
+    ask: () =>
+      Effect.die(
+        new Error(
+          "no AskHub assembled: this kernel was composed with AskHubNone — provide AI.AskHubMemory (or use AI.memory, the reference assembly) to support asks/approvals",
+        ),
+      ),
+    pending: Effect.succeed([]),
+    answer: (id) =>
+      Effect.die(
+        new Error(
+          `no AskHub assembled: cannot answer ask ${JSON.stringify(id)} — this kernel was composed with AskHubNone`,
+        ),
+      ),
+  }),
+);

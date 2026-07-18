@@ -1,88 +1,49 @@
 /**
- * The GitHub event catalog — **world-owned** {@link EventSource}s scoped
+ * The GitHub event catalog — **world-owned** {@link Event}s scoped
  * to a repository (canon §2a rulings 4 + 6).
  *
  * Provider catalogs are repository-*generic*; charters consume *this*
  * repository's events. The constructors here are scoped: each takes a
- * repository and returns an `EventSource` **instance** carrying the
- * repository's provisioning props — it is what `AI.when` accepts (the
- * signature's inbound corner), what `AI.exit(AI.when(source))` observes
- * (the machine-observed exit), and what the channel Layer
- * ({@link GitHubEventsLive}) provisions from.
+ * repository and returns an `Event` **instance** — pure
+ * vocabulary: a deterministic name, the typed payload schema (what
+ * `AI.when` types `In` with), the rendered clause, and the correlation
+ * `key`. Nothing subscribes through it and nothing provisions from it —
+ * delivery is user-space code (`consumeRepositoryEvents` + `Match.tag`
+ * → `send`/`steer`/`settle` in the process's implementation Layer,
+ * whose OWN requirement on `GitHub.RepositoryEventSource` is the
+ * compile fence obligating the deployment to provision the wire).
  *
  * Every source is marked `owner: "world"`: GitHub publishes these, a
  * process never can, so a bare `${GitHub.IssueOpened(repo)}` mention is
  * inert vocabulary (renders the name, grants nothing) — only the marked
- * signature expressions (`AI.when` / `AI.until`) put them to work, and
+ * signature expressions (`AI.when` / `AI.exit`) put them to work, and
  * `ctx.emit` of one is a defect.
  *
- * These constructors are the AI-term analogue of
- * {@link consumeRepositoryEvents} (the world-side webhook consumer): at
- * deploy time an EventSource compiles to webhook-ingestion
- * infrastructure; the front door routes from that webhook to the
- * accepting process with explicit `send`/`steer`. The payload schemas
- * here ARE the typed wire events ({@link RepositoryEvent}) — a
- * charter's `AI.when` types `In` as exactly what the delivery handler
- * routes.
+ * The payload schemas here ARE the typed wire events
+ * ({@link RepositoryEvent}) — a charter's `AI.when` types `In` as
+ * exactly what the delivery handler routes.
  */
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
-import { type EventChannelService, EventSource } from "../AI/EventSource.ts";
+import { Event } from "../AI/Event.ts";
 import type { Repository } from "./Repository.ts";
-import type { GitHubEventName, WebhookEvent } from "./RepositoryEventSource.ts";
+import type { WebhookEvent } from "./RepositoryEventSource.ts";
 import {
   isRepositoryResource,
   type RepositoryLike,
   repositoryIdentity,
-  resolveRepository,
 } from "./RepositoryLike.ts";
 
 /**
- * The channel tag for the GitHub event family: the service a harness
- * must provide to deliver these sources. The tag joins a term's `Req`
- * where the term holds a process-side obligation — for world-owned
- * sources that is exactly the machine-observed halt
- * (`AI.exit(AI.when(GitHub.IssueClosed(repo)))`): the kernel must observe
- * the world on the process's behalf. `AI.when` contributes nothing (the
- * front door that subscribes and delivers holds the consuming
- * obligation), and a bare mention contributes nothing (world-owned
- * sources have no publish affordance).
- *
- * Holding the tag is what obligates the deployment to provision the
- * delivery wire — on Cloudflare: a repository webhook pointing at the
- * Worker, provisioned by {@link GitHubEventsLive} through
- * `GitHub.RepositoryEventSource`, driven by the union of subscribed
- * sources' props, never a side list.
+ * A repository as a source constructor sees it after normalization:
+ * plain identity when statically known, the deferred constructor Effect
+ * otherwise (identity then only exists in-Effect — the clauses fall
+ * back to generic phrasing).
  */
-export class GitHubEvents extends Context.Service<
-  GitHubEvents,
-  EventChannelService
->()("GitHub.Events") {}
-
-/**
- * Pure definition data carried by every GitHub source (the binding
- * idiom: props tell the channel Layer what to provision and what to
- * filter; behavior lives exclusively in the Layer).
- */
-export interface GitHubSourceProps {
-  /**
-   * The repository whose events this source delivers — normalized at
-   * construction to its plain identity when the {@link RepositoryLike}
-   * form allows (a yielded resource, or a deferred constructor with
-   * plain-string props); otherwise the deferred Effect is carried as-is
-   * and resolved in-Effect by the consuming Layer via
-   * {@link resolveSourceRepo}.
-   */
-  repo:
-    | { owner: string; repository: string }
-    | Effect.Effect<Repository, any, any>;
-  /** Bare GitHub event name — what the webhook is provisioned with. */
-  event: GitHubEventName;
-  /** Family-specific runtime filter (action, label, branch, …). */
-  filter?: Record<string, string | undefined>;
-}
+type RepoScope =
+  | { owner: string; repository: string }
+  | Effect.Effect<Repository, any, any>;
 
 /**
  * Stable per-module-load identity for a DEFERRED constructor whose
@@ -114,11 +75,8 @@ const deferredKey = (repo: object): string => {
  *   identity props are unresolved `Input`s (stable per module load).
  *
  * The name is DISPLAY/topology identity only — the **wire identity**
- * (which repo to provision and filter) always resolves from
- * `props.repo` in-Effect via {@link resolveSourceRepo}. The
- * kernel-internal EventBus correlates on the name, but world-owned
- * GitHub sources ride the channel (the webhook wire), not the bus, so
- * the placeholder never becomes a wire key.
+ * (which repo to consume) lives in user space, on the
+ * `consumeRepositoryEvents` call the implementation Layer makes.
  */
 const scopeKey = (repo: RepositoryLike): string => {
   if (isRepositoryResource(repo)) return repo.FQN;
@@ -129,13 +87,13 @@ const scopeKey = (repo: RepositoryLike): string => {
 };
 
 /**
- * Normalize what a scoped constructor stores in `props.repo`: forms
- * with statically-known identity (a yielded resource's props, a
- * deferred constructor's meta) collapse to the plain identity eagerly;
- * a deferred constructor with unresolved identity props is carried
- * as-is for the Layer to resolve in-Effect.
+ * Normalize a scoped constructor's repository argument: forms with
+ * statically-known identity (a yielded resource's props, a deferred
+ * constructor's meta) collapse to the plain identity eagerly; a
+ * deferred constructor with unresolved identity props stays an Effect
+ * (its clauses use generic phrasing).
  */
-const normalizeRepo = (repo: RepositoryLike): GitHubSourceProps["repo"] => {
+const normalizeRepo = (repo: RepositoryLike): RepoScope => {
   const identity = repositoryIdentity(repo);
   if (identity !== undefined) return identity;
   if (Effect.isEffect(repo)) return repo;
@@ -151,13 +109,13 @@ const normalizeRepo = (repo: RepositoryLike): GitHubSourceProps["repo"] => {
  * identity can't know the strings at construction, so its clauses use
  * the generic "the repository" — still a full, readable clause.
  */
-const describeRepo = (scope: GitHubSourceProps["repo"]): string =>
+const describeRepo = (scope: RepoScope): string =>
   Effect.isEffect(scope)
     ? "the repository"
     : `${scope.owner}/${scope.repository}`;
 
 /**
- * The EventSource `key` contract over the typed events: {@link eventKey}
+ * The Event `key` contract over the typed events: {@link eventKey}
  * guarded for non-event values (a plain-string demo work item) —
  * consumers fall back to their keyless behavior on `undefined`.
  */
@@ -168,18 +126,6 @@ const identityKey = (value: unknown): string | undefined => {
     return undefined;
   }
 };
-
-/**
- * Resolve a source's `props.repo` to the plain `{ owner, repository }`
- * a consuming Layer provisions and filters with — already plain for the
- * statically-known forms; the deferred Effect resolves via
- * {@link resolveRepository} (legal under a Stack — the bindings
- * precedent).
- */
-export const resolveSourceRepo = (
-  repo: GitHubSourceProps["repo"],
-): Effect.Effect<{ owner: string; repository: string }> =>
-  Effect.isEffect(repo) ? resolveRepository(repo) : Effect.succeed(repo);
 
 // ─── the typed wire: tagged repository events ──────────────────────
 //
@@ -300,7 +246,7 @@ const CommitSchema = S.Struct({
 
 /**
  * The schema shape an event const carries: a real schema whose `Type`
- * is the event's NAMED interface — exactly what `AI.EventSource`
+ * is the event's NAMED interface — exactly what `AI.Event`
  * requires, without leaking the structural struct type into hovers.
  */
 type EventSchema<T> = S.Top & { readonly Type: T };
@@ -488,21 +434,11 @@ export const eventKey = (event: RepositoryEvent): string | undefined => {
  */
 export const IssueOpened = (repo: RepositoryLike) => {
   const scope = normalizeRepo(repo);
-  return EventSource(
-    `github.issues.opened/${scopeKey(repo)}`,
-    IssueOpenedEvent,
-    GitHubEvents,
-    {
-      repo: scope,
-      event: "issues",
-      filter: { action: "opened" },
-    } satisfies GitHubSourceProps,
-    {
-      owner: "world",
-      description: `an issue opens in ${describeRepo(scope)}`,
-      key: identityKey,
-    },
-  );
+  return Event(`github.issues.opened/${scopeKey(repo)}`, IssueOpenedEvent, {
+    owner: "world",
+    description: `an issue opens in ${describeRepo(scope)}`,
+    key: identityKey,
+  });
 };
 
 /**
@@ -515,15 +451,9 @@ export const IssueOpened = (repo: RepositoryLike) => {
  */
 export const IssueLabeled = (repo: RepositoryLike, label: string) => {
   const scope = normalizeRepo(repo);
-  return EventSource(
+  return Event(
     `github.issues.labeled/${scopeKey(repo)}#${label}`,
     IssueLabeledEvent,
-    GitHubEvents,
-    {
-      repo: scope,
-      event: "issues",
-      filter: { action: "labeled", label },
-    } satisfies GitHubSourceProps,
     {
       owner: "world",
       description: `an issue in ${describeRepo(scope)} is labeled ${label}`,
@@ -545,15 +475,9 @@ export const IssueLabeled = (repo: RepositoryLike, label: string) => {
  */
 export const IssueCommented = (repo: RepositoryLike) => {
   const scope = normalizeRepo(repo);
-  return EventSource(
+  return Event(
     `github.issues.commented/${scopeKey(repo)}`,
     IssueCommentedEvent,
-    GitHubEvents,
-    {
-      repo: scope,
-      event: "issue_comment",
-      filter: { action: "created" },
-    } satisfies GitHubSourceProps,
     {
       owner: "world",
       description: `a comment lands on an issue in ${describeRepo(scope)}`,
@@ -565,10 +489,11 @@ export const IssueCommented = (repo: RepositoryLike) => {
 /**
  * GitHub closing an issue — the machine-observed exit of a case run
  * (`AI.exit(AI.when(GitHub.IssueClosed(repo)))`): the WORLD settles
- * the case, never the model's claim that it is done. The kernel holds
- * the one internal subscription for this (the halt's channel tag joins
- * `Req`), correlating runs by the source's own `key`
- * (`owner/repository#number`) — no per-charter match callback needed.
+ * the case, never the model's claim that it is done. Exit delivery is
+ * delivery — the implementation Layer that consumed the wire hands the
+ * close to the run (`settle(key, event)`), correlating by the source's
+ * own `key` (`owner/repository#number`) — no per-charter match
+ * callback needed.
  *
  * @example
  * ```typescript
@@ -578,21 +503,11 @@ export const IssueCommented = (repo: RepositoryLike) => {
  */
 export const IssueClosed = (repo: RepositoryLike) => {
   const scope = normalizeRepo(repo);
-  return EventSource(
-    `github.issues.closed/${scopeKey(repo)}`,
-    IssueClosedEvent,
-    GitHubEvents,
-    {
-      repo: scope,
-      event: "issues",
-      filter: { action: "closed" },
-    } satisfies GitHubSourceProps,
-    {
-      owner: "world",
-      description: `GitHub closes an issue in ${describeRepo(scope)}`,
-      key: identityKey,
-    },
-  );
+  return Event(`github.issues.closed/${scopeKey(repo)}`, IssueClosedEvent, {
+    owner: "world",
+    description: `GitHub closes an issue in ${describeRepo(scope)}`,
+    key: identityKey,
+  });
 };
 
 /**
@@ -600,15 +515,9 @@ export const IssueClosed = (repo: RepositoryLike) => {
  */
 export const PullRequestOpened = (repo: RepositoryLike) => {
   const scope = normalizeRepo(repo);
-  return EventSource(
+  return Event(
     `github.pull_request.opened/${scopeKey(repo)}`,
     PullRequestOpenedEvent,
-    GitHubEvents,
-    {
-      repo: scope,
-      event: "pull_request",
-      filter: { action: "opened" },
-    } satisfies GitHubSourceProps,
     {
       owner: "world",
       description: `a pull request opens in ${describeRepo(scope)}`,
@@ -625,15 +534,9 @@ export const PullRequestOpened = (repo: RepositoryLike) => {
  */
 export const PullRequestMerged = (repo: RepositoryLike) => {
   const scope = normalizeRepo(repo);
-  return EventSource(
+  return Event(
     `github.pull_request.merged/${scopeKey(repo)}`,
     PullRequestMergedEvent,
-    GitHubEvents,
-    {
-      repo: scope,
-      event: "pull_request",
-      filter: { action: "closed", merged: "true" },
-    } satisfies GitHubSourceProps,
     {
       owner: "world",
       description: `a pull request merges in ${describeRepo(scope)}`,
@@ -657,20 +560,10 @@ export const Push = (
   filter: { branch: string; titlePrefix?: string },
 ) => {
   const scope = normalizeRepo(repo);
-  return EventSource(
-    `github.push/${scopeKey(repo)}@${filter.branch}`,
-    PushEvent,
-    GitHubEvents,
-    {
-      repo: scope,
-      event: "push",
-      filter: { ...filter },
-    } satisfies GitHubSourceProps,
-    {
-      owner: "world",
-      description: `a push lands on ${filter.branch} in ${describeRepo(scope)}`,
-    },
-  );
+  return Event(`github.push/${scopeKey(repo)}@${filter.branch}`, PushEvent, {
+    owner: "world",
+    description: `a push lands on ${filter.branch} in ${describeRepo(scope)}`,
+  });
 };
 
 // ─── the wire parser: one Octokit delivery → one typed event ────────

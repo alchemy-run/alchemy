@@ -30,15 +30,11 @@ const repo = GitHub.Repository("world-owned-alchemy-effect", {
 const IssueOpened = GitHub.IssueOpened(repo);
 
 // an org-internal broadcast: the unmarked mention is the publish grant
-const PostRouted = AI.EventSource(
-  "org.post.routed",
-  S.Struct({ to: S.String }),
-);
+const PostRouted = AI.Event("org.post.routed", S.Struct({ to: S.String }));
 
 // mentions BOTH bare: the org source is granted, the world source is
-// vocabulary. Note this compiles with NO GitHubEvents Layer anywhere —
-// the world-owned mention contributes no channel obligation (the
-// type-level half of the gate).
+// vocabulary. Note this compiles with no event Layer anywhere — event
+// refs contribute nothing to Req (the type-level half of the gate).
 class Desk extends AI.Process<Desk>()("WorldDesk")`
 Watch the repository: ${IssueOpened} names what arrives; announce your
 routing decisions by publishing ${PostRouted}.

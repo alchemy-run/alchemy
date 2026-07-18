@@ -67,11 +67,10 @@ const ModelLive = AnthropicLanguageModel.layer({
   Layer.provide(FetchHttpClient.layer),
 );
 
-// One shared bus instance (module const ⇒ Layer-memoized once per
-// build): the kernel's machine-exit subscriptions and the drive loops'
-// republications meet on the SAME topics.
-const EventBusLive = AI.EventBusMemory;
-const KernelLive = AI.memory.pipe(Layer.provide([ModelLive, EventBusLive]));
+// AI.memory is the reference kernel ASSEMBLY — it names its own
+// components (ask hub, event bus) explicitly. The factory adds none:
+// its exits are all world-owned and settle through the drive loops.
+const KernelLive = AI.memory.pipe(Layer.provide(ModelLive));
 
 // the provider's credential chain — the SAME resolution the Stack's
 // `GitHub.providers()` uses (`alchemy login` profile: env, stored PAT,
@@ -138,7 +137,6 @@ export const FactoryLocal = Factory.pipe(
   Layer.provide(GitHub.RepositoryEventSourcePolling({ every: "30 seconds" })), // ← poll
   Layer.provide(SqliteLedger("factory.db")), // ← restart-resume
   Layer.provideMerge(KernelLive), // ← kernel (exposed: the events tail below)
-  Layer.provide(EventBusLive),
   Layer.provide(Credentials),
 );
 

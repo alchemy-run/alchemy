@@ -65,8 +65,8 @@ Serve items, ${AI.concurrency(3)}. ${AI.never`healthy`}` {}
   });
 
   it("AI.when renders as the sentence's conjunction", () => {
-    const Ping = AI.EventSource("test.ping", S.Struct({ n: S.Number }));
-    const Pong = AI.EventSource("test.pong", S.Struct({ n: S.Number }));
+    const Ping = AI.Event("test.ping", S.Struct({ n: S.Number }));
+    const Pong = AI.Event("test.pong", S.Struct({ n: S.Number }));
     class Serve extends AI.Process<Serve>()("Serve")`
 ${AI.when(Ping, Pong)} serve it. ${AI.never`healthy`}` {}
     const prose = AI.renderTemplate(
@@ -77,10 +77,7 @@ ${AI.when(Ping, Pong)} serve it. ${AI.never`healthy`}` {}
   });
 
   it("a bare event mention (the publish grant) renders the event's name in place", () => {
-    const FixShipped = AI.EventSource(
-      "fix.shipped",
-      S.Struct({ pr: S.Number }),
-    );
+    const FixShipped = AI.Event("fix.shipped", S.Struct({ pr: S.Number }));
     class Fixer extends AI.Process<Fixer>()("Fixer")`
 Ship fixes; publish ${FixShipped} for each.
 ${AI.never`healthy`}` {}
@@ -93,10 +90,7 @@ ${AI.never`healthy`}` {}
   });
 
   it("${X.name} interpolates a plain string — the inert mention", () => {
-    const FixShipped = AI.EventSource(
-      "fix.shipped",
-      S.Struct({ pr: S.Number }),
-    );
+    const FixShipped = AI.Event("fix.shipped", S.Struct({ pr: S.Number }));
     class Reader extends AI.Process<Reader>()("Reader")`
 You may hear about ${FixShipped.name} but you never publish it.
 ${AI.never`healthy`}` {}
@@ -120,7 +114,7 @@ ${AI.when(GitHub.IssueOpened(repo))}, read it first. ${AI.never`healthy`}` {}
   });
 
   it("a mixed when uses descriptions where present, '{name} arrives' where not", () => {
-    const Nudge = AI.EventSource("org.nudge", S.Struct({ n: S.Number }));
+    const Nudge = AI.Event("org.nudge", S.Struct({ n: S.Number }));
     class Desk extends AI.Process<Desk>()("RenderMixedDesk")`
 ${AI.when(GitHub.IssueOpened(repo), Nudge)} act on it. ${AI.never`healthy`}` {}
     const prose = AI.renderTemplate((Desk as any).template, (Desk as any).refs);
@@ -142,44 +136,14 @@ ${GitHub.IssueOpened(repo)} is vocabulary here. ${AI.never`healthy`}` {}
     expect(prose).not.toContain("an issue opens");
   });
 
-  it("a machine-observed exit renders the source's description as the exit clause", () => {
+  it("an externally-settled charter renders its ending as ordinary prose (no combinator)", () => {
     class Case extends AI.Process<Case>()("RenderCase")`
-Work the issue.
-${AI.exit(AI.when(GitHub.IssueClosed(repo)))}` {}
+Work the issue. GitHub closing the issue is what ends this work.` {}
     const prose = AI.renderTemplate((Case as any).template, (Case as any).refs);
-    expect(prose).toContain(
-      "This run ends when: GitHub closes an issue in alchemy-run/test-alchemy",
-    );
-  });
-
-  it("a prose-carrying exit joins the clause and the authored prose with an em dash", () => {
-    class Case extends AI.Process<Case>()("RenderProseCase")`
-Work the issue.
-${AI.exit(AI.when(GitHub.IssueClosed(repo)))`whether merged or by hand`}` {}
-    const prose = AI.renderTemplate((Case as any).template, (Case as any).refs);
-    expect(prose).toContain(
-      "This run ends when: GitHub closes an issue in alchemy-run/test-alchemy — whether merged or by hand",
-    );
-  });
-
-  it("a prose-carrying exit on a description-less source falls back to '{name} arrives'", () => {
-    const Done = AI.EventSource("test.done", S.Struct({ n: S.Number }));
-    class Case extends AI.Process<Case>()("RenderFallbackCase")`
-Work it. ${AI.exit(AI.when(Done))`one way or another`}` {}
-    const prose = AI.renderTemplate((Case as any).template, (Case as any).refs);
-    expect(prose).toContain(
-      "This run ends when: test.done arrives — one way or another",
-    );
-  });
-
-  it("a multi-source exit joins the sources' clauses with ' or '", () => {
-    class Case extends AI.Process<Case>()("RenderMultiCase")`
-Work the issue.
-${AI.exit(AI.when(GitHub.IssueClosed(repo), GitHub.PullRequestMerged(repo)))}` {}
-    const prose = AI.renderTemplate((Case as any).template, (Case as any).refs);
-    expect(prose).toContain(
-      "This run ends when: GitHub closes an issue in alchemy-run/test-alchemy or a pull request merges in alchemy-run/test-alchemy",
-    );
+    expect(prose).toContain("GitHub closing the issue is what ends this work.");
+    // no halt ⇒ no halt contract, no resolve tool instructions
+    expect(prose).not.toContain("# Halt condition");
+    expect(prose).not.toContain("This run ends when:");
   });
 
   it("the fixture charter renders as readable prose (deferred repo ⇒ real identity)", () => {
@@ -200,12 +164,12 @@ ${AI.exit(AI.when(GitHub.IssueClosed(repo), GitHub.PullRequestMerged(repo)))}` {
     // with ${Reply}" — the mention IS the action)
     expect(prose).toContain("comment asking the reporter to close it");
     expect(prose).toContain("Once approved, mergePullRequest —");
-    // the machine exit composes the source's clause with the charter's
-    // authored prose — no lead-in restatement anywhere in the charter
+    // the ending is ORDINARY PROSE (no halt combinator — the charter is
+    // externally settled; the component delivers the close)
     expect(prose).toContain(
-      "This run ends when: GitHub closes an issue in alchemy-run/test-alchemy — whether the merged pull request closed it or a maintainer closed it by hand",
+      "GitHub closing the issue is what ends this work — whether the merged pull request closed it or a maintainer closed it by hand.",
     );
-    expect(prose).not.toContain("is what ends your work");
+    expect(prose).not.toContain("This run ends when:");
     // budget is a Layer, not prose
     expect(prose).not.toContain("# Budget");
   });

@@ -9,7 +9,7 @@
  * fold, served as JSON.
  */
 import { isAgent } from "./Agent.ts";
-import { isEventSource, isWorldOwned } from "./EventSource.ts";
+import { isEvent, isWorldOwned } from "./Event.ts";
 import { isProcess } from "./Process.ts";
 import { renderTemplate } from "./Render.ts";
 import { isTool } from "./Tool.ts";
@@ -29,7 +29,7 @@ export interface TopologyNode {
   readonly tools: ReadonlyArray<string>;
   /**
    * The declared published language: event names from bare `${X}`
-   * EventSource mentions (the publish grant, canon §2a) — "this process
+   * Event mentions (the publish grant, canon §2a) — "this process
    * may publish X".
    */
   readonly emits: ReadonlyArray<string>;
@@ -89,7 +89,7 @@ const nodeOf = (term: TermLike, kind: TopologyNode["kind"]): TopologyNode => {
     // bare mention is vocabulary, not a publish grant — the world
     // publishes it, this process never can.
     emits: term.refs.flatMap((ref) =>
-      isEventSource(ref) && !isWorldOwned(ref) ? [ref["~alchemy/Name"]] : [],
+      isEvent(ref) && !isWorldOwned(ref) ? [ref["~alchemy/Name"]] : [],
     ),
   };
 };

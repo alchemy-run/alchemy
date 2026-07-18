@@ -80,10 +80,10 @@ const ModelLive = AnthropicLanguageModel.layer({
   Layer.provide(FetchHttpClient.layer),
 );
 
-const EventBusLive = AI.EventBusMemory;
 // TODO(deploy): replace with CloudflareKernelLive(OrgRing) — execution
 // belongs in the OrgRing DO (Phase-3 harness), never this Worker.
-const KernelLive = AI.memory.pipe(Layer.provide([ModelLive, EventBusLive]));
+// AI.memory names its own components (ask hub, event bus) explicitly.
+const KernelLive = AI.memory.pipe(Layer.provide(ModelLive));
 
 // ─── credentials + tools ───────────────────────────────────────────
 
@@ -132,7 +132,6 @@ const FactoryCloudflare = Factory.pipe(
   //   the runtime client
   Layer.provide(D1Ledger.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding))),
   Layer.provideMerge(KernelLive),
-  Layer.provide(EventBusLive),
 );
 
 export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(

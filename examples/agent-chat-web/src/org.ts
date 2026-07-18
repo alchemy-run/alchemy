@@ -71,7 +71,7 @@ export const PostThread = S.Struct({
 });
 export type PostThread = typeof PostThread.Type;
 
-const PostOpened = AI.EventSource("workspace.post.opened", PostThread);
+const PostOpened = AI.Event("workspace.post.opened", PostThread);
 
 /** Domain-owned formatting for an agent task — never generic stringify. */
 const formatPost = (post: PostThread): string =>
@@ -105,7 +105,7 @@ BOTH when it is urgent and deep. Never empty.` {}
 // — a fact other code may subscribe to. The bare ${PostRouted} mention
 // on the term below IS the publish grant (canon §2a), so topology knows
 // the published language
-export const PostRouted = AI.EventSource(
+export const PostRouted = AI.Event(
   "workspace.post.routed",
   S.Struct({
     post: S.String,
@@ -189,29 +189,25 @@ Escalate engineering-shaped problems by saying so in your resolution.
 ${AI.when(PostOpened)}
 ${AI.until(S.String)`the user's question is answered or escalated`}` {}
 
-// ─── #issues: a GOAL with a MACHINE-OBSERVED exit ───────────────
+// ─── #issues: a GOAL the model resolves after closing ────────────
 
-export const IssueClosed = AI.EventSource(
-  "github.issue.closed",
-  S.Struct({ number: S.Number, by: S.String }),
-);
 const issueNumber = AI.Parameter("number", S.Number)`the issue number`;
 class CloseIssue extends AI.Tool<CloseIssue>()("close_issue")`
 Close issue ${issueNumber} once it is resolved.` {}
 
-// the run settles when the WORLD closes the issue — not a model claim.
-// The model may cause it (close_issue) or a human may. The per-item
-// `match` correlates each observed close to THIS run's work item (the
-// Post that names that issue number), so concurrent runs of #issues
-// each exit only on THEIR issue's close (canon §2: P0 correlation).
+// the demo keeps this model-declared (`AI.until`): the run resolves
+// after the model has ACTUALLY closed the issue with its tool. The
+// externally-settled shape (no halt; the component delivers the
+// world's close via `settle(key, event)`) is the production pattern —
+// see services/alchemy-org/src/issues.ts.
 export class Issues extends AI.Process<Issues>()("issues")`
 Work the issue described in the Post. If the Post explicitly says the
 fix is already verified/applied, close it immediately with ${CloseIssue}
 using its issue number. Otherwise investigate with ${Sage}, and close it
 with ${CloseIssue} only when genuinely resolved.
 ${AI.when(PostOpened)}
-${AI.exit(AI.when(IssueClosed), (post: PostThread, event) =>
-  post.messages.some((message) => message.text.includes(`#${event.number}`)))}` {}
+${AI.until(S.String)`the issue is closed (close_issue succeeded) — resolve
+with the issue number you closed`}` {}
 
 // ─── physics ─────────────────────────────────────────────────────
 
@@ -227,16 +223,12 @@ export const ReadFileLive = Layer.succeed(ReadFile, ((input: {
     `// ${input.path} (demo stub)\nexport const answer = 42;\n`,
   )) as never);
 
-// close_issue publishes the world event — the reconciler doctrine: the
-// model CAUSES it, the run settles on OBSERVING it
+// close_issue is demo physics: a stub acknowledging the close (a real
+// deployment's tool would call the tracker's API; the run's END would
+// then be delivered by the implementation Layer — settle, not a claim)
 export const CloseIssueLive = Layer.succeed(CloseIssue, ((input: {
   number: number;
-}) =>
-  Effect.gen(function* () {
-    const bus = yield* AI.EventBus;
-    yield* bus.publish(IssueClosed, { number: input.number, by: "Sage" });
-    return "closed";
-  })) as never);
+}) => Effect.succeed(`closed #${input.number}`)) as never);
 
 /** The sidebar: everything the app renders is derived from these roots. */
 export const roots = [Engineering, Support, Issues, Sage, Scout, Helper];

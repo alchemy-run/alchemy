@@ -12,7 +12,7 @@ import { kernelPrompts } from "./KernelPrompts.ts";
  *   told to fill.
  * - `Tool` / `Agent` / `Process` refs render as their declared name — prose
  *   mentions the collaborator; wiring stays out of band.
- * - bare `EventSource` refs (`${X}` — the publish grant, canon §2a)
+ * - bare `Event` refs (`${X}` — the publish grant, canon §2a)
  *   render as the event's name, exactly like a Tool mention — the grant
  *   is topology metadata; the prose around the expression carries the
  *   verb. (`${X.name}` interpolates a plain string: same render, no
@@ -62,7 +62,7 @@ const displayRef = (
       return `{${String(name)}}`;
     case "Tool":
       return String(name);
-    case "EventSource":
+    case "Event":
       // the unmarked mention renders as the event's name in place, like
       // a Tool mention. Owner-insensitive by design (canon §2a ruling
       // 4): a world-owned source grants nothing by bare mention, but it
@@ -81,29 +81,7 @@ const displayRef = (
         schema: unknown;
         template: TemplateStringsArray;
         refs: ReadonlyArray<unknown>;
-        sources?: ReadonlyArray<Record<string, unknown>>;
       };
-      if (halt.mode !== "never" && halt.sources !== undefined) {
-        // A machine-observed exit (`AI.exit(AI.when(...))`): the sources
-        // own the clause (descriptions joined " or "; "{name} arrives"
-        // fallback — the same clause builder as `when`), and the
-        // callable form's authored prose joins after an em dash:
-        // "This run ends when: {clause} — {prose}".
-        const clause = kernelPrompts.sourceClause(
-          halt.sources.map((source) => ({
-            name: String(source["~alchemy/Name"] ?? ""),
-            description:
-              typeof source["description"] === "string"
-                ? source["description"]
-                : undefined,
-          })),
-        );
-        const prose = renderTemplate(halt.template, halt.refs);
-        return kernelPrompts.haltContract({
-          haltProse: prose.length > 0 ? `${clause} — ${prose}` : clause,
-          hasSchema: halt.schema !== undefined,
-        });
-      }
       const prose = renderTemplate(halt.template, halt.refs);
       return halt.mode === "never"
         ? kernelPrompts.perpetualNote({ healthProse: prose })

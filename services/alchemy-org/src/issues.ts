@@ -48,7 +48,7 @@ export interface IssueSnapshot extends IssueRef {
 //     the publish grant) ────────────────────────────────────────────
 
 /** Published when an issue is handed to engineering. */
-export const EngineeringStarted = AI.EventSource(
+export const EngineeringStarted = AI.Event(
   "org.engineering.started",
   IssueRefSchema,
 );
@@ -57,7 +57,7 @@ export const EngineeringStarted = AI.EventSource(
  * Published when work is blocked on a maintainer — the run parks on its
  * machine-observed exit right after.
  */
-export const IssueParked = AI.EventSource(
+export const IssueParked = AI.Event(
   "org.issue.parked",
   S.Struct({
     owner: S.String,
@@ -109,8 +109,9 @@ issue outright.
 If you are blocked on something only a maintainer can decide, publish
 ${IssueParked} naming what you need, and wait.
 
-${AI.exit(AI.when(GitHub.IssueClosed(testAlchemy)))`whether the merged
-pull request closed it or a maintainer closed it by hand`}` {}
+GitHub closing the issue is what ends this work — whether the merged
+pull request closed it or a maintainer closed it by hand. You never
+declare the issue done yourself.` {}
 
 // ─── the ONE implementation ────────────────────────────────────────
 
@@ -178,9 +179,10 @@ export const GitHubIssuesLive = Layer.effect(
         ),
     );
 
+    // the declared interface is the WHOLE service (the tag is sealed):
+    // the actor verbs stay internal — delivery goes through the drive
+    // loop above, never around the ledger
     return {
-      ...inner, // the actor verbs
-
       // wire failures that aren't domain answers (network, auth) are
       // defects here — the interface deliberately declares no
       // wire-error channel

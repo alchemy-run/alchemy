@@ -7,16 +7,16 @@
  * live iteration cuts issues on a repo we own and can reset; the real
  * alchemy + distilled flywheel lives in `services/alchemy-org`.
  *
- * The GitHub sources come from the CORE catalog (src/GitHub/Events.ts).
+ * The GitHub events come from the CORE catalog (src/GitHub/Events.ts).
  * Delivery is owned by the process's IMPLEMENTATION (the components
  * doctrine): the worker hand-wires `GitHub.consumeRepositoryEvents`,
- * adapting each delivery and picking the door — `issues.opened`
- * creates a run, `issue_comment.created` steers it, and
- * `issues.closed` settles it (observed by the kernel through the
- * exit's channel subscription, correlated by the source's own `key`:
- * `owner/repository#number`). The `AI.when` / `AI.exit` declarations
- * below encode the INTERFACE only. Budget is NOT prose — the worker
- * provides `AI.budget({...})` as a Layer next to the kernel.
+ * routing each typed event — `IssueOpened` creates a run,
+ * `IssueCommented` steers it, and `IssueClosed` settles it
+ * (`settle(key, event)`, keyed by `owner/repository#number`). The
+ * `AI.when` declarations below encode the INTERFACE only; the charter
+ * has NO halt — it is externally settled, and the ending is ordinary
+ * prose. Budget is NOT prose — the worker provides `AI.budget({...})`
+ * as a Layer next to the kernel.
  */
 import * as S from "effect/Schema";
 import * as AI from "@/AI/index.ts";
@@ -31,16 +31,13 @@ import { IssueRef } from "./vocabulary.ts";
  * channel: deliverable on the harness bus), declared by its bare
  * mention in the charter (the unmarked grant, canon §2a).
  */
-export const EngineeringStarted = AI.EventSource(
-  "org.engineering.started",
-  IssueRef,
-);
+export const EngineeringStarted = AI.Event("org.engineering.started", IssueRef);
 
 /**
- * Published when work is blocked on a maintainer — the run parks on its
- * machine-observed exit right after.
+ * Published when work is blocked on a maintainer — the run parks right
+ * after, awaiting a steer or the component's settle.
  */
-export const IssueParked = AI.EventSource(
+export const IssueParked = AI.Event(
   "org.issue.parked",
   S.Struct({
     owner: S.String,
@@ -52,9 +49,9 @@ export const IssueParked = AI.EventSource(
 
 /**
  * One issue, one run: created when the issue opens, steered by its
- * comments, settled when GitHub closes it — the machine-observed exit
- * (`AI.exit(AI.when(IssueClosed(...)))`) correlates runs by the
- * source's natural key, so the charter never restates the plumbing.
+ * comments, settled when GitHub closes it — the implementation Layer
+ * delivers the close (`settle(key, event)`, the source's natural key),
+ * so the charter never states the plumbing: its ending is prose.
  */
 export class ResolveGitHubIssue extends AI.Process<ResolveGitHubIssue>()(
   "ResolveGitHubIssue",
@@ -84,5 +81,6 @@ issue outright.
 If you are blocked on something only a maintainer can decide, publish
 ${IssueParked} naming what you need, and wait.
 
-${AI.exit(AI.when(GitHub.IssueClosed(testAlchemy)))`whether the merged
-pull request closed it or a maintainer closed it by hand`}` {}
+GitHub closing the issue is what ends this work — whether the merged
+pull request closed it or a maintainer closed it by hand. You never
+declare the issue done yourself.` {}

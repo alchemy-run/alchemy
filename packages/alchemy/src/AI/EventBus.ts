@@ -4,38 +4,37 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import type { EventSource } from "./EventSource.ts";
+import type { Event } from "./Event.ts";
 
 /**
- * The harness's own event bus — the delivery channel for
- * **kernel-internal** {@link EventSource}s (`Channel = never`): sources
- * declared without a channel tag are deliverable only by the harness
- * itself (tests, `AI.Kernel.memory`, cross-ring stimuli produced by
- * tool side effects on the same harness).
+ * The same-harness event bus — an OPTIONAL kernel **component**
+ * (kernel-pruning ruling, 2026-07-17: components are Layers an
+ * assembly names; no implementation fabricates them). Its ONE kernel
+ * job is `ctx.emit` fan-out: an org-owned {@link Event} a process emits
+ * reaches same-harness subscribers (a server's SSE tail, a test's
+ * assertion). The kernel never subscribes anything — run endings are
+ * exclusively `settle(key, event)` from the implementation Layer that
+ * consumed the wire.
  *
- * The shape mirrors `EventChannelService`: `subscribe` is effectful —
- * the subscription registers NOW (scoped to the caller, i.e. the loop's
- * interpretation Scope), so events published between interpretation and
- * `run()` are buffered, mirroring a real channel's provision-then-
- * deliver split. `publish` is the world-side injection point.
+ * `subscribe` is effectful — the subscription registers NOW (scoped to
+ * the caller), so events published between registration and
+ * consumption are buffered. `publish` is the harness-side injection
+ * point.
  *
- * A seam (§2.6): the kernel resolves it via `Effect.serviceOption` with
- * the in-memory default; provide {@link EventBusMemory} explicitly in a
- * test to hold the publishing side.
+ * `AI.memory` (the reference assembly) includes {@link EventBusMemory}
+ * explicitly; Layers are memoized by reference, so a harness that also
+ * provides it shares the kernel's instance.
  */
 export interface EventBusService {
   /** Inject a world event for a source (by source or by its name). */
-  publish(
-    source: EventSource<any, any, any> | string,
-    event: unknown,
-  ): Effect.Effect<void>;
+  publish(source: Event<any> | string, event: unknown): Effect.Effect<void>;
   /**
    * Subscribe to a source's events: registers now (buffered from this
    * point), delivers as a stream. The subscription lives in the
    * caller's Scope.
    */
   subscribe(
-    source: EventSource<any, any, any> | string,
+    source: Event<any> | string,
   ): Effect.Effect<Stream.Stream<unknown>, never, Scope.Scope>;
 }
 
@@ -43,7 +42,7 @@ export class EventBus extends Context.Service<EventBus, EventBusService>()(
   "alchemy/AI/EventBus",
 ) {}
 
-const nameOf = (source: EventSource<any, any, any> | string): string =>
+const nameOf = (source: Event<any> | string): string =>
   typeof source === "string" ? source : source["~alchemy/Name"];
 
 export const makeMemoryEventBus: Effect.Effect<EventBusService> = Effect.gen(
@@ -76,4 +75,19 @@ export const makeMemoryEventBus: Effect.Effect<EventBusService> = Effect.gen(
 export const EventBusMemory: Layer.Layer<EventBus> = Layer.effect(
   EventBus,
   Effect.map(makeMemoryEventBus, (bus) => EventBus.of(bus)),
+);
+
+/**
+ * The NAMED absence of the component — an assembly that wants no
+ * same-harness fan-out says so explicitly (kernel-pruning ruling: no
+ * silent defaults, no optional polling — a kernel's components are
+ * always named). Publications go nowhere; subscriptions never deliver;
+ * `ctx.emit` remains a durable Trace row.
+ */
+export const EventBusNone: Layer.Layer<EventBus> = Layer.succeed(
+  EventBus,
+  EventBus.of({
+    publish: () => Effect.void,
+    subscribe: () => Effect.succeed(Stream.never),
+  }),
 );

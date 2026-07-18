@@ -51,7 +51,7 @@ export interface LintIssue {
  *   with the health signals that substitute for an exit.
  */
 export const lint = (
-  loop: Process<any, any, any, any, any, any[], any>,
+  loop: Process<any, any, any, any, any, any[], any, any>,
 ): LintIssue[] => {
   const issues: LintIssue[] = [];
   const refs: any[] = loop.refs;

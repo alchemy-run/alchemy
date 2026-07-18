@@ -119,27 +119,13 @@ export const CloudflareKernelLive = Layer.effect(
         Effect.gen(function* () {
           if (!AI.isProcess(term)) return agentService();
 
-          // A loop's runs live in its named DO instance. Subscribe the
-          // charter's MACHINE-OBSERVED exit sources
-          // (`AI.exit(AI.when(source, …))` — possibly several): resolve
-          // each source's channel tag from ambient context (it is in the
-          // loop's Req — the same mechanism as tool refs) and let the
-          // channel Layer do the two-phase bind (plan: provision the
-          // webhook; runtime: stream). `AI.when` sources are NOT
-          // subscribed — delivery is always outside code (the front door).
-          for (const halt of (term.refs as any[]).filter(AI.isHalt)) {
-            for (const source of (halt as { sources?: unknown[] }).sources ??
-              []) {
-              if (AI.isEventSource(source) && source.channel) {
-                const channel = yield* source.channel;
-                const stream = yield* channel.subscribe(source);
-                // TODO(Phase 2): correlate the stream against this ring's
-                // parked runs (the source's `key`, or the halt's `match`
-                // override), keyed by delivery id.
-                void stream;
-              }
-            }
-          }
+          // A loop's runs live in its named DO instance. Machine-
+          // observed exits (`AI.exit(AI.when(source, …))`) are NOT
+          // subscribed by the kernel — exit delivery is delivery
+          // (kernel-pruning ruling): the implementation Layer that
+          // consumed the wire settles the run (`settle(key, event)`),
+          // correlated by the source's `key` (or the halt's `match`
+          // override).
           return loopService(term);
         }) as any,
 
