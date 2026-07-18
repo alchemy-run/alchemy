@@ -177,9 +177,7 @@ export const PolicyProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName = output?.name
-        ? output.name
-        : yield* createPolicyName(id, olds.name);
+      const oldName = output?.name ?? (yield* createPolicyName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.

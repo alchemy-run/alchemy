@@ -239,9 +239,8 @@ export const BranchProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      const oldName = output?.branchName
-        ? output.branchName
-        : yield* createBranchName(id, olds.name);
+      const oldName =
+        output?.branchName ?? (yield* createBranchName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.

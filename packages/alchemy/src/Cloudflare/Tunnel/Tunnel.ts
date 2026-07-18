@@ -209,9 +209,8 @@ export const TunnelProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName = output?.tunnelName
-        ? output.tunnelName
-        : yield* createTunnelName(id, olds.name);
+      const oldName =
+        output?.tunnelName ?? (yield* createTunnelName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.

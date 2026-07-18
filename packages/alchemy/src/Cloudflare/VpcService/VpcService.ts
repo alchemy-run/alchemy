@@ -174,9 +174,8 @@ export const VpcServiceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName = output?.serviceName
-        ? output.serviceName
-        : yield* createServiceName(id, olds?.name);
+      const oldName =
+        output?.serviceName ?? (yield* createServiceName(id, olds?.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.

@@ -508,9 +508,8 @@ export const SecurityGroupProvider = () =>
           }
 
           // Group name change requires replacement
-          const oldGroupName = output?.groupName
-            ? output.groupName
-            : yield* createGroupName(id, olds.groupName);
+          const oldGroupName =
+            output?.groupName ?? (yield* createGroupName(id, olds.groupName));
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.

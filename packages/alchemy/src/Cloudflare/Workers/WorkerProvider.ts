@@ -2197,9 +2197,8 @@ export const LiveWorkerProvider = () =>
           if (newNamespace !== oldNamespace) {
             return { action: "replace" };
           }
-          const oldWorkerName = output?.workerName
-            ? output.workerName
-            : yield* createWorkerName(id, olds?.name);
+          const oldWorkerName =
+            output?.workerName ?? (yield* createWorkerName(id, olds?.name));
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id
           // differently today (a Worker replace would also destroy its

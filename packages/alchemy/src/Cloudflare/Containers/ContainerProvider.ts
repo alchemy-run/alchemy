@@ -664,9 +664,9 @@ export const LiveContainerProvider = () =>
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
 
-          const oldName = output?.applicationName
-            ? output.applicationName
-            : yield* createApplicationName(id, olds.name);
+          const oldName =
+            output?.applicationName ??
+            (yield* createApplicationName(id, olds.name));
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.

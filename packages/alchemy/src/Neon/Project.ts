@@ -235,9 +235,8 @@ export const ProjectProvider = () =>
     }),
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       if (!isResolved(news)) return undefined;
-      const oldName = output?.projectName
-        ? output.projectName
-        : yield* createProjectName(id, olds.name);
+      const oldName =
+        output?.projectName ?? (yield* createProjectName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
