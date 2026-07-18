@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { sha256 } from "../../Util/sha256.ts";
 
 export interface DBInstanceProps {
   /**
@@ -379,6 +380,13 @@ export interface DBInstance extends Resource<
      */
     finalDBSnapshotIdentifier: string | undefined;
     /**
+     * SHA-256 hex fingerprint of the last `masterUserPassword` this provider
+     * sent to RDS — never the secret itself. Lets reconcile skip the
+     * `MasterUserPassword` modify (and the `resetting-master-credentials`
+     * cycle it triggers) when the configured password has not changed.
+     */
+    masterUserPasswordFingerprint: string | undefined;
+    /**
      * ARN of the Secrets Manager secret holding master credentials.
      */
     masterUserSecretArn: string | undefined;
@@ -476,14 +484,17 @@ const toAttrs = ({
   tags,
   skipFinalSnapshot,
   finalDBSnapshotIdentifier,
+  masterUserPasswordFingerprint,
 }: {
   instance: rds.DBInstance;
   tags: Record<string, string>;
   skipFinalSnapshot?: boolean | undefined;
   finalDBSnapshotIdentifier?: string | undefined;
+  masterUserPasswordFingerprint?: string | undefined;
 }): DBInstance["Attributes"] => ({
   skipFinalSnapshot,
   finalDBSnapshotIdentifier,
+  masterUserPasswordFingerprint,
   dbInstanceIdentifier: instance.DBInstanceIdentifier ?? "",
   dbInstanceArn: instance.DBInstanceArn ?? "",
   dbClusterIdentifier: instance.DBClusterIdentifier,
@@ -687,14 +698,25 @@ export const DBInstanceProvider = () =>
             instance,
             tags: toTagRecord(instance.TagList),
             // Not observable from AWS — carry the stored deletion behavior
-            // forward so a refresh doesn't drop it.
+            // and last-sent fingerprint forward so a refresh drops neither.
             skipFinalSnapshot: output?.skipFinalSnapshot,
             finalDBSnapshotIdentifier: output?.finalDBSnapshotIdentifier,
+            masterUserPasswordFingerprint:
+              output?.masterUserPasswordFingerprint,
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const identifier =
             output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
+          // AWS never returns the master password, so there is nothing to
+          // observe-and-diff — fingerprint the configured value instead and
+          // only send `MasterUserPassword` when the fingerprint changed.
+          // Without this, every reconcile of an instance whose props carry a
+          // password triggers a live `resetting-master-credentials` modify.
+          const passwordFingerprint =
+            news.masterUserPassword !== undefined
+              ? yield* sha256(Redacted.value(news.masterUserPassword))
+              : undefined;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // Duration props → the exact wire units the RDS API expects.
@@ -841,14 +863,20 @@ export const DBInstanceProvider = () =>
             if (news.allowMajorVersionUpgrade) {
               core.AllowMajorVersionUpgrade = true;
             }
-            // syncMasterPassword — rotation or explicit password update.
+            // syncMasterPassword — rotation or explicit password update. The
+            // explicit branch is fingerprint-guarded: send only when the
+            // configured password actually changed (or was never
+            // fingerprinted — pre-existing state sends once, then records).
             if (
               news.manageMasterUserPassword &&
               news.rotateMasterUserPassword
             ) {
               core.RotateMasterUserPassword = true;
               coreDirty = true;
-            } else if (news.masterUserPassword !== undefined) {
+            } else if (
+              news.masterUserPassword !== undefined &&
+              passwordFingerprint !== output?.masterUserPasswordFingerprint
+            ) {
               core.MasterUserPassword = news.masterUserPassword;
               coreDirty = true;
             }
@@ -897,6 +925,7 @@ export const DBInstanceProvider = () =>
             tags: desiredTags,
             skipFinalSnapshot: news.skipFinalSnapshot,
             finalDBSnapshotIdentifier: news.finalDBSnapshotIdentifier,
+            masterUserPasswordFingerprint: passwordFingerprint,
           });
         }),
         delete: Effect.fn(function* ({ output }) {
