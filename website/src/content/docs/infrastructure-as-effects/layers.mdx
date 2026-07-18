@@ -169,17 +169,13 @@ Changing the implementation is a one-line change:
 +      JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp)),
 ```
 
-This swap crossed clouds. The Worker still runs on Cloudflare, but its
-jobs now come from a DynamoDB table on AWS. The bindings follow the
-Layer: the next deploy tears down the KV namespace, creates the table
-`JobServiceDynamo` declares, and wires the Worker with the credentials
-and permissions DynamoDB needs. `fetch` is byte-for-byte unchanged.
-Tests do the same swap with a `JobServiceMemory` backed by a `Map`.
+This swap crossed clouds: the Worker still runs on Cloudflare, but its
+jobs now come from a DynamoDB table on AWS, with the credentials and
+permissions wired up automatically. Tests do the same swap with a
+`JobServiceMemory` backed by a `Map`.
 
-The same duality runs one level down: alchemy's Bindings follow the same
-tag/Layer split — `ReadWriteNamespace` satisfied by
-`ReadWriteNamespaceBinding` or `ReadWriteNamespaceHttp` — with the same
-one-line diff ([a contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
+Alchemy's own Bindings follow the same tag/Layer split
+([a contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
 
 ## The types hold the boundary
 
