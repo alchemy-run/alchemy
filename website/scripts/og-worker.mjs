@@ -20,7 +20,7 @@ const fonts = workerData.fonts.map(({ path, ...font }) => ({
   data: readFileSync(path),
 }));
 
-parentPort.on("message", async ({ id, tree }) => {
+async function render({ id, tree }) {
   try {
     const svg = await satori(tree, { width: 1200, height: 630, fonts });
     const png = new Resvg(svg, { fitTo: { mode: "width", value: 1200 } })
@@ -30,4 +30,15 @@ parentPort.on("message", async ({ id, tree }) => {
   } catch (error) {
     parentPort.postMessage({ id, error: String(error?.stack ?? error) });
   }
+}
+
+// Serialize renders: the pool posts this worker's whole share of requests
+// up front, and satori's awaits would otherwise interleave ALL of them —
+// hundreds of concurrent render states per worker. That both delays the
+// first result until nearly every render finishes and multiplies peak
+// memory enough to OOM a 16GB CI runner. A promise chain keeps exactly
+// one render in flight per worker.
+let queue = Promise.resolve();
+parentPort.on("message", (message) => {
+  queue = queue.then(() => render(message));
 });
