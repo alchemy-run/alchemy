@@ -22,6 +22,7 @@ import type { Secret } from "../SecretsStore/Secret.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
+import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
@@ -31,10 +32,29 @@ import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
 
-export type WorkerBinding = Exclude<
+type DistilledWorkerBinding = Exclude<
   workers.PutScriptRequest["metadata"]["bindings"],
   undefined
 >[number];
+
+/**
+ * The `durable_object_namespace` metadata binding extended with alchemy-only
+ * transfer metadata. `transferredFrom` names the Worker(s) — by logical id in
+ * this stack + stage, or by physical script name — that previously hosted the
+ * class, so the provider can drive Cloudflare's data-preserving
+ * `transferred_classes` migration. It is stripped from the binding before the
+ * script upload — Cloudflare never sees it.
+ */
+export type DurableObjectNamespaceWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "durable_object_namespace" }
+> & {
+  transferredFrom?: string | string[];
+};
+
+export type WorkerBinding =
+  | Exclude<DistilledWorkerBinding, { type: "durable_object_namespace" }>
+  | DurableObjectNamespaceWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<
   workers.GetScriptScriptAndVersionSettingResponse["bindings"],
@@ -53,6 +73,7 @@ export type WorkerBindingResource =
   | Namespace
   | Queue
   | AiGateway
+  | AIBinding
   | SearchInstance
   | SearchNamespace
   | Dataset

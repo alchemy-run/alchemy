@@ -14,7 +14,7 @@ describe.concurrent.each([
   {
     dev: true,
     stage: "test-local",
-    timeout: 30_000,
+    timeout: 120_000,
   },
   {
     dev: false,

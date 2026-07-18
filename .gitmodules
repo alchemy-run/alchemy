@@ -8,3 +8,6 @@
 [submodule "distilled"]
 	path = distilled
 	url = https://github.com/alchemy-run/distilled.git
+[submodule "cloudflare-tools"]
+	path = cloudflare-tools
+	url = https://github.com/alchemy-run/cloudflare-tools.git

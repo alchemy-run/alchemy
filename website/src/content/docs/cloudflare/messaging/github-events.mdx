@@ -198,7 +198,7 @@ every GitHub event name.
 
 ## Case study: a release-blogging agent
 
-The [`cloudflare-agent` example](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-agent)
+The [`cloudflare-agent` example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-agent)
 uses this event source as the front door of an autonomous pipeline:
 a Worker consumes push events on the alchemy repo, filters for
 release commits on `main`, and hands each one to a Durable Object
@@ -211,7 +211,7 @@ The filter is ordinary handler code over the typed `push` payload:
 yield* GitHub.consumeRepositoryEvents(
   {
     owner: "alchemy-run",
-    repository: "alchemy-effect",
+    repository: "alchemy",
     events: ["push"],
   },
   (event) => {

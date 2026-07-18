@@ -150,54 +150,78 @@ test(
     const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
 
-    const startRes = yield* client.post(`${url}/workflow/wait/world`).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
-      ),
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
-      }),
-    );
-    const { instanceId } = (yield* startRes.json) as { instanceId: string };
-
-    // Cloudflare reports an instance parked in `waitForEvent` as `running`
-    // (`waiting` is reserved for sleeps), so the wait step itself is not
-    // observable through the coarse instance status. Wait for the instance
-    // to start, then deliver the event.
-    const runningStatus = yield* waitForStatus(
-      client,
-      url,
-      instanceId,
-      (status) => status.status === "running" || isTerminal(status),
-    );
-    expect(runningStatus.status).toBe("running");
-
-    // An event sent in the gap before the `waitForEvent` step registers can
-    // be missed, so re-send until the workflow acknowledges it by reaching a
-    // terminal status.
-    const lastStatus = yield* Effect.gen(function* () {
-      const sendRes = yield* client.post(
-        `${url}/workflow/send/${instanceId}/external-ok`,
-      );
-      if (sendRes.status !== 200) {
-        return yield* Effect.fail(
-          new Error(`sendEvent failed: ${sendRes.status}`),
+    const { instanceId, lastStatus } = yield* Effect.gen(function* () {
+      const { instanceId } = yield* client
+        .post(`${url}/workflow/wait/world`)
+        .pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json.pipe(
+                  Effect.flatMap((body) => {
+                    const instanceId = (body as { instanceId?: unknown })
+                      .instanceId;
+                    return typeof instanceId === "string"
+                      ? Effect.succeed({ instanceId })
+                      : Effect.fail(
+                          new Error("Worker returned no workflow id"),
+                        );
+                  }),
+                )
+              : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("500 millis"),
+            times: 15,
+          }),
         );
-      }
-      const status = yield* waitForStatus(
+
+      // Cloudflare reports an instance parked in `waitForEvent` as `running`
+      // (`waiting` is reserved for sleeps), so the wait step itself is not
+      // observable through the coarse instance status. Wait for the instance
+      // to start, then deliver the event.
+      const runningStatus = yield* waitForStatus(
         client,
         url,
         instanceId,
-        isTerminal,
-        5,
+        (status) => status.status === "running" || isTerminal(status),
       );
-      return isTerminal(status)
-        ? status
-        : yield* Effect.fail(new Error(`workflow still ${status.status}`));
-    }).pipe(Effect.retry({ times: 3 }));
+      if (runningStatus.status !== "running") {
+        return yield* Effect.fail(
+          new Error(
+            `workflow ${runningStatus.status}: ${JSON.stringify(runningStatus.error)}`,
+          ),
+        );
+      }
+
+      // An event sent in the gap before the `waitForEvent` step registers can
+      // be missed, so re-send until the workflow acknowledges it by reaching a
+      // terminal status.
+      const lastStatus = yield* Effect.gen(function* () {
+        const sendRes = yield* client.post(
+          `${url}/workflow/send/${instanceId}/external-ok`,
+        );
+        if (sendRes.status !== 200) {
+          return yield* Effect.fail(
+            new Error(`sendEvent failed: ${sendRes.status}`),
+          );
+        }
+        const status = yield* waitForStatus(
+          client,
+          url,
+          instanceId,
+          isTerminal,
+          5,
+        );
+        return isTerminal(status)
+          ? status
+          : yield* Effect.fail(new Error(`workflow still ${status.status}`));
+      }).pipe(Effect.retry({ times: 3 }));
+      return { instanceId, lastStatus };
+    }).pipe(
+      // A just-deployed workflow can error its first instance while the
+      // binding propagates. Retry the scenario with a fresh instance.
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
+    );
     expect(lastStatus.status).toBe("complete");
     expect(lastStatus.error).toBeFalsy();
     expect(lastStatus.output?.greeting).toBe("external-ok");

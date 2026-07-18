@@ -1,3 +1,4 @@
+import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as zones from "@distilled.cloud/cloudflare/zones";
@@ -12,7 +13,7 @@ import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
+import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -26,9 +27,15 @@ import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
-import { Worker, type WorkerProps, type WorkerRouteConfig } from "./Worker.ts";
+import {
+  Worker,
+  type ViteOptions,
+  type WorkerProps,
+  type WorkerRouteConfig,
+} from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
@@ -36,6 +43,65 @@ class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
 }> {}
+
+/**
+ * A Durable Object class is being dropped from this Worker while a binding in
+ * the same deploy still references it on another script — the class moved
+ * cross-script, but its namespace (and every stored object in it) still lives
+ * on this Worker. Cloudflare rejects a single upload that both deletes the
+ * class and ships a binding referencing it, and silently deleting would
+ * destroy the namespace's data irreversibly, so the deploy fails before any
+ * upload.
+ *
+ * Moving a Durable Object class between Workers is always declared: set
+ * `transferredFrom` on the Durable Object at its **new host** — naming the
+ * former host by Worker logical id (same stack) or physical script name — and
+ * Alchemy performs the data-preserving `transferred_classes` migration on the
+ * new host's deploy; this deploy then converges on its own. To abandon the
+ * data instead, remove the binding entirely in one deploy (which deletes the
+ * class and its data), then add the cross-script binding in a second deploy.
+ */
+export class DurableObjectTransferRequired extends Data.TaggedError(
+  "DurableObjectTransferRequired",
+)<{
+  scriptName: string;
+  className: string;
+  targetScriptName: string | undefined;
+}> {
+  override get message() {
+    return (
+      `Durable Object class '${this.className}' still lives on Worker '${this.scriptName}' but this deploy re-binds it as a cross-script reference` +
+      (this.targetScriptName ? ` to '${this.targetScriptName}'` : "") +
+      ". Durable Object data does NOT move with the class automatically. " +
+      `To move the data, set transferredFrom: "${this.scriptName}" (the former host's script name, or its Worker logical id for same-stack moves) on the Durable Object declaration in its new host Worker. ` +
+      "To abandon the data, remove the binding entirely in one deploy before re-adding it as a cross-script reference."
+    );
+  }
+}
+
+/**
+ * More than one script matches the `transferredFrom` declaration of a Durable
+ * Object (e.g. an orphaned script left behind by a `name` prop change still
+ * carries the same alchemy tags, or the host history lists several scripts
+ * that each still hold a same-class namespace). Alchemy refuses to guess
+ * which namespace's data to move — narrow the declaration to the exact
+ * physical script name that holds the data.
+ */
+export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
+  "AmbiguousDurableObjectTransfer",
+)<{
+  scriptName: string;
+  logicalId: string;
+  className: string;
+  sources: string[];
+}> {
+  override get message() {
+    return (
+      `Durable Object '${this.logicalId}' (class '${this.className}') is new to Worker '${this.scriptName}' and multiple scripts match its transferredFrom declaration: ${this.sources.join(", ")}. ` +
+      `Narrow transferredFrom to the exact physical script name that holds the data.`
+    );
+  }
+}
 
 /**
  * Resolve the Workers for Platforms dispatch-namespace *name* from a resolved
@@ -895,6 +961,79 @@ export const LiveWorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
+      /**
+       * Resolve the source script of a declared Durable Object transfer for
+       * a class that is new to `selfScriptName`. `sources` is the
+       * `transferredFrom` host history: each entry names a former host either
+       * by *physical script name* or by *Worker logical id* in this stack +
+       * stage (matched via the `alchemy:id:`/stack/stage ownership tags).
+       * The namespace is transferred from whichever listed host currently
+       * holds a same-class namespace; when none does (fresh stage, or every
+       * transfer already completed) this returns `undefined` and the caller
+       * creates the class fresh — the declaration is inert and safe to keep.
+       * More than one match (e.g. an orphaned script from a `name` change)
+       * fails with {@link AmbiguousDurableObjectTransfer} rather than
+       * guessing whose data to move.
+       */
+      const resolveTransferSource = Effect.fn(function* (params: {
+        accountId: string;
+        selfScriptName: string;
+        logicalId: string;
+        className: string;
+        sources: readonly string[];
+        observedNamespaces: readonly { script: string; class: string }[];
+      }) {
+        if (params.sources.length === 0) {
+          return undefined;
+        }
+        const candidates = Array.from(
+          new Set(
+            params.observedNamespaces.flatMap((ns) =>
+              ns.class === params.className &&
+              ns.script !== params.selfScriptName
+                ? [ns.script]
+                : [],
+            ),
+          ),
+        );
+        const matched: string[] = [];
+        for (const script of candidates) {
+          if (params.sources.includes(script)) {
+            matched.push(script);
+            continue;
+          }
+          const settings = yield* getScriptSettings(
+            params.accountId,
+            script,
+            undefined,
+          ).pipe(
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("WorkerHasNoVersions", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          const tags = new Set(settings?.tags ?? []);
+          if (
+            tags.has(`alchemy:stack:${stack.name}`) &&
+            tags.has(`alchemy:stage:${stack.stage}`) &&
+            params.sources.some((source) => tags.has(`alchemy:id:${source}`))
+          ) {
+            matched.push(script);
+          }
+        }
+        if (matched.length > 1) {
+          return yield* Effect.fail(
+            new AmbiguousDurableObjectTransfer({
+              scriptName: params.selfScriptName,
+              logicalId: params.logicalId,
+              className: params.className,
+              sources: matched,
+            }),
+          );
+        }
+        return matched[0];
+      });
+
       const getDurableObjects = (
         bindings: readonly WorkerSettingsBinding[] | null | undefined,
       ) => {
@@ -998,26 +1137,32 @@ export const LiveWorkerProvider = () =>
       });
 
       const prepareBundle = (id: string, props: WorkerProps) =>
-        (props.bundle === false
-          ? readPrebuiltWorkerBundle({
-              main: props.main!,
-              rules: props.rules,
-            })
-          : bundler.build({
+        (isPythonMain(props.main)
+          ? readPythonWorkerBundle({
               id,
-              main: props.main!,
+              main: props.main,
               compatibility: getCompatibility(props),
-              entry: props.isExternal
-                ? {
-                    kind: "external",
-                  }
-                : {
-                    kind: "effect",
-                    exports: props.exports ?? {},
-                  },
-              stack: { name: stack.name, stage: stack.stage },
-              extraOptions: props.build,
             })
+          : props.bundle === false
+            ? readPrebuiltWorkerBundle({
+                main: props.main!,
+                rules: props.rules,
+              })
+            : bundler.build({
+                id,
+                main: props.main!,
+                compatibility: getCompatibility(props),
+                entry: props.isExternal
+                  ? {
+                      kind: "external",
+                    }
+                  : {
+                      kind: "effect",
+                      exports: props.exports ?? {},
+                    },
+                stack: { name: stack.name, stage: stack.stage },
+                extraOptions: props.build,
+              })
         ).pipe(Artifacts.cached("build"));
 
       const hashScript = (script: string) =>
@@ -1031,41 +1176,42 @@ export const LiveWorkerProvider = () =>
         // (~0.5s), which is only needed for vite-based workers at build time —
         // not for every Worker definition at module-load time.
         const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const { clientDirectory, serverBundle } = yield* Vite.viteBuild(
-          props.vite?.rootDir,
-          Object.fromEntries(
-            (yield* Effect.all(
-              Object.entries(props.env ?? {}).map(
-                Effect.fn(function* ([key, value]) {
-                  return [
-                    key,
-                    typeof value === "string"
-                      ? value
-                      : Redacted.isRedacted(value) &&
-                          typeof Redacted.value(value) === "string"
-                        ? Redacted.value(value)
-                        : // A `WorkerLoader` is a real Effect that also carries
-                          // the `~alchemy/Kind` marker — it is a binding, not a
-                          // runnable env value. Check it before `Effect.isEffect`
-                          // so we don't execute it as an inlined env entry.
-                          isWorkerLoader(value)
-                          ? undefined
-                          : Effect.isEffect(value)
-                            ? yield* value as any as Effect.Effect<any>
-                            : undefined,
-                  ];
-                }),
-              ),
-            )).filter(([_, value]) => value !== undefined),
-          ),
-          {
-            main: props.vite?.main,
-            compatibilityDate: compatibility.date,
-            compatibilityFlags: compatibility.flags,
-            viteEnvironments: props.vite?.viteEnvironments,
-          },
-        );
-        const [assets, bundle] = yield* Effect.all(
+        const { clientDirectory, serverBundle, externalWorkspaces } =
+          yield* Vite.viteBuild(
+            props.vite?.rootDir,
+            Object.fromEntries(
+              (yield* Effect.all(
+                Object.entries(props.env ?? {}).map(
+                  Effect.fn(function* ([key, value]) {
+                    return [
+                      key,
+                      typeof value === "string"
+                        ? value
+                        : Redacted.isRedacted(value) &&
+                            typeof Redacted.value(value) === "string"
+                          ? Redacted.value(value)
+                          : // A `WorkerLoader` is a real Effect that also carries
+                            // the `~alchemy/Kind` marker — it is a binding, not a
+                            // runnable env value. Check it before `Effect.isEffect`
+                            // so we don't execute it as an inlined env entry.
+                            isWorkerLoader(value)
+                            ? undefined
+                            : Effect.isEffect(value)
+                              ? yield* value as any as Effect.Effect<any>
+                              : undefined,
+                    ];
+                  }),
+                ),
+              )).filter(([_, value]) => value !== undefined),
+            ),
+            {
+              main: props.vite?.main,
+              compatibilityDate: compatibility.date,
+              compatibilityFlags: compatibility.flags,
+              viteEnvironments: props.vite?.viteEnvironments,
+            },
+          );
+        const [assets, bundle, input] = yield* Effect.all(
           [
             clientDirectory
               ? readAssets({
@@ -1079,6 +1225,11 @@ export const LiveWorkerProvider = () =>
                 })
               : Effect.undefined,
             serverBundle,
+            hashViteInput(
+              props.vite?.rootDir,
+              props.vite?.memo,
+              externalWorkspaces,
+            ),
           ],
           { concurrency: "unbounded" },
         );
@@ -1087,7 +1238,56 @@ export const LiveWorkerProvider = () =>
             new Error("Vite build produced neither assets nor server output"),
           );
         }
-        return { assets, bundle };
+        return {
+          assets,
+          bundle,
+          input: input.hash,
+          additionalWorkspaces: input.workspaces,
+        };
+      });
+
+      const hashViteInput = Effect.fn(function* <E>(
+        rootDir: string = process.cwd(),
+        options: ViteOptions["memo"],
+        additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
+      ) {
+        const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
+          hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
+            Effect.map((hash) => `${path.relative(rootDir, cwd)}:${hash}`),
+          );
+        const hashRoot = hashWorkspaceDirectory(rootDir, options);
+        if (Array.isArray(options?.workspaces)) {
+          return yield* Effect.all(
+            [
+              hashRoot,
+              ...options.workspaces.map(({ cwd, ...options }) =>
+                hashWorkspaceDirectory(cwd, options),
+              ),
+            ],
+            { concurrency: "unbounded" },
+          ).pipe(
+            Effect.flatMap(([root, ...workspaces]) =>
+              sha256Object([root, ...workspaces.sort()]),
+            ),
+            Effect.map((hash) => ({ hash, workspaces: undefined })),
+          );
+        }
+        const [root, workspaces] = yield* Effect.all(
+          [hashRoot, additionalWorkspaces],
+          { concurrency: "unbounded" },
+        );
+        const workspaceHashes = yield* Effect.forEach(
+          workspaces,
+          (cwd) => hashWorkspaceDirectory(cwd),
+          { concurrency: "unbounded" },
+        );
+        const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
+        return {
+          hash,
+          workspaces: Array.from(workspaces).map((cwd) =>
+            path.relative(rootDir, cwd),
+          ),
+        };
       });
 
       const prepareAssetsAndBundle = (
@@ -1112,27 +1312,12 @@ export const LiveWorkerProvider = () =>
                 files: [{ path: "main.js", content: props.script }],
                 hash: bundleHash,
               },
+              input: undefined,
+              additionalWorkspaces: undefined,
             };
           }
           if (props.vite) {
-            const [{ assets, bundle }, input] = yield* Effect.all(
-              [
-                viteBuild(props),
-                // hashDirectory expects `{ cwd, memo }`. The vite props
-                // store the project root under `rootDir`, so map it
-                // here. Without this, `cwd` falls back to
-                // `process.cwd()` and the input hash is computed over
-                // the wrong directory tree (often the entire monorepo
-                // root), making it both slow and unable to detect
-                // changes scoped to the actual Vite project.
-                hashDirectory({
-                  cwd: props.vite.rootDir,
-                  memo: props.vite.memo,
-                }),
-              ],
-              { concurrency: "unbounded" },
-            );
-            return { assets, bundle, input };
+            return yield* viteBuild(props);
           }
           const [assets, bundle] = yield* Effect.all(
             [
@@ -1143,16 +1328,21 @@ export const LiveWorkerProvider = () =>
             ],
             { concurrency: "unbounded" },
           );
-          return { assets, bundle };
+          return {
+            assets,
+            bundle,
+            input: undefined,
+            additionalWorkspaces: undefined,
+          };
         }).pipe(
-          Effect.map(({ assets, bundle, input }) => ({
+          Effect.map(({ assets, bundle, input, additionalWorkspaces }) => ({
             assets,
             bundle: {
               main: bundle?.files[0].path,
               files: bundle?.files.map(
                 (file) =>
                   new File([file.content as BlobPart], file.path, {
-                    type: contentTypeFromExtension(path.extname(file.path)),
+                    type: contentTypeForModule(file.path),
                   }),
               ),
             },
@@ -1160,6 +1350,7 @@ export const LiveWorkerProvider = () =>
               assets: assets?.hash,
               bundle: bundle?.hash,
               input,
+              additionalWorkspaces,
             } satisfies Worker["Attributes"]["hash"],
           })),
         );
@@ -1222,7 +1413,22 @@ export const LiveWorkerProvider = () =>
           assets: prebuiltAssets?.hash ?? preparedHash.assets,
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
-        const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
+        // `transferredFrom` is alchemy-only transfer metadata on
+        // durable_object_namespace bindings — it drives the
+        // `transferred_classes` migration below and must be stripped from the
+        // wire-shape binding before upload.
+        const metadataBindings = bindings.flatMap((b) =>
+          (b.data.bindings ?? []).map((item): WorkerBinding => {
+            if (
+              item.type === "durable_object_namespace" &&
+              item.transferredFrom !== undefined
+            ) {
+              const { transferredFrom: _, ...rest } = item;
+              return rest;
+            }
+            return item;
+          }),
+        );
         const expectedDurableObjectClassNames =
           getExpectedDurableObjectClassNames(metadataBindings, name);
         let metadataAssets:
@@ -1374,13 +1580,15 @@ export const LiveWorkerProvider = () =>
         )[0];
         const newMigrationTag = bumpMigrationTagVersion(oldMigrationTag);
 
-        // Compute deleted classes
-        const deletedClasses: string[] = [];
+        // Compute delete-class candidates. Candidates are validated against
+        // observed namespace ownership below — a class may already have been
+        // transferred to another script by its new host's deploy.
+        const deletedClassCandidates: string[] = [];
         for (const [logicalId, className] of Object.entries(
           oldDoClassNameByLogicalId,
         )) {
           if (!currentDoClassNameByLogicalId[logicalId]) {
-            deletedClasses.push(className);
+            deletedClassCandidates.push(className);
           }
         }
 
@@ -1402,9 +1610,105 @@ export const LiveWorkerProvider = () =>
                 (binding) => binding.bindingName === oldBinding.name,
               )
             ) {
-              deletedClasses.push(oldBinding.className);
+              deletedClassCandidates.push(oldBinding.className);
             }
           }
+        }
+
+        // Class names the current deploy references *cross-script* (mapped to
+        // the foreign script). A class that both leaves the "hosted here" set
+        // and shows up here has moved to another Worker — Cloudflare rejects
+        // deleting a class while any binding in the upload references its
+        // class name, and deleting would destroy the namespace's data.
+        const crossScriptClassTargets = new Map<string, string>();
+        for (const item of metadataBindings) {
+          if (
+            item.type === "durable_object_namespace" &&
+            item.className &&
+            typeof item.scriptName === "string" &&
+            item.scriptName !== name
+          ) {
+            crossScriptClassTargets.set(item.className, item.scriptName);
+          }
+        }
+
+        // One account-level namespace listing serves both sides of a
+        // transfer: the destination checks the source still hosts the class
+        // before emitting `transferred_classes`, and the former host checks
+        // whether a to-be-deleted class was already transferred away.
+        // Dispatch-namespace user workers keep the legacy behavior — their
+        // namespaces don't surface on the account-level list.
+        const mayTransferIn = currentDoBindings.some(
+          (binding) =>
+            !oldDoClassNameByLogicalId[binding.logicalId] &&
+            binding.transferredFrom !== undefined,
+        );
+        const observedNamespaces =
+          !dispatchNamespace &&
+          (deletedClassCandidates.length > 0 || mayTransferIn)
+            ? yield* listDurableObjectNamespaces(accountId)
+            : [];
+        const hosts = (
+          namespaces: readonly { script: string; class: string }[],
+          scriptName: string,
+          className: string,
+        ) =>
+          namespaces.some(
+            (ns) => ns.script === scriptName && ns.class === className,
+          );
+        const scriptHostsClass = (scriptName: string, className: string) =>
+          hosts(observedNamespaces, scriptName, className);
+
+        const deletedClasses: string[] = [];
+        for (const className of deletedClassCandidates) {
+          if (dispatchNamespace) {
+            deletedClasses.push(className);
+            continue;
+          }
+          const targetScriptName = crossScriptClassTargets.get(className);
+          if (targetScriptName === undefined) {
+            // Plain removal. Delete only if the namespace actually still
+            // lives here — it may have been transferred to another script by
+            // that script's deploy, or removed out-of-band. The stale
+            // alchemy:do tag drops out either way because tags are recomputed
+            // from current bindings.
+            if (scriptHostsClass(name, className)) {
+              deletedClasses.push(className);
+            }
+            continue;
+          }
+          // The class went local → cross-script. When the new host's deploy
+          // ran a `transferred_classes` migration moments ago, the account
+          // listing can briefly still attribute the namespace to this script,
+          // so re-observe with a short bounded budget until the transfer
+          // becomes visible (namespace off this script) or the state is
+          // conclusively a conflict (still here — including the case where
+          // the target created a *fresh* namespace for the same class name).
+          const namespaces = yield* listDurableObjectNamespaces(accountId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (observed) =>
+                !hosts(observed, name, className) ||
+                hosts(observed, targetScriptName, className),
+              times: 5,
+            }),
+          );
+          if (!hosts(namespaces, name, className)) {
+            // Transferred away — nothing to delete.
+            continue;
+          }
+          // local → cross-script transition without a transfer. Fail before
+          // any upload: Cloudflare would reject the combined delete + binding
+          // anyway, and silently deleting would destroy the namespace's
+          // data. See the error's docs for the two ways out
+          // (`transferredFrom` on the new host, or a two-phase removal).
+          return yield* Effect.fail(
+            new DurableObjectTransferRequired({
+              scriptName: name,
+              className,
+              targetScriptName,
+            }),
+          );
         }
 
         // Collect container-backed class names so we can send container metadata
@@ -1414,10 +1718,15 @@ export const LiveWorkerProvider = () =>
           ),
         );
 
-        // Compute new and renamed classes
+        // Compute new, renamed, and transferred classes
         const newClasses: string[] = [];
         const newSqliteClasses: string[] = [];
         const renamedClasses: { from: string; to: string }[] = [];
+        const transferredClasses: {
+          from: string;
+          fromScript: string;
+          to: string;
+        }[] = [];
         for (const binding of currentDoBindings) {
           let previousClassName: string | undefined =
             oldDoClassNameByLogicalId[binding.logicalId];
@@ -1435,6 +1744,16 @@ export const LiveWorkerProvider = () =>
                 old.type === "durable_object_namespace" &&
                 "className" in old &&
                 old.className &&
+                // Only a *locally-owned* binding proves the class exists on
+                // this script. A cross-script binding under the same name —
+                // e.g. this worker previously referenced another host's
+                // class and now hosts its own — points at a foreign
+                // namespace and must not suppress the create migration
+                // (Cloudflare rejects a local binding for a class the
+                // script isn't configured to implement).
+                (!("scriptName" in old) ||
+                  old.scriptName === undefined ||
+                  old.scriptName === name) &&
                 old.name === binding.bindingName,
             );
             if (observed && "className" in observed && observed.className) {
@@ -1442,6 +1761,38 @@ export const LiveWorkerProvider = () =>
             }
           }
           if (!previousClassName) {
+            // A class new to this script is a host move when the declaration
+            // says so: `transferredFrom` lists the former host(s) — moves
+            // are always declared, never inferred, because a class deleted
+            // on one worker and created on another is otherwise ambiguous
+            // between "move the data" and "delete + fresh namespace". The
+            // declared source must be observed to still host the namespace;
+            // otherwise (fresh stage, transfer already completed) fall
+            // through to a plain create.
+            const fromScript = dispatchNamespace
+              ? undefined
+              : yield* resolveTransferSource({
+                  accountId,
+                  selfScriptName: name,
+                  logicalId: binding.logicalId,
+                  className: binding.className,
+                  sources: normalizeTransferSources(
+                    binding.transferredFrom,
+                    name,
+                  ),
+                  observedNamespaces,
+                });
+            if (fromScript !== undefined) {
+              // Data-preserving move: ship Cloudflare's
+              // `transferred_classes` migration instead of creating a
+              // fresh class.
+              transferredClasses.push({
+                from: binding.className,
+                fromScript,
+                to: binding.className,
+              });
+              continue;
+            }
             // Default all new Durable Object classes to SQLite. Cloudflare
             // recommends SQLite for new namespaces, and container-backed
             // Durable Objects require it.
@@ -1461,6 +1812,7 @@ export const LiveWorkerProvider = () =>
               currentDoClassNameByLogicalId,
               deletedClasses,
               renamedClasses,
+              transferredClasses,
               newSqliteClasses,
             },
           )}`,
@@ -1489,7 +1841,7 @@ export const LiveWorkerProvider = () =>
           newClasses,
           deletedClasses,
           renamedClasses,
-          transferredClasses: [] as { from: string; to: string }[],
+          transferredClasses,
           newSqliteClasses,
         };
 
@@ -1732,11 +2084,12 @@ export const LiveWorkerProvider = () =>
           return assetsHash !== output.hash?.assets;
         }
         if (props.vite) {
-          const input = yield* hashDirectory({
-            cwd: props.vite.rootDir,
-            memo: props.vite.memo,
-          });
-          return input !== output.hash?.input;
+          const { hash } = yield* hashViteInput(
+            props.vite.rootDir,
+            props.vite.memo,
+            Effect.succeed(output.hash?.additionalWorkspaces ?? []),
+          );
+          return hash !== output.hash?.input;
         }
         const bundleHash = yield* prepareBundle(id, props).pipe(
           Effect.map((b) => b.hash),
@@ -2008,10 +2361,17 @@ export const LiveWorkerProvider = () =>
           const exportDerived = Object.keys(exportMap)
             .filter((logicalId) => isDurableObjectExport(exportMap[logicalId]))
             .map((logicalId) => ({ logicalId, className: logicalId }));
+          // Transfer-destination classes are excluded from the placeholder
+          // entirely (class list, bindings, tags): Cloudflare forbids
+          // creating the destination class of a `transferred_classes`
+          // migration ahead of the transfer, so `reconcile` must perform it
+          // with the real upload. (`transferredFrom` may still be an
+          // unresolved Output here — precreate runs on raw props — but only
+          // its presence matters.)
           const durableObjects = mergeDurableObjectClasses(
             exportDerived,
             getDurableObjectBindings(bindings, name),
-          );
+          ).filter((binding) => !binding.transferredFrom);
           const doClasses = durableObjects.map((binding) => binding.className);
           // Only attach container metadata for classes actually fronted by a
           // Container binding (mirrors reconcile's `containerClassNames`).
@@ -2491,6 +2851,21 @@ export const LiveWorkerProvider = () =>
     }),
   );
 
+const contentTypeForModule = (filePath: string) => {
+  // Vendored Python packages upload as opaque data, mirroring Wrangler's
+  // vendored-module rules — with one exception: the `workers-runtime-sdk`
+  // JS shims under `python_modules/workers/` must be ES modules so the
+  // runtime can resolve them via `import_from_javascript()`.
+  if (filePath.startsWith("python_modules/")) {
+    return filePath.startsWith("python_modules/workers/") &&
+      /\.m?js$/.test(filePath)
+      ? "application/javascript+module"
+      : "application/octet-stream";
+  }
+  const dot = filePath.lastIndexOf(".");
+  return contentTypeFromExtension(dot === -1 ? "" : filePath.slice(dot));
+};
+
 const contentTypeFromExtension = (extension: string) => {
   switch (extension) {
     case ".wasm":
@@ -2507,12 +2882,49 @@ const contentTypeFromExtension = (extension: string) => {
       return "application/javascript+module";
     case ".cjs":
       return "application/javascript";
+    case ".py":
+      return "text/x-python";
     case ".map":
       return "application/source-map";
     default:
       return "application/octet-stream";
   }
 };
+
+/**
+ * Observe every Durable Object namespace on the account as `(script, class)`
+ * pairs. Namespace ownership is authoritative cloud state: after a
+ * `transferred_classes` migration the namespace moves to the receiving
+ * script, so this is how both sides of a transfer observe where a class
+ * currently lives — the destination checks the source still hosts the class
+ * before emitting the transfer, and the former host checks whether a class
+ * it is about to delete has already been transferred away.
+ */
+const listDurableObjectNamespaces = (accountId: string) =>
+  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((namespaces) =>
+      Array.from(namespaces).flatMap((ns) =>
+        ns.script && ns.class ? [{ script: ns.script, class: ns.class }] : [],
+      ),
+    ),
+  );
+
+/**
+ * Coerce a resolved `transferredFrom` declaration to its list form, dropping
+ * self-references (a worker naming itself as its own former host is
+ * meaningless — the class already lives there).
+ */
+const normalizeTransferSources = (
+  value: string | readonly string[] | undefined,
+  selfScriptName: string,
+): string[] =>
+  (value === undefined
+    ? []
+    : Array.isArray(value)
+      ? value
+      : [value as string]
+  ).filter((source) => source !== selfScriptName);
 
 function bumpMigrationTagVersion(
   oldTag: string | undefined,
@@ -2530,8 +2942,16 @@ function bumpMigrationTagVersion(
  * the same logical id (the binding sid) that `reconcile` writes.
  */
 function mergeDurableObjectClasses(
-  exportDerived: ReadonlyArray<{ logicalId: string; className: string }>,
-  bindingDerived: ReadonlyArray<{ logicalId: string; className: string }>,
+  exportDerived: ReadonlyArray<{
+    logicalId: string;
+    className: string;
+    transferredFrom?: string | string[];
+  }>,
+  bindingDerived: ReadonlyArray<{
+    logicalId: string;
+    className: string;
+    transferredFrom?: string | string[];
+  }>,
 ) {
   return Array.from(
     new Map(
@@ -2575,6 +2995,14 @@ function getDurableObjectBindings(
           logicalId: binding.sid,
           bindingName: item.name,
           className: item.className,
+          // Declared host history for a data-preserving
+          // `transferred_classes` migration. Normalize an empty list to
+          // "not declared"; self-references are dropped at resolution time.
+          transferredFrom:
+            Array.isArray(item.transferredFrom) &&
+            item.transferredFrom.length === 0
+              ? undefined
+              : item.transferredFrom,
         },
       ];
     }),

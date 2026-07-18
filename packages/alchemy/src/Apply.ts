@@ -3,6 +3,10 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
+import type { ActionLike } from "./Action.ts";
+import { makeResolveContext } from "./ActionRuntimeContext.ts";
+import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import { RuntimeContext } from "./RuntimeContext.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -16,7 +20,7 @@ import {
   Cli,
 } from "./Cli/Cli.ts";
 import type { ApplyStatus } from "./Cli/Event.ts";
-import { havePropsChanged } from "./Diff.ts";
+import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -405,7 +409,14 @@ const executeNode = (
         stack: stackName,
         stage,
         fqn,
-        value: { ...value, namespace } as S,
+        // Early commits (`creating`/`replacing`) persist plan props that may
+        // still hold unresolved Output exprs; strip them so state stores only
+        // plain data (see stripUnresolved in Diff.ts).
+        value: {
+          ...value,
+          props: stripUnresolved(value.props),
+          namespace,
+        } as S,
       });
 
     const scopedSession = {
@@ -1117,6 +1128,25 @@ const executeNode = (
 // `--force` is set). The output value is written to `tracker[fqn].output`
 // so downstream Output evaluation works identically to resource attrs.
 
+/**
+ * Run an Action body, resolving any Outputs it captured via `yield* output`
+ * during init against the current tracker and exposing them to the body through
+ * the resolve {@link RuntimeContext}. See {@link makeCaptureContext}.
+ */
+const runAction = Effect.fn("apply.runAction")(function* (
+  task: ActionLike,
+  input: any,
+  outputs: Record<string, any>,
+) {
+  const resolved: Record<string, unknown> = {};
+  for (const [key, output] of Object.entries(task.Captures)) {
+    resolved[key] = yield* Output.evaluate(output, outputs);
+  }
+  return yield* task
+    .Run(input)
+    .pipe(Effect.provideService(RuntimeContext, makeResolveContext(resolved)));
+});
+
 const executeActionNode = (
   fqn: string,
   node: ActionApply,
@@ -1195,9 +1225,12 @@ const executeActionNode = (
     // until its run actually starts.
     yield* report("pending");
     yield* waitForDeps(
-      Object.keys(Output.resolveUpstream(node.input)).filter(
-        (f) => f in readyStable,
-      ),
+      [
+        ...new Set([
+          ...Object.keys(Output.resolveUpstream(node.input)),
+          ...Object.keys(Output.upstreamAny(task.Captures)),
+        ]),
+      ].filter((f) => f in readyStable),
     );
 
     const outputs = getOutputs();
@@ -1216,7 +1249,7 @@ const executeActionNode = (
     });
     yield* report("running");
 
-    const result = yield* task.Run(resolvedInput);
+    const result = yield* runAction(task, resolvedInput, outputs);
 
     yield* commit<RanActionState>({
       kind: "action",
@@ -1440,7 +1473,7 @@ const converge = Effect.fn(function* (
         } satisfies RunningActionState,
       });
 
-      const result = yield* node.def.Run(newInput);
+      const result = yield* runAction(node.def, newInput, outputs);
 
       yield* state.set({
         stack: stackName,
@@ -1538,7 +1571,7 @@ const collectGarbage = Effect.fn(function* (
           instanceId,
           downstream,
           props,
-          attr,
+          attr: persistedAttr,
           provider,
         } = isDeleteNode(node)
           ? {
@@ -1570,6 +1603,10 @@ const collectGarbage = Effect.fn(function* (
               provider: yield* findProviderByType(node.old.resourceType),
             };
 
+        // Mutable: an attr-less row (interrupted create) may recover its
+        // attributes from `provider.read` below, right before deletion.
+        let attr = persistedAttr;
+
         const nextAncestors = new Set(ancestors).add(fqn);
 
         const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
@@ -1577,7 +1614,13 @@ const collectGarbage = Effect.fn(function* (
             stack: stackName,
             stage,
             fqn,
-            value: { ...value, namespace } as S,
+            // Same rule as the lifecycle commit above: state only stores
+            // plain data, never unresolved Output exprs.
+            value: {
+              ...value,
+              props: stripUnresolved(value.props),
+              namespace,
+            } as S,
           });
 
         const report = (status: ApplyStatus) =>
@@ -1623,19 +1666,6 @@ const collectGarbage = Effect.fn(function* (
                 yield* report("retained");
                 return;
               }
-              yield* commit<DeletingResourceState>({
-                status: "deleting",
-                fqn,
-                logicalId,
-                instanceId,
-                resourceType,
-                props,
-                attr,
-                downstream,
-                providerVersion: provider.version ?? 0,
-                bindings: excludeDeletedBindings(node.bindings),
-                removalPolicy: node.resource.RemovalPolicy,
-              });
             }
 
             // Honor `retain` for the old generation of a replacement, mirroring
@@ -1649,6 +1679,76 @@ const collectGarbage = Effect.fn(function* (
               yield* scopedSession.note(
                 "Retaining replaced resource (removal policy: retain)...",
               );
+            }
+
+            // A row can reach deletion with `attr === undefined` when a create
+            // was interrupted after the cloud-side call succeeded but before
+            // `reconcile` returned Attributes (a `creating` row — or the old
+            // generation of a replacement chain in the same predicament).
+            // Skipping the provider's delete outright would silently orphan
+            // the physical resource, so ask `read` to look it up from the
+            // persisted props (providers derive the deterministic physical
+            // name from id/props):
+            //   - plain attrs    → exists and is ours; proceed to delete
+            //   - Unowned(attrs) → exists but is NOT ours (e.g. our create
+            //                      actually lost a name race, or died before
+            //                      stamping ownership) — never delete a
+            //                      foreign resource; drop our state and say so
+            //   - undefined      → nothing exists; dropping state is safe
+            if (attr === undefined && !retainOldGeneration) {
+              if (provider.read) {
+                const recovered = yield* provider
+                  .read({
+                    id: logicalId,
+                    fqn,
+                    instanceId,
+                    olds: props as never,
+                    output: undefined,
+                  })
+                  .pipe(
+                    instrumentLifecycle(
+                      "read",
+                      fqn,
+                      resourceType,
+                      logicalId,
+                      instanceId,
+                    ),
+                  );
+                if (recovered !== undefined) {
+                  if (Unowned.is(recovered)) {
+                    yield* scopedSession.note(
+                      "Resource exists in the cloud but is not owned by this " +
+                        "stack — leaving it in place (re-deploy with --adopt " +
+                        "to take ownership, then destroy).",
+                    );
+                  } else {
+                    attr = stripUnowned(recovered as Record<string, any>);
+                  }
+                }
+              } else {
+                yield* scopedSession.note(
+                  "No attributes were recorded for this resource (its create " +
+                    "was interrupted) and the provider does not implement " +
+                    "`read` — if a physical resource was created, it must be " +
+                    "cleaned up manually.",
+                );
+              }
+            }
+
+            if (isDeleteNode(node)) {
+              yield* commit<DeletingResourceState>({
+                status: "deleting",
+                fqn,
+                logicalId,
+                instanceId,
+                resourceType,
+                props,
+                attr,
+                downstream,
+                providerVersion: provider.version ?? 0,
+                bindings: excludeDeletedBindings(node.bindings),
+                removalPolicy: node.resource.RemovalPolicy,
+              });
             }
 
             if (attr !== undefined && !retainOldGeneration) {

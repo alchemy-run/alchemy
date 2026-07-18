@@ -8,7 +8,11 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
-import type { BaseRuntimeContext } from "../RuntimeContext.ts";
+import {
+  packEnvValue,
+  unpackEnvValue,
+  type BaseRuntimeContext,
+} from "../RuntimeContext.ts";
 
 export type ProcessServices =
   | ChildProcessSpawner
@@ -73,37 +77,15 @@ export const createHostRuntimeContext =
       set: (bindingId: string, output: Output.Output) =>
         Effect.sync(() => {
           const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+          // `packEnvValue` marker-packs Redacted values so they survive the
+          // Output → env round-trip.
+          env[key] = output.pipe(Output.map(packEnvValue));
           return key;
         }),
       get: <T>(key: string) =>
-        // Read the captured value straight from `process.env`. We must NOT
-        // resolve through `Config.string` here: at runtime the ambient
-        // `ConfigProvider` is the interceptor installed in `Platform.ts`,
-        // whose runtime branch calls back into this `get(key)`. Going through
-        // `Config` would re-enter that interceptor for the same key and
-        // recurse forever, allocating until init OOMs — and when this host
-        // (ECS.Task / EC2.Instance) is a Platform nested inside another
-        // Platform (e.g. a Lambda), the outer interceptor is already the
-        // ambient `ConfigProvider` during this host's layer build, so even
-        // the build-time `ALCHEMY_PHASE` lookup recurses. The Lambda runtime
-        // reads from `process.env` and the Worker runtime from
-        // `WorkerEnvironment` for exactly this reason.
-        Effect.sync(() => {
-          // Key is already canonical (see RuntimeContext.sanitizeKey).
-          const value = process.env[key];
-          if (value === undefined) {
-            return undefined as T | undefined;
-          }
-          try {
-            return JSON.parse(value) as T;
-          } catch {
-            // Values `set` on this host are always JSON-encoded, but env vars
-            // injected out-of-band (e.g. `ALCHEMY_PHASE`) are plain strings —
-            // fall back to the raw string rather than dying.
-            return value as unknown as T;
-          }
-        }),
+        // Read straight from `process.env` — see `unpackEnvValue` for why
+        // this must never resolve through `Config.string`.
+        Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
       run: (effect: Effect.Effect<void, never, any>) =>
         Effect.sync(() => {
           runners.push(effect);

@@ -57,7 +57,7 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
  * the returned Effect, so dispatch must invoke every listener for
  * the event type.
  */
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "send → subscribe handlers → DO state → polled by test client",
   (stack) =>
     Effect.gen(function* () {

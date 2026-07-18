@@ -228,7 +228,7 @@ function caseSensitiveLinkChecker() {
 }
 
 export default defineConfig({
-  site: "https://v2.alchemy.run",
+  site: "https://alchemy.run",
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
@@ -261,7 +261,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/alchemy-run/alchemy-effect",
+          href: "https://github.com/alchemy-run/alchemy",
         },
         {
           icon: "discord",
@@ -270,8 +270,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl:
-          "https://github.com/alchemy-run/alchemy-effect/edit/main/website",
+        baseUrl: "https://github.com/alchemy-run/alchemy/edit/main/website",
       },
       // One top-level group per docs tab (see src/docs-tabs.ts). The
       // docs-tabs-sidebar middleware swaps in the active tab's group, so
@@ -339,10 +338,6 @@ export default defineConfig({
                 },
                 { label: "Phases", link: "/infrastructure-as-effects/phases" },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
-                {
-                  label: "Building with Layers",
-                  link: "/infrastructure-as-effects/infrastructure-layers",
-                },
                 {
                   label: "Circular Bindings",
                   link: "/infrastructure-as-effects/circular-bindings",
@@ -506,6 +501,10 @@ export default defineConfig({
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
                 {
+                  label: "Python Workers",
+                  link: "/cloudflare/compute/python-workers",
+                },
+                {
                   label: "Durable Objects",
                   link: "/cloudflare/compute/durable-objects",
                 },
@@ -629,6 +628,7 @@ export default defineConfig({
             {
               label: "AI",
               items: [
+                { label: "Workers AI", link: "/cloudflare/ai/workers-ai" },
                 { label: "AI Gateway", link: "/cloudflare/ai/ai-gateway" },
                 {
                   label: "AI Search (AutoRAG)",

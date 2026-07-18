@@ -1,12 +1,12 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.62",
+  "version": "2.0.0-beta.63",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "packages/alchemy"
   },
   "bin": {
@@ -335,7 +335,6 @@
     "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
-    "magic-string": "^0.30.21",
     "mongodb": "^6.10.0",
     "mysql2": "^3.15.3",
     "pathe": "^2.0.3",
@@ -348,6 +347,7 @@
   },
   "devDependencies": {
     "@aws/durable-execution-sdk-js": "^2.1.0",
+    "alchemy-test": "workspace:*",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
@@ -355,7 +355,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
-    "@oxc-project/types": "^0.127.0",
+    "@oxc-project/types": "^0.139.0",
     "@tanstack/react-router": "catalog:fixtures",
     "@tanstack/react-start": "catalog:fixtures",
     "@types/aws-lambda": "catalog:",

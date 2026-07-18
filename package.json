@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alchemy-run/alchemy-effect"
+    "url": "https://github.com/alchemy-run/alchemy"
   },
   "type": "module",
   "module": "./lib/index.js",
@@ -14,8 +14,9 @@
     "bench:containers": "cd benchmark/container && bun run bench",
     "build:clean:shallow": "bun clean:shallow . && bun run build",
     "build:clean": "bun clean . && bun i && bun run build && bun download:env",
-    "build:packages": "bun tsc -b && bun run --filter './packages/*' build",
-    "build": "bun tsc -b && bun run --filter ./website --filter './packages/*' build && bun lint:providers",
+    "build:cloudflare-tools": "bun tsc -b distilled/packages/cloudflare/tsconfig.json && bun run --filter './cloudflare-tools/packages/*' build",
+    "build:packages": "bun tsc -b && bun run --filter './cloudflare-tools/packages/*' --filter './packages/*' build",
+    "build": "bun tsc -b && bun run --filter ./website --filter './cloudflare-tools/packages/*' --filter './packages/*' build && bun lint:providers",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",
     "clear:state": "alchemy state clear ./stacks/nuke.ts",
@@ -45,7 +46,7 @@
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
     "nuke": "bash scripts/nuke.sh",
     "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode",
-    "prepare": "husky && effect-tsgo patch",
+    "prepare": "husky && effect-tsgo patch && bun build:cloudflare-tools",
     "publish:npm": "bun run build && bun run --filter alchemy publish:npm",
     "setup": "effect-tsgo patch && bun run download:external",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
@@ -61,7 +62,10 @@
       "examples/monorepo-single-stack/*",
       "examples/monorepo-multi-stack/*",
       "benchmark/*",
-      "distilled/packages/*"
+      "distilled/packages/*",
+      "cloudflare-tools/packages/*",
+      "cloudflare-tools/packages/vendor/*",
+      "cloudflare-tools/packages/tools/*"
     ],
     "catalog": {
       "@alchemy.run/node-utils": "0.0.5",
@@ -71,9 +75,9 @@
       "@cloudflare/workers-types": "^4.20250805.0",
       "@distilled.cloud/aws": "workspace:*",
       "@distilled.cloud/axiom": "workspace:*",
-      "@distilled.cloud/cloudflare-rolldown-plugin": "0.13.5",
-      "@distilled.cloud/cloudflare-runtime": "0.13.5",
-      "@distilled.cloud/cloudflare-vite-plugin": "0.13.5",
+      "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
+      "@distilled.cloud/cloudflare-runtime": "workspace:*",
+      "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
       "@distilled.cloud/cloudflare": "workspace:*",
       "@distilled.cloud/core": "workspace:*",
       "@distilled.cloud/neon": "workspace:*",
@@ -91,6 +95,7 @@
       "@smithy/node-config-provider": "^4.0.0",
       "@smithy/shared-ini-file-loader": "^4.3.4",
       "@smithy/types": "^4.8.1",
+      "@playwright/test": "^1.61.1",
       "@types/aws-lambda": "^8.10.152",
       "@types/bun": "latest",
       "@types/node": "latest",
@@ -101,9 +106,10 @@
       "drizzle-orm": ">=1.0.0-rc.1",
       "effect": ">=4.0.0-beta.97|| >=4.0.0",
       "fast-xml-parser": "^5.3.4",
-      "rolldown": "1.0.1",
+      "rolldown": "1.1.5",
       "solid-js": "latest",
       "sonda": "^0.11.1",
+      "tsdown": "^0.22.4",
       "typescript": "^7.0.2",
       "vite": "^8.0.7",
       "vitest": "^4.1.8",
@@ -124,6 +130,18 @@
       "pathe": "^2.0.3"
     },
     "catalogs": {
+      "effect": {
+        "@effect/platform-bun": ">=4.0.0-beta.97 || >=4.0.0",
+        "@effect/platform-node": ">=4.0.0-beta.97 || >=4.0.0",
+        "@effect/sql-pg": ">=4.0.0-beta.97 || >=4.0.0",
+        "@effect/vitest": ">=4.0.0-beta.97 || >=4.0.0",
+        "effect": ">=4.0.0-beta.97 || >=4.0.0"
+      },
+      "workers": {
+        "@cloudflare/workers-types": "^5.20260704.1",
+        "miniflare": "^4.20260701.0",
+        "workerd": "1.20260704.1"
+      },
       "fixtures": {
         "@tanstack/react-router": "^1.167.4",
         "@vitejs/plugin-react": "^6.0.2",

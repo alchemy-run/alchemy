@@ -149,22 +149,20 @@ test(
     // may come from a different isolate, but every isolate must report
     // exactly one init run and zero init-finalizer runs no matter how many
     // events it has served.
-    const observations: { init: number; finalized: number }[] = [];
-    yield* Effect.gen(function* () {
+    const observation = yield* Effect.gen(function* () {
       const init = Number(yield* getText(client, `${url}/init-runs`));
       const finalized = Number(
         yield* getText(client, `${url}/init-finalizer-runs`),
       );
-      observations.push({ init, finalized });
+      return { init, finalized };
     }).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("500 millis"),
-        times: 5,
+        until: (o) => o.init === 1 && o.finalized === 0,
+        times: 10,
       }),
     );
-    expect(observations.every((o) => o.init === 1 && o.finalized === 0)).toBe(
-      true,
-    );
+    expect(observation).toEqual({ init: 1, finalized: 0 });
   }).pipe(logLevel),
   { timeout: 180_000 },
 );

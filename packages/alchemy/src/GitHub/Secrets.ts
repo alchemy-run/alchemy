@@ -41,7 +41,7 @@ export interface SecretsProps {
  * ```ts
  * yield* GitHub.Secrets({
  *   owner: "alchemy-run",
- *   repository: "alchemy-effect",
+ *   repository: "alchemy",
  *   secrets: {
  *     AXIOM_INGEST_TOKEN: tokenValue,
  *     AXIOM_DATASET_TRACES: traces.name,

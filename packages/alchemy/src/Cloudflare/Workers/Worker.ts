@@ -403,6 +403,12 @@ export interface WorkerProps<
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
    * upload. Mutually exclusive with {@link script} — provide exactly one.
+   *
+   * A `.py` entry deploys a Python Worker instead: no bundling runs — the
+   * entry plus every sibling `.py` file upload as Python modules, the
+   * `python_workers` compatibility flag is added, and dependencies from
+   * `pyproject.toml` (or a prebuilt `python_modules/` directory) are
+   * vendored alongside. See the Python Workers section above.
    */
   main?: string;
   /**
@@ -585,7 +591,24 @@ export interface ViteOptions {
    *
    * @see {@link MemoOptions}
    */
-  memo?: MemoOptions;
+  memo?: MemoOptions & {
+    /**
+     * Configure additional workspaces to hash.
+     * By default, auto-detects workspaces during Vite build, then hashes all
+     * non-gitignored files in the workspace plus the nearest lockfile.
+     * @default "auto"
+     */
+    workspaces?:
+      | "auto"
+      | Array<
+          MemoOptions & {
+            /**
+             * The working directory to hash, relative to the Vite root.
+             */
+            cwd: string;
+          }
+        >;
+  };
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
@@ -632,6 +655,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
       assets: string | undefined;
       bundle: string | undefined;
       input: string | undefined;
+      additionalWorkspaces: string[] | undefined;
       // Hash of the deploy-time metadata surface (compatibility, env,
       // bindings, asset config, limits, observability, ...) so metadata-only
       // edits trigger an update (#745). Optional: state written before this
@@ -733,6 +757,57 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     return new Response("Not Found", { status: 404 });
  *   },
  * };
+ * ```
+ *
+ * @section Python Workers
+ * Point `main` at a `.py` file to deploy a
+ * [Python Worker](https://developers.cloudflare.com/workers/languages/python/)
+ * (open beta). There is no bundling step — the entry and every sibling
+ * `.py` module upload as-is and are interpreted by Pyodide, and the
+ * `python_workers` compatibility flag is added automatically. Like async
+ * Workers, Python Workers take no inline Effect implementation; declare
+ * bindings with the `env` prop and read them from `self.env` in Python.
+ *
+ * Dependencies come from `pyproject.toml` next to the entry: Alchemy
+ * vendors `[project.dependencies]` with [uv](https://docs.astral.sh/uv/)
+ * against the Pyodide wheel index and uploads them under
+ * `python_modules/`. If a `python_modules/` directory already exists
+ * (e.g. produced by `pywrangler sync`), it is uploaded as-is and uv is
+ * not invoked.
+ *
+ * See the [Python Workers guide](/cloudflare/compute/python-workers)
+ * for the full walkthrough.
+ *
+ * @example Defining a Python Worker in your stack
+ * ```typescript
+ * // alchemy.run.ts
+ * const kv = yield* Cloudflare.KV.Namespace("Cache");
+ *
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.py",
+ *   env: { CACHE: kv },
+ * });
+ * ```
+ *
+ * @example Writing the Python handler
+ * ```python
+ * # src/worker.py
+ * from workers import Response, WorkerEntrypoint
+ *
+ * class Default(WorkerEntrypoint):
+ *     async def fetch(self, request):
+ *         cached = await self.env.CACHE.get("greeting")
+ *         return Response(cached or "Hello from Python!")
+ * ```
+ *
+ * @example Vendoring dependencies with pyproject.toml
+ * ```toml
+ * # src/pyproject.toml — vendored with uv on deploy
+ * [project]
+ * name = "my-worker"
+ * version = "0.1.0"
+ * requires-python = ">=3.13"
+ * dependencies = ["humanize"]
  * ```
  *
  * @section Effect Workers

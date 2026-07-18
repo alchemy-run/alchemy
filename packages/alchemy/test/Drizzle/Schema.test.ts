@@ -5,7 +5,6 @@ import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
@@ -292,7 +291,7 @@ test.provider("sqlite CLI fallback updates after schema drift", (stack) =>
 );
 
 test.provider(
-  "sqlite CLI fallback fails fast for interactive rename prompts without a TTY",
+  "sqlite CLI fallback generates column changes without a TTY",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -306,25 +305,23 @@ test.provider(
           out: ws.out,
         }),
       );
-      const initialDirs = yield* readMigrationDirs(ws.out);
 
       const renamedSchemaPath = path.join(ws.root, "schema-sqlite-renamed.ts");
       yield* fs.writeFileString(
         renamedSchemaPath,
         SQLITE_RENAMED_COLUMN_SCHEMA_SOURCE,
       );
+      yield* Effect.sleep("1 second");
 
-      const exit = yield* stack
-        .deploy(
-          Drizzle.Schema("sqlite-schema", {
-            dialect: "sqlite",
-            schema: renamedSchemaPath,
-            out: ws.out,
-          }),
-        )
-        .pipe(Effect.exit);
+      yield* stack.deploy(
+        Drizzle.Schema("sqlite-schema", {
+          dialect: "sqlite",
+          schema: renamedSchemaPath,
+          out: ws.out,
+        }),
+      );
 
-      expect(Exit.isFailure(exit)).toBe(true);
-      expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
+      expect(yield* getStatus("sqlite-schema")).toEqual("updated");
+      expect(yield* readMigrationDirs(ws.out)).not.toHaveLength(0);
     }),
 );

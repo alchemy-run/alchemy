@@ -28,7 +28,7 @@ const getLiveConnector = (accountId: string, tunnelId: string) =>
   );
 
 test.provider(
-  "create, rename in place, and destroy a WARP Connector tunnel",
+  "create, rename by replacement, and destroy a WARP Connector tunnel",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -54,7 +54,8 @@ test.provider(
       expect(live?.id).toEqual(connector.tunnelId);
       expect(live?.name).toEqual("alchemy-test-warp-connector");
 
-      // Rename converges in place — same tunnelId, no replacement.
+      // Cloudflare returns TunnelNotFound from the documented PATCH endpoint
+      // for a live connector, so changing the name replaces the tunnel.
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Tunnel.WarpConnector("SiteA", {
@@ -62,22 +63,16 @@ test.provider(
           }).pipe(adopt(true));
         }),
       );
-      expect(renamed.tunnelId).toEqual(connector.tunnelId);
+      expect(renamed.tunnelId).not.toEqual(connector.tunnelId);
       expect(renamed.name).toEqual("alchemy-test-warp-connector-v2");
 
-      const renamedLive = yield* getLiveConnector(
-        accountId,
-        connector.tunnelId,
-      );
+      const renamedLive = yield* getLiveConnector(accountId, renamed.tunnelId);
       expect(renamedLive?.name).toEqual("alchemy-test-warp-connector-v2");
 
       yield* stack.destroy();
 
       // Cloudflare soft-deletes tunnels; gone = 404 or deletedAt set.
-      const afterDestroy = yield* getLiveConnector(
-        accountId,
-        connector.tunnelId,
-      );
+      const afterDestroy = yield* getLiveConnector(accountId, renamed.tunnelId);
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 90_000 },

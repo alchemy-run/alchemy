@@ -26,6 +26,24 @@
     {
       "path": "./distilled/packages/axiom/tsconfig.json"
     },
+    // cloudflare-tools (submodule) — reference the composite leaf configs
+    // directly; the per-package tsconfig.json files are non-composite
+    // solution configs that `tsc -b` cannot reference.
+    {
+      "path": "./cloudflare-tools/packages/cloudflare-rolldown-plugin/tsconfig.json"
+    },
+    {
+      "path": "./cloudflare-tools/packages/cloudflare-runtime/tsconfig.node.json"
+    },
+    {
+      "path": "./cloudflare-tools/packages/cloudflare-runtime/tsconfig.workers.json"
+    },
+    {
+      "path": "./cloudflare-tools/packages/cloudflare-vite-plugin/tsconfig.node.json"
+    },
+    {
+      "path": "./cloudflare-tools/packages/cloudflare-vite-plugin/tsconfig.workers.json"
+    },
     {
       "path": "./tsconfig.scripts.json"
     },

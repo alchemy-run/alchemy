@@ -5,7 +5,7 @@ sidebar:
   order: 27
 ---
 
-The [`cloudflare-agent` example](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-agent)
+The [`cloudflare-agent` example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-agent)
 is an autonomous release pipeline: a push lands on `main`, a Worker
 filters for release commits, and each one is handed to a Durable
 Object that drives an AI agent to write the release blog post — with
@@ -29,7 +29,7 @@ and filters for release commits on `main` in ordinary handler code:
 ```typescript
 // src/ReleaseService.ts
 yield* Github.consumeRepositoryEvents(
-  { owner: "alchemy-run", repository: "alchemy-effect", events: ["push"] },
+  { owner: "alchemy-run", repository: "alchemy", events: ["push"] },
   (event) => {
     const title = event.payload.head_commit?.message.split("\n")[0] ?? "";
     const isRelease =

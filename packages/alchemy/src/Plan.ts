@@ -543,7 +543,18 @@ export const make = <A>(
         (action) =>
           [
             action.FQN,
-            Object.values(Output.upstreamAny(action.Input)).map((r) => r.FQN),
+            // An Action depends on the resources referenced by its Input *and*
+            // any Output captured via `yield* output` inside its init Effect.
+            Array.from(
+              new Set([
+                ...Object.values(Output.upstreamAny(action.Input)).map(
+                  (r) => r.FQN,
+                ),
+                ...Object.values(Output.upstreamAny(action.Captures)).map(
+                  (r) => r.FQN,
+                ),
+              ]),
+            ),
           ] as const,
       ),
     ]);
@@ -572,7 +583,8 @@ export const make = <A>(
         const bindDeps = bindingUpstreamDependencies[fqn] ?? [];
         return [fqn, [...new Set([...propDeps, ...bindDeps])]];
       }),
-      // Actions have no bindings — their upstream is purely their input.
+      // Actions have no bindings — their upstream is input + init captures,
+      // both already folded into newUpstreamDependencies above.
       ...actions.map((action): [string, string[]] => {
         const fqn = action.FQN;
         return [fqn, newUpstreamDependencies[fqn] ?? []];
@@ -717,7 +729,7 @@ export const make = <A>(
             // If planning persisted here, a mere `alchemy plan` / `--dry-run`
             // would claim ownership of an unowned cloud resource, arming a
             // later unrelated deploy to orphan-delete it. See
-            // https://github.com/alchemy-run/alchemy-effect/issues/793.
+            // https://github.com/alchemy-run/alchemy/issues/793.
             //
             // After a cold-start adoption (engine just discovered an
             // existing cloud resource via `read`), force the engine's
@@ -784,7 +796,7 @@ export const make = <A>(
                 // The adopted state rides onto the plan node via `oldState`
                 // (→ `node.state`) and is persisted at APPLY time by the
                 // update lifecycle's `updating` / `updated` commits. See
-                // https://github.com/alchemy-run/alchemy-effect/issues/793.
+                // https://github.com/alchemy-run/alchemy/issues/793.
                 oldState = adoptedState;
                 forceUpdateAfterAdoption = true;
               }
@@ -842,10 +854,32 @@ export const make = <A>(
                   })
                   .pipe(providePlanScope(fqn, oldState.instanceId));
                 if (attr) {
+                  // The recovered resource may be foreign: our interrupted
+                  // create could have lost a name race, or died before
+                  // stamping ownership. Route `Unowned` through the same
+                  // adoption table as the cold-start probe above — never
+                  // silently take over (and later mutate/delete) a resource
+                  // we cannot prove we created.
+                  if (Unowned.is(attr)) {
+                    const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
+                    if (!adoptThis) {
+                      return yield* new OwnedBySomeoneElse({
+                        message:
+                          `Cannot resume creating resource '${fqn}' ` +
+                          `(${resource.Type}): a resource with its physical ` +
+                          "identity exists in the cloud but is not owned by " +
+                          "this stack/stage/logical-id. Re-run with `--adopt` " +
+                          "(or wrap the effect in `adopt(true)`) to take it " +
+                          "over.",
+                        resourceType: resource.Type,
+                        logicalId: id,
+                      });
+                    }
+                  }
                   return Node<Create>({
                     action: "create",
                     props: news,
-                    state: { ...oldState, attr },
+                    state: { ...oldState, attr: stripUnowned(attr) },
                   });
                 }
               }
@@ -1220,6 +1254,7 @@ export const make = <A>(
                   LogicalId: logicalId,
                   Type: persisted.actionType,
                   Input: persisted.input,
+                  Captures: {},
                   Run: () => undefined as any,
                   Output: undefined as any,
                 } satisfies ActionLike,
@@ -1246,43 +1281,27 @@ export const make = <A>(
             // Tasks are routed through `actionDeletions` above.
             if (isActionState(persisted)) return;
             const oldState = persisted as ResourceState | undefined;
-            let attr: any = oldState?.attr;
             if (oldState) {
               const { logicalId } = parseFqn(fqn);
               const resourceType = oldState.resourceType;
               const provider = yield* findProviderByType(resourceType);
-              if (oldState.attr === undefined) {
-                // Attr-less state comes from a failed create, whose persisted
-                // props are the RAW plan-time props and may contain unresolved
-                // Output expressions. `read` derives identity from `olds` when
-                // `output` is undefined (as it is here), so unresolved exprs
-                // would crash the provider. Skip recovery — the delete then
-                // proceeds with `attr: undefined`, exactly as it does for
-                // providers without `read`.
-                if (provider.read && isResolved(oldState.props)) {
-                  attr = yield* provider
-                    .read({
-                      id: logicalId,
-                      fqn,
-                      instanceId: oldState.instanceId,
-                      olds: oldState.props as never,
-                      output: oldState.attr as never,
-                    })
-                    .pipe(providePlanScope(fqn, oldState.instanceId));
-                }
-              }
+              // NOTE: an attr-less row (interrupted create) is NOT recovered
+              // here. Apply's `deleteResource` performs the authoritative
+              // read-then-delete recovery — it also covers replaced-chain
+              // old generations that never pass through plan, and routes
+              // `Unowned` results away from `provider.delete`.
               return [
                 fqn,
                 {
                   action: "delete",
-                  state: { ...oldState, attr },
+                  state: oldState,
                   provider: provider,
                   resource: {
                     Namespace: oldState.namespace,
                     FQN: fqn,
                     LogicalId: logicalId,
                     Type: oldState.resourceType,
-                    Attributes: attr,
+                    Attributes: oldState.attr,
                     Props: oldState.props,
                     Binding: undefined!,
                     Provider: Provider(resourceType),

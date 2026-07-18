@@ -144,7 +144,7 @@ test.provider(
   { timeout: 180_000 },
 );
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // An interrupted first deploy persists the zone as `status: "creating"` with
 // no attributes — and an Output-valued `name` does not survive the state

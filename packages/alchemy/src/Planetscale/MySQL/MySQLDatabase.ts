@@ -18,6 +18,7 @@ import {
 } from "../Util.ts";
 import {
   ensureMySQLProductionBranchClusterSize,
+  observeDefaultKeyspaceReplicas,
   type MySQLClusterSize,
 } from "./MySQLClusterSize.ts";
 import { runMySQLImports, runMySQLMigrations } from "./MySQLMigrations.ts";
@@ -31,6 +32,16 @@ export interface MySQLDatabaseProps extends BaseDatabaseProps {
    * @see https://planetscale.com/docs/concepts/cluster-size
    */
   clusterSize: MySQLClusterSize;
+
+  /**
+   * Desired total number of replicas for the database's default keyspace.
+   * Each cluster size includes a fixed number of replicas (2 for
+   * production `PS_*` sizes); higher values add extra replicas. Changes
+   * are reconciled in place via PlanetScale's keyspace resize lifecycle —
+   * never by replacing the database.
+   * @see https://planetscale.com/docs/vitess/sharding/keyspaces
+   */
+  replicas?: number;
 
   /**
    * Whether to copy migration data to new branches and in deploy requests.
@@ -67,6 +78,12 @@ export interface MySQLDatabaseProps extends BaseDatabaseProps {
  * Output attributes of a deployed MySQL PlanetScale database.
  */
 export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
+  /**
+   * Observed total replica count of the default keyspace on the default
+   * branch, or `undefined` while the keyspace is still provisioning.
+   */
+  replicas: number | undefined;
+
   /**
    * Whether to copy migration data to new branches and in deploy requests.
    */
@@ -168,8 +185,14 @@ export const MySQLDatabaseProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (news.replicas !== olds.replicas) {
-        return { action: "replace" } as const;
+      // Replicas reconcile in place via a keyspace resize — never a
+      // replacement. Diff against the observed keyspace replica count so
+      // an adopted database whose live state already matches plans no-op.
+      if (
+        news.replicas !== undefined &&
+        news.replicas !== (output?.replicas ?? olds.replicas)
+      ) {
+        return { action: "update" } as const;
       }
       if (news.migrationsDir) {
         const newHashes = yield* hashMigrations(news.migrationsDir);
@@ -203,46 +226,57 @@ export const MySQLDatabaseProvider = () =>
           database: databaseName,
         })
         .pipe(
-          Effect.flatMap((data) => {
-            if (data.kind !== "mysql") {
-              return Effect.fail(
-                new PlanetscaleConflict({
-                  message:
-                    `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
-                    `is a MySQLDatabase. Use Planetscale.${data.kind === "postgresql" ? "PostgresDatabase" : data.kind}() instead, ` +
-                    `or delete the existing database and retry.`,
-                }),
+          Effect.flatMap(
+            Effect.fn(function* (data) {
+              if (data.kind !== "mysql") {
+                return yield* Effect.fail(
+                  new PlanetscaleConflict({
+                    message:
+                      `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
+                      `is a MySQLDatabase. Use Planetscale.${data.kind === "postgresql" ? "PostgresDatabase" : data.kind}() instead, ` +
+                      `or delete the existing database and retry.`,
+                  }),
+                );
+              }
+              // Observe the default keyspace's live replica configuration
+              // so adopted databases diff against reality.
+              const replicas = yield* observeDefaultKeyspaceReplicas(
+                organization,
+                data.name,
+                data.default_branch ?? "main",
               );
-            }
-            return Effect.succeed({
-              id: data.id,
-              name: data.name,
-              organization,
-              state: data.state,
-              defaultBranch: data.default_branch ?? "main",
-              plan: data.plan ?? "hobby",
-              createdAt: data.created_at,
-              updatedAt: data.updated_at,
-              htmlUrl: data.html_url,
-              region: { slug: data.region.slug },
-              migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
-              migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
-              migrationsHashes: output?.migrationsHashes ?? {},
-              importHashes: output?.importHashes ?? {},
-              clusterSize: output?.clusterSize ?? "",
-              requireApprovalForDeploy:
-                data.require_approval_for_deploy ?? false,
-              restrictBranchRegion: data.restrict_branch_region ?? false,
-              insightsRawQueries: data.insights_raw_queries ?? false,
-              productionBranchWebConsole:
-                data.production_branch_web_console ?? false,
-              automaticMigrations: data.automatic_migrations ?? false,
-              migrationFramework: data.migration_framework ?? undefined,
-              migrationTableName: data.migration_table_name ?? undefined,
-              allowDataBranching: data.allow_data_branching ?? false,
-              allowForeignKeyConstraints: data.foreign_keys_enabled ?? false,
-            });
-          }),
+              return {
+                id: data.id,
+                name: data.name,
+                organization,
+                state: data.state,
+                defaultBranch: data.default_branch ?? "main",
+                replicas,
+                plan: data.plan ?? "hobby",
+                createdAt: data.created_at,
+                updatedAt: data.updated_at,
+                htmlUrl: data.html_url,
+                region: { slug: data.region.slug },
+                migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
+                migrationsTable:
+                  output?.migrationsTable ?? olds?.migrationsTable,
+                migrationsHashes: output?.migrationsHashes ?? {},
+                importHashes: output?.importHashes ?? {},
+                clusterSize: output?.clusterSize ?? "",
+                requireApprovalForDeploy:
+                  data.require_approval_for_deploy ?? false,
+                restrictBranchRegion: data.restrict_branch_region ?? false,
+                insightsRawQueries: data.insights_raw_queries ?? false,
+                productionBranchWebConsole:
+                  data.production_branch_web_console ?? false,
+                automaticMigrations: data.automatic_migrations ?? false,
+                migrationFramework: data.migration_framework ?? undefined,
+                migrationTableName: data.migration_table_name ?? undefined,
+                allowDataBranching: data.allow_data_branching ?? false,
+                allowForeignKeyConstraints: data.foreign_keys_enabled ?? false,
+              };
+            }),
+          ),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
     }),
@@ -272,13 +306,14 @@ export const MySQLDatabaseProvider = () =>
       // Ensure — if missing, create.
       if (!observed) {
         yield* session.note("Creating database...");
+        // Note: the API rejects the `replicas` param for mysql databases;
+        // replicas are converged below via the keyspace resize lifecycle.
         observed = yield* planetscale.createDatabase({
           organization,
           name: newName,
           region: news.region?.slug,
           kind: "mysql",
           cluster_size: clusterSize,
-          replicas: news.replicas,
         });
       }
 
@@ -345,13 +380,16 @@ export const MySQLDatabaseProvider = () =>
         default_branch: news.defaultBranch,
       });
 
-      // Sync cluster size on the active default branch.
+      // Sync cluster size and replicas on the active default branch —
+      // both converge in place via PlanetScale's keyspace resize
+      // lifecycle, diffed against the observed default keyspace.
       const branch = news.defaultBranch ?? updated.default_branch ?? "main";
-      yield* ensureMySQLProductionBranchClusterSize(
+      const keyspace = yield* ensureMySQLProductionBranchClusterSize(
         organization,
         updated.name,
         branch,
         news.clusterSize,
+        news.replicas,
       );
 
       const migrationTarget = {
@@ -394,6 +432,7 @@ export const MySQLDatabaseProvider = () =>
         htmlUrl: updated.html_url,
         region: { slug: updated.region.slug },
         clusterSize,
+        replicas: keyspace.replicas,
         migrationsDir: news.migrationsDir,
         migrationsTable: news.migrationsDir ? migrationsTable : undefined,
         migrationsHashes,
@@ -445,6 +484,7 @@ export const MySQLDatabaseProvider = () =>
                 migrationsHashes: {},
                 importHashes: {},
                 clusterSize: "",
+                replicas: undefined,
                 requireApprovalForDeploy:
                   data.require_approval_for_deploy ?? false,
                 restrictBranchRegion: data.restrict_branch_region ?? false,

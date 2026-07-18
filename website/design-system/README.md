@@ -18,14 +18,14 @@ Alchemy — without re-inventing tokens each time.
 
 ## Sources
 
-- **Repo:** `github.com/alchemy-run/alchemy-effect` — website (Astro +
+- **Repo:** `github.com/alchemy-run/alchemy` — website (Astro +
   Starlight), README, docs content, raw sketch PNGs under `images/`.
 - **Live docs:** https://alchemy.run
 - **Docs styling:** `website/src/styles/custom.css` — the ground truth for
   color tokens, spacing, dark-only theme.
-- **Hero diagrams:** `website/images/alchemy-effect-*.png` — hand-drawn
+- **Hero diagrams:** `images/alchemy-effect-*.png` — hand-drawn
   Function → Binding → Resource triple, layers, terminal screenshots.
-- **Sibling repos** (same brand): `alchemy-run/alchemy` (core),
+- **Sibling repos** (same brand):
   `alchemy-run/distilled` (Effect-native cloud SDKs).
 
 ---

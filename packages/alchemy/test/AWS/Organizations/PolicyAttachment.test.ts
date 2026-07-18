@@ -35,7 +35,7 @@ test.provider("list enumerates policy attachments", () =>
   }),
 );
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // An interrupted first deploy persists the attachment as `status: "creating"`
 // with no attributes — and the Output-valued props (`policyId` from the Policy
