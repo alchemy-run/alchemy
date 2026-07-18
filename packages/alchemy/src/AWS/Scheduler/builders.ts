@@ -269,7 +269,6 @@ const materializeSchedule = (
               Service: "scheduler.amazonaws.com",
             },
             Action: ["sts:AssumeRole"],
-            Resource: ["*"],
           },
         ],
       },

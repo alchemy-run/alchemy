@@ -241,7 +241,10 @@ const program = handler.pipe(
         }))
       )
     ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
+      // Full provider chain, not fromEnv: Fargate tasks receive credentials
+      // from the container-credentials endpoint
+      // (AWS_CONTAINER_CREDENTIALS_RELATIVE_URI), not environment variables.
+      Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
