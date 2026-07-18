@@ -132,7 +132,11 @@ deploy, the `MyKV` namespace is created in the
 `kv.get` works inside its handlers.
 
 The inner `Layer.provide` satisfies `JobServiceKV`'s dependency on the KV
-runtime binding privately. The handler sees only `JobService`.
+runtime binding privately. The handler sees only `JobService`:
+
+```typescript
+JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding))
+```
 
 ## Reuse across Workers
 
