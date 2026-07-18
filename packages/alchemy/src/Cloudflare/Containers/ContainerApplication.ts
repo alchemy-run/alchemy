@@ -114,8 +114,8 @@ export interface ContainerApplicationProps extends PlatformProps {
    * `impit`) or for packages that intentionally ship in the base image.
    *
    * Install inside the image is controlled by {@link autoInstallExternals}
-   * (default `true`); set it to `false` if your custom `dockerfile` already
-   * installs these packages and you want to avoid the redundant step.
+   * (default `true`); set it to `false` if your {@link baseImage} already
+   * ships these packages and you want to avoid the redundant step.
    */
   external?: string[];
   /**
@@ -125,9 +125,9 @@ export interface ContainerApplicationProps extends PlatformProps {
    *
    * @default true
    *
-   * Set to `false` when your custom `dockerfile` already installs these
-   * packages (for example, via a base image that pre-installs `sharp`), to
-   * avoid the redundant install step.
+   * Set to `false` when your {@link baseImage} already ships these packages
+   * (for example, a base image that pre-installs `sharp`), to avoid the
+   * redundant install step.
    */
   autoInstallExternals?: boolean;
   /**
@@ -136,18 +136,24 @@ export interface ContainerApplicationProps extends PlatformProps {
    */
   name?: string;
   /**
-   * Dockerfile used to build the container image. Its meaning depends on the
-   * selected variant:
+   * Path to the Dockerfile to build, resolved relative to {@link context}.
+   * Only used by the user-Dockerfile variant (i.e. when neither {@link main}
+   * nor {@link image} is set).
    *
-   * - With {@link main}: an inline Dockerfile string used as the base image.
-   *   Alchemy appends statements to copy the bundled program and set the
-   *   entrypoint. If omitted, a default base image matching the runtime is used.
-   * - Without {@link main} (and without {@link image}): a path to the
-   *   Dockerfile to build, resolved relative to {@link context}.
-   *
-   * @default `<context>/Dockerfile` for the user-Dockerfile variant.
+   * @default `<context>/Dockerfile`
    */
   dockerfile?: string;
+  /**
+   * Base image for the generated Dockerfile used by the Effect-native
+   * ({@link main}) variant — a plain registry reference, e.g.
+   * `"oven/bun:latest"`. Alchemy synthesizes the `FROM` line and appends the
+   * statements that copy the bundled program and set the entrypoint.
+   *
+   * Only valid together with {@link main}.
+   *
+   * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
+   */
+  baseImage?: string;
   /**
    * Initial number of instances to maintain. Matches wrangler, which forces
    * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
@@ -346,8 +352,8 @@ export type ContainerShape = Main<ContainerServices>;
  * By default the entrypoint is bundled for the `bun` runtime. Use `runtime` to
  * switch to Node, `external` to keep native/precompiled packages out of the
  * bundle (auto-installed in the image unless `autoInstallExternals` is `false`),
- * a custom `dockerfile` as the image base, and `registryId` to override the
- * registry host.
+ * `baseImage` to pick the image the generated Dockerfile starts `FROM`, and
+ * `registryId` to override the registry host.
  *
  * @example Node runtime with external native deps
  * ```typescript
@@ -363,20 +369,22 @@ export type ContainerShape = Main<ContainerServices>;
  * because `autoInstallExternals` is `true`, Alchemy runs `npm install sharp`
  * inside the image so the dependency is present at runtime.
  *
- * @example Custom Dockerfile base and registry
+ * @example Custom base image and registry
  * ```typescript
  * export class Custom extends Cloudflare.Container<Custom>()("Custom", {
  *   main: import.meta.url,
- *   dockerfile: "FROM oven/bun:1\nRUN apt-get update && apt-get install -y ffmpeg",
+ *   baseImage: "oven/bun:1",
  *   autoInstallExternals: false,
  *   registryId: "registry.cloudflare.com",
  * }) {}
  * ```
  *
- * Alchemy appends the program-copy and entrypoint steps to your `dockerfile`,
- * so you control the base image and any system packages; `autoInstallExternals:
- * false` skips the redundant install step when your Dockerfile already provides
- * those packages.
+ * Alchemy generates the Dockerfile — `FROM` your `baseImage`, then the
+ * program-copy and entrypoint steps — so you control the starting image;
+ * `autoInstallExternals: false` skips the redundant install step when the base
+ * image already ships your `external` packages. If you need extra build steps
+ * (e.g. `RUN apt-get install`), build your own Dockerfile with the
+ * `context`/`dockerfile` variant instead.
  *
  * @section Scaling & Instance Types
  * Control the desired and maximum instance counts with `instances`/`maxInstances`

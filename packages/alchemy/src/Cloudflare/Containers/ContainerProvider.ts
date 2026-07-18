@@ -188,7 +188,7 @@ export const LiveContainerProvider = () =>
             external: props.external,
           });
           const finalDockerfile = buildFinalDockerfile(
-            props.dockerfile,
+            props.baseImage,
             runtime,
             props.external,
             props.autoInstallExternals,
@@ -312,7 +312,7 @@ export const LiveContainerProvider = () =>
             `${id}-container`,
           );
           const finalDockerfile = buildFinalDockerfile(
-            props.dockerfile,
+            props.baseImage,
             runtime,
             props.external,
             props.autoInstallExternals,

@@ -13,7 +13,6 @@ import type { Named } from "../../Named.ts";
 import type { ResourceClassLike } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Props } from "../../State/ResourceState.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
@@ -88,15 +87,29 @@ export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
  * Bundle an Effect-native program into a generated image. Alchemy bundles
  * {@link main} and bakes it in as the container's entrypoint.
  */
-export interface EffectfulContainerProps extends ContainerApplicationProps {
+export interface EffectfulContainerProps extends Omit<
+  ContainerApplicationProps,
+  "dockerfile" | "image" | "context"
+> {
   /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
+  /**
+   * Base image for the generated Dockerfile — a plain registry reference,
+   * e.g. `"oven/bun:latest"`. Alchemy synthesizes the `FROM` line and appends
+   * the statements that copy the bundled program and set the entrypoint.
+   *
+   * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
+   */
+  baseImage?: string;
 }
 /**
  * Build the container image from your own Dockerfile and build context — no
  * Effect program is bundled. The image is shipped as-is.
  */
-export interface ExternalContainerProps extends ContainerApplicationProps {
+export interface ExternalContainerProps extends Omit<
+  ContainerApplicationProps,
+  "main" | "baseImage" | "image"
+> {
   /**
    * The build context directory containing the Dockerfile and any files it
    * copies.
@@ -115,7 +128,10 @@ export interface ExternalContainerProps extends ContainerApplicationProps {
  * Deploy a pre-built remote image — Alchemy pulls it and re-pushes it to
  * Cloudflare's managed registry without building anything.
  */
-export interface RemoteContainerProps extends ContainerApplicationProps {
+export interface RemoteContainerProps extends Omit<
+  ContainerApplicationProps,
+  "main" | "baseImage" | "context" | "dockerfile"
+> {
   /**
    * The pre-built image to pull and re-push.
    *
@@ -400,12 +416,16 @@ export type Container<Id extends string = string> = Named<Id> & {
 export const Container: ResourceClassLike<ContainerApplication> & {
   <const Id extends string>(
     id: Id,
-    props: InputProps<ExternalContainerProps | RemoteContainerProps>,
+    props:
+      | InputProps<ExternalContainerProps>
+      | InputProps<RemoteContainerProps>,
   ): Container.Decl<Container<Id>, {}, Id>;
   <Self>(): {
     <
       const Id extends string,
-      Props extends InputProps<ExternalContainerProps | RemoteContainerProps>,
+      Props extends
+        | InputProps<ExternalContainerProps>
+        | InputProps<RemoteContainerProps>,
     >(
       id: Id,
       props: Props,
@@ -466,8 +486,14 @@ export declare namespace Container {
   >
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
-    make: <InitReq = never, WorkerReq = never>(
-      props: Props,
+    make: <InitReq = never, WorkerReq = never, PropsReq = never>(
+      props:
+        | InputProps<EffectfulContainerProps>
+        | Effect.Effect<
+            InputProps<EffectfulContainerProps>,
+            Config.ConfigError,
+            PropsReq
+          >,
       impl: Effect.Effect<
         Shape & WorkerShape<WorkerReq>,
         Config.ConfigError,

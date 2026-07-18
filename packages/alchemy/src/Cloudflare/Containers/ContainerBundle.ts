@@ -78,19 +78,32 @@ export const createContainerApplicationName = (
   });
 
 /**
- * Build the final Dockerfile used for a container image. Starts from the
- * user-provided Dockerfile (or a runtime-appropriate default), then appends
- * the statements that copy the bundled program and set the entrypoint.
+ * Build the final Dockerfile used for a generated (Effect-native) container
+ * image. Synthesizes the `FROM` line from the user's `baseImage` registry
+ * reference (or a runtime-appropriate default), then appends the statements
+ * that copy the bundled program and set the entrypoint.
  */
 export const buildFinalDockerfile = (
-  userDockerfile: string | undefined,
+  baseImage: string | undefined,
   runtime: "bun" | "node",
   external: string[] = [],
   autoInstallExternals = true,
 ): string => {
-  const base =
-    userDockerfile?.trim() ??
-    (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
+  const ref = baseImage?.trim();
+  if (ref && /\s/.test(ref)) {
+    // A registry reference never contains whitespace — catch Dockerfile
+    // content (e.g. the pre-rename `dockerfile: "FROM oven/bun:latest"`)
+    // early with an actionable message instead of producing a broken build.
+    throw new Error(
+      `\`baseImage\` must be a plain image reference (e.g. "oven/bun:latest"), got: ${JSON.stringify(baseImage)}. ` +
+        "Dockerfile content is not supported here — for custom build steps use the `context`/`dockerfile` variant instead.",
+    );
+  }
+  const base = ref
+    ? `FROM ${ref}`
+    : runtime === "bun"
+      ? "FROM oven/bun:1"
+      : "FROM node:22-slim";
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   const installCmd = runtime === "bun" ? "bun add" : "npm install";
   const installStep =
@@ -333,7 +346,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     `${id}-container`,
   );
   const dockerfileContent = buildFinalDockerfile(
-    news.dockerfile,
+    news.baseImage,
     runtime,
     news.external,
     news.autoInstallExternals,
