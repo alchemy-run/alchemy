@@ -113,17 +113,36 @@ one-line diff ([a contract and a Layer](/infrastructure-as-effects/binding#a-con
 
 ## The types hold the boundary
 
-**Cloud requirements stay inside the Layer.** The KV Layer resolves
-`WorkerEnvironment` internally; callers see only `RuntimeContext`.
-Provide a DynamoDB-backed Layer on a Cloudflare Worker and the program
-fails to type-check — the Worker can't satisfy AWS `Credentials`.
+A Layer that needs an environment the host can't supply is a compile
+error:
 
-**Runtime-only methods are marked.** `Alchemy.RuntimeContext` exists only
-inside the runtime closure ([Phases](/infrastructure-as-effects/phases)),
-so `kv.get` can only be called from a handler — move it into init and the
-compiler rejects it. A
-[colored function](https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/),
-with the color encoded as an Effect requirement.
+```typescript
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  handler.pipe(Effect.provide(JobServiceDynamo)),
+  // ✗ Type error: the Layer requires AWS `Credentials` and `Region`,
+  //   which a Cloudflare Worker can't provide
+);
+```
+
+And `Alchemy.RuntimeContext` marks methods that only work inside a
+deployed handler ([Phases](/infrastructure-as-effects/phases)):
+
+```typescript
+Effect.gen(function* () {
+  const jobs = yield* JobService;
+
+  yield* jobs.getJob("job-1");
+  // ✗ Type error: `RuntimeContext` only exists inside handlers
+
+  return {
+    fetch: Effect.gen(function* () {
+      return yield* jobs.getJob("job-1"); // ✓
+    }),
+  };
+});
+```
 
 ## Composing Layers
 
