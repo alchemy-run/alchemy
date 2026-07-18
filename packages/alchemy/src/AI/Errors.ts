@@ -1,12 +1,12 @@
 import * as Data from "effect/Data";
 
 /**
- * The typed abnormal exit of a {@link Process}: raised by the kernel
+ * The typed abnormal exit of an agent run: raised by the kernel
  * when a run exceeds one of its budget ceilings — a hard limit (tokens,
  * wall-clock, iterations, dollars) or the no-progress detector
  * (`stall`). Ceilings come from the provided `AI.budget({...})` Layer,
  * or from the kernel's own default guards when none is given — so
- * `BudgetExceeded` rides EVERY Process's error channel; parents catch
+ * `BudgetExceeded` rides EVERY agent's error channel; parents catch
  * it as escalation policy.
  *
  * A budget ceiling is a checkpoint, not a tombstone (§9.3): the ring
@@ -28,7 +28,7 @@ export class BudgetExceeded extends Data.TaggedError("AI.BudgetExceeded")<{
 }> {}
 
 /**
- * The typed give-up of a bounded {@link Process}: the run concluded that its
+ * The typed give-up of a bounded agent run: the run concluded that its
  * halt condition (`Out`) is unachievable — distinct from `BudgetExceeded`
  * (nothing ran out) and from the halt (nothing was achieved).
  *

@@ -1,148 +1,146 @@
-import type * as S from "effect/Schema";
+import * as S from "effect/Schema";
 
 /**
- * Who publishes a source (canon §2a ruling 4). Affordances are
- * owner-sensitive:
+ * An `Event` term is a **capability term** (with `Tool` and
+ * `Parameter`): pure vocabulary, never interpreted. It declares one
+ * message shape the org speaks — schema and prose as ONE artifact,
+ * and the class IS the payload type:
  *
- * - `"org"` (the default) — an org-internal broadcast: a process may
- *   publish it, so a bare `${X}` mention IS the publish grant (joins
- *   `emits` topology, permits `ctx.emit(X, payload)`).
- * - `"world"` — a provider-catalog source (`GitHub.IssueOpened(repo)`):
- *   the WORLD publishes it, a process never can, so a bare mention
- *   affords nothing — it renders as vocabulary (the event's name) and
- *   grants no publish topology and no `ctx.emit`. Inbound use is always
- *   marked: `AI.when(X)` to accept, `AI.exit(AI.when(X))` for a
- *   machine-observed exit.
+ * ```ts
+ * export class Mention extends AI.Event("Mention", {
+ *   thread: S.String,
+ *   author: S.String,
+ *   text: S.String,
+ * })`
+ * A mention of the org in a Discord thread.` {}
+ *
+ * // value: the term (spliced into charters)
+ * // type:  the payload — (mention: Mention) => …
+ * ```
+ *
+ * Splicing an event into an `Agent`/`Process` charter does two things:
+ *
+ * - **renders** the event's description where it is mentioned, so the
+ *   charter reads as a document ("A ${Mention} is a request in natural
+ *   language…");
+ * - **narrows the term's input alphabet**: the union of spliced event
+ *   payloads (plus `string`, the always-allowed base) becomes the `In`
+ *   of the {@link Actor} the term interprets into — `send`/`dispatch`/
+ *   `steer` are type-checked against what the charter declares it
+ *   accepts.
+ *
+ * It grants NOTHING else: no subscription, no bus, no delivery. How an
+ * event reaches the term's Actor is entirely the implementation
+ * Layer's decision (a webhook, a poll, a substrate callback) — events
+ * are what may arrive, never how.
  */
-export type EventOwner = "world" | "org";
-
-export interface EventOptions<Owner extends EventOwner> {
-  owner: Owner;
-  /**
-   * The term's rendered clause (the combinator contract from the prose
-   * guide, §2.2): a present-tense phrase completing "when ___" — e.g.
-   * "an issue opens in alchemy-run/test-alchemy". The *term author*
-   * writes the clause once; every charter author composes sentences
-   * with it: `AI.when(X)` renders "when {description}", and a
-   * machine-observed exit (`AI.exit(AI.when(X))`) renders it as the
-   * exit clause ("This run ends when: {description}"). Without one,
-   * the marked expressions fall back to the source's name — legible,
-   * but write the description.
-   */
-  description?: string;
-  /**
-   * The source's **natural identity key** — a pure function from a
-   * payload (or a payload-shaped work item) to the string naming the
-   * world entity the event is about (e.g. `owner/repo#number`).
-   * Declared ONCE by whoever defines the event family; every consumer
-   * derives correlation from it: delivery code uses it to address the
-   * running actor (first key ⇒ `send` creates the run, seen key ⇒
-   * `steer`), and machine-observed exits settle on key equality
-   * between the run's work item and the delivered event. May return
-   * `undefined` when the value doesn't carry the identity fields (e.g.
-   * a plain-string work item) — consumers fall back to their keyless
-   * behavior.
-   */
-  key?: (payload: any) => string | undefined;
-}
-
-/**
- * A named, typed message declaration — the event vocabulary a
- * {@link Process} charter composes with: `AI.when(X)` to accept
- * (typing `In`), `AI.exit(AI.when(X))` for a machine-observed exit,
- * or a bare `${X}` mention as a publish grant (org-owned only).
- *
- * An `Event` is **pure definition data** — kernel-pruning ruling
- * (2026-07-17): it declares vocabulary, typing, affordance, and
- * identity; it carries NO provisioning config and nothing subscribes
- * through it. Delivery is user-space code (the process's
- * implementation Layer consumes the wire and calls
- * `send`/`steer`/`settle`); whether an assembly also routes
- * org-internal emissions anywhere (e.g. `AI.EventBus`) is that
- * assembly's business, never this declaration's.
- *
- * - `~alchemy/Name` (aliased as `name`) — deterministic identity
- *   (`github.issues.opened/owner/repo`).
- * - `schema` — the payload type (`In`).
- * - `~alchemy/Owner` — who publishes it (see {@link EventOwner}).
- *   World-owned sources (provider catalogs) afford nothing by bare
- *   mention; the constructors that build them narrow the field to the
- *   `"world"` literal so the gate holds at the type level too.
- * - `description` / `key` — the combinator clause and the correlation
- *   function (see {@link EventOptions}).
- */
-export interface Event<In = unknown> {
+export interface Event<
+  Name extends string = string,
+  Schema extends S.Top = S.Top,
+  Refs extends any[] = any[],
+> {
   "~alchemy/Kind": "Event";
-  "~alchemy/Name": string;
-  /** Who publishes this source; absent/`"org"` = org-internal. */
-  "~alchemy/Owner"?: EventOwner;
+  "~alchemy/Name": Name;
+  schema: Schema;
+  template: TemplateStringsArray;
+  refs: Refs;
   /**
-   * The source's readable name — an alias of `~alchemy/Name`. The
-   * inert-mention escape hatch: `${X.name}` interpolates a plain string
-   * (renders the name, grants nothing), where a bare `${X}` is the
-   * publish grant.
+   * Instances ARE the payload: `Wake` the type is what one Wake
+   * message is, and `new Wake({ stamp })` constructs one — the
+   * payload's `_tag` is filled from the schema (never passed by the
+   * caller). Purely structural beyond that: plain objects satisfy the
+   * type too; `new` is a convenience, not a brand.
    */
-  name: string;
-  /**
-   * The term's rendered clause — a present-tense phrase completing
-   * "when ___" (see {@link EventOptions.description}). Composed
-   * by the marked expressions (`AI.when(X)` → "when {description}";
-   * the machine-observed exit `AI.exit(AI.when(X))` → the exit
-   * clause); a bare mention still renders only the NAME (descriptions
-   * never leak into noun position). `undefined` ⇒ the expressions fall
-   * back to the name.
-   */
-  description?: string;
-  /**
-   * The source's natural identity key (see
-   * {@link EventOptions.key}) — the ONE correlation function
-   * delivery code steers by and machine-observed exits settle by.
-   * `undefined` ⇒ keyless (delivery always `send`s; an exit settles on
-   * any event from the source).
-   */
-  key?: (payload: any) => string | undefined;
-  schema: S.Top & { readonly Type: In };
+  new (fields: Omit<Schema["Type"], "_tag">): Schema["Type"];
 }
 
 export const Event: {
+  // alias another event term under this org's name and prose (the
+  // payload schema — and therefore the payload TYPE — is inherited)
+  <const Name extends string, Schema extends S.Top>(
+    name: Name,
+    event: Event<any, Schema, any[]>,
+  ): {
+    <Refs extends any[]>(
+      template: TemplateStringsArray,
+      ...refs: Refs
+    ): Event<Name, Schema, Refs>;
+  };
+  // an existing schema (e.g. a wire's event consts)
   <const Name extends string, Schema extends S.Top>(
     name: Name,
     schema: Schema,
-  ): Event<Schema["Type"]>;
-  // owner-marked: the returned type narrows `~alchemy/Owner` to the
-  // literal so Services.ts/topology can gate the bare mention at the
-  // type level (canon §2a ruling 4)
-  <
-    const Name extends string,
-    Schema extends S.Top,
-    const Owner extends EventOwner,
-  >(
-    name: Name,
-    schema: Schema,
-    options: EventOptions<Owner>,
-  ): Event<Schema["Type"]> & {
-    "~alchemy/Owner": Owner;
+  ): {
+    <Refs extends any[]>(
+      template: TemplateStringsArray,
+      ...refs: Refs
+    ): Event<Name, Schema, Refs>;
   };
-} = (name: string, schema: S.Top, options?: EventOptions<EventOwner>): any => ({
-  "~alchemy/Kind": "Event",
-  "~alchemy/Name": name,
-  "~alchemy/Owner": options?.owner ?? "org",
-  name,
-  description: options?.description,
-  key: options?.key,
-  schema,
-});
+  // inline fields, built into a TAGGED struct — the event's name IS
+  // the payload's `_tag`, so `Match.tag` routing works out of the box
+  <const Name extends string, const Fields extends S.Struct.Fields>(
+    name: Name,
+    fields: Fields,
+  ): {
+    <Refs extends any[]>(
+      template: TemplateStringsArray,
+      ...refs: Refs
+    ): Event<Name, S.TaggedStruct<Name, Fields>, Refs>;
+  };
+} = ((name: string, source: object) =>
+  (template: TemplateStringsArray, ...refs: any[]) => {
+    const schema = isEvent(source)
+      ? source.schema
+      : "~effect/Schema/Schema" in source
+        ? source
+        : S.TaggedStruct(name, source as S.Struct.Fields);
+    // the payload's tag comes from the SCHEMA (an alias keeps the
+    // wire's tag, not the alias's name); untagged schemas inject none
+    const tag = (
+      schema as { fields?: { _tag?: { ast?: { literal?: string } } } }
+    ).fields?._tag?.ast?.literal;
+    return Object.assign(
+      class {
+        constructor(fields: object) {
+          Object.assign(this, fields);
+          if (tag !== undefined) {
+            (this as { _tag?: string })._tag = tag;
+          }
+        }
+      },
+      {
+        "~alchemy/Kind": "Event",
+        "~alchemy/Name": name,
+        schema,
+        template,
+        refs,
+      },
+    );
+  }) as any;
 
-export const isEvent = (value: unknown): value is Event<unknown> =>
-  typeof value === "object" &&
+export const isEvent = (value: unknown): value is Event =>
+  (typeof value === "object" || typeof value === "function") &&
   value !== null &&
   (value as Record<string, unknown>)["~alchemy/Kind"] === "Event";
 
 /**
- * Is the source world-owned (canon §2a ruling 4)? A world-owned source's
- * bare mention is inert vocabulary — no publish grant, no `emits`
- * topology, and `ctx.emit` of it is a defect: a process cannot publish
- * what only the world emits.
+ * The union of event payloads spliced into a term's template — the
+ * CLASS instance types (`Mentioned | Wake`), not their structural
+ * expansions, so hovers stay nominal.
  */
-export const isWorldOwned = (source: Event<any>): boolean =>
-  source["~alchemy/Owner"] === "world";
+export type Events<Refs extends any[]> = Refs[number] extends infer R
+  ? R extends Event<any, any, any[]>
+    ? InstanceType<R>
+    : never
+  : never;
+
+/**
+ * A term's input alphabet, derived from its prose: the spliced event
+ * payloads plus `string` (the always-allowed base — chat and steering
+ * guidance are never a type error). A charter that declares no events
+ * accepts `unknown` — no events spliced means no claim made, not
+ * "nothing accepted".
+ */
+export type Accepts<Refs extends any[]> = [Events<Refs>] extends [never]
+  ? unknown
+  : Events<Refs> | string;

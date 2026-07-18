@@ -1,42 +1,45 @@
 import * as Context from "effect/Context";
-import type { ProcessService } from "./Process.ts";
+import type { Actor } from "./Actor.ts";
+import type { Accepts } from "./Event.ts";
 import type { Services } from "./Services.ts";
-import type { HaltOutcome } from "./Step.ts";
 
 /**
- * An `Agent` term is prose that hires tools: a tagged template whose
- * interpolations declare the tools (and parameters) the agent may use.
- * Like all terms it is pure data — behavior comes from interpreters.
+ * An `Agent` term is a callable persona: prose that hires
+ * capabilities, as a tagged template whose interpolations declare the
+ * tools, skills, and fellow agents it may use. Like all terms it is
+ * pure data — behavior comes from an interpreter (a {@link Kernel}
+ * implementation). At runtime an agent is a minimal event-driven,
+ * asynchronous entity: a mailbox, a serial run loop, actions out.
  *
- * Agent is one of the two **process terms** (with `Process` — the
- * `InterpretableTerm` union): the only term class the Kernel interprets,
- * each interpretation acquiring a ring (one serial admission loop) of
- * its own. The capability terms it interpolates (`Tool`, `Parameter`)
- * are compiled into its turns — they never get rings.
+ * Every agent's tag resolves to the SAME interface — the
+ * {@link Actor} verbs — because agents exist to be called:
+ * an owner hands the Engineer a ready issue (`dispatch`) and awaits
+ * the pull request. A term whose public surface should be a
+ * domain-specific, deterministic interface instead is a
+ * {@link Process}, not an agent.
  *
- * The `<Self>()` form makes the agent a `Context.Service` **tag**, so:
+ * The `<Self>()` form makes the agent a `Context.Service` **tag**:
  *
- * - Interpolating `${Engineer}` in a Process charter contributes the tag
- *   `Engineer` to the loop's `Req` — not the agent's tools. Transitivity
- *   moves from type-level bubbling to Layer composition.
- * - The agent's implementation is a Layer: the kernel-derived default
- *   (`AI.layer(Engineer)`, requiring `Kernel` + the agent's tools) or any
- *   custom `Layer.effect(Engineer, …)`.
- * - Each agent gets its own tool provisioning:
- *   `AI.layer(Engineer).pipe(Layer.provide(BashDevBox))` vs
- *   `AI.layer(Judge).pipe(Layer.provide(BashReadOnly))` — two agents, one
- *   `Bash` contract, different physics, side by side in one runtime.
+ * - Interpolating `${Engineer}` in another charter contributes the tag
+ *   `Engineer` to that charter's `Req` — not the agent's tools.
+ *   Transitivity lives in Layer composition: each agent gets its own
+ *   capability provisioning
+ *   (`AI.layer(Engineer).pipe(Layer.provide(BashDevBox))` vs
+ *   `AI.layer(Judge).pipe(Layer.provide(BashReadOnly))` — one
+ *   contract, different physics, side by side in one runtime).
+ * - Yielding `Engineer` in `Effect.gen` resolves the live service from
+ *   context.
  *
- * `Req` (the fourth parameter) is the agent's *construction* requirement —
- * the union of its interpolated tool tags, i.e. what its Layer must be
- * provided with. It is carried as a phantom (`"~alchemy/Req"`) and consumed
- * by `AI.layer` / `Kernel.agent`.
+ * Capability denial by omission: a charter that never interpolates
+ * `${Approve}` has no `Approve` anywhere in its Layer graph's
+ * requirements; no Layer can grant it merge authority. Constitutional
+ * constraints are enforced by the type system, not by prose.
  */
 export interface Agent<
+  Req = never,
   Name extends string = string,
   Refs extends any[] = any[],
   Self = unknown,
-  Req = never,
 > {
   "~alchemy/Kind": "Agent";
   "~alchemy/Name": Name;
@@ -44,85 +47,65 @@ export interface Agent<
   refs: Refs;
   /** Phantom: the requirements of this agent's implementation Layer. */
   "~alchemy/Req": Req;
-  /**
-   * Instances are branded with the agent's name so that distinct agents
-   * remain distinct *types* (structural typing would otherwise collapse
-   * every `Self` to the same `AgentService` shape, and with it every tag).
-   */
-  new (_: never): AgentService & { readonly "~alchemy/Name": Name };
   /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
   "~alchemy/Self": Self;
+  /**
+   * Instances are branded with the agent's name so distinct agents
+   * remain distinct types (and therefore distinct tags). The instance
+   * shape is always the one agent interface: the actor verbs, with
+   * the input alphabet derived from the charter's event splices.
+   */
+  new (_: never): Actor<Accepts<Refs>> & { readonly "~alchemy/Name": Name };
 }
-
-/**
- * The live handle an `Agent` term interprets into — the same
- * {@link ProcessService} shape a Process produces, with the channels
- * supplied by **kernel defaults** instead of refs (see
- * designs/ai/reports/agent-loop-algebra.md):
- *
- * - inbox   = the send/dispatch mailbox (each message is a work item)
- * - halt    = "model returned no tool calls" (kernel policy — never a
- *   term: the execution ring's exit is model-behavior lore the charter
- *   may not override)
- * - fold    = append to the carried transcript
- * - `Out`   = the turn's final message (an opaque kernel type in
- *   Phase 1; refined in Phase 2)
- * - `Err = never` is a theorem, not a default: tool errors are
- *   model-visible results the agent reacts to; harness failures surface
- *   as `KernelError` at interpretation time.
- *
- * There is no `session` parameter: a run is keyed by `(term, work item)`
- * — world identity (the Discord thread, the GitHub issue) rides in `In`.
- * An interactive dispatch with no world identity gets a kernel-minted
- * one-shot key.
- */
-export interface AgentService<
-  In = unknown,
-  Out = HaltOutcome,
-> extends ProcessService<Out, In, never> {}
 
 export const Agent: {
   <Self>(): {
     <Name extends string>(
-      id: Name,
+      name: Name,
     ): {
       <const Refs extends any[]>(
         template: TemplateStringsArray,
         ...refs: Refs
-      ): Agent<Name, Refs, Self, Services<Refs>> &
-        Context.Service<Self, AgentService>;
+      ): Agent<Services<Refs>, Name, Refs, Self> &
+        Context.Service<Self, Actor<Accepts<Refs>>>;
     };
   };
   <Name extends string>(
-    id: Name,
+    name: Name,
   ): {
-    <Refs extends any[]>(
+    <const Refs extends any[]>(
       template: TemplateStringsArray,
       ...refs: Refs
-    ): Agent<Name, Refs, unknown, Services<Refs>>;
+    ): Agent<Services<Refs>, Name, Refs>;
   };
 } = ((name?: string) =>
   name
     ? (template: TemplateStringsArray, ...refs: any[]) =>
-        makeAgent(name, template, refs)
+        makeTerm("Agent", name, template, refs)
     : (name: string) =>
         (template: TemplateStringsArray, ...refs: any[]) =>
-          makeAgent(name, template, refs)) as any;
+          makeTerm("Agent", name, template, refs)) as any;
 
-const makeAgent = (name: string, template: TemplateStringsArray, refs: any[]) =>
+/** Shared constructor for the interpretable terms (Agent, Process). */
+export const makeTerm = (
+  kind: "Agent" | "Process",
+  name: string,
+  template: TemplateStringsArray,
+  refs: any[],
+) =>
   Object.assign(
-    class extends (Context.Service<any, AgentService>()(
-      `alchemy/AI/Agent/${name}`,
+    class extends (Context.Service<any, any>()(
+      `alchemy/AI/${kind}/${name}`,
     ) as any) {},
     {
-      "~alchemy/Kind": "Agent",
+      "~alchemy/Kind": kind,
       "~alchemy/Name": name,
       refs,
       template,
     },
   ) as any;
 
-export const isAgent = (value: unknown): value is Agent =>
+export const isAgent = (value: unknown): value is Agent<any, any, any[], any> =>
   (typeof value === "object" || typeof value === "function") &&
   value !== null &&
   (value as Record<string, unknown>)["~alchemy/Kind"] === "Agent";

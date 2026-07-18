@@ -19,8 +19,11 @@ import * as Layer from "effect/Layer";
 import { testAlchemy } from "./repos.ts";
 import {
   Approve,
+  CloseIssue,
   Comment,
+  LinkIssues,
   MergePullRequest,
+  OpenIssue,
   OpenPullRequest,
   SearchIssues,
 } from "./tools.ts";
@@ -98,6 +101,55 @@ export const MergePullRequestLive = Layer.effect(
         return `merged #${input.pr.number}: ${merged.sha}`;
       })) as never;
   }),
+);
+
+/**
+ * Linking's physics today is a comment naming the relation — GitHub
+ * renders the cross-reference on both issues, which is the durable
+ * artifact the charter wants. A future `GitHub.UpdateIssue` binding
+ * could add real duplicate-marking; the contract won't change.
+ */
+export const LinkIssuesLive = Layer.effect(
+  LinkIssues,
+  Effect.gen(function* () {
+    const comment = yield* GitHub.CreateIssueComment(testAlchemy);
+    return ((input: {
+      issue: { number: number };
+      related: { number: number };
+      reason: string;
+    }) =>
+      Effect.gen(function* () {
+        const created = yield* comment({
+          issue_number: input.issue.number,
+          body: `Related to #${input.related.number} — ${input.reason}`,
+        }).pipe(Effect.mapError(asToolFailure));
+        return `linked #${input.issue.number} → #${input.related.number}: ${created.html_url}`;
+      })) as never;
+  }),
+);
+
+/**
+ * TODO(binding): needs `GitHub.CreateIssue` / `GitHub.UpdateIssue`
+ * bindings (create + close are one Octokit call each). Until they
+ * land these fail MODEL-VISIBLY so a live run degrades to reporting
+ * instead of crashing.
+ */
+export const OpenIssueLive = Layer.succeed(
+  OpenIssue,
+  ((input: { title: string }) =>
+    Effect.fail(
+      `openIssue is not wired yet (GitHub.CreateIssue binding is TODO): ` +
+        `report the drafted issue ${JSON.stringify(input.title)} in your reply instead`,
+    )) as never,
+);
+
+export const CloseIssueLive = Layer.succeed(
+  CloseIssue,
+  ((input: { issue: { number: number }; reason: string }) =>
+    Effect.fail(
+      `closeIssue is not wired yet (GitHub.UpdateIssue binding is TODO): ` +
+        `comment the close rationale on #${input.issue.number} instead — ${input.reason}`,
+    )) as never,
 );
 
 /**

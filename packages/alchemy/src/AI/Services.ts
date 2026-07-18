@@ -5,7 +5,7 @@ import type { ToolImpl } from "./Tool.ts";
  * The requirement contributed by a single interpolated ref — its
  * **tag**:
  *
- * - a `Tool<Self>`, `Agent<Self>`, or `Process<Self>` class is a
+ * - a `Tool<Self>`, `Agent<Self>`, or `Process<Self, Shape>` class is a
  *   `Context.Service`; interpolating it contributes the tag itself.
  *   Transitivity lives in Layer composition, not the type computation:
  *   an agent's tools are requirements of the *agent's Layer*

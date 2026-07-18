@@ -1,110 +1,109 @@
 /**
- * The pull-request train: {@link GitHubPullRequests} — shepherds a pull
- * request from open to merged — plus {@link GitHubPullRequestsLive},
- * its ONE implementation. Same shape as issues.ts: the term declares
- * the interface; the Layer owns delivery against the three seams
- * (arrival, ledger, kernel); the environment is the provide-list.
+ * The PullRequests process — the repository's ONE merge authority.
+ * Every pull request, whether the factory's own Engineer opened it or
+ * a human contributor did, passes through this charter: review
+ * verdict, then merge or relay changes.
+ *
+ * The Issues and Discord owners deliberately do NOT reference
+ * ${MergePullRequest}; capability-by-omission makes this the only
+ * term any Layer could ever grant merge authority to.
+ *
+ * A PROCESS: its tag is {@link PullRequestsService} and nothing else —
+ * nobody outside {@link PullRequestsLive} can `send` a fake
+ * pull-request event; work enters through GitHub or not at all.
  */
 import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
-import { Reviewer } from "./agents.ts";
+import {
+  PullRequestClosed,
+  PullRequestMerged,
+  PullRequestOpened,
+} from "./events.ts";
 import { Ledger } from "./ledger.ts";
 import { testAlchemy } from "./repos.ts";
+import { Reviewer } from "./reviewer.ts";
 import { Comment, MergePullRequest } from "./tools.ts";
 
-export interface PullRequestRef {
-  readonly number: number;
-  readonly title: string;
-  readonly url: string;
+/** What the org may ask of the PullRequests owner from code: read, never drive. */
+export interface PullRequestsService {
+  /** Snapshot of the repository's open pull requests. */
+  readonly list: () => Effect.Effect<
+    GitHub.ListPullRequestsResponse,
+    GitHub.GitHubApiError
+  >;
 }
 
-// ─── the term ──────────────────────────────────────────────────────
+export class PullRequests extends AI.Process<
+  PullRequests,
+  PullRequestsService
+>()("PullRequests")`
+This process drives every pull request in ${testAlchemy} to a
+verdict — the factory's own and human contributors' alike.
 
-export class GitHubPullRequests extends AI.Process<
-  GitHubPullRequests,
-  {
-    listOpen(): Effect.Effect<ReadonlyArray<PullRequestRef>>;
-  }
->()("GitHubPullRequests")`
-You shepherd pull requests for the test-alchemy repository from open
-to merged.
+Each ${PullRequestOpened} receives a review from ${Reviewer} against
+its originating issue. A pull request that names no issue gets one
+chance: ${Comment} asks the author to link or state the intent, and
+the review proceeds against that statement when it arrives.
 
-${AI.when(GitHub.PullRequestOpened(testAlchemy))}, have ${Reviewer}
-review it against its originating issue — the diff and the spec,
-nothing else. If the review requests changes, ${Comment} them on the
-pull request and wait for the conversation to move. Once approved,
-${MergePullRequest} — it refuses to merge without an approved review.
+A review that requests changes is relayed with ${Comment}, exactly —
+the author hears the Reviewer's words, not a summary. A review that
+approves, with green checks, is followed by ${MergePullRequest}. The
+merge tool itself refuses without an approved review; a refusal is a
+fact about the world to fix, never to work around.
 
-The merge is what ends this work — or a maintainer closing the pull
-request unmerged. You never declare it done yourself.` {}
+A ${PullRequestMerged} or ${PullRequestClosed} ends this process's
+involvement — the verdict was delivered, however it happened. A pull
+request whose author has gone quiet after requested changes stays
+open with its review attached — closing other people's work is a
+human's call, and this process never makes it.` {}
 
-// ─── the ONE implementation ────────────────────────────────────────
-
-/** The ledger queue this process admits into. */
-const QUEUE = "pull-requests";
-
-// the Layer type is inferred — see the note on GitHubIssuesLive
-export const GitHubPullRequestsLive = Layer.effect(
-  GitHubPullRequests,
+/**
+ * The implementation: one run per pull request, keyed `owner/repo#n`.
+ * Opening is `send` (Ledger-deduped), the conversation moving is
+ * `steer`, the world merging or closing is `settle` — a merge is the
+ * verdict delivered, however it happened.
+ */
+export const PullRequestsLive = Layer.effect(
+  PullRequests,
   Effect.gen(function* () {
-    const kernel = yield* AI.Kernel;
     const ledger = yield* Ledger;
-    // the domain method's physics: the GitHub API binding, bound once
     const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
+    const pullRequests = yield* AI.interpret(PullRequests);
 
-    // defect at Layer build, never a consumer-visible error — see issues.ts
-    const inner = yield* kernel.interpret(GitHubPullRequests).pipe(Effect.orDie);
-
-    // It's just routing.
     yield* GitHub.consumeRepositoryEvents(
       testAlchemy,
       { events: ["pull_request"] },
       (event) =>
         Match.value(event).pipe(
-          // the machine exit: the merge — exit delivery is delivery
-          Match.tag("PullRequestMerged", (event) =>
-            Effect.gen(function* () {
-              const key = GitHub.eventKey(event)!;
-              yield* ledger.settle(QUEUE, key);
-              yield* Effect.log(`[pull-requests] settled ${key} (merged)`);
-              yield* inner.settle(key, event);
-            }),
-          ),
           Match.tag("PullRequestOpened", (event) =>
             Effect.gen(function* () {
               const key = GitHub.eventKey(event)!;
-              const { status } = yield* ledger.offer(QUEUE, key, event);
-              yield* Effect.log(`[pull-requests] ${status} ${key}`);
+              const { status } = yield* ledger.offer(
+                "pull-requests",
+                key,
+                event,
+              );
               yield* status === "accepted"
-                ? inner.send(event, { key })
-                : inner.steer(key, event);
+                ? pullRequests.send(event, { key })
+                : pullRequests.steer(key, event);
             }),
           ),
-          // close-without-merge: not this process's message
-          Match.orElse(() => Effect.void),
+          Match.tag("PullRequestMerged", "PullRequestClosed", (event) =>
+            Effect.gen(function* () {
+              const key = GitHub.eventKey(event)!;
+              yield* pullRequests.settle(key, event);
+              yield* ledger.settle("pull-requests", key);
+            }),
+          ),
+          Match.exhaustive,
         ),
     );
 
-    // the declared interface is the WHOLE service (the tag is sealed):
-    // the actor verbs stay internal — delivery goes through the drive
-    // loop above, never around the ledger
     return {
-      // wire failures are defects — the interface declares no
-      // wire-error channel
-      listOpen: () =>
-        listPullRequests({ state: "open", per_page: 100 }).pipe(
-          Effect.map((pulls) =>
-            pulls.map((pull) => ({
-              number: pull.number,
-              title: pull.title,
-              url: pull.html_url,
-            })),
-          ),
-          Effect.orDie,
-        ),
+      list: () => listPullRequests({ state: "open" }),
     };
   }),
 );

@@ -14,7 +14,7 @@
  * It is deliberately NOT a task queue: no claim/lease, no visibility
  * timeout, no ordering — ordering and per-key serialization are the
  * kernel Layer's job, retry is `Effect.retry` at the call site (see
- * designs/ai/reports/factory-components.md §3.1: keep the name Ledger).
+ * the factory-components design: keep the name Ledger).
  */
 import * as Cloudflare from "alchemy/Cloudflare";
 import { RuntimeContext } from "alchemy/RuntimeContext";

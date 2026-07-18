@@ -1,72 +1,65 @@
 # alchemy-org
 
-A software factory that manages a GitHub repository's issues and pull
-requests end to end — two AI processes, two agents, one budget —
-written ONCE against seams (arrival, ledger, kernel, tools) and run in
-any environment by swapping Layers.
+A software factory that manages a GitHub repository end to end,
+expressed almost entirely as prose: agents, the tools they hire, and
+the typed parameters those tools speak. Code appears only at the
+edges — tool physics and the seams (ledger, kernel, entrypoints) that
+decide where the prose runs.
 
-It currently manages the `test-alchemy` SANDBOX repository (a repo we
-own and can reset). Pointing it at the real alchemy repositories is a
-one-line change in `src/repos.ts` once the loop has proven itself.
+## The org
 
-## The flywheel
+One file, one purpose:
 
-One GitHub issue, one run, owned end to end. The Process itself
-triages, replies, and merges (SearchIssues / Comment / MergePullRequest
-are its tools); agents exist only where the work is a distinct craft:
+- `src/repos.ts` — the managed repository; the resource IS the export
+  (an un-yielded `GitHub.Repository` const; the Stack yields the same
+  const to provision it).
+- `src/vocabulary.ts` — the typed Parameters everything interpolates.
+- `src/tools.ts` — the Tool contracts (pure terms; physics elsewhere).
 
-1. **Issue opens** (`GitHub.IssueOpened(testAlchemy)`) — the
-   `GitHubIssues` process dedupes it, answers questions, or writes
-   acceptance criteria.
-2. **Engineer** works the checkout until the tests are green and opens
-   a pull request.
-3. **Reviewer** reviews the PR against the issue; approval belongs to
-   the Reviewer alone (the autonomy dial).
-4. **Merge** via `MergePullRequest` (refuses without an approved
-   review). GitHub closing the issue settles the run
-   (`AI.exit(AI.when(GitHub.IssueClosed(testAlchemy)))`) — the world,
-   never the model's claim.
+The processes (`AI.Process<Self, Shape>`) — prose describing how work
+moves, referencing the agents that do it. A process's tag resolves to
+its declared deterministic interface ONLY; the actor verbs stay
+private to its implementation Layer, which interprets the charter and
+wires the world (events, schedules, substrate callbacks) to it:
 
-`GitHubPullRequests` shepherds each PR the same way (opened → reviewed
-→ merged).
+- `src/issues.ts` — **Issues**: open → triage/dedupe/link → ready →
+  hand to Engineer → close on merged evidence.
+- `src/pull-requests.ts` — **PullRequests**: the org's ONE merge
+  authority; every PR (factory's or human's) gets a Reviewer verdict,
+  then merge or relayed changes.
+- `src/discord.ts` — **FrontDesk**: the org's Discord front desk;
+  mentions become answers, links to prior art, or well-formed issues
+  — never work. Driven by the `Discord.ServerEventSource` seam (REST
+  polling locally; gateway/webhook Layers slot in unchanged).
+- `src/distilled.ts` — **Distilled**: the scheduled submodule
+  maintainer; regenerate, test, PR through the same review door.
 
-## Layout
+The agents (`AI.Agent<Self>`) — callable personas the processes
+delegate to; every agent's tag is the same generic actor interface,
+and `AI.layer(agent)` is the kernel-default implementation:
 
-- `src/repos.ts` — the resource IS the export (the un-yielded
-  `GitHub.Repository` const); charters, bindings, and the Stack all
-  name the repository through it.
-- `src/vocabulary.ts` / `src/tools.ts` — typed Parameters + Tool
-  contracts.
-- `src/agents.ts` — Engineer / Reviewer.
-- `src/issues.ts` / `src/pull-requests.ts` — the two processes: charter
-  (the interface) + ONE generic implementation Layer each (delivery,
-  ledger dedupe, domain methods over the `GitHub.*` API bindings).
+- `src/engineer.ts` — **Engineer**: one ready issue in, one PR out.
+- `src/reviewer.ts` — **Reviewer**: diff against spec, approve or
+  request changes; never saw the reasoning, on purpose.
+
+Authority lives in reference topology, not configuration: only
+PullRequests names `MergePullRequest`, only FrontDesk names `Reply`,
+the Engineer never reviews and the Reviewer never edits. A capability
+no charter mentions cannot be granted by any Layer.
+
+## Physics and seams (code)
+
+- `src/github-tools.ts` — tool physics over the `GitHub.*` API
+  bindings (business rules like merge-needs-approval live here;
+  missing bindings fail model-visibly with TODOs).
+- `src/toolbox.ts` — the Engineer's local workspace physics
+  (FileSystem / shell, sandboxed).
 - `src/ledger.ts` — the dedupe/liveness seam (Memory | Sqlite | D1).
-- `src/github-tools.ts` — tool physics over the GitHub API bindings
-  (business rules like merge-needs-approval live here).
-- `src/toolbox.ts` — the Engineer's local workspace physics.
-- `src/factory.ts` — both processes under one budget,
-  environment-agnostic.
-- `src/local.ts` — the factory on a laptop (polling, sqlite ledger,
-  in-process kernel): `bun run src/local.ts`.
-- `src/worker.ts` — the factory on Cloudflare (webhook, D1 ledger).
-- `alchemy.run.ts` — the Stack: provisions the managed repository and
-  the OrgWorker; the Worker's Layers declare their own infrastructure
-  (webhook, D1) as a consequence of consuming it.
+- `alchemy.run.ts` — the Stack: provisions the repository.
 
-## Run it locally
+## What's next
 
-```sh
-ANTHROPIC_API_KEY=… GITHUB_TOKEN=… bun run src/local.ts
-```
-
-Optional: `FACTORY_WORKSPACE` points at the Engineer's checkout
-(defaults to `.factory-workspace`).
-
-## Deploy status: shape complete, kernel TODO
-
-`bun alchemy deploy` provisions the repository, the webhook, the D1
-ledger, and the Worker. Two TODO(deploy) slots remain stubbed in
-`src/worker.ts`: the kernel (model turns must move into the OrgRing
-Durable Object — `AI.memory` in a stateless Worker is a placeholder)
-and the Engineer's workspace tools (the DevBox container).
+The entrypoints that compose processes + physics per environment
+(laptop polling / Cloudflare Worker webhook), the kernel
+implementation that interprets the charters, and the Reply tool's
+Discord physics. Git history holds the previous iteration.
