@@ -1,29 +1,22 @@
 ---
 title: Layers
-description: A Layer packages resources, bindings, and runtime code behind a typed service interface. Consumers depend on the interface; the infrastructure underneath swaps freely.
+description: A Layer defines a service contract with swappable implementations. In Alchemy, a Layer can encapsulate Resources and Bindings, so shared services carry their own infrastructure and permissions.
 ---
 
-A [Binding](/infrastructure-as-effects/binding) connects one
-[Resource](/infrastructure-as-code/resource) to one Function. A **Layer**
-works one level up: it bundles resources, bindings, and client code into
-a unit that provides one service.
+As your application grows, you'll need to start sharing components of
+your code using Layers. A **Layer** lets you define a service contract
+and swap different implementations of that service in and out across
+your code.
 
-The consumer asks for a capability:
+In Alchemy, [Resources](/infrastructure-as-code/resource) and
+[Bindings](/infrastructure-as-effects/binding) can be encapsulated inside
+a Layer, meaning you can create shareable services that carry their own
+infrastructure and permissions.
 
-```typescript
-const jobs = yield* JobService;
-```
+You can share these within your codebase, across packages, or publish
+them to npm for others to consume.
 
-A Layer answers with an implementation, and its infrastructure comes
-along. Provide the KV-backed Layer and the deploy includes a KV
-namespace, bound to the Worker. Provide a DynamoDB-backed one and the
-deploy includes a table instead. Provide an in-memory fake in tests and
-there is nothing to deploy. The consumer's code is identical in all
-three.
-
-And because a Layer is a value in a module, whole capabilities ship as
-packages — auth backed by D1, rate limiting backed by a Durable Object —
-installed from npm and provided with one line.
+Let's look at how they work.
 
 ## The contract
 
