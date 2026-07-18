@@ -169,6 +169,12 @@
       "worker": "./src/Drizzle/index.ts",
       "import": "./lib/Drizzle/index.js"
     },
+    "./Archil": {
+      "types": "./lib/Archil/index.d.ts",
+      "bun": "./src/Archil/index.ts",
+      "worker": "./src/Archil/index.ts",
+      "import": "./lib/Archil/index.js"
+    },
     "./Axiom": {
       "types": "./lib/Axiom/index.d.ts",
       "bun": "./src/Axiom/index.ts",
