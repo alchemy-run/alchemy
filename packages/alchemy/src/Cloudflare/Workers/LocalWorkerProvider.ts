@@ -233,17 +233,13 @@ export const LocalWorkerProvider = () =>
       // Latest successful serve per worker id, so runtime wiring changes
       // that arrive AFTER workerd started (e.g. a sibling `Consumer`
       // resource registering this script as a queue consumer) can restart
-      // the instance with the same bundle. `scope` is the parent scope the
-      // workerd child scope is forked from (the instance scope), NOT the
-      // caller's ambient scope — restarts are triggered from other
-      // providers' reconcile fibers whose scopes must not own workerd.
+      // the instance with the same bundle.
       const latestServes = new Map<
         string,
         {
           worker: WorkerConfig;
           bundle: Bundle.BundleOutput;
           proxy: WorkerProxy.WorkerProxyInstance;
-          scope: Scope.Scope;
         }
       >();
       // Serializes serves per worker id: a restart triggered by a sibling
@@ -259,63 +255,89 @@ export const LocalWorkerProvider = () =>
         return lock;
       };
 
+      // Serve with make-before-break semantics: start the replacement
+      // workerd while the previous instance (if any) keeps serving — and
+      // stays registered in the dev registry — then cut the proxy over and
+      // tear the previous instance down. Cross-script consumers (e.g. a DO
+      // bound via `scriptName` from another Worker) therefore never observe
+      // a window where the script has no running instance and no registry
+      // entry, even when `runtime.start` is slow (container image builds).
+      // Both instances use the same registry key; the registry's entry
+      // removal is owner-aware, so closing the old scope after the
+      // replacement has re-registered cannot delete the replacement's
+      // registration.
+      //
+      // The workerd scope is forked from the provider's `rootScope`, NOT
+      // the instance scope: a reconcile that replaces the instance (or a
+      // restart triggered from a sibling provider's fiber) tears down the
+      // bundle watcher without killing the currently serving workerd — the
+      // last good instance keeps serving until the replacement's first
+      // serve completes. Ownership is tracked in `workerdScopes`, closed by
+      // the next successful serve, by `delete`, or by provider shutdown.
       const serveWith = (
         worker: WorkerConfig,
         bundle: Bundle.BundleOutput,
         proxy: WorkerProxy.WorkerProxyInstance,
-        parentScope: Scope.Scope,
       ) =>
         Semaphore.withPermits(
           serveLock(worker.id),
           1,
         )(
-          Effect.gen(function* () {
-            const previous = workerdScopes.get(worker.id);
-            if (previous) {
-              // Both runtimes use the same registry key. Close the old scope first so
-              // its unregister finalizer cannot delete the replacement registration.
-              yield* Scope.close(previous, Exit.void);
-              workerdScopes.delete(worker.id);
-            }
-            const scope = yield* Scope.fork(parentScope);
-            const url = yield* runtime
-              .start({
-                name: worker.name,
-                compatibilityDate: worker.compatibility.date,
-                compatibilityFlags: worker.compatibility.flags,
-                bindings: worker.workerBindings as never,
-                hyperdrives: worker.hyperdrives,
-                durableObjectNamespaces: worker.durableObjectNamespaces,
-                queueConsumers: yield* getQueueConsumers(worker.name),
-                modules: yield* toRuntimeModules(bundle),
-                assets: toRuntimeAssets(worker.assets),
-              })
-              .pipe(Scope.provide(scope));
-            workerdScopes.set(worker.id, scope);
-            latestServes.set(worker.id, {
-              worker,
-              bundle,
-              proxy,
-              scope: parentScope,
-            });
-            MutableHashMap.set(
-              localRuntimeState.workerRestarts,
-              worker.name,
-              restartWorker(worker.id),
-            );
-            yield* proxy.set(url);
-            return url;
-          }),
+          // The bookkeeping after `runtime.start` must not be torn in half
+          // by an interrupt: once the replacement workerd is up, it must be
+          // recorded in `workerdScopes` and the previous instance must be
+          // closed, or one of the two workerds would leak until provider
+          // shutdown while holding the shared registry key.
+          Effect.uninterruptibleMask((restore) =>
+            Effect.gen(function* () {
+              const scope = yield* Scope.fork(rootScope);
+              const url = yield* restore(
+                runtime
+                  .start({
+                    name: worker.name,
+                    compatibilityDate: worker.compatibility.date,
+                    compatibilityFlags: worker.compatibility.flags,
+                    bindings: worker.workerBindings as never,
+                    hyperdrives: worker.hyperdrives,
+                    durableObjectNamespaces: worker.durableObjectNamespaces,
+                    queueConsumers: yield* getQueueConsumers(worker.name),
+                    modules: yield* toRuntimeModules(bundle),
+                    assets: toRuntimeAssets(worker.assets),
+                  })
+                  .pipe(Scope.provide(scope)),
+              ).pipe(
+                // The scope hangs off `rootScope`, so a failed or
+                // interrupted start must close it here — nothing else owns
+                // it yet.
+                Effect.onExit((exit) =>
+                  exit._tag === "Failure"
+                    ? Scope.close(scope, exit)
+                    : Effect.void,
+                ),
+              );
+              const previous = workerdScopes.get(worker.id);
+              workerdScopes.set(worker.id, scope);
+              latestServes.set(worker.id, { worker, bundle, proxy });
+              MutableHashMap.set(
+                localRuntimeState.workerRestarts,
+                worker.name,
+                restartWorker(worker.id),
+              );
+              yield* proxy.set(url);
+              if (previous) {
+                yield* Scope.close(previous, Exit.void).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning(
+                      `[${worker.id}] Failed to stop previous local worker instance`,
+                      Cause.squash(cause),
+                    ),
+                  ),
+                );
+              }
+              return url;
+            }),
+          ),
         );
-
-      const serveScoped = Effect.fn(function* (
-        worker: WorkerConfig,
-        bundle: Bundle.BundleOutput,
-        proxy: WorkerProxy.WorkerProxyInstance,
-      ) {
-        const parentScope = yield* Effect.scope;
-        return yield* serveWith(worker, bundle, proxy, parentScope);
-      });
 
       /**
        * Restart a running worker with its latest bundle so start-time
@@ -327,12 +349,7 @@ export const LocalWorkerProvider = () =>
         Effect.suspend(() => {
           const latest = latestServes.get(id);
           if (!latest) return Effect.void;
-          return serveWith(
-            latest.worker,
-            latest.bundle,
-            latest.proxy,
-            latest.scope,
-          ).pipe(
+          return serveWith(latest.worker, latest.bundle, latest.proxy).pipe(
             Effect.asVoid,
             Effect.catchCause((cause) =>
               Effect.logWarning(
@@ -342,6 +359,18 @@ export const LocalWorkerProvider = () =>
             ),
           );
         });
+
+      // Tear down the running workerd for a worker id, if any. Used when the
+      // Worker is deleted or handed off to an external dev process —
+      // instance replacement does NOT go through this: the previous workerd
+      // keeps serving until the replacement's first serve closes it.
+      const closeWorkerd = Effect.fn(function* (id: string) {
+        const scope = workerdScopes.get(id);
+        if (scope) {
+          workerdScopes.delete(id);
+          yield* Scope.close(scope, Exit.void);
+        }
+      });
 
       // Note: `serveLocks` entries are intentionally retained — an
       // in-flight restart may still hold the semaphore when the instance
@@ -521,7 +550,7 @@ export const LocalWorkerProvider = () =>
               : Result.failVoid,
           ),
           Stream.mapEffect((bundle) =>
-            serveScoped(worker, bundle, proxy).pipe(
+            serveWith(worker, bundle, proxy).pipe(
               Effect.exit,
               Effect.tap((exit) => {
                 if (exit._tag === "Success") {
@@ -709,6 +738,7 @@ export const LocalWorkerProvider = () =>
               instances.delete(id);
               dropServeState(id);
             }
+            yield* closeWorkerd(id);
             const name = yield* createWorkerName(id, news.name);
             return {
               workerId: name,
@@ -737,6 +767,10 @@ export const LocalWorkerProvider = () =>
             yield* Effect.log(
               `[${options.id}] Changes detected, interrupting existing instance`,
             );
+            // Tears down the instance's bundle watcher and any in-flight
+            // serve — but NOT its running workerd, which keeps serving (and
+            // stays registered in the dev registry) until the replacement
+            // instance's first serve completes and cuts over.
             yield* Fiber.interrupt(existing.fiber);
             yield* Scope.close(existing.scope, Exit.void);
             instances.delete(options.id);
@@ -766,6 +800,7 @@ export const LocalWorkerProvider = () =>
             instances.delete(id);
             dropServeState(id);
           }
+          yield* closeWorkerd(id);
         }),
       };
     }),
