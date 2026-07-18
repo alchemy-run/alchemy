@@ -16,14 +16,23 @@ import {
   IndexProvider,
 } from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
 import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
+import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { InstanceId } from "@/InstanceId.ts";
 import { Provider } from "@/Provider.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
+import {
+  apiTokenCredentials,
+  Credentials,
+} from "@distilled.cloud/cloudflare/Credentials";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as MutableHashMap from "effect/MutableHashMap";
 import * as Redacted from "effect/Redacted";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 // Regression tests for the "engine-owned names" invariant: a provider's
 // `diff` must never order a replace (or rename) because the physical-name
@@ -69,6 +78,23 @@ const env = Layer.mergeAll(
     dev: false,
     adopt: false,
   }),
+  // The remaining layers only satisfy the provider layers' type-level
+  // requirements (reconcile/read need clients); diff never touches them.
+  Layer.succeed(
+    Credentials,
+    Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+  ),
+  Layer.sync(ArtifactStore, createArtifactStore),
+  Layer.succeed(
+    LocalRuntimeState,
+    LocalRuntimeState.of({
+      queues: MutableHashMap.empty(),
+      queueConsumers: MutableHashMap.empty(),
+      workerRestarts: MutableHashMap.empty(),
+    }),
+  ),
+  NodeServices.layer,
+  FetchHttpClient.layer,
 );
 
 const diffInput = <Olds, News, Output>(
