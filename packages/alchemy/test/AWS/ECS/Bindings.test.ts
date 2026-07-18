@@ -178,9 +178,10 @@ describe("ECS Bindings", () => {
       );
       yield* Effect.logInfo("ECS bindings setup: fixture ready");
     }),
-    // c128 sweeps can starve the phase-2 Lambda bundle/create beyond 180s.
-    // Keep the hook below the suite's hard wall while allowing that cold tail.
-    { timeout: 210_000 },
+    // High-concurrency full-suite sweeps starve the container build/push +
+    // phase-2 Lambda bundle. After a nuke the ECR repo is gone, so every
+    // round is a cold build — 210s tripped at c96 (convergence round 6).
+    { timeout: 330_000 },
   );
 
   // NO_DESTROY=1 keeps the deployment around between runs while iterating —
