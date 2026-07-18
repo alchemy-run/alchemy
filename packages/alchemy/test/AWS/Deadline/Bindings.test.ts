@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import { reapFarmChildren } from "@/AWS/Deadline/internal.ts";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Alchemy";
 import * as deadline from "@distilled.cloud/aws/deadline";
@@ -87,40 +88,9 @@ const reapLeakedFarms = Effect.gen(function* () {
     (farm) =>
       Effect.gen(function* () {
         const farmId = farm.farmId;
-        const queues = yield* deadline.listQueues.items({ farmId }).pipe(
-          EffectStream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed([] as deadline.QueueSummary[]),
-          ),
-        );
-        yield* Effect.forEach(
-          queues,
-          (queue) =>
-            deadline
-              .deleteQueue({ farmId, queueId: queue.queueId })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
-          { discard: true },
-        );
-        const fleets = yield* deadline.listFleets.items({ farmId }).pipe(
-          EffectStream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed([] as deadline.FleetSummary[]),
-          ),
-        );
-        yield* Effect.forEach(
-          fleets,
-          (fleet) =>
-            deadline
-              .deleteFleet({ farmId, fleetId: fleet.fleetId })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
-          { discard: true },
-        );
+        // Reap ALL child resources (storage profiles, budgets, limits,
+        // associations, queues, fleets) — the same sweep Farm.delete runs.
+        yield* reapFarmChildren(farmId);
         // Sub-resource deletion is asynchronous; the farm rejects deletion
         // with ConflictException until they finish. Bounded.
         yield* Effect.retry(deadline.deleteFarm({ farmId }), {

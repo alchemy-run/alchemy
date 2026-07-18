@@ -13,6 +13,7 @@ import {
   deadlineArnOf,
   fetchDeadlineTags,
   reapDeadlineLogGroups,
+  reapFarmChildren,
   retryWhileConflict,
   syncDeadlineTags,
 } from "./internal.ts";
@@ -269,8 +270,17 @@ export const FarmProvider = () =>
           return final.attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Sub-resources (queues, fleets) finish deleting asynchronously;
-          // the farm rejects deletion with ConflictException until they do.
+          // A farm refuses deletion while ANY child resource exists (storage
+          // profiles, queues, fleets, budgets, limits, associations) — and
+          // unlike async sub-resource drain, those conflicts never resolve
+          // by waiting. A normal stack destroy deletes children first, so
+          // this reap observes nothing; an orphan sweep (nuke) or a mid-run
+          // crash targets a farm whose children were never enumerated, and
+          // without the reap deleteFarm conflicts until the retry budget
+          // runs out and the farm leaks.
+          yield* reapFarmChildren(output.farmId);
+          // Child deletion (queues, fleets) finishes asynchronously; the
+          // farm rejects deletion with ConflictException until it settles.
           yield* retryWhileConflict(
             deadline.deleteFarm({ farmId: output.farmId }),
           ).pipe(

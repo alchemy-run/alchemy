@@ -100,6 +100,192 @@ export const reapDeadlineLogGroups = Effect.fn(function* (prefix: string) {
   );
 });
 
+/**
+ * Reap every child resource of a farm so `deleteFarm` can succeed. A normal
+ * stack destroy deletes children before the farm, so this observes nothing —
+ * but an orphan sweep (nuke) or a mid-run crash can leave a farm whose
+ * children were never enumerated, and `deleteFarm` then rejects with
+ * `ConflictException` ("This farm still contains some storage profiles /
+ * queues / fleets ...") until the retry budget runs out and the farm leaks.
+ *
+ * Order matters: queue-fleet/queue-limit associations must be stopped and
+ * deleted before their queues/fleets/limits; storage profiles may be
+ * referenced by queues (`allowedStorageProfileIds`) so they go after the
+ * queues. Every step is idempotent — a child already gone is not an error.
+ */
+export const reapFarmChildren = Effect.fn(function* (farmId: string) {
+  // Every list catches ResourceNotFoundException → [] because the farm
+  // itself may already be gone.
+
+  // 1. Queue-fleet associations — stop scheduling, then delete (the delete
+  // rejects with ConflictException until the stop settles to STOPPED).
+  const queueFleetAssociations = yield* deadline.listQueueFleetAssociations
+    .items({ farmId })
+    .pipe(
+      EffectStream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed([] as deadline.QueueFleetAssociationSummary[]),
+      ),
+    );
+  yield* Effect.forEach(
+    queueFleetAssociations,
+    (assoc) =>
+      Effect.gen(function* () {
+        if (assoc.status !== "STOPPED") {
+          yield* deadline
+            .updateQueueFleetAssociation({
+              farmId,
+              queueId: assoc.queueId,
+              fleetId: assoc.fleetId,
+              status: "STOP_SCHEDULING_AND_CANCEL_TASKS",
+            })
+            .pipe(
+              // Already gone (the association or its farm).
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+        }
+        yield* retryWhileConflict(
+          deadline.deleteQueueFleetAssociation({
+            farmId,
+            queueId: assoc.queueId,
+            fleetId: assoc.fleetId,
+          }),
+        ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+      }),
+    { concurrency: 4, discard: true },
+  );
+
+  // 2. Queue-limit associations — same stop-then-delete dance.
+  const queueLimitAssociations = yield* deadline.listQueueLimitAssociations
+    .items({ farmId })
+    .pipe(
+      EffectStream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed([] as deadline.QueueLimitAssociationSummary[]),
+      ),
+    );
+  yield* Effect.forEach(
+    queueLimitAssociations,
+    (assoc) =>
+      Effect.gen(function* () {
+        if (assoc.status !== "STOPPED") {
+          yield* deadline
+            .updateQueueLimitAssociation({
+              farmId,
+              queueId: assoc.queueId,
+              limitId: assoc.limitId,
+              status: "STOP_LIMIT_USAGE_AND_CANCEL_TASKS",
+            })
+            .pipe(
+              // Already gone (the association or its farm).
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+        }
+        yield* retryWhileConflict(
+          deadline.deleteQueueLimitAssociation({
+            farmId,
+            queueId: assoc.queueId,
+            limitId: assoc.limitId,
+          }),
+        ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+      }),
+    { concurrency: 4, discard: true },
+  );
+
+  // 3. Budgets.
+  const budgets = yield* deadline.listBudgets.items({ farmId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as deadline.BudgetSummary[]),
+    ),
+  );
+  yield* Effect.forEach(
+    budgets,
+    (budget) =>
+      deadline
+        .deleteBudget({ farmId, budgetId: budget.budgetId })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    { concurrency: 4, discard: true },
+  );
+
+  // 4. Queues (deletion is asynchronous; the farm delete below retries
+  // through the drain window). A queue's own log group is reaped too.
+  const queues = yield* deadline.listQueues.items({ farmId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as deadline.QueueSummary[]),
+    ),
+  );
+  yield* Effect.forEach(
+    queues,
+    (queue) =>
+      retryWhileConflict(
+        deadline.deleteQueue({ farmId, queueId: queue.queueId }),
+      ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    { concurrency: 4, discard: true },
+  );
+
+  // 5. Fleets (deletion drains workers asynchronously).
+  const fleets = yield* deadline.listFleets.items({ farmId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as deadline.FleetSummary[]),
+    ),
+  );
+  yield* Effect.forEach(
+    fleets,
+    (fleet) =>
+      retryWhileConflict(
+        deadline.deleteFleet({ farmId, fleetId: fleet.fleetId }),
+      ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    { concurrency: 4, discard: true },
+  );
+
+  // 6. Limits (their queue-limit associations were deleted above).
+  const limits = yield* deadline.listLimits.items({ farmId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as deadline.LimitSummary[]),
+    ),
+  );
+  yield* Effect.forEach(
+    limits,
+    // deleteLimit is idempotent server-side: neither ResourceNotFound nor
+    // Conflict is in its error union — deleting a missing limit succeeds.
+    (limit) => deadline.deleteLimit({ farmId, limitId: limit.limitId }),
+    { concurrency: 4, discard: true },
+  );
+
+  // 7. Storage profiles (after queues — a queue's allowedStorageProfileIds
+  // reference blocks profile deletion with ConflictException).
+  const storageProfiles = yield* deadline.listStorageProfiles
+    .items({ farmId })
+    .pipe(
+      EffectStream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed([] as deadline.StorageProfileSummary[]),
+      ),
+    );
+  yield* Effect.forEach(
+    storageProfiles,
+    (profile) =>
+      retryWhileConflict(
+        deadline.deleteStorageProfile({
+          farmId,
+          storageProfileId: profile.storageProfileId,
+        }),
+      ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    { concurrency: 4, discard: true },
+  );
+});
+
 // Explicitly-typed retry wrappers — an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
