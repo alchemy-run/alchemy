@@ -229,10 +229,19 @@ describe.sequential("Amplify Bindings", () => {
       const successor = yield* deploySite(branchName);
       expect(successor.jobId).not.toBe(deployed.jobId);
 
+      // Amplify marks the superseded job deletable eventually — the successor
+      // can settle while the old job still reads "active" for a beat, so
+      // retry the delete until it lands (bounded).
       const deleted = (yield* postJson("/jobs/delete", {
         branchName,
         jobId: deployed.jobId,
-      })) as { deleted: boolean; errorTag?: string };
+      }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (r) => (r as { deleted: boolean }).deleted,
+          times: 10,
+        }),
+      )) as { deleted: boolean; errorTag?: string };
       expect(deleted.deleted).toBe(true);
 
       // Out-of-band: the job is gone from the branch history.
