@@ -150,13 +150,10 @@ two are mutually exclusive). `allowedSenderAddresses` restricts the
 destination on the account.
 
 :::caution
-This binding is **live under `alchemy dev`**. Like every binding,
-`send_email` connects to the real provider — there is no local email
-stub — so `send()` from your dev loop sends real mail from your
-domain. If your app should not send during local development, branch
-on something you control (an env var, or the injected `ALCHEMY_STAGE`
-binding) and log instead of sending. Don't test the negative branch
-by pointing `send()` at a made-up address — that's still a real send.
+`send_email` is live under `alchemy dev` — there is no local email
+stub, so `send()` from your dev loop sends real mail from your
+domain. To keep dev runs from sending, branch on an env var (or the
+injected `ALCHEMY_STAGE` binding) and log instead.
 :::
 
 ## Send from the Worker
