@@ -151,10 +151,7 @@ export const LabelProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
-      const newName =
-        n.name !== undefined || o.name !== undefined
-          ? yield* createLabelName(id, n.name)
-          : oldName;
+      const newName = n.name ?? oldName;
       if (oldName !== newName) {
         return { action: "replace" } as const;
       }

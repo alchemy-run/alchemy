@@ -84,10 +84,7 @@ export const NamespaceProvider = () =>
       // Auto-generated titles are engine-owned: the deployed title stays
       // authoritative even if the generator would title this id differently
       // today. Only an explicit user-provided title can force a rename.
-      const title =
-        news.title !== undefined || olds.title !== undefined
-          ? yield* createTitle(id, news.title)
-          : oldTitle;
+      const title = news.title ?? oldTitle;
       if (title !== oldTitle) {
         return { action: "update" } as const;
       }

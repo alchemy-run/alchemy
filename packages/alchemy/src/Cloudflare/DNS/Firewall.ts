@@ -262,10 +262,7 @@ export const FirewallProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
-      const name =
-        news.name !== undefined || olds.name !== undefined
-          ? yield* createClusterName(id, news.name)
-          : oldName;
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "replace" } as const;
       }

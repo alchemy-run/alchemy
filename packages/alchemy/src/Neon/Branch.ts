@@ -245,10 +245,7 @@ export const BranchProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.
-      const newName =
-        news.name !== undefined || olds.name !== undefined
-          ? yield* createBranchName(id, news.name)
-          : oldName;
+      const newName = news.name ?? oldName;
       if (
         newName !== oldName ||
         (news.protected ?? false) !== (output?.protected ?? false) ||

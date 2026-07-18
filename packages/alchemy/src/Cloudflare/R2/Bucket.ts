@@ -929,10 +929,7 @@ export const BucketProvider = () =>
           // authoritative even if the generator would name this id
           // differently today. Only an explicit user-provided name can
           // force a replace.
-          const name =
-            news.name !== undefined || olds.name !== undefined
-              ? yield* createBucketName(id, news.name)
-              : oldName;
+          const name = news.name ?? oldName;
           const oldJurisdiction =
             output?.jurisdiction ?? olds.jurisdiction ?? "default";
           const oldStorageClass =

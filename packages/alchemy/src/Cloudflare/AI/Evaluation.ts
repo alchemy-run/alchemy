@@ -158,10 +158,7 @@ export const EvaluationProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
-      const newName =
-        news.name !== undefined || olds?.name !== undefined
-          ? yield* createEvaluationName(id, news.name)
-          : output.name;
+      const newName = news.name ?? output.name;
       if (
         output.gatewayId !== news.gatewayId ||
         output.name !== newName ||

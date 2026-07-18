@@ -1789,10 +1789,7 @@ export default handler;
           // authoritative even if the generator would name this id
           // differently today. Only an explicit user-provided functionName
           // can force a replace.
-          const newFunctionName =
-            news.functionName !== undefined || olds.functionName !== undefined
-              ? yield* createFunctionName(id, news.functionName)
-              : output.functionName;
+          const newFunctionName = news.functionName ?? output.functionName;
           if (output.functionName !== newFunctionName) {
             return { action: "replace" };
           }

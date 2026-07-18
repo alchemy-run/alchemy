@@ -599,10 +599,7 @@ export const SearchInstanceProvider = () =>
       // Auto-generated ids are engine-owned: the deployed id stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided instanceId can force a replace.
-      const newId =
-        news.instanceId !== undefined || olds.instanceId !== undefined
-          ? yield* createInstanceId(id, news.instanceId)
-          : oldId;
+      const newId = news.instanceId ?? oldId;
       if (newId !== oldId) {
         return { action: "replace" } as const;
       }

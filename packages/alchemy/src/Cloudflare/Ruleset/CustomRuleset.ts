@@ -168,10 +168,7 @@ export const CustomRulesetProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.
-      const name =
-        news.name !== undefined || olds.name !== undefined
-          ? (news.name ?? (yield* createPhysicalName({ id })))
-          : oldName;
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         olds.description !== news.description ||

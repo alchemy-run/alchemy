@@ -202,10 +202,7 @@ export const GatewayProviderProvider = () =>
       // Auto-generated aliases are engine-owned: the deployed alias stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided alias can force a replace.
-      const newAlias =
-        news.alias !== undefined || olds?.alias !== undefined
-          ? yield* createAlias(id, news.alias)
-          : output.alias;
+      const newAlias = news.alias ?? output.alias;
       if (
         output.gatewayId !== news.gatewayId ||
         output.providerSlug !== news.providerSlug ||

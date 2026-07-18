@@ -202,10 +202,7 @@ export const SearchNamespaceProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
-      const newName =
-        news?.name !== undefined || olds?.name !== undefined
-          ? yield* createNamespaceName(id, news?.name)
-          : oldName;
+      const newName = news?.name ?? oldName;
       if (newName !== oldName) {
         // A user-pinned name collides with the still-existing old
         // namespace only when both resolve to the same string — they

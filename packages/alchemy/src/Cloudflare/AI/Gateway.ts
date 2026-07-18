@@ -484,10 +484,7 @@ export const GatewayResourceProvider = () =>
       // Auto-generated ids are engine-owned: the deployed id stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided id can force a replace.
-      const newGatewayId =
-        news.id !== undefined || olds.id !== undefined
-          ? next.gatewayId
-          : oldGatewayId;
+      const newGatewayId = news.id ?? oldGatewayId;
       if (
         (output?.accountId ?? accountId) !== accountId ||
         oldGatewayId !== newGatewayId

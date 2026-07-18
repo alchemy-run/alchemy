@@ -2205,10 +2205,7 @@ export const LiveWorkerProvider = () =>
           // differently today (a Worker replace would also destroy its
           // Durable Object storage). Only an explicit user-provided name
           // can force a replace.
-          const workerName =
-            news.name !== undefined || olds?.name !== undefined
-              ? yield* createWorkerName(id, news.name)
-              : oldWorkerName;
+          const workerName = news.name ?? oldWorkerName;
           if (workerName !== oldWorkerName) {
             return { action: "replace" };
           }

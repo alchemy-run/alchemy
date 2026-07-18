@@ -319,10 +319,7 @@ export const ListProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
-      const desiredName =
-        news.name !== undefined || olds?.name !== undefined
-          ? yield* createListName(id, news.name)
-          : oldName;
+      const desiredName = news.name ?? oldName;
       if (oldName !== undefined && desiredName !== oldName) {
         return { action: "replace" } as const;
       }

@@ -514,10 +514,7 @@ export const SecurityGroupProvider = () =>
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.
-          const newGroupName =
-            news.groupName !== undefined || olds.groupName !== undefined
-              ? yield* createGroupName(id, news.groupName)
-              : oldGroupName;
+          const newGroupName = news.groupName ?? oldGroupName;
           if (newGroupName !== oldGroupName) {
             return { action: "replace" };
           }

@@ -196,10 +196,7 @@ export const ObservabilityDestinationProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
-      const newName =
-        news.name !== undefined || olds?.name !== undefined
-          ? (news.name ?? (yield* createDestinationName(id)))
-          : oldName;
+      const newName = news.name ?? oldName;
       if (oldName !== newName) {
         return { action: "replace" } as const;
       }

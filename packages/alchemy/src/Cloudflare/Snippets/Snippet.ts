@@ -174,10 +174,7 @@ export const SnippetProvider = () =>
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
-      const name =
-        n.name !== undefined || o.name !== undefined
-          ? yield* createSnippetName(id, n.name)
-          : oldName;
+      const name = n.name ?? oldName;
       if (oldName !== name) {
         return { action: "replace" } as const;
       }
