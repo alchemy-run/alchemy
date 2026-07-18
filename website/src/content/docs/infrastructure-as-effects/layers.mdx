@@ -38,32 +38,7 @@ cloud-specific.
 
 ## The implementation
 
-A Layer builds the service. Three lines do all the work.
-
-Declare the storage — a real KV namespace, owned by the Layer:
-
-```typescript
-const MyKV = yield* Cloudflare.KV.Namespace("MyKV");
-```
-
-Bind it — `kv` is a typed client for reading and writing that namespace
-at runtime:
-
-```typescript
-const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
-```
-
-Implement the contract against the client:
-
-```typescript
-return {
-  getJob: Effect.fn(function* (id: string) {
-    return yield* kv.get<Job>(id, "json");
-  }),
-};
-```
-
-Put together:
+A Layer builds the service. Three lines do all the work:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -84,6 +59,15 @@ export const JobServiceKV = Layer.effect(
   }),
 );
 ```
+
+`KV.Namespace("MyKV")` declares the storage — a real KV namespace, owned
+by the Layer.
+
+`ReadWriteNamespace(MyKV)` binds it — `kv` is a typed client for reading
+and writing that namespace at runtime.
+
+The returned object implements the `JobService` contract against that
+client.
 
 ## The consumer
 
