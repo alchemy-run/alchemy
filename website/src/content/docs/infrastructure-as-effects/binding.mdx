@@ -62,7 +62,9 @@ export interface ReadWriteBucket extends Binding.Service<
 > {}
 ```
 
-The implementation is a Layer, and there are two interchangeable ones:
+The implementation is a Layer, and any Layer that satisfies the
+contract can be provided. Cloudflare ships two interchangeable ones for
+R2:
 
 ```diff lang="typescript"
 -  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
