@@ -3,10 +3,13 @@ title: Building with Layers
 description: Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
 ---
 
-A [Layer](/infrastructure-as-effects/layers) packages infrastructure behind a typed
-service. This guide builds a `JobService` backed by a Cloudflare KV
-namespace, plugs it into a Worker, then swaps the storage backend
-to an R2 bucket — without touching the Worker.
+A [Layer](/infrastructure-as-effects/layers) packages resources,
+bindings, and runtime code behind a typed service interface. The
+consumer depends on the interface; the Layer decides what runs
+underneath. This guide builds that separation end to end: define a
+`JobService` contract, implement it with a Cloudflare KV namespace,
+plug it into a Worker, then swap the storage backend to an R2
+bucket while the Worker stays byte-for-byte unchanged.
 
 ## Define the service interface
 
