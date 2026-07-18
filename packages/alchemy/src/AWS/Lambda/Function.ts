@@ -2330,11 +2330,17 @@ export default handler;
             );
           }
 
-          // A timed-out delete attempt above is not deletion proof. After the
-          // final Lambda flush window, make one bounded authoritative pass and
-          // require exact-name absence before discarding the function's state.
-          // This keeps throttling visible as a provider failure instead of
-          // silently stranding an auto-created log group for nuke.
+          // A timed-out delete attempt above is not deletion proof, and the
+          // Lambda service keeps flushing buffered logs AFTER the function is
+          // deleted (typically ~35s, occasionally much longer), silently
+          // re-creating a just-deleted group. Converge with a bounded
+          // observe→delete loop: any reappearance is simply deleted again
+          // (every delete is idempotent — ResourceNotFoundException means
+          // done). A recreation we deleted counts as gone; a flush landing
+          // after our final check is inherently unobservable and the next
+          // nuke census is the backstop. We only fail loudly if the group is
+          // still observable at budget exhaustion AND a final delete attempt
+          // did not remove it — i.e. the group is genuinely undeletable.
           const observeLogGroup = logs
             .describeLogGroups({
               logGroupNamePrefix: logGroupName,
@@ -2357,8 +2363,9 @@ export default handler;
               }),
             );
 
-          if (yield* observeLogGroup) {
-            yield* logs.deleteLogGroup({ logGroupName }).pipe(
+          const deleteLogGroupAgain = logs
+            .deleteLogGroup({ logGroupName })
+            .pipe(
               Effect.retry({
                 while: (error) =>
                   error._tag === "OperationAbortedException" ||
@@ -2379,14 +2386,32 @@ export default handler;
                   ),
               }),
             );
-          }
 
-          const logGroupRemains = yield* Effect.repeat(observeLogGroup, {
-            schedule: Schedule.fixed("1 second"),
-            until: (present) => !present,
-            times: 10,
+          const reapIfObserved = Effect.gen(function* () {
+            const present = yield* observeLogGroup;
+            if (present) {
+              yield* deleteLogGroupAgain;
+            }
+            return present;
           });
-          if (logGroupRemains) {
+
+          // Happy path (no reappearance): a single describe, done. On a
+          // post-delete flush recreation: delete and re-check every 5s for
+          // up to ~90s after the last reappearance-free observation.
+          const observedAtBudgetEnd = yield* reapIfObserved.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (present) => !present,
+              times: 18,
+            }),
+          );
+
+          // Budget exhausted with the group still reappearing: the last loop
+          // iteration already issued a delete. One final authoritative
+          // observation decides — absent means our delete of the latest
+          // recreation stuck (gone); present means the group survives its own
+          // deletion (denied/undeletable) and must fail loudly.
+          if (observedAtBudgetEnd && (yield* observeLogGroup)) {
             yield* Effect.die(
               new Error(
                 `Lambda log group ${logGroupName} remained observable after delete`,
