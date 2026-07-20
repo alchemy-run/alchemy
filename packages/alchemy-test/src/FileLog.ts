@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as NodeFs from "node:fs";
 
 import type { LogEntry } from "./Model.ts";
 import type { TestEvent } from "./Reporter.ts";
@@ -76,6 +77,17 @@ export const formatEvent = (event: TestEvent): string | undefined => {
 
 export interface FileLog {
   readonly append: (event: TestEvent) => Effect.Effect<void>;
+  /**
+   * Synchronously append one live file-hook log line (prefixed with the
+   * file it belongs to). File-level hooks (beforeAll deploys / afterAll
+   * destroys) can run for many minutes; buffering their output until
+   * `FileEnd` makes the run log go silent for the whole time — a
+   * long-running deploy then reads as a deadlocked run. Streaming each
+   * entry as it is captured keeps the log tail-able mid-hook. Sync (node:fs
+   * append) because it is called from a plain array-push interception;
+   * append-mode writes interleave safely with the Effect-based appends.
+   */
+  readonly appendHookLine: (file: string, entry: LogEntry) => void;
 }
 
 const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -122,5 +134,16 @@ export const makeFileLog = Effect.fn(function* (logFile: string) {
       .writeFileString(logFile, chunk, { flag: "a" })
       .pipe(Effect.ignore);
   };
-  return { append } satisfies FileLog;
+  const appendHookLine: FileLog["appendHookLine"] = (file, entry) => {
+    try {
+      const prefixed = entry.message
+        .split("\n")
+        .map((line) => `[hook ${file}] ${line}`)
+        .join("\n");
+      NodeFs.appendFileSync(logFile, `${prefixed}\n`);
+    } catch {
+      // Never let log streaming break a hook.
+    }
+  };
+  return { append, appendHookLine } satisfies FileLog;
 });

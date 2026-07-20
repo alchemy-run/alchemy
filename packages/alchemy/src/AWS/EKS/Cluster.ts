@@ -234,12 +234,14 @@ const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
     ),
   );
 
-const jsonEqual = (a: unknown, b: unknown) =>
-  JSON.stringify(a ?? undefined) === JSON.stringify(b ?? undefined);
-
+// Wait budget: ~30 min at 10s spacing. Cluster create/delete takes ~10–15 min
+// and async config/version updates ~5–15 min. The interval MUST be flat, not
+// exponential: `Schedule.exponential` with no delay cap sleeps 8.5/17/34 min
+// between late attempts — a silent multi-minute park that presents as a
+// deadlocked (0% CPU, no output) deploy and blows any hook budget.
 const updateRetrySchedule = Schedule.max([
-  Schedule.exponential("1 second"),
-  Schedule.recurs(120),
+  Schedule.spaced("10 seconds"),
+  Schedule.recurs(180),
 ]);
 
 const getKubernetesConnection = (
@@ -323,18 +325,209 @@ const applyAutoModeDefaults = (
       }
     : { ...news, roleArn: roles.roleArn };
 
-const clusterConfigChanged = (olds: ClusterProps, news: ClusterProps) =>
-  !jsonEqual(olds.resourcesVpcConfig, news.resourcesVpcConfig) ||
-  !jsonEqual(
-    olds.accessConfig?.authenticationMode,
-    news.accessConfig?.authenticationMode,
-  ) ||
-  !jsonEqual(olds.computeConfig, news.computeConfig) ||
-  !jsonEqual(olds.storageConfig, news.storageConfig) ||
-  !jsonEqual(olds.kubernetesNetworkConfig, news.kubernetesNetworkConfig) ||
-  !jsonEqual(olds.logging, news.logging) ||
-  !jsonEqual(olds.upgradePolicy, news.upgradePolicy) ||
-  (olds.deletionProtection ?? false) !== (news.deletionProtection ?? false);
+const stringSetEqual = (
+  a: readonly string[] | undefined,
+  b: readonly string[] | undefined,
+) =>
+  JSON.stringify([...(a ?? [])].sort()) ===
+  JSON.stringify([...(b ?? [])].sort());
+
+/** Flatten an EKS `Logging` shape into a `logType -> enabled` map. */
+const loggingByType = (logging: eks.Logging | undefined) => {
+  const byType: Record<string, boolean> = {};
+  for (const setup of logging?.clusterLogging ?? []) {
+    for (const type of setup.types ?? []) {
+      byType[type] = setup.enabled ?? false;
+    }
+  }
+  return byType;
+};
+
+interface ClusterConfigUpdate {
+  /** Stable category slug — also feeds the per-category idempotency token. */
+  category: string;
+  request: Omit<eks.UpdateClusterConfigRequest, "name" | "clientRequestToken">;
+}
+
+/**
+ * Plan the `updateClusterConfig` calls needed to converge observed cloud
+ * state to the desired props.
+ *
+ * EKS's UpdateClusterConfig API accepts exactly ONE update category per call
+ * (`InvalidParameterException: Only one type of update can be allowed.`), so
+ * drift is computed per category and each drifted category becomes its own
+ * request — the caller issues them serially, waiting for each async update
+ * to complete before the next.
+ *
+ * Comparison is desired-subset only: a field the user did not specify is
+ * "don't care" and is never diffed against server-populated response fields
+ * (vpcId, clusterSecurityGroupId, default upgradePolicy, ...). A freshly
+ * created cluster therefore plans zero updates.
+ */
+const planClusterConfigUpdates = (
+  observed: Cluster["Attributes"],
+  desired: ClusterProps,
+): ClusterConfigUpdate[] => {
+  const updates: ClusterConfigUpdate[] = [];
+
+  // Access config — authenticationMode is the only mutable field.
+  const desiredAuthMode = desired.accessConfig?.authenticationMode;
+  if (
+    desiredAuthMode !== undefined &&
+    desiredAuthMode !== observed.accessConfig?.authenticationMode
+  ) {
+    updates.push({
+      category: "access",
+      request: { accessConfig: { authenticationMode: desiredAuthMode } },
+    });
+  }
+
+  // Auto Mode trio — computeConfig, storageConfig and kubernetesNetworkConfig
+  // count as ONE update category and must ship together in a single call.
+  const desiredCompute = desired.computeConfig;
+  const observedCompute = observed.computeConfig;
+  const computeDrift =
+    desiredCompute !== undefined &&
+    ((desiredCompute.enabled !== undefined &&
+      desiredCompute.enabled !== (observedCompute?.enabled ?? false)) ||
+      (desiredCompute.nodePools !== undefined &&
+        !stringSetEqual(
+          desiredCompute.nodePools,
+          observedCompute?.nodePools,
+        )) ||
+      (desiredCompute.nodeRoleArn !== undefined &&
+        desiredCompute.nodeRoleArn !== observedCompute?.nodeRoleArn));
+  const desiredBlockStorage = desired.storageConfig?.blockStorage?.enabled;
+  const storageDrift =
+    desiredBlockStorage !== undefined &&
+    desiredBlockStorage !==
+      (observed.storageConfig?.blockStorage?.enabled ?? false);
+  const desiredElb =
+    desired.kubernetesNetworkConfig?.elasticLoadBalancing?.enabled;
+  const elbDrift =
+    desiredElb !== undefined &&
+    desiredElb !==
+      (observed.kubernetesNetworkConfig?.elasticLoadBalancing?.enabled ??
+        false);
+  if (computeDrift || storageDrift || elbDrift) {
+    updates.push({
+      category: "auto-mode",
+      request: {
+        computeConfig: desiredCompute ?? {
+          enabled: observedCompute?.enabled ?? false,
+          nodePools: observedCompute?.nodePools,
+          nodeRoleArn: observedCompute?.nodeRoleArn,
+        },
+        storageConfig: {
+          blockStorage: {
+            enabled:
+              desiredBlockStorage ??
+              observed.storageConfig?.blockStorage?.enabled ??
+              false,
+          },
+        },
+        // serviceIpv4Cidr / ipFamily are create-only (diff replaces on
+        // change) — never send them on update.
+        kubernetesNetworkConfig: {
+          elasticLoadBalancing: {
+            enabled:
+              desiredElb ??
+              observed.kubernetesNetworkConfig?.elasticLoadBalancing?.enabled ??
+              false,
+          },
+        },
+      },
+    });
+  }
+
+  // VPC endpoint access (public/private endpoint + public access CIDRs).
+  const desiredVpc = desired.resourcesVpcConfig;
+  const observedVpc = observed.resourcesVpcConfig;
+  const endpointPublicDrift =
+    desiredVpc.endpointPublicAccess !== undefined &&
+    desiredVpc.endpointPublicAccess !== observedVpc.endpointPublicAccess;
+  const endpointPrivateDrift =
+    desiredVpc.endpointPrivateAccess !== undefined &&
+    desiredVpc.endpointPrivateAccess !== observedVpc.endpointPrivateAccess;
+  const publicCidrsDrift =
+    desiredVpc.publicAccessCidrs !== undefined &&
+    !stringSetEqual(
+      desiredVpc.publicAccessCidrs,
+      observedVpc.publicAccessCidrs,
+    );
+  if (endpointPublicDrift || endpointPrivateDrift || publicCidrsDrift) {
+    updates.push({
+      category: "vpc-endpoint",
+      request: {
+        resourcesVpcConfig: {
+          endpointPublicAccess: desiredVpc.endpointPublicAccess,
+          endpointPrivateAccess: desiredVpc.endpointPrivateAccess,
+          publicAccessCidrs: desiredVpc.publicAccessCidrs,
+        },
+      },
+    });
+  }
+
+  // VPC subnet / security-group membership — separate from endpoint access.
+  const subnetsDrift =
+    desiredVpc.subnetIds !== undefined &&
+    !stringSetEqual(desiredVpc.subnetIds, observedVpc.subnetIds);
+  const securityGroupsDrift =
+    desiredVpc.securityGroupIds !== undefined &&
+    !stringSetEqual(desiredVpc.securityGroupIds, observedVpc.securityGroupIds);
+  if (subnetsDrift || securityGroupsDrift) {
+    updates.push({
+      category: "vpc-network",
+      request: {
+        resourcesVpcConfig: {
+          subnetIds: desiredVpc.subnetIds,
+          securityGroupIds: desiredVpc.securityGroupIds,
+        },
+      },
+    });
+  }
+
+  // Control-plane logging — compare per log type; types the user didn't
+  // mention are "don't care".
+  if (desired.logging !== undefined) {
+    const observedLogging = loggingByType(observed.logging);
+    const desiredLogging = loggingByType(desired.logging);
+    if (
+      Object.entries(desiredLogging).some(
+        ([type, enabled]) => (observedLogging[type] ?? false) !== enabled,
+      )
+    ) {
+      updates.push({
+        category: "logging",
+        request: { logging: desired.logging },
+      });
+    }
+  }
+
+  // Upgrade policy.
+  if (
+    desired.upgradePolicy?.supportType !== undefined &&
+    desired.upgradePolicy.supportType !== observed.upgradePolicy?.supportType
+  ) {
+    updates.push({
+      category: "upgrade-policy",
+      request: { upgradePolicy: desired.upgradePolicy },
+    });
+  }
+
+  // Deletion protection.
+  if (
+    desired.deletionProtection !== undefined &&
+    desired.deletionProtection !== observed.deletionProtection
+  ) {
+    updates.push({
+      category: "deletion-protection",
+      request: { deletionProtection: desired.deletionProtection },
+    });
+  }
+
+  return updates;
+};
 
 const mapClusterState = (
   cluster: eks.Cluster,
@@ -832,43 +1025,29 @@ export const ClusterProvider = () =>
 
           const clusterArn = state.clusterArn;
 
-          // Sync cluster config — diff observed against desired. Each
-          // mutable aspect (vpc, logging, access mode, compute, storage,
-          // upgrade policy, deletion protection) lives behind a single
-          // updateClusterConfig call. We synthesize a `ClusterProps`
-          // shape from observed attributes for the existing diff helper.
-          const observedAsProps: ClusterProps = {
-            roleArn: state.roleArn,
-            resourcesVpcConfig: state.resourcesVpcConfig,
-            accessConfig: state.accessConfig,
-            computeConfig: state.computeConfig,
-            storageConfig: state.storageConfig,
-            kubernetesNetworkConfig: state.kubernetesNetworkConfig,
-            logging: state.logging,
-            upgradePolicy: state.upgradePolicy,
-            deletionProtection: state.deletionProtection,
-          };
-          if (clusterConfigChanged(observedAsProps, effective)) {
+          // Sync cluster config — EKS's UpdateClusterConfig accepts exactly
+          // ONE update category per call ("Only one type of update can be
+          // allowed"), so we plan the observed↔desired drift per category and
+          // issue one serialized updateClusterConfig per drifted category,
+          // waiting for each async update to land (Successful + cluster back
+          // to ACTIVE) before the next. Everything settable at create time is
+          // already passed to createCluster, so a greenfield create plans
+          // zero updates.
+          for (const { category, request } of planClusterConfigUpdates(
+            state,
+            effective,
+          )) {
             const configUpdate = yield* eks.updateClusterConfig({
               name: clusterName,
-              resourcesVpcConfig: effective.resourcesVpcConfig,
-              logging: effective.logging,
-              accessConfig: effective.accessConfig
-                ? {
-                    authenticationMode:
-                      effective.accessConfig.authenticationMode,
-                  }
-                : undefined,
-              upgradePolicy: effective.upgradePolicy,
-              computeConfig: effective.computeConfig,
-              kubernetesNetworkConfig: effective.kubernetesNetworkConfig,
-              storageConfig: effective.storageConfig,
-              deletionProtection: effective.deletionProtection,
-              clientRequestToken: yield* toClientRequestToken(id, "config"),
+              ...request,
+              clientRequestToken: yield* toClientRequestToken(
+                id,
+                `config-${category}`,
+              ),
             });
             if (configUpdate.update?.id) {
               yield* session.note(
-                `Updating EKS cluster config ${clusterName}...`,
+                `Updating EKS cluster ${category} config (${clusterName})...`,
               );
               yield* waitForUpdate(clusterName, configUpdate.update.id);
               state =

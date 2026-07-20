@@ -9,12 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { LogEntry } from "./Model.ts";
-import {
-  Reporter,
-  type RunSummary,
-  type TestEvent,
-  type TestMeta,
-} from "./Reporter.ts";
+import { Reporter, type RunSummary, type TestEvent } from "./Reporter.ts";
 import { writeDirect } from "./StrayOutput.ts";
 
 const useColor =
@@ -53,7 +48,14 @@ const indent = (text: string, prefix = "  "): string =>
 /** Mutable per-run reporter state. */
 interface ReporterState {
   readonly hookLogs: Map<string, ReadonlyArray<LogEntry>>;
-  readonly running: Map<string, { meta: TestMeta; startedAt: number }>;
+  /**
+   * Currently-executing work items: tests AND file-level hooks. Hooks must
+   * be tracked too — a `beforeAll` deploy can legitimately run for many
+   * minutes with no test starting or finishing, and if the stall report
+   * only covered tests, such a run would print nothing at all and read as
+   * deadlocked.
+   */
+  readonly running: Map<string, { label: string; startedAt: number }>;
   lastEnd: number;
   /** Running-set fingerprint of the last stall report — dedupes repeats. */
   lastStallKey: string;
@@ -87,9 +89,7 @@ const printStalled = (state: ReporterState): void => {
   ];
   for (const item of items.slice(0, STALL_LIST_MAX)) {
     lines.push(
-      dim(
-        `    ${item.meta.file} > ${item.meta.titlePath.join(" > ")} (${formatDuration(now - item.startedAt)})`,
-      ),
+      dim(`    ${item.label} (${formatDuration(now - item.startedAt)})`),
     );
   }
   if (items.length > STALL_LIST_MAX) {
@@ -112,9 +112,21 @@ const onEvent = (
     case "TestStart":
       return Effect.sync(() => {
         state.running.set(event.test.id, {
-          meta: event.test,
+          label: `${event.test.file} > ${event.test.titlePath.join(" > ")}`,
           startedAt: Date.now(),
         });
+      });
+    case "HookStart":
+      return Effect.sync(() => {
+        state.running.set(`${event.file} :: ${event.hook}`, {
+          label: `${event.file} > [${event.hook} hook]`,
+          startedAt: Date.now(),
+        });
+      });
+    case "HookEnd":
+      return Effect.sync(() => {
+        state.running.delete(`${event.file} :: ${event.hook}`);
+        state.lastEnd = Date.now();
       });
     case "TestEnd": {
       state.running.delete(event.test.id);
