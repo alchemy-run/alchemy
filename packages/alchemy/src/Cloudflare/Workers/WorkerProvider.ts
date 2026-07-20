@@ -409,6 +409,10 @@ const resolveWorkerMetadataHash = ({
     logpush: props.logpush,
     observability: props.observability,
     placement: props.placement,
+    // The source descriptor is plain JSON data; hashing it means
+    // switching providers (or changing provider options) triggers an
+    // update even when no hash slot the new source computes differs.
+    source: props.source,
     subdomain: props.subdomain,
     tags: props.tags,
     url: props.url,
@@ -1142,7 +1146,7 @@ export const LiveWorkerProvider = () =>
         opts: { skipAssetsRead?: boolean } = {},
       ) =>
         Effect.gen(function* () {
-          const source = resolveSource(props);
+          const source = yield* resolveSource(props);
           const ctx = makeWorkerSourceContext(id, workerName, props);
           // Sources that own their assets (vite) produce them from the
           // build; for every other source the props-level `assets`
@@ -1899,7 +1903,7 @@ export const LiveWorkerProvider = () =>
         // (without building where it can) and any defined slot that
         // differs from state means an update. `additionalWorkspaces` is
         // auxiliary metadata for the input hash, never a change signal.
-        const source = resolveSource(props);
+        const source = yield* resolveSource(props);
         const slots = yield* source.hash(
           makeWorkerSourceContext(id, workerName, props),
           output.hash,
