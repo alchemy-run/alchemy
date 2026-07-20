@@ -4,16 +4,12 @@ import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
-import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -27,17 +23,10 @@ import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
-import {
-  Worker,
-  type ViteOptions,
-  type WorkerProps,
-  type WorkerRouteConfig,
-} from "./Worker.ts";
+import { makeSourceContext, resolveSource } from "./Source.ts";
+import { Worker, type WorkerProps, type WorkerRouteConfig } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
-import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
-import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
@@ -435,9 +424,6 @@ export const LiveWorkerProvider = () =>
   Provider.effect(
     Worker,
     Effect.gen(function* () {
-      const path = yield* Path.Path;
-
-      const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
 
       // const createScriptSubdomain = yield* workers.createScriptSubdomain;
@@ -1136,206 +1122,44 @@ export const LiveWorkerProvider = () =>
         );
       });
 
-      const prepareBundle = (id: string, props: WorkerProps) =>
-        (isPythonMain(props.main)
-          ? readPythonWorkerBundle({
-              id,
-              main: props.main,
-              compatibility: getCompatibility(props),
-            })
-          : props.bundle === false
-            ? readPrebuiltWorkerBundle({
-                main: props.main!,
-                rules: props.rules,
-              })
-            : bundler.build({
-                id,
-                main: props.main!,
-                compatibility: getCompatibility(props),
-                entry: props.isExternal
-                  ? {
-                      kind: "external",
-                    }
-                  : {
-                      kind: "effect",
-                      exports: props.exports ?? {},
-                    },
-                stack: { name: stack.name, stage: stack.stage },
-                extraOptions: props.build,
-              })
-        ).pipe(Artifacts.cached("build"));
-
-      const hashScript = (script: string) =>
-        Effect.sync(() =>
-          crypto.createHash("sha256").update(script).digest("hex"),
-        );
-
-      const viteBuild = Effect.fn(function* (props: WorkerProps) {
-        const compatibility = getCompatibility(props);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s), which is only needed for vite-based workers at build time —
-        // not for every Worker definition at module-load time.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const { clientDirectory, serverBundle, externalWorkspaces } =
-          yield* Vite.viteBuild(
-            props.vite?.rootDir,
-            Object.fromEntries(
-              (yield* Effect.all(
-                Object.entries(props.env ?? {}).map(
-                  Effect.fn(function* ([key, value]) {
-                    return [
-                      key,
-                      typeof value === "string"
-                        ? value
-                        : Redacted.isRedacted(value) &&
-                            typeof Redacted.value(value) === "string"
-                          ? Redacted.value(value)
-                          : // A `WorkerLoader` is a real Effect that also carries
-                            // the `~alchemy/Kind` marker — it is a binding, not a
-                            // runnable env value. Check it before `Effect.isEffect`
-                            // so we don't execute it as an inlined env entry.
-                            isWorkerLoader(value)
-                            ? undefined
-                            : Effect.isEffect(value)
-                              ? yield* value as any as Effect.Effect<any>
-                              : undefined,
-                    ];
-                  }),
-                ),
-              )).filter(([_, value]) => value !== undefined),
-            ),
-            {
-              main: props.vite?.main,
-              compatibilityDate: compatibility.date,
-              compatibilityFlags: compatibility.flags,
-              viteEnvironments: props.vite?.viteEnvironments,
-            },
-          );
-        const [assets, bundle, input] = yield* Effect.all(
-          [
-            clientDirectory
-              ? readAssets({
-                  ...(props.assets && typeof props.assets !== "string"
-                    ? props.assets
-                    : undefined),
-                  directory: path.resolve(
-                    props.vite?.rootDir ?? process.cwd(),
-                    clientDirectory,
-                  ),
-                })
-              : Effect.undefined,
-            serverBundle,
-            hashViteInput(
-              props.vite?.rootDir,
-              props.vite?.memo,
-              externalWorkspaces,
-            ),
-          ],
-          { concurrency: "unbounded" },
-        );
-        if (!assets && !bundle) {
-          return yield* Effect.die(
-            new Error("Vite build produced neither assets nor server output"),
-          );
-        }
-        return {
-          assets,
-          bundle,
-          input: input.hash,
-          additionalWorkspaces: input.workspaces,
-        };
-      });
-
-      const hashViteInput = Effect.fn(function* <E>(
-        rootDir: string = process.cwd(),
-        options: ViteOptions["memo"],
-        additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
-      ) {
-        const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
-          hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
-            Effect.map((hash) => `${path.relative(rootDir, cwd)}:${hash}`),
-          );
-        const hashRoot = hashWorkspaceDirectory(rootDir, options);
-        if (Array.isArray(options?.workspaces)) {
-          return yield* Effect.all(
-            [
-              hashRoot,
-              ...options.workspaces.map(({ cwd, ...options }) =>
-                hashWorkspaceDirectory(cwd, options),
-              ),
-            ],
-            { concurrency: "unbounded" },
-          ).pipe(
-            Effect.flatMap(([root, ...workspaces]) =>
-              sha256Object([root, ...workspaces.sort()]),
-            ),
-            Effect.map((hash) => ({ hash, workspaces: undefined })),
-          );
-        }
-        const [root, workspaces] = yield* Effect.all(
-          [hashRoot, additionalWorkspaces],
-          { concurrency: "unbounded" },
-        );
-        const workspaceHashes = yield* Effect.forEach(
-          workspaces,
-          (cwd) => hashWorkspaceDirectory(cwd),
-          { concurrency: "unbounded" },
-        );
-        const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
-        return {
-          hash,
-          workspaces: Array.from(workspaces).map((cwd) =>
-            path.relative(rootDir, cwd),
-          ),
-        };
-      });
+      const makeWorkerSourceContext = (
+        id: string,
+        workerName: string,
+        props: WorkerProps,
+      ) =>
+        makeSourceContext({
+          id,
+          workerName,
+          props,
+          compatibility: getCompatibility(props),
+          stack: { name: stack.name, stage: stack.stage },
+        });
 
       const prepareAssetsAndBundle = (
         id: string,
+        workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean } = {},
       ) =>
         Effect.gen(function* () {
-          if (props.script !== undefined) {
-            const [assets, bundleHash] = yield* Effect.all(
-              [
-                opts.skipAssetsRead
-                  ? Effect.succeed(undefined)
-                  : prepareAssets(props.assets),
-                hashScript(props.script),
-              ],
-              { concurrency: "unbounded" },
-            );
-            return {
-              assets,
-              bundle: {
-                files: [{ path: "main.js", content: props.script }],
-                hash: bundleHash,
-              },
-              input: undefined,
-              additionalWorkspaces: undefined,
-            };
-          }
-          if (props.vite) {
-            return yield* viteBuild(props);
-          }
-          const [assets, bundle] = yield* Effect.all(
+          const source = resolveSource(props);
+          const ctx = makeWorkerSourceContext(id, workerName, props);
+          // Sources that own their assets (vite) produce them from the
+          // build; for every other source the props-level `assets`
+          // directory is read here — skipped entirely when putWorker's
+          // AssetsWithHash fast path already decided nothing changed.
+          const [output, propsAssets] = yield* Effect.all(
             [
-              opts.skipAssetsRead
-                ? Effect.succeed(undefined)
+              source.build(ctx),
+              source.ownsAssets || opts.skipAssetsRead
+                ? Effect.undefined
                 : prepareAssets(props.assets),
-              prepareBundle(id, props),
             ],
             { concurrency: "unbounded" },
           );
+          const assets = output.assets ?? propsAssets;
+          const bundle = output.bundle;
           return {
-            assets,
-            bundle,
-            input: undefined,
-            additionalWorkspaces: undefined,
-          };
-        }).pipe(
-          Effect.map(({ assets, bundle, input, additionalWorkspaces }) => ({
             assets,
             bundle: {
               main: bundle?.files[0].path,
@@ -1349,11 +1173,11 @@ export const LiveWorkerProvider = () =>
             hash: {
               assets: assets?.hash,
               bundle: bundle?.hash,
-              input,
-              additionalWorkspaces,
+              input: output.hash.input,
+              additionalWorkspaces: output.hash.additionalWorkspaces,
             } satisfies Worker["Attributes"]["hash"],
-          })),
-        );
+          };
+        });
 
       const normalizePrebuiltAssets = (
         assets: WorkerProps["assets"],
@@ -1396,7 +1220,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, news, {
+        } = yield* prepareAssetsAndBundle(id, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
         });
         // When the caller supplied a precomputed hash (e.g. via
@@ -2048,6 +1872,7 @@ export const LiveWorkerProvider = () =>
 
       const hasChanged = Effect.fn(function* (
         id: string,
+        workerName: string,
         props: WorkerProps,
         output: Worker["Attributes"],
         bindings: readonly ResourceBinding<Worker["Binding"]>[] | undefined,
@@ -2070,35 +1895,33 @@ export const LiveWorkerProvider = () =>
             return true;
           }
         }
-        if (props.script !== undefined) {
-          const scriptHash = yield* hashScript(props.script);
-          if (scriptHash !== output.hash?.bundle) {
-            return true;
-          }
-          if (!props.assets) {
-            return false;
-          }
-          const assetsHash = Predicate.hasProperty(props.assets, "hash")
-            ? props.assets.hash
-            : undefined;
-          if (assetsHash === undefined) {
-            return true;
-          }
-          return assetsHash !== output.hash?.assets;
-        }
-        if (props.vite) {
-          const { hash } = yield* hashViteInput(
-            props.vite.rootDir,
-            props.vite.memo,
-            Effect.succeed(output.hash?.additionalWorkspaces ?? []),
-          );
-          return hash !== output.hash?.input;
-        }
-        const bundleHash = yield* prepareBundle(id, props).pipe(
-          Effect.map((b) => b.hash),
+        // Source diff: the source recomputes the hash slots it owns
+        // (without building where it can) and any defined slot that
+        // differs from state means an update. `additionalWorkspaces` is
+        // auxiliary metadata for the input hash, never a change signal.
+        const source = resolveSource(props);
+        const slots = yield* source.hash(
+          makeWorkerSourceContext(id, workerName, props),
+          output.hash,
         );
-        if (bundleHash !== output.hash?.bundle) {
+        if (
+          slots.bundle !== undefined &&
+          slots.bundle !== output.hash?.bundle
+        ) {
           return true;
+        }
+        if (slots.input !== undefined && slots.input !== output.hash?.input) {
+          return true;
+        }
+        if (
+          slots.assets !== undefined &&
+          slots.assets !== output.hash?.assets
+        ) {
+          return true;
+        }
+        if (source.ownsAssets) {
+          // Source-owned assets (vite) are covered by the `input` hash.
+          return false;
         }
         if (!props.assets) {
           return false;
@@ -2296,6 +2119,7 @@ export const LiveWorkerProvider = () =>
             cronsChanged ||
             (yield* hasChanged(
               id,
+              workerName,
               news,
               output,
               Array.isArray(newBindings)

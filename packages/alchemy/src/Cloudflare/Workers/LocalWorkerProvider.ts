@@ -66,11 +66,16 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
+import {
+  makeSourceContext,
+  resolveSource,
+  type DevContext,
+  type SourceDevServices,
+  type SourceError,
+} from "./Source.ts";
 import { Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
-import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
 type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
@@ -91,7 +96,6 @@ export const LocalWorkerProvider = () =>
     Worker,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
-      const bundler = yield* WorkerBundle;
       const runtime = yield* Runtime;
       const stack = yield* Stack;
       const path = yield* Path.Path;
@@ -214,16 +218,17 @@ export const LocalWorkerProvider = () =>
               content: file.content,
             });
           } else {
-            if (typeof file.content !== "string") {
-              return yield* new WorkerValidationError({
-                message: `Expected string for ${file.path} (${type})`,
-                value: file.content,
-              });
-            }
+            // Prebuilt (`bundle: false`) workers read every module as raw
+            // bytes; string-typed workerd modules (ESModule, Text, ...)
+            // are decoded here, mirroring the deploy path which uploads
+            // the same bytes with a text content type.
             modules.push({
               name: file.path,
               type,
-              content: file.content,
+              content:
+                typeof file.content === "string"
+                  ? file.content
+                  : new TextDecoder().decode(file.content),
             });
           }
         }
@@ -459,20 +464,7 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
-          viteMain: props.vite?.main,
-          viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
-          env: props.env,
-          bundleOptions: {
-            id,
-            main: props.main!,
-            compatibility,
-            entry: props.isExternal
-              ? { kind: "external" }
-              : { kind: "effect", exports: props.exports ?? {} },
-            stack: { name: stack.name, stage: stack.stage },
-            extraOptions: props.build,
-          } satisfies WorkerBundleOptions,
           assets: props.assets,
           dev: {
             ...props.dev,
@@ -484,19 +476,18 @@ export const LocalWorkerProvider = () =>
 
       type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
 
-      const runWorker = Effect.fn(function* (worker: WorkerConfig) {
+      const runWorker = Effect.fn(function* (
+        worker: WorkerConfig,
+        proxy: WorkerProxy.WorkerProxyInstance,
+        bundles: Stream.Stream<
+          Bundle.BundleWatchEvent,
+          SourceError,
+          SourceDevServices
+        >,
+      ) {
         let start = Date.now();
         let status: "start" | "update" = "start";
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
-        yield* (
-          isPythonMain(worker.bundleOptions.main)
-            ? watchPythonWorkerBundle({
-                id: worker.bundleOptions.id,
-                main: worker.bundleOptions.main,
-                compatibility: worker.compatibility,
-              })
-            : bundler.watch(worker.bundleOptions)
-        ).pipe(
+        yield* bundles.pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               start = Date.now();
@@ -545,39 +536,6 @@ export const LocalWorkerProvider = () =>
         return proxy.url;
       });
 
-      const runVite = Effect.fn(function* (
-        worker: WorkerConfig,
-        rootDir: string | undefined,
-      ) {
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
-        yield* proxy.unset().pipe(Effect.forkChild);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s); only needed when running a vite dev server.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const devServer = yield* Vite.viteDev(
-          rootDir,
-          worker.env ?? {},
-          {
-            main: worker.viteMain,
-            compatibilityDate: worker.compatibility.date,
-            compatibilityFlags: worker.compatibility.flags,
-            viteEnvironments: worker.viteEnvironments,
-            worker: {
-              name: worker.name,
-              bindings: worker.workerBindings,
-              durableObjectNamespaces: worker.durableObjectNamespaces,
-              hyperdrives: worker.hyperdrives,
-              queueConsumers: yield* getQueueConsumers(worker.name),
-              assets: toRuntimeAssets(worker.assets),
-            },
-            context,
-          },
-          { port: 0 },
-        );
-        yield* proxy.set(new URL(devServer.resolvedUrls!.local[0]));
-        return proxy.url;
-      });
-
       const rootScope = yield* Effect.scope;
       const workerdScopes = new Map<string, Scope.Closeable>();
 
@@ -588,7 +546,7 @@ export const LocalWorkerProvider = () =>
           signature: string;
           fiber: Fiber.Fiber<
             Worker["Attributes"],
-            Bundle.BundleError | WorkerValidationError | RuntimeError
+            SourceError | WorkerValidationError | RuntimeError
           >;
           scope: Scope.Closeable;
         }
@@ -602,8 +560,35 @@ export const LocalWorkerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
+        const source = resolveSource(props);
+        const devCtx: DevContext = {
+          ...makeSourceContext({
+            id: options.id,
+            workerName: config.name,
+            props,
+            compatibility: config.compatibility,
+            stack: { name: stack.name, stage: stack.stage },
+          }),
+          worker: {
+            name: config.name,
+            bindings: config.workerBindings,
+            durableObjectNamespaces: config.durableObjectNamespaces,
+            hyperdrives: config.hyperdrives,
+            queueConsumers: getQueueConsumers(config.name),
+            assets: toRuntimeAssets(config.assets),
+          },
+          runtimeContext: context,
+        };
+        const proxy = yield* maybeStartProxy(config.id, config.dev);
+        // Queue requests until the source's first output is served —
+        // whether that's the first workerd serve (bundle mode) or the
+        // dev server URL (server mode).
+        yield* proxy.unset().pipe(Effect.forkChild);
+        const handle = yield* source.dev(devCtx);
         const url = yield* (
-          props.vite ? runVite(config, props.vite.rootDir) : runWorker(config)
+          handle.mode === "server"
+            ? proxy.set(handle.url).pipe(Effect.as(proxy.url))
+            : runWorker(config, proxy, handle.bundles)
         ).pipe(Effect.map((url) => url.toString()));
         return {
           workerId: config.name,

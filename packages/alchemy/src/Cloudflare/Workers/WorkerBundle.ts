@@ -315,3 +315,47 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (
     Effect.flatMap(Bundle.bundleOutputFromFiles),
   );
 });
+
+/**
+ * Watch a prebuilt Worker (`bundle: false`) for changes: emits the
+ * initial byte-for-byte read, then re-reads whenever a file under the
+ * entry's directory changes (debounced). Mirrors the
+ * {@link Bundle.BundleWatchEvent} protocol of the rolldown watcher so
+ * local dev can consume either stream interchangeably — crucially
+ * WITHOUT re-bundling the prebuilt artifact, preserving the same
+ * byte-for-byte contract as the deploy path.
+ */
+export const watchPrebuiltWorkerBundle = (
+  options: PrebuiltWorkerBundleOptions,
+) =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const main = yield* Effect.sync(() => {
+        try {
+          return fileURLToPath(options.main);
+        } catch {
+          return options.main;
+        }
+      }).pipe(Effect.map((p) => path.resolve(p)));
+      const root = path.dirname(main);
+      const read = readPrebuiltWorkerBundle(options).pipe(
+        Effect.map(
+          (output): Bundle.BundleWatchEvent => ({ _tag: "Success", output }),
+        ),
+        Effect.catch((error) =>
+          Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error }),
+        ),
+      );
+      const rebuilds = fs.watch(root).pipe(
+        Stream.debounce("200 millis"),
+        Stream.flatMap(() =>
+          Stream.make({ _tag: "Start" } as Bundle.BundleWatchEvent).pipe(
+            Stream.concat(Stream.fromEffect(read)),
+          ),
+        ),
+        Stream.catchCause(() => Stream.empty),
+      );
+      return Stream.fromEffect(read).pipe(Stream.concat(rebuilds));
+    }),
+  );
