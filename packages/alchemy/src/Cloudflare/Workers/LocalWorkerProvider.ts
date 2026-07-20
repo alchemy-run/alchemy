@@ -560,7 +560,7 @@ export const LocalWorkerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
-        const source = resolveSource(props);
+        const source = yield* resolveSource(props);
         const devCtx: DevContext = {
           ...makeSourceContext({
             id: options.id,

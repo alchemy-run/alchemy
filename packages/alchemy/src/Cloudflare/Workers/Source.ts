@@ -9,7 +9,7 @@ import type {
 } from "@distilled.cloud/cloudflare-runtime";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -27,7 +27,11 @@ import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
 import { makePythonSource } from "./Sources/Python.ts";
 import { makeRolldownSource } from "./Sources/Rolldown.ts";
 import { makeViteSource } from "./Sources/Vite.ts";
-import type { WorkerAssetsConfig, WorkerProps } from "./Worker.ts";
+import type {
+  WorkerAssetsConfig,
+  WorkerProps,
+  WorkerSourceDescriptor,
+} from "./Worker.ts";
 
 /**
  * The hash slots a Worker source contributes to
@@ -251,25 +255,126 @@ export interface SourceProvider {
 }
 
 /**
- * Resolve the {@link SourceProvider} for a Worker from its props. Legacy
- * props map to the built-in providers, preserving the historical
- * precedence exactly: `script` → `vite` → `.py` main → `bundle: false`
- * → rolldown (default).
+ * The contract of a dynamically-imported source-provider module: its
+ * default export builds a {@link SourceProvider} from the descriptor's
+ * (JSON-serializable) options. `make` provides the package's own layers
+ * internally, so the closed {@link SourceServices} requirement holds.
  */
-export const resolveSource = (props: WorkerProps): SourceProvider => {
+export interface WorkerSourceModule {
+  readonly make: (
+    options: unknown,
+  ) => Effect.Effect<SourceProvider, SourceProviderError, SourceServices>;
+}
+
+/**
+ * Module imports memoized per specifier for the process lifetime.
+ * `make(options)` still runs per Worker — a stack can host several
+ * Workers of the same provider with different options.
+ */
+const sourceModules = new Map<
+  string,
+  Effect.Effect<WorkerSourceModule, SourceProviderError>
+>();
+
+const importSourceModule = (
+  specifier: string,
+): Effect.Effect<WorkerSourceModule, SourceProviderError> => {
+  const cached = sourceModules.get(specifier);
+  if (cached) {
+    return cached;
+  }
+  const load = Effect.tryPromise({
+    try: () => import(/* @vite-ignore */ specifier),
+    catch: (cause) =>
+      new SourceProviderError({
+        provider: specifier,
+        message:
+          `Failed to import Worker source provider "${specifier}". ` +
+          `Is the package installed in your project? Install it and re-run.`,
+        cause,
+      }),
+  }).pipe(
+    Effect.flatMap((mod: { default?: Partial<WorkerSourceModule> }) => {
+      if (typeof mod.default?.make !== "function") {
+        return Effect.fail(
+          new SourceProviderError({
+            provider: specifier,
+            message:
+              `Module "${specifier}" is not a Worker source provider: ` +
+              `its default export must satisfy WorkerSourceModule ({ make(options) }).`,
+          }),
+        );
+      }
+      return Effect.succeed(mod.default as WorkerSourceModule);
+    }),
+  );
+  // The underlying `import()` is memoized by the JS module registry;
+  // caching the composed effect just skips rebuilding it per resolution.
+  sourceModules.set(specifier, load);
+  return load;
+};
+
+/**
+ * Load an external source provider from its serializable descriptor:
+ * dynamically import the module, validate the shape, and call
+ * `make(options)`.
+ */
+export const loadSource = (
+  descriptor: WorkerSourceDescriptor,
+): Effect.Effect<SourceProvider, SourceProviderError, SourceServices> =>
+  importSourceModule(descriptor.provider).pipe(
+    Effect.flatMap((mod) => mod.make(descriptor.options)),
+  );
+
+/**
+ * Resolve the {@link SourceProvider} for a Worker from its props. The
+ * `source` descriptor (external providers) wins; legacy props map to the
+ * built-in providers, preserving the historical precedence exactly:
+ * `script` → `vite` → `.py` main → `bundle: false` → rolldown (default).
+ *
+ * `source` is mutually exclusive with `script`/`vite`/`main` — a source
+ * is self-contained, and a provider that needs a custom entry takes it
+ * in its own `options`.
+ */
+export const resolveSource = (
+  props: WorkerProps,
+): Effect.Effect<SourceProvider, SourceProviderError, SourceServices> => {
+  if (props.source) {
+    const conflict =
+      props.script !== undefined
+        ? "script"
+        : props.vite
+          ? "vite"
+          : props.main !== undefined
+            ? "main"
+            : undefined;
+    if (conflict) {
+      return Effect.fail(
+        new SourceProviderError({
+          provider: props.source.provider,
+          message:
+            `Worker prop "source" is mutually exclusive with "${conflict}": ` +
+            `a source provider is self-contained — pass a custom entry via the provider's own options instead.`,
+        }),
+      );
+    }
+    return loadSource(props.source);
+  }
   if (props.script !== undefined) {
-    return makeInlineScriptSource(props.script);
+    return Effect.succeed(makeInlineScriptSource(props.script));
   }
   if (props.vite) {
-    return makeViteSource(props.vite);
+    return Effect.succeed(makeViteSource(props.vite));
   }
   if (isPythonMain(props.main)) {
-    return makePythonSource(props.main);
+    return Effect.succeed(makePythonSource(props.main));
   }
   if (props.bundle === false) {
-    return makePrebuiltSource({ main: props.main!, rules: props.rules });
+    return Effect.succeed(
+      makePrebuiltSource({ main: props.main!, rules: props.rules }),
+    );
   }
-  return makeRolldownSource({ main: props.main! });
+  return Effect.succeed(makeRolldownSource({ main: props.main! }));
 };
 
 /**
