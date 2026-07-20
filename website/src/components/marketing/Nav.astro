@@ -214,8 +214,23 @@ const { marketing = false } = Astro.props;
     gap: 6px;
   }
 
+  /* Collapse search to an icon-only button (matching the theme toggle) —
+     docs pages have no other search entry point, so it must stay reachable. */
   @media (max-width: 880px) {
     .alc-nav__search {
+      width: auto;
+    }
+    .alc-nav__search :global(button[data-open-modal]) {
+      width: 32px;
+      justify-content: center;
+      padding: 0;
+    }
+    .alc-nav__search :global(button[data-open-modal] svg) {
+      width: 16px;
+      height: 16px;
+    }
+    .alc-nav__search :global(button[data-open-modal] > span),
+    .alc-nav__search :global(button[data-open-modal] kbd) {
       display: none;
     }
     .alc-nav__link--icon .alc-nav__link-text {
