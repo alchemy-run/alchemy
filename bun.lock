@@ -48,7 +48,7 @@
     },
     "distilled/packages/aws": {
       "name": "@distilled.cloud/aws",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@aws-crypto/crc32": "catalog:",
         "@aws-crypto/util": "catalog:",
@@ -71,7 +71,6 @@
         "dedent": "catalog:",
         "dotenv": "catalog:",
         "pathe": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -80,7 +79,7 @@
     },
     "distilled/packages/axiom": {
       "name": "@distilled.cloud/axiom",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -88,7 +87,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -97,7 +95,7 @@
     },
     "distilled/packages/azure": {
       "name": "@distilled.cloud/azure",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -105,7 +103,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -114,7 +111,7 @@
     },
     "distilled/packages/cloudflare": {
       "name": "@distilled.cloud/cloudflare",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -124,7 +121,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "typescript-5": "npm:typescript@^5.9.3",
         "vitest": "catalog:",
       },
@@ -134,7 +130,7 @@
     },
     "distilled/packages/coinbase": {
       "name": "@distilled.cloud/coinbase",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -142,7 +138,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
         "yaml": "^2.8.2",
       },
@@ -152,7 +147,7 @@
     },
     "distilled/packages/core": {
       "name": "@distilled.cloud/core",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
@@ -165,7 +160,7 @@
     },
     "distilled/packages/expo-eas": {
       "name": "@distilled.cloud/expo-eas",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -173,7 +168,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -182,7 +176,7 @@
     },
     "distilled/packages/fly-io": {
       "name": "@distilled.cloud/fly-io",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -190,7 +184,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -199,7 +192,7 @@
     },
     "distilled/packages/gcp": {
       "name": "@distilled.cloud/gcp",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -207,7 +200,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -216,7 +208,7 @@
     },
     "distilled/packages/kubernetes": {
       "name": "@distilled.cloud/kubernetes",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -224,7 +216,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -233,7 +224,7 @@
     },
     "distilled/packages/mongodb-atlas": {
       "name": "@distilled.cloud/mongodb-atlas",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -241,7 +232,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -250,7 +240,7 @@
     },
     "distilled/packages/neon": {
       "name": "@distilled.cloud/neon",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -258,7 +248,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -267,7 +256,7 @@
     },
     "distilled/packages/planetscale": {
       "name": "@distilled.cloud/planetscale",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -275,7 +264,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -284,7 +272,7 @@
     },
     "distilled/packages/posthog": {
       "name": "@distilled.cloud/posthog",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -294,7 +282,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -303,7 +290,7 @@
     },
     "distilled/packages/prisma-postgres": {
       "name": "@distilled.cloud/prisma-postgres",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -311,7 +298,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -320,7 +306,7 @@
     },
     "distilled/packages/stripe": {
       "name": "@distilled.cloud/stripe",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -328,7 +314,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -337,7 +322,7 @@
     },
     "distilled/packages/supabase": {
       "name": "@distilled.cloud/supabase",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -345,7 +330,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -354,7 +338,7 @@
     },
     "distilled/packages/turso": {
       "name": "@distilled.cloud/turso",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -362,7 +346,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -371,7 +354,7 @@
     },
     "distilled/packages/typesense": {
       "name": "@distilled.cloud/typesense",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -379,7 +362,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
         "yaml": "catalog:",
       },
@@ -389,7 +371,7 @@
     },
     "distilled/packages/workos": {
       "name": "@distilled.cloud/workos",
-      "version": "0.29.1",
+      "version": "0.29.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -397,7 +379,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "dotenv": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
         "yaml": "catalog:",
       },
@@ -1030,8 +1011,8 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/cloudflare-rolldown-plugin": "0.13.6",
-    "@distilled.cloud/cloudflare-runtime": "https://pkg.distilled.cloud/cloudflare-runtime/cc1e17f",
-    "@distilled.cloud/cloudflare-vite-plugin": "https://pkg.distilled.cloud/cloudflare-vite-plugin/cc1e17f",
+    "@distilled.cloud/cloudflare-runtime": "https://pkg.distilled.cloud/cloudflare-runtime/2ff81d5",
+    "@distilled.cloud/cloudflare-vite-plugin": "https://pkg.distilled.cloud/cloudflare-vite-plugin/2ff81d5",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
@@ -1328,9 +1309,9 @@
 
     "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@0.13.6", "", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "magic-string": "^0.30.21", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.0.1", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["rolldown", "vite"] }, "sha512-DJ+2nsGLnMMMFryySCz2hLN8RT2GS2KZOYkxvL5CeEkj28D+jpciI4L3gi8J2N/x486eTzIy5JCvRBeLKsHKSA=="],
 
-    "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@https://pkg.distilled.cloud/cloudflare-runtime/cc1e17f", { "dependencies": { "@alchemy.run/node-utils": "^0.0.5", "workerd": "1.20260704.1" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.29.0", "@effect/platform-bun": ">=4.0.0-beta.97 || >=4.0.0", "@effect/platform-node": ">=4.0.0-beta.97 || >=4.0.0", "effect": ">=4.0.0-beta.97 || >=4.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-ma/fRponLhzhMdyKwS3YPhe4a/yvmY3HrTxVHAIf03PbpeKnWDYgY/PJGJFylugzwLiZ3A003zGhaqOuhVCjOA=="],
+    "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@https://pkg.distilled.cloud/cloudflare-runtime/2ff81d5", { "dependencies": { "@alchemy.run/node-utils": "^0.0.5", "workerd": "1.20260704.1" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.29.0", "@effect/platform-bun": ">=4.0.0-beta.97 || >=4.0.0", "@effect/platform-node": ">=4.0.0-beta.97 || >=4.0.0", "effect": ">=4.0.0-beta.97 || >=4.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-rKhcQcZZolKcn85HNvWsvNjNsZn8RzRji85o0/nSsadCjZUhGluhrnC05PZ3NZUbK/OT+BavSlFHQnBihit22Q=="],
 
-    "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@https://pkg.distilled.cloud/cloudflare-vite-plugin/cc1e17f", { "dependencies": { "@distilled.cloud/cloudflare-rolldown-plugin": "https://pkg.distilled.cloud/cloudflare-rolldown-plugin/cc1e17f" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.29.0", "@distilled.cloud/cloudflare-runtime": "https://pkg.distilled.cloud/cloudflare-runtime/cc1e17f", "@effect/platform-bun": ">=4.0.0-beta.97 || >=4.0.0", "@effect/platform-node": ">=4.0.0-beta.97 || >=4.0.0", "effect": ">=4.0.0-beta.97 || >=4.0.0", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-GSXYfdjJEnpC7VM1VkUggLl0Pf+PoiKLR2jmlvQZ9hpq7KkVDxwa1t90jlFQFBJbaF7+2drWH3MrXeVPr1CE8Q=="],
+    "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@https://pkg.distilled.cloud/cloudflare-vite-plugin/2ff81d5", { "dependencies": { "@distilled.cloud/cloudflare-rolldown-plugin": "https://pkg.distilled.cloud/cloudflare-rolldown-plugin/2ff81d5" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.29.0", "@distilled.cloud/cloudflare-runtime": "https://pkg.distilled.cloud/cloudflare-runtime/2ff81d5", "@effect/platform-bun": ">=4.0.0-beta.97 || >=4.0.0", "@effect/platform-node": ">=4.0.0-beta.97 || >=4.0.0", "effect": ">=4.0.0-beta.97 || >=4.0.0", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-sCyF+e33MJkE+e/X06Y8LFhtM+da6MEadokQ1fsC/eISEolbLAC9enzmGQM+kRv0FGOUYdyKvWKjOa8E0PVOBw=="],
 
     "@distilled.cloud/coinbase": ["@distilled.cloud/coinbase@workspace:distilled/packages/coinbase"],
 
@@ -4500,7 +4481,7 @@
 
     "@distilled.cloud/cloudflare-runtime/workerd": ["workerd@1.20260704.1", "", { "optionalDependencies": { "@cloudflare/workerd-darwin-64": "1.20260704.1", "@cloudflare/workerd-darwin-arm64": "1.20260704.1", "@cloudflare/workerd-linux-64": "1.20260704.1", "@cloudflare/workerd-linux-arm64": "1.20260704.1", "@cloudflare/workerd-windows-64": "1.20260704.1" }, "bin": { "workerd": "bin/workerd" } }, "sha512-GDZ0jzIYDYfN7rCt/oFJv4BG3QJ+4IS2kfRvxEMY9VKIfPhzo63PH69Ir7ug8LfORCgCtmfkiQVXrqbot7pZTQ=="],
 
-    "@distilled.cloud/cloudflare-vite-plugin/@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@https://pkg.distilled.cloud/cloudflare-rolldown-plugin/cc1e17f", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "magic-string": "^0.30.21", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.1.5", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["rolldown", "vite"] }, "sha512-iFbw34uvK+vOgrJBN9j+WeAQZyUIiB0X0FcLhNBq7YKZestXb8y5Hvw3ECUd69VmJgUUJU3SdfyV4khpWfviiw=="],
+    "@distilled.cloud/cloudflare-vite-plugin/@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@https://pkg.distilled.cloud/cloudflare-rolldown-plugin/2ff81d5", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "magic-string": "^0.30.21", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.1.5", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["rolldown", "vite"] }, "sha512-iFbw34uvK+vOgrJBN9j+WeAQZyUIiB0X0FcLhNBq7YKZestXb8y5Hvw3ECUd69VmJgUUJU3SdfyV4khpWfviiw=="],
 
     "@distilled.cloud/coinbase/@types/node": ["@types/node@26.1.1", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw=="],
 
