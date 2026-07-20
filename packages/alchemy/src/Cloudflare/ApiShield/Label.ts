@@ -148,7 +148,10 @@ export const LabelProvider = () =>
       // The name is the label's identity — compare the resolved physical
       // names (an omitted name resolves deterministically from the id).
       const oldName = output?.name ?? (yield* createLabelName(id, o.name));
-      const newName = yield* createLabelName(id, n.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const newName = n.name ?? oldName;
       if (oldName !== newName) {
         return { action: "replace" } as const;
       }

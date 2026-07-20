@@ -8,7 +8,29 @@ export interface PutItemRequest extends Omit<
   "TableName"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `dynamodb:PutItem`.
+ *
+ * Bind this operation to a `Table` inside a function runtime to get a callable
+ * that writes a single item, automatically injecting the table name and
+ * granting the host `dynamodb:PutItem` on the table. Provide the `PutItemHttp`
+ * layer on the Function to satisfy the binding.
+ * @binding
+ * @section Writing Data
+ * @example Write a Single Item
+ * ```typescript
+ * // inside the Function's Effect.gen, with Effect.provide(DynamoDB.PutItemHttp)
+ * const putItem = yield* AWS.DynamoDB.PutItem(table);
+ *
+ * yield* putItem({
+ *   Item: {
+ *     pk: { S: "user#123" },
+ *     sk: { S: "profile" },
+ *     name: { S: "Alice" },
+ *   },
+ * });
+ * ```
+ */
 export interface PutItem extends Binding.Service<
   PutItem,
   "AWS.DynamoDB.PutItem",

@@ -68,10 +68,15 @@ export interface WorkloadProps {
 }
 
 export interface WorkloadResources {
+  /** Reference to the created Kubernetes Deployment. */
   deployment: Kubernetes.ObjectRef;
+  /** Reference to the created Kubernetes Service, if one was requested. */
   service: Kubernetes.ObjectRef | undefined;
+  /** The resolved workload name. */
   name: string;
+  /** The labels applied to the Deployment. */
   labels: Record<string, string>;
+  /** The labels applied to the pod template (and used as the selector). */
   podLabels: Record<string, string>;
 }
 

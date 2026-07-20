@@ -317,6 +317,13 @@ export const VpcEndpointProvider = () =>
 
       const describeVpcEndpoint = (vpcEndpointId: string) =>
         ec2.describeVpcEndpoints({ VpcEndpointIds: [vpcEndpointId] }).pipe(
+          // describe-after-write eventual consistency: an endpoint we just
+          // created (or modified) may not be visible to describe yet. The id
+          // is known-valid at every call site, so a bounded retry converges.
+          Effect.retry({
+            while: (e) => e._tag === "InvalidVpcEndpointId.NotFound",
+            schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]),
+          }),
           Effect.map((r) => r.VpcEndpoints?.[0]),
           Effect.flatMap((ep) =>
             ep
@@ -326,7 +333,6 @@ export const VpcEndpointProvider = () =>
                 ),
           ),
         );
-      // const { accountId, region } = yield* AWSEnvironment.current;
 
       const toAttrs = Effect.fn(function* (ep: ec2.VpcEndpoint) {
         const { accountId, region } = yield* AWSEnvironment.current;
@@ -379,7 +385,19 @@ export const VpcEndpointProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
-          const ep = yield* describeVpcEndpoint(output.vpcEndpointId);
+          // No consistency retry here: an endpoint deleted out-of-band should
+          // read as missing immediately, not after a retry window.
+          const lookup = yield* ec2
+            .describeVpcEndpoints({ VpcEndpointIds: [output.vpcEndpointId] })
+            .pipe(
+              Effect.catchTag("InvalidVpcEndpointId.NotFound", () =>
+                Effect.succeed({ VpcEndpoints: [] }),
+              ),
+            );
+          const ep = lookup.VpcEndpoints?.[0];
+          if (!ep || ep.State === "deleted" || ep.State === "deleting") {
+            return undefined;
+          }
           return yield* toAttrs(ep);
         }),
 
@@ -466,13 +484,11 @@ export const VpcEndpointProvider = () =>
             });
             const newEpId = result.VpcEndpoint!.VpcEndpointId!;
             yield* session.note(`VPC Endpoint created: ${newEpId}`);
-            if (
-              news.vpcEndpointType === "Interface" ||
-              news.vpcEndpointType === "GatewayLoadBalancer"
-            ) {
-              yield* waitForVpcEndpointAvailable(newEpId, session);
-            }
-            ep = yield* describeVpcEndpoint(newEpId);
+            // Wait for every endpoint type: the wait loop also absorbs the
+            // describe-after-create eventual-consistency window during which
+            // the fresh id is not yet visible (Gateway endpoints go
+            // `available` almost immediately, so this costs nothing there).
+            ep = yield* waitForVpcEndpointAvailable(newEpId, session);
           }
 
           const vpcEndpointId = ep.VpcEndpointId!;
@@ -554,48 +570,80 @@ export const VpcEndpointProvider = () =>
               hasModifications = true;
             }
 
-            if (ep.PrivateDnsEnabled !== news.privateDnsEnabled) {
+            if (
+              news.privateDnsEnabled !== undefined &&
+              ep.PrivateDnsEnabled !== news.privateDnsEnabled
+            ) {
               modifications.PrivateDnsEnabled = news.privateDnsEnabled;
               hasModifications = true;
             }
           }
 
-          if ((ep.PolicyDocument ?? undefined) !== news.policyDocument) {
-            // AWS rejects passing both a policy document and the reset flag in
-            // the same call — choose exactly one.
-            if (news.policyDocument) {
+          const observedPolicy = ep.PolicyDocument ?? undefined;
+          if (news.policyDocument !== undefined) {
+            if (!policyDocumentEquals(observedPolicy, news.policyDocument)) {
+              // AWS rejects passing both a policy document and the reset flag
+              // in the same call — choose exactly one.
               modifications.PolicyDocument = news.policyDocument;
-            } else {
-              modifications.ResetPolicy = true;
+              hasModifications = true;
             }
+          } else if (!isFullAccessEndpointPolicy(observedPolicy)) {
+            // An absent `policyDocument` means "the default full-access
+            // policy". AWS attaches exactly that default to every fresh
+            // endpoint, so only reset when a custom policy is actually
+            // present — issuing a ResetPolicy no-op immediately after create
+            // races the new endpoint id's propagation and previously failed
+            // the whole reconcile with InvalidVpcEndpointId.NotFound.
+            modifications.ResetPolicy = true;
             hasModifications = true;
           }
 
-          if (ep.IpAddressType !== news.ipAddressType) {
+          // An unspecified `ipAddressType`/`dnsOptions` means "AWS default" —
+          // the observed value on a fresh endpoint (e.g. "not-specified", or
+          // populated DNS defaults) must not be diffed against `undefined`,
+          // which previously caused a spurious modify on every reconcile.
+          if (
+            news.ipAddressType !== undefined &&
+            ep.IpAddressType !== news.ipAddressType
+          ) {
             modifications.IpAddressType = news.ipAddressType;
             hasModifications = true;
           }
 
-          const observedDnsRecordIpType = ep.DnsOptions?.DnsRecordIpType;
-          const observedPrivateDnsOnly =
-            ep.DnsOptions?.PrivateDnsOnlyForInboundResolverEndpoint;
-          if (
-            observedDnsRecordIpType !== news.dnsOptions?.dnsRecordIpType ||
-            observedPrivateDnsOnly !==
-              news.dnsOptions?.privateDnsOnlyForInboundResolverEndpoint
-          ) {
-            modifications.DnsOptions = news.dnsOptions
-              ? {
-                  DnsRecordIpType: news.dnsOptions.dnsRecordIpType,
-                  PrivateDnsOnlyForInboundResolverEndpoint:
-                    news.dnsOptions.privateDnsOnlyForInboundResolverEndpoint,
-                }
-              : undefined;
-            hasModifications = true;
+          if (news.dnsOptions !== undefined) {
+            const observedDnsRecordIpType = ep.DnsOptions?.DnsRecordIpType;
+            const observedPrivateDnsOnly =
+              ep.DnsOptions?.PrivateDnsOnlyForInboundResolverEndpoint;
+            if (
+              (news.dnsOptions.dnsRecordIpType !== undefined &&
+                observedDnsRecordIpType !== news.dnsOptions.dnsRecordIpType) ||
+              (news.dnsOptions.privateDnsOnlyForInboundResolverEndpoint !==
+                undefined &&
+                observedPrivateDnsOnly !==
+                  news.dnsOptions.privateDnsOnlyForInboundResolverEndpoint)
+            ) {
+              modifications.DnsOptions = {
+                DnsRecordIpType: news.dnsOptions.dnsRecordIpType,
+                PrivateDnsOnlyForInboundResolverEndpoint:
+                  news.dnsOptions.privateDnsOnlyForInboundResolverEndpoint,
+              };
+              hasModifications = true;
+            }
           }
 
           if (hasModifications) {
-            yield* ec2.modifyVpcEndpoint(modifications);
+            yield* ec2.modifyVpcEndpoint(modifications).pipe(
+              // The endpoint id is known-valid here (we just observed or
+              // created it) — NotFound is describe/modify-plane propagation
+              // lag, not a missing endpoint.
+              Effect.retry({
+                while: (e) => e._tag === "InvalidVpcEndpointId.NotFound",
+                schedule: Schedule.max([
+                  Schedule.fixed(2000),
+                  Schedule.recurs(10),
+                ]),
+              }),
+            );
             yield* session.note("Updated VPC Endpoint configuration");
             if (
               observedType === "Interface" ||
@@ -650,6 +698,15 @@ export const VpcEndpointProvider = () =>
           // Wait for deletion
           yield* waitForVpcEndpointDeleted(vpcEndpointId, session);
 
+          // Interface/GatewayLoadBalancer endpoints release their network
+          // interfaces asynchronously after the endpoint itself reports
+          // deleted. The parent VPC (and subnets/security groups) cannot be
+          // deleted while those ENIs linger, so wait until they are gone.
+          const eniIds = output.networkInterfaceIds ?? [];
+          if (eniIds.length > 0) {
+            yield* waitForEndpointEnisReleased(eniIds, session);
+          }
+
           yield* session.note(`VPC Endpoint ${vpcEndpointId} deleted`);
         }),
       };
@@ -669,32 +726,46 @@ class VpcEndpointFailed extends Data.TaggedError("VpcEndpointFailed")<{
   errorMessage?: string;
 }> {}
 
-// Terminal error: VPC Endpoint not found
-class VpcEndpointNotFound extends Data.TaggedError("VpcEndpointNotFound")<{
-  vpcEndpointId: string;
-}> {}
-
 // Retryable error: VPC Endpoint is still deleting
 class VpcEndpointDeleting extends Data.TaggedError("VpcEndpointDeleting")<{
   vpcEndpointId: string;
   state: string;
 }> {}
 
+// Retryable error: endpoint network interfaces are still being released
+class VpcEndpointEnisLingering extends Data.TaggedError(
+  "VpcEndpointEnisLingering",
+)<{
+  networkInterfaceIds: string[];
+}> {}
+
 /**
- * Wait for VPC Endpoint to be in available state
+ * Wait for VPC Endpoint to be in available state.
+ *
+ * Only ever called with an id we just created or observed, so a NotFound (or
+ * an empty describe result) is describe-after-create eventual consistency and
+ * is retried as "pending" rather than treated as terminal.
  */
 const waitForVpcEndpointAvailable = (
   vpcEndpointId: string,
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    const result = yield* ec2.describeVpcEndpoints({
-      VpcEndpointIds: [vpcEndpointId],
-    });
+    const result = yield* ec2
+      .describeVpcEndpoints({ VpcEndpointIds: [vpcEndpointId] })
+      .pipe(
+        Effect.catchTag("InvalidVpcEndpointId.NotFound", () =>
+          Effect.succeed({ VpcEndpoints: [] }),
+        ),
+      );
     const ep = result.VpcEndpoints?.[0];
 
     if (!ep) {
-      return yield* new VpcEndpointNotFound({ vpcEndpointId });
+      // Fresh id not visible to describe yet — retry.
+      return yield* new VpcEndpointPending({
+        vpcEndpointId,
+        state: "propagating",
+      });
     }
 
     if (ep.State === "available") {
@@ -760,3 +831,95 @@ const waitForVpcEndpointDeleted = (
       ),
     }),
   );
+
+/**
+ * Wait for the endpoint's network interfaces to be released after deletion.
+ *
+ * Uses a filter (not `NetworkInterfaceIds`) so already-released interfaces
+ * simply drop out of the result instead of failing the whole describe with
+ * `InvalidNetworkInterfaceID.NotFound`.
+ */
+const waitForEndpointEnisReleased = (
+  networkInterfaceIds: string[],
+  session: ScopedPlanStatusSession,
+) =>
+  Effect.gen(function* () {
+    const result = yield* ec2.describeNetworkInterfaces({
+      Filters: [{ Name: "network-interface-id", Values: networkInterfaceIds }],
+    });
+    const remaining = (result.NetworkInterfaces ?? [])
+      .map((eni) => eni.NetworkInterfaceId)
+      .filter((id): id is string => Boolean(id));
+    if (remaining.length > 0) {
+      return yield* new VpcEndpointEnisLingering({
+        networkInterfaceIds: remaining,
+      });
+    }
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "VpcEndpointEnisLingering",
+      schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(20)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(
+            `Waiting for endpoint network interfaces to release... (${attempt * 3}s)`,
+          ),
+        ),
+      ),
+    }),
+  );
+
+/**
+ * Structural check for the default full-access endpoint policy that AWS
+ * attaches to every freshly created VPC endpoint. An absent `policyDocument`
+ * prop is equivalent to this default, so observing it must not trigger a
+ * `ResetPolicy` modification.
+ */
+const isFullAccessEndpointPolicy = (doc: string | undefined): boolean => {
+  if (!doc) return true;
+  try {
+    const parsed = JSON.parse(doc) as {
+      Statement?: Array<{
+        Effect?: unknown;
+        Principal?: unknown;
+        Action?: unknown;
+        Resource?: unknown;
+        Condition?: unknown;
+      }>;
+    };
+    const statements = parsed.Statement ?? [];
+    if (statements.length !== 1) return false;
+    const s = statements[0];
+    const isStar = (value: unknown) =>
+      value === "*" ||
+      (Array.isArray(value) && value.length === 1 && value[0] === "*") ||
+      (typeof value === "object" &&
+        value !== null &&
+        (value as { AWS?: unknown }).AWS === "*");
+    return (
+      s.Effect === "Allow" &&
+      isStar(s.Principal) &&
+      isStar(s.Action) &&
+      isStar(s.Resource) &&
+      s.Condition === undefined
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Compare two endpoint policy documents structurally (AWS normalizes the JSON
+ * it stores, so raw string comparison would report a perpetual diff).
+ */
+const policyDocumentEquals = (
+  a: string | undefined,
+  b: string | undefined,
+): boolean => {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  try {
+    return JSON.stringify(JSON.parse(a)) === JSON.stringify(JSON.parse(b));
+  } catch {
+    return a === b;
+  }
+};

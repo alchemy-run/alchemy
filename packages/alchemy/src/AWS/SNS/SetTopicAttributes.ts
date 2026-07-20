@@ -8,7 +8,27 @@ export interface SetTopicAttributesRequest extends Omit<
   "TopicArn"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:SetTopicAttributes`.
+ *
+ * Bind this operation to a {@link Topic} inside a function runtime to set a
+ * single topic attribute by name. The binding grants the host function
+ * `sns:SetTopicAttributes` on the topic. Provide the
+ * `SetTopicAttributesHttp` layer on the Function to implement the binding.
+ * @binding
+ * @section Updating Topic Attributes
+ * @example Set a Topic's Display Name
+ * ```typescript
+ * // init (provide SNS.SetTopicAttributesHttp on the Function)
+ * const setTopicAttributes = yield* SNS.SetTopicAttributes(topic);
+ *
+ * // runtime
+ * yield* setTopicAttributes({
+ *   AttributeName: "DisplayName",
+ *   AttributeValue: "order-events",
+ * });
+ * ```
+ */
 export interface SetTopicAttributes extends Binding.Service<
   SetTopicAttributes,
   "AWS.SNS.SetTopicAttributes",

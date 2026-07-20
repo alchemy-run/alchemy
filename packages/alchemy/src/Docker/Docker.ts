@@ -248,7 +248,7 @@ export declare namespace Docker {
   }
 }
 
-interface CommandOutput {
+export interface CommandOutput {
   exitCode: ChildProcessSpawner.ExitCode;
   stdout: string;
   stderr: string;

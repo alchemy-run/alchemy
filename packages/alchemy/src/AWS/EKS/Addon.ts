@@ -59,18 +59,31 @@ export interface Addon extends Resource<
   "AWS.EKS.Addon",
   AddonProps,
   {
+    /** The ARN of the add-on. */
     addonArn: string;
+    /** The name of the add-on (e.g. `vpc-cni`, `coredns`). */
     addonName: string;
+    /** The name of the EKS cluster the add-on is installed on. */
     clusterName: string;
+    /** The add-on status (e.g. `ACTIVE`, `DEGRADED`). */
     status: eks.AddonStatus;
+    /** The installed version of the add-on. */
     addonVersion: string | undefined;
+    /** The IAM role ARN bound to the add-on's service account, if any. */
     serviceAccountRoleArn: string | undefined;
+    /** The add-on's configuration values (JSON or YAML). */
     configurationValues: string | undefined;
+    /** The ARNs of the pod identity associations owned by the add-on. */
     podIdentityAssociations: string[];
+    /** The Kubernetes namespace the add-on is installed in. */
     namespace: string | undefined;
+    /** The publisher of the add-on. */
     publisher: string | undefined;
+    /** The owner of the add-on. */
     owner: string | undefined;
+    /** The tags applied to the add-on. */
     tags: Record<string, string>;
+    /** Health issues currently reported for the add-on. */
     healthIssues: eks.AddonIssue[];
   },
   never,

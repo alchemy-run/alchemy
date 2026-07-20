@@ -230,6 +230,25 @@ test.provider(
         "stable",
       );
       expect(afterDestroy).toBeUndefined();
+
+      // ...and the host function itself is gone (bounded retry to ride out
+      // delete propagation).
+      yield* Lambda.getFunction({
+        FunctionName: replaced.fn.functionName,
+      }).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(
+            new Error(`Function ${replaced.fn.functionName} still exists`),
+          ),
+        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(8),
+          ]),
+        }),
+      );
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),

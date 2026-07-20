@@ -125,8 +125,12 @@ export const VolumeProvider = () =>
         diff: Effect.fn(function* ({ id, instanceId, output, news }) {
           if (!isResolved(news)) return undefined;
           const args = yield* makeVolumeArgs(id, news, instanceId);
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id differently
+          // today. Only an explicit user-provided name can force a replace.
+          const desiredName = news.name ?? output?.name ?? args.name;
           if (
-            output?.name !== args.name ||
+            output?.name !== desiredName ||
             output?.driver !== args.driver ||
             !Equal.equals(output?.driverOpts ?? {}, args.opt ?? {}) ||
             // Compare only user labels; internal `alchemy::*` branding lives on
@@ -136,11 +140,15 @@ export const VolumeProvider = () =>
             return { action: "replace" as const, deleteFirst: true };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
           const args = yield* makeVolumeArgs(id, news, instanceId);
+          // Prefer the deployed name: regenerating would target a different
+          // volume if the generator's output for this id ever drifts.
+          const name = news.name ?? output?.name ?? args.name;
           const internalTags = yield* createInternalTags(id);
           const result = yield* docker.volume.create({
             ...args,
+            name,
             label: { ...internalTags, ...args.label },
           });
           return toVolumeAttributes(

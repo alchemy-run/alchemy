@@ -33,11 +33,29 @@ export interface Invalidation extends Resource<
   "AWS.CloudFront.Invalidation",
   InvalidationProps,
   {
+    /**
+     * The identifier of the invalidation batch.
+     */
     invalidationId: string;
+    /**
+     * The distribution the invalidation ran against.
+     */
     distributionId: string;
+    /**
+     * The version prop that triggered this invalidation batch.
+     */
     version: string;
+    /**
+     * Current status of the invalidation (`InProgress` or `Completed`).
+     */
     status: string;
+    /**
+     * The path patterns that were invalidated.
+     */
     paths: string[];
+    /**
+     * When the invalidation batch was created.
+     */
     createTime: Date | undefined;
   },
   never,

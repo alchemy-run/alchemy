@@ -19,7 +19,7 @@ export default class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()
       queue,
       {
         batchSize: 10,
-        maximumBatchingWindowInSeconds: 20,
+        maximumBatchingWindow: "20 seconds",
       },
       (stream) =>
         stream.pipe(

@@ -258,10 +258,12 @@ export const DatabaseProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createDatabaseName(id, news.name);
-      const oldName = output?.databaseName
-        ? output.databaseName
-        : yield* createDatabaseName(id, olds.name);
+      const oldName =
+        output?.databaseName ?? (yield* createDatabaseName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       const oldJurisdiction =
         output?.jurisdiction ?? olds.jurisdiction ?? "default";
       if (

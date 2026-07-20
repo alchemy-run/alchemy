@@ -70,9 +70,13 @@ export interface PodIdentityServiceAccountProps {
 }
 
 export interface PodIdentityServiceAccountResources {
+  /** Reference to the created Kubernetes service account. */
   serviceAccount: Kubernetes.ObjectRef;
+  /** The Pod Identity association binding the role to the service account. */
   podIdentityAssociation: PodIdentityAssociationResource;
+  /** The generated IAM role, or `undefined` when `roleArn` was supplied. */
   role: RoleResource | undefined;
+  /** The ARN of the IAM role pods assume (generated or supplied). */
   roleArn: Input<string> | RoleArn;
 }
 

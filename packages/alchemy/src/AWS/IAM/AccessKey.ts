@@ -24,13 +24,21 @@ export interface AccessKey extends Resource<
   "AWS.IAM.AccessKey",
   AccessKeyProps,
   {
+    /** The IAM user the access key belongs to. */
     userName: string;
+    /** The access key ID. */
     accessKeyId: string;
+    /** Whether the key is `Active` or `Inactive`. */
     status: iam.StatusType;
+    /** When the access key was created. */
     createDate: Date | undefined;
+    /** The secret access key. AWS only returns it at creation; later reads preserve the originally stored redacted value. */
     secretAccessKey: Redacted.Redacted<string> | undefined;
+    /** When the access key was last used, if ever. */
     lastUsedDate: Date | undefined;
+    /** The AWS service the key last authenticated to. */
     lastUsedServiceName: string | undefined;
+    /** The region of the key's last use. */
     lastUsedRegion: string | undefined;
   },
   never,

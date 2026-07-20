@@ -94,14 +94,23 @@ export interface PodIdentityWorkloadProps {
 }
 
 export interface PodIdentityWorkloadResources {
+  /** Reference to the created Kubernetes Deployment. */
   deployment: Kubernetes.ObjectRef;
+  /** Reference to the created Kubernetes Service, if one was requested. */
   service: Kubernetes.ObjectRef | undefined;
+  /** Reference to the created Kubernetes service account. */
   serviceAccount: Kubernetes.ObjectRef;
+  /** The Pod Identity association binding the role to the service account. */
   podIdentityAssociation: PodIdentityAssociationResource;
+  /** The generated IAM role, or `undefined` when `roleArn` was supplied. */
   role: RoleResource | undefined;
+  /** The ARN of the IAM role pods assume (generated or supplied). */
   roleArn: Input<string> | RoleArn;
+  /** The resolved workload name. */
   name: string;
+  /** The labels applied to the Deployment. */
   labels: Record<string, string>;
+  /** The labels applied to the pod template (and used as the selector). */
   podLabels: Record<string, string>;
 }
 

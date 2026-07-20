@@ -44,11 +44,29 @@ export interface StreamConsumer extends Resource<
   "AWS.Kinesis.StreamConsumer",
   StreamConsumerProps,
   {
+    /**
+     * The consumer's physical name.
+     */
     consumerName: ConsumerName;
+    /**
+     * ARN of the registered consumer.
+     */
     consumerArn: ConsumerArn;
+    /**
+     * Current lifecycle status of the consumer.
+     */
     consumerStatus: ConsumerStatus;
+    /**
+     * ARN of the stream the consumer is registered on.
+     */
     streamArn: StreamArn;
+    /**
+     * When the consumer was registered.
+     */
     consumerCreationTimestamp: Date;
+    /**
+     * Current tags reported for the consumer.
+     */
     tags: Record<string, string>;
   },
   never,

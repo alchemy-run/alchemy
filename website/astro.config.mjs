@@ -339,10 +339,6 @@ export default defineConfig({
                 { label: "Phases", link: "/infrastructure-as-effects/phases" },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
-                  label: "Building with Layers",
-                  link: "/infrastructure-as-effects/infrastructure-layers",
-                },
-                {
                   label: "Circular Bindings",
                   link: "/infrastructure-as-effects/circular-bindings",
                 },
@@ -504,6 +500,10 @@ export default defineConfig({
               label: "Compute",
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
+                {
+                  label: "Python Workers",
+                  link: "/cloudflare/compute/python-workers",
+                },
                 {
                   label: "Durable Objects",
                   link: "/cloudflare/compute/durable-objects",

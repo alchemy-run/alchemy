@@ -1,9 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { assertVpcLinkDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,6 +17,8 @@ test.provider.skipIf(!!process.env.FAST || !targetArn)(
   "create, update description, delete VPC link",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const arn = targetArn!;
 
       const link = yield* stack.deploy(
@@ -42,6 +45,7 @@ test.provider.skipIf(!!process.env.FAST || !targetArn)(
       expect(remote.description).toEqual("v2");
 
       yield* stack.destroy();
+      yield* assertVpcLinkDeleted(link.vpcLinkId);
     }),
 );
 
@@ -72,5 +76,6 @@ test.provider.skipIf(!!process.env.FAST || !targetArn)(
       expect(all.some((v) => v.vpcLinkId === link.vpcLinkId)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertVpcLinkDeleted(link.vpcLinkId);
     }),
 );

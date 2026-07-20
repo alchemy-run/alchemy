@@ -20,7 +20,7 @@ import { AccessKey } from "../IAM/AccessKey.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Role } from "../IAM/Role.ts";
 import { User } from "../IAM/User.ts";
-import { isFunction } from "./Function.ts";
+import { isBindingHost } from "./Function.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 // Shared scaffolding for the MicroVM runtime bindings. Every `*Http` impl is
@@ -361,7 +361,7 @@ export const makeImageBinding = <Req, Res, Err, Self>(
         const region = Effect.map(imageArn, regionFromArn);
 
         let access: WorkerAwsAccess | undefined;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           if (!globalThis.__ALCHEMY_RUNTIME__) {
             yield* host.bind`${label}`({ policyStatements: statements });
           }
@@ -419,7 +419,7 @@ export const makeAccountBinding = <Req, Res, Err, Self>(
         ];
 
         let access: WorkerAwsAccess | undefined;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           if (!globalThis.__ALCHEMY_RUNTIME__) {
             yield* host.bind`${label}`({ policyStatements: statements });
           }

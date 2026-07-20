@@ -10,13 +10,19 @@ import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const deployTestBucket = (stack: Test.ScratchStack) =>
-  stack.deploy(
-    Effect.gen(function* () {
-      return yield* Bucket("DataPlaneTestBucket", {
-        forceDestroy: true,
-      });
-    }),
-  );
+  Effect.gen(function* () {
+    // Leading destroy: reconcile away any partial deployment left by a
+    // previously crashed run (the auto-generated physical name is
+    // deterministic, so the re-deploy below re-adopts and owns it).
+    yield* stack.destroy();
+    return yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Bucket("DataPlaneTestBucket", {
+          forceDestroy: true,
+        });
+      }),
+    );
+  });
 
 test.provider("listObjectsV2 - list objects in bucket", (stack) =>
   Effect.gen(function* () {

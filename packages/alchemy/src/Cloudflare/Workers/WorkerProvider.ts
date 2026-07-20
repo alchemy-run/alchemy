@@ -35,6 +35,7 @@ import {
 } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
@@ -1136,26 +1137,32 @@ export const LiveWorkerProvider = () =>
       });
 
       const prepareBundle = (id: string, props: WorkerProps) =>
-        (props.bundle === false
-          ? readPrebuiltWorkerBundle({
-              main: props.main!,
-              rules: props.rules,
-            })
-          : bundler.build({
+        (isPythonMain(props.main)
+          ? readPythonWorkerBundle({
               id,
-              main: props.main!,
+              main: props.main,
               compatibility: getCompatibility(props),
-              entry: props.isExternal
-                ? {
-                    kind: "external",
-                  }
-                : {
-                    kind: "effect",
-                    exports: props.exports ?? {},
-                  },
-              stack: { name: stack.name, stage: stack.stage },
-              extraOptions: props.build,
             })
+          : props.bundle === false
+            ? readPrebuiltWorkerBundle({
+                main: props.main!,
+                rules: props.rules,
+              })
+            : bundler.build({
+                id,
+                main: props.main!,
+                compatibility: getCompatibility(props),
+                entry: props.isExternal
+                  ? {
+                      kind: "external",
+                    }
+                  : {
+                      kind: "effect",
+                      exports: props.exports ?? {},
+                    },
+                stack: { name: stack.name, stage: stack.stage },
+                extraOptions: props.build,
+              })
         ).pipe(Artifacts.cached("build"));
 
       const hashScript = (script: string) =>
@@ -1335,7 +1342,7 @@ export const LiveWorkerProvider = () =>
               files: bundle?.files.map(
                 (file) =>
                   new File([file.content as BlobPart], file.path, {
-                    type: contentTypeFromExtension(path.extname(file.path)),
+                    type: contentTypeForModule(file.path),
                   }),
               ),
             },
@@ -1367,7 +1374,10 @@ export const LiveWorkerProvider = () =>
         existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const name = yield* createWorkerName(id, news.name);
+        // Prefer the deployed name: regenerating would target a different
+        // script if the generator's output for this id ever drifts.
+        const name =
+          output?.workerName ?? (yield* createWorkerName(id, news.name));
         // When set, this Worker is a Workers for Platforms "user worker"
         // uploaded into a dispatch namespace rather than a routable
         // account-level script. The put/settings calls switch endpoints and
@@ -2187,10 +2197,14 @@ export const LiveWorkerProvider = () =>
           if (newNamespace !== oldNamespace) {
             return { action: "replace" };
           }
-          const workerName = yield* createWorkerName(id, news.name);
-          const oldWorkerName = output?.workerName
-            ? output.workerName
-            : yield* createWorkerName(id, olds?.name);
+          const oldWorkerName =
+            output?.workerName ?? (yield* createWorkerName(id, olds?.name));
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id
+          // differently today (a Worker replace would also destroy its
+          // Durable Object storage). Only an explicit user-provided name
+          // can force a replace.
+          const workerName = news.name ?? oldWorkerName;
           if (workerName !== oldWorkerName) {
             return { action: "replace" };
           }
@@ -2844,6 +2858,21 @@ export const LiveWorkerProvider = () =>
     }),
   );
 
+const contentTypeForModule = (filePath: string) => {
+  // Vendored Python packages upload as opaque data, mirroring Wrangler's
+  // vendored-module rules — with one exception: the `workers-runtime-sdk`
+  // JS shims under `python_modules/workers/` must be ES modules so the
+  // runtime can resolve them via `import_from_javascript()`.
+  if (filePath.startsWith("python_modules/")) {
+    return filePath.startsWith("python_modules/workers/") &&
+      /\.m?js$/.test(filePath)
+      ? "application/javascript+module"
+      : "application/octet-stream";
+  }
+  const dot = filePath.lastIndexOf(".");
+  return contentTypeFromExtension(dot === -1 ? "" : filePath.slice(dot));
+};
+
 const contentTypeFromExtension = (extension: string) => {
   switch (extension) {
     case ".wasm":
@@ -2860,6 +2889,8 @@ const contentTypeFromExtension = (extension: string) => {
       return "application/javascript+module";
     case ".cjs":
       return "application/javascript";
+    case ".py":
+      return "text/x-python";
     case ".map":
       return "application/source-map";
     default:

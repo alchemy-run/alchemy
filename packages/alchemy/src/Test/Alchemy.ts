@@ -3,14 +3,16 @@
 /**
  * Test adapter for the `alchemy-test` runner (see `packages/alchemy-test`).
  *
- * Same shape as {@link "./Vitest.ts"} / {@link "./Bun.ts"}, but registers
+ * Same shape as {@link "./Bun.ts"}, but registers
  * tests as raw Effects with the alchemy-test harness so the single-process
  * runner can inject a buffering Logger/Console per test and manage
  * concurrency + timeouts itself.
  */
 import {
+  exclusiveOf,
   registerHook,
   registerTest,
+  retryOf,
   timeoutOf,
   type TestOptions,
 } from "alchemy-test";
@@ -140,6 +142,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerTest({
       name,
       mode,
+      exclusive: exclusiveOf(opts),
+      retry: retryOf(opts),
       timeout: timeoutOf(opts),
       body: mode === "skip" || mode === "todo" ? undefined : () => wrap(eff),
     });
@@ -187,6 +191,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerTest({
       name,
       mode,
+      exclusive: exclusiveOf(opts),
+      retry: retryOf(opts),
       timeout: timeoutOf(opts),
       body: mode === "skip" ? undefined : () => wrapProvider(name, fn),
     });

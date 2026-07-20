@@ -7,6 +7,8 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -70,6 +72,87 @@ test.provider("diff: changing masterUsername forces replacement", () =>
     );
     expect(result).toEqual({ action: "replace" });
   }),
+);
+
+// Render a deploy failure (whatever engine wrapper it arrives in) to a string
+// we can assert AWS's parameter-validation message against.
+const renderFailure = (attempt: Result.Result<unknown, unknown>): string => {
+  if (!Result.isFailure(attempt)) {
+    return "";
+  }
+  const failure = attempt.failure;
+  const json = (() => {
+    try {
+      return JSON.stringify(failure);
+    } catch {
+      return "";
+    }
+  })();
+  return `${String(failure)} ${json}`;
+};
+
+// Live wire probes for this PR's Redacted/Duration prop conversions on
+// DBInstance (the instance reconcile has its own conversion code, separate
+// from DBCluster's). Both drive the full engine + provider `reconcile` path
+// into a real `createDBInstance` call that AWS rejects at
+// parameter-validation time — nothing is provisioned and the probe completes
+// in seconds. Probe 1 proves `masterUserPassword: Redacted.Redacted<string>`
+// serializes to the actual secret characters on the wire; probe 2 proves
+// `backupRetentionPeriod: Duration.Input` ("60 days") arrives as integer days
+// (rejected as > the 35-day maximum). The in-range round-trip (create "1 day"
+// → read 1 → modify "3 days" → read 3) is covered by the
+// RDS_TEST_LIFECYCLE-gated lifecycle test below.
+test.provider(
+  "wire probe: Redacted password + Duration retention reach createDBInstance",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const badPassword = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* DBInstance("AuditProbeInstance", {
+              dbInstanceIdentifier: "alchemy-audit-probe-instance",
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              allocatedStorage: 20,
+              masterUsername: "alchemy",
+              // '@' and ' ' are forbidden password characters — AWS rejects
+              // the create before provisioning anything.
+              masterUserPassword: Redacted.make("bad@pass word1"),
+              backupRetentionPeriod: "3 days",
+            });
+          }),
+        ),
+      );
+      expect(Result.isFailure(badPassword)).toBe(true);
+      expect(renderFailure(badPassword)).toContain("InvalidParameterValue");
+      expect(renderFailure(badPassword)).toContain("MasterUserPassword");
+
+      const badRetention = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* DBInstance("AuditProbeInstance", {
+              dbInstanceIdentifier: "alchemy-audit-probe-instance",
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              allocatedStorage: 20,
+              masterUsername: "alchemy",
+              masterUserPassword: Redacted.make("ValidPassw0rd"),
+              // 60 days is above the 1-35 day API maximum — AWS can only
+              // reject it if the converted integer arrived on the wire.
+              backupRetentionPeriod: "60 days",
+            });
+          }),
+        ),
+      );
+      expect(Result.isFailure(badRetention)).toBe(true);
+      expect(renderFailure(badRetention)).toContain("InvalidParameterValue");
+      expect(renderFailure(badRetention)).toMatch(/retention/i);
+
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
 );
 
 // Default (read-only) path: an RDS instance takes many minutes to create and
@@ -180,7 +263,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             storageType: "gp3",
             masterUsername: "alchemy",
             manageMasterUserPassword: true,
-            backupRetentionPeriod: 1,
+            backupRetentionPeriod: "1 day",
             deletionProtection: false,
             dbSubnetGroupName,
             publiclyAccessible: false,
@@ -203,7 +286,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             storageType: "gp3",
             masterUsername: "alchemy",
             manageMasterUserPassword: true,
-            backupRetentionPeriod: 3,
+            backupRetentionPeriod: "3 days",
             enablePerformanceInsights: true,
             deletionProtection: false,
             dbSubnetGroupName,

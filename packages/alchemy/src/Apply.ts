@@ -5,6 +5,7 @@ import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
+import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import {
   Artifacts,
@@ -1570,7 +1571,7 @@ const collectGarbage = Effect.fn(function* (
           instanceId,
           downstream,
           props,
-          attr,
+          attr: persistedAttr,
           provider,
         } = isDeleteNode(node)
           ? {
@@ -1601,6 +1602,10 @@ const collectGarbage = Effect.fn(function* (
               attr: node.old.attr,
               provider: yield* findProviderByType(node.old.resourceType),
             };
+
+        // Mutable: an attr-less row (interrupted create) may recover its
+        // attributes from `provider.read` below, right before deletion.
+        let attr = persistedAttr;
 
         const nextAncestors = new Set(ancestors).add(fqn);
 
@@ -1661,19 +1666,6 @@ const collectGarbage = Effect.fn(function* (
                 yield* report("retained");
                 return;
               }
-              yield* commit<DeletingResourceState>({
-                status: "deleting",
-                fqn,
-                logicalId,
-                instanceId,
-                resourceType,
-                props,
-                attr,
-                downstream,
-                providerVersion: provider.version ?? 0,
-                bindings: excludeDeletedBindings(node.bindings),
-                removalPolicy: node.resource.RemovalPolicy,
-              });
             }
 
             // Honor `retain` for the old generation of a replacement, mirroring
@@ -1687,6 +1679,76 @@ const collectGarbage = Effect.fn(function* (
               yield* scopedSession.note(
                 "Retaining replaced resource (removal policy: retain)...",
               );
+            }
+
+            // A row can reach deletion with `attr === undefined` when a create
+            // was interrupted after the cloud-side call succeeded but before
+            // `reconcile` returned Attributes (a `creating` row — or the old
+            // generation of a replacement chain in the same predicament).
+            // Skipping the provider's delete outright would silently orphan
+            // the physical resource, so ask `read` to look it up from the
+            // persisted props (providers derive the deterministic physical
+            // name from id/props):
+            //   - plain attrs    → exists and is ours; proceed to delete
+            //   - Unowned(attrs) → exists but is NOT ours (e.g. our create
+            //                      actually lost a name race, or died before
+            //                      stamping ownership) — never delete a
+            //                      foreign resource; drop our state and say so
+            //   - undefined      → nothing exists; dropping state is safe
+            if (attr === undefined && !retainOldGeneration) {
+              if (provider.read) {
+                const recovered = yield* provider
+                  .read({
+                    id: logicalId,
+                    fqn,
+                    instanceId,
+                    olds: props as never,
+                    output: undefined,
+                  })
+                  .pipe(
+                    instrumentLifecycle(
+                      "read",
+                      fqn,
+                      resourceType,
+                      logicalId,
+                      instanceId,
+                    ),
+                  );
+                if (recovered !== undefined) {
+                  if (Unowned.is(recovered)) {
+                    yield* scopedSession.note(
+                      "Resource exists in the cloud but is not owned by this " +
+                        "stack — leaving it in place (re-deploy with --adopt " +
+                        "to take ownership, then destroy).",
+                    );
+                  } else {
+                    attr = stripUnowned(recovered as Record<string, any>);
+                  }
+                }
+              } else {
+                yield* scopedSession.note(
+                  "No attributes were recorded for this resource (its create " +
+                    "was interrupted) and the provider does not implement " +
+                    "`read` — if a physical resource was created, it must be " +
+                    "cleaned up manually.",
+                );
+              }
+            }
+
+            if (isDeleteNode(node)) {
+              yield* commit<DeletingResourceState>({
+                status: "deleting",
+                fqn,
+                logicalId,
+                instanceId,
+                resourceType,
+                props,
+                attr,
+                downstream,
+                providerVersion: provider.version ?? 0,
+                bindings: excludeDeletedBindings(node.bindings),
+                removalPolicy: node.resource.RemovalPolicy,
+              });
             }
 
             if (attr !== undefined && !retainOldGeneration) {

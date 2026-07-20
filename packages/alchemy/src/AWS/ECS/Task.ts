@@ -33,6 +33,7 @@ import {
   hasTags,
 } from "../../Tags.ts";
 import type { Credentials } from "../Credentials.ts";
+import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -204,26 +205,53 @@ export interface Task extends Resource<
   "AWS.ECS.Task",
   TaskProps,
   {
+    /** The ARN of the registered task definition revision. */
     taskDefinitionArn: string;
+    /** The task definition family name. */
     taskFamily: string;
+    /** The name of the main container in the task definition. */
     containerName: string;
+    /** The container port the task listens on. */
     port: number;
+    /** The full URI of the container image the task runs. */
     imageUri: string;
+    /** The name of the ECR repository holding the built image. */
     repositoryName: string;
+    /** The URI of the ECR repository holding the built image. */
     repositoryUri: string;
+    /** The ARN of the task role assumed by the running containers. */
     taskRoleArn: string;
+    /** The name of the task role. */
     taskRoleName: string;
+    /** The ARN of the execution role used to pull images and write logs. */
     executionRoleArn: string;
+    /** The name of the execution role. */
     executionRoleName: string;
+    /** The CloudWatch log group the task writes to. */
     logGroupName: string;
+    /** The ARN of the CloudWatch log group. */
     logGroupArn: string;
+    /** The content hash of the bundled application code. */
     code: {
+      /** The content hash of the bundled application code. */
       hash: string;
     };
   },
   {
+    /** Environment variables injected into the task's containers. */
     env?: Record<string, any>;
+    /** IAM policy statements attached to the task role. */
     policyStatements?: PolicyStatement[];
+    /**
+     * Task-level volumes requested through the binding channel (e.g.
+     * `EFS.Mount`). Merged with the Task's own `volumes` prop.
+     */
+    volumes?: ecs.Volume[];
+    /**
+     * Container mount points for binding-requested volumes, applied to the
+     * primary container.
+     */
+    mountPoints?: ecs.MountPoint[];
   },
   Providers
 > {}
@@ -509,6 +537,24 @@ export const TaskProvider = () =>
             })) ?? [],
         );
 
+        // Volumes/mount points requested through the binding channel (e.g.
+        // `EFS.Mount`) — deduped by volume name / container path; merged
+        // with the `volumes` prop and primary container in `reconcile`.
+        const volumes = [
+          ...new Map(
+            activeBindings
+              .flatMap((binding) => binding?.data?.volumes ?? [])
+              .map((volume) => [volume.name, volume] as const),
+          ).values(),
+        ];
+        const mountPoints = [
+          ...new Map(
+            activeBindings
+              .flatMap((binding) => binding?.data?.mountPoints ?? [])
+              .map((point) => [point.containerPath, point] as const),
+          ).values(),
+        ];
+
         if (policyStatements.length > 0) {
           yield* iam.putRolePolicy({
             RoleName: roleName,
@@ -527,14 +573,8 @@ export const TaskProvider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         }
 
-        return env;
+        return { env, volumes, mountPoints };
       });
-
-      const decodeAuthorizationToken = (token: string) => {
-        const decoded = Buffer.from(token, "base64").toString("utf8");
-        const [, password] = decoded.split(":", 2);
-        return password;
-      };
 
       const bundleProgram = Effect.fn(function* (id: string, props: TaskProps) {
         const handler = props.handler ?? "default";
@@ -707,18 +747,6 @@ await Effect.runPromise(program).catch((err) => {
 
         const dockerfile = props.docker?.dockerfile ?? generatedDockerfile;
 
-        const auth = yield* ecr.getAuthorizationToken({});
-        const credentials = auth.authorizationData?.[0];
-        if (!credentials?.authorizationToken || !credentials.proxyEndpoint) {
-          return yield* Effect.die(
-            new Error("Failed to get ECR authorization token"),
-          );
-        }
-        const password = decodeAuthorizationToken(
-          credentials.authorizationToken,
-        );
-        const registry = credentials.proxyEndpoint.replace(/^https?:\/\//, "");
-
         yield* docker.materialize({
           context: contextDir,
           dockerfile: dockerfile,
@@ -738,18 +766,11 @@ await Effect.runPromise(program).catch((err) => {
           props.runtimePlatform?.cpuArchitecture === "ARM64"
             ? "linux/arm64"
             : "linux/amd64";
-        yield* docker.image.build({
-          tag: imageUri,
+        return yield* buildAndPushEcrImage(docker, {
+          imageUri,
           context: contextDir,
           platform: buildPlatform,
         });
-        yield* docker.image.push(imageUri, {
-          username: "AWS",
-          password,
-          server: registry,
-        });
-
-        return imageUri;
       });
 
       const registerTaskDefinition = Effect.fn(function* ({
@@ -760,6 +781,8 @@ await Effect.runPromise(program).catch((err) => {
         executionRoleArn,
         logGroupName,
         tags,
+        bindingVolumes = [],
+        bindingMountPoints = [],
       }: {
         props: TaskProps;
         family: string;
@@ -768,6 +791,10 @@ await Effect.runPromise(program).catch((err) => {
         executionRoleArn: string;
         logGroupName: string;
         tags: Record<string, string>;
+        /** Task-level volumes requested through the binding channel. */
+        bindingVolumes?: ecs.Volume[];
+        /** Primary-container mount points for binding-requested volumes. */
+        bindingMountPoints?: ecs.MountPoint[];
       }) {
         const { region } = yield* AWSEnvironment.current;
         const containerName = props.container?.name ?? family;
@@ -798,6 +825,16 @@ await Effect.runPromise(program).catch((err) => {
             },
           },
           ...props.container,
+          // Merge binding-requested mount points (e.g. `EFS.Mount`) with any
+          // the user configured on the primary container.
+          ...(bindingMountPoints.length > 0
+            ? {
+                mountPoints: [
+                  ...(props.container?.mountPoints ?? []),
+                  ...bindingMountPoints,
+                ],
+              }
+            : {}),
         };
         const response = yield* ecs.registerTaskDefinition({
           family,
@@ -807,7 +844,10 @@ await Effect.runPromise(program).catch((err) => {
           requiresCompatibilities: props.requiresCompatibilities ?? ["FARGATE"],
           cpu: String(props.cpu ?? 256),
           memory: String(props.memory ?? 512),
-          volumes: props.volumes,
+          volumes:
+            bindingVolumes.length > 0
+              ? [...(props.volumes ?? []), ...bindingVolumes]
+              : props.volumes,
           placementConstraints: props.placementConstraints,
           runtimePlatform: props.runtimePlatform,
           ephemeralStorage: props.ephemeralStorage,
@@ -942,7 +982,11 @@ await Effect.runPromise(program).catch((err) => {
           output,
           session,
         }) {
-          const family = yield* toTaskFamily(id, news);
+          // Prefer the deployed name: regenerating would target a different
+          // resource if the generator's output for this id ever drifts. (An
+          // explicit taskName change arrives here as a fresh replacement
+          // instance with no output.)
+          const family = output?.taskFamily ?? (yield* toTaskFamily(id, news));
           const taskRoleName =
             output?.taskRoleName ?? (yield* createRoleName(id, "task-role"));
           const executionRoleName =
@@ -983,7 +1027,11 @@ await Effect.runPromise(program).catch((err) => {
               );
           }
 
-          const bindingEnv = yield* attachBindings({
+          const {
+            env: bindingEnv,
+            volumes: bindingVolumes,
+            mountPoints: bindingMountPoints,
+          } = yield* attachBindings({
             roleName: taskRoleName,
             policyName: taskPolicyName,
             bindings,
@@ -1040,6 +1088,8 @@ await Effect.runPromise(program).catch((err) => {
             executionRoleArn,
             logGroupName,
             tags,
+            bindingVolumes,
+            bindingMountPoints,
           });
 
           // Sync tags — task definition revisions carry tags at register
@@ -1144,6 +1194,16 @@ await Effect.runPromise(program).catch((err) => {
           yield* ecs
             .deregisterTaskDefinition({
               taskDefinition: output.taskDefinitionArn,
+            })
+            .pipe(Effect.catchTag("ClientException", () => Effect.void));
+
+          // Deregistering only flips the revision to INACTIVE — it still
+          // exists (and shows up in `listTaskDefinitions --status INACTIVE`)
+          // forever. Hard-delete it so destroying a Task leaves zero
+          // task-definition leftovers.
+          yield* ecs
+            .deleteTaskDefinitions({
+              taskDefinitions: [output.taskDefinitionArn],
             })
             .pipe(Effect.catchTag("ClientException", () => Effect.void));
 

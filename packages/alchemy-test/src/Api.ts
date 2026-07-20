@@ -38,6 +38,9 @@ export type TestOptions =
 export const timeoutOf = (options?: TestOptions): number | undefined =>
   typeof options === "number" ? options : options?.timeout;
 
+export const retryOf = (options?: TestOptions): number | undefined =>
+  typeof options === "object" && options !== null ? options.retry : undefined;
+
 export const exclusiveOf = (options?: TestOptions): boolean =>
   typeof options === "object" && options !== null && options.exclusive === true;
 
@@ -98,7 +101,9 @@ const makeDescribe = (config: DescribeConfig): DescribeFn => {
       if (typeof second === "function") {
         body = second;
       } else if (typeof second === "object" && second !== null) {
-        if (second.concurrent === false || second.sequential === true) {
+        if (second.concurrent === true || second.sequential === false) {
+          sequential = false;
+        } else if (second.concurrent === false || second.sequential === true) {
           sequential = true;
         }
         body = typeof third === "function" ? third : undefined;
@@ -143,7 +148,7 @@ const makeDescribe = (config: DescribeConfig): DescribeFn => {
 
 export const describe: DescribeFn = makeDescribe({
   mode: "run",
-  sequential: false,
+  sequential: true,
 });
 
 // ---------------------------------------------------------------------------
@@ -155,6 +160,7 @@ export interface RegisterTestOptions {
   readonly mode: Mode;
   readonly fails?: boolean;
   readonly exclusive?: boolean;
+  readonly retry?: number | undefined;
   readonly timeout?: number | undefined;
   readonly body: TestBody | undefined;
 }
@@ -168,6 +174,7 @@ export const registerTest = (options: RegisterTestOptions): void => {
     mode: options.mode,
     fails: options.fails ?? false,
     exclusive: options.exclusive ?? false,
+    retry: options.retry,
     timeout: options.timeout,
     body: options.body,
     parent,
@@ -238,6 +245,7 @@ export const makeTester = <R>(
       name,
       mode: "run",
       timeout: timeoutOf(options),
+      retry: retryOf(options),
       exclusive: exclusiveOf(options),
       body: () => mapEffect(Effect.suspend(() => self(emptyContext))),
       ...overrides,
@@ -371,6 +379,7 @@ const registerFnTest = (
     mode: fn === undefined ? "todo" : mode,
     fails,
     timeout: timeoutOf(options),
+    retry: retryOf(options),
     exclusive: exclusiveOf(options),
     body: fn === undefined ? undefined : fromFn(fn),
   });

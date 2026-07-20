@@ -279,6 +279,16 @@ export interface ProviderService<
     output: Res["Attributes"];
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
+    /**
+     * Set by account-wide teardown (`alchemy unsafe nuke`) to signal the
+     * operator explicitly requested destructive deletion. Nuke enumerates
+     * resources straight from the cloud, so `olds` carries Attributes rather
+     * than the originally-deployed Props — destructive prerequisites that a
+     * normal destroy gates behind a prop (e.g. emptying a non-empty S3
+     * bucket behind `forceDestroy`) may be performed when this is set.
+     * Normal engine destroys never set it.
+     */
+    force?: boolean;
   }): Effect.Effect<void, any, DeleteReq>;
 }
 

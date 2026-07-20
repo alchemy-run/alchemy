@@ -147,7 +147,7 @@ export const listEvaluationTypes = (accountId: string) =>
 export const EvaluationProvider = () =>
   Provider.succeed(Evaluation, {
     stables: ["evaluationId", "accountId", "gatewayId", "createdAt"],
-    diff: Effect.fn(function* ({ id, news, output }) {
+    diff: Effect.fn(function* ({ id, olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -155,7 +155,10 @@ export const EvaluationProvider = () =>
       }
       if (output === undefined) return undefined;
       // Evaluations have no update API — any change is a replacement.
-      const newName = yield* createEvaluationName(id, news.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const newName = news.name ?? output.name;
       if (
         output.gatewayId !== news.gatewayId ||
         output.name !== newName ||
@@ -197,7 +200,9 @@ export const EvaluationProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const gatewayId = news.gatewayId as string;
-      const name = yield* createEvaluationName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const name = output?.name ?? (yield* createEvaluationName(id, news.name));
       const datasetIds = news.datasetIds as string[];
       const evaluationTypeIds = news.evaluationTypeIds;
 

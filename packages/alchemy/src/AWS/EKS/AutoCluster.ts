@@ -116,13 +116,21 @@ export interface AutoClusterProps {
 }
 
 export interface AutoClusterResources {
+  /** The underlying `EKS.Cluster` resource. */
   cluster: ClusterResource;
+  /** The generated cluster IAM role, or `undefined` when `roleArn` was supplied. */
   clusterRole: RoleResource | undefined;
+  /** The generated node IAM role, or `undefined` when `nodeRoleArn` was supplied. */
   nodeRole: RoleResource | undefined;
+  /** The ARN of the cluster IAM role (generated or supplied). */
   clusterRoleArn: Output.Output<string, never>;
+  /** The ARN of the node IAM role (generated or supplied). */
   nodeRoleArn: Output.Output<string, never>;
+  /** All subnet IDs the cluster spans (public + private). */
   subnetIds: Array<string | NetworkResources["publicSubnetIds"][number]>;
+  /** The public subnet IDs of the network. */
   publicSubnetIds: NetworkResources["publicSubnetIds"];
+  /** The private subnet IDs of the network. */
   privateSubnetIds: NetworkResources["privateSubnetIds"];
 }
 

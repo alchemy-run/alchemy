@@ -83,24 +83,43 @@ export interface Cluster extends Resource<
   "AWS.EKS.Cluster",
   ClusterProps,
   {
+    /** The ARN of the cluster. */
     clusterArn: ClusterArn;
+    /** The name of the cluster. */
     clusterName: ClusterName;
+    /** The cluster status (e.g. `CREATING`, `ACTIVE`, `UPDATING`). */
     status: string;
+    /** The Kubernetes API server endpoint URL. */
     endpoint: string | undefined;
+    /** The base64-encoded certificate authority data for the cluster. */
     certificateAuthorityData: string | undefined;
+    /** The Kubernetes version the cluster is running (e.g. `1.31`). */
     version: string | undefined;
+    /** The EKS platform version of the cluster. */
     platformVersion: string | undefined;
+    /** The ARN of the IAM role the EKS control plane assumes. */
     roleArn: string;
+    /** The VPC configuration of the cluster (subnets, security groups, endpoint access). */
     resourcesVpcConfig: eks.VpcConfigResponse;
+    /** The access configuration (authentication mode, bootstrap admin). */
     accessConfig: eks.AccessConfigResponse | undefined;
+    /** The EKS Auto Mode compute configuration, if enabled. */
     computeConfig: eks.ComputeConfigResponse | undefined;
+    /** The EKS Auto Mode block storage configuration, if enabled. */
     storageConfig: eks.StorageConfigResponse | undefined;
+    /** The Kubernetes network configuration (service CIDR, IP family, elastic load balancing). */
     kubernetesNetworkConfig: eks.KubernetesNetworkConfigResponse | undefined;
+    /** The control-plane log types shipped to CloudWatch. */
     logging: eks.Logging | undefined;
+    /** The cluster's upgrade policy (support type). */
     upgradePolicy: eks.UpgradePolicyResponse | undefined;
+    /** Whether deletion protection is enabled on the cluster. */
     deletionProtection: boolean;
+    /** The OIDC identity provider issuer URL for the cluster. */
     oidcIssuer: string | undefined;
+    /** The tags applied to the cluster. */
     tags: Record<string, string>;
+    /** References to Kubernetes objects applied via `kubernetes` props. */
     kubernetesObjects: KubernetesObjectRef[];
   },
   KubernetesObjectBinding,
@@ -134,6 +153,29 @@ export interface Cluster extends Resource<
  *   storageConfig: {
  *     blockStorage: { enabled: true },
  *   },
+ * });
+ * ```
+ *
+ * @section Running Workloads
+ * @example Cluster with a Managed Node Group and an Add-on
+ * ```typescript
+ * const cluster = yield* AWS.EKS.Cluster("AppCluster", {
+ *   roleArn: clusterRole.roleArn,
+ *   resourcesVpcConfig: { subnetIds: network.privateSubnetIds },
+ *   accessConfig: { authenticationMode: "API" },
+ * });
+ *
+ * const nodes = yield* AWS.EKS.Nodegroup("AppNodes", {
+ *   clusterName: cluster.clusterName,
+ *   nodeRole: nodeRole.roleArn,
+ *   subnets: network.privateSubnetIds,
+ *   instanceTypes: ["t3.medium"],
+ *   scalingConfig: { minSize: 1, maxSize: 2, desiredSize: 1 },
+ * });
+ *
+ * const metricsServer = yield* AWS.EKS.Addon("MetricsServer", {
+ *   clusterName: cluster.clusterName,
+ *   addonName: "metrics-server",
  * });
  * ```
  */

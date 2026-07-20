@@ -42,8 +42,8 @@ export default Alchemy.Stack(
     );
 
     const queue = yield* AWS.SQS.Queue("ExampleJobsQueue", {
-      receiveMessageWaitTimeSeconds: 20,
-      visibilityTimeout: 60,
+      receiveMessageWaitTime: "20 seconds",
+      visibilityTimeout: "60 seconds",
     });
 
     const cluster = yield* AWS.ECS.Cluster("ExampleCluster", {});

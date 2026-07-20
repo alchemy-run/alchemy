@@ -575,7 +575,13 @@ export const SubnetProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.Subnets ?? []).map(toSubnetAttributes),
+                (page.Subnets ?? [])
+                  // Per-AZ default subnets are default-VPC furniture AWS
+                  // provisions; never census/nuke them. Custom subnets created
+                  // inside the default VPC have DefaultForAz=false and are
+                  // still listed.
+                  .filter((subnet) => !subnet.DefaultForAz)
+                  .map(toSubnetAttributes),
               ),
             ),
           ),
