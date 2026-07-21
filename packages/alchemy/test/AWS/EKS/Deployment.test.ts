@@ -2,6 +2,8 @@ import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network.ts";
 import { Cluster } from "@/AWS/EKS/Cluster.ts";
 import { Deployment } from "@/AWS/EKS/Deployment.ts";
+import { HelmChart } from "@/AWS/EKS/HelmChart.ts";
+import { readObject } from "@/AWS/EKS/internal/client.ts";
 import * as Core from "@/Test/Core";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
@@ -77,19 +79,38 @@ const sharedStack = Core.scratchStack(testOptions, "EksServerHost");
 
 describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
   let baseUrl: string;
+  let helmRelease: HelmChart["Attributes"];
+  let helmConnection: {
+    clusterName: string;
+    endpoint: string;
+    certificateAuthorityData: string;
+  };
 
   beforeAll(
     Effect.gen(function* () {
       yield* sharedStack.destroy();
       // Phase 1: cluster + network only.
       yield* sharedStack.deploy(infra);
-      // Phase 2: same infra + the Deployment fixture (refs the cluster).
-      const host = yield* sharedStack.deploy(
+      // Phase 2: same infra + the Deployment fixture (refs the cluster) +
+      // a HelmChart rendering the local fixture chart onto the cluster.
+      const { host, cluster, release } = yield* sharedStack.deploy(
         Effect.gen(function* () {
-          yield* infra;
-          return yield* EksHostApi;
+          const { cluster } = yield* infra;
+          const release = yield* HelmChart("E2EHelmChart", {
+            cluster,
+            chart: `${import.meta.dirname}/fixtures/chart`,
+            values: { message: "helm-e2e", secondConfigMap: { enabled: true } },
+          });
+          const host = yield* EksHostApi;
+          return { host, cluster, release };
         }),
       );
+      helmRelease = release;
+      helmConnection = {
+        clusterName: cluster.clusterName,
+        endpoint: cluster.endpoint!,
+        certificateAuthorityData: cluster.certificateAuthorityData!,
+      };
       // `url` is a full URL (`http://<nlb-hostname>:<port>` — the NLB
       // listener is the Service port, not 80).
       expect(host.url).toBeTruthy();
@@ -142,5 +163,30 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
         expect(got.Item?.pk?.S).toBe(itemId);
       }),
     { timeout: 180_000 },
+  );
+
+  test.provider(
+    "HelmChart renders and applies its objects onto the cluster",
+    () =>
+      Effect.gen(function* () {
+        // The chart rendered both ConfigMaps (the conditional one was
+        // toggled on via values) into the default namespace.
+        expect(helmRelease.objects).toHaveLength(2);
+        expect(helmRelease.namespace).toBe("default");
+
+        // Read the primary ConfigMap back out-of-band through the
+        // Kubernetes API and prove the values reached the cluster.
+        const configRef = helmRelease.objects.find((object) =>
+          object.name.endsWith("-config"),
+        )!;
+        expect(configRef).toBeDefined();
+        const applied = (yield* readObject({
+          connection: helmConnection,
+          object: configRef,
+        })) as { data?: Record<string, string> } | undefined;
+        expect(applied?.data?.message).toBe("helm-e2e");
+        expect(applied?.data?.release).toBe(helmRelease.releaseName);
+      }),
+    { timeout: 120_000 },
   );
 });

@@ -47,6 +47,13 @@ const supportedKinds: Record<string, KubernetesObjectKindSpec> = {
     scope: "Cluster",
     applyRank: 10,
   },
+  // CRDs apply right after namespaces so a chart's custom resources
+  // (default rank 100) always find their definition registered.
+  "apiextensions.k8s.io/v1/CustomResourceDefinition": {
+    plural: "customresourcedefinitions",
+    scope: "Cluster",
+    applyRank: 15,
+  },
   "v1/ServiceAccount": {
     plural: "serviceaccounts",
     scope: "Namespaced",
