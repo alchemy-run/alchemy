@@ -313,9 +313,11 @@ export const make = <A>(
                   ? oldState.old.props
                   : oldState.props;
 
-              const oldBindings = oldState.bindings ?? [];
-              // Collapse duplicate bindings by sid so the binding set handed to
-              // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+              // Normalize both sides through `dedupeBindings` so the binding
+              // sets handed to `diff` are deduped AND sid-sorted — provider
+              // diffs that hash/compare the arrays never churn on
+              // registration-order flips (or on legacy unsorted state).
+              const oldBindings = dedupeBindings(oldState.bindings ?? []);
               const newBindings = dedupeBindings(
                 stack.bindings[resource.FQN] ?? [],
               );
@@ -802,7 +804,8 @@ export const make = <A>(
               }
             }
 
-            const oldBindings = oldState?.bindings ?? [];
+            // Sid-sorted like `newBindings` (see the resolveResource note).
+            const oldBindings = dedupeBindings(oldState?.bindings ?? []);
             const bindingDiffs = diffBindings(oldBindings, newBindings);
 
             const Node = <T extends Apply>(

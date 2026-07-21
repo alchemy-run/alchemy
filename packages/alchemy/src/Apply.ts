@@ -412,9 +412,20 @@ const executeNode = (
         // Early commits (`creating`/`replacing`) persist plan props that may
         // still hold unresolved Output exprs; strip them so state stores only
         // plain data (see stripUnresolved in Diff.ts).
+        //
+        // Binding rows follow the same rule. Even the RESOLVED binding
+        // payload can carry Effect leaves — a tagged Worker/Function class in
+        // `env` (the circular-bindings pattern) is a function-typed Effect
+        // that `Output.evaluate` passes through untouched. A JSON state store
+        // would persist it via its `toJSON` as an `{"_id":"Effect",...}`
+        // relic, which the next plan's `diffBindings` compares against the
+        // live class stripped to `undefined` — a phantom binding "update" on
+        // every deploy, forever. Stripping at the commit boundary keeps both
+        // store kinds consistent with the comparison in `havePropsChanged`.
         value: {
           ...value,
           props: stripUnresolved(value.props),
+          bindings: stripUnresolved(value.bindings),
           namespace,
         } as S,
       });
@@ -1437,8 +1448,10 @@ const converge = Effect.fn(function* (
           attr,
           providerVersion: node.provider.version ?? 0,
           // Resolved payload, not raw `node.bindings` — see the create
-          // commit in applyResource.
-          bindings: newBindings,
+          // commit in applyResource. Stripped like the commit helper so
+          // Effect leaves (e.g. tagged Worker classes in `env`) never reach
+          // the state store.
+          bindings: stripUnresolved(newBindings),
           downstream: node.downstream,
           namespace,
           removalPolicy: node.resource.RemovalPolicy,
@@ -1630,10 +1643,11 @@ const collectGarbage = Effect.fn(function* (
             stage,
             fqn,
             // Same rule as the lifecycle commit above: state only stores
-            // plain data, never unresolved Output exprs.
+            // plain data, never unresolved Output exprs or Effect leaves.
             value: {
               ...value,
               props: stripUnresolved(value.props),
+              bindings: stripUnresolved(value.bindings),
               namespace,
             } as S,
           });

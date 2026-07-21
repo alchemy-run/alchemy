@@ -1079,11 +1079,12 @@ describe("duplicate bindings are collapsed by sid before diff", () => {
         { sid: "Shared", data: { env: { K: "last" } } },
       ]);
 
-      // The duplicated sid retains its first-seen position but takes the
-      // last value (matching `diffBindings`' `Map`-based collapse).
+      // The duplicated sid takes the last value (matching `diffBindings`'
+      // `Map`-based collapse) and the result is sid-sorted so binding rows
+      // are deterministic regardless of registration order.
       expect(deduped).toEqual([
-        { sid: "Shared", data: { env: { K: "last" } } },
         { sid: "Other", data: { env: { K: "x" } } },
+        { sid: "Shared", data: { env: { K: "last" } } },
       ]);
     }),
   );
