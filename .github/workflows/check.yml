@@ -37,5 +37,17 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
 
       - run: bun install
+      - name: debug mysql2 resolution
+        run: |
+          bun --version
+          echo "--- packages/alchemy/node_modules mysql2 link ---"
+          ls -la packages/alchemy/node_modules/ | grep -i mysql || echo "MISSING from packages/alchemy/node_modules"
+          echo "--- store entries ---"
+          ls node_modules/.bun 2>/dev/null | grep -i "^mysql2" || echo "MISSING from store"
+          echo "--- bun pm why ---"
+          bun pm why mysql2 || true
+          echo "--- lockfile drift after install ---"
+          git diff --stat bun.lock || true
+          git diff bun.lock | grep -iE "mysql|smithy|aws-sdk/types" | head -20 || true
       - run: bun tsc -b
       - run: bun run docs:check
