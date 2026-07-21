@@ -365,11 +365,18 @@ export interface DBInstance extends Resource<
      */
     masterUsername: string | undefined;
     /**
-     * Deletion behavior persisted from props — `delete` receives only the
-     * stored attributes, never live props, so the snapshot decision must
-     * ride in state.
+     * Whether the final snapshot is skipped on delete, persisted from the
+     * prop of the same name. `delete` receives only the stored attributes,
+     * never live props, so the snapshot decision must ride in state;
+     * `undefined` (older state without this attr) is treated as skip.
      */
     skipFinalSnapshot: boolean | undefined;
+    /**
+     * Identifier used for the final snapshot when `skipFinalSnapshot` is
+     * `false`, persisted from props so `delete` can name the snapshot without
+     * live props. `undefined` means `delete` falls back to the default
+     * `<instance-identifier>-final-<timestamp>` naming scheme.
+     */
     finalDBSnapshotIdentifier: string | undefined;
     /**
      * ARN of the Secrets Manager secret holding master credentials.
