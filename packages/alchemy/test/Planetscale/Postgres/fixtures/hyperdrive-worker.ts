@@ -22,7 +22,7 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     return {
       fetch: Effect.gen(function* () {

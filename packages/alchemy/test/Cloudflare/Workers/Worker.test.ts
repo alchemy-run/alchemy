@@ -11,6 +11,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -855,6 +856,312 @@ describe.concurrent("Cloudflare.Worker", () => {
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // #874 regression: binding a tagged Worker identity (an Effect class) in
+  // another Worker's `env` — the circular-bindings pattern — must converge.
+  // The tag stays in the desired props (`news.env.TARGET` is an Effect) while
+  // `stripUnresolved` removes it from the stored props at commit, so a diff
+  // that compares the two raw shapes plans an update on every deploy, forever.
+  // After a successful deploy, an identical program must plan as a noop —
+  // and a code-only change must STILL plan as an update (the tag must not
+  // knock the diff off its bundle-hash path onto the raw-props fallback,
+  // which can't see file contents).
+  test.provider(
+    "Effect-valued worker tag in env converges to a noop plan",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        class EnvTagTarget extends Cloudflare.Worker<EnvTagTarget, {}>()(
+          "EnvTagTargetWorker",
+        ) {}
+        class EnvTagCaller extends Cloudflare.Worker<EnvTagCaller, {}>()(
+          "EnvTagCallerWorker",
+        ) {}
+
+        // The caller's entry lives in a temp dir so the test can edit its
+        // contents mid-flight without touching the shared checked-in fixture.
+        const callerScript = (marker: string) =>
+          `export default { fetch: async () => new Response(${JSON.stringify(marker)}) };\n`;
+        const tempDir = yield* fs.makeTempDirectory({
+          prefix: "alchemy-env-tag-worker",
+        });
+        const callerMain = path.join(tempDir, "worker.ts");
+        yield* fs.writeFileString(callerMain, callerScript("v1"));
+
+        const layers = Layer.mergeAll(
+          EnvTagTarget.make({ main, isExternal: true }, Effect.succeed({})),
+          EnvTagCaller.make(
+            {
+              main: callerMain,
+              isExternal: true,
+              env: { TARGET: EnvTagTarget },
+            },
+            Effect.succeed({}),
+          ),
+        );
+
+        const program = () =>
+          Effect.gen(function* () {
+            const target = yield* EnvTagTarget;
+            const caller = yield* EnvTagCaller;
+            return { target, caller };
+          }).pipe(Effect.provide(layers));
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployed = yield* stack.deploy(program());
+
+        // The env tag must have landed as a live service binding.
+        const settings = yield* workers.getScriptScriptAndVersionSetting({
+          accountId,
+          scriptName: deployed.caller.workerName,
+        });
+        expect(settings.bindings).toContainEqual(
+          expect.objectContaining({
+            type: "service",
+            name: "TARGET",
+            service: deployed.target.workerName,
+          }),
+        );
+
+        // Identical program → both workers plan as noop.
+        const settledPlan = yield* stack.plan(program());
+        expect(actionOf(settledPlan, "EnvTagTargetWorker")).toBe("noop");
+        expect(actionOf(settledPlan, "EnvTagCallerWorker")).toBe("noop");
+
+        // A code-only change to the caller's entry (identical props — the
+        // bundle hash is the only difference) must still plan as an update.
+        yield* fs.writeFileString(callerMain, callerScript("v2"));
+        const codeChangePlan = yield* stack.plan(program());
+        expect(actionOf(codeChangePlan, "EnvTagTargetWorker")).toBe("noop");
+        expect(actionOf(codeChangePlan, "EnvTagCallerWorker")).toBe("update");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.caller.workerName, accountId);
+        yield* waitForWorkerToBeDeleted(deployed.target.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // The full circular case from the #874 report: A and B each bind the
+  // OTHER's tag in env. The tags keep the dependency on the binding channel
+  // (precreate stubs + converge pass) — a cycle the props channel cannot
+  // express — and both workers must still converge to noop plans.
+  test.provider(
+    "circular worker tags in env converge to noop plans",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        class CircTagA extends Cloudflare.Worker<CircTagA, {}>()(
+          "CircTagAWorker",
+        ) {}
+        class CircTagB extends Cloudflare.Worker<CircTagB, {}>()(
+          "CircTagBWorker",
+        ) {}
+
+        const layers = Layer.mergeAll(
+          CircTagA.make(
+            { main, isExternal: true, env: { PEER: CircTagB } },
+            Effect.succeed({}),
+          ),
+          CircTagB.make(
+            { main, isExternal: true, env: { PEER: CircTagA } },
+            Effect.succeed({}),
+          ),
+        );
+
+        const program = () =>
+          Effect.gen(function* () {
+            const a = yield* CircTagA;
+            const b = yield* CircTagB;
+            return { a, b };
+          }).pipe(Effect.provide(layers));
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployed = yield* stack.deploy(program());
+
+        // Each side must carry a live service binding to the other.
+        for (const [self, peer] of [
+          [deployed.a, deployed.b],
+          [deployed.b, deployed.a],
+        ] as const) {
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: self.workerName,
+          });
+          expect(settings.bindings).toContainEqual(
+            expect.objectContaining({
+              type: "service",
+              name: "PEER",
+              service: peer.workerName,
+            }),
+          );
+        }
+
+        const settled = yield* stack.plan(program());
+        expect(actionOf(settled, "CircTagAWorker")).toBe("noop");
+        expect(actionOf(settled, "CircTagBWorker")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.a.workerName, accountId);
+        yield* waitForWorkerToBeDeleted(deployed.b.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // #874 (comments): an Output-valued `worker.bind` binding must also
+  // converge. Terminal apply commits must persist the RESOLVED binding
+  // payload — raw `node.bindings` hold the Output expression, which JSON
+  // state stores silently drop, so every later plan's `diffBindings` would
+  // compare a lossy stored shape against resolved data and re-update
+  // forever (the PR #266 path).
+  test.provider(
+    "Output-valued worker.bind binding converges to a noop plan",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const program = () =>
+          Effect.gen(function* () {
+            const source = yield* Cloudflare.Worker("BindTextSource", {
+              main,
+            });
+            const host = yield* Cloudflare.Worker("BindTextHost", {
+              main,
+            });
+            // `source.workerName` is an Output<string> at plan time — the
+            // same shape as an Action-produced value bound as plain_text.
+            yield* host.bind`REV`({
+              bindings: [
+                { type: "plain_text", name: "REV", text: source.workerName },
+              ],
+            });
+            return { source, host };
+          });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployed = yield* stack.deploy(program());
+
+        // The resolved text must have landed in the live binding.
+        const settings = yield* workers.getScriptScriptAndVersionSetting({
+          accountId,
+          scriptName: deployed.host.workerName,
+        });
+        expect(settings.bindings).toContainEqual(
+          expect.objectContaining({
+            type: "plain_text",
+            name: "REV",
+            text: deployed.source.workerName,
+          }),
+        );
+
+        const settled = yield* stack.plan(program());
+        expect(actionOf(settled, "BindTextSource")).toBe("noop");
+        expect(actionOf(settled, "BindTextHost")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.host.workerName, accountId);
+        yield* waitForWorkerToBeDeleted(deployed.source.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // Effect-valued env entries are stripped from the props comparison (#874),
+  // so change detection for them rides entirely on the evaluated binding
+  // data. This test guards that channel: when only the VALUE an env Effect
+  // resolves to changes (a `gen` Effect — serializes value-blind, so the
+  // props comparison could never see it), the plan must still flip from
+  // noop to update.
+  test.provider(
+    "changing the value of an Effect-valued env entry plans an update",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const program = (value: string) =>
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("EffectEnvValueWorker", {
+              main,
+              env: {
+                VALUE: Effect.gen(function* () {
+                  return value;
+                }),
+              },
+            });
+          });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployed = yield* stack.deploy(program("v1"));
+
+        // The evaluated value lands as a plain_text binding.
+        const settings = yield* workers.getScriptScriptAndVersionSetting({
+          accountId,
+          scriptName: deployed.workerName,
+        });
+        expect(settings.bindings).toContainEqual(
+          expect.objectContaining({
+            type: "plain_text",
+            name: "VALUE",
+            text: "v1",
+          }),
+        );
+
+        // Same value → noop; changed value → update.
+        const samePlan = yield* stack.plan(program("v1"));
+        expect(actionOf(samePlan, "EffectEnvValueWorker")).toBe("noop");
+        const changedPlan = yield* stack.plan(program("v2"));
+        expect(actionOf(changedPlan, "EffectEnvValueWorker")).toBe("update");
+
+        // The changed value must actually deploy — and then converge.
+        const redeployed = yield* stack.deploy(program("v2"));
+        const updatedSettings = yield* workers.getScriptScriptAndVersionSetting(
+          {
+            accountId,
+            scriptName: redeployed.workerName,
+          },
+        );
+        expect(updatedSettings.bindings).toContainEqual(
+          expect.objectContaining({
+            type: "plain_text",
+            name: "VALUE",
+            text: "v2",
+          }),
+        );
+        const resettled = yield* stack.plan(program("v2"));
+        expect(actionOf(resettled, "EffectEnvValueWorker")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 360_000 },
   );

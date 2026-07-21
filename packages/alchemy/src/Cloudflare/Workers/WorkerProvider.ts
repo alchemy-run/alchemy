@@ -14,7 +14,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
-import { isResolved } from "../../Diff.ts";
+import { isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
@@ -2182,8 +2182,24 @@ export const LiveWorkerProvider = () =>
               ),
             );
           }),
-        diff: Effect.fn(function* ({ id, news, olds, output, newBindings }) {
+        diff: Effect.fn(function* ({
+          id,
+          news: desired,
+          olds,
+          output,
+          newBindings,
+        }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          // Effect-valued `env` entries (tagged Worker classes / resource
+          // Effects — the circular-bindings pattern) never resolve at plan
+          // time and are dropped from persisted props by `stripUnresolved`
+          // at the commit boundary. Their deploy-time identity is carried by
+          // the resolved binding data, which the metadata hash below covers.
+          // Strip them before the resolution check so a tag in `env` doesn't
+          // force the raw-props fallback — which compares the Effect's JSON
+          // form against the stripped stored props and re-plans an update
+          // forever (#874).
+          const news = stripEffects(desired);
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };

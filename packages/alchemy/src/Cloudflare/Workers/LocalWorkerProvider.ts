@@ -57,7 +57,7 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { isResolved } from "../../Diff.ts";
+import { isResolved, stripEffects } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -638,7 +638,12 @@ export const LocalWorkerProvider = () =>
             (instance) => Fiber.join(instance.fiber),
             { concurrency: "unbounded" },
           ),
-        diff: Effect.fn(function* ({ id, news, newBindings, output }) {
+        diff: Effect.fn(function* ({ id, news: desired, newBindings, output }) {
+          // Effect-valued `env` entries (tagged Worker classes) never resolve
+          // at plan time; their identity is carried by the resolved binding
+          // data. Strip them so the signature-based diff still runs — same
+          // rationale as the cloud WorkerProvider (#874).
+          const news = stripEffects(desired);
           if (!isResolved(news) || !isResolved(newBindings)) return undefined;
           const options = {
             id,

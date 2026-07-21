@@ -47,10 +47,10 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * `dsql:DbConnectAdmin` with `admin: true`) on the cluster to the host
  * Function; the runtime half mints a presigned token client-side (a pure
  * SigV4 computation, no API call) and returns a {@link SqlConnectionInfo}
- * whose `url` feeds `Drizzle.postgres` / any Postgres client directly.
+ * whose `url` feeds `Drizzle.Postgres` / any Postgres client directly.
  *
  * Token freshness is structural: yielding the returned connection effect
- * re-mints the token, and execution-scoped pools (`Drizzle.postgres`)
+ * re-mints the token, and execution-scoped pools (`Drizzle.Postgres`)
  * rebuild per execution — a ~15-minute token can never outlive its pool.
  *
  * @section Connecting to a Cluster
@@ -64,7 +64,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * @example Drizzle over DSQL
  * ```typescript
  * const conn = yield* DSQL.Connect(cluster, { admin: true });
- * const db = yield* Drizzle.postgres(conn.pipe(Effect.map((info) => info.url)));
+ * const db = yield* Drizzle.Postgres(conn.pipe(Effect.map((info) => info.url)));
  * // inside a handler:
  * const rows = yield* db.select().from(Widgets);
  * ```

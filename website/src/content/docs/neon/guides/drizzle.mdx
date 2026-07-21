@@ -105,7 +105,7 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 });
 ```
 
-Inside the Worker, `Drizzle.postgres(conn.connectionString)`
+Inside the Worker, `Drizzle.Postgres(conn.connectionString)`
 returns a typed `EffectPgDatabase` whose queries you `yield*`
 directly — the [Add Drizzle ORM](/cloudflare/data/drizzle) guide
 walks through the whole Worker side: binding the connection,

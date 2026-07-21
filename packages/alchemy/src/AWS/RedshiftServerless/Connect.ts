@@ -60,7 +60,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * environment variables. At runtime it calls
  * `redshift-serverless:GetCredentials` to mint short-lived credentials and
  * returns a typed {@link WorkgroupConnectionInfo} whose `url` feeds
- * `Drizzle.postgres` directly.
+ * `Drizzle.Postgres` directly.
  *
  * The Redshift Data API ({@link RedshiftData.Statements}) remains the
  * recommended default — it needs no driver, no VPC reach, and no credential
@@ -86,7 +86,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * const connect = yield* RedshiftServerless.Connect(workgroup, {
  *   database: "analytics",
  * });
- * const db = yield* Drizzle.postgres(
+ * const db = yield* Drizzle.Postgres(
  *   Effect.map(connect, (info) => info.url),
  *   { prepare: false },
  * );

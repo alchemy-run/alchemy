@@ -7,7 +7,6 @@ import * as Redacted from "effect/Redacted";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
-import * as schema from "./schema.ts";
 import { relations, Users } from "./schema.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -32,9 +31,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             // which Cloudflare Workers' isolate disallows.
             disableEval: true,
           },
-          schema,
           relations,
-          mode: "default",
         });
 
         const close = Effect.tryPromise({
