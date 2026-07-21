@@ -361,18 +361,6 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "Kubernetes",
-    intro:
-      "Kubernetes objects (Namespace, Deployment, Service, ConfigMap, Job, ServiceAccount) defined in TypeScript and converged onto an EKS cluster via server-side apply; cluster provisioning and workload guides live under AWS → EKS.",
-    pages: {
-      slugs: [
-        "kubernetes/index",
-        "kubernetes/setup",
-        "kubernetes/objects-as-bindings",
-      ],
-    },
-  },
-  {
     heading: "Drizzle",
     intro:
       "Drizzle schemas as Stack resources — migration SQL regenerated on deploy and applied by whichever database resource consumes it; Worker runtime wiring lives under Cloudflare → Data.",
