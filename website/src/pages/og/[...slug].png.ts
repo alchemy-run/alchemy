@@ -17,8 +17,6 @@
 
 import type { APIRoute, GetStaticPaths } from "astro";
 import { getCollection } from "astro:content";
-import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,40 +129,17 @@ const workerFonts = FONTS.map(({ file, public: pub, ...font }) => ({
 }));
 
 // ────────────────────────────────────────────────────────────────────────────
-// Render pool + disk cache.
+// Render pool.
 //
 // Rendering a satori→resvg PNG per page is (was) the single most expensive
 // build step: ~130ms × ~4k pages ≈ 9 minutes, serially, on the build's main
-// thread. Two fixes:
-//
-// 1. All renders run in a pool of worker threads (scripts/og-worker.mjs) —
-//    the element tree is plain JSON, so the main thread just ships
-//    `OgCard(props)` to a worker. The pool is pre-warmed from
-//    `getStaticPaths`, so workers crunch OG images concurrently while the
-//    main thread prerenders HTML pages.
-//
-// 2. Finished PNGs are cached in node_modules/.cache/alchemy-og keyed by a
-//    hash of the element tree + font files, so warm rebuilds skip
-//    rendering entirely. The tree hash covers everything visual (props AND
-//    OgCard markup/styles); bump CACHE_VERSION when changing the renderer
-//    setup itself (satori/resvg versions or render options).
+// thread. All renders now run in a pool of worker threads
+// (scripts/og-worker.mjs) — the element tree is plain JSON, so the main
+// thread just ships `OgCard(props)` to a worker. The pool is pre-warmed
+// from `getStaticPaths`, so workers crunch OG images concurrently while
+// the main thread prerenders HTML pages; at that throughput the cards are
+// cheap enough to rebuild every time.
 // ────────────────────────────────────────────────────────────────────────────
-
-const CACHE_VERSION = 1;
-const cacheDir = path.resolve("node_modules/.cache/alchemy-og");
-
-let fontFingerprintPromise: Promise<string> | undefined;
-function getFontFingerprint() {
-  return (fontFingerprintPromise ??= (async () => {
-    const stats = await Promise.all(
-      workerFonts.map(async (f) => {
-        const s = await fs.stat(f.path);
-        return `${path.basename(f.path)}:${s.size}`;
-      }),
-    );
-    return createHash("sha256").update(stats.join("\n")).digest("hex");
-  })());
-}
 
 class RenderPool {
   private workers: Worker[] = [];
@@ -224,32 +199,13 @@ function getPool() {
   ));
 }
 
-/** Cache filenames referenced by the current build, for pruning. */
-const usedCacheFiles = new Set<string>();
-
-/** Render (or cache-read) one card; returns the PNG. */
-async function renderCard(entry: Entry): Promise<Buffer> {
+/** Render one card in the pool; returns the PNG. */
+function renderCard(entry: Entry): Promise<Buffer> {
   const { title, description, kind, eyebrow, date } = entry;
-  // OgCard is a pure function of its props; the element tree it returns is
-  // plain data, so it both ships to the worker AND serves as the cache key
-  // (it captures card markup/style changes, not just prop changes).
+  // OgCard is a pure function of its props; the element tree it returns
+  // is plain data, so it ships to the worker as-is.
   const tree = OgCard({ title, description, eyebrow, kind, date });
-  const json = JSON.stringify(tree);
-  const key = createHash("sha256")
-    .update(`v${CACHE_VERSION}\n${await getFontFingerprint()}\n${json}`)
-    .digest("hex");
-  const cacheFile = `${key}.png`;
-  usedCacheFiles.add(cacheFile);
-  const cachePath = path.join(cacheDir, cacheFile);
-  try {
-    return await fs.readFile(cachePath);
-  } catch {
-    // cache miss
-  }
-  const png = await getPool().render(JSON.parse(json));
-  await fs.mkdir(cacheDir, { recursive: true });
-  await fs.writeFile(cachePath, png);
-  return png;
+  return getPool().render(tree);
 }
 
 /** slug → in-flight render, primed for every entry from getStaticPaths. */
@@ -257,30 +213,14 @@ const prewarmed = new Map<string, Promise<Buffer>>();
 
 function prewarm(entries: Entry[]) {
   // `astro dev` also calls getStaticPaths — don't rasterize 4k cards on
-  // dev-server startup. Dev GETs render on demand (and still use the
-  // cache).
+  // dev-server startup. Dev GETs render on demand.
   if (import.meta.env.DEV) return;
   for (const entry of entries) {
     prewarmed.set(entry.slug, renderCard(entry));
   }
   // Surface failures per-route (each GET awaits its own slug), not as
-  // unhandled rejections here. Once every render settles, prune cache
-  // entries this build no longer references — deleted pages and edited
-  // cards would otherwise accumulate forever (locally and in the CI
-  // cache, which round-trips this directory between runs).
-  void Promise.allSettled(prewarmed.values()).then(async () => {
-    let names: string[];
-    try {
-      names = await fs.readdir(cacheDir);
-    } catch {
-      return;
-    }
-    await Promise.all(
-      names
-        .filter((n) => n.endsWith(".png") && !usedCacheFiles.has(n))
-        .map((n) => fs.rm(path.join(cacheDir, n), { force: true })),
-    );
-  });
+  // unhandled rejections here.
+  for (const p of prewarmed.values()) p.catch(() => {});
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -310,6 +250,12 @@ const MARKETING_PAGES: Record<string, Omit<Entry, "slug" | "kind">> = {
     description:
       "TypeScript IaC on Effect. Stand up your whole cloud in one program, type-check the IAM, hot-reload it locally, run tests against the real cloud, preview every PR.",
     eyebrow: "typescript · effect · infrastructure as code",
+  },
+  privacy: {
+    title: "Privacy & Telemetry",
+    description:
+      "What data the Alchemy CLI and Cloudflare State Store collect, where it goes, and how to opt out.",
+    eyebrow: "alchemy.run",
   },
 };
 
@@ -376,7 +322,39 @@ export const getStaticPaths: GetStaticPaths = async () => {
     }),
   );
 
-  const paths = [...marketingPaths, ...docPaths];
+  // Virtual routes that emit og:image metas but aren't docs entries or
+  // hand-curated marketing pages: Starlight's 404 and starlight-blog's
+  // pagination indexes (/blog, /blog/2, …). The page count is estimated
+  // generously (starlight-blog paginates at ≥5 posts/page, so dividing
+  // by 5 can only overshoot); a surplus card is harmless, and the
+  // build-output og:image check fails loudly if a rendered page ever
+  // references a card this misses.
+  const blogPosts = docs.filter((entry: any) =>
+    ((entry as { slug?: string; id?: string }).slug ?? entry.id).startsWith(
+      "blog/",
+    ),
+  );
+  const blogDescription = "Release notes and posts from the alchemy team.";
+  const virtualPaths = [
+    {
+      slug: "404",
+      title: "Page not found",
+      kind: "doc" as const,
+      eyebrow: "alchemy · documentation",
+    },
+    ...Array.from(
+      { length: Math.max(1, Math.ceil(blogPosts.length / 5)) },
+      (_, i) => ({
+        slug: i === 0 ? "blog" : `blog/${i + 1}`,
+        title: "Blog",
+        description: blogDescription,
+        kind: "blog" as const,
+        eyebrow: "blog · alchemy.run",
+      }),
+    ),
+  ].map((props) => ({ params: { slug: props.slug }, props }));
+
+  const paths = [...marketingPaths, ...docPaths, ...virtualPaths];
   // Kick off every render now: workers rasterize OG cards in parallel
   // while Astro's main thread prerenders HTML pages. Each GET below just
   // awaits its slug's already-running (or already-cached) render.

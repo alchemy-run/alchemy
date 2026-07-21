@@ -160,6 +160,13 @@ function copyMarkdownSources() {
  *    context lines flush. See git history: three different authoring
  *    conventions had accumulated and all rendered misaligned.
  *
+ * 3. `og:image` check: every page's og:image URL must not contain
+ *    "undefined"/"null" (a broken slug lookup — Starlight 0.39 renamed
+ *    routeData `slug` to `id` and the old field silently reads as
+ *    undefined), and when OG images were emitted (full builds; the
+ *    DOCS_FAST target skips them) the URL's path must exist in the
+ *    build output.
+ *
  * @returns {import("astro").AstroIntegration}
  */
 function buildOutputChecks() {
@@ -194,7 +201,12 @@ function buildOutputChecks() {
         const broken = new Map();
         /** @type {{ file: string, line: string }[]} */
         const oddIndents = [];
+        /** @type {{ file: string, url: string }[]} */
+        const badOgImages = [];
         const htmlFiles = [...paths].filter((p) => p.endsWith(".html"));
+        const hasOgImages = [...paths].some(
+          (p) => p.startsWith("/og/") && p.endsWith(".png"),
+        );
 
         /** @param {string} htmlFile */
         async function checkFile(htmlFile) {
@@ -220,6 +232,26 @@ function buildOutputChecks() {
             if (!exists) {
               if (!broken.has(link)) broken.set(link, new Set());
               broken.get(link)?.add(htmlFile);
+            }
+          }
+
+          // og:image check (see integration docstring).
+          for (const m of html.matchAll(
+            /property="og:image"\s+content="([^"]+)"/g,
+          )) {
+            const url = m[1];
+            let pathname;
+            try {
+              pathname = new URL(url).pathname;
+            } catch {
+              badOgImages.push({ file: htmlFile, url });
+              continue;
+            }
+            if (
+              /\b(?:undefined|null)\b/.test(pathname) ||
+              (hasOgImages && !paths.has(pathname))
+            ) {
+              badOgImages.push({ file: htmlFile, url });
             }
           }
 
@@ -276,6 +308,16 @@ function buildOutputChecks() {
           logger.error(msg);
           throw new Error(
             `Case-sensitive broken links detected (${broken.size})`,
+          );
+        }
+        if (badOgImages.length > 0) {
+          let msg = "Broken og:image URLs detected:\n";
+          for (const { file, url } of badOgImages.slice(0, 20)) {
+            msg += `  ${file}: ${url}\n`;
+          }
+          logger.error(msg);
+          throw new Error(
+            `Broken og:image URLs detected (${badOgImages.length})`,
           );
         }
         if (oddIndents.length > 0) {

@@ -75,20 +75,6 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      # OG-image render cache (website/node_modules/.cache/alchemy-og).
-      # Entries are content-addressed (hash of card element tree + fonts),
-      # so any restored cache is valid: hits skip the satori→resvg render,
-      # misses render and are saved for the next run. The sha-keyed
-      # primary never hits, so an updated cache (with any newly rendered
-      # cards) is saved after every successful deploy; `restore-keys`
-      # picks up the most recent prior cache. Saves ~2min of build time.
-      - name: Restore OG image cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: website/node_modules/.cache/alchemy-og
-          key: og-images-${{ github.sha }}
-          restore-keys: og-images-
-
       # Secrets (Cloudflare credentials, etc.) are injected by
       # `doppler run` from the `alchemy-v2` project — `prod` config on
       # main, `dev` config everywhere else.
