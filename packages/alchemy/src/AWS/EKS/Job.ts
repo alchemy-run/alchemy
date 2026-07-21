@@ -12,6 +12,7 @@ import {
   type PlatformServices,
 } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
+import { Self } from "../../Self.ts";
 import { Resource } from "../../Resource.ts";
 import {
   packEnvValue,
@@ -342,7 +343,8 @@ export const makeEksJobBootstrap =
     `
 import { BunServices } from "@effect/platform-bun";
 import { Stack } from "alchemy/Stack";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -352,7 +354,15 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
+
+// Normalize the entrypoint export: an inline-effect class default export is
+// an Effect resolving the platform instance, while the tagged form
+// (X.make(props, impl)) exports a Layer providing the Self tag. Both fold
+// into a Layer via makeEntrypointLayer (same pattern as the ECS/Lambda/
+// Cloudflare Container bridges).
+const tag = Context.Service("${Self.key}");
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   BunServices.layer,
@@ -362,11 +372,11 @@ const platform = Layer.mergeAll(
 
 // Resolve the bundled program's registered one-shot runners (the shape's
 // \`run\` effect and any host.run work) and execute them to completion.
-const program = handler.pipe(
+const program = tag.pipe(
   Effect.flatMap((host) => host.RuntimeContext.exports),
   Effect.flatMap((exports) => exports.program),
   Effect.provide(
-    Layer.effect(
+    layer.pipe(Layer.provideMerge(Layer.effect(
       Stack,
       Effect.all([
         Config.string("ALCHEMY_STACK_NAME"),
@@ -379,7 +389,7 @@ const program = handler.pipe(
           resources: {}
         }))
       )
-    ).pipe(
+    )),
       Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(platform),
