@@ -3,16 +3,35 @@ title: EKS
 description: Stand up an EKS Auto Mode cluster on a Network and run containers on it — Deployments for servers, Jobs for run-to-completion work, Manifests for everything else. No YAML, no kubectl.
 ---
 
-**EKS** is managed Kubernetes. Alchemy targets **Auto Mode**, where
-AWS manages the nodes, storage, and load-balancer integration for
-you: [`Cluster`](/providers/aws/eks/cluster) with `compute: "auto"`
-stands up the control plane from a VPC, and container platforms run
-your code on it — [`Deployment`](/providers/aws/eks/deployment) for
-replicated servers, [`Job`](/providers/aws/eks/job) for
-run-to-completion work, and [`Manifest`](/providers/aws/eks/manifest)
-for any raw Kubernetes object. The workloads live in the same
-TypeScript program as the cluster, with no YAML manifests and no
-`kubectl apply` step.
+**EKS** (Elastic Kubernetes Service) is AWS's managed Kubernetes:
+AWS runs the Kubernetes control plane, and your containers run on
+it as Kubernetes objects. Alchemy targets **Auto Mode**, where AWS
+also manages the nodes, storage, and load-balancer integration —
+no machines to operate.
+
+The Kubernetes primitives you'll meet here:
+
+- A **cluster** is one Kubernetes installation: the API server
+  plus the nodes that run your containers.
+- A **pod** is one or more containers running together — the unit
+  Kubernetes schedules onto nodes.
+- A **Deployment** keeps a set number of identical pods running,
+  replacing ones that fail. A **Service** gives them one stable
+  address — and, as type `LoadBalancer`, a public one.
+- A **Job** runs a pod to completion; a **CronJob** does that on a
+  schedule.
+- Everything in Kubernetes is an object described by a
+  **manifest** you apply to the cluster.
+
+Alchemy models these directly:
+[`Cluster`](/providers/aws/eks/cluster) with `compute: "auto"`
+stands up the control plane from a VPC;
+[`Deployment`](/providers/aws/eks/deployment) synthesizes a
+Kubernetes `Deployment` + `Service`;
+[`Job`](/providers/aws/eks/job) a `Job` or `CronJob`; and
+[`Manifest`](/providers/aws/eks/manifest) applies any raw
+Kubernetes object. The workloads live in the same TypeScript
+program as the cluster, with no YAML and no `kubectl apply` step.
 
 ## Create an Auto Mode cluster
 

@@ -77,13 +77,12 @@ props:
   steps.
 
 :::tip
-Building on Apple Silicon? Match the image architecture to the
-Fargate runtime with
-`runtimePlatform: { cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" }`
-so the locally built image runs on Graviton — Alchemy builds the
-image for whichever architecture the task definition declares. If
-a registry rate-limits your local pulls, switch the environment
-base with `image: "oven/bun:1"`.
+`runtimePlatform.cpuArchitecture` picks the architecture the task
+runs on in Fargate (default `X86_64`). Alchemy builds or mirrors
+the image for whatever the task definition declares, regardless of
+the machine you build on. Declaring `"ARM64"` runs the task on
+Graviton — cheaper per vCPU, and image builds happen to be native
+(no emulation) on Apple Silicon machines.
 :::
 
 ## Run an Effect program in a Task
@@ -119,22 +118,35 @@ Lambda and Cloudflare Workers.
 
 A `Task` is the target of the ECS control-plane bindings. From a
 Lambda function, a Service, or any other host, bind
-[`RunTask`](/providers/aws/ecs/runtask) to start one — the
-cluster and task definition ARNs are injected automatically, and
-the host is granted `ecs:RunTask` plus `iam:PassRole` on the
-task's roles:
+[`RunTask`](/providers/aws/ecs/runtask) in the **init phase** —
+this grants the host `ecs:RunTask` plus `iam:PassRole` on the
+task's roles — then call it from a handler at **runtime**, where
+the cluster and task definition ARNs are injected automatically:
 
 ```typescript
-const runTask = yield* AWS.ECS.RunTask(cluster, task);
+const api = yield* AWS.Lambda.Function(
+  "Api",
+  { main: import.meta.url, url: true },
+  Effect.gen(function* () {
+    // init: bind the launch (IAM grants happen here)
+    const runTask = yield* AWS.ECS.RunTask(cluster, task);
 
-const response = yield* runTask({
-  launchType: "FARGATE",
-  networkConfiguration: {
-    awsvpcConfiguration: {
-      subnets: [subnetId],
-    },
-  },
-});
+    return {
+      fetch: Effect.gen(function* () {
+        // runtime: launch a task per request
+        const response = yield* runTask({
+          launchType: "FARGATE",
+          networkConfiguration: {
+            awsvpcConfiguration: { subnets: [subnetId] },
+          },
+        });
+        return yield* HttpServerResponse.json({
+          taskArn: response.tasks?.[0]?.taskArn,
+        });
+      }),
+    };
+  }),
+);
 ```
 
 For cron-style execution, `AWS.ECS.every` provisions an
