@@ -1,23 +1,29 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
-import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Database } from "./Db.ts";
-import { relations, Users } from "./schema.ts";
+import { Database } from "./database.ts";
 
+export interface User {
+  readonly id: number;
+  readonly email: string;
+  readonly name: string;
+  readonly created_at: number;
+}
+
+/**
+ * A Worker querying D1 through `@effect/sql-d1` — tagged-template SQL over
+ * the native binding. Interpolated values are parameterized, every query is
+ * an Effect, and failures surface as typed `SqlError`s.
+ */
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    const database = yield* Database;
-    const d1 = yield* Cloudflare.D1.QueryDatabase(database);
-
-    // drizzle-orm's `effect-d1` driver over the native D1 binding.
-    const db = yield* Drizzle.d1(d1, { relations });
+    const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
+    const sql = yield* Cloudflare.D1.sqlClient(d1);
 
     return {
       fetch: Effect.gen(function* () {
@@ -25,7 +31,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
         switch (request.method) {
           case "GET": {
             if (request.url === "/") {
-              const users = yield* db.select().from(Users);
+              const users = yield* sql<User>`
+                SELECT * FROM users ORDER BY id
+              `;
               return yield* HttpServerResponse.json({ users });
             }
             const id = Number(request.url.split("/").pop());
@@ -35,20 +43,17 @@ export default class Api extends Cloudflare.Worker<Api>()(
                 { status: 400 },
               );
             }
-            const user = yield* db.query.Users.findFirst({
-              where: { id },
-              with: { posts: true },
-            });
-            return yield* HttpServerResponse.json({ user });
+            const [user] = yield* sql<User>`
+              SELECT * FROM users WHERE id = ${id}
+            `;
+            return yield* HttpServerResponse.json({ user: user ?? null });
           }
           case "POST": {
-            const user = yield* db
-              .insert(Users)
-              .values({
-                name: crypto.randomUUID(),
-                email: crypto.randomUUID(),
-              })
-              .returning();
+            const [user] = yield* sql<User>`
+              INSERT INTO users (name, email)
+              VALUES (${crypto.randomUUID()}, ${crypto.randomUUID()})
+              RETURNING *
+            `;
             return yield* HttpServerResponse.json({ user });
           }
           case "DELETE": {
@@ -59,11 +64,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
                 { status: 400 },
               );
             }
-            const [user] = yield* db
-              .delete(Users)
-              .where(eq(Users.id, id))
-              .returning();
-            return yield* HttpServerResponse.json({ user });
+            const [user] = yield* sql<User>`
+              DELETE FROM users WHERE id = ${id} RETURNING *
+            `;
+            return yield* HttpServerResponse.json({ user: user ?? null });
           }
           default: {
             return yield* HttpServerResponse.json(

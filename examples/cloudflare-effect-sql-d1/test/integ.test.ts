@@ -1,17 +1,15 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
-import type { Post, User } from "../src/schema.ts";
+import type { User } from "../src/Api.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.mergeAll(Cloudflare.providers(), Drizzle.providers()),
+  providers: Cloudflare.providers(),
   state: Alchemy.localState(),
 });
 
@@ -34,7 +32,7 @@ test(
 );
 
 test(
-  "worker exposes user CRUD through Drizzle on D1",
+  "worker exposes user CRUD through @effect/sql-d1",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -52,27 +50,21 @@ test(
     );
     expect(createResponse.status).toBe(200);
 
-    const createBody = (yield* createResponse.json) as unknown as {
-      user: User[];
+    const { user: createdUser } = (yield* createResponse.json) as unknown as {
+      user: User;
     };
-    expect(createBody.user).toHaveLength(1);
-
-    const [createdUser] = createBody.user;
     expect(createdUser.id).toBeNumber();
     expect(createdUser.email).toBeString();
     expect(createdUser.name).toBeString();
+    expect(createdUser.created_at).toBeNumber();
 
     const readResponse = yield* HttpClient.get(`${baseUrl}/${createdUser.id}`);
     expect(readResponse.status).toBe(200);
-
-    const readBody = (yield* readResponse.json) as unknown as {
-      user: User & { posts: Post[] };
-    };
+    const readBody = (yield* readResponse.json) as unknown as { user: User };
     expect(readBody.user).toMatchObject({
       id: createdUser.id,
       email: createdUser.email,
       name: createdUser.name,
-      posts: [],
     });
 
     const invalidReadResponse = yield* HttpClient.get(`${baseUrl}/not-a-user`);
@@ -93,15 +85,10 @@ test(
       HttpClientRequest.delete(`${baseUrl}/${createdUser.id}`),
     );
     expect(deleteResponse.status).toBe(200);
-
     const deleteBody = (yield* deleteResponse.json) as unknown as {
       user: User;
     };
-    expect(deleteBody.user).toMatchObject({
-      id: createdUser.id,
-      email: createdUser.email,
-      name: createdUser.name,
-    });
+    expect(deleteBody.user).toMatchObject({ id: createdUser.id });
 
     const finalResponse = yield* HttpClient.get(baseUrl);
     expect(finalResponse.status).toBe(200);

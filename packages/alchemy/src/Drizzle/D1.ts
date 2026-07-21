@@ -1,21 +1,12 @@
-import type * as runtime from "@cloudflare/workers-types";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import * as SQLiteD1Drizzle from "drizzle-orm/effect-d1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { D1DatabaseSource } from "../Cloudflare/D1/SqlClient.ts";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
-
-/**
- * A source of the raw Cloudflare `D1Database` binding. Structurally matches
- * the client returned by `Cloudflare.D1.QueryDatabase(db)` (its `raw`
- * accessor), so both the client and a bare effect are accepted.
- */
-export type D1DatabaseSource<E, R> =
-  | Effect.Effect<runtime.D1Database, E, R>
-  | { readonly raw: Effect.Effect<runtime.D1Database, E, R> };
 
 /**
  * Open a Drizzle database over a Cloudflare D1 binding using the

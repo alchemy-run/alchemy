@@ -121,7 +121,10 @@ test(
       false,
     );
   }),
-  { timeout: 20_000 },
+  // The cold-start `getWhenReady` window plus a full CRUD round-trip against
+  // a freshly-warmed Hyperdrive/PlanetScale connection routinely exceeds
+  // 20s. Match the sequential-query case's budget.
+  { timeout: 120_000 },
 );
 
 test(

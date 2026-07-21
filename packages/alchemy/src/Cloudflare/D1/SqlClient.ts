@@ -31,19 +31,13 @@ export type SqlClientConfig = Omit<D1Client.D1ClientConfig, "db">;
  * resolved once at Worker init and used from any handler:
  *
  * ```typescript
- * import { sqlClient } from "alchemy/Cloudflare/D1/SqlClient";
- *
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
- * const sql = yield* sqlClient(d1);
+ * const sql = yield* Cloudflare.D1.sqlClient(d1);
  *
  * fetch: Effect.gen(function* () {
  *   const users = yield* sql`SELECT * FROM users`;
  * });
  * ```
- *
- * This module lives on its own subpath (`alchemy/Cloudflare/D1/SqlClient`)
- * rather than the `Cloudflare.D1` namespace because it imports the optional
- * peer dependency `@effect/sql-d1`.
  *
  * The client build is deferred until the first query and memoized on the
  * current execution's `Scope` (via {@link makeExecutionMemo}), so the
@@ -76,11 +70,9 @@ export const sqlClient = <E = never, R = never>(
  * `D1Client`) run on a bound D1 database:
  *
  * ```typescript
- * import { sqlClientLayer } from "alchemy/Cloudflare/D1/SqlClient";
- *
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
  * const app = yield* makeApp.pipe(
- *   Effect.provide(sqlClientLayer(d1)),
+ *   Effect.provide(Cloudflare.D1.sqlClientLayer(d1)),
  * );
  * ```
  *

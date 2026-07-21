@@ -208,54 +208,16 @@ the Worker. Change the schema and deploy again — the provider diffs
 against the latest snapshot, writes just the delta SQL, and D1
 applies the new file; an unchanged schema is a no-op.
 
-## Use `@effect/sql-d1` directly
+## Prefer tagged-template SQL?
 
-Sometimes you want tagged-template SQL without the ORM — or you're
-building services against Effect's generic `SqlClient` interface.
-The same binding powers the raw client via the
-`alchemy/Cloudflare/D1/SqlClient` module:
-
-```typescript
-import { sqlClient } from "alchemy/Cloudflare/D1/SqlClient";
-
-Effect.gen(function* () {
-  const database = yield* Database;
-  const d1 = yield* Cloudflare.D1.QueryDatabase(database);
-  const sql = yield* sqlClient(d1);
-
-  return {
-    fetch: Effect.gen(function* () {
-      const rows = yield* sql`SELECT id, name FROM users ORDER BY id`;
-      return yield* HttpServerResponse.json({ rows });
-    }),
-  };
-});
-```
-
-`sql` is an `@effect/sql-d1` `D1Client` — it implements the generic
-`SqlClient` interface, parameterizes interpolated values, and maps
-D1 failures to typed `SqlError`s. It shares the same per-execution
-lifecycle as `Drizzle.d1`.
-
-To provide it as the `SqlClient.SqlClient` (and `D1Client`) services
-for cloud-agnostic code, use the layer form:
-
-```typescript
-import { sqlClientLayer } from "alchemy/Cloudflare/D1/SqlClient";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-
-const makeApp = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  // ... services that only know about SqlClient
-});
-
-const app = yield* makeApp.pipe(Effect.provide(sqlClientLayer(d1)));
-```
-
-The module lives on its own subpath (rather than the
-`Cloudflare.D1` namespace) because it imports the optional
-`@effect/sql-d1` peer — importing `alchemy/Cloudflare` alone never
-requires it.
+Drizzle is one consumer of the binding, not a requirement. The same
+`QueryDatabase` client also powers `Cloudflare.D1.sqlClient` — the
+raw `@effect/sql-d1` client with tagged-template SQL and Effect's
+generic `SqlClient` interface, no ORM involved. That path is
+covered in
+[SQL with @effect/sql-d1](/cloudflare/data/d1#sql-with-effectsql-d1)
+with a complete runnable project in
+[`cloudflare-effect-sql-d1`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-effect-sql-d1).
 
 :::note
 D1's driver does not support interactive transactions or streaming

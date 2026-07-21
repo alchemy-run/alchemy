@@ -19,12 +19,11 @@
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-d1": "catalog:",
     "alchemy": "workspace:*",
-    "drizzle-orm": "1.0.0-rc.4",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "drizzle-kit": "1.0.0-rc.4"
+    "drizzle-kit": "catalog:"
   }
 }

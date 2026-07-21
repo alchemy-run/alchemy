@@ -13,7 +13,8 @@ via `migrationsDir`. There is no setup page because there is nothing
 to set up: the provider has no credentials — it just needs
 `drizzle-kit` and `drizzle-orm` installed (optional peers of
 alchemy). The runtime client additionally needs `@effect/sql-pg` and
-`pg` on Postgres, or `@effect/sql-d1` on D1.
+`pg` on Postgres, `@effect/sql-mysql2` and `mysql2` on MySQL, or
+`@effect/sql-d1` on D1.
 
 ## Resources
 
@@ -84,6 +85,15 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
+`Drizzle.mysql` is the MySQL counterpart — same signature, driving
+`drizzle-orm/effect-mysql2` over mysql2's text protocol so it works
+through Hyperdrive (which does not proxy MySQL prepared statements):
+
+```typescript
+const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+const db = yield* Drizzle.mysql(conn.connectionString, { relations });
+```
+
 `Drizzle.d1` is the same shape on Cloudflare D1 — it takes the
 `Cloudflare.D1.QueryDatabase` client instead of a connection string
 and drives drizzle-orm's `effect-d1` driver through
@@ -138,4 +148,5 @@ built on the same schema resource, see
 
 [Schema](/providers/drizzle/schema) ·
 [postgres](/providers/drizzle/postgres) ·
+[mysql](/providers/drizzle/mysql) ·
 [d1](/providers/drizzle/d1)

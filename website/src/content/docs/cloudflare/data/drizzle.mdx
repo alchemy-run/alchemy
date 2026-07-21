@@ -480,20 +480,18 @@ export const Hyperdrive: Effect.Effect<
 });
 ```
 
-At runtime there's no `Drizzle.mysql` helper — use
-`drizzle-orm/mysql2` directly (swap the `pg` dependency for
-`mysql2`). The client is created per request and closed when the
-response is done:
+At runtime, `Drizzle.mysql` is the MySQL counterpart of
+`Drizzle.postgres` — it takes Hyperdrive's connection string and
+returns a typed drizzle db whose queries are Effects (swap the `pg`
+dependency for `mysql2` + `@effect/sql-mysql2`):
 
 ```typescript
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import { drizzle } from "drizzle-orm/mysql2";
+import * as Drizzle from "alchemy/Drizzle";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
-import * as schema from "./schema.ts";
 import { relations, Users } from "./schema.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -506,45 +504,28 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const db = yield* Drizzle.mysql(conn.connectionString, {
+      relations,
+    });
 
     return {
       fetch: Effect.gen(function* () {
-        const connectionString = yield* conn.connectionString;
-        const db = drizzle({
-          connection: {
-            uri: Redacted.value(connectionString),
-            // mysql2's text/binary parsers JIT via `new Function(...)`,
-            // which Cloudflare Workers' isolate disallows.
-            disableEval: true,
-          },
-          schema,
-          relations,
-          mode: "default",
-        });
-
-        const close = Effect.tryPromise({
-          try: () => db.$client.end(),
-          catch: (cause) => cause,
-        }).pipe(Effect.catch(() => Effect.void));
-
-        return yield* Effect.gen(function* () {
-          const users = yield* Effect.tryPromise({
-            try: () => db.select().from(Users),
-            catch: (cause) => cause,
-          });
-          return yield* HttpServerResponse.json({ users });
-        }).pipe(Effect.ensuring(close));
+        const users = yield* db.select().from(Users);
+        return yield* HttpServerResponse.json({ users });
       }),
     };
   }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 
-Two MySQL-specific details: `disableEval: true` is required because
-mysql2's parsers compile via `new Function(...)`, which the Workers
-isolate blocks; and queries go through `Effect.tryPromise` because
-the plain mysql2 driver returns Promises — there's no effect-native
-integration like `@effect/sql-pg` on this path.
+The pool is built lazily on the first query, memoized per execution,
+and torn down when the event settles — the same lifecycle as
+`Drizzle.postgres`. Two MySQL-specific behaviors are handled for
+you: queries run over mysql2's **text protocol** (Hyperdrive does
+not proxy MySQL prepared statements / `COM_STMT_PREPARE`), and the
+pool defaults to `disableEval: true` because mysql2's JIT row
+parsers compile via `new Function(...)`, which the Workers isolate
+blocks.
 
 </TabItem>
 </Tabs>
