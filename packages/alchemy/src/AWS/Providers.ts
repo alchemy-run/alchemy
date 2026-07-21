@@ -1707,6 +1707,37 @@ const hasTransientNetworkCause = (cause: unknown, depth = 0): boolean => {
     : false;
 };
 
+// Error codes raised while failing to even open a connection. bun's fetch
+// reports an unresolvable hostname (NXDOMAIN — e.g. an AWS service with no
+// endpoint in the ambient region, like IoT Managed Integrations outside its
+// launch regions) as `ConnectionRefused`/`FailedToOpenSocket`, which is
+// indistinguishable from a live-but-refusing host. These failures are almost
+// always permanent (wrong region, wrong endpoint), so they get a small retry
+// budget instead of the full 16-attempt transport budget — enough to ride out
+// a momentary blip, but a nonexistent endpoint fails in ~1.5s, not ~60s.
+const CONNECT_FAILURE_CODES = new Set([
+  "ConnectionRefused", // bun: connect failed (includes NXDOMAIN)
+  "FailedToOpenSocket", // bun: socket open failed (includes NXDOMAIN)
+  "ENOTFOUND", // node: DNS name not found
+  "EAI_NONAME", // node: DNS name not found
+  "ECONNREFUSED", // node: TCP connect refused
+]);
+
+const hasConnectFailureCause = (cause: unknown, depth = 0): boolean => {
+  if (cause == null || typeof cause !== "object" || depth > 8) return false;
+  const code = (cause as { code?: unknown }).code;
+  if (typeof code === "string" && CONNECT_FAILURE_CODES.has(code)) return true;
+  const nested = (cause as { cause?: unknown }).cause;
+  return nested !== undefined && nested !== cause
+    ? hasConnectFailureCause(nested, depth + 1)
+    : false;
+};
+
+const isConnectFailure = (error: unknown): boolean =>
+  HttpClientError.isHttpClientError(error) &&
+  error.reason._tag === "TransportError" &&
+  hasConnectFailureCause(error.reason);
+
 // TODO(sam): remove this once it's upstreamed to distilled
 const isHttpTransportError = (error: unknown): boolean => {
   if (!HttpClientError.isHttpClientError(error)) return false;
@@ -1731,34 +1762,44 @@ const isHttpTransportError = (error: unknown): boolean => {
   return false;
 };
 
-const awsRetryFactory: RetryFactory = (lastError) => ({
-  while: (error) =>
-    isTransientError(error) ||
-    isThrottlingError(error) ||
-    isRetryable(error) ||
-    isHttpTransportError(error),
-  // Transient transport failures (e.g. a sustained `read ETIMEDOUT` blip
-  // against a control-plane endpoint) can outlast a 10-attempt budget. With
-  // the 5s cap below, the extra attempts add bounded backoff while making
-  // the network-flake recovery materially more robust.
-  schedule: Schedule.max([
-    pipe(
-      Schedule.exponential(Duration.millis(200), 2),
-      Schedule.modifyDelay(
-        Effect.fn(function* ({ duration }) {
-          const error = yield* Ref.get(lastError);
-          if (isThrottlingError(error)) {
-            // Throttling: floor at 500ms (matches distilled default).
-            if (Duration.toMillis(duration) < 500) {
-              return Duration.toMillis(Duration.millis(500));
+const awsRetryFactory: RetryFactory = (lastError) => {
+  // The factory runs once per API call, so this counter is call-scoped. It
+  // caps connect-phase failures (see CONNECT_FAILURE_CODES) at 3 retries
+  // within the overall schedule below.
+  let connectFailures = 0;
+  return {
+    while: (error) => {
+      if (isConnectFailure(error)) return ++connectFailures <= 3;
+      return (
+        isTransientError(error) ||
+        isThrottlingError(error) ||
+        isRetryable(error) ||
+        isHttpTransportError(error)
+      );
+    },
+    // Transient transport failures (e.g. a sustained `read ETIMEDOUT` blip
+    // against a control-plane endpoint) can outlast a 10-attempt budget. With
+    // the 5s cap below, the extra attempts add bounded backoff while making
+    // the network-flake recovery materially more robust.
+    schedule: Schedule.max([
+      pipe(
+        Schedule.exponential(Duration.millis(200), 2),
+        Schedule.modifyDelay(
+          Effect.fn(function* ({ duration }) {
+            const error = yield* Ref.get(lastError);
+            if (isThrottlingError(error)) {
+              // Throttling: floor at 500ms (matches distilled default).
+              if (Duration.toMillis(duration) < 500) {
+                return Duration.toMillis(Duration.millis(500));
+              }
             }
-          }
-          return Duration.toMillis(duration);
-        }),
+            return Duration.toMillis(duration);
+          }),
+        ),
+        capped(Duration.seconds(5)),
+        jittered,
       ),
-      capped(Duration.seconds(5)),
-      jittered,
-    ),
-    Schedule.recurs(15),
-  ]),
-});
+      Schedule.recurs(15),
+    ]),
+  };
+};

@@ -76,6 +76,10 @@ const readMigrationDirs = (out: string) =>
       .sort();
   });
 
+// Returns snapshots in chain order (each entry's prevIds points at the one
+// before it). Directory-name order is NOT reliable: two migrations generated
+// within the same second share the timestamp prefix and then sort by the
+// random name suffix.
 const readSnapshots = (out: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -93,7 +97,14 @@ const readSnapshots = (out: string) =>
         }),
       );
     }
-    return snapshots;
+    const byPrev = new Map(snapshots.map((s) => [s.prevIds[0], s]));
+    const ordered: typeof snapshots = [];
+    let cursor = byPrev.get("00000000-0000-0000-0000-000000000000");
+    while (cursor !== undefined) {
+      ordered.push(cursor);
+      cursor = byPrev.get(cursor.id);
+    }
+    return ordered.length === snapshots.length ? ordered : snapshots;
   });
 
 const getStatus = Effect.fn(function* (fqn: string) {

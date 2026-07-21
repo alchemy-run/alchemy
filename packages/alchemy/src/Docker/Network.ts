@@ -107,7 +107,7 @@ export const NetworkProvider = () =>
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.
-          const desiredName = news.name ?? output.name;
+          const desiredName = news?.name ?? output.name;
           if (
             output.name !== desiredName ||
             output.driver !== args.driver ||

@@ -15,6 +15,7 @@ export type Dialect = "postgres" | "mysql" | "sqlite";
 
 type DrizzleSnapshot = {
   id?: string;
+  prevIds?: string[];
 };
 
 type DrizzleKitApi = {
@@ -286,20 +287,36 @@ export const SchemaProvider = () =>
           return entries.filter((name) => /^\d+_/.test(name)).sort();
         });
 
+      // The latest snapshot is the head of the `prevIds` chain — the one no
+      // other snapshot points back to. Directory-name order alone is not
+      // enough: two migrations generated within the same second share the
+      // timestamp prefix, and the random name suffix then decides the sort.
       const readLatestSnapshot = (out: string) =>
         Effect.gen(function* () {
           const dirs = yield* listMigrationDirs(out);
-          for (const dir of [...dirs].reverse()) {
+          const entries: Array<{ snapshot: DrizzleSnapshot; hash: string }> =
+            [];
+          for (const dir of dirs) {
             const snapshotPath = path.join(out, dir, "snapshot.json");
             const exists = yield* fs.exists(snapshotPath);
             if (!exists) continue;
             const text = yield* fs.readFileString(snapshotPath);
-            return {
+            entries.push({
               snapshot: JSON.parse(text) as DrizzleSnapshot,
               hash: sha(text),
-            };
+            });
           }
-          return undefined;
+          if (entries.length === 0) return undefined;
+          const referenced = new Set(
+            entries.flatMap((entry) => entry.snapshot.prevIds ?? []),
+          );
+          const head = entries.find(
+            (entry) =>
+              entry.snapshot.id !== undefined &&
+              !referenced.has(entry.snapshot.id),
+          );
+          // Fall back to name order for snapshots without id/prevIds chains.
+          return head ?? entries[entries.length - 1];
         });
 
       const detectDriftWithCli = (props: SchemaProps) =>

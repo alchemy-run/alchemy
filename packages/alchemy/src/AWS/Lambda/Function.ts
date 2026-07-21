@@ -2318,7 +2318,7 @@ export default handler;
           // nuke census is the backstop. We only fail loudly if the group is
           // still observable at budget exhaustion AND a final delete attempt
           // did not remove it — i.e. the group is genuinely undeletable.
-          const observeLogGroup = logs
+          const describeLogGroup = logs
             .describeLogGroups({
               logGroupNamePrefix: logGroupName,
               limit: 1,
@@ -2329,16 +2329,35 @@ export default handler;
                   (group) => group.logGroupName === logGroupName,
                 ),
               ),
-              Effect.timeoutOrElse({
-                duration: "10 seconds",
-                orElse: () =>
-                  Effect.die(
-                    new Error(
-                      `Timed out confirming Lambda log group deletion: ${logGroupName}`,
-                    ),
-                  ),
-              }),
             );
+
+          // Loop observation: a describe that can't complete in time (API
+          // throttling under a busy account / saturated test run) is NOT
+          // deletion proof — assume the group is still present and let the
+          // bounded loop keep converging instead of dying on a slow read.
+          const observeLogGroup = describeLogGroup.pipe(
+            Effect.timeoutOrElse({
+              duration: "30 seconds",
+              orElse: () =>
+                Effect.logWarning(
+                  `Timed out observing Lambda log group ${logGroupName} — assuming still present`,
+                ).pipe(Effect.as(true)),
+            }),
+          );
+
+          // Final authoritative observation: here a timeout must fail loudly,
+          // since we are about to declare the delete converged.
+          const observeLogGroupOrDie = describeLogGroup.pipe(
+            Effect.timeoutOrElse({
+              duration: "30 seconds",
+              orElse: () =>
+                Effect.die(
+                  new Error(
+                    `Timed out confirming Lambda log group deletion: ${logGroupName}`,
+                  ),
+                ),
+            }),
+          );
 
           const deleteLogGroupAgain = logs
             .deleteLogGroup({ logGroupName })
@@ -2354,7 +2373,7 @@ export default handler;
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.timeoutOrElse({
-                duration: "10 seconds",
+                duration: "45 seconds",
                 orElse: () =>
                   Effect.die(
                     new Error(
@@ -2388,7 +2407,7 @@ export default handler;
           // observation decides — absent means our delete of the latest
           // recreation stuck (gone); present means the group survives its own
           // deletion (denied/undeletable) and must fail loudly.
-          if (observedAtBudgetEnd && (yield* observeLogGroup)) {
+          if (observedAtBudgetEnd && (yield* observeLogGroupOrDie)) {
             yield* Effect.die(
               new Error(
                 `Lambda log group ${logGroupName} remained observable after delete`,

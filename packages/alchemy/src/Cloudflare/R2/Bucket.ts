@@ -694,7 +694,8 @@ export const BucketProvider = () =>
               perPage,
               startAfter,
             });
-            const page = (response.buckets ?? []).filter(
+            const raw = response.buckets ?? [];
+            const page = raw.filter(
               (b): b is typeof b & { name: string } =>
                 typeof b.name === "string" && b.name !== "",
             );
@@ -708,7 +709,10 @@ export const BucketProvider = () =>
                 location: normalizeLocation(b.location),
               });
             }
-            if (page.length < perPage) break;
+            // Terminate on the RAW page length — the filtered length can be
+            // shorter on a full page (nameless entries), which would end the
+            // walk early and silently drop the remaining buckets.
+            if (raw.length < perPage || page.length === 0) break;
             startAfter = page[page.length - 1].name;
           }
           return all;
@@ -859,43 +863,47 @@ export const BucketProvider = () =>
               buckets,
               (bucket) =>
                 Effect.gen(function* () {
-                  const domains =
-                    (yield* listCustomDomains(
-                      bucket.name,
-                      bucket.jurisdiction,
-                      {
+                  // The three hydration reads are independent — issue them
+                  // concurrently so each bucket costs one round-trip of wall
+                  // clock instead of three (a large leaked-bucket census can
+                  // otherwise blow the nuke scan's per-provider timeout).
+                  const [domains, lifecycleRules, cors] = yield* Effect.all(
+                    [
+                      listCustomDomains(bucket.name, bucket.jurisdiction, {
                         retryMissing: false,
-                      },
-                    )) ?? [];
-                  const lifecycleRules = yield* r2
-                    .getBucketLifecycle({
-                      accountId,
-                      bucketName: bucket.name,
-                      jurisdiction: bucket.jurisdiction,
-                    })
-                    .pipe(
-                      Effect.map((observed) =>
-                        (observed.rules ?? []).map(toLifecycleRule),
-                      ),
-                      Effect.catchTag("NoSuchBucket", () =>
-                        Effect.succeed([] as Bucket.LifecycleRule[]),
-                      ),
-                    );
-                  const cors = yield* r2
-                    .getBucketCors({
-                      accountId,
-                      bucketName: bucket.name,
-                      jurisdiction: bucket.jurisdiction,
-                    })
-                    .pipe(
-                      Effect.map((observed) =>
-                        (observed.rules ?? []).map(toCorsRule),
-                      ),
-                      Effect.catchTag(
-                        ["NoSuchBucket", "NoCorsConfiguration"],
-                        () => Effect.succeed([] as Bucket.CorsRule[]),
-                      ),
-                    );
+                      }).pipe(Effect.map((d) => d ?? [])),
+                      r2
+                        .getBucketLifecycle({
+                          accountId,
+                          bucketName: bucket.name,
+                          jurisdiction: bucket.jurisdiction,
+                        })
+                        .pipe(
+                          Effect.map((observed) =>
+                            (observed.rules ?? []).map(toLifecycleRule),
+                          ),
+                          Effect.catchTag("NoSuchBucket", () =>
+                            Effect.succeed([] as Bucket.LifecycleRule[]),
+                          ),
+                        ),
+                      r2
+                        .getBucketCors({
+                          accountId,
+                          bucketName: bucket.name,
+                          jurisdiction: bucket.jurisdiction,
+                        })
+                        .pipe(
+                          Effect.map((observed) =>
+                            (observed.rules ?? []).map(toCorsRule),
+                          ),
+                          Effect.catchTag(
+                            ["NoSuchBucket", "NoCorsConfiguration"],
+                            () => Effect.succeed([] as Bucket.CorsRule[]),
+                          ),
+                        ),
+                    ] as const,
+                    { concurrency: 3 },
+                  );
                   return {
                     bucketName: bucket.name,
                     storageClass: bucket.storageClass,
@@ -908,13 +916,26 @@ export const BucketProvider = () =>
                   };
                 }).pipe(
                   // The custom-domain endpoint intermittently 500s ("Failed to
-                  // access or modify the bucket policy"). Ride out the transient
-                  // blip with a bounded retry rather than aborting the whole
-                  // enumeration.
-                  Effect.retry({
-                    while: (e) => e._tag === "InternalServerError",
-                    schedule: r2TransientServerErrorSchedule,
-                  }),
+                  // access or modify the bucket policy"), and some buckets 500
+                  // PERSISTENTLY. The blanket Cloudflare retry policy already
+                  // retries each call's transient blips; don't stack another
+                  // retry here (the budgets multiply into minutes per bucket).
+                  // A bucket that still 500s must not abort the account-wide
+                  // enumeration (nuke would then see ZERO buckets) — degrade
+                  // it to an un-hydrated shape; delete can still tear the
+                  // bucket down.
+                  Effect.catchTag("InternalServerError", () =>
+                    Effect.succeed({
+                      bucketName: bucket.name,
+                      storageClass: bucket.storageClass,
+                      jurisdiction: bucket.jurisdiction,
+                      location: bucket.location,
+                      accountId,
+                      domains: [] as Bucket.CustomDomain[],
+                      lifecycleRules: [] as Bucket.LifecycleRule[],
+                      cors: [] as Bucket.CorsRule[],
+                    }),
+                  ),
                 ),
               { concurrency: 10 },
             );

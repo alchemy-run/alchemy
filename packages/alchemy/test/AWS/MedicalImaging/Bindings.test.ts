@@ -25,9 +25,9 @@ const NONEXISTENT_JOB = "0123456789abcdef0123456789abcdef";
 // ---------------------------------------------------------------------------
 // Ungated typed-error probes: every data-plane operation the eleven bindings
 // wrap is exercised directly through distilled against a nonexistent data
-// store, and must answer with its typed tag: import-job routes answer
-// ResourceNotFoundException, while image-set routes authorize against the
-// image set ARN and answer AccessDeniedException for a nonexistent store.
+// store, and must answer with its typed tag. As of mid-2026 both import-job
+// and image-set routes answer ResourceNotFoundException for a nonexistent
+// store (image-set routes previously answered AccessDeniedException).
 // These prove the distilled error unions (and request serialization) at
 // near-zero cost on every CI pass, while the full runtime fixture below is
 // gated behind the multi-minute data store provisioning.
@@ -35,7 +35,7 @@ const NONEXISTENT_JOB = "0123456789abcdef0123456789abcdef";
 
 describe("MedicalImaging data-plane operations (typed-error probes)", () => {
   test.provider(
-    "getImageSet on a nonexistent datastore fails with AccessDeniedException",
+    "getImageSet on a nonexistent datastore fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -44,12 +44,12 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
             imageSetId: NONEXISTENT_IMAGE_SET,
           }),
         );
-        expect(error._tag).toBe("AccessDeniedException");
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
 
   test.provider(
-    "getImageSetMetadata on a nonexistent datastore fails with AccessDeniedException",
+    "getImageSetMetadata on a nonexistent datastore fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -58,12 +58,12 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
             imageSetId: NONEXISTENT_IMAGE_SET,
           }),
         );
-        expect(error._tag).toBe("AccessDeniedException");
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
 
   test.provider(
-    "getImageFrame on a nonexistent datastore fails with AccessDeniedException",
+    "getImageFrame on a nonexistent datastore fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -73,12 +73,12 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
             imageFrameInformation: { imageFrameId: NONEXISTENT_IMAGE_SET },
           }),
         );
-        expect(error._tag).toBe("AccessDeniedException");
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
 
   test.provider(
-    "searchImageSets on a nonexistent datastore fails with AccessDeniedException",
+    "searchImageSets on a nonexistent datastore fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -86,12 +86,12 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
             datastoreId: NONEXISTENT_DATASTORE,
           }),
         );
-        expect(error._tag).toBe("AccessDeniedException");
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
 
   test.provider(
-    "listImageSetVersions on a nonexistent datastore fails with AccessDeniedException",
+    "listImageSetVersions on a nonexistent datastore fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -100,12 +100,12 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
             imageSetId: NONEXISTENT_IMAGE_SET,
           }),
         );
-        expect(error._tag).toBe("AccessDeniedException");
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
 
   test.provider(
-    "updateImageSetMetadata on a nonexistent datastore fails with AccessDeniedException",
+    "updateImageSetMetadata on a nonexistent datastore fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -116,12 +116,12 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
             updateImageSetMetadataUpdates: { revertToVersionId: "1" },
           }),
         );
-        expect(error._tag).toBe("AccessDeniedException");
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
 
   test.provider(
-    "copyImageSet on a nonexistent datastore fails with AccessDeniedException",
+    "copyImageSet on a nonexistent datastore fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -133,12 +133,12 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
             },
           }),
         );
-        expect(error._tag).toBe("AccessDeniedException");
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
 
   test.provider(
-    "deleteImageSet on a nonexistent datastore fails with AccessDeniedException",
+    "deleteImageSet on a nonexistent datastore fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -147,7 +147,7 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
             imageSetId: NONEXISTENT_IMAGE_SET,
           }),
         );
-        expect(error._tag).toBe("AccessDeniedException");
+        expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
 

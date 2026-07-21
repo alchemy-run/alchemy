@@ -49,12 +49,25 @@ test.provider.skipIf(!owner)(
       yield* stack.destroy();
 
       const [secret] = yield* stack.deploy(
-        GitHub.Secrets({
-          owner,
-          repository,
-          secrets: {
-            ALCHEMY_CONFIG_SECRET: Config.succeed("hunter2"),
-          },
+        Effect.gen(function* () {
+          // `Repository` defaults to `retain`: ensure the host repo exists
+          // (another suite may have deleted/recreated it mid-run) without
+          // ever deleting it on destroy. Reconcile is idempotent.
+          yield* GitHub.Repository("Repo", {
+            owner,
+            name: repository,
+            description: "alchemy-effect secret test host",
+            visibility: "private",
+            autoInit: true,
+          });
+
+          return yield* GitHub.Secrets({
+            owner,
+            repository,
+            secrets: {
+              ALCHEMY_CONFIG_SECRET: Config.succeed("hunter2"),
+            },
+          });
         }),
       );
 

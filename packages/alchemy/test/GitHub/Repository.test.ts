@@ -61,7 +61,11 @@ test.provider.skipIf(!owner)(
             description: "alchemy-effect integration test",
             visibility: "private",
             autoInit: true,
-            hasWiki: false,
+            // `hasIssues`, not `hasWiki`: wikis on PRIVATE repos are
+            // plan-gated for orgs — GitHub accepts `has_wiki: true` on the
+            // PATCH but silently keeps it false on a free-plan org, so a
+            // wiki toggle can never be asserted here.
+            hasIssues: false,
             topics: ["alchemy", "test"],
           }).pipe(destroy());
         }),
@@ -75,7 +79,7 @@ test.provider.skipIf(!owner)(
       expect(fetched?.id).toEqual(created.repoId);
       expect(fetched?.description).toEqual("alchemy-effect integration test");
       expect(fetched?.private).toEqual(true);
-      expect(fetched?.has_wiki).toEqual(false);
+      expect(fetched?.has_issues).toEqual(false);
       expect(fetched?.topics).toEqual(
         expect.arrayContaining(["alchemy", "test"]),
       );
@@ -88,7 +92,7 @@ test.provider.skipIf(!owner)(
             name,
             description: "updated description",
             visibility: "private",
-            hasWiki: true,
+            hasIssues: true,
             topics: ["alchemy"],
           }).pipe(destroy());
         }),
@@ -97,7 +101,7 @@ test.provider.skipIf(!owner)(
       expect(updated.repoId).toEqual(created.repoId);
       const afterUpdate = yield* getRepo(name);
       expect(afterUpdate?.description).toEqual("updated description");
-      expect(afterUpdate?.has_wiki).toEqual(true);
+      expect(afterUpdate?.has_issues).toEqual(true);
       expect(afterUpdate?.topics).toEqual(["alchemy"]);
 
       // Rename — new `name`, same logical ID → in-place rename, same repoId.
