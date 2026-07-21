@@ -380,12 +380,20 @@ export interface DBInstance extends Resource<
      */
     finalDBSnapshotIdentifier: string | undefined;
     /**
-     * SHA-256 hex fingerprint of the last `masterUserPassword` this provider
-     * sent to RDS — never the secret itself. Lets reconcile skip the
-     * `MasterUserPassword` modify (and the `resetting-master-credentials`
-     * cycle it triggers) when the configured password has not changed.
+     * Salted SHA-256 fingerprint of the last `masterUserPassword` this
+     * provider sent to RDS — `sha256(`${dbInstanceIdentifier}:${password}`)`,
+     * never the secret itself. Lets reconcile skip the `MasterUserPassword`
+     * modify (and the `resetting-master-credentials` cycle it triggers) when
+     * the configured password has not changed.
+     *
+     * Persisted `Redacted` because a password hash is still sensitive: an
+     * unsalted digest is vulnerable to rainbow-table lookup, so the state
+     * store must not surface it in plaintext (logs, `stringify`, dumps). The
+     * per-resource identifier salt additionally defeats precomputed tables;
+     * it is stable across a resource's life, so the fingerprint stays
+     * comparable across reconciles.
      */
-    masterUserPasswordFingerprint: string | undefined;
+    masterUserPasswordFingerprint: Redacted.Redacted<string> | undefined;
     /**
      * ARN of the Secrets Manager secret holding master credentials.
      */
@@ -479,6 +487,18 @@ const toTagRecord = (
       .map((tag) => [tag.Key, tag.Value]),
   );
 
+/**
+ * Whether two optional master-password fingerprints match, compared by their
+ * underlying (`Redacted`-unwrapped) digest. A missing stored fingerprint
+ * counts as "does not match" so a pre-existing instance sends its password
+ * once, then records the fingerprint for subsequent reconciles.
+ */
+const sameFingerprint = (
+  a: Redacted.Redacted<string> | undefined,
+  b: Redacted.Redacted<string> | undefined,
+): boolean =>
+  a !== undefined && b !== undefined && Redacted.value(a) === Redacted.value(b);
+
 const toAttrs = ({
   instance,
   tags,
@@ -490,7 +510,7 @@ const toAttrs = ({
   tags: Record<string, string>;
   skipFinalSnapshot?: boolean | undefined;
   finalDBSnapshotIdentifier?: string | undefined;
-  masterUserPasswordFingerprint?: string | undefined;
+  masterUserPasswordFingerprint?: Redacted.Redacted<string> | undefined;
 }): DBInstance["Attributes"] => ({
   skipFinalSnapshot,
   finalDBSnapshotIdentifier,
@@ -713,9 +733,16 @@ export const DBInstanceProvider = () =>
           // only send `MasterUserPassword` when the fingerprint changed.
           // Without this, every reconcile of an instance whose props carry a
           // password triggers a live `resetting-master-credentials` modify.
+          // The hash is salted with the (stable) instance identifier so the
+          // persisted digest is not rainbow-table-lookupable, and kept
+          // `Redacted` so it never leaks in plaintext through state/logs.
           const passwordFingerprint =
             news.masterUserPassword !== undefined
-              ? yield* sha256(Redacted.value(news.masterUserPassword))
+              ? Redacted.make(
+                  yield* sha256(
+                    `${identifier}:${Redacted.value(news.masterUserPassword)}`,
+                  ),
+                )
               : undefined;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -875,7 +902,10 @@ export const DBInstanceProvider = () =>
               coreDirty = true;
             } else if (
               news.masterUserPassword !== undefined &&
-              passwordFingerprint !== output?.masterUserPasswordFingerprint
+              !sameFingerprint(
+                passwordFingerprint,
+                output?.masterUserPasswordFingerprint,
+              )
             ) {
               core.MasterUserPassword = news.masterUserPassword;
               coreDirty = true;
