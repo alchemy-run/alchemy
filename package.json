@@ -88,7 +88,6 @@
       "@effect/platform-node-shared": ">=4.0.0-beta.99|| >=4.0.0",
       "@effect/platform-node": ">=4.0.0-beta.99|| >=4.0.0",
       "@effect/sql-d1": ">=4.0.0-beta.99|| >=4.0.0",
-      "@effect/sql-mysql2": ">=4.0.0-beta.99|| >=4.0.0",
       "@effect/sql-pg": ">=4.0.0-beta.99|| >=4.0.0",
       "@effect/vitest": ">=4.0.0-beta.99|| >=4.0.0",
       "@libsql/client": "^0.17.0",
@@ -136,7 +135,6 @@
         "@effect/platform-bun": ">=4.0.0-beta.99 || >=4.0.0",
         "@effect/platform-node": ">=4.0.0-beta.99 || >=4.0.0",
         "@effect/sql-d1": ">=4.0.0-beta.99 || >=4.0.0",
-        "@effect/sql-mysql2": ">=4.0.0-beta.99 || >=4.0.0",
         "@effect/sql-pg": ">=4.0.0-beta.99 || >=4.0.0",
         "@effect/vitest": ">=4.0.0-beta.99 || >=4.0.0",
         "effect": ">=4.0.0-beta.99 || >=4.0.0"
@@ -165,7 +163,6 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-d1": "catalog:",
-    "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@effect/tsgo": "0.16.0",
     "@types/bun": "latest",
