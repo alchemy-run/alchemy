@@ -139,9 +139,18 @@ export interface ArchilClient {
     cursor?: string;
   }): Effect.Effect<DiskData[], CommonError, RuntimeContext>;
   /**
-   * Provision a disk at runtime — idempotent by name — and wait (bounded)
-   * for it to become available. Runtime-created disks are application data,
-   * not IaC state: deleting them again is the application's responsibility.
+   * Get-or-create a disk by name — the primary call for per-user /
+   * per-thread disks. Archil's create is idempotent: when a disk with this
+   * name and configuration already exists its ID is returned as-is;
+   * otherwise a new disk is provisioned (milliseconds) and waited on
+   * (bounded) until available. A name collision with a *different*
+   * configuration fails with the typed `DiskConflict`.
+   *
+   * Disk names are account-global per region — include your app/stage in
+   * runtime-created names (e.g. `myapp-prod-thread-${id}`) so environments
+   * don't collide on the same disks. Runtime-created disks are application
+   * data, not IaC state: deleting them again is the application's
+   * responsibility.
    */
   createDisk(options: {
     /** Disk name (alphanumeric, dashes, underscores; 1-100 chars). */
@@ -180,22 +189,39 @@ export interface ArchilClient {
  * read-only scoping, so every client carries full control-plane access.
  *
  * @binding
- * @section Getting a Client
- * @example Bind once, address disks dynamically
+ * @section One Disk per User or Thread
+ * @example Get-or-create a workspace per chat thread
+ * The core Archil pattern: thousands of disks, one per domain entity,
+ * materialized lazily by name. `createDisk` is idempotent, so the same call
+ * serves first-touch and every request after.
  * ```typescript
  * const archil = yield* Archil.Client();
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     // disk id from the request, a database row, wherever
- *     const disk = archil.disk(tenantDiskId);
- *     const { stdout } = yield* disk.exec("wc -l /mnt/archil/*.csv");
+ *     const { disk } = yield* archil.createDisk({
+ *       name: `myapp-prod-thread-${threadId}`,
+ *     });
+ *     const { stdout } = yield* disk.exec("cat /mnt/archil/history.md");
  *     return yield* HttpServerResponse.text(stdout);
  *   }),
  * };
  * ```
  *
- * @example Pin a deploy-time disk resource
+ * @example Address an existing disk by ID
+ * ```typescript
+ * // disk id from the request, a database row, wherever — no I/O
+ * const disk = archil.disk(tenantDiskId);
+ * const { stdout } = yield* disk.exec("wc -l /mnt/archil/*.csv");
+ * ```
+ *
+ * @example Tear down a per-entity disk
+ * ```typescript
+ * yield* archil.deleteDisk(diskId);   // or disk.delete() — both idempotent
+ * ```
+ *
+ * @section Deploy-Time Disks
+ * @example Pin an `Archil.Disk` resource
  * ```typescript
  * const dataDisk = yield* Archil.Disk("data");
  * const archil = yield* Archil.Client();
@@ -203,16 +229,6 @@ export interface ArchilClient {
  *
  * // request time:
  * const { stdout } = yield* data.exec("ls -la /mnt/archil");
- * ```
- *
- * @section Dynamic Provisioning
- * @example Scratch disk per agent session
- * ```typescript
- * const { disk, diskId } = yield* archil.createDisk({
- *   name: `agent-${sessionId}`,
- * });
- * yield* disk.exec("python3 /mnt/archil/job.py");
- * yield* disk.delete();
  * ```
  *
  * @section Multi-Disk Execution
