@@ -118,6 +118,9 @@
       "path": "./examples/cloudflare-email/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-d1-drizzle/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-neon-drizzle/tsconfig.json"
     },
     {

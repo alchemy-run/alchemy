@@ -5,14 +5,19 @@ description: Replace raw pg with Drizzle's effect-postgres integration, manage y
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const drizzleDeps = `drizzle-orm@^1.0.0-rc.1 @effect/sql-pg pg`;
-export const drizzleDevDeps = `drizzle-kit@^1.0.0-rc.1 @types/pg`;
+export const drizzleDeps = `drizzle-orm@^1.0.0-rc.4 @effect/sql-pg pg`;
+export const drizzleDevDeps = `drizzle-kit@^1.0.0-rc.4 @types/pg`;
 
 The previous tutorial wired your Worker to Neon Postgres through
 Hyperdrive. Now we'll layer **Drizzle ORM** on top: typed schemas,
 typed queries, and — most usefully — a `Drizzle.Schema` resource
 that regenerates migration SQL programmatically on every deploy
 and lets `Neon.Branch` apply them transactionally.
+
+Targeting D1 instead of Postgres? The same flow on Cloudflare's
+serverless SQLite — `dialect: "sqlite"`, the native binding as
+transport, and the `effect-d1` driver — is covered in
+[Drizzle on D1](/cloudflare/data/d1-drizzle).
 
 ## Define the schema
 

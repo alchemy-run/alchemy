@@ -70,7 +70,9 @@ const db = yield* Cloudflare.D1.Database("my-db", {
 
 The migration files themselves don't have to be hand-written —
 [Drizzle.Schema](/drizzle/migrations) can generate them from a
-Drizzle schema on deploy.
+Drizzle schema on deploy. [Drizzle on D1](/cloudflare/data/d1-drizzle)
+walks through the whole flow: schema → generated migrations → typed
+queries from the Worker.
 
 ## Query from a Worker
 
@@ -113,13 +115,18 @@ and those return Effects. For libraries that want the native
 `D1Database` object (e.g. Better Auth), use the client's `raw`
 escape hatch.
 
+Prefer an ORM or tagged-template SQL over hand-written prepared
+statements? [Drizzle on D1](/cloudflare/data/d1-drizzle) layers
+`Drizzle.d1` and the raw `@effect/sql-d1` client on top of this same
+binding.
+
 ## Where next
 
 Guides:
 
-- [Add Drizzle ORM](/cloudflare/data/drizzle) — typed schemas and
-  generated migrations (the D1 resource's `migrationsTable` prop
-  accepts Drizzle's).
+- [Drizzle on D1](/cloudflare/data/d1-drizzle) — typed schemas,
+  generated migrations, and the `effect-d1` / `@effect/sql-d1`
+  runtime clients on this database.
 
 Related:
 

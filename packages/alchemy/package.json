@@ -157,6 +157,12 @@
       "worker": "./src/Cloudflare/Live.ts",
       "import": "./lib/Cloudflare/Live.js"
     },
+    "./Cloudflare/D1/SqlClient": {
+      "types": "./lib/Cloudflare/D1/SqlClient.d.ts",
+      "bun": "./src/Cloudflare/D1/SqlClient.ts",
+      "worker": "./src/Cloudflare/D1/SqlClient.ts",
+      "import": "./lib/Cloudflare/D1/SqlClient.js"
+    },
     "./Cloudflare/*": {
       "types": "./lib/Cloudflare/*/index.d.ts",
       "bun": "./src/Cloudflare/*/index.ts",
@@ -355,6 +361,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
+    "@effect/sql-d1": "catalog:",
     "@oxc-project/types": "^0.139.0",
     "@tanstack/react-router": "catalog:fixtures",
     "@tanstack/react-start": "catalog:fixtures",
@@ -387,6 +394,7 @@
     "@aws/durable-execution-sdk-js": "^2.1.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/sql-d1": "catalog:",
     "@effect/sql-pg": "catalog:",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
@@ -402,6 +410,9 @@
       "optional": true
     },
     "@effect/platform-node": {
+      "optional": true
+    },
+    "@effect/sql-d1": {
       "optional": true
     },
     "@effect/sql-pg": {

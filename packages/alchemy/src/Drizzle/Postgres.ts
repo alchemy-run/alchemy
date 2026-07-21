@@ -2,6 +2,7 @@ import * as PgClient from "@effect/sql-pg/PgClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
+import type { EffectDrizzlePgConfig } from "drizzle-orm/pg-core/effect/utils";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
@@ -50,7 +51,7 @@ export const postgres = <
   R = never,
 >(
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
-  config?: PgDrizzle.EffectDrizzlePgConfig<TRelations>,
+  config?: EffectDrizzlePgConfig<TRelations>,
 ) =>
   Effect.map(
     makeExecutionMemo(
