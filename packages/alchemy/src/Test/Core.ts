@@ -11,7 +11,6 @@ import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
-import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
@@ -118,6 +117,14 @@ export const toEffect = <A>(
   options: MakeOptions,
   scope?: Scope.Scope,
 ): Effect.Effect<A, any, never> => {
+  const services = Layer.mergeAll(
+    Layer.succeed(TestLoggingPolicy, options.log ?? true),
+    Layer.succeed(AdoptPolicy, options.adopt ?? false),
+  ).pipe(
+    Layer.provideMerge(overrideAlchemyContext({ dev: resolveDev(options) })),
+    Layer.provide(options.state ?? State.localState()),
+    Layer.provideMerge(Layer.provideMerge(alchemyLayer, platformLayer)),
+  );
   const base = Effect.gen(function* () {
     const cfg = yield* loadConfigProvider(Option.none());
     const configProvider = withProfileOverride(cfg, options.profile);
@@ -125,18 +132,7 @@ export const toEffect = <A>(
       provideFreshArtifactStore,
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
-  }).pipe(
-    Effect.provideService(TestLoggingPolicy, options.log ?? true),
-    Effect.provideService(AdoptPolicy, options.adopt ?? false),
-    Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
-    // `options.state` (e.g. `Cloudflare.state()`) itself requires
-    // `AuthProviders` to read credentials, so AuthProviders must be provided
-    // AFTER the state layer or the state layer's requirement is never
-    // satisfied — which surfaces as `Service not found: AuthProviders`.
-    Effect.provide(options.state ?? State.localState()),
-    Effect.provideService(AuthProviders, {}),
-    Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer)),
-  );
+  }).pipe(Effect.provide(services));
 
   return (
     scope === undefined ? Effect.scoped(base) : Scope.provide(base, scope)
