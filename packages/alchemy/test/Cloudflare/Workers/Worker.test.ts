@@ -1090,6 +1090,82 @@ describe.concurrent("Cloudflare.Worker", () => {
     { timeout: 360_000 },
   );
 
+  // Effect-valued env entries are stripped from the props comparison (#874),
+  // so change detection for them rides entirely on the evaluated binding
+  // data. This test guards that channel: when only the VALUE an env Effect
+  // resolves to changes (a `gen` Effect — serializes value-blind, so the
+  // props comparison could never see it), the plan must still flip from
+  // noop to update.
+  test.provider(
+    "changing the value of an Effect-valued env entry plans an update",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const program = (value: string) =>
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("EffectEnvValueWorker", {
+              main,
+              env: {
+                VALUE: Effect.gen(function* () {
+                  return value;
+                }),
+              },
+            });
+          });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployed = yield* stack.deploy(program("v1"));
+
+        // The evaluated value lands as a plain_text binding.
+        const settings = yield* workers.getScriptScriptAndVersionSetting({
+          accountId,
+          scriptName: deployed.workerName,
+        });
+        expect(settings.bindings).toContainEqual(
+          expect.objectContaining({
+            type: "plain_text",
+            name: "VALUE",
+            text: "v1",
+          }),
+        );
+
+        // Same value → noop; changed value → update.
+        const samePlan = yield* stack.plan(program("v1"));
+        expect(actionOf(samePlan, "EffectEnvValueWorker")).toBe("noop");
+        const changedPlan = yield* stack.plan(program("v2"));
+        expect(actionOf(changedPlan, "EffectEnvValueWorker")).toBe("update");
+
+        // The changed value must actually deploy — and then converge.
+        const redeployed = yield* stack.deploy(program("v2"));
+        const updatedSettings = yield* workers.getScriptScriptAndVersionSetting(
+          {
+            accountId,
+            scriptName: redeployed.workerName,
+          },
+        );
+        expect(updatedSettings.bindings).toContainEqual(
+          expect.objectContaining({
+            type: "plain_text",
+            name: "VALUE",
+            text: "v2",
+          }),
+        );
+        const resettled = yield* stack.plan(program("v2"));
+        expect(actionOf(resettled, "EffectEnvValueWorker")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
   // `domains` should reflect the workers.dev URL when the subdomain is
   // enabled and be empty when it isn't. `worker.url` is just `domains[0]`,
   // so the two must stay in lockstep across deploys.
