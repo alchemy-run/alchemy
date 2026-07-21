@@ -9,7 +9,7 @@ import { gitHubBaseUrlChanged, octokitFor } from "@/GitHub/Octokit";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "alchemy-test";
 
 const normalize = (input: string) =>
   Effect.runSync(normalizeGitHubBaseUrl(input));
