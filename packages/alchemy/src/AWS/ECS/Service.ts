@@ -58,6 +58,7 @@ import {
   deleteTaskDefinitionInfrastructure,
   ensureTaskExecutionRole,
   ensureTaskLogGroup,
+  reapSupersededTaskDefinitionRevision,
   registerTaskDefinitionRevision,
   syncTaskDefinitionTags,
   taskImagePlatform,
@@ -3282,6 +3283,15 @@ export const ServiceProvider = () =>
             // Legacy inline ingress recorded in prior attrs (service itself
             // was missing — e.g. recreated) is stale now: reap it.
             yield* reapLegacyIngress({ output, session });
+            // Synthesizing registered a NEW revision; reap the superseded
+            // one so revisions don't accumulate ACTIVE forever (same-family
+            // guarded — a prior BYO `task:` reference is left untouched).
+            if (owned !== undefined) {
+              yield* reapSupersededTaskDefinitionRevision({
+                previousArn: output?.taskDefinitionArn,
+                nextArn: owned.taskDefinitionArn,
+              });
+            }
             yield* session.note(service.serviceArn);
             return {
               serviceArn: service.serviceArn as ServiceArn,
@@ -3369,6 +3379,17 @@ export const ServiceProvider = () =>
           // at the composed target groups, so the legacy inline ingress can
           // be reaped without dropping traffic wiring.
           yield* reapLegacyIngress({ output, session });
+
+          // Synthesizing registered a NEW revision and `updateService` above
+          // rolled the service onto it — reap the superseded revision so
+          // revisions don't accumulate ACTIVE forever (same-family guarded —
+          // a prior BYO `task:` reference is left untouched).
+          if (owned !== undefined) {
+            yield* reapSupersededTaskDefinitionRevision({
+              previousArn: output?.taskDefinitionArn,
+              nextArn: owned.taskDefinitionArn,
+            });
+          }
 
           yield* session.note(observed.serviceArn);
           return {
@@ -3488,6 +3509,7 @@ export const ServiceProvider = () =>
           ) {
             yield* deleteTaskDefinitionInfrastructure({
               taskDefinitionArn: output.taskDefinitionArn,
+              taskFamily: output.taskFamily,
               repositoryName: output.repositoryName,
               logGroupName: output.logGroupName,
               taskRoleName: output.taskRoleName,

@@ -5,34 +5,20 @@ import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import fg from "fast-glob";
-import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "pathe";
 import type * as rolldown from "rolldown";
-import { esmExternalRequirePlugin } from "rolldown/plugins";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import {
-  isDurableObjectExport,
-  type DurableObjectExport,
-} from "./DurableObject.ts";
-import {
   isWorkflowExport,
   type WorkflowExport,
 } from "../Workflows/Workflow.ts";
-
-/**
- * Node builtin specifiers in both bare (`events`) and prefixed
- * (`node:events`) forms. Some entries (`node:sea`, `node:test`, bun's
- * `bun:*`) only exist prefixed, so already-prefixed names are kept as-is.
- */
-const nodeBuiltinModules = builtinModules.flatMap((name) =>
-  name.includes(":") ? [name] : [name, `node:${name}`],
-);
-
-const hasNodejsCompat = (flags: string[]) =>
-  flags.includes("nodejs_compat") || flags.includes("nodejs_compat_v2");
+import {
+  isDurableObjectExport,
+  type DurableObjectExport,
+} from "./DurableObject.ts";
 
 export interface WorkerBundleOptions {
   id: string;
@@ -79,24 +65,6 @@ export const WorkerBundle = Effect.gen(function* () {
         Effect.provide(context),
       ),
       plugins: [
-        // Convert CommonJS `require("events")` etc. of Node builtins into
-        // ESM imports so deps like `pg` run under `nodejs_compat`.
-        // cloudflareRolldown registers this same converter from its own
-        // `options` hook, but rolldown recognizes builtin plugins by class
-        // identity (`instanceof BuiltinPlugin`) — when the package manager
-        // installs the plugin's rolldown as a separate copy from ours, that
-        // registration silently no-ops and the bundle keeps rolldown's
-        // throwing `require` fallback, failing Cloudflare startup
-        // validation (#880). Registering it here, from the same rolldown
-        // instance that runs the build, is identity-safe.
-        ...(hasNodejsCompat(options.compatibility.flags)
-          ? [
-              esmExternalRequirePlugin({
-                external: nodeBuiltinModules,
-                skipDuplicateCheck: true,
-              }),
-            ]
-          : []),
         cloudflareRolldown({
           compatibilityDate: options.compatibility.date,
           compatibilityFlags: options.compatibility.flags,

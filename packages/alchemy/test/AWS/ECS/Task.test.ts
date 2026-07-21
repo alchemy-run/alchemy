@@ -188,3 +188,79 @@ test.provider(
     }),
   { timeout: 120_000 },
 );
+
+// Revision hygiene: every reconcile registers a NEW task-definition
+// revision, so the superseded revision must be reaped (deregistered + hard
+// deleted) on the spot, and destroy must sweep every remaining revision of
+// the family. Uses the registry-image form (`image:` mirrored into ECR via a
+// local docker pull/tag/push of a tiny busybox) — no Fargate placement, no
+// bundling. Requires a local Docker daemon (same as the Service platform
+// tests).
+test.provider(
+  "superseded task-definition revisions are reaped on reconcile and destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (marker: string) =>
+        Effect.gen(function* () {
+          return yield* Task("RevisionReapTask", {
+            // Docker Hub busybox: the public.ecr.aws mirror aggressively
+            // rate-limits anonymous pulls during local builds.
+            image: "busybox:stable",
+            command: ["sh", "-c", "true"],
+            cpu: 256,
+            memory: 512,
+            env: { MARKER: marker },
+          });
+        });
+
+      const deployed = yield* stack.deploy(program("one"));
+      expect(deployed.taskDefinitionArn).toBeTruthy();
+
+      // Redeploy with a changed env var → a new revision in the same family.
+      const redeployed = yield* stack.deploy(program("two"));
+      expect(redeployed.taskFamily).toBe(deployed.taskFamily);
+      expect(redeployed.taskDefinitionArn).not.toBe(deployed.taskDefinitionArn);
+
+      const newRevision = yield* ecs.describeTaskDefinition({
+        taskDefinition: redeployed.taskDefinitionArn,
+      });
+      expect(newRevision.taskDefinition?.status).toBe("ACTIVE");
+      expect(
+        newRevision.taskDefinition?.containerDefinitions?.[0]?.environment?.find(
+          (e) => e.name === "MARKER",
+        )?.value,
+      ).toBe("two");
+
+      // The superseded revision was reaped by the redeploy, not left ACTIVE.
+      const supersededReaped = yield* ecs
+        .describeTaskDefinition({
+          taskDefinition: deployed.taskDefinitionArn,
+        })
+        .pipe(
+          Effect.map((r) => r.taskDefinition?.status !== "ACTIVE"),
+          Effect.catchTag("ClientException", () => Effect.succeed(true)),
+        );
+      expect(supersededReaped).toBe(true);
+
+      yield* stack.destroy();
+
+      // Zero-orphan proof: no revision of the family survives destroy as
+      // ACTIVE.
+      const activeRevisions = yield* ecs
+        .listTaskDefinitions({
+          familyPrefix: deployed.taskFamily,
+          status: "ACTIVE",
+        })
+        .pipe(
+          Effect.map((r) =>
+            (r.taskDefinitionArns ?? []).filter((arn) =>
+              arn.includes(`/${deployed.taskFamily}:`),
+            ),
+          ),
+        );
+      expect(activeRevisions).toEqual([]);
+    }),
+  { timeout: 240_000 },
+);
