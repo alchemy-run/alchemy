@@ -299,6 +299,21 @@ test.provider(
       expect(redeployed.loadBalancerArn).not.toBe(legacyLbArn);
       expect(redeployed.targetGroupArn).not.toBe(legacyTgArn);
 
+      // The redeploy registered a NEW task-definition revision — the
+      // superseded one must be reaped (deregistered + deleted), not left
+      // ACTIVE forever. This is the exact leak this test used to produce:
+      // one stranded ACTIVE revision per run.
+      expect(redeployed.taskDefinitionArn).not.toBe(deployed.taskDefinitionArn);
+      const supersededReaped = yield* ecs
+        .describeTaskDefinition({
+          taskDefinition: deployed.taskDefinitionArn,
+        })
+        .pipe(
+          Effect.map((r) => r.taskDefinition?.status !== "ACTIVE"),
+          Effect.catchTag("ClientException", () => Effect.succeed(true)),
+        );
+      expect(supersededReaped).toBe(true);
+
       // The legacy inline resources are gone (nothing stranded). The ALB
       // deletion is async — poll bounded.
       const legacyLbGone = yield* elbv2
@@ -346,6 +361,26 @@ test.provider(
           ),
         );
       expect(composedLbGone).toBe(true);
+
+      // Zero-orphan proof for the synthesized task definition: NO revision
+      // of the family survives destroy as ACTIVE (deploy + redeploy
+      // registered two revisions; both must be gone).
+      const activeRevisions = yield* ecs
+        .listTaskDefinitions({
+          familyPrefix: redeployed.taskFamily!,
+          status: "ACTIVE",
+        })
+        .pipe(
+          Effect.map((r) =>
+            (r.taskDefinitionArns ?? []).filter((arn) =>
+              arn.includes(`/${redeployed.taskFamily!}:`),
+            ),
+          ),
+          Effect.catchTag("ClientException", () =>
+            Effect.succeed([] as string[]),
+          ),
+        );
+      expect(activeRevisions).toEqual([]);
     }),
   { timeout: 420_000 },
 );

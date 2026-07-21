@@ -753,33 +753,104 @@ export const syncTaskDefinitionTags = Effect.fn(function* ({
   }
 });
 
+/** The family segment of a task definition revision ARN (`…:task-definition/<family>:<revision>`). */
+const taskFamilyOfArn = (arn: string) => arn.split("/").pop()?.split(":")[0];
+
 /**
- * Tear down the infrastructure a task definition owns: the revision
- * (deregister + hard delete), the ECR repository, the log group, and the
- * task/execution roles. Idempotent — every step tolerates "already gone".
+ * Reap the task-definition revision superseded by a reconcile: registering
+ * always produces a NEW revision, so without this every reconcile strands
+ * the previous revision ACTIVE forever. Deregister + hard-delete the prior
+ * revision once the new one is registered.
+ *
+ * Guarded to the same family — `previousArn` can reference a foreign task
+ * definition this resource does not own (e.g. an `ECS.Service` switched from
+ * a BYO `task:` reference to the image-owning form), which must be left
+ * untouched. Idempotent: both calls tolerate "already gone", and a revision
+ * still referenced by running tasks parks in `DELETE_IN_PROGRESS` until AWS
+ * finishes the delete.
+ */
+export const reapSupersededTaskDefinitionRevision = Effect.fn(function* ({
+  previousArn,
+  nextArn,
+}: {
+  /** The revision recorded before this reconcile (`output.taskDefinitionArn`). */
+  previousArn: string | undefined;
+  /** The freshly-registered revision ARN. */
+  nextArn: string;
+}) {
+  if (
+    previousArn === undefined ||
+    previousArn === nextArn ||
+    taskFamilyOfArn(previousArn) !== taskFamilyOfArn(nextArn)
+  ) {
+    return;
+  }
+  yield* ecs
+    .deregisterTaskDefinition({ taskDefinition: previousArn })
+    .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  yield* ecs
+    .deleteTaskDefinitions({ taskDefinitions: [previousArn] })
+    .pipe(Effect.catchTag("ClientException", () => Effect.void));
+});
+
+/**
+ * Tear down the infrastructure a task definition owns: every remaining
+ * revision of the family (deregister + hard delete), the ECR repository, the
+ * log group, and the task/execution roles. Idempotent — every step tolerates
+ * "already gone".
  */
 export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
   taskDefinitionArn: string;
+  /**
+   * The family owned by this resource. When present, EVERY remaining ACTIVE
+   * revision is swept — state rows written before reconcile-time revision
+   * reaping can have superseded revisions beyond the recorded one.
+   */
+  taskFamily?: string;
   repositoryName: string;
   logGroupName: string;
   taskRoleName: string;
   executionRoleName: string;
 }) {
-  yield* ecs
-    .deregisterTaskDefinition({
-      taskDefinition: output.taskDefinitionArn,
-    })
-    .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  const familyArns = output.taskFamily
+    ? yield* ecs
+        .listTaskDefinitions({
+          familyPrefix: output.taskFamily,
+          status: "ACTIVE",
+        })
+        .pipe(
+          // `familyPrefix` is a prefix match — filter to the exact family so
+          // a family that happens to prefix another resource's is untouched.
+          Effect.map((r) =>
+            (r.taskDefinitionArns ?? []).filter(
+              (arn) => taskFamilyOfArn(arn) === output.taskFamily,
+            ),
+          ),
+          Effect.catchTag("ClientException", () =>
+            Effect.succeed([] as string[]),
+          ),
+        )
+    : [];
+  const revisionArns = [...new Set([output.taskDefinitionArn, ...familyArns])];
 
-  // Deregistering only flips the revision to INACTIVE — it still
-  // exists (and shows up in `listTaskDefinitions --status INACTIVE`)
-  // forever. Hard-delete it so destroying a Task leaves zero
-  // task-definition leftovers.
-  yield* ecs
-    .deleteTaskDefinitions({
-      taskDefinitions: [output.taskDefinitionArn],
-    })
-    .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  for (const arn of revisionArns) {
+    yield* ecs
+      .deregisterTaskDefinition({ taskDefinition: arn })
+      .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  }
+
+  // Deregistering only flips the revisions to INACTIVE — they still
+  // exist (and show up in `listTaskDefinitions --status INACTIVE`)
+  // forever. Hard-delete them so destroying a Task leaves zero
+  // task-definition leftovers. `deleteTaskDefinitions` accepts at most
+  // 10 ARNs per call.
+  for (let i = 0; i < revisionArns.length; i += 10) {
+    yield* ecs
+      .deleteTaskDefinitions({
+        taskDefinitions: revisionArns.slice(i, i + 10),
+      })
+      .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  }
 
   yield* ecr
     .deleteRepository({
@@ -794,33 +865,37 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
     })
     .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
-  yield* iam
-    .listRolePolicies({
-      RoleName: output.taskRoleName,
-    })
-    .pipe(
-      // The role may already be gone (delete re-run / race) — treat a
-      // missing role as "no policies to delete" so delete is idempotent.
-      Effect.catchTag("NoSuchEntityException", () =>
-        Effect.succeed({ PolicyNames: [] as string[] }),
-      ),
-      Effect.flatMap((policies) =>
-        Effect.all(
-          (policies.PolicyNames ?? []).map((policyName) =>
-            iam
-              .deleteRolePolicy({
-                RoleName: output.taskRoleName,
-                PolicyName: policyName,
-              })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              ),
+  for (const roleName of [output.taskRoleName, output.executionRoleName]) {
+    // Delete inline policies on BOTH roles — the task role carries the
+    // bindings policy, and the execution role can carry inline policies too
+    // (e.g. the Service's secrets-read policy). A role with any inline
+    // policy left rejects `deleteRole` with `DeleteConflictException`.
+    yield* iam
+      .listRolePolicies({
+        RoleName: roleName,
+      })
+      .pipe(
+        // The role may already be gone (delete re-run / race) — treat a
+        // missing role as "no policies to delete" so delete is idempotent.
+        Effect.catchTag("NoSuchEntityException", () =>
+          Effect.succeed({ PolicyNames: [] as string[] }),
+        ),
+        Effect.flatMap((policies) =>
+          Effect.all(
+            (policies.PolicyNames ?? []).map((policyName) =>
+              iam
+                .deleteRolePolicy({
+                  RoleName: roleName,
+                  PolicyName: policyName,
+                })
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                ),
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-  for (const roleName of [output.taskRoleName, output.executionRoleName]) {
     yield* iam
       .listAttachedRolePolicies({
         RoleName: roleName,
@@ -1100,7 +1175,7 @@ export const TaskProvider = () =>
           // pushing into the task's ECR repository, then register a new
           // task definition revision. Task definitions are versioned in
           // AWS, so registering a new revision is the unit of "update" —
-          // the prior revision is deregistered only on `delete`.
+          // the superseded revision is reaped after registration below.
           const source = news as ImageSourceLike;
           const resolved = yield* imageSource.resolve({
             id,
@@ -1143,6 +1218,13 @@ export const TaskProvider = () =>
           yield* syncTaskDefinitionTags({
             revisionArn: taskDefinition.taskDefinitionArn!,
             tags,
+          });
+
+          // The registration above superseded the previously-recorded
+          // revision — reap it so revisions don't accumulate ACTIVE forever.
+          yield* reapSupersededTaskDefinitionRevision({
+            previousArn: output?.taskDefinitionArn,
+            nextArn: taskDefinition.taskDefinitionArn!,
           });
 
           yield* session.note(taskDefinition.taskDefinitionArn!);
