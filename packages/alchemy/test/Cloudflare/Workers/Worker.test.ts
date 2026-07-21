@@ -954,6 +954,79 @@ describe.concurrent("Cloudflare.Worker", () => {
     { timeout: 360_000 },
   );
 
+  // The full circular case from the #874 report: A and B each bind the
+  // OTHER's tag in env. The tags keep the dependency on the binding channel
+  // (precreate stubs + converge pass) — a cycle the props channel cannot
+  // express — and both workers must still converge to noop plans.
+  test.provider(
+    "circular worker tags in env converge to noop plans",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        class CircTagA extends Cloudflare.Worker<CircTagA, {}>()(
+          "CircTagAWorker",
+        ) {}
+        class CircTagB extends Cloudflare.Worker<CircTagB, {}>()(
+          "CircTagBWorker",
+        ) {}
+
+        const layers = Layer.mergeAll(
+          CircTagA.make(
+            { main, isExternal: true, env: { PEER: CircTagB } },
+            Effect.succeed({}),
+          ),
+          CircTagB.make(
+            { main, isExternal: true, env: { PEER: CircTagA } },
+            Effect.succeed({}),
+          ),
+        );
+
+        const program = () =>
+          Effect.gen(function* () {
+            const a = yield* CircTagA;
+            const b = yield* CircTagB;
+            return { a, b };
+          }).pipe(Effect.provide(layers));
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployed = yield* stack.deploy(program());
+
+        // Each side must carry a live service binding to the other.
+        for (const [self, peer] of [
+          [deployed.a, deployed.b],
+          [deployed.b, deployed.a],
+        ] as const) {
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: self.workerName,
+          });
+          expect(settings.bindings).toContainEqual(
+            expect.objectContaining({
+              type: "service",
+              name: "PEER",
+              service: peer.workerName,
+            }),
+          );
+        }
+
+        const settled = yield* stack.plan(program());
+        expect(actionOf(settled, "CircTagAWorker")).toBe("noop");
+        expect(actionOf(settled, "CircTagBWorker")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.a.workerName, accountId);
+        yield* waitForWorkerToBeDeleted(deployed.b.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
   // `domains` should reflect the workers.dev URL when the subdomain is
   // enabled and be empty when it isn't. `worker.url` is just `domains[0]`,
   // so the two must stay in lockstep across deploys.
