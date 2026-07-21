@@ -68,7 +68,6 @@ export default Alchemy.Stack(
     // `${context}/Dockerfile`). Deploy builds + pushes the image and
     // registers the task definition; run it with `RunTask` or a schedule.
     const reportTask = yield* AWS.ECS.Task("ReportTask", {
-      cluster,
       context: `${import.meta.dirname}/src/report`,
       cpu: 256,
       memory: 512,
@@ -84,7 +83,6 @@ export default Alchemy.Stack(
     // run nightly by an EventBridge Scheduler cron via `AWS.ECS.every`
     // (which provisions the schedule plus the ecs:RunTask invoke role).
     const heartbeatTask = yield* AWS.ECS.Task("HeartbeatTask", {
-      cluster,
       image: "busybox:stable",
       command: ["sh", "-c", "echo orders heartbeat"],
       cpu: 256,

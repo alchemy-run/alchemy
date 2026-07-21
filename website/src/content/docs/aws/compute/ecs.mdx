@@ -66,8 +66,10 @@ props:
   ```
 
 - `main` — bundle an inline Effect program into a generated image.
-  `baseImage` optionally sets the base
-  (default `public.ecr.aws/docker/library/bun:1`).
+  Compose with `image` to pick the environment base (default
+  `oven/bun:1`), or with an inline `dockerfile`
+  (`Dockerfile.inline`) when the environment needs extra build
+  steps.
 
 :::tip
 Building on Apple Silicon? Match the image architecture to the
@@ -75,8 +77,8 @@ Fargate runtime with
 `runtimePlatform: { cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" }`
 so the locally built image runs on Graviton — Alchemy builds the
 image for whichever architecture the task definition declares. If
-the default ECR mirror rate-limits your local pulls, switch the
-base image with `baseImage: "oven/bun:1"`.
+a registry rate-limits your local pulls, switch the environment
+base with `image: "oven/bun:1"`.
 :::
 
 ## Effect one-shots
@@ -90,7 +92,7 @@ variables and IAM policy statements to the task:
 ```typescript
 const drainer = yield* AWS.ECS.Task(
   "QueueDrainer",
-  { main: import.meta.url, baseImage: "oven/bun:1", cpu: 256, memory: 512 },
+  { main: import.meta.url, image: "oven/bun:1", cpu: 256, memory: 512 },
   Effect.gen(function* () {
     const receive = yield* AWS.SQS.ReceiveMessage(queue);
     return {

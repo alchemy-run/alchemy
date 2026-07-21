@@ -34,10 +34,11 @@ import SeedTask from "./SeedTask.ts";
  * Bindings work exactly as on Lambda:
  * - `AWS.DynamoDB.GetItem` / `Scan` grant read access to the orders table
  *   and inject its name into the container environment.
- * - `AWS.ECS.RunTask(SeedTask)` grants `ecs:RunTask` on the seed task's
- *   definition (plus `iam:PassRole` on its roles), so `POST /api/seed` can
- *   launch the one-shot seeding task on Fargate. SeedTask declares its home
- *   cluster, so the binding doesn't need the cluster repeated.
+ * - `AWS.ECS.RunTask(cluster, SeedTask)` grants `ecs:RunTask` on the seed
+ *   task's definition (plus `iam:PassRole` on its roles), so
+ *   `POST /api/seed` can launch the one-shot seeding task on Fargate. The
+ *   cluster is explicit at the binding — a task definition is
+ *   cluster-independent.
  */
 export class Api extends AWS.ECS.Service<Api>()("Api") {}
 
@@ -74,14 +75,14 @@ export default Api.make(
   Effect.gen(function* () {
     const table = yield* OrdersTable;
     const network = yield* OrdersNetwork;
+    const cluster = yield* OrdersCluster;
     const seedTask = yield* SeedTask;
 
     const scan = yield* AWS.DynamoDB.Scan(table);
     const getItem = yield* AWS.DynamoDB.GetItem(table);
-    // SeedTask declares its cluster, so the binding needs only the task.
-    // (The task-only form is typed to fail with `RunTaskRequiresCluster`
-    // when a task declares no cluster — SeedTask does, so discharge it.)
-    const runSeedTask = yield* AWS.ECS.RunTask(seedTask).pipe(Effect.orDie);
+    // The launch cluster is explicit at the binding — the task definition
+    // itself is cluster-independent.
+    const runSeedTask = yield* AWS.ECS.RunTask(cluster, seedTask);
 
     // First public subnet, bound into the environment so the runtime can
     // build the seed task's awsvpc network configuration.

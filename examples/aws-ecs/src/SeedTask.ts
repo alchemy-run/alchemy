@@ -1,6 +1,6 @@
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
-import { OrdersCluster, OrdersTable } from "./infra.ts";
+import { OrdersTable } from "./infra.ts";
 
 const seedOrders = [
   { id: "1001", customer: "ada", total: 4250 },
@@ -19,32 +19,27 @@ const seedOrders = [
  * container environment and grants `dynamodb:PutItem` on the task role.
  *
  * Nothing runs this task on deploy — it is the target of the
- * `AWS.ECS.RunTask` binding the `Api` service exposes at `POST /api/seed`.
- * Declaring `cluster` records the task's home cluster, so the binding is
- * just `RunTask(SeedTask)` — no need to repeat the cluster at the call
- * site.
+ * `AWS.ECS.RunTask(cluster, SeedTask)` binding the `Api` service exposes at
+ * `POST /api/seed`. A task definition is cluster-independent (mirroring
+ * `AWS::ECS::TaskDefinition`), so the launch cluster is declared where the
+ * launch is bound, not here.
  */
 export default AWS.ECS.Task(
   "SeedTask",
-  // Props are an Effect so they can reference the shared cluster.
-  Effect.gen(function* () {
-    const cluster = yield* OrdersCluster;
-    return {
-      cluster,
-      main: import.meta.url,
-      // Docker Hub's `oven/bun`; the public.ecr.aws default mirror
-      // rate-limits anonymous pulls during local builds.
-      image: "oven/bun:1",
-      cpu: 256,
-      memory: 512,
-      // Build/run on ARM64 so an image built on an Apple Silicon host matches
-      // the Fargate runtime architecture (Graviton).
-      runtimePlatform: {
-        cpuArchitecture: "ARM64" as const,
-        operatingSystemFamily: "LINUX" as const,
-      },
-    };
-  }),
+  {
+    main: import.meta.url,
+    // Docker Hub's `oven/bun`; the public.ecr.aws default mirror
+    // rate-limits anonymous pulls during local builds.
+    image: "oven/bun:1",
+    cpu: 256,
+    memory: 512,
+    // Build/run on ARM64 so an image built on an Apple Silicon host matches
+    // the Fargate runtime architecture (Graviton).
+    runtimePlatform: {
+      cpuArchitecture: "ARM64",
+      operatingSystemFamily: "LINUX",
+    },
+  },
   Effect.gen(function* () {
     const table = yield* OrdersTable;
     const putItem = yield* AWS.DynamoDB.PutItem(table);
