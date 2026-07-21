@@ -10,8 +10,9 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve"
+    "jsx": "preserve",
+    "allowImportingTsExtensions": true
   },
-  "include": ["alchemy.run.ts", "app/**/*"],
+  "include": ["alchemy.run.ts", "app/**/*", "test"],
   "exclude": ["node_modules"]
 }

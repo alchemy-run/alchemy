@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "strict": true
   },
-  "include": ["alchemy.run.ts", "src"]
+  "include": ["alchemy.run.ts", "src", "test"]
 }
