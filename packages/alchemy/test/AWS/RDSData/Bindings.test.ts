@@ -368,7 +368,7 @@ describe("RDSData Bindings", () => {
   // half binds `rds-db:connect` on `dbuser:{resourceId}/app_iam` and attaches
   // the Lambda to the fixture VPC through the binding contract's `vpc`
   // channel (DECISION #5); the runtime half presigns a 15-minute token as the
-  // password and `Drizzle.postgres` consumes `ConnectionInfo.url` directly.
+  // password and `Drizzle.Postgres` consumes `ConnectionInfo.url` directly.
   describe("RDS.Connect (IAM auth)", () => {
     test.provider.skipIf(!SLOW)(
       "mints an IAM auth token as the password and can re-mint via refreshPassword",

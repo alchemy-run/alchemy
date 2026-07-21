@@ -229,6 +229,12 @@
       "worker": "./src/Process/index.ts",
       "import": "./lib/Process/index.js"
     },
+    "./SQL": {
+      "types": "./lib/SQL/index.d.ts",
+      "bun": "./src/SQL/index.ts",
+      "worker": "./src/SQL/index.ts",
+      "import": "./lib/SQL/index.js"
+    },
     "./SQLite": {
       "types": "./lib/SQLite/index.d.ts",
       "bun": "./src/SQLite/index.ts",
@@ -315,6 +321,7 @@
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@effect/sql-d1": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@octokit/webhooks": "^14.2.0",

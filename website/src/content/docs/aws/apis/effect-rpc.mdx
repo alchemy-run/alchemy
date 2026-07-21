@@ -138,13 +138,13 @@ handlers will need:
 
 ```diff lang="typescript"
   Effect.gen(function* () {
-+    const table = yield* AWS.DynamoDB.Table("JobsTable", {
-+      partitionKey: "id",
-+      attributes: { id: "S" },
-+    });
++   const table = yield* AWS.DynamoDB.Table("JobsTable", {
++     partitionKey: "id",
++     attributes: { id: "S" },
++   });
 +
-+    const getItem = yield* AWS.DynamoDB.GetItem(table);
-+    const putItem = yield* AWS.DynamoDB.PutItem(table);
++   const getItem = yield* AWS.DynamoDB.GetItem(table);
++   const putItem = yield* AWS.DynamoDB.PutItem(table);
 
     return {};
   }),
@@ -166,37 +166,37 @@ the `getItem` / `putItem` bindings from step 3a:
     const getItem = yield* AWS.DynamoDB.GetItem(table);
     const putItem = yield* AWS.DynamoDB.PutItem(table);
 
-+    const handlersLayer = JobRpcs.toLayer({
-+      getJob: ({ jobId }) =>
-+        getItem({ Key: { id: { S: jobId } } }).pipe(
-+          Effect.orDie,
-+          Effect.flatMap(({ Item }) =>
-+            Item
-+              ? Effect.succeed(
-+                  new Job({
-+                    id: Item.id?.S ?? jobId,
-+                    content: Item.content?.S ?? "",
-+                  }),
-+                )
-+              : Effect.fail(new JobNotFound({ jobId })),
-+          ),
-+        ),
-+      createJob: ({ content }) =>
-+        Effect.gen(function* () {
-+          const jobId = crypto.randomUUID();
-+          yield* putItem({
-+            Item: {
-+              id: { S: jobId },
-+              content: { S: content },
-+            },
-+          });
-+          return jobId;
-+        }).pipe(
-+          Effect.mapError(
-+            (error) => new PutJobFailed({ message: error.message }),
-+          ),
-+        ),
-+    });
++   const handlersLayer = JobRpcs.toLayer({
++     getJob: ({ jobId }) =>
++       getItem({ Key: { id: { S: jobId } } }).pipe(
++         Effect.orDie,
++         Effect.flatMap(({ Item }) =>
++           Item
++             ? Effect.succeed(
++                 new Job({
++                   id: Item.id?.S ?? jobId,
++                   content: Item.content?.S ?? "",
++                 }),
++               )
++             : Effect.fail(new JobNotFound({ jobId })),
++         ),
++       ),
++     createJob: ({ content }) =>
++       Effect.gen(function* () {
++         const jobId = crypto.randomUUID();
++         yield* putItem({
++           Item: {
++             id: { S: jobId },
++             content: { S: content },
++           },
++         });
++         return jobId;
++       }).pipe(
++         Effect.mapError(
++           (error) => new PutJobFailed({ message: error.message }),
++         ),
++       ),
++   });
 
     return {};
 ```
@@ -220,20 +220,20 @@ HTTP API approach, RPC doesn't need `HttpPlatform.layer` or
 
 ```diff lang="typescript"
     return {
--    };
-+      fetch: yield* RpcServer.toHttpEffect(JobRpcs).pipe(
-+        Effect.provide(
-+          Layer.mergeAll(handlersLayer, RpcSerialization.layerJson),
-+        ),
-+      ),
-+    };
+-   };
++     fetch: yield* RpcServer.toHttpEffect(JobRpcs).pipe(
++       Effect.provide(
++         Layer.mergeAll(handlersLayer, RpcSerialization.layerJson),
++       ),
++     ),
++   };
   }).pipe(
-+    Effect.provide(
-+      Layer.mergeAll(
-+        AWS.DynamoDB.GetItemHttp,
-+        AWS.DynamoDB.PutItemHttp,
-+      ),
-+    ),
++   Effect.provide(
++     Layer.mergeAll(
++       AWS.DynamoDB.GetItemHttp,
++       AWS.DynamoDB.PutItemHttp,
++     ),
++   ),
   ),
 ```
 

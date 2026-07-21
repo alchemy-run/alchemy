@@ -313,6 +313,16 @@ const { marketing = false } = Astro.props;
   @media (max-width: 50rem) {
     site-search button[data-close-modal] {
       display: inline-flex;
+      /* Starlight positions this button with `position: absolute` +
+         `align-self: flex-end`, relying on the static position of an
+         abs-pos flex child honoring alignment. WebKit doesn't implement
+         that, so on iOS the button lands at the frame's START and
+         overlaps the search input's magnifier/text. Pin it explicitly:
+         1rem matches .dialog-frame's mobile padding, which is exactly
+         where flex-end places it in browsers that do honor alignment —
+         inside the 5rem gutter that --sl-search-cancel-space reserves
+         to the right of the input. */
+      inset-inline-end: 1rem;
     }
   }
 
