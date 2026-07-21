@@ -65,7 +65,7 @@ export const makeWorkflowBridge =
         // per-invocation-scope pattern as `WorkerBridge.processEvent`. `task`
         // threads it into every step via the surrounding body context, so
         // `@binding` helpers that acquire per-run resources against the
-        // ambient scope (e.g. `Drizzle.postgres`) resolve them inside
+        // ambient scope (e.g. `Drizzle.Postgres`) resolve them inside
         // workflow steps, matching the Worker and Durable Object bridges.
         const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(

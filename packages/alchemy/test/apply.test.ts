@@ -351,6 +351,68 @@ describe("basic operations", () => {
       }),
   );
 
+  // #874: terminal commits must persist the RESOLVED binding payload the
+  // provider reconciled with, not the raw plan-time expressions. Raw
+  // `node.bindings` hold unresolved Outputs (silently dropped by JSON state
+  // stores), so persisting them makes every later plan's `diffBindings`
+  // compare a lossy stored shape against fully-resolved data — a phantom
+  // binding update on every plan. Exercises the create, update, and replace
+  // commit sites.
+  test.provider("terminal commits persist resolved binding payloads", (stack) =>
+    Effect.gen(function* () {
+      const program = (opts: { source: string; replaceString?: string }) =>
+        Effect.gen(function* () {
+          const source = yield* BindingTarget("BindSource", {
+            string: opts.source,
+          });
+          const host = yield* BindingTarget("BindHost", {
+            name: "host",
+            replaceString: opts.replaceString,
+          });
+          // `source.string` is an unresolved Output at plan time.
+          yield* host.bind("FromSource", {
+            env: { VALUE: source.string },
+          });
+          return { source, host };
+        });
+
+      const actionOf = (plan: any, logicalId: string) =>
+        (Object.values(plan.resources) as any[]).find(
+          (node: any) => node.resource.LogicalId === logicalId,
+        )?.action;
+
+      const expectHostBindings = Effect.fn(function* (value: string) {
+        const hostState = yield* getState("BindHost");
+        expect(hostState?.bindings).toEqual([
+          { sid: "FromSource", data: { env: { VALUE: value } } },
+        ]);
+      });
+
+      // ── create commit ──
+      yield* stack.deploy(program({ source: "v1" }));
+      yield* expectHostBindings("v1");
+      const created = yield* stack.plan(program({ source: "v1" }));
+      expect(actionOf(created, "BindSource")).toBe("noop");
+      expect(actionOf(created, "BindHost")).toBe("noop");
+
+      // ── update commit ──
+      yield* stack.deploy(program({ source: "v2" }));
+      yield* expectHostBindings("v2");
+      const updated = yield* stack.plan(program({ source: "v2" }));
+      expect(actionOf(updated, "BindSource")).toBe("noop");
+      expect(actionOf(updated, "BindHost")).toBe("noop");
+
+      // ── replace commit ──
+      yield* stack.deploy(program({ source: "v2", replaceString: "flip" }));
+      yield* expectHostBindings("v2");
+      const replaced = yield* stack.plan(
+        program({ source: "v2", replaceString: "flip" }),
+      );
+      expect(actionOf(replaced, "BindSource")).toBe("noop");
+      expect(actionOf(replaced, "BindHost")).toBe("noop");
+    }),
+  );
+
   test.provider(
     "should update a surviving consumer before deleting a removed dependency",
     (stack) =>

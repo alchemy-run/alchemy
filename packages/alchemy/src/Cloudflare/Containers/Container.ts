@@ -8,12 +8,12 @@ import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
 import type { ResourceClassLike } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Props } from "../../State/ResourceState.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
@@ -84,45 +84,17 @@ export class ContainerCrashedError extends Data.TaggedError(
 
 export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
 
-/**
- * Bundle an Effect-native program into a generated image. Alchemy bundles
- * {@link main} and bakes it in as the container's entrypoint.
- */
-export interface EffectfulContainerProps extends ContainerApplicationProps {
-  /** Entrypoint file for the Effect program, typically `import.meta.url`. */
-  main: string;
-}
-/**
- * Build the container image from your own Dockerfile and build context — no
- * Effect program is bundled. The image is shipped as-is.
- */
-export interface ExternalContainerProps extends ContainerApplicationProps {
-  /**
-   * The build context directory containing the Dockerfile and any files it
-   * copies.
-   *
-   * @default `./`
-   */
-  context?: string;
-  /**
-   * The Dockerfile to build, resolved relative to {@link context}.
-   *
-   * @default `<context>/Dockerfile`
-   */
-  dockerfile?: string;
-}
-/**
- * Deploy a pre-built remote image — Alchemy pulls it and re-pushes it to
- * Cloudflare's managed registry without building anything.
- */
-export interface RemoteContainerProps extends ContainerApplicationProps {
-  /**
-   * The pre-built image to pull and re-push.
-   *
-   * E.g. `ghcr.io/alpine/alpine:latest`
-   */
-  image: string;
-}
+import type {
+  EffectfulContainerProps,
+  ExternalContainerProps,
+  RemoteContainerProps,
+} from "./ContainerApplication.ts";
+
+export type {
+  EffectfulContainerProps,
+  ExternalContainerProps,
+  RemoteContainerProps,
+};
 
 export type Container<Id extends string = string> = Named<Id> & {
   get running(): Effect.Effect<boolean, never, RuntimeContext>;
@@ -400,12 +372,16 @@ export type Container<Id extends string = string> = Named<Id> & {
 export const Container: ResourceClassLike<ContainerApplication> & {
   <const Id extends string>(
     id: Id,
-    props: InputProps<ExternalContainerProps | RemoteContainerProps>,
+    props:
+      | InputProps<ExternalContainerProps>
+      | InputProps<RemoteContainerProps>,
   ): Container.Decl<Container<Id>, {}, Id>;
   <Self>(): {
     <
       const Id extends string,
-      Props extends InputProps<ExternalContainerProps | RemoteContainerProps>,
+      Props extends
+        | InputProps<ExternalContainerProps>
+        | InputProps<RemoteContainerProps>,
     >(
       id: Id,
       props: Props,
@@ -466,8 +442,14 @@ export declare namespace Container {
   >
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
-    make: <InitReq = never, WorkerReq = never>(
-      props: Props,
+    make: <InitReq = never, WorkerReq = never, PropsReq = never>(
+      props:
+        | InputProps<EffectfulContainerProps>
+        | Effect.Effect<
+            InputProps<EffectfulContainerProps>,
+            Config.ConfigError,
+            PropsReq
+          >,
       impl: Effect.Effect<
         Shape & WorkerShape<WorkerReq>,
         Config.ConfigError,

@@ -223,7 +223,8 @@ export interface TaskDefinition extends Resource<
  *
  * **Layering — why `TaskDefinition` is deliberately *not* a Platform.** ECS
  * splits "what runs" from "how it runs": a task definition is the immutable
- * container spec, while `Task` (one-shot) and `Service` (long-running) are
+ * container spec, while `Task` (runs to completion) and `Service`
+ * (long-running) are
  * the execution vehicles. The effectful Platform abstraction requires
  * Alchemy to own the container image and entrypoint so it can bundle the
  * inline Effect program — that is exactly what `AWS.ECS.Task` does (bundle →

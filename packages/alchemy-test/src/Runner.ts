@@ -758,8 +758,26 @@ export const run = Effect.fn(function* (options: RunOptions) {
     yield* reporter.attachController(controller);
   }
 
+  // Array whose pushes are teed to `tee` as they happen. File-hook output is
+  // captured into this buffer over the (potentially very long) life of a
+  // deploy/destroy hook; teeing each entry into the run log keeps the log
+  // live instead of silent-until-FileEnd (which reads as a deadlocked run).
+  const liveHookLogBuffer = (
+    tee: (entry: LogEntry) => void,
+  ): Array<LogEntry> => {
+    const buffer: Array<LogEntry> = [];
+    const push = Array.prototype.push.bind(buffer);
+    buffer.push = (...entries: Array<LogEntry>) => {
+      for (const entry of entries) tee(entry);
+      return push(...entries);
+    };
+    return buffer;
+  };
+
   const runFile = Effect.fn(function* (c: CollectedFile) {
-    const fileLogs: Array<LogEntry> = [];
+    const fileLogs = liveHookLogBuffer((entry) =>
+      fileLog.appendHookLine(c.file, entry),
+    );
     const fileErrors: Array<string> = [];
     // Shares the LIVE hook-log buffer so the TUI can tail deploys.
     yield* emit({ _tag: "FileStart", file: c.file, logs: fileLogs });
@@ -816,5 +834,8 @@ export const run = Effect.fn(function* (options: RunOptions) {
     failures,
   };
   yield* emit({ _tag: "RunEnd", summary });
+  // Drain the live hook-line queue so tail lines from the final file's
+  // hooks are on disk before the process exits.
+  yield* fileLog.close;
   return summary;
 });

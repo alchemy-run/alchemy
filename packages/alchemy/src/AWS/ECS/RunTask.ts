@@ -13,27 +13,40 @@ export interface RunTaskRequest extends Omit<
  * Runtime binding for `ecs:RunTask`.
  *
  * Bind this operation to a `Cluster` and `Task` inside a function runtime to
- * get a callable that starts a one-shot Fargate task from the bound task
+ * get a callable that starts a Fargate task from the bound task
  * definition. The cluster and task definition ARNs are injected automatically;
  * the host is granted `ecs:RunTask` on the task definition plus `iam:PassRole`
  * on the task and execution roles.
  * @binding
  * @section Running Tasks
- * @example Run a One-Shot Fargate Task
+ * @example Launch a Fargate Task from a handler
  * ```typescript
- * const runTask = yield* AWS.ECS.RunTask(cluster, task);
+ * const api = yield* AWS.Lambda.Function(
+ *   "Api",
+ *   { main: import.meta.url, url: true },
+ *   Effect.gen(function* () {
+ *     // init: bind the launch (IAM grants happen here)
+ *     const runTask = yield* AWS.ECS.RunTask(cluster, task);
  *
- * const response = yield* runTask({
- *   launchType: "FARGATE",
- *   networkConfiguration: {
- *     awsvpcConfiguration: {
- *       subnets: [subnetId],
- *       securityGroups: [securityGroupId],
- *       assignPublicIp: "ENABLED",
- *     },
- *   },
- * });
- * const taskArn = response.tasks?.[0]?.taskArn;
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime: launch a task per request
+ *         const response = yield* runTask({
+ *           launchType: "FARGATE",
+ *           networkConfiguration: {
+ *             awsvpcConfiguration: {
+ *               subnets: [subnetId],
+ *               assignPublicIp: "ENABLED",
+ *             },
+ *           },
+ *         });
+ *         return yield* HttpServerResponse.json({
+ *           taskArn: response.tasks?.[0]?.taskArn,
+ *         });
+ *       }),
+ *     };
+ *   }),
+ * );
  * ```
  */
 export interface RunTask extends Binding.Service<

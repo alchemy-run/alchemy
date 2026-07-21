@@ -8,11 +8,12 @@ The Drizzle provider manages your Drizzle schema as a resource:
 pending migration SQL whenever the schema module changes, and the
 database resource downstream — [Neon.Branch](/neon/guides/drizzle),
 [Planetscale.PostgresBranch](/planetscale/guides/drizzle), or
-[Cloudflare.D1.Database](/cloudflare/data/d1) — applies it via
-`migrationsDir`. There is no setup page because there is nothing to
-set up: the provider has no credentials — it just needs `drizzle-kit`
-and `drizzle-orm` installed (optional peers of alchemy). The runtime
-client additionally needs `@effect/sql-pg` and `pg`.
+[Cloudflare.D1.Database](/cloudflare/data/d1-drizzle) — applies it
+via `migrationsDir`. There is no setup page because there is nothing
+to set up: the provider has no credentials — it just needs
+`drizzle-kit` and `drizzle-orm` installed (optional peers of
+alchemy). The runtime client additionally needs `@effect/sql-pg` and
+`pg` on Postgres, or `@effect/sql-d1` on D1.
 
 ## Resources
 
@@ -53,9 +54,9 @@ resource — and `delete` is a deliberate no-op, because migration
 files are typically checked in and removing the resource should
 never wipe them.
 
-## The runtime client
+## The runtime clients
 
-`Drizzle.postgres` turns a connection string into a drizzle-orm
+`Drizzle.Postgres` turns a connection string into a drizzle-orm
 client whose queries are Effects — yield them directly inside a
 Worker:
 
@@ -65,7 +66,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, {
+    const db = yield* Drizzle.Postgres(conn.connectionString, {
       relations,
     });
 
@@ -83,29 +84,66 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-The connection is deferred until the first query and memoized per
+`Drizzle.D1` is the same shape on Cloudflare D1 — it takes the
+`Cloudflare.D1.QueryDatabase` client instead of a connection string
+and drives drizzle-orm's `effect-d1` driver through
+`@effect/sql-d1`:
+
+```typescript
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
+    const db = yield* Drizzle.D1(d1, { relations });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* db.select().from(Users);
+        return yield* HttpServerResponse.json({ users });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding)),
+) {}
+```
+
+Both clients defer connecting until the first query and memoize per
 execution — a `fetch`/`queue`/`scheduled` event or a Workflow run —
-on the `ExecutionContext`, then torn down when that execution's
-scope closes; plan- and deploy-time evaluation never opens a
-connection, and passing `relations` unlocks the typed `db.query.*`
-API. For the Worker wiring itself — Hyperdrive, `ConnectBinding`,
-`nodejs_compat`, and the exact install commands — follow
-[Drizzle on Workers](/cloudflare/data/drizzle).
+then tear down when that execution's scope closes; plan- and
+deploy-time evaluation never opens a connection, and passing
+`relations` unlocks the typed `db.query.*` API. For the Worker
+wiring itself follow [Drizzle on Workers](/cloudflare/data/drizzle)
+(Postgres via Hyperdrive, `nodejs_compat`, install commands) or
+[Drizzle on D1](/cloudflare/data/d1-drizzle) (native binding,
+`@effect/sql-d1`, and the raw tagged-template client).
+
+Each Drizzle client has a raw effect-sql sibling in `alchemy/SQL` —
+the one home for the low-level clients when you want tagged-template
+SQL without an ORM: `SQL.Postgres({ url })` and `SQL.D1(d1)` return
+the underlying `PgClient` / `D1Client`, memoized per execution with
+the same lifecycle as their Drizzle counterparts.
 
 ## Compose with your cloud
 
 [Drizzle on Workers](/cloudflare/data/drizzle) is the canonical
-Worker wiring guide. On the database side,
+Worker wiring guide for Postgres, and
+[Drizzle on D1](/cloudflare/data/d1-drizzle) for Cloudflare's
+serverless SQLite. On the database side,
 [Neon](/neon/guides/drizzle) and
 [PlanetScale](/planetscale/guides/drizzle) each wire `schema.out`
 into their branch resources, while
 [Neon migrations](/neon/data/migrations) and
 [PlanetScale migrations](/planetscale/data/migrations) explain how
-each provider orders, hashes, and applies the generated files. For
-per-stage database tiering built on the same schema resource, see
+each provider orders, hashes, and applies the generated files —
+[D1](/cloudflare/data/d1#migrations) applies the same contract via
+`migrationsDir`/`migrationsTable`. For per-stage database tiering
+built on the same schema resource, see
 [Branch from a shared database](/cloudflare/data/branch-from-shared-database).
 
 ## Reference
 
 [Schema](/providers/drizzle/schema) ·
-[postgres](/providers/drizzle/postgres)
+[Postgres](/providers/drizzle/postgres) ·
+[D1](/providers/drizzle/d1) ·
+[SQL.Postgres](/providers/sql/postgres) ·
+[SQL.D1](/providers/sql/d1)

@@ -22,13 +22,27 @@ export interface StartTaskRequest extends Omit<
  * @section Running Tasks
  * @example Start a Task on a Specific Container Instance
  * ```typescript
- * const startTask = yield* AWS.ECS.StartTask(cluster, task);
+ * const controller = yield* AWS.Lambda.Function(
+ *   "PlacementController",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     // init: bind the launch (IAM grants happen here)
+ *     const startTask = yield* AWS.ECS.StartTask(cluster, task);
  *
- * const response = yield* startTask({
- *   containerInstances: [containerInstanceArn],
- *   startedBy: "placement-controller",
- * });
- * const taskArn = response.tasks?.[0]?.taskArn;
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime: place the task on a chosen instance
+ *         const response = yield* startTask({
+ *           containerInstances: [containerInstanceArn],
+ *           startedBy: "placement-controller",
+ *         });
+ *         return yield* HttpServerResponse.json({
+ *           taskArn: response.tasks?.[0]?.taskArn,
+ *         });
+ *       }),
+ *     };
+ *   }),
+ * );
  * ```
  */
 export interface StartTask extends Binding.Service<

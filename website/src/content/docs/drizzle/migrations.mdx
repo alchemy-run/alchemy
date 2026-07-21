@@ -102,12 +102,11 @@ commit, not cloud state to tear down.
 
 ## Dialects
 
-`postgres` is the default and the path the examples exercise
-end-to-end. `sqlite` generation works through drizzle-kit's CLI
-fallback — the provider runs `drizzle-kit generate` in a temp copy of
-`out` and fails fast if drizzle-kit asks an interactive rename
-question without a TTY (both behaviors are covered by
-`Schema.test.ts`). `mysql` schema generation is not wired through
+`postgres` is the default. `sqlite` is the D1 path — pass
+`dialect: "sqlite"` and wire `schema.out` into
+`Cloudflare.D1.Database`'s `migrationsDir`, as
+[Drizzle on D1](/cloudflare/data/d1-drizzle) walks through
+end-to-end. `mysql` schema generation is not wired through
 `Drizzle.Schema` in any example — for PlanetScale MySQL, check in the
 output of `drizzle-kit generate` and point `migrationsDir` at it, as
 [Add Drizzle ORM](/cloudflare/data/drizzle) documents.
@@ -120,13 +119,15 @@ Application mechanics:
   files are ordered, hashed, and tracked on Neon.
 - [PlanetScale migrations](/planetscale/data/migrations) — the same
   contract on PlanetScale branches.
+- [D1](/cloudflare/data/d1#migrations) — `migrationsDir` and
+  `migrationsTable` on Cloudflare's serverless SQLite.
 
 Related:
 
-- [D1](/cloudflare/data/d1) — `migrationsDir` and `migrationsTable`
-  on Cloudflare's serverless SQLite.
-- [Add Drizzle ORM](/cloudflare/data/drizzle) — the runtime side:
-  querying from a Worker with `Drizzle.postgres`.
+- [Add Drizzle ORM](/cloudflare/data/drizzle) — the runtime side on
+  Postgres: querying from a Worker with `Drizzle.Postgres`.
+- [Drizzle on D1](/cloudflare/data/d1-drizzle) — the runtime side on
+  D1: `Drizzle.D1` and the raw `@effect/sql-d1` client.
 
 Reference:
 

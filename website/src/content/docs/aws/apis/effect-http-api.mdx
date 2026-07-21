@@ -149,13 +149,13 @@ handlers will need:
 
 ```diff lang="typescript"
   Effect.gen(function* () {
-+    const table = yield* AWS.DynamoDB.Table("JobsTable", {
-+      partitionKey: "id",
-+      attributes: { id: "S" },
-+    });
++   const table = yield* AWS.DynamoDB.Table("JobsTable", {
++     partitionKey: "id",
++     attributes: { id: "S" },
++   });
 +
-+    const getItem = yield* AWS.DynamoDB.GetItem(table);
-+    const putItem = yield* AWS.DynamoDB.PutItem(table);
++   const getItem = yield* AWS.DynamoDB.GetItem(table);
++   const putItem = yield* AWS.DynamoDB.PutItem(table);
 
     return {};
   }),
@@ -175,15 +175,15 @@ must be bundled into the function. Provide them on the Init Effect:
 ```diff lang="typescript"
   Effect.gen(function* () {
     // ...
--  }),
-+  }).pipe(
-+    Effect.provide(
-+      Layer.mergeAll(
-+        AWS.DynamoDB.GetItemHttp,
-+        AWS.DynamoDB.PutItemHttp,
-+      ),
-+    ),
-+  ),
+- }),
++ }).pipe(
++   Effect.provide(
++     Layer.mergeAll(
++       AWS.DynamoDB.GetItemHttp,
++       AWS.DynamoDB.PutItemHttp,
++     ),
++   ),
++ ),
 ```
 
 `GetItemHttp` / `PutItemHttp` implement the binding contracts over
@@ -201,36 +201,36 @@ bindings from step 3a:
     const getItem = yield* AWS.DynamoDB.GetItem(table);
     const putItem = yield* AWS.DynamoDB.PutItem(table);
 
-+    const jobsGroup = HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
-+      handlers
-+        .handle("getJob", ({ query }) =>
-+          getItem({ Key: { id: { S: query.jobId } } }).pipe(
-+            Effect.orDie,
-+            Effect.flatMap(({ Item }) =>
-+              Item
-+                ? Effect.succeed(
-+                    new Job({
-+                      id: Item.id?.S ?? query.jobId,
-+                      content: Item.content?.S ?? "",
-+                    }),
-+                  )
-+                : Effect.fail(new JobNotFound({ id: query.jobId })),
-+            ),
-+          ),
-+        )
-+        .handle("createJob", ({ payload }) =>
-+          Effect.gen(function* () {
-+            const jobId = crypto.randomUUID();
-+            yield* putItem({
-+              Item: {
-+                id: { S: jobId },
-+                content: { S: payload.content },
-+              },
-+            });
-+            return jobId;
-+          }).pipe(Effect.orDie),
-+        ),
-+    );
++   const jobsGroup = HttpApiBuilder.group(JobApi, "Jobs", (handlers) =>
++     handlers
++       .handle("getJob", ({ query }) =>
++         getItem({ Key: { id: { S: query.jobId } } }).pipe(
++           Effect.orDie,
++           Effect.flatMap(({ Item }) =>
++             Item
++               ? Effect.succeed(
++                   new Job({
++                     id: Item.id?.S ?? query.jobId,
++                     content: Item.content?.S ?? "",
++                   }),
++                 )
++               : Effect.fail(new JobNotFound({ id: query.jobId })),
++           ),
++         ),
++       )
++       .handle("createJob", ({ payload }) =>
++         Effect.gen(function* () {
++           const jobId = crypto.randomUUID();
++           yield* putItem({
++             Item: {
++               id: { S: jobId },
++               content: { S: payload.content },
++             },
++           });
++           return jobId;
++         }).pipe(Effect.orDie),
++       ),
++   );
 
     return {};
 ```
@@ -252,18 +252,18 @@ group, and `HttpRouter.toHttpEffect` converts that Layer into the
 
 ```diff lang="typescript"
     return {
--    };
-+      fetch: yield* HttpRouter.toHttpEffect(
-+        HttpApiBuilder.layer(JobApi).pipe(Layer.provide(jobsGroup)),
-+      ),
-+    };
+-   };
++     fetch: yield* HttpRouter.toHttpEffect(
++       HttpApiBuilder.layer(JobApi).pipe(Layer.provide(jobsGroup)),
++     ),
++   };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         AWS.DynamoDB.GetItemHttp,
         AWS.DynamoDB.PutItemHttp,
-+        HttpPlatform.layer,
-+        Etag.layer,
++       HttpPlatform.layer,
++       Etag.layer,
       ),
     ),
   ),

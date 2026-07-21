@@ -681,7 +681,14 @@ const executeNode = (
           resourceType: node.resource.Type,
           props: news,
           attr,
-          bindings: excludeDeletedBindings(node.bindings),
+          // Terminal commits persist the RESOLVED binding payload the
+          // provider actually reconciled with, not the raw plan-time
+          // expressions. Raw `node.bindings` may hold unresolved Outputs
+          // (silently dropped by JSON state stores), so persisting them
+          // makes the next plan's `diffBindings` compare a lossy stored
+          // shape against fully-resolved data — a phantom binding update
+          // on every plan (#874).
+          bindings: bindingOutputs,
           providerVersion: node.provider.version ?? 0,
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
@@ -813,7 +820,8 @@ const executeNode = (
             resourceType: node.resource.Type,
             props: news,
             attr,
-            bindings: excludeDeletedBindings(node.bindings),
+            // Resolved payload, not raw `node.bindings` — see create commit.
+            bindings: bindingOutputs,
             providerVersion: node.provider.version ?? 0,
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
@@ -1040,7 +1048,8 @@ const executeNode = (
             props: news,
             attr,
             providerVersion: node.provider.version ?? 0,
-            bindings: excludeDeletedBindings(node.bindings),
+            // Resolved payload, not raw `node.bindings` — see create commit.
+            bindings: bindingOutputs,
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
           });
@@ -1056,7 +1065,8 @@ const executeNode = (
             props: news,
             attr,
             providerVersion: node.provider.version ?? 0,
-            bindings: excludeDeletedBindings(node.bindings),
+            // Resolved payload, not raw `node.bindings` — see create commit.
+            bindings: bindingOutputs,
             downstream: node.downstream,
             // Preserve the remaining backlog exactly as-is. GC is responsible for
             // popping one generation at a time until the chain is exhausted.
@@ -1420,10 +1430,15 @@ const converge = Effect.fn(function* (
           logicalId,
           instanceId,
           resourceType: node.resource.Type,
-          props: newProps,
+          // This site bypasses the `commit` helper, so strip unresolved
+          // leaves (Effect-valued env entries survive `Output.evaluate`)
+          // the same way `commit` does — state only ever holds plain data.
+          props: stripUnresolved(newProps),
           attr,
           providerVersion: node.provider.version ?? 0,
-          bindings: excludeDeletedBindings(node.bindings),
+          // Resolved payload, not raw `node.bindings` — see the create
+          // commit in applyResource.
+          bindings: newBindings,
           downstream: node.downstream,
           namespace,
           removalPolicy: node.resource.RemovalPolicy,
