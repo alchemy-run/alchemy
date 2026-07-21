@@ -68,13 +68,24 @@ function providersSidebarEntry() {
  */
 function providerResourcesEntry(...providers) {
   const sidebar = providersSidebar();
-  const items = providers.flatMap((provider) => {
+  const entryItems = (provider) => {
     const group = sidebar?.find((p) => p.label === provider);
     if (group) return group.items;
     return [
       { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
     ];
-  });
+  };
+  // A single provider's tree is inlined; a multi-namespace hub nests each
+  // provider under its own subgroup so same-named resources (SQL.D1 vs
+  // Drizzle.D1) stay distinguishable.
+  const items =
+    providers.length === 1
+      ? entryItems(providers[0])
+      : providers.map((provider) => ({
+          label: provider,
+          collapsed: true,
+          items: entryItems(provider),
+        }));
   return { label: "Resources", collapsed: false, items };
 }
 
