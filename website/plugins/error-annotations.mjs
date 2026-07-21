@@ -31,11 +31,7 @@
  * visual output is identical to what the compiler-backed plugin produced.
  */
 import { ExpressiveCodeAnnotation } from "@astrojs/starlight/expressive-code";
-import {
-  addClassName,
-  getClassNames,
-  h,
-} from "@astrojs/starlight/expressive-code/hast";
+import { getClassNames, h } from "@astrojs/starlight/expressive-code/hast";
 
 /** Matches `// @error: <text>`, tolerating a leading diff marker. */
 const ERROR_COMMENT = /^(?:[+-](?=[\s/]))?\s*\/\/ @error: ?(.*)$/;
@@ -43,17 +39,28 @@ const ERROR_COMMENT = /^(?:[+-](?=[\s/]))?\s*\/\/ @error: ?(.*)$/;
 /** Extracts an optional `ts(NNNN)` code from the start of the message. */
 const TS_CODE = /^ts\((\d+)\):?\s*/;
 
+/** The line's token container (`.code` child), or the node itself. */
+function codeContainer(node) {
+  return (
+    node.children?.find(
+      (c) => c.type === "element" && getClassNames(c).includes("code"),
+    ) ?? node
+  );
+}
+
 class ErrorUnderlineAnnotation extends ExpressiveCodeAnnotation {
   render({ nodesToTransform }) {
     return nodesToTransform.map((node) => {
       if (node.type !== "element") return node;
-      // Squiggle only the token container (`.code`), not the whole line —
-      // the error box is appended to the line as a sibling and must not
-      // inherit the text decoration.
-      const code = node.children?.find(
-        (c) => c.type === "element" && getClassNames(c).includes("code"),
-      );
-      addClassName(code ?? node, "twoslash-error-underline");
+      // Wrap the line's tokens in a squiggle span rather than classing the
+      // container: the error box is appended to the same container below,
+      // and `text-decoration` propagates to descendants (it can't be
+      // cancelled from inside), so the box must be a sibling of the
+      // underlined span, not its child.
+      const code = codeContainer(node);
+      code.children = [
+        h("span.twoslash.twoslash-error-underline", code.children ?? []),
+      ];
       return node;
     });
   }
@@ -67,19 +74,22 @@ class ErrorBoxAnnotation extends ExpressiveCodeAnnotation {
   }
   render({ nodesToTransform }) {
     return nodesToTransform.map((node) => {
-      if (node.type === "element") {
-        node.children.push(
-          h("div.twoslash-error-box.twoslash-error-level-error", [
-            h("span.twoslash-error-box-icon"),
-            h("span.twoslash-error-box-content", [
-              ...(this.title
-                ? [h("span.twoslash-error-box-content-title", this.title)]
-                : []),
-              h("span.twoslash-error-box-content-message", this.message),
-            ]),
+      if (node.type !== "element") return node;
+      // Append inside `.code` (a block container): a block-level flex box
+      // after inline token content renders on its own line below the code,
+      // exactly like twoslash's markup did. Appending to the `.ec-line`
+      // instead puts the box on the same flex row as the code.
+      codeContainer(node).children.push(
+        h("div.twoslash-error-box.twoslash-error-level-error", [
+          h("span.twoslash-error-box-icon"),
+          h("span.twoslash-error-box-content", [
+            ...(this.title
+              ? [h("span.twoslash-error-box-content-title", this.title)]
+              : []),
+            h("span.twoslash-error-box-content-message", this.message),
           ]),
-        );
-      }
+        ]),
+      );
       return node;
     });
   }
