@@ -885,19 +885,17 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
   executionRoleName: string;
 }) {
   const familyArns = output.taskFamily
-    ? yield* ecs
-        .listTaskDefinitions({
+    ? yield* ecs.listTaskDefinitions
+        .items({
           familyPrefix: output.taskFamily,
           status: "ACTIVE",
         })
         .pipe(
           // `familyPrefix` is a prefix match — filter to the exact family so
           // a family that happens to prefix another resource's is untouched.
-          Effect.map((r) =>
-            (r.taskDefinitionArns ?? []).filter(
-              (arn) => taskFamilyOfArn(arn) === output.taskFamily,
-            ),
-          ),
+          Stream.filter((arn) => taskFamilyOfArn(arn) === output.taskFamily),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
           Effect.catchTag("ClientException", () =>
             Effect.succeed([] as string[]),
           ),
@@ -942,54 +940,40 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
     // bindings policy, and the execution role can carry inline policies too
     // (e.g. the Service's secrets-read policy). A role with any inline
     // policy left rejects `deleteRole` with `DeleteConflictException`.
-    yield* iam
-      .listRolePolicies({
+    yield* iam.listRolePolicies
+      .items({
         RoleName: roleName,
       })
       .pipe(
+        Stream.mapEffect((policyName) =>
+          iam
+            .deleteRolePolicy({
+              RoleName: roleName,
+              PolicyName: policyName,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+        ),
+        Stream.runDrain,
         // The role may already be gone (delete re-run / race) — treat a
         // missing role as "no policies to delete" so delete is idempotent.
-        Effect.catchTag("NoSuchEntityException", () =>
-          Effect.succeed({ PolicyNames: [] as string[] }),
-        ),
-        Effect.flatMap((policies) =>
-          Effect.all(
-            (policies.PolicyNames ?? []).map((policyName) =>
-              iam
-                .deleteRolePolicy({
-                  RoleName: roleName,
-                  PolicyName: policyName,
-                })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                ),
-            ),
-          ),
-        ),
+        Effect.catchTag("NoSuchEntityException", () => Effect.void),
       );
 
-    yield* iam
-      .listAttachedRolePolicies({
+    yield* iam.listAttachedRolePolicies
+      .items({
         RoleName: roleName,
       })
       .pipe(
-        Effect.catchTag("NoSuchEntityException", () =>
-          Effect.succeed({ AttachedPolicies: [] }),
+        Stream.mapEffect((policy) =>
+          iam
+            .detachRolePolicy({
+              RoleName: roleName,
+              PolicyArn: policy.PolicyArn!,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
         ),
-        Effect.flatMap((policies) =>
-          Effect.all(
-            (policies.AttachedPolicies ?? []).map((policy) =>
-              iam
-                .detachRolePolicy({
-                  RoleName: roleName,
-                  PolicyArn: policy.PolicyArn!,
-                })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                ),
-            ),
-          ),
-        ),
+        Stream.runDrain,
+        Effect.catchTag("NoSuchEntityException", () => Effect.void),
       );
     yield* iam
       .deleteRole({

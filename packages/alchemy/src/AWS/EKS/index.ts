@@ -31,6 +31,7 @@ export * from "./DescribePodIdentityAssociationHttp.ts";
 export * from "./DescribeUpdate.ts";
 export * from "./DescribeUpdateHttp.ts";
 export * from "./FargateProfile.ts";
+export * from "./HelmChart.ts";
 export * from "./Job.ts";
 export * from "./ListAccessEntries.ts";
 export * from "./ListAccessEntriesHttp.ts";

@@ -57,6 +57,46 @@ yield* GitHub.Secret("deploy-key", {
 Environment secrets are only released to workflows once the
 environment's protection rules are satisfied.
 
+## Manage the environment itself
+
+`GitHub.Environment` manages the deployment environment as a resource —
+including its protection rules — so the environment a secret targets is
+declared in the same deploy:
+
+```typescript
+const production = yield* GitHub.Environment("production", {
+  owner: "my-org",
+  repository: "my-repo",
+  name: "production",
+  waitTimer: 30,
+  preventSelfReview: true,
+  reviewers: {
+    users: ["release-manager"],
+    teams: ["platform"],
+  },
+  deploymentBranchPolicy: {
+    customBranchPolicies: ["main", "release/*"],
+  },
+});
+
+yield* GitHub.Secret("deploy-key", {
+  owner: "my-org",
+  repository: "my-repo",
+  environment: production,
+  name: "DEPLOY_KEY",
+  value: Redacted.make("my-secret-value"),
+});
+```
+
+The `environment` prop on secrets and variables accepts either a name
+string or the `Environment` resource itself. Reviewers are referenced by
+user login and team slug — alchemy resolves them to the IDs GitHub's API
+expects. `deploymentBranchPolicy` restricts
+which branches can deploy: `{ protectedBranches: true }` or a list of
+branch name patterns via `customBranchPolicies`. Environments on private
+repositories are plan-gated (Pro/Team/Enterprise); public repositories
+get them on every plan.
+
 ## Create a variable
 
 `GitHub.Variable` manages a plain-text repository variable —
@@ -74,6 +114,19 @@ yield* GitHub.Variable("aws-region", {
 
 Unlike secrets, variable values are readable back, so alchemy diffs
 the live value and skips the API call when nothing changed.
+
+Variables take the same `environment` prop as secrets to scope the
+variable to one Actions environment instead of the whole repository:
+
+```typescript
+yield* GitHub.Variable("region", {
+  owner: "my-org",
+  repository: "my-repo",
+  environment: "production",
+  name: "AWS_REGION",
+  value: "us-east-1",
+});
+```
 
 ## Wire in outputs from other resources
 
@@ -122,8 +175,9 @@ yield* GitHub.Variables({
 
 `Secrets` accepts plain strings, `Redacted` values, or unresolved
 inputs (outputs of other resources, `Config` values) — plain strings
-are wrapped with `Redacted.make` automatically. Pass `environment`
-to scope every secret in the map to one Actions environment.
+are wrapped with `Redacted.make` automatically. Both helpers take an
+`environment` to scope every entry in the map to one Actions
+environment.
 
 ## Provision CI credentials as code
 
@@ -195,7 +249,8 @@ for private repositories, or `public_repo` for public ones.
 
 Reference:
 
-- [Secret](/providers/github/secret) ·
+- [Environment](/providers/github/environment) ·
+  [Secret](/providers/github/secret) ·
   [Secrets](/providers/github/secrets) ·
   [Variable](/providers/github/variable) ·
   [Variables](/providers/github/variables)
