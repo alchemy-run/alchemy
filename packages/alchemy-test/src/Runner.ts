@@ -834,5 +834,8 @@ export const run = Effect.fn(function* (options: RunOptions) {
     failures,
   };
   yield* emit({ _tag: "RunEnd", summary });
+  // Drain the live hook-line queue so tail lines from the final file's
+  // hooks are on disk before the process exits.
+  yield* fileLog.close;
   return summary;
 });
