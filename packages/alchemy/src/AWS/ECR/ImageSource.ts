@@ -13,6 +13,10 @@ import {
 import { hashDirectory } from "../../Command/Memo.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { Self } from "../../Self.ts";
+import {
+  isInlineDockerfile,
+  type InlineDockerfile,
+} from "../../Docker/Dockerfile.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { buildAndPushEcrImage, getEcrRegistryCredentials } from "./Image.ts";
 
@@ -23,16 +27,24 @@ import { buildAndPushEcrImage, getEcrRegistryCredentials } from "./Image.ts";
  * NOT exported from the AWS barrel or `ECR/index.ts`. Consumers import the
  * module path directly.
  *
- * A platform resource's image comes from exactly one of three sources,
- * presence-discriminated, flat on the platform's props:
+ * A platform's props separate the ENVIRONMENT (what the container is) from
+ * the PROGRAM (`main` — "and run my bundled Effect program in it"):
  *
- * - `main` — bundle an Effect program (rolldown) into a generated image
- *   (`baseImage` optionally sets the base image, default bun).
- * - `context` — `docker build` the user's own Dockerfile. `dockerfile` is
- *   ALWAYS a path relative to the cwd, defaulting to `${context}/Dockerfile`.
- * - `image` — mirror a pre-built registry image into ECR
- *   (docker pull → tag → push). The tag is content-addressed on the image
- *   reference, so the mirror is refreshed only when the ref changes.
+ * - environment (at most one): `image` (registry ref) | `context` +
+ *   `dockerfile`-as-path (docker build) | inline `dockerfile` content
+ *   (`Dockerfile.inline`) | the default bun base when `main` stands alone.
+ * - `main` present → the bundle is injected into the environment (COPY +
+ *   ENTRYPOINT) and pushed as a derived image. `main` absent → the
+ *   environment runs verbatim: `image` is mirrored into ECR
+ *   (docker pull → tag → push, content-addressed on the ref), a Dockerfile
+ *   builds as-is.
+ *
+ * `dockerfile` is a string PATH (relative to the cwd, defaulting to
+ * `${context}/Dockerfile`) or an `InlineDockerfile`
+ * (`{ content: Input<string> }`, usually via `Dockerfile.inline`). Inline
+ * content may interpolate Outputs (e.g. `FROM ${base.imageUri}`), creating
+ * a real dependency edge; never interpolate secrets — content is baked
+ * into image layers.
  *
  * Every source lands in an auto-created (caller-named) private ECR
  * repository so the compute platform pulls from a registry that is reliable
@@ -41,7 +53,8 @@ import { buildAndPushEcrImage, getEcrRegistryCredentials } from "./Image.ts";
 
 /**
  * Bundle an Effect program into a generated image. Alchemy bundles `main`
- * with rolldown and bakes it into a Dockerfile generated `FROM baseImage`.
+ * with rolldown and bakes it into a Dockerfile generated from the
+ * environment (`image`, `dockerfile`, or the default bun base).
  */
 export interface BundledImageSource {
   /**
@@ -50,11 +63,27 @@ export interface BundledImageSource {
    */
   main: string;
   /**
-   * Base image for the generated Dockerfile. Only meaningful with
-   * {@link main}.
+   * Environment image: used as the generated Dockerfile's `FROM`. Any
+   * registry ref works (private non-ECR registries require docker
+   * credentials on the build machine); the image must be able to run the
+   * bun runtime. Exclusive with {@link dockerfile} / {@link context}.
    * @default "oven/bun:1"
    */
-  baseImage?: string;
+  image?: string;
+  /**
+   * Environment Dockerfile: a string is a PATH (built in {@link context},
+   * then the bundle is layered on top in a second stage); an
+   * {@link InlineDockerfile} is inline content used as the environment
+   * preamble (built with no context — its own `COPY`s are unsupported).
+   * The resulting environment must be able to run the bun runtime.
+   * Exclusive with {@link image}.
+   */
+  dockerfile?: string | InlineDockerfile;
+  /**
+   * Build context for a path {@link dockerfile} environment. Exclusive
+   * with {@link image} and inline dockerfiles.
+   */
+  context?: string;
   /**
    * Named export to load from `main`.
    * @default "default"
@@ -75,14 +104,17 @@ export interface BundledImageSource {
  */
 export interface DockerfileImageSource {
   /**
-   * Docker build context directory.
+   * Docker build context directory. Optional when {@link dockerfile} is
+   * inline content (which builds with an empty context).
    */
-  context: string;
+  context?: string;
   /**
-   * Path to the Dockerfile, relative to the cwd (NOT the context).
+   * Path to the Dockerfile relative to the cwd (NOT the context), or
+   * {@link InlineDockerfile} content. The Dockerfile must define its own
+   * `CMD`/`ENTRYPOINT` (no program is injected).
    * @default `${context}/Dockerfile`
    */
-  dockerfile?: string;
+  dockerfile?: string | InlineDockerfile;
 }
 
 /**
@@ -108,20 +140,20 @@ export type ImageSourceProps =
 /** Loose bag shape used to sniff which source variant a props object is. */
 export interface ImageSourceLike {
   main?: string;
-  baseImage?: string;
   handler?: string;
   build?: BundledImageSource["build"];
   context?: string;
-  dockerfile?: string;
+  dockerfile?: string | InlineDockerfile;
   image?: string;
 }
 
 export type ImageSourceKind = "main" | "context" | "image";
 
 /**
- * Which of the three image sources a props bag declares. Precedence
- * (`main` > `image` > `context`) only matters for malformed inputs that set
- * more than one.
+ * Which image source a props bag declares. `main` always wins (the other
+ * fields then describe its ENVIRONMENT); without `main`, `image` is the
+ * mirrored-verbatim source and any `context`/`dockerfile` (path or inline)
+ * is an external docker build.
  */
 export const imageSourceKind = (
   source: ImageSourceLike,
@@ -130,9 +162,45 @@ export const imageSourceKind = (
     ? "main"
     : source.image !== undefined
       ? "image"
-      : source.context !== undefined
+      : source.context !== undefined || source.dockerfile !== undefined
         ? "context"
         : undefined;
+
+/**
+ * Validate environment-source exclusivity. Dies (plan-time defect) on
+ * `image`+`dockerfile`, `image`+`context`, or inline-`dockerfile`+`context`.
+ */
+export const validateImageSource = (
+  id: string,
+  source: ImageSourceLike,
+): Effect.Effect<void> => {
+  if (source.image !== undefined && source.dockerfile !== undefined) {
+    return Effect.die(
+      new Error(
+        `'${id}': 'image' and 'dockerfile' are both set — declare exactly one environment source (an 'image' ref, or a Dockerfile)`,
+      ),
+    );
+  }
+  if (source.image !== undefined && source.context !== undefined) {
+    return Effect.die(
+      new Error(
+        `'${id}': 'image' and 'context' are both set — declare exactly one environment source`,
+      ),
+    );
+  }
+  if (
+    source.dockerfile !== undefined &&
+    isInlineDockerfile(source.dockerfile) &&
+    source.context !== undefined
+  ) {
+    return Effect.die(
+      new Error(
+        `'${id}': inline 'dockerfile' content builds with no context — use a path dockerfile with 'context', or drop 'context'`,
+      ),
+    );
+  }
+  return Effect.void;
+};
 
 /** The resolved (built/mirrored + pushed) image. */
 export interface ResolvedImage {
@@ -284,12 +352,12 @@ await Effect.runPromise(program).catch((err) => {
  * cwd (absolute paths pass through), defaulting to `${context}/Dockerfile`.
  */
 const resolveContextPaths = Effect.fn(function* (source: {
-  context: string;
+  context: string | undefined;
   dockerfile?: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const context = path.resolve(source.context);
+  const context = path.resolve(source.context ?? ".");
   const dockerfile = source.dockerfile
     ? path.resolve(source.dockerfile)
     : path.join(context, "Dockerfile");
@@ -332,6 +400,18 @@ export const computeStaticSourceHash = Effect.fn(function* (
     })).slice(0, 16);
   }
   if (kind === "context") {
+    if (
+      source.dockerfile !== undefined &&
+      isInlineDockerfile(source.dockerfile)
+    ) {
+      // Inline content builds with no context; an unresolved (Output)
+      // content can't be hashed at plan time — defer to reconcile.
+      if (typeof source.dockerfile.content !== "string") return undefined;
+      return (yield* sha256Object({
+        dockerfile: source.dockerfile.content,
+        platform: platform ?? "linux/amd64",
+      })).slice(0, 16);
+    }
     const fs = yield* FileSystem.FileSystem;
     const { context, dockerfile } = yield* resolveContextPaths({
       context: source.context!,
@@ -442,22 +522,61 @@ export const makeImageSource = Effect.gen(function* () {
       isExternal: options.isExternal,
       bootstrap: options.bootstrap,
     });
-    const dockerfile = generateDockerfile(options.source, options.port);
+    // A path-`dockerfile` environment is built as a separate local stage in
+    // `resolve`; hash its identity (context files + Dockerfile content)
+    // explicitly since the generated Dockerfile only references the local
+    // env tag. Inline environments flow through the generated Dockerfile
+    // text itself; `image` environments through its FROM line.
+    const df = options.source.dockerfile;
+    const isPathEnv = df !== undefined && !isInlineDockerfile(df);
+    let envIdentity: Record<string, string> = {};
+    if (isPathEnv) {
+      const fs = yield* FileSystem.FileSystem;
+      const { context, dockerfile } = yield* resolveContextPaths({
+        context: options.source.context!,
+        dockerfile: df,
+      });
+      envIdentity = {
+        envContextHash: yield* hashDirectory({ cwd: context }),
+        envDockerfile: yield* fs.readFileString(dockerfile),
+      };
+    }
+    const dockerfile = generateDockerfile(
+      options.source,
+      options.port,
+      isPathEnv ? "<env>" : undefined,
+    );
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
       dockerfile,
       platform: options.platform,
+      ...envIdentity,
     })).slice(0, 16);
     return { bundled, dockerfile, codeHash };
   });
 
-  /** Generated Dockerfile for a bundled `main` program. */
-  const generateDockerfile = (source: BundledImageSource, port?: number) => {
-    // `oven/bun` is Docker-Hub only — there is no `docker/library/bun` (bun
-    // is not a Docker official image) and no `public.ecr.aws/oven/bun`.
-    const base = source.baseImage ?? "oven/bun:1";
+  /**
+   * Generated Dockerfile for a bundled `main` program. The environment
+   * preamble is, in order of precedence: `envFrom` (a locally-built
+   * environment tag from a path-`dockerfile` two-stage build), inline
+   * `dockerfile` content (already resolved), the `image` ref, or the
+   * default bun base (`oven/bun` is Docker-Hub only — there is no
+   * `docker/library/bun` and no `public.ecr.aws/oven/bun`).
+   */
+  const generateDockerfile = (
+    source: BundledImageSource,
+    port?: number,
+    envFrom?: string,
+  ) => {
+    const preamble =
+      envFrom !== undefined
+        ? `FROM ${envFrom}`
+        : source.dockerfile !== undefined &&
+            isInlineDockerfile(source.dockerfile)
+          ? String(source.dockerfile.content).trimEnd()
+          : `FROM ${source.image ?? "oven/bun:1"}`;
     const lines = [
-      `FROM ${base}`,
+      preamble,
       `WORKDIR /app`,
       `COPY index.mjs /app/index.mjs`,
       // Copy any additional rolldown chunks (`chunk-XXX.js`,
@@ -551,6 +670,8 @@ export const makeImageSource = Effect.gen(function* () {
       );
     }
 
+    yield* validateImageSource(id, source);
+
     const repositoryUri =
       options.repositoryUri ??
       (yield* ensureRepository({ repositoryName, tags: options.tags }));
@@ -558,6 +679,18 @@ export const makeImageSource = Effect.gen(function* () {
     if (kind === "main") {
       // Bundle → hash → (skip if pushed) → materialize generated Dockerfile
       // → build + push.
+      const df = source.dockerfile;
+      if (
+        df !== undefined &&
+        isInlineDockerfile(df) &&
+        typeof df.content !== "string"
+      ) {
+        return yield* Effect.die(
+          new Error(
+            `'${id}': inline dockerfile content did not resolve to a string — Outputs in Dockerfile.inline must be resolvable at deploy time`,
+          ),
+        );
+      }
       yield* session.note(`Bundling ${id} program...`);
       const { bundled, dockerfile, codeHash } = yield* computeMainCodeHash({
         source: source as BundledImageSource,
@@ -572,6 +705,33 @@ export const makeImageSource = Effect.gen(function* () {
         return { imageUri, repositoryName, repositoryUri, codeHash };
       }
 
+      // A path-`dockerfile` environment builds first as a local stage in the
+      // USER's context (so its COPYs resolve), then the generated Dockerfile
+      // FROMs the local tag and layers the bundle on top.
+      let envFrom: string | undefined;
+      if (df !== undefined && !isInlineDockerfile(df)) {
+        const env = yield* resolveContextPaths({
+          context: source.context!,
+          dockerfile: df,
+        });
+        envFrom = `alchemy-env-${id.toLowerCase()}:${codeHash}`;
+        yield* session.note(`Building environment image for ${id}...`);
+        yield* docker.image.build({
+          context: env.context,
+          file: env.dockerfile,
+          tag: envFrom,
+          platform,
+        });
+      }
+      const finalDockerfile =
+        envFrom === undefined
+          ? dockerfile
+          : generateDockerfile(
+              source as BundledImageSource,
+              options.port,
+              envFrom,
+            );
+
       const realMain = yield* resolveMainPath(
         (source as BundledImageSource).main,
       );
@@ -582,7 +742,7 @@ export const makeImageSource = Effect.gen(function* () {
       );
       yield* docker.materialize({
         context: contextDir,
-        dockerfile,
+        dockerfile: finalDockerfile,
         // Entry chunk becomes `index.mjs`; all other chunks keep their
         // emitted `*.js` names so the entry's relative imports resolve.
         files: bundled.files.map((file, index) => ({
@@ -628,10 +788,45 @@ export const makeImageSource = Effect.gen(function* () {
       return { imageUri, repositoryName, repositoryUri, codeHash };
     }
 
-    // kind === "context": docker build the user's Dockerfile.
+    // kind === "context": docker build the user's Dockerfile — from a path
+    // (in their context) or from inline content (empty stable context).
+    const externalDf = (source as DockerfileImageSource).dockerfile;
+    if (externalDf !== undefined && isInlineDockerfile(externalDf)) {
+      if (typeof externalDf.content !== "string") {
+        return yield* Effect.die(
+          new Error(
+            `'${id}': inline dockerfile content did not resolve to a string — Outputs in Dockerfile.inline must be resolvable at deploy time`,
+          ),
+        );
+      }
+      const codeHash = (yield* computeStaticSourceHash(source, platform))!;
+      const imageUri = `${repositoryUri}:${codeHash}`;
+      if (yield* describeImage(repositoryName, codeHash)) {
+        return { imageUri, repositoryName, repositoryUri, codeHash };
+      }
+      const contextDir = yield* getStableContextDir(
+        dotAlchemy,
+        dotAlchemy,
+        `${id}-image`,
+      );
+      yield* docker.materialize({
+        context: contextDir,
+        dockerfile: externalDf.content,
+        files: [],
+      });
+      yield* session.note(`Building container image ${imageUri}...`);
+      yield* buildAndPushEcrImage(docker, {
+        imageUri,
+        context: contextDir,
+        platform,
+      });
+      yield* session.note(`Pushed ${imageUri}`);
+      return { imageUri, repositoryName, repositoryUri, codeHash };
+    }
+
     const { context, dockerfile } = yield* resolveContextPaths({
-      context: (source as DockerfileImageSource).context,
-      dockerfile: (source as DockerfileImageSource).dockerfile,
+      context: (source as DockerfileImageSource).context!,
+      dockerfile: externalDf,
     });
     const codeHash = (yield* computeStaticSourceHash(source, platform))!;
     const imageUri = `${repositoryUri}:${codeHash}`;
@@ -670,6 +865,16 @@ export const makeImageSource = Effect.gen(function* () {
   }) {
     const platform = options.platform ?? "linux/amd64";
     if (imageSourceKind(options.source) === "main") {
+      // Unresolved inline environment content (an Output) can't be hashed
+      // at plan time — return undefined so the diff defers to reconcile.
+      const df = options.source.dockerfile;
+      if (
+        df !== undefined &&
+        isInlineDockerfile(df) &&
+        typeof df.content !== "string"
+      ) {
+        return undefined;
+      }
       const { codeHash } = yield* computeMainCodeHash({
         source: options.source as BundledImageSource,
         isExternal: options.isExternal,

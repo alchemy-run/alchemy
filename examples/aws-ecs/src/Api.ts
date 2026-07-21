@@ -50,7 +50,7 @@ export default Api.make(
     return {
       cluster,
       main: import.meta.url,
-      baseImage: "oven/bun:1",
+      image: "oven/bun:1",
       port: 3000,
       cpu: 256,
       memory: 512,

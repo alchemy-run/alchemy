@@ -13,7 +13,7 @@ const seedOrders = [
  * Effect whose impl returns `{ run }` — a one-shot entry that executes to
  * completion when the container starts, after which the container exits.
  *
- * The Effect program is bundled into a generated image `FROM baseImage`
+ * The Effect program is bundled into a generated image `FROM image`
  * (`main: import.meta.url` names this module as the entrypoint). The
  * `AWS.DynamoDB.PutItem` binding injects the table's name into the
  * container environment and grants `dynamodb:PutItem` on the task role.
@@ -34,7 +34,7 @@ export default AWS.ECS.Task(
       main: import.meta.url,
       // Docker Hub's `oven/bun`; the public.ecr.aws default mirror
       // rate-limits anonymous pulls during local builds.
-      baseImage: "oven/bun:1",
+      image: "oven/bun:1",
       cpu: 256,
       memory: 512,
       // Build/run on ARM64 so an image built on an Apple Silicon host matches

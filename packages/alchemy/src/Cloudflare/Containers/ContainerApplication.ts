@@ -9,6 +9,7 @@ import {
 import { Resource } from "../../Resource.ts";
 import * as Server from "../../Server/index.ts";
 import type { Providers } from "../Providers.ts";
+import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";
@@ -72,18 +73,29 @@ export interface ContainerApplicationProps extends PlatformProps {
    *
    * The image source is selected by which of these props are set, in order:
    *
-   * 1. {@link main} — bundle the Effect program and build a generated image.
+   * 1. {@link main} — bundle the Effect program and build a generated image;
+   *    composes with {@link image} or an inline {@link dockerfile} to pick
+   *    the environment base.
    * 2. {@link image} — pull the given remote image and re-push it to
    *    Cloudflare's registry (no build).
    * 3. {@link context} / {@link dockerfile} — build the user's own Dockerfile
-   *    against a build context directory.
+   *    (a path against a build context directory, or inline content).
    */
   main?: string;
   /**
-   * A pre-built remote image to deploy, e.g. `ghcr.io/alpine/alpine:latest`.
+   * A registry image reference, e.g. `ghcr.io/alpine/alpine:latest`. Its
+   * meaning composes with {@link main}:
    *
-   * When set (and {@link main} is not), Alchemy pulls this image and re-pushes
-   * it to Cloudflare's managed registry instead of building anything.
+   * - With {@link main} — the environment base for the generated Dockerfile
+   *   (`FROM <image>` + the bundled program layered on top). The image must
+   *   be able to run the {@link runtime}.
+   * - Without {@link main} — a pre-built image deployed verbatim: Alchemy
+   *   pulls it and re-pushes it to Cloudflare's managed registry without
+   *   building anything.
+   *
+   * Exclusive with {@link dockerfile} and {@link context}.
+   *
+   * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"` (with {@link main})
    */
   image?: string;
   /**
@@ -114,8 +126,9 @@ export interface ContainerApplicationProps extends PlatformProps {
    * `impit`) or for packages that intentionally ship in the base image.
    *
    * Install inside the image is controlled by {@link autoInstallExternals}
-   * (default `true`); set it to `false` if your {@link baseImage} already
-   * ships these packages and you want to avoid the redundant step.
+   * (default `true`); set it to `false` if your environment ({@link image}
+   * or inline {@link dockerfile}) already ships these packages and you want
+   * to avoid the redundant step.
    */
   external?: string[];
   /**
@@ -125,7 +138,7 @@ export interface ContainerApplicationProps extends PlatformProps {
    *
    * @default true
    *
-   * Set to `false` when your {@link baseImage} already ships these packages
+   * Set to `false` when your environment image already ships these packages
    * (for example, a base image that pre-installs `sharp`), to avoid the
    * redundant install step.
    */
@@ -136,24 +149,19 @@ export interface ContainerApplicationProps extends PlatformProps {
    */
   name?: string;
   /**
-   * Path to the Dockerfile to build, resolved relative to {@link context}.
-   * Only used by the user-Dockerfile variant (i.e. when neither {@link main}
-   * nor {@link image} is set).
+   * The Dockerfile to build. A plain string is always a **path**, resolved
+   * relative to {@link context} (default `<context>/Dockerfile`) — the
+   * user-Dockerfile variant. An {@link InlineDockerfile} (typically
+   * `Dockerfile.inline`) is **inline content**: with {@link main} it becomes
+   * the environment preamble of the generated Dockerfile (its `FROM` + extra
+   * build steps, with the bundled program layered on top); without
+   * {@link main} it is the whole Dockerfile, built in an empty generated
+   * context (exclusive with {@link context}).
    *
-   * @default `<context>/Dockerfile`
+   * Exclusive with {@link image}. Never interpolate secrets into inline
+   * content — it is baked into image layers.
    */
-  dockerfile?: string;
-  /**
-   * Base image for the generated Dockerfile used by the Effect-native
-   * ({@link main}) variant — a plain registry reference, e.g.
-   * `"oven/bun:latest"`. Alchemy synthesizes the `FROM` line and appends the
-   * statements that copy the bundled program and set the entrypoint.
-   *
-   * Only valid together with {@link main}.
-   *
-   * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
-   */
-  baseImage?: string;
+  dockerfile?: string | InlineDockerfile;
   /**
    * Initial number of instances to maintain. Matches wrangler, which forces
    * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
@@ -352,8 +360,8 @@ export type ContainerShape = Main<ContainerServices>;
  * By default the entrypoint is bundled for the `bun` runtime. Use `runtime` to
  * switch to Node, `external` to keep native/precompiled packages out of the
  * bundle (auto-installed in the image unless `autoInstallExternals` is `false`),
- * `baseImage` to pick the image the generated Dockerfile starts `FROM`, and
- * `registryId` to override the registry host.
+ * `image` (or an inline `dockerfile`) to pick the environment the generated
+ * Dockerfile starts `FROM`, and `registryId` to override the registry host.
  *
  * @example Node runtime with external native deps
  * ```typescript
@@ -369,22 +377,40 @@ export type ContainerShape = Main<ContainerServices>;
  * because `autoInstallExternals` is `true`, Alchemy runs `npm install sharp`
  * inside the image so the dependency is present at runtime.
  *
- * @example Custom base image and registry
+ * @example Custom environment image and registry
  * ```typescript
  * export class Custom extends Cloudflare.Container<Custom>()("Custom", {
  *   main: import.meta.url,
- *   baseImage: "oven/bun:1",
+ *   image: "oven/bun:1",
  *   autoInstallExternals: false,
  *   registryId: "registry.cloudflare.com",
  * }) {}
  * ```
  *
- * Alchemy generates the Dockerfile — `FROM` your `baseImage`, then the
+ * Alchemy generates the Dockerfile — `FROM` your `image`, then the
  * program-copy and entrypoint steps — so you control the starting image;
- * `autoInstallExternals: false` skips the redundant install step when the base
- * image already ships your `external` packages. If you need extra build steps
- * (e.g. `RUN apt-get install`), build your own Dockerfile with the
- * `context`/`dockerfile` variant instead.
+ * `autoInstallExternals: false` skips the redundant install step when the
+ * environment already ships your `external` packages.
+ *
+ * @example Inline environment Dockerfile (extra build steps)
+ * ```typescript
+ * import * as Dockerfile from "alchemy/Docker/Dockerfile";
+ *
+ * export class Transcoder extends Cloudflare.Container<Transcoder>()(
+ *   "Transcoder",
+ *   {
+ *     main: import.meta.url,
+ *     dockerfile: Dockerfile.inline`
+ *       FROM oven/bun:1
+ *       RUN apt-get update && apt-get install -y ffmpeg
+ *     `,
+ *   },
+ * ) {}
+ * ```
+ *
+ * Inline `dockerfile` content replaces the generated `FROM` line, so the
+ * environment can run extra build steps (system packages, config) while the
+ * bundled program is still layered on top.
  *
  * @section Scaling & Instance Types
  * Control the desired and maximum instance counts with `instances`/`maxInstances`

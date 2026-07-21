@@ -22,7 +22,7 @@ export class DevBox extends Cloudflare.Container<
 export default DevBox.make(
   {
     main: import.meta.url,
-    baseImage: "oven/bun:1.3",
+    image: "oven/bun:1.3",
   },
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

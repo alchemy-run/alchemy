@@ -235,8 +235,8 @@ export interface TaskPropsBase extends PlatformProps, TaskDefinitionConfig {
 }
 
 /**
- * Bundle an inline Effect program (`main`) into a generated image
- * `FROM baseImage`.
+ * Bundle an inline Effect program (`main`) into a generated image whose
+ * environment comes from `image`, `dockerfile`, or the default bun base.
  */
 export interface BundledTaskProps extends TaskPropsBase, BundledImageSource {}
 /**
@@ -366,7 +366,8 @@ export const createContainerRuntimeContext =
  * sources, declared flat on the props:
  *
  * - `main` — bundle an inline Effect program into a generated image
- *   (`baseImage` optionally sets the base image).
+ *   (compose with `image` or an inline `dockerfile` to pick the
+ *   environment; defaults to `oven/bun:1`).
  * - `context` — build your own Dockerfile (`dockerfile` is a path relative
  *   to the cwd, defaulting to `${context}/Dockerfile`).
  * - `image` — run a pre-built registry image, mirrored into ECR.
@@ -407,7 +408,7 @@ export const createContainerRuntimeContext =
  * ```typescript
  * const drainer = yield* Task(
  *   "QueueDrainer",
- *   { main: import.meta.url, baseImage: "oven/bun:1", cpu: 256, memory: 512 },
+ *   { main: import.meta.url, image: "oven/bun:1", cpu: 256, memory: 512 },
  *   Effect.gen(function* () {
  *     const receive = yield* AWS.SQS.ReceiveMessage(queue);
  *     return {
