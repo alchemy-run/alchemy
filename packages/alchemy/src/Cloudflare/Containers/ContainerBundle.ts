@@ -16,7 +16,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
-import type { ContainerApplicationProps } from "./ContainerApplication.ts";
+import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
 
 /**
  * Fold the runtime-context `env` map (populated by `Binding.Service`s and
@@ -43,7 +43,7 @@ import type { ContainerApplicationProps } from "./ContainerApplication.ts";
  * Explicit `props.environmentVariables` win on a name collision.
  */
 export const makeContainerEnv = (
-  props: ContainerApplicationProps,
+  props: AnyContainerApplicationProps,
   accountId: string,
 ) => {
   const env: Record<string, string | Redacted.Redacted<string>> = {};
@@ -95,7 +95,7 @@ export const createContainerApplicationName = (
  */
 export const validateContainerImageProps = (
   props: Pick<
-    ContainerApplicationProps,
+    AnyContainerApplicationProps,
     "main" | "image" | "dockerfile" | "context"
   >,
 ): void => {
@@ -146,7 +146,7 @@ export const validateContainerImageProps = (
  * - neither → `undefined` (callers fall back to the runtime default base).
  */
 export const containerEnvPreamble = (
-  props: Pick<ContainerApplicationProps, "image" | "dockerfile">,
+  props: Pick<AnyContainerApplicationProps, "image" | "dockerfile">,
 ): string | undefined => {
   const df = props.dockerfile;
   if (df !== undefined && isInlineDockerfile(df)) {
@@ -436,7 +436,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
  */
 export const prepareContainerBuildContext = Effect.fn(function* (
   id: string,
-  news: ContainerApplicationProps,
+  news: AnyContainerApplicationProps,
 ) {
   const { dotAlchemy } = yield* AlchemyContext;
   const docker = yield* Docker;

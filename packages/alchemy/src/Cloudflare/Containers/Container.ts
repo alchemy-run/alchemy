@@ -84,75 +84,17 @@ export class ContainerCrashedError extends Data.TaggedError(
 
 export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
 
-/**
- * Bundle an Effect-native program into a generated image. Alchemy bundles
- * {@link main} and bakes it in as the container's entrypoint. The
- * environment the program runs in comes from {@link image} or an inline
- * {@link dockerfile} (exclusive with each other), defaulting to the
- * runtime's base image.
- */
-export interface EffectfulContainerProps extends Omit<
-  ContainerApplicationProps,
-  "dockerfile" | "image" | "context"
-> {
-  /** Entrypoint file for the Effect program, typically `import.meta.url`. */
-  main: string;
-  /**
-   * Environment image for the generated Dockerfile — a plain registry
-   * reference, e.g. `"oven/bun:latest"`. Alchemy synthesizes the `FROM` line
-   * and appends the statements that copy the bundled program and set the
-   * entrypoint. Exclusive with {@link dockerfile}.
-   *
-   * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
-   */
-  image?: string;
-  /**
-   * Inline environment Dockerfile content (typically `Dockerfile.inline`).
-   * Replaces the generated `FROM` line — carry your own `FROM` plus any
-   * extra build steps (system packages, config); the bundled program is
-   * layered on top. Exclusive with {@link image}.
-   */
-  dockerfile?: InlineDockerfile;
-}
-/**
- * Build the container image from your own Dockerfile — no Effect program is
- * bundled. The image is shipped as-is.
- */
-export interface ExternalContainerProps extends Omit<
-  ContainerApplicationProps,
-  "main" | "image" | "context" | "dockerfile"
-> {
-  /**
-   * The build context directory containing the Dockerfile and any files it
-   * copies. Only valid with a `dockerfile` PATH (not inline content).
-   *
-   * @default `./`
-   */
-  context?: string;
-  /**
-   * The Dockerfile to build. A string is a **path** resolved relative to
-   * {@link context} (default `<context>/Dockerfile`); an
-   * {@link InlineDockerfile} (typically `Dockerfile.inline`) is the whole
-   * Dockerfile's content, built in an empty generated context (exclusive
-   * with {@link context}).
-   */
-  dockerfile?: string | InlineDockerfile;
-}
-/**
- * Deploy a pre-built remote image — Alchemy pulls it and re-pushes it to
- * Cloudflare's managed registry without building anything.
- */
-export interface RemoteContainerProps extends Omit<
-  ContainerApplicationProps,
-  "main" | "context" | "dockerfile" | "image"
-> {
-  /**
-   * The pre-built image to pull and re-push.
-   *
-   * E.g. `ghcr.io/alpine/alpine:latest`
-   */
-  image: string;
-}
+import type {
+  EffectfulContainerProps,
+  ExternalContainerProps,
+  RemoteContainerProps,
+} from "./ContainerApplication.ts";
+
+export type {
+  EffectfulContainerProps,
+  ExternalContainerProps,
+  RemoteContainerProps,
+};
 
 export type Container<Id extends string = string> = Named<Id> & {
   get running(): Effect.Effect<boolean, never, RuntimeContext>;

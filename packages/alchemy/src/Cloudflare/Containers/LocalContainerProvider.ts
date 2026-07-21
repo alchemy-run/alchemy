@@ -11,8 +11,8 @@ import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
 import type {
+  AnyContainerApplicationProps,
   ContainerApplication,
-  ContainerApplicationProps,
   DevContainerImage,
 } from "./ContainerApplication.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
@@ -58,7 +58,7 @@ export const LocalContainerProvider = () =>
       // `Output`s there and get skipped. Caching env here would freeze that
       // incomplete env and start the container without its bindings;
       // `makeAttributes` attaches the freshly-computed env instead.
-      const prepareImage = (id: string, news: ContainerApplicationProps) =>
+      const prepareImage = (id: string, news: AnyContainerApplicationProps) =>
         Effect.gen(function* () {
           validateContainerImageProps(news);
           // Variant 1 — Effect-native program. Bundle `main` and write it
@@ -139,7 +139,7 @@ export const LocalContainerProvider = () =>
         }).pipe(Artifacts.cached(`container-image:${id}`));
 
       const placeholderConfiguration = (
-        props: ContainerApplicationProps,
+        props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
       ) =>
         normalizeNulls({
@@ -170,7 +170,7 @@ export const LocalContainerProvider = () =>
         output,
       }: {
         id: string;
-        news: ContainerApplicationProps;
+        news: AnyContainerApplicationProps;
         output: ContainerApplication["Attributes"] | undefined;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;

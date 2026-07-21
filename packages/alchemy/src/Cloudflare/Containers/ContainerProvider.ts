@@ -18,8 +18,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type {
+  AnyContainerApplicationProps,
   ContainerApplication,
-  ContainerApplicationProps,
 } from "./ContainerApplication.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
@@ -109,7 +109,7 @@ export const LiveContainerProvider = () =>
         );
 
       const desiredConfiguration = (
-        props: ContainerApplicationProps,
+        props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
         imageRef: string,
       ) =>
@@ -160,7 +160,7 @@ export const LiveContainerProvider = () =>
       // A maxInstances default of 1 (the previous value) silently serialised
       // every Durable Object instance through a single container slot, which is
       // the dominant cause of "containers are slow under load".
-      const scalingDefaults = (props: ContainerApplicationProps) => ({
+      const scalingDefaults = (props: AnyContainerApplicationProps) => ({
         instances: props.instances ?? 0,
         maxInstances: props.maxInstances ?? 20,
         schedulingPolicy: props.schedulingPolicy ?? "default",
@@ -169,7 +169,7 @@ export const LiveContainerProvider = () =>
 
       const computeImage = Effect.fn(function* (
         id: string,
-        props: ContainerApplicationProps,
+        props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -303,7 +303,7 @@ export const LiveContainerProvider = () =>
 
       const buildAndPushImage = Effect.fn(function* (
         id: string,
-        props: ContainerApplicationProps,
+        props: AnyContainerApplicationProps,
         build: ImageBuild,
         imageRef: string,
         session?: { note: (message: string) => Effect.Effect<void> },
@@ -446,7 +446,7 @@ export const LiveContainerProvider = () =>
         session,
       }: {
         id: string;
-        news: ContainerApplicationProps;
+        news: AnyContainerApplicationProps;
         name: string;
         configuration: ContainerApplication.Configuration;
         durableObjects:
@@ -586,7 +586,7 @@ export const LiveContainerProvider = () =>
         session,
       }: {
         id: string;
-        news: ContainerApplicationProps;
+        news: AnyContainerApplicationProps;
         existing: ContainerApplication["Attributes"];
         // The DO attachment to (re)create with if the "existing" application
         // turns out to be gone. Threaded through so the update→create fallback
