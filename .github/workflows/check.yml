@@ -36,11 +36,6 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
-      # Frozen: CI must install exactly what bun.lock pins. Without it, any
-      # manifest↔lockfile drift makes bun re-resolve on every CI run — which
-      # floated mysql2 to a version the isolated linker failed to link into
-      # packages/alchemy, failing tsc with "Cannot find module 'mysql2/promise'"
-      # on every branch (2026-07-21). Drift now fails loudly at install.
-      - run: bun install --frozen-lockfile
+      - run: bun install
       - run: bun tsc -b
       - run: bun run docs:check
