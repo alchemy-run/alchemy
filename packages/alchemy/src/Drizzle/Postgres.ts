@@ -19,7 +19,7 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * yielded as an Effect. Callers don't need a separate `yield* conn` step:
  *
  * ```typescript
- * const db = yield* Drizzle.postgres(hd.connectionString);
+ * const db = yield* Drizzle.Postgres(hd.connectionString);
  *
  * fetch: Effect.gen(function* () {
  *   const rows = yield* db.select().from(users);
@@ -45,7 +45,7 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * @binding
  */
 
-export const postgres = <
+export const Postgres = <
   TRelations extends AnyRelations = EmptyRelations,
   E = never,
   R = never,

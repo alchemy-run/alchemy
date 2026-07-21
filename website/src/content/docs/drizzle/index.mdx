@@ -56,7 +56,7 @@ never wipe them.
 
 ## The runtime clients
 
-`Drizzle.postgres` turns a connection string into a drizzle-orm
+`Drizzle.Postgres` turns a connection string into a drizzle-orm
 client whose queries are Effects — yield them directly inside a
 Worker:
 
@@ -66,7 +66,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, {
+    const db = yield* Drizzle.Postgres(conn.connectionString, {
       relations,
     });
 
@@ -84,7 +84,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-`Drizzle.d1` is the same shape on Cloudflare D1 — it takes the
+`Drizzle.D1` is the same shape on Cloudflare D1 — it takes the
 `Cloudflare.D1.QueryDatabase` client instead of a connection string
 and drives drizzle-orm's `effect-d1` driver through
 `@effect/sql-d1`:
@@ -95,7 +95,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
-    const db = yield* Drizzle.d1(d1, { relations });
+    const db = yield* Drizzle.D1(d1, { relations });
 
     return {
       fetch: Effect.gen(function* () {
@@ -137,5 +137,5 @@ built on the same schema resource, see
 ## Reference
 
 [Schema](/providers/drizzle/schema) ·
-[postgres](/providers/drizzle/postgres) ·
-[d1](/providers/drizzle/d1)
+[Postgres](/providers/drizzle/postgres) ·
+[D1](/providers/drizzle/d1)

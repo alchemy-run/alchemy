@@ -455,7 +455,7 @@ finishes draining.
 
 As everywhere on workerd, there is no isolate-teardown hook: cleanup
 belongs in methods (call scope), not in the constructor or init.
-Per-call resources like `Drizzle.postgres` pools open lazily inside
+Per-call resources like `Drizzle.Postgres` pools open lazily inside
 the method and close with its scope. See
 [Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
 for the model across all runtimes.

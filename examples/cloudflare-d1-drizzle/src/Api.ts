@@ -17,7 +17,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const d1 = yield* Cloudflare.D1.QueryDatabase(database);
 
     // drizzle-orm's `effect-d1` driver over the native D1 binding.
-    const db = yield* Drizzle.d1(d1, { relations });
+    const db = yield* Drizzle.D1(d1, { relations });
 
     return {
       fetch: Effect.gen(function* () {

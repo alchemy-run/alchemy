@@ -22,7 +22,7 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  *
  * ```typescript
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
- * const db = yield* Drizzle.d1(d1, { relations });
+ * const db = yield* Drizzle.D1(d1, { relations });
  *
  * fetch: Effect.gen(function* () {
  *   const rows = yield* db.select().from(users);
@@ -46,7 +46,7 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  *
  * @binding
  */
-export const d1 = <
+export const D1 = <
   TRelations extends AnyRelations = EmptyRelations,
   E = never,
   R = never,

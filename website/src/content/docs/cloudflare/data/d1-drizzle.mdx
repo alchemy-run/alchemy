@@ -141,10 +141,10 @@ already-applied migrations are skipped on subsequent deploys —
 mechanics, and [Migrations as resources](/drizzle/migrations) the
 deploy-graph pattern.
 
-## Query from the Worker with `Drizzle.d1`
+## Query from the Worker with `Drizzle.D1`
 
 Bind the database with `Cloudflare.D1.QueryDatabase`, hand the
-client to `Drizzle.d1`, and every query is an Effect you `yield*`
+client to `Drizzle.D1`, and every query is an Effect you `yield*`
 directly:
 
 ```typescript
@@ -162,7 +162,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   Effect.gen(function* () {
     const database = yield* Database;
     const d1 = yield* Cloudflare.D1.QueryDatabase(database);
-    const db = yield* Drizzle.d1(d1, { relations });
+    const db = yield* Drizzle.D1(d1, { relations });
 
     return {
       fetch: Effect.gen(function* () {
@@ -174,7 +174,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-Under the hood `Drizzle.d1` builds an `@effect/sql-d1` `D1Client`
+Under the hood `Drizzle.D1` builds an `@effect/sql-d1` `D1Client`
 over the native binding and drives `drizzle-orm/effect-d1` with it.
 The client is created lazily on the first query and memoized per
 execution — a `fetch`/`queue`/`scheduled` event, a Durable Object
@@ -183,7 +183,7 @@ settles. Plan- and deploy-time evaluation never touches D1.
 
 ## Relational queries
 
-Because `relations` was passed to `Drizzle.d1`, the typed
+Because `relations` was passed to `Drizzle.D1`, the typed
 `db.query.*` namespace is available:
 
 ```typescript
@@ -211,7 +211,7 @@ applies the new file; an unchanged schema is a no-op.
 ## Prefer tagged-template SQL?
 
 Drizzle is one consumer of the binding, not a requirement. The same
-`QueryDatabase` client also powers `Cloudflare.D1.sqlClient` — the
+`QueryDatabase` client also powers `Cloudflare.D1.SqlClient` — the
 raw `@effect/sql-d1` client with tagged-template SQL and Effect's
 generic `SqlClient` interface, no ORM involved. That path is
 covered in
@@ -229,7 +229,7 @@ statements in one round-trip) where you need atomicity.
 ## Local dev
 
 `alchemy dev` runs the same Worker against a local D1 database via
-miniflare — `Drizzle.d1` and `sqlClient` work unchanged because they
+miniflare — `Drizzle.D1` and `SqlClient` work unchanged because they
 resolve whatever `D1Database` binding the runtime provides.
 
 ## Where next
@@ -247,5 +247,5 @@ resolve whatever `D1Database` binding the runtime provides.
 Reference:
 
 - [Schema](/providers/drizzle/schema) ·
-  [d1](/providers/drizzle/d1) ·
-  [sqlClient](/providers/cloudflare/d1/sqlclient)
+  [D1](/providers/drizzle/d1) ·
+  [SqlClient](/providers/cloudflare/d1/sqlclient)

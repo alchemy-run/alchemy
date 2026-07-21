@@ -9,9 +9,9 @@ import { Posts, relations, Users } from "./drizzle-schema.ts";
 /**
  * Effect-native Worker exercising BOTH D1 client layers over one database:
  *
- * - `Drizzle.d1(d1, { relations })` — the drizzle-orm `effect-d1` driver
+ * - `Drizzle.D1(d1, { relations })` — the drizzle-orm `effect-d1` driver
  *   (typed query builder + relational queries);
- * - `Cloudflare.D1.sqlClient(d1)` — the raw `@effect/sql-d1` client
+ * - `Cloudflare.D1.SqlClient(d1)` — the raw `@effect/sql-d1` client
  *   (tagged-template SQL).
  */
 export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>()(
@@ -22,8 +22,8 @@ export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>(
   Effect.gen(function* () {
     const database = yield* DrizzleDb;
     const d1 = yield* Cloudflare.D1.QueryDatabase(database);
-    const db = yield* Drizzle.d1(d1, { relations });
-    const sql = yield* Cloudflare.D1.sqlClient(d1);
+    const db = yield* Drizzle.D1(d1, { relations });
+    const sql = yield* Cloudflare.D1.SqlClient(d1);
 
     return {
       fetch: Effect.gen(function* () {

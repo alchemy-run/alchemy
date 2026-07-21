@@ -23,7 +23,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
-    const sql = yield* Cloudflare.D1.sqlClient(d1);
+    const sql = yield* Cloudflare.D1.SqlClient(d1);
 
     return {
       fetch: Effect.gen(function* () {

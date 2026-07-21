@@ -34,7 +34,7 @@ const caches = new WeakMap<
  *
  * The accessor's `Scope` requirement is erased from its type — every runtime
  * bridge provides a fresh execution `Scope`, exactly like
- * `Drizzle.postgres` before this primitive was extracted. Evaluating the
+ * `Drizzle.Postgres` before this primitive was extracted. Evaluating the
  * accessor outside an execution scope is a defect.
  */
 export const makeExecutionMemo = <A, E, R>(

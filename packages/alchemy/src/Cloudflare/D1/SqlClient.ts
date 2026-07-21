@@ -3,7 +3,7 @@ import * as D1Client from "@effect/sql-d1/D1Client";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as Sql from "effect/unstable/sql/SqlClient";
 import { makeExecutionMemo } from "../../Runtime/ExecutionMemo.ts";
 import { proxyChain } from "../../Util/proxy-chain.ts";
 
@@ -32,7 +32,7 @@ export type SqlClientConfig = Omit<D1Client.D1ClientConfig, "db">;
  *
  * ```typescript
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
- * const sql = yield* Cloudflare.D1.sqlClient(d1);
+ * const sql = yield* Cloudflare.D1.SqlClient(d1);
  *
  * fetch: Effect.gen(function* () {
  *   const users = yield* sql`SELECT * FROM users`;
@@ -48,7 +48,7 @@ export type SqlClientConfig = Omit<D1Client.D1ClientConfig, "db">;
  *
  * @binding
  */
-export const sqlClient = <E = never, R = never>(
+export const SqlClient = <E = never, R = never>(
   database: D1DatabaseSource<E, R>,
   config?: SqlClientConfig,
 ) =>
@@ -72,26 +72,26 @@ export const sqlClient = <E = never, R = never>(
  * ```typescript
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
  * const app = yield* makeApp.pipe(
- *   Effect.provide(Cloudflare.D1.sqlClientLayer(d1)),
+ *   Effect.provide(Cloudflare.D1.SqlClientLayer(d1)),
  * );
  * ```
  *
  * The layer itself builds synchronously at Worker init; the underlying
- * `D1Client` is created lazily per execution (see {@link sqlClient}).
+ * `D1Client` is created lazily per execution (see {@link SqlClient}).
  */
-export const sqlClientLayer = <E = never, R = never>(
+export const SqlClientLayer = <E = never, R = never>(
   database: D1DatabaseSource<E, R>,
   config?: SqlClientConfig,
 ) =>
   // Derive SqlClient from the single D1Client build so both tags share one
   // per-execution client (and one prepared-statement cache).
   Layer.effect(
-    SqlClient.SqlClient,
+    Sql.SqlClient,
     Effect.gen(function* () {
       return yield* D1Client.D1Client;
     }),
   ).pipe(
     Layer.provideMerge(
-      Layer.effect(D1Client.D1Client, sqlClient(database, config)),
+      Layer.effect(D1Client.D1Client, SqlClient(database, config)),
     ),
   );
