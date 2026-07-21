@@ -1,6 +1,6 @@
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
-import { OrdersTable } from "./infra.ts";
+import { OrdersCluster, OrdersTable } from "./infra.ts";
 
 const seedOrders = [
   { id: "1001", customer: "ada", total: 4250 },
@@ -20,23 +20,31 @@ const seedOrders = [
  *
  * Nothing runs this task on deploy — it is the target of the
  * `AWS.ECS.RunTask` binding the `Api` service exposes at `POST /api/seed`.
+ * Declaring `cluster` records the task's home cluster, so the binding is
+ * just `RunTask(SeedTask)` — no need to repeat the cluster at the call
+ * site.
  */
 export default AWS.ECS.Task(
   "SeedTask",
-  {
-    main: import.meta.url,
-    // Docker Hub's `oven/bun`; the public.ecr.aws default mirror
-    // rate-limits anonymous pulls during local builds.
-    baseImage: "oven/bun:1",
-    cpu: 256,
-    memory: 512,
-    // Build/run on ARM64 so an image built on an Apple Silicon host matches
-    // the Fargate runtime architecture (Graviton).
-    runtimePlatform: {
-      cpuArchitecture: "ARM64",
-      operatingSystemFamily: "LINUX",
-    },
-  },
+  // Props are an Effect so they can reference the shared cluster.
+  Effect.gen(function* () {
+    const cluster = yield* OrdersCluster;
+    return {
+      cluster,
+      main: import.meta.url,
+      // Docker Hub's `oven/bun`; the public.ecr.aws default mirror
+      // rate-limits anonymous pulls during local builds.
+      baseImage: "oven/bun:1",
+      cpu: 256,
+      memory: 512,
+      // Build/run on ARM64 so an image built on an Apple Silicon host matches
+      // the Fargate runtime architecture (Graviton).
+      runtimePlatform: {
+        cpuArchitecture: "ARM64" as const,
+        operatingSystemFamily: "LINUX" as const,
+      },
+    };
+  }),
   Effect.gen(function* () {
     const table = yield* OrdersTable;
     const putItem = yield* AWS.DynamoDB.PutItem(table);

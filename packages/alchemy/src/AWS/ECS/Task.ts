@@ -59,6 +59,21 @@ export class TaskEnvironment extends Context.Service<
 >()("AWS.ECS.TaskEnvironment") {}
 
 /**
+ * Derive the cluster ARN from either form of the `cluster` prop (a bare
+ * ARN or a `{ clusterArn }`-shaped object, e.g. a resolved `Cluster`'s
+ * attributes). Tolerates `undefined` — the prop is optional.
+ */
+export const taskClusterArnOf = (
+  cluster: TaskPropsBase["cluster"] | undefined,
+): ClusterArn | undefined =>
+  typeof cluster === "string"
+    ? cluster
+    : typeof (cluster as { clusterArn?: unknown } | undefined)?.clusterArn ===
+        "string"
+      ? (cluster as { clusterArn: ClusterArn }).clusterArn
+      : undefined;
+
+/**
  * The binding contract shared by the ECS container platforms (`Task` and the
  * image-owning `Service`): env vars and IAM policy statements land on the
  * task role, plus task-level volumes/mount points requested through the
@@ -202,9 +217,11 @@ export interface TaskDefinitionConfig {
 
 export interface TaskPropsBase extends PlatformProps, TaskDefinitionConfig {
   /**
-   * Default ECS cluster the task is intended to run on. Accepted for DX
-   * parity with `RunTask`/`Schedule` — the task definition itself is not
-   * cluster-scoped.
+   * Default ECS cluster the task is intended to run on — the task
+   * definition itself is not cluster-scoped, but declaring the cluster here
+   * records it on the task's `clusterArn` attribute so `RunTask`/`StartTask`
+   * can be bound with just the task (`RunTask(task)`) instead of repeating
+   * the cluster at every call site.
    */
   cluster?: ClusterArn | { clusterArn: ClusterArn };
   /**
@@ -246,6 +263,12 @@ export interface Task extends Resource<
   {
     /** The ARN of the registered task definition revision. */
     taskDefinitionArn: string;
+    /**
+     * The ARN of the cluster the task declared via its `cluster` prop, if
+     * any. Used by `RunTask`/`StartTask` to resolve the cluster when the
+     * binding is given only the task.
+     */
+    clusterArn?: ClusterArn;
     /** The task definition family name. */
     taskFamily: string;
     /** The name of the main container in the task definition. */
@@ -1150,6 +1173,9 @@ export const TaskProvider = () =>
           yield* session.note(taskDefinition.taskDefinitionArn!);
           return {
             taskDefinitionArn: taskDefinition.taskDefinitionArn!,
+            // Record the declared home cluster so `RunTask(task)` /
+            // `StartTask(task)` can resolve it without an explicit cluster.
+            clusterArn: taskClusterArnOf(news.cluster),
             taskFamily: family,
             containerName:
               taskDefinition.containerDefinitions?.[0]?.name ?? family,

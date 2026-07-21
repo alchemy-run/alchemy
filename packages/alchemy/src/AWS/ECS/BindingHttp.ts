@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import { isResource } from "../../Resource.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Service } from "./Service.ts";
@@ -121,16 +122,22 @@ export const makeEcsClusterHttpBinding = <
 
 /**
  * Build the impl Effect for a task-launch operation (`RunTask`/`StartTask`):
- * the runtime callable injects the bound {@link Cluster}'s ARN as `cluster`
- * and the bound {@link Task}'s definition ARN as `taskDefinition`; the
- * deploy-time half grants `actions` on the task definition plus
- * `iam:PassRole` on the task and execution roles.
+ * the runtime callable injects the cluster ARN as `cluster` and the bound
+ * {@link Task}'s definition ARN as `taskDefinition`; the deploy-time half
+ * grants `actions` on the task definition plus `iam:PassRole` on the task
+ * and execution roles.
+ *
+ * The cluster comes from the explicit {@link Cluster} argument when given,
+ * otherwise from the task's declared `cluster` prop (recorded on its
+ * `clusterArn` attribute). A locally-declared task with no `cluster` prop
+ * fails the single-argument form at bind time with `missingClusterError`.
  */
 export const makeEcsTaskLaunchHttpBinding = <
   I extends { cluster?: string; taskDefinition: string },
   A,
   E,
   R,
+  EMissing,
 >(options: {
   /** Fully-qualified binding tag, e.g. `AWS.ECS.RunTask`. */
   tag: string;
@@ -138,36 +145,64 @@ export const makeEcsTaskLaunchHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the task definition ARN. */
   actions: readonly string[];
+  /**
+   * Typed bind-time error for the single-argument form when the bound
+   * {@link Task} does not declare a `cluster` in its props.
+   */
+  missingClusterError: (task: Task) => EMissing;
 }) =>
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* (cluster: Cluster, task: Task) {
-      const ClusterArn = yield* cluster.clusterArn;
+    return Effect.fn(function* (
+      ...args: [cluster: Cluster, task: Task] | [task: Task]
+    ) {
+      const [cluster, task] =
+        args.length === 2 ? args : ([undefined, args[0]] as const);
+      // The single-argument form resolves the cluster from the task's
+      // declared `cluster` prop. For a locally-declared task the absence of
+      // that prop is knowable at bind time — fail with the binding's typed
+      // error instead of letting an undefined cluster fall through to the
+      // runtime call. Refs (`Task.ref(...)`) don't expose props; their
+      // `clusterArn` attribute resolves from stack state instead.
+      if (
+        cluster === undefined &&
+        isResource(task) &&
+        task.Props?.cluster === undefined
+      ) {
+        return yield* Effect.fail(options.missingClusterError(task));
+      }
+      const ClusterArn = yield* cluster !== undefined
+        ? cluster.clusterArn
+        : task.clusterArn;
       const TaskDefinitionArn = yield* task.taskDefinitionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host) || isTask(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}, ${task}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [task.taskDefinitionArn],
-                },
-                {
-                  Effect: "Allow",
-                  Action: passRoleActions,
-                  Resource: [task.taskRoleArn, task.executionRoleArn],
-                },
-              ],
-            },
-          );
+          const bindTaskLaunch =
+            cluster !== undefined
+              ? host.bind`Allow(${host}, ${options.tag}(${cluster}, ${task}))`
+              : host.bind`Allow(${host}, ${options.tag}(${task}))`;
+          yield* bindTaskLaunch({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [task.taskDefinitionArn],
+              },
+              {
+                Effect: "Allow",
+                Action: passRoleActions,
+                Resource: [task.taskRoleArn, task.executionRoleArn],
+              },
+            ],
+          });
         }
       }
       return Effect.fn(
-        `${options.tag}(${cluster.LogicalId}, ${task.LogicalId})`,
+        cluster !== undefined
+          ? `${options.tag}(${cluster.LogicalId}, ${task.LogicalId})`
+          : `${options.tag}(${task.LogicalId})`,
       )(function* (request: Omit<I, "cluster" | "taskDefinition">) {
         return yield* op({
           ...request,
