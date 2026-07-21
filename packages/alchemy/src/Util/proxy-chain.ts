@@ -27,10 +27,39 @@ const replay = (root: unknown, ops: ReadonlyArray<Op>): unknown => {
 };
 
 /**
- * Wrap a cached `Effect<T>` in a chainable Proxy so callers can use the
- * returned value as if it were `T` itself — every property read and call
- * records a step, and the chain is replayed against the resolved value
- * when it's finally yielded as an Effect.
+ * The type of a {@link proxyChain} handle.
+ *
+ * Yielding a chain runs the cached effect first, so the cached effect's
+ * error and requirement channels are part of every leaf the chain can
+ * produce. When both channels are `never` the handle is exactly `T`;
+ * otherwise every `Effect` reachable through the chain — property reads
+ * and call returns, at any depth — is widened with the cached `E` and `R`
+ * so nothing is erased from the types.
+ */
+export type ProxyChain<T, E = never, R = never> = [E | R] extends [never]
+  ? T
+  : Widen<T, E, R>;
+
+type Widen<T, E, R> =
+  T extends Effect.Effect<infer A, infer XE, infer XR>
+    ? Effect.Effect<A, XE | E, XR | R> & {
+        [K in keyof T as K extends keyof Effect.Effect<never>
+          ? never
+          : K]: Widen<T[K], E, R>;
+      }
+    : T extends (...args: infer Args) => infer Ret
+      ? ((...args: Args) => Widen<Ret, E, R>) & {
+          [K in keyof T]: Widen<T[K], E, R>;
+        }
+      : T extends object
+        ? { [K in keyof T]: Widen<T[K], E, R> }
+        : T;
+
+/**
+ * Wrap a cached `Effect<T, E, R>` in a chainable Proxy so callers can use
+ * the returned value as if it were `T` itself — every property read and
+ * call records a step, and the chain is replayed against the resolved
+ * value when it's finally yielded as an Effect.
  *
  * Compare:
  *
@@ -52,9 +81,32 @@ const replay = (root: unknown, ops: ReadonlyArray<Op>): unknown => {
  * The chain ends when the proxy is yielded as an Effect — the resolved
  * value at that point must be a `Yieldable` (an Effect, drizzle query
  * builder, etc). Anything before that is recorded as ops.
+ *
+ * The cached effect's error and requirement channels survive: because a
+ * yielded chain evaluates the cached effect before replaying, its `E` and
+ * `R` are threaded onto every `Effect` the chain can produce (see
+ * {@link ProxyChain}). For example:
+ *
+ * ```typescript
+ * // PgClient.make: Effect<PgClient, SqlError, Scope | Reactivity>
+ * const sql = proxyChain(PgClient.make({ url }));
+ *
+ * fetch: Effect.gen(function* () {
+ *   // Effect<readonly Row[], SqlError, Scope | Reactivity> — the
+ *   // deferred connect's failure and requirements are not erased.
+ *   const rows = yield* sql`select * from users`;
+ * });
+ * ```
+ *
+ * Widening rebuilds method signatures structurally, which collapses
+ * per-call generic inference on the widened surface. When full inference
+ * fidelity matters (e.g. drizzle's `select()`), discharge the channels
+ * first — hand `proxyChain` an `Effect<T>` — and the handle is exactly
+ * `T`.
  */
-export const proxyChain = <T>(cached: Effect.Effect<T, any, any>): T =>
-  chain(cached) as T;
+export const proxyChain = <T, E = never, R = never>(
+  cached: Effect.Effect<T, E, R>,
+): ProxyChain<T, E, R> => chain(cached) as ProxyChain<T, E, R>;
 
 const chain = (
   cached: Effect.Effect<unknown, any, any>,

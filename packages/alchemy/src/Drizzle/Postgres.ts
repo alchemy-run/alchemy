@@ -64,6 +64,14 @@ export const postgres = <
       }),
     ),
     (db) =>
+      // The cast to a channel-free Effect is deliberate: it keeps the
+      // handle's type exactly `EffectPgDatabase` (proxyChain's identity
+      // fast path), preserving drizzle's generic `select()`/`from()`
+      // inference. The erased channels are accounted for: `Scope` is
+      // provided by every runtime bridge's per-event scope (which
+      // `makeExecutionMemo` targets), and a failed pool build surfaces
+      // as the same `SqlError` the drizzle query effects already
+      // declare.
       proxyChain<
         EffectPgDatabase<TRelations> & {
           $client: PgClient.PgClient;

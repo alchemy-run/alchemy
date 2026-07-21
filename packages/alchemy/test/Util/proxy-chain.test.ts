@@ -1,5 +1,6 @@
 import { proxyChain } from "@/Util/proxy-chain.ts";
 import { describe, expect, it } from "alchemy-test";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
 const TIMEOUT = 5_000;
@@ -9,8 +10,8 @@ const TIMEOUT = 5_000;
  * read `this` — so replaying them with the wrong receiver would throw,
  * which is how we assert `this`-binding is preserved through the proxy.
  */
-const makeDb = () => ({
-  greeting: "hi",
+const makeDb = (greeting = "hi") => ({
+  greeting,
   echo(n: number) {
     return Effect.succeed(`${this.greeting}:${n}`);
   },
@@ -161,9 +162,31 @@ describe("proxyChain", () => {
 
   it.effect("propagates failures from the underlying (cached) effect", () =>
     Effect.gen(function* () {
-      const db = proxyChain<Db>(Effect.fail("connect failed"));
+      const db = proxyChain<Db, string>(Effect.fail("connect failed"));
       const error = yield* Effect.flip(db.select().from("users"));
       expect(error).toBe("connect failed");
+    }),
+  );
+
+  it.effect("threads the cached effect's requirements through the chain", () =>
+    Effect.gen(function* () {
+      class Prefix extends Context.Service<
+        Prefix,
+        { readonly value: string }
+      >()("test/proxy-chain/Prefix") {}
+      // Effect<Db, never, Prefix> — the requirement must survive onto the
+      // yielded chain instead of being erased.
+      const db = proxyChain(
+        Effect.gen(function* () {
+          const prefix = yield* Prefix;
+          return makeDb(prefix.value);
+        }),
+      );
+      const rows = yield* db
+        .select()
+        .from("users")
+        .pipe(Effect.provideService(Prefix, { value: "hey" }));
+      expect(rows).toEqual(["hey/users"]);
     }),
   );
 }, 5000);
