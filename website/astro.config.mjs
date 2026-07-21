@@ -143,17 +143,28 @@ function copyMarkdownSources() {
 }
 
 /**
- * Internal-link checker. Walks the build output once into a case-sensitive
- * Set of paths and validates every internal `<a href>` / `<img src>`
- * against it. Case-sensitivity matters: `fs.existsSync`-based checkers
- * (e.g. astro-broken-links-checker, which this replaced) resolve
- * `/foo/Bar` to `/foo/bar` on macOS but 404 on Linux CI.
+ * Build-output checks — one pass over every rendered HTML page:
+ *
+ * 1. Case-sensitive internal-link check: validates every internal
+ *    `<a href>` / `<img src>` against a case-sensitive Set of output
+ *    paths. Case-sensitivity matters: `fs.existsSync`-based checkers
+ *    (e.g. astro-broken-links-checker, which this replaced) resolve
+ *    `/foo/Bar` to `/foo/bar` on macOS but 404 on Linux CI.
+ *
+ * 2. Diff-block indent check: in every rendered ```diff code block,
+ *    each line's indentation must be even (the docs use 2-space
+ *    indents everywhere). An odd indent means a `+`/`-` marker line
+ *    was authored in the wrong convention — expressive-code strips
+ *    only the marker character, so markers must be written as an
+ *    EXTRA column followed by the line's full indentation, with
+ *    context lines flush. See git history: three different authoring
+ *    conventions had accumulated and all rendered misaligned.
  *
  * @returns {import("astro").AstroIntegration}
  */
-function caseSensitiveLinkChecker() {
+function buildOutputChecks() {
   return {
-    name: "case-sensitive-link-checker",
+    name: "build-output-checks",
     hooks: {
       "astro:build:done": async ({ dir, logger }) => {
         const distPath = fileURLToPath(dir);
@@ -181,6 +192,8 @@ function caseSensitiveLinkChecker() {
 
         /** @type {Map<string, Set<string>>} */
         const broken = new Map();
+        /** @type {{ file: string, line: string }[]} */
+        const oddIndents = [];
         const htmlFiles = [...paths].filter((p) => p.endsWith(".html"));
 
         /** @param {string} htmlFile */
@@ -209,6 +222,42 @@ function caseSensitiveLinkChecker() {
               broken.get(link)?.add(htmlFile);
             }
           }
+
+          // Diff-block indent check (see integration docstring).
+          if (
+            html.includes("highlight ins") ||
+            html.includes("highlight del")
+          ) {
+            for (const fig of html.matchAll(
+              /<figure class="frame[^"]*">.*?<\/figure>/gs,
+            )) {
+              const block = fig[0];
+              if (
+                !block.includes("highlight ins") &&
+                !block.includes("highlight del")
+              )
+                continue;
+              for (const m of block.matchAll(
+                /<div class="ec-line[^"]*"><div class="code">(.*?)<\/div><\/div>/gs,
+              )) {
+                const text = m[1]
+                  .replace(/<[^>]+>/g, "")
+                  .replace(/&quot;/g, '"')
+                  .replace(/&#39;/g, "'")
+                  .replace(/&lt;/g, "<")
+                  .replace(/&gt;/g, ">")
+                  .replace(/&amp;/g, "&");
+                const trimmed = text.trim();
+                if (!trimmed) continue;
+                // JSDoc continuation lines legitimately indent by one.
+                if (trimmed.startsWith("*")) continue;
+                const indent = text.length - text.trimStart().length;
+                if (indent % 2 === 1) {
+                  oddIndents.push({ file: htmlFile, line: text.slice(0, 60) });
+                }
+              }
+            }
+          }
         }
 
         // Read/scan in bounded parallel batches — serial reads dominate
@@ -229,8 +278,21 @@ function caseSensitiveLinkChecker() {
             `Case-sensitive broken links detected (${broken.size})`,
           );
         }
+        if (oddIndents.length > 0) {
+          let msg =
+            "Misindented diff-block lines detected (write markers as an " +
+            "extra column before the line's full indentation, context " +
+            "lines flush):\n";
+          for (const { file, line } of oddIndents.slice(0, 20)) {
+            msg += `  ${file}: ${JSON.stringify(line)}\n`;
+          }
+          logger.error(msg);
+          throw new Error(
+            `Misindented diff-block lines detected (${oddIndents.length})`,
+          );
+        }
         logger.info(
-          `Case-sensitive link check passed (${htmlFiles.length} pages)`,
+          `Build-output checks passed (${htmlFiles.length} pages: links + diff indents)`,
         );
       },
     },
@@ -245,7 +307,7 @@ export default defineConfig({
     react(),
     pagefindIgnoreNoise(),
     copyMarkdownSources(),
-    caseSensitiveLinkChecker(),
+    buildOutputChecks(),
     sitemap({
       filter: (page) =>
         !page.endsWith(".html") &&
