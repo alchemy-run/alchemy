@@ -11,6 +11,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -855,6 +856,100 @@ describe.concurrent("Cloudflare.Worker", () => {
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // #874 regression: binding a tagged Worker identity (an Effect class) in
+  // another Worker's `env` — the circular-bindings pattern — must converge.
+  // The tag stays in the desired props (`news.env.TARGET` is an Effect) while
+  // `stripUnresolved` removes it from the stored props at commit, so a diff
+  // that compares the two raw shapes plans an update on every deploy, forever.
+  // After a successful deploy, an identical program must plan as a noop —
+  // and a code-only change must STILL plan as an update (the tag must not
+  // knock the diff off its bundle-hash path onto the raw-props fallback,
+  // which can't see file contents).
+  test.provider(
+    "Effect-valued worker tag in env converges to a noop plan",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        class EnvTagTarget extends Cloudflare.Worker<EnvTagTarget, {}>()(
+          "EnvTagTargetWorker",
+        ) {}
+        class EnvTagCaller extends Cloudflare.Worker<EnvTagCaller, {}>()(
+          "EnvTagCallerWorker",
+        ) {}
+
+        // The caller's entry lives in a temp dir so the test can edit its
+        // contents mid-flight without touching the shared checked-in fixture.
+        const callerScript = (marker: string) =>
+          `export default { fetch: async () => new Response(${JSON.stringify(marker)}) };\n`;
+        const tempDir = yield* fs.makeTempDirectory({
+          prefix: "alchemy-env-tag-worker",
+        });
+        const callerMain = path.join(tempDir, "worker.ts");
+        yield* fs.writeFileString(callerMain, callerScript("v1"));
+
+        const layers = Layer.mergeAll(
+          EnvTagTarget.make({ main, isExternal: true }, Effect.succeed({})),
+          EnvTagCaller.make(
+            {
+              main: callerMain,
+              isExternal: true,
+              env: { TARGET: EnvTagTarget },
+            },
+            Effect.succeed({}),
+          ),
+        );
+
+        const program = () =>
+          Effect.gen(function* () {
+            const target = yield* EnvTagTarget;
+            const caller = yield* EnvTagCaller;
+            return { target, caller };
+          }).pipe(Effect.provide(layers));
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployed = yield* stack.deploy(program());
+
+        // The env tag must have landed as a live service binding.
+        const settings = yield* workers.getScriptScriptAndVersionSetting({
+          accountId,
+          scriptName: deployed.caller.workerName,
+        });
+        expect(settings.bindings).toContainEqual(
+          expect.objectContaining({
+            type: "service",
+            name: "TARGET",
+            service: deployed.target.workerName,
+          }),
+        );
+
+        // Identical program → both workers plan as noop.
+        const settledPlan = yield* stack.plan(program());
+        expect(actionOf(settledPlan, "EnvTagTargetWorker")).toBe("noop");
+        expect(actionOf(settledPlan, "EnvTagCallerWorker")).toBe("noop");
+
+        // A code-only change to the caller's entry (identical props — the
+        // bundle hash is the only difference) must still plan as an update.
+        yield* fs.writeFileString(callerMain, callerScript("v2"));
+        const codeChangePlan = yield* stack.plan(program());
+        expect(actionOf(codeChangePlan, "EnvTagTargetWorker")).toBe("noop");
+        expect(actionOf(codeChangePlan, "EnvTagCallerWorker")).toBe("update");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.caller.workerName, accountId);
+        yield* waitForWorkerToBeDeleted(deployed.target.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 360_000 },
   );
