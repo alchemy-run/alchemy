@@ -1,16 +1,22 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+// Both resource cases require the same parent and child shape. Keep their
+// out-of-band read and provider-list assertions in one lifecycle so the
+// regional DeleteRestApi throttle is crossed once rather than twice.
 test.provider.skipIf(!!process.env.FAST)(
-  "create and delete API Gateway resource",
+  "API Gateway resource lifecycle and list",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { api, res } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgResApi", {
@@ -31,37 +37,13 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       expect(remote.pathPart).toEqual("items");
 
-      yield* stack.destroy();
-    }),
-);
-
-test.provider.skipIf(!!process.env.FAST)(
-  "list enumerates the deployed API Gateway resource",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const { res } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const api = yield* AWS.ApiGateway.RestApi("AgResListApi", {
-            endpointConfiguration: { types: ["REGIONAL"] },
-          });
-          const res = yield* AWS.ApiGateway.Resource("AgListPath", {
-            restApi: api,
-            parentId: api.rootResourceId,
-            pathPart: "items",
-          });
-          return { res };
-        }),
-      );
-
       const provider = yield* Provider.findProvider(
         AWS.ApiGateway.GatewayResource,
       );
       const all = yield* provider.list();
-
       expect(all.some((r) => r.resourceId === res.resourceId)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );

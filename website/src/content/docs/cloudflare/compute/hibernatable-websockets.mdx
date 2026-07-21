@@ -107,17 +107,17 @@ return {
 +    socket: Cloudflare.WebSocket,
 +    message: string | ArrayBuffer,
 +  ) {
-+     const attachment = socket.deserializeAttachment<{ id: string }>();
-+     if (!attachment) return;
-+     const text =
-+       typeof message === "string"
-+         ? message
-+         : new TextDecoder().decode(message);
-+     const label = attachment.id.slice(0, 8);
-+     for (const peer of sessions.values()) {
-+       yield* peer.send(`[${label}] ${text}`);
-+     }
-+   }),
++    const attachment = socket.deserializeAttachment<{ id: string }>();
++    if (!attachment) return;
++    const text =
++      typeof message === "string"
++        ? message
++        : new TextDecoder().decode(message);
++    const label = attachment.id.slice(0, 8);
++    for (const peer of sessions.values()) {
++      yield* peer.send(`[${label}] ${text}`);
++    }
++  }),
 };
 ```
 

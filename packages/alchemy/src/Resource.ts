@@ -139,7 +139,19 @@ export interface ResourceLike<
 }
 
 export const isResource = (value: any): value is ResourceLike => {
-  return typeof value === "object" && value !== null && "Type" in value;
+  // Require the full resource identity (Type AND FQN), not just `Type`:
+  // user-authored prop objects legitimately carry a `Type` field (e.g.
+  // Amazon States Language states like `{ Type: "Pass", End: true }` in a
+  // Step Functions definition) and must not be mistaken for resources.
+  // Locally-declared resources always expose both as own keys; refs
+  // (`Resource.ref(...)`) deliberately report neither via `in` so they keep
+  // routing through Output resolution.
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "Type" in value &&
+    "FQN" in value
+  );
 };
 
 /**

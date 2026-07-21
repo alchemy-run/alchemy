@@ -31,11 +31,17 @@ export interface AlarmMuteRule extends Resource<
   "AWS.CloudWatch.AlarmMuteRule",
   AlarmMuteRuleProps,
   {
+    /** Physical name of the mute rule. */
     alarmMuteRuleName: AlarmMuteRuleName;
+    /** ARN of the mute rule. */
     alarmMuteRuleArn: AlarmMuteRuleArn;
+    /** Current status of the mute rule. */
     status: string | undefined;
+    /** The mute type of the rule. */
     muteType: string | undefined;
+    /** The full mute rule description as last read from CloudWatch. */
     alarmMuteRule: cloudwatch.GetAlarmMuteRuleOutput;
+    /** Tags on the mute rule, including the internal Alchemy ownership tags. */
     tags: Record<string, string>;
   },
   never,
@@ -43,7 +49,9 @@ export interface AlarmMuteRule extends Resource<
 > {}
 
 /**
- * A CloudWatch alarm mute rule.
+ * A CloudWatch alarm mute rule — suppresses alarm actions on a recurring
+ * schedule (e.g. maintenance windows) instead of manually disabling and
+ * re-enabling alarm actions.
  * @resource
  * @section Creating Mute Rules
  * @example Scheduled Mute
@@ -56,6 +64,17 @@ export interface AlarmMuteRule extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * @section Reading Mute Rules at Runtime
+ * @example Read the Mute Rule from a Function
+ * ```typescript
+ * // init — bind the rule to the function (see GetAlarmMuteRule)
+ * const getAlarmMuteRule = yield* AWS.CloudWatch.GetAlarmMuteRule(rule);
+ *
+ * // runtime
+ * const result = yield* getAlarmMuteRule();
+ * const schedule = result.Rule?.Schedule;
  * ```
  */
 export const AlarmMuteRule = Resource<AlarmMuteRule>(

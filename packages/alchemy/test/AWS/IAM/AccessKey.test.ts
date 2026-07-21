@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { AccessKey, User } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
@@ -39,6 +40,12 @@ describe("AWS.IAM.AccessKey", () => {
       expect(found?.secretAccessKey).toBeUndefined();
 
       yield* stack.destroy();
+
+      // The user (and with it every access key it owned) is gone.
+      const deletedUser = yield* IAM.getUser({
+        UserName: deployed.user.userName,
+      }).pipe(Effect.option);
+      expect(deletedUser._tag).toBe("None");
     }),
   );
 });

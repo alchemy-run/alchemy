@@ -177,8 +177,8 @@ export const TableProvider = () =>
     diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;
       if (
-        news.tableBucket !== olds.tableBucket ||
-        news.namespace !== olds.namespace
+        news.tableBucket !== olds?.tableBucket ||
+        news.namespace !== olds?.namespace
       ) {
         return { action: "replace" } as const;
       }
@@ -187,11 +187,11 @@ export const TableProvider = () =>
       if (oldName !== newName) {
         return { action: "replace" } as const;
       }
-      if ((news.format ?? "ICEBERG") !== (olds.format ?? "ICEBERG")) {
+      if ((news.format ?? "ICEBERG") !== (olds?.format ?? "ICEBERG")) {
         return { action: "replace" } as const;
       }
       // Schema is fixed at create time; schema evolution is out of band.
-      const oldSchema = JSON.stringify(olds.schema ?? null);
+      const oldSchema = JSON.stringify(olds?.schema ?? null);
       const newSchema = JSON.stringify(news.schema ?? null);
       if (oldSchema !== newSchema) {
         return { action: "replace" } as const;
@@ -255,12 +255,14 @@ export const TableProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // Deliberately NO versionToken: destroy is unconditional. Runtime
+      // commits (UpdateTableMetadataLocation) rotate the token, so the
+      // persisted one may be stale and would fail with ConflictException.
       yield* s3tables
         .deleteTable({
           tableBucketARN: output.tableBucketArn,
           namespace: output.namespace,
           name: output.name,
-          versionToken: output.versionToken,
         })
         .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
     }),

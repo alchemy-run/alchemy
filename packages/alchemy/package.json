@@ -193,12 +193,6 @@
       "worker": "./src/Endpoint/index.ts",
       "import": "./lib/Endpoint/index.js"
     },
-    "./Kubernetes": {
-      "types": "./lib/Kubernetes/index.d.ts",
-      "bun": "./src/Kubernetes/index.ts",
-      "worker": "./src/Kubernetes/index.ts",
-      "import": "./lib/Kubernetes/index.js"
-    },
     "./Neon": {
       "types": "./lib/Neon/index.d.ts",
       "bun": "./src/Neon/index.ts",
@@ -240,6 +234,12 @@
       "bun": "./src/Process/index.ts",
       "worker": "./src/Process/index.ts",
       "import": "./lib/Process/index.js"
+    },
+    "./SQL": {
+      "types": "./lib/SQL/index.d.ts",
+      "bun": "./src/SQL/index.ts",
+      "worker": "./src/SQL/index.ts",
+      "import": "./lib/SQL/index.js"
     },
     "./SQLite": {
       "types": "./lib/SQLite/index.d.ts",
@@ -328,6 +328,7 @@
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/ai-anthropic": "catalog:",
+    "@effect/sql-d1": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
@@ -343,8 +344,7 @@
     "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
-    "magic-string": "^0.30.21",
-    "mysql2": "^3.15.3",
+    "mongodb": "^6.10.0",
     "pathe": "^2.0.3",
     "pg": "^8.13.0",
     "picomatch": "^4.0.4",
@@ -354,6 +354,7 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@aws/durable-execution-sdk-js": "^2.1.0",
     "alchemy-test": "workspace:*",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "catalog:",
@@ -362,7 +363,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
-    "@oxc-project/types": "^0.127.0",
+    "@oxc-project/types": "^0.139.0",
     "@tanstack/react-router": "catalog:fixtures",
     "@tanstack/react-start": "catalog:fixtures",
     "@types/aws-lambda": "catalog:",
@@ -377,6 +378,7 @@
     "@vitejs/plugin-rsc": "catalog:fixtures",
     "better-auth": "catalog:",
     "effect": "catalog:",
+    "iovalkey": "^0.3.3",
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:fixtures",
     "react-router": "catalog:fixtures",
@@ -386,11 +388,11 @@
     "tsx": "^4.20.6",
     "typescript": "catalog:",
     "uuid": "catalog:",
-    "vitest": "catalog:",
     "wrangler": "catalog:",
     "ws": "catalog:"
   },
   "peerDependencies": {
+    "@aws/durable-execution-sdk-js": "^2.1.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
@@ -401,10 +403,13 @@
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
-    "@effect/platform-node": {
+    "@aws/durable-execution-sdk-js": {
       "optional": true
     },
     "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
       "optional": true
     },
     "@effect/sql-pg": {

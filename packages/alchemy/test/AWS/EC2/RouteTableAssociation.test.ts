@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import { RouteTable, RouteTableAssociation, Subnet, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,7 +18,7 @@ test.provider("list enumerates the deployed RouteTableAssociation", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const { assoc } = yield* stack.deploy(
+    const { vpc, assoc } = yield* stack.deploy(
       Effect.gen(function* () {
         const vpc = yield* Vpc("ListRtbAssocVpc", {
           cidrBlock: "10.0.0.0/16",
@@ -43,5 +44,9 @@ test.provider("list enumerates the deployed RouteTableAssociation", (stack) =>
     expect(all.some((x) => x.associationId === assoc.associationId)).toBe(true);
 
     yield* stack.destroy();
+
+    // The VPC cannot delete while the subnet/route-table/association exist —
+    // VPC-gone proves full teardown.
+    yield* assertVpcGone(vpc.vpcId);
   }).pipe(logLevel),
 );

@@ -141,8 +141,8 @@ init, alongside the bucket:
 ```diff lang="typescript"
   Effect.gen(function* () {
     const bucket = yield* S3.Bucket("Bucket");
-+    const putObject = yield* S3.PutObject(bucket);
-+    const getObject = yield* S3.GetObject(bucket);
++   const putObject = yield* S3.PutObject(bucket);
++   const getObject = yield* S3.GetObject(bucket);
 
     return {
       fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
@@ -330,11 +330,11 @@ The Bucket is now declared inside `Api`'s init, so the copy in
 
 ```diff lang="typescript"
   Effect.gen(function* () {
--    const bucket = yield* AWS.S3.Bucket("Bucket");
+-   const bucket = yield* AWS.S3.Bucket("Bucket");
     const api = yield* Api;
 
     return {
--      bucketName: bucket.bucketName,
+-     bucketName: bucket.bucketName,
       url: api.functionUrl,
     };
   }),

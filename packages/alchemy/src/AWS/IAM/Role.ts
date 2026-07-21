@@ -1,4 +1,5 @@
 import * as iam from "@distilled.cloud/aws/iam";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -17,6 +18,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import {
   parsePolicyDocument,
   stringifyPolicyDocument,
@@ -71,9 +73,10 @@ export interface RoleProps {
    */
   description?: string;
   /**
-   * Maximum session duration in seconds.
+   * Maximum session duration, e.g. `"4 hours"` or `Duration.hours(4)`.
+   * Sent to IAM as whole seconds (a bare number is milliseconds).
    */
-  maxSessionDuration?: number;
+  maxSessionDuration?: Duration.Input;
   /**
    * Optional managed policy ARN used as the permissions boundary.
    */
@@ -88,16 +91,27 @@ export interface Role extends Resource<
   "AWS.IAM.Role",
   RoleProps,
   {
+    /** The ARN of the role. */
     roleArn: RoleArn;
+    /** The name of the role. */
     roleName: RoleName;
+    /** The stable unique ID of the role. */
     roleId: string | undefined;
+    /** The IAM path of the role. */
     path: string | undefined;
+    /** The trust policy in effect for the role. */
     assumeRolePolicyDocument: PolicyDocument;
+    /** Managed policy ARNs attached to the role. */
     managedPolicyArns: string[];
+    /** Inline policies embedded in the role, keyed by policy name. */
     inlinePolicies: Record<string, PolicyDocument>;
+    /** The description of the role. */
     description: string | undefined;
+    /** The maximum session duration, in seconds. */
     maxSessionDuration: number | undefined;
+    /** The managed policy ARN used as the permissions boundary, if any. */
     permissionsBoundary: string | undefined;
+    /** The tags applied to the role. */
     tags: Record<string, string>;
   },
   {
@@ -177,6 +191,43 @@ const mergeBoundAssumeRolePolicy = (
  *       Principal: { Service: "ecs-tasks.amazonaws.com" },
  *       Action: ["sts:AssumeRole"],
  *     }],
+ *   },
+ * });
+ * ```
+ *
+ * @section Granting Permissions
+ * @example Attach a Customer-Managed Policy
+ * ```typescript
+ * const policy = yield* Policy("AppPolicy", {
+ *   policyDocument: {
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Action: ["s3:GetObject"],
+ *       Resource: ["arn:aws:s3:::my-bucket/*"],
+ *     }],
+ *   },
+ * });
+ *
+ * const role = yield* Role("AppRole", {
+ *   assumeRolePolicyDocument: {
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Principal: { Service: "lambda.amazonaws.com" },
+ *       Action: ["sts:AssumeRole"],
+ *     }],
+ *   },
+ *   managedPolicyArns: [policy.policyArn],
+ *   inlinePolicies: {
+ *     Logs: {
+ *       Version: "2012-10-17",
+ *       Statement: [{
+ *         Effect: "Allow",
+ *         Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+ *         Resource: ["*"],
+ *       }],
+ *     },
  *   },
  * });
  * ```
@@ -463,6 +514,9 @@ export const RoleProvider = () =>
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
+          const desiredMaxSessionDuration = toWireSeconds(
+            news.maxSessionDuration,
+          );
 
           // Observe — read the role from IAM. Absence is signalled by
           // `NoSuchEntityException`; ownership has already been verified
@@ -487,7 +541,7 @@ export const RoleProvider = () =>
                   assumeRolePolicyDocument,
                 ),
                 Description: news.description,
-                MaxSessionDuration: news.maxSessionDuration,
+                MaxSessionDuration: desiredMaxSessionDuration,
                 PermissionsBoundary: news.permissionsBoundary,
                 Tags: createTagsList(desiredTags),
               })
@@ -527,12 +581,12 @@ export const RoleProvider = () =>
           // Sync description / maxSessionDuration via updateRole.
           if (
             observedDescription !== news.description ||
-            observedMaxSessionDuration !== news.maxSessionDuration
+            observedMaxSessionDuration !== desiredMaxSessionDuration
           ) {
             yield* iam.updateRole({
               RoleName: roleName,
               Description: news.description,
-              MaxSessionDuration: news.maxSessionDuration,
+              MaxSessionDuration: desiredMaxSessionDuration,
             });
           }
 
@@ -612,7 +666,7 @@ export const RoleProvider = () =>
             inlinePolicies,
             description: liveRole.Role?.Description ?? news.description,
             maxSessionDuration:
-              liveRole.Role?.MaxSessionDuration ?? news.maxSessionDuration,
+              liveRole.Role?.MaxSessionDuration ?? desiredMaxSessionDuration,
             permissionsBoundary:
               liveRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn ??
               news.permissionsBoundary,
@@ -676,7 +730,40 @@ export const RoleProvider = () =>
             .deleteRole({
               RoleName: output.roleName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+            .pipe(
+              Effect.retry({
+                while: (error) =>
+                  error._tag === "ConcurrentModificationException" ||
+                  error._tag === "DeleteConflictException" ||
+                  error._tag === "LimitExceededException" ||
+                  error._tag === "ServiceFailureException",
+                schedule: Schedule.max([
+                  Schedule.exponential("250 millis"),
+                  Schedule.recurs(8),
+                ]),
+              }),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            );
+
+          // IAM deletion is eventually consistent. Do not let the engine
+          // discard state until the role is actually absent, otherwise a
+          // following clean run (or nuke) can still discover the old role.
+          for (let attempt = 0; attempt < 30; attempt++) {
+            const remaining = yield* iam
+              .getRole({ RoleName: output.roleName })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            if (remaining === undefined) return;
+            yield* Effect.sleep("1 second");
+          }
+          yield* Effect.die(
+            new Error(
+              `IAM role ${output.roleName} remained observable 30 seconds after delete`,
+            ),
+          );
         }),
       };
     }),

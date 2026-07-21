@@ -14,6 +14,7 @@ import {
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import type { IamAction } from "./actions.generated.ts";
 import {
   oldestNondefaultPolicyVersion,
   parsePolicyDocument,
@@ -21,6 +22,9 @@ import {
   stringifyPolicyDocument,
   toTagRecord,
 } from "./common.ts";
+
+export type { IamAction } from "./actions.generated.ts";
+export { stringifyPolicyDocument } from "./common.ts";
 
 export interface PolicyDocument {
   Version: "2012-10-17";
@@ -30,7 +34,7 @@ export interface PolicyDocument {
 export interface PolicyStatement {
   Effect: "Allow" | "Deny";
   Sid?: string;
-  Action: string[];
+  Action?: IamAction[] | string[];
   Resource?: string | string[];
   Condition?: Record<string, Record<string, string | string[]>>;
   Principal?: Record<string, string | string[]>;
@@ -38,6 +42,83 @@ export interface PolicyStatement {
   NotAction?: string[];
   NotResource?: string[];
 }
+
+/**
+ * A single statement in a Service Control Policy (SCP) or Resource Control
+ * Policy (RCP) — the restricted IAM dialect accepted by AWS Organizations.
+ *
+ * SCP statements never carry a `Principal`/`NotPrincipal` (they apply to the
+ * accounts the policy is attached to), and Allow statements are further
+ * restricted by Organizations at write time (`Resource` must be `"*"`, no
+ * `Condition`, no `NotAction`). This interface narrows {@link PolicyStatement}
+ * to the SCP-legal field set; the Allow-statement value restrictions are
+ * enforced by the Organizations API.
+ */
+export interface ServiceControlPolicyStatement {
+  Sid?: string;
+  Effect: "Allow" | "Deny";
+  Action?: IamAction[] | string[];
+  NotAction?: string[];
+  Resource?: string | string[];
+  NotResource?: string[];
+  Condition?: Record<string, Record<string, string | string[]>>;
+}
+
+/**
+ * A Service Control Policy document — the SCP-legal subset of
+ * {@link PolicyDocument} used by AWS Organizations policies
+ * (`SERVICE_CONTROL_POLICY` / `RESOURCE_CONTROL_POLICY`).
+ */
+export interface ServiceControlPolicyDocument {
+  Version: "2012-10-17";
+  Statement: ServiceControlPolicyStatement[];
+}
+
+/**
+ * Canonicalize an IAM policy document for drift comparison.
+ *
+ * Accepts either the raw JSON string a cloud API returned (IAM returns
+ * URL-encoded documents; both encoded and plain strings are handled) or an
+ * in-memory document object, and produces a deterministic string — object keys
+ * sorted recursively, arrays kept in order, no whitespace — so two equivalent
+ * documents compare equal regardless of key ordering or encoding.
+ *
+ * Single-element arrays are collapsed to their element: the IAM policy
+ * grammar treats `["x"]` and `"x"` as equivalent in every list-valued
+ * position (`Action`, `Resource`, principal values, condition values, even
+ * `Statement` itself), and several AWS services (e.g. Secrets Manager)
+ * store the scalar form — without collapsing, a typed document that uses
+ * arrays would spuriously diff against the stored policy on every deploy.
+ *
+ * Unparseable strings are returned unchanged so a diff still fires (and shows
+ * the offending value) instead of throwing inside a provider.
+ */
+export const normalizePolicyDocument = (json: string | object): string => {
+  const stable = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.length === 1
+        ? stable(value[0])
+        : value.map(stable)
+      : value !== null && typeof value === "object"
+        ? Object.fromEntries(
+            Object.entries(value as Record<string, unknown>)
+              .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+              .map(([k, v]) => [k, stable(v)]),
+          )
+        : value;
+  if (typeof json === "string") {
+    try {
+      return JSON.stringify(stable(JSON.parse(json)));
+    } catch {
+      try {
+        return JSON.stringify(stable(JSON.parse(decodeURIComponent(json))));
+      } catch {
+        return json;
+      }
+    }
+  }
+  return JSON.stringify(stable(json));
+};
 
 export type PolicyName = string;
 export type PolicyArn = `arn:aws:iam::${AccountID}:policy/${string}`;
@@ -70,16 +151,27 @@ export interface Policy extends Resource<
   "AWS.IAM.Policy",
   PolicyProps,
   {
+    /** The ARN of the policy. */
     policyArn: PolicyArn;
+    /** The name of the policy. */
     policyName: PolicyName;
+    /** The stable unique ID of the policy. */
     policyId: string | undefined;
+    /** The IAM path of the policy. */
     path: string | undefined;
+    /** The version currently set as the default (e.g. `v2`). */
     defaultVersionId: string | undefined;
+    /** How many IAM identities the policy is attached to. */
     attachmentCount: number | undefined;
+    /** How many IAM identities use the policy as a permissions boundary. */
     permissionsBoundaryUsageCount: number | undefined;
+    /** Whether the policy can be attached to IAM identities. */
     isAttachable: boolean | undefined;
+    /** The description of the policy. */
     description: string | undefined;
+    /** The policy document of the default version. */
     policyDocument: PolicyDocument;
+    /** The tags applied to the policy. */
     tags: Record<string, string>;
   },
   never,

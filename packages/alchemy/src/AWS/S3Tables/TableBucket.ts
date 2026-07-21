@@ -143,9 +143,9 @@ export const TableBucketProvider = () =>
         Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
       );
     }),
-    diff: Effect.fn(function* ({ id, news, olds }) {
+    diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
       if (!isResolved(news)) return;
-      const oldName = yield* createBucketName(id, olds ?? {});
+      const oldName = yield* createBucketName(id, olds);
       const newName = yield* createBucketName(id, news);
       if (oldName !== newName) {
         return { action: "replace" } as const;
@@ -157,7 +157,7 @@ export const TableBucketProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    reconcile: Effect.fn(function* ({ id, news, output, session }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
       const { accountId, region } = yield* AWSEnvironment.current;
       const name = output?.name ?? (yield* createBucketName(id, news));
       const arn =
@@ -207,9 +207,82 @@ export const TableBucketProvider = () =>
         type: bucket.type,
       };
     }),
-    delete: Effect.fn(function* ({ output }) {
-      yield* s3tables
-        .deleteTableBucket({ tableBucketARN: output.tableBucketArn })
-        .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+    delete: Effect.fn(function* ({ output, force }) {
+      const tableBucketARN = output.tableBucketArn;
+      if (force !== true) {
+        yield* s3tables.deleteTableBucket({ tableBucketARN }).pipe(
+          // Tracked children are normally deleted first, but their deletion
+          // can take a few seconds to propagate. Do not purge untracked data
+          // during ordinary destroy: a persistent Conflict is protective.
+          Effect.retry({
+            while: (e) => e._tag === "ConflictException",
+            schedule: Schedule.max([Schedule.fixed(500), Schedule.recurs(8)]),
+          }),
+          Effect.catchTag("NotFoundException", () => Effect.void),
+        );
+        return;
+      }
+
+      const purgeAndDelete = Effect.gen(function* () {
+        // Nuke explicitly sets force after operator confirmation. It can
+        // discover a top-level bucket even when child state was never saved,
+        // so only this path may purge globally-invisible children.
+        const tables = yield* s3tables.listTables
+          .items({ tableBucketARN })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+          );
+        yield* Effect.forEach(
+          tables,
+          (table) =>
+            s3tables
+              .deleteTable({
+                tableBucketARN,
+                namespace: table.namespace[0]!,
+                name: table.name,
+              })
+              .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
+          { concurrency: 4, discard: true },
+        );
+
+        const namespaces = yield* s3tables.listNamespaces
+          .items({ tableBucketARN })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+          );
+        yield* Effect.forEach(
+          namespaces,
+          (namespace) =>
+            s3tables
+              .deleteNamespace({
+                tableBucketARN,
+                namespace: namespace.namespace[0]!,
+              })
+              .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
+          { concurrency: 4, discard: true },
+        );
+
+        yield* s3tables.deleteTableBucket({ tableBucketARN });
+      });
+
+      yield* purgeAndDelete.pipe(
+        // Deletes propagate asynchronously. Re-listing on every bounded retry
+        // also catches children that were briefly absent from a prior list.
+        Effect.retry({
+          while: (e) =>
+            e._tag === "ConflictException" ||
+            e._tag === "TooManyRequestsException" ||
+            e._tag === "InternalServerErrorException",
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(8),
+          ]),
+        }),
+        Effect.catchTag("NotFoundException", () => Effect.void),
+      );
     }),
   });

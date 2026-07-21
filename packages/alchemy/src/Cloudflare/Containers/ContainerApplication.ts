@@ -9,6 +9,7 @@ import {
 import { Resource } from "../../Resource.ts";
 import * as Server from "../../Server/index.ts";
 import type { Providers } from "../Providers.ts";
+import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";
@@ -64,90 +65,19 @@ export namespace ContainerApplication {
   }
 }
 
-export interface ContainerApplicationProps extends PlatformProps {
-  /**
-   * Main entrypoint for an Effect-native container program. This file is
-   * bundled and added to a generated Docker image as the container's
-   * entrypoint.
-   *
-   * The image source is selected by which of these props are set, in order:
-   *
-   * 1. {@link main} — bundle the Effect program and build a generated image.
-   * 2. {@link image} — pull the given remote image and re-push it to
-   *    Cloudflare's registry (no build).
-   * 3. {@link context} / {@link dockerfile} — build the user's own Dockerfile
-   *    against a build context directory.
-   */
-  main?: string;
-  /**
-   * A pre-built remote image to deploy, e.g. `ghcr.io/alpine/alpine:latest`.
-   *
-   * When set (and {@link main} is not), Alchemy pulls this image and re-pushes
-   * it to Cloudflare's managed registry instead of building anything.
-   */
-  image?: string;
-  /**
-   * Build context directory used when building the container from a user
-   * Dockerfile (i.e. when neither {@link main} nor {@link image} is set).
-   *
-   * @default `.`
-   */
-  context?: string;
-  /**
-   * Exported handler symbol inside the bundled module.
-   * @default "default"
-   */
-  handler?: string;
-  /**
-   * Runtime environment for the container program.
-   *
-   * @default "bun"
-   */
-  runtime?: "bun" | "node";
-  /**
-   * Module specifiers that Rolldown should mark as external when bundling
-   * the container entrypoint. The matching packages are installed inside the
-   * image via the runtime's package manager (`bun add` for `runtime: "bun"`,
-   * `npm install` for `runtime: "node"`) before the entrypoint runs.
-   *
-   * Use this for native dependencies that must not be bundled (e.g. `sharp`,
-   * `impit`) or for packages that intentionally ship in the base image.
-   *
-   * Install inside the image is controlled by {@link autoInstallExternals}
-   * (default `true`); set it to `false` if your custom `dockerfile` already
-   * installs these packages and you want to avoid the redundant step.
-   */
-  external?: string[];
-  /**
-   * Whether to auto-install the packages listed in {@link external} inside
-   * the container image (via `bun add` or `npm install`) before running the
-   * entrypoint.
-   *
-   * @default true
-   *
-   * Set to `false` when your custom `dockerfile` already installs these
-   * packages (for example, via a base image that pre-installs `sharp`), to
-   * avoid the redundant install step.
-   */
-  autoInstallExternals?: boolean;
+/**
+ * Configuration shared by every container image source: application naming,
+ * scaling, placement, runtime environment, and rollout settings. The image
+ * source itself is declared by the variant interfaces
+ * ({@link EffectfulContainerProps} / {@link ExternalContainerProps} /
+ * {@link RemoteContainerProps}) that extend this base.
+ */
+export interface ContainerApplicationPropsBase extends PlatformProps {
   /**
    * Human-readable application name. If omitted, Alchemy derives a deterministic
    * physical name from the stack, stage, and logical ID.
    */
   name?: string;
-  /**
-   * Dockerfile used to build the container image. Its meaning depends on the
-   * selected variant:
-   *
-   * - With {@link main}: an inline Dockerfile string used as the base image.
-   *   Alchemy appends statements to copy the bundled program and set the
-   *   entrypoint. If omitted, a default base image matching the runtime is used.
-   * - Without {@link main} (and without {@link image}): a path to the
-   *   Dockerfile to build, resolved relative to {@link context}.
-   *
-   * @default `<context>/Dockerfile` for the user-Dockerfile variant.
-   */
-  dockerfile?: string;
   /**
    * Initial number of instances to maintain. Matches wrangler, which forces
    * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
@@ -257,6 +187,138 @@ export interface ContainerApplicationProps extends PlatformProps {
   exports?: string[];
 }
 
+/**
+ * Bundle an Effect-native program into a generated image. Alchemy bundles
+ * {@link main} and bakes it in as the container's entrypoint. The
+ * environment the program runs in comes from {@link image} or an inline
+ * {@link dockerfile} (exclusive with each other), defaulting to the
+ * runtime's base image.
+ */
+export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
+  /** Entrypoint file for the Effect program, typically `import.meta.url`. */
+  main: string;
+  /**
+   * Environment image for the generated Dockerfile — a plain registry
+   * reference, e.g. `"oven/bun:latest"`. Alchemy synthesizes the `FROM` line
+   * and appends the statements that copy the bundled program and set the
+   * entrypoint. The image must be able to run the {@link runtime}.
+   * Exclusive with {@link dockerfile}.
+   *
+   * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
+   */
+  image?: string;
+  /**
+   * Inline environment Dockerfile content (typically `Dockerfile.inline`).
+   * Replaces the generated `FROM` line — carry your own `FROM` plus any
+   * extra build steps (system packages, config); the bundled program is
+   * layered on top. Exclusive with {@link image}. Never interpolate secrets
+   * into inline content — it is baked into image layers.
+   */
+  dockerfile?: InlineDockerfile;
+  /**
+   * Exported handler symbol inside the bundled module.
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * Runtime environment for the container program.
+   *
+   * @default "bun"
+   */
+  runtime?: "bun" | "node";
+  /**
+   * Module specifiers that Rolldown should mark as external when bundling
+   * the container entrypoint. The matching packages are installed inside the
+   * image via the runtime's package manager (`bun add` for `runtime: "bun"`,
+   * `npm install` for `runtime: "node"`) before the entrypoint runs.
+   *
+   * Use this for native dependencies that must not be bundled (e.g. `sharp`,
+   * `impit`) or for packages that intentionally ship in the base image.
+   *
+   * Install inside the image is controlled by {@link autoInstallExternals}
+   * (default `true`); set it to `false` if your environment ({@link image}
+   * or inline {@link dockerfile}) already ships these packages and you want
+   * to avoid the redundant step.
+   */
+  external?: string[];
+  /**
+   * Whether to auto-install the packages listed in {@link external} inside
+   * the container image (via `bun add` or `npm install`) before running the
+   * entrypoint.
+   *
+   * @default true
+   *
+   * Set to `false` when your environment image already ships these packages
+   * (for example, a base image that pre-installs `sharp`), to avoid the
+   * redundant install step.
+   */
+  autoInstallExternals?: boolean;
+}
+
+/**
+ * Build the container image from your own Dockerfile — no Effect program is
+ * bundled. The image is shipped as-is.
+ */
+export interface ExternalContainerProps extends ContainerApplicationPropsBase {
+  /**
+   * The build context directory containing the Dockerfile and any files it
+   * copies. Only valid with a `dockerfile` PATH (not inline content).
+   *
+   * @default `./`
+   */
+  context?: string;
+  /**
+   * The Dockerfile to build. A string is a **path** resolved relative to
+   * {@link context} (default `<context>/Dockerfile`); an
+   * {@link InlineDockerfile} (typically `Dockerfile.inline`) is the whole
+   * Dockerfile's content, built in an empty generated context (exclusive
+   * with {@link context}).
+   */
+  dockerfile?: string | InlineDockerfile;
+}
+
+/**
+ * Deploy a pre-built remote image — Alchemy pulls it and re-pushes it to
+ * Cloudflare's managed registry without building anything.
+ */
+export interface RemoteContainerProps extends ContainerApplicationPropsBase {
+  /**
+   * The pre-built image to pull and re-push.
+   *
+   * E.g. `ghcr.io/alpine/alpine:latest`
+   */
+  image: string;
+}
+
+/**
+ * Container application props — the image comes from exactly one of three
+ * sources, declared flat on the props: `main` (bundled Effect program,
+ * composing with `image` / inline `dockerfile` as its environment),
+ * `context`/`dockerfile` (user Dockerfile), or `image` (pre-built remote
+ * image).
+ */
+export type ContainerApplicationProps =
+  | EffectfulContainerProps
+  | ExternalContainerProps
+  | RemoteContainerProps;
+
+/**
+ * INTERNAL — the loose provider-side view across the three variants: every
+ * variant-specific field optional at its widest type. Each union member is
+ * assignable to this shape, so provider/bundle code annotates helper params
+ * with it instead of narrowing the union at every property access.
+ */
+export interface AnyContainerApplicationProps extends ContainerApplicationPropsBase {
+  main?: string;
+  image?: string;
+  context?: string;
+  dockerfile?: string | InlineDockerfile;
+  handler?: string;
+  runtime?: "bun" | "node";
+  external?: string[];
+  autoInstallExternals?: boolean;
+}
+
 export type ContainerServices =
   | ContainerApplication
   | PlatformServices
@@ -346,8 +408,8 @@ export type ContainerShape = Main<ContainerServices>;
  * By default the entrypoint is bundled for the `bun` runtime. Use `runtime` to
  * switch to Node, `external` to keep native/precompiled packages out of the
  * bundle (auto-installed in the image unless `autoInstallExternals` is `false`),
- * a custom `dockerfile` as the image base, and `registryId` to override the
- * registry host.
+ * `image` (or an inline `dockerfile`) to pick the environment the generated
+ * Dockerfile starts `FROM`, and `registryId` to override the registry host.
  *
  * @example Node runtime with external native deps
  * ```typescript
@@ -363,20 +425,40 @@ export type ContainerShape = Main<ContainerServices>;
  * because `autoInstallExternals` is `true`, Alchemy runs `npm install sharp`
  * inside the image so the dependency is present at runtime.
  *
- * @example Custom Dockerfile base and registry
+ * @example Custom environment image and registry
  * ```typescript
  * export class Custom extends Cloudflare.Container<Custom>()("Custom", {
  *   main: import.meta.url,
- *   dockerfile: "FROM oven/bun:1\nRUN apt-get update && apt-get install -y ffmpeg",
+ *   image: "oven/bun:1",
  *   autoInstallExternals: false,
  *   registryId: "registry.cloudflare.com",
  * }) {}
  * ```
  *
- * Alchemy appends the program-copy and entrypoint steps to your `dockerfile`,
- * so you control the base image and any system packages; `autoInstallExternals:
- * false` skips the redundant install step when your Dockerfile already provides
- * those packages.
+ * Alchemy generates the Dockerfile — `FROM` your `image`, then the
+ * program-copy and entrypoint steps — so you control the starting image;
+ * `autoInstallExternals: false` skips the redundant install step when the
+ * environment already ships your `external` packages.
+ *
+ * @example Inline environment Dockerfile (extra build steps)
+ * ```typescript
+ * import * as Dockerfile from "alchemy/Docker/Dockerfile";
+ *
+ * export class Transcoder extends Cloudflare.Container<Transcoder>()(
+ *   "Transcoder",
+ *   {
+ *     main: import.meta.url,
+ *     dockerfile: Dockerfile.inline`
+ *       FROM oven/bun:1
+ *       RUN apt-get update && apt-get install -y ffmpeg
+ *     `,
+ *   },
+ * ) {}
+ * ```
+ *
+ * Inline `dockerfile` content replaces the generated `FROM` line, so the
+ * environment can run extra build steps (system packages, config) while the
+ * bundled program is still layered on top.
  *
  * @section Scaling & Instance Types
  * Control the desired and maximum instance counts with `instances`/`maxInstances`

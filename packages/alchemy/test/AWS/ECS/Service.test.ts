@@ -1,6 +1,5 @@
 import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2/Subnet.ts";
-import { Vpc } from "@/AWS/EC2/Vpc.ts";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
 import * as Provider from "@/Provider";
@@ -12,6 +11,8 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { getDefaultVpc } from "../DefaultVpc.ts";
+import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,15 +26,24 @@ const { test } = Test.make({ providers: AWS.providers() });
 // (the canonical `AWS.ECS.Task` resource) and instead register a minimal task
 // definition against a public image and run the service at `desiredCount: 0`,
 // so `createService` returns immediately without waiting for Fargate task
-// placement. Networking is a throwaway VPC + single subnet (no NAT/IGW needed
-// since no task is ever launched).
+// placement. Networking is a stack-owned subnet in the standing default VPC
+// (no NAT/IGW needed since no task is ever launched).
 test.provider("list enumerates the deployed service", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
+    // Reclaim any revisions a previously-killed run left behind, and
+    // guarantee full deletion (deregister + delete) on success, failure,
+    // and interruption.
+    const family = "alchemy-test-ecs-service-list";
+    yield* reclaimTaskDefinitionFamily(family);
+    yield* Effect.addFinalizer(() =>
+      reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+    );
+
     // Register a minimal Fargate task definition pointing at a public image.
     const registered = yield* ecs.registerTaskDefinition({
-      family: "alchemy-test-ecs-service-list",
+      family,
       networkMode: "awsvpc",
       requiresCompatibilities: ["FARGATE"],
       cpu: "256",
@@ -53,22 +63,13 @@ test.provider("list enumerates the deployed service", (stack) =>
         new Error("registerTaskDefinition returned no task definition ARN"),
       );
     }
-    // Safety net: deregister the out-of-band task definition on scope close even
-    // if the body fails — leaves it INACTIVE rather than orphaned as ACTIVE.
-    yield* Effect.addFinalizer(() =>
-      ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.ignore),
-    );
+    const defaultVpc = yield* getDefaultVpc;
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
-        const vpc = yield* Vpc("ListServiceVpc", {
-          cidrBlock: "10.71.0.0/16",
-        });
         const subnet = yield* Subnet("ListServiceSubnet", {
-          vpcId: vpc.vpcId,
-          cidrBlock: "10.71.1.0/24",
+          vpcId: defaultVpc.vpcId,
+          cidrBlock: defaultVpc.subnetCidrBlock(234),
         });
         const cluster = yield* Cluster("ListServiceCluster", {
           clusterName: "alchemy-test-ecs-service-list",
@@ -81,7 +82,7 @@ test.provider("list enumerates the deployed service", (stack) =>
             port: 80,
           },
           desiredCount: 0,
-          vpcId: vpc.vpcId,
+          vpcId: defaultVpc.vpcId,
           subnets: [subnet.subnetId],
         });
       }),
@@ -97,9 +98,16 @@ test.provider("list enumerates the deployed service", (stack) =>
 
     yield* stack.destroy();
 
-    yield* ecs
-      .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-      .pipe(Effect.catchTag("ClientException", () => Effect.void));
+    yield* reclaimTaskDefinitionFamily(family);
+
+    // Out-of-band gone-proof: the cluster (deleted after its service) is
+    // INACTIVE or absent, so nothing this test created is left ACTIVE.
+    const after = yield* ecs.describeClusters({
+      clusters: ["alchemy-test-ecs-service-list"],
+    });
+    expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
+      false,
+    );
   }),
 );
 
@@ -116,8 +124,14 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const family = "alchemy-test-ecs-service-inplace";
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
+
       const registered = yield* ecs.registerTaskDefinition({
-        family: "alchemy-test-ecs-service-inplace",
+        family,
         networkMode: "awsvpc",
         requiresCompatibilities: ["FARGATE"],
         cpu: "256",
@@ -132,12 +146,7 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
-      // Safety net: deregister the out-of-band task definition on scope close.
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(Effect.ignore),
-      );
+      const defaultVpc = yield* getDefaultVpc;
 
       const deployService = (props: {
         desiredCount: number;
@@ -147,10 +156,9 @@ test.provider(
       }) =>
         stack.deploy(
           Effect.gen(function* () {
-            const vpc = yield* Vpc("InPlaceVpc", { cidrBlock: "10.72.0.0/16" });
             const subnet = yield* Subnet("InPlaceSubnet", {
-              vpcId: vpc.vpcId,
-              cidrBlock: "10.72.1.0/24",
+              vpcId: defaultVpc.vpcId,
+              cidrBlock: defaultVpc.subnetCidrBlock(235),
             });
             const cluster = yield* Cluster("InPlaceCluster", {
               clusterName: "alchemy-test-ecs-service-inplace",
@@ -159,7 +167,7 @@ test.provider(
               cluster,
               task: { taskDefinitionArn, containerName: "app", port: 80 },
               desiredCount: props.desiredCount,
-              vpcId: vpc.vpcId,
+              vpcId: defaultVpc.vpcId,
               subnets: [subnet.subnetId],
               assignPublicIp: props.assignPublicIp,
               tags: props.tags,
@@ -216,9 +224,16 @@ test.provider(
       expect(tagMap.keep).toBeUndefined();
 
       yield* stack.destroy();
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(family);
+
+      // Out-of-band gone-proof: the cluster (deleted after its service) is
+      // INACTIVE or absent.
+      const after = yield* ecs.describeClusters({
+        clusters: ["alchemy-test-ecs-service-inplace"],
+      });
+      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
+        false,
+      );
     }),
   { timeout: 240_000 },
 );
@@ -238,11 +253,11 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       // Clean up any out-of-band ELBv2 leftovers from a prior interrupted run
-      // BEFORE destroying the stack: a stale ALB holds ENIs in the stack's
-      // VPC, which deadlocks the VPC deletion inside `stack.destroy()`. It
-      // also keeps the fresh ALB, target group, and listener consistently
-      // wired (a stale, unassociated target group would make `createService`
-      // reject with `InvalidParameterException`).
+      // BEFORE destroying the stack: a stale ALB holds ENIs in the
+      // stack-owned subnets and prevents their deletion. It also keeps the
+      // fresh ALB, target group, and listener consistently wired (a stale,
+      // unassociated target group would make `createService` reject with
+      // `InvalidParameterException`).
       const existingLbs = yield* elbv2
         .describeLoadBalancers({ Names: ["alchemy-test-ecs-manuallb"] })
         .pipe(Effect.catch(() => Effect.succeed({ LoadBalancers: [] })));
@@ -282,8 +297,14 @@ test.provider(
 
       yield* stack.destroy();
 
+      const family = "alchemy-test-ecs-service-manuallb";
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
+
       const registered = yield* ecs.registerTaskDefinition({
-        family: "alchemy-test-ecs-service-manuallb",
+        family,
         networkMode: "awsvpc",
         requiresCompatibilities: ["FARGATE"],
         cpu: "256",
@@ -298,12 +319,7 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
-      // Safety net: deregister the out-of-band task definition on scope close.
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(Effect.ignore),
-      );
+      const defaultVpc = yield* getDefaultVpc;
 
       // Resolve two available AZs in the active region — hardcoding zone
       // names breaks as soon as the profile targets a different region.
@@ -318,22 +334,21 @@ test.provider(
       // out-of-band ELBv2 resources.
       const net = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("ManualLbVpc", { cidrBlock: "10.73.0.0/16" });
           const subnetA = yield* Subnet("ManualLbSubnetA", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.73.1.0/24",
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(236),
             availabilityZone: az1,
           });
           const subnetB = yield* Subnet("ManualLbSubnetB", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.73.2.0/24",
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(237),
             availabilityZone: az2,
           });
           const cluster = yield* Cluster("ManualLbCluster", {
             clusterName: "alchemy-test-ecs-service-manuallb",
           });
           return {
-            vpcId: vpc.vpcId.as<string>(),
+            vpcId: defaultVpc.vpcId,
             subnetAId: subnetA.subnetId.as<string>(),
             subnetBId: subnetB.subnetId.as<string>(),
             clusterArn: cluster.clusterArn.as<string>(),
@@ -387,15 +402,14 @@ test.provider(
       // Service wired to the user-supplied target group.
       const service = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("ManualLbVpc", { cidrBlock: "10.73.0.0/16" });
           const subnetA = yield* Subnet("ManualLbSubnetA", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.73.1.0/24",
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(236),
             availabilityZone: az1,
           });
           const subnetB = yield* Subnet("ManualLbSubnetB", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.73.2.0/24",
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(237),
             availabilityZone: az2,
           });
           const cluster = yield* Cluster("ManualLbCluster", {
@@ -406,11 +420,14 @@ test.provider(
             task: { taskDefinitionArn, containerName: "app", port: 80 },
             desiredCount: 0,
             public: false,
-            vpcId: vpc.vpcId,
+            vpcId: defaultVpc.vpcId,
             subnets: [subnetA.subnetId, subnetB.subnetId],
             loadBalancers: [
               { targetGroupArn, containerName: "app", containerPort: 80 },
             ],
+            // Duration.Input audit coverage: only valid on services with a
+            // load balancer — assert the wire value round-trips as seconds.
+            healthCheckGracePeriod: "45 seconds",
           });
         }),
       );
@@ -427,6 +444,9 @@ test.provider(
       expect(lbs.length).toBe(1);
       expect(lbs[0]?.containerName).toBe("app");
       expect(lbs[0]?.targetGroupArn).toBe(targetGroupArn);
+
+      // Duration.Input round-trip: `"45 seconds"` landed on the wire as 45.
+      expect(described.services?.[0]?.healthCheckGracePeriodSeconds).toBe(45);
 
       // Delete the service first (it references the target group), then tear
       // down the out-of-band ELBv2 resources, then the rest of the stack.
@@ -448,9 +468,7 @@ test.provider(
         .pipe(Effect.catch(() => Effect.void));
 
       yield* stack.destroy();
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 240_000 },
 );
@@ -475,8 +493,14 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const family = "alchemy-test-ecs-service-wedged";
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
+
       const registered = yield* ecs.registerTaskDefinition({
-        family: "alchemy-test-ecs-service-wedged",
+        family,
         networkMode: "awsvpc",
         requiresCompatibilities: ["FARGATE"],
         cpu: "256",
@@ -491,20 +515,14 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
-      // Safety net: deregister the out-of-band task definition on scope close.
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-          .pipe(Effect.ignore),
-      );
+      const defaultVpc = yield* getDefaultVpc;
 
       const deployService = () =>
         stack.deploy(
           Effect.gen(function* () {
-            const vpc = yield* Vpc("WedgedVpc", { cidrBlock: "10.74.0.0/16" });
             const subnet = yield* Subnet("WedgedSubnet", {
-              vpcId: vpc.vpcId,
-              cidrBlock: "10.74.1.0/24",
+              vpcId: defaultVpc.vpcId,
+              cidrBlock: defaultVpc.subnetCidrBlock(238),
             });
             const cluster = yield* Cluster("WedgedCluster", {
               clusterName: "alchemy-test-ecs-service-wedged",
@@ -514,7 +532,7 @@ test.provider(
               cluster,
               task: { taskDefinitionArn, containerName: "app", port: 80 },
               desiredCount: 0,
-              vpcId: vpc.vpcId,
+              vpcId: defaultVpc.vpcId,
               subnets: [subnet.subnetId],
             });
           }),
@@ -567,9 +585,7 @@ test.provider(
       expect(recovered.clusterArn).toEqual(created.clusterArn);
 
       yield* stack.destroy();
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 240_000 },
 );

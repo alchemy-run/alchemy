@@ -17,24 +17,41 @@ export interface ServiceShape<
 >
   extends Context.ServiceClass.Shape<Identifier, Shape>, ServiceLike {}
 
+// A parameter that ALREADY admits Effects (e.g. GitHub's
+// `RepositoryLike = Repository | Effect<Repository, any, any>`)
+// is passed exactly as declared — re-wrapping it in
+// `Effect<T, never, Req>` would make TS infer the argument's
+// own R into Req and leak it onto the caller (a deferred resource
+// constructor's Stack/provider requirements, which the impl never
+// incurs when it resolves identity statically).
+type BindParameter<T, Req> = [
+  Extract<T, Effect.Effect<any, any, any>>,
+] extends [never]
+  ? Input<T> | Effect.Effect<T, never, Req>
+  : T;
+
 type BindParameters<
   Parameters extends any[],
   Req = never,
-> = Parameters extends [infer First, ...infer Rest]
-  ? [
-      // A parameter that ALREADY admits Effects (e.g. GitHub's
-      // `RepositoryLike = Repository | Effect<Repository, any, any>`)
-      // is passed exactly as declared — re-wrapping it in
-      // `Effect<First, never, Req>` would make TS infer the argument's
-      // own R into Req and leak it onto the caller (a deferred resource
-      // constructor's Stack/provider requirements, which the impl never
-      // incurs when it resolves identity statically).
-      [Extract<First, Effect.Effect<any, any, any>>] extends [never]
-        ? Input<First> | Effect.Effect<First, never, Req>
-        : First,
-      ...BindParameters<Rest, Req>,
-    ]
-  : [];
+> = Parameters extends []
+  ? []
+  : // Variadic lists (`number extends length`) — e.g. `(...parameters:
+    // [Parameter, ...Parameter[]])` — must be checked FIRST: a plain array
+    // also matches the optional-head pattern below with itself as the rest,
+    // which recurses forever (TS2589).
+    number extends Parameters["length"]
+    ? Parameters extends [infer First, ...infer Rest]
+      ? [BindParameter<First, Req>, ...Array<BindParameter<Rest[number], Req>>]
+      : Array<BindParameter<Parameters[number], Req>>
+    : Parameters extends [infer First, ...infer Rest]
+      ? [BindParameter<First, Req>, ...BindParameters<Rest, Req>]
+      : // Optional head (e.g. `(bus?: EventBus)`) — `[infer F, ...R]` does
+        // not match a tuple with an optional first element, which used to
+        // collapse the whole parameter list to `[]` (`PutEvents(bus)` failed
+        // with "Expected 0 arguments").
+        Parameters extends [(infer First)?, ...infer Rest]
+        ? [BindParameter<First, Req>?, ...BindParameters<Rest, Req>]
+        : [];
 
 /**
  * The combined tag + callable + type form of a binding (the `Resource.ts`-style

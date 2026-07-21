@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -74,6 +75,20 @@ test.provider(
       }
 
       yield* stack.destroy();
+
+      // Out-of-band proof the destroy removed the function from the cloud.
+      yield* Lambda.getFunction({ FunctionName: fn.functionName }).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(new Error(`Function ${fn.functionName} still exists`)),
+        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(8),
+          ]),
+        }),
+      );
     }),
   { timeout: 600_000 },
 );

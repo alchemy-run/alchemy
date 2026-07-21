@@ -44,7 +44,31 @@ interface EventDescriptor {
   props?: EventRouteProps;
 }
 
-/** @binding */
+/**
+ * Event source connecting an EventBridge {@link EventBus} to the hosting
+ * compute (Lambda function or ServerHost process). Matching events invoke
+ * the host with a stream of {@link EventRecord}s.
+ *
+ * Use it through the {@link consumeBusEvents} helper; the host-specific
+ * implementation layer (e.g. `AWS.Lambda.EventSource`) creates the rule,
+ * grants EventBridge invoke permission, and dispatches events at runtime.
+ * @binding
+ * @section Consuming Events
+ * @example Consume Matching Events on a Lambda Function
+ * ```typescript
+ * // init — subscribe to matching events (provide AWS.Lambda.EventSource on the Function)
+ * yield* AWS.EventBridge.consumeBusEvents(
+ *   bus,
+ *   { source: ["my.app"] },
+ *   (events: Stream.Stream<AWS.EventBridge.EventRecord>) =>
+ *     events.pipe(
+ *       Stream.runForEach((event) =>
+ *         Effect.log(event["detail-type"], event.detail),
+ *       ),
+ *     ),
+ * );
+ * ```
+ */
 export interface EventSource extends Binding.Service<
   EventSource,
   "AWS.EventBridge.EventSource",

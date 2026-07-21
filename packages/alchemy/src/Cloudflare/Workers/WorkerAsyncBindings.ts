@@ -23,6 +23,7 @@ import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
+import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
 import {
@@ -227,6 +228,11 @@ const toBinding = (
       namespace: binding.name,
     };
   } else if (isAiGateway(binding)) {
+    return {
+      type: "ai",
+      name: bindingName,
+    };
+  } else if (isAI(binding)) {
     return {
       type: "ai",
       name: bindingName,

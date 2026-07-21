@@ -106,24 +106,73 @@ export interface LaunchTemplate extends Resource<
   "AWS.AutoScaling.LaunchTemplate",
   LaunchTemplateProps,
   {
+    /**
+     * ID of the launch template (`lt-...`).
+     */
     launchTemplateId: LaunchTemplateId;
+    /**
+     * ARN of the launch template.
+     */
     launchTemplateArn: LaunchTemplateArn;
+    /**
+     * Name of the launch template.
+     */
     launchTemplateName: LaunchTemplateName;
+    /**
+     * Version number launched by default.
+     */
     defaultVersionNumber: number;
+    /**
+     * Most recently created version number.
+     */
     latestVersionNumber: number;
+    /**
+     * Tags on the launch template.
+     */
     tags: Record<string, string>;
+    /**
+     * ARN of the managed instance role, when Alchemy manages IAM.
+     */
     roleArn?: string;
+    /**
+     * Name of the managed instance role, when Alchemy manages IAM.
+     */
     roleName?: string;
+    /**
+     * Name of the inline policy on the managed instance role.
+     */
     policyName?: string;
+    /**
+     * Whether Alchemy manages the instance profile/role for the hosted
+     * program.
+     */
     managedIam?: boolean;
+    /**
+     * systemd unit name running the hosted program on instances.
+     */
     runtimeUnitName?: string;
+    /**
+     * S3 key prefix where the bundled program assets are staged.
+     */
     assetPrefix?: string;
+    /**
+     * Bundled program code metadata.
+     */
     code?: {
+      /**
+       * Content hash of the bundled entrypoint.
+       */
       hash: string;
     };
   },
   {
+    /**
+     * Environment variables contributed by bindings to the hosted process.
+     */
     env?: Record<string, any>;
+    /**
+     * IAM policy statements contributed by bindings to the instance role.
+     */
     policyStatements?: PolicyStatement[];
   },
   Providers
@@ -140,6 +189,29 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  * `AWS.EC2.Instance`, but packages that host configuration for use with an
  * Auto Scaling Group.
  * @resource
+ * @section Creating a Launch Template
+ * @example Basic Launch Template
+ * ```typescript
+ * import { LaunchTemplate } from "alchemy/AWS/AutoScaling";
+ *
+ * const template = yield* LaunchTemplate("Template", {
+ *   imageId: "ami-0abcdef1234567890",
+ *   instanceType: "t3.micro",
+ * });
+ * ```
+ *
+ * @example Launch a fleet from the template
+ * ```typescript
+ * import { AutoScalingGroup } from "alchemy/AWS/AutoScaling";
+ *
+ * const group = yield* AutoScalingGroup("Fleet", {
+ *   launchTemplate: template,
+ *   subnetIds: [subnet.subnetId],
+ *   minSize: 1,
+ *   maxSize: 3,
+ * });
+ * ```
+ *
  * @section Hosting Processes
  * @example Hosted HTTP Launch Template
  * ```typescript

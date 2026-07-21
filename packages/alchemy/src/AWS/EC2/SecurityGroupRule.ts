@@ -7,6 +7,10 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import {
+  getDefaultVpcDefaultSecurityGroupId,
+  getDefaultVpcScope,
+} from "./defaultVpcScope.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 
 export type SecurityGroupRuleId<ID extends string = string> = `sgr-${ID}`;
@@ -349,22 +353,37 @@ export const SecurityGroupRuleProvider = () =>
         // Account/region-scoped: every rule is enumerable via
         // describeSecurityGroupRules with no filter. Paginate exhaustively.
         list: () =>
-          ec2.describeSecurityGroupRules.pages({}).pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.SecurityGroupRules ?? [])
-                  .filter(
-                    (
-                      rule,
-                    ): rule is ec2.SecurityGroupRule & {
-                      SecurityGroupRuleId: string;
-                    } => rule.SecurityGroupRuleId != null,
-                  )
-                  .map((rule) => toAttrs(rule)),
+          Effect.gen(function* () {
+            // Rules on the default VPC's "default" security group are
+            // furniture AWS provisions with the default VPC; never
+            // census/nuke them. Rules on user-created groups inside the
+            // default VPC are still listed.
+            const defaultVpc = yield* getDefaultVpcScope;
+            const defaultSgId = yield* getDefaultVpcDefaultSecurityGroupId(
+              defaultVpc.vpcId,
+            );
+            return yield* ec2.describeSecurityGroupRules.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.SecurityGroupRules ?? [])
+                    .filter(
+                      (
+                        rule,
+                      ): rule is ec2.SecurityGroupRule & {
+                        SecurityGroupRuleId: string;
+                      } => rule.SecurityGroupRuleId != null,
+                    )
+                    .filter(
+                      (rule) =>
+                        defaultSgId === undefined ||
+                        rule.GroupId !== defaultSgId,
+                    )
+                    .map((rule) => toAttrs(rule)),
+                ),
               ),
-            ),
-          ),
+            );
+          }),
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;

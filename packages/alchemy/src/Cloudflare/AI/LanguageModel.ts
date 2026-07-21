@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -11,14 +13,34 @@ import {
 } from "effect/unstable/ai";
 import * as Sse from "effect/unstable/encoding/Sse";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { QueryGatewayClient } from "./QueryGateway.ts";
 
 /**
- * Options for constructing an AI Gateway-backed Workers AI LanguageModel.
+ * The slice of an AI client the LanguageModel adapter needs: the raw Workers
+ * AI handle plus, when routed through an AI Gateway, the gateway id.
+ *
+ * Both `Cloudflare.AI.QueryGateway(gateway)` (gateway-routed) and
+ * `Cloudflare.Workers.AI()` (plain Workers AI binding) clients satisfy it.
+ */
+export interface LanguageModelClient {
+  /** Effect resolving to the raw Workers AI runtime binding. */
+  readonly raw: Effect.Effect<Ai, never, RuntimeContext>;
+  /**
+   * Effect resolving to the AI Gateway id to route `ai.run` calls through.
+   * Omit for a plain Workers AI binding — requests then go directly to
+   * Workers AI without a gateway.
+   */
+  readonly id?: Effect.Effect<string, never, RuntimeContext>;
+}
+
+/**
+ * Options for constructing a Workers AI-backed LanguageModel.
  */
 export interface LanguageModelOptions {
-  /** Already-bound AI Gateway client from `Cloudflare.AI.QueryGateway(gateway)`. */
-  readonly client: QueryGatewayClient;
+  /**
+   * Already-bound AI client — from `Cloudflare.AI.QueryGateway(gateway)`
+   * (routed through the gateway) or `Cloudflare.Workers.AI()` (direct).
+   */
+  readonly client: LanguageModelClient;
   /** Workers AI model id, e.g. `@cf/meta/llama-3.3-70b-instruct-fp8-fast`. */
   readonly model: string;
   /** Optional per-call defaults; overridable per request via `providerOptions`. */
@@ -57,7 +79,7 @@ export const makeLanguageModel = ({
 > =>
   Effect.gen(function* () {
     const ai = yield* client.raw;
-    const gatewayId = yield* client.id;
+    const gatewayId = client.id === undefined ? undefined : yield* client.id;
 
     const callRaw = (
       body: WorkersAiInputs,
@@ -69,7 +91,9 @@ export const makeLanguageModel = ({
             model as keyof AiModels,
             body as unknown as AiModels[keyof AiModels]["inputs"],
             {
-              gateway: { id: gatewayId },
+              ...(gatewayId === undefined
+                ? {}
+                : { gateway: { id: gatewayId } }),
               returnRawResponse: true,
             },
           ),

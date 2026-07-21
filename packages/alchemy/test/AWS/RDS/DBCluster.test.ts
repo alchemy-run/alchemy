@@ -7,6 +7,8 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -34,8 +36,8 @@ const base: DBClusterProps = {
 test.provider("diff: backup retention is an in-place update", () =>
   Effect.gen(function* () {
     const result = yield* callDiff(
-      { ...base, backupRetentionPeriod: 1 },
-      { ...base, backupRetentionPeriod: 7 },
+      { ...base, backupRetentionPeriod: "1 day" },
+      { ...base, backupRetentionPeriod: "7 days" },
     );
     expect(result).toBeUndefined();
   }),
@@ -69,6 +71,91 @@ test.provider("diff: changing engineMode forces replacement", () =>
     );
     expect(result).toEqual({ action: "replace" });
   }),
+);
+
+// Render a deploy failure (whatever engine wrapper it arrives in) to a string
+// we can assert AWS's parameter-validation message against.
+const renderFailure = (attempt: Result.Result<unknown, unknown>): string => {
+  if (!Result.isFailure(attempt)) {
+    return "";
+  }
+  const failure = attempt.failure;
+  const json = (() => {
+    try {
+      return JSON.stringify(failure);
+    } catch {
+      return "";
+    }
+  })();
+  return `${String(failure)} ${json}`;
+};
+
+// Live wire probes for this PR's Redacted/Duration prop conversions. Both
+// drive the full engine + provider `reconcile` path into a real
+// `createDBCluster` call that AWS rejects at parameter-validation time, so
+// nothing is ever provisioned and the probe completes in seconds.
+//
+// Probe 1 proves `masterUserPassword: Redacted.Redacted<string>` is
+// serialized to the actual secret characters on the wire — AWS's validator
+// can only reject the password if it saw the real '@'/' ' characters, not a
+// "<redacted>" placeholder.
+//
+// Probe 2 proves `backupRetentionPeriod: Duration.Input` ("60 days") reaches
+// the wire as integer days — AWS can only reject 60 > 35 if the converted
+// number arrived.
+//
+// (The in-range live round-trip — create with "1 day", read back 1, modify to
+// "3 days", read back 3 — is covered by the RDS_TEST_LIFECYCLE-gated test
+// below, which needs ~15+ minutes of Aurora provisioning.)
+test.provider(
+  "wire probe: Redacted password + Duration retention reach createDBCluster",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const badPassword = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* DBCluster("AuditProbeCluster", {
+              dbClusterIdentifier: "alchemy-audit-probe",
+              engine: "aurora-postgresql",
+              masterUsername: "alchemy",
+              // '@' and ' ' are forbidden password characters — AWS rejects
+              // the create before provisioning anything.
+              masterUserPassword: Redacted.make("bad@pass word1"),
+              backupRetentionPeriod: "3 days",
+            });
+          }),
+        ),
+      );
+      expect(Result.isFailure(badPassword)).toBe(true);
+      // Typed tag (patched into distilled rds createDBCluster) + AWS's own
+      // validation text naming the password parameter.
+      expect(renderFailure(badPassword)).toContain("InvalidParameterValue");
+      expect(renderFailure(badPassword)).toContain("MasterUserPassword");
+
+      const badRetention = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* DBCluster("AuditProbeCluster", {
+              dbClusterIdentifier: "alchemy-audit-probe",
+              engine: "aurora-postgresql",
+              masterUsername: "alchemy",
+              masterUserPassword: Redacted.make("ValidPassw0rd"),
+              // 60 days is above the 1-35 day API maximum — AWS echoes the
+              // converted integer back in the validation error.
+              backupRetentionPeriod: "60 days",
+            });
+          }),
+        ),
+      );
+      expect(Result.isFailure(badRetention)).toBe(true);
+      expect(renderFailure(badRetention)).toContain("InvalidParameterValue");
+      expect(renderFailure(badRetention)).toMatch(/retention/i);
+
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
 );
 
 // Read-only `list()` test (no deploy). An Aurora DB cluster takes MANY minutes
@@ -172,7 +259,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 1,
+            backupRetentionPeriod: "1 day",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: false,
           });
@@ -197,7 +284,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 3,
+            backupRetentionPeriod: "3 days",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: true,
           });
@@ -223,7 +310,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 3,
+            backupRetentionPeriod: "3 days",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: false,
           });

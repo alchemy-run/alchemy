@@ -6,6 +6,7 @@ import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -30,6 +31,14 @@ test.provider(
       const logGroupName = "/alchemy/test/ecs-task-list";
       const taskRoleName = "alchemy-test-ecs-task-list-task-role";
       const executionRoleName = "alchemy-test-ecs-task-list-execution-role";
+
+      // Reclaim any revisions a previously-killed run left behind, and
+      // guarantee full deletion (deregister + delete) on success, failure,
+      // and interruption.
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -60,13 +69,6 @@ test.provider(
       });
       const arn = registered.taskDefinition?.taskDefinitionArn;
       expect(arn).toBeDefined();
-      // Safety net: deregister the out-of-band task definition on scope close
-      // even if the assertions below fail.
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: arn! })
-          .pipe(Effect.ignore),
-      );
 
       const provider = yield* Provider.findProvider(Task);
       const all = yield* provider.list();
@@ -87,9 +89,7 @@ test.provider(
       expect(found?.taskRoleName).toBe(taskRoleName);
       expect(found?.executionRoleName).toBe(executionRoleName);
 
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: arn! })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 240_000 },
 );
@@ -106,6 +106,14 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const family = "alchemy-test-ecs-task-multicontainer";
+
+      // Reclaim any revisions a previously-killed run left behind, and
+      // guarantee full deletion of BOTH revisions registered below on
+      // success, failure, and interruption.
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -141,11 +149,6 @@ test.provider(
       const td = registered.taskDefinition;
       const arn = td?.taskDefinitionArn;
       expect(arn).toBeDefined();
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: arn! })
-          .pipe(Effect.ignore),
-      );
 
       const described = yield* ecs.describeTaskDefinition({
         taskDefinition: arn!,
@@ -180,13 +183,8 @@ test.provider(
         ],
       });
       expect(updated.taskDefinition?.revision).toBeGreaterThan(td!.revision!);
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({
-            taskDefinition: updated.taskDefinition!.taskDefinitionArn!,
-          })
-          .pipe(Effect.ignore),
-      );
+
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 120_000 },
 );

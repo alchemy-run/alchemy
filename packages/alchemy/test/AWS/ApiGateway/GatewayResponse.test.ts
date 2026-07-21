@@ -1,9 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -11,6 +12,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "create and delete gateway response",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { api } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgGwRespApi", {
@@ -34,6 +37,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(g.responseType).toEqual("DEFAULT_4XX");
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -41,6 +45,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "update gateway response status and templates",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { api } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgGwRespUpdateApi", {
@@ -84,6 +90,7 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -122,5 +129,6 @@ test.provider.skipIf(!!process.env.FAST)(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );

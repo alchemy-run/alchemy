@@ -33,11 +33,17 @@ export interface Group extends Resource<
   "AWS.IAM.Group",
   GroupProps,
   {
+    /** The ARN of the group. */
     groupArn: string;
+    /** The name of the group. */
     groupName: string;
+    /** The stable unique ID of the group. */
     groupId: string | undefined;
+    /** The IAM path of the group. */
     path: string | undefined;
+    /** Managed policy ARNs attached to the group. */
     managedPolicyArns: string[];
+    /** Inline policies embedded in the group, keyed by policy name. */
     inlinePolicies: Record<string, PolicyDocument>;
   },
   never,

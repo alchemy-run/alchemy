@@ -508,10 +508,12 @@ export const SecurityGroupProvider = () =>
           }
 
           // Group name change requires replacement
-          const newGroupName = yield* createGroupName(id, news.groupName);
-          const oldGroupName = output?.groupName
-            ? output.groupName
-            : yield* createGroupName(id, olds.groupName);
+          const oldGroupName =
+            output?.groupName ?? (yield* createGroupName(id, olds.groupName));
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id differently
+          // today. Only an explicit user-provided name can force a replace.
+          const newGroupName = news.groupName ?? oldGroupName;
           if (newGroupName !== oldGroupName) {
             return { action: "replace" };
           }
@@ -520,7 +522,12 @@ export const SecurityGroupProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const groupName = yield* createGroupName(id, news.groupName);
+          // Prefer the deployed name: regenerating would target a different
+          // resource if the generator's output for this id ever drifts. (An
+          // explicit groupName change arrives here as a fresh replacement
+          // instance with no output.)
+          const groupName =
+            output?.groupName ?? (yield* createGroupName(id, news.groupName));
           const desiredTags = yield* createTags(id, news.tags);
 
           // Observe — find the SG via cached id, else fall through to create.

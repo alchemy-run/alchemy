@@ -26,7 +26,9 @@ export interface AnomalyDetector extends Resource<
   "AWS.CloudWatch.AnomalyDetector",
   AnomalyDetectorProps,
   {
+    /** Synthetic identifier derived from the detector's metric identity. */
     detectorId: string;
+    /** The full AnomalyDetector description as last read from CloudWatch. */
     anomalyDetector: cloudwatch.AnomalyDetector;
   },
   never,
@@ -34,7 +36,9 @@ export interface AnomalyDetector extends Resource<
 > {}
 
 /**
- * A CloudWatch anomaly detector.
+ * A CloudWatch anomaly detector — trains a model on a metric's historical
+ * data and computes an expected-value band, which alarms can use via the
+ * `ANOMALY_DETECTION_BAND` metric-math function.
  * @resource
  * @section Creating Detectors
  * @example Single Metric Detector
@@ -44,6 +48,26 @@ export interface AnomalyDetector extends Resource<
  *   MetricName: "Errors",
  *   Stat: "Sum",
  * });
+ * ```
+ *
+ * @example Detector on a Custom Metric
+ * ```typescript
+ * // pair with PutMetricData publishing to the same namespace/metric
+ * const detector = yield* AnomalyDetector("PaymentsDetector", {
+ *   Namespace: "MyApp/Payments",
+ *   MetricName: "PaymentProcessed",
+ *   Stat: "Sum",
+ * });
+ * ```
+ *
+ * @section Reading Detectors at Runtime
+ * @example List Detectors from a Function
+ * ```typescript
+ * // init — see DescribeAnomalyDetectors
+ * const describeAnomalyDetectors = yield* AWS.CloudWatch.DescribeAnomalyDetectors();
+ *
+ * // runtime
+ * const result = yield* describeAnomalyDetectors({ Namespace: "MyApp/Payments" });
  * ```
  */
 export const AnomalyDetector = Resource<AnomalyDetector>(

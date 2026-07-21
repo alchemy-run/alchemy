@@ -151,7 +151,7 @@ with its own scope; completed tasks replay from the journal, so
 scoped resources are only re-acquired by steps that actually
 execute.
 
-Per-run resources like `Drizzle.postgres` pools follow this: the
+Per-run resources like `Drizzle.Postgres` pools follow this: the
 pool opens on the first query inside a step, is reused by every
 later step in the same invocation, and closes when the invocation
 settles. The workflow's init closure shares the isolate-lifetime

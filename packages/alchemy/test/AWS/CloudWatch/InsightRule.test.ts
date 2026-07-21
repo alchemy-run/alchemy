@@ -43,5 +43,10 @@ test.provider("list enumerates the deployed insight rule", (stack) =>
     expect(all.some((r) => r.ruleName === deployed.ruleName)).toBe(true);
 
     yield* stack.destroy();
+
+    // Out-of-band assert-gone: the exhaustively-paginated live listing no
+    // longer contains the rule after the final destroy.
+    const after = yield* provider.list();
+    expect(after.some((r) => r.ruleName === deployed.ruleName)).toBe(false);
   }),
 );

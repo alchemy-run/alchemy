@@ -1,9 +1,11 @@
 import * as rds from "@distilled.cloud/aws/rds";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -93,9 +95,10 @@ export interface DBInstanceProps {
    */
   availabilityZone?: string;
   /**
-   * Backup retention period in days. In-place modify.
+   * Backup retention period (e.g. `"7 days"` or `Duration.days(7)`).
+   * Sent to the API in whole days. In-place modify.
    */
-  backupRetentionPeriod?: number;
+  backupRetentionPeriod?: Duration.Input;
   /**
    * Daily backup window, e.g. `07:00-09:00`. In-place modify.
    */
@@ -114,6 +117,8 @@ export interface DBInstanceProps {
   dbParameterGroupName?: string;
   /**
    * VPC security groups attached to the instance. In-place modify.
+   * Ignored for Aurora cluster members (`dbClusterIdentifier` set) — security
+   * groups are managed on the DB cluster instead.
    */
   vpcSecurityGroupIds?: string[];
   /**
@@ -149,13 +154,15 @@ export interface DBInstanceProps {
    */
   performanceInsightsKMSKeyId?: string;
   /**
-   * Performance Insights retention in days (7, 731, or month multiples).
+   * Performance Insights retention (e.g. `"7 days"`). Sent to the API in
+   * whole days (valid: 7, 731, or month multiples).
    */
-  performanceInsightsRetentionPeriod?: number;
+  performanceInsightsRetentionPeriod?: Duration.Input;
   /**
-   * Enhanced-monitoring granularity in seconds (0, 1, 5, 10, 15, 30, 60).
+   * Enhanced-monitoring granularity (e.g. `"60 seconds"`). Sent to the API
+   * in whole seconds (valid: 0, 1, 5, 10, 15, 30, 60).
    */
-  monitoringInterval?: number;
+  monitoringInterval?: Duration.Input;
   /**
    * IAM role ARN for enhanced monitoring. In-place modify.
    */
@@ -197,52 +204,203 @@ export interface DBInstanceProps {
    * User-defined tags.
    */
   tags?: Record<string, string>;
+  /**
+   * Skip the final snapshot when the instance is deleted. Set `false` to
+   * have RDS take a final snapshot on teardown — belt-and-suspenders beyond
+   * `deletionProtection` for databases whose data must survive a deliberate
+   * destroy. Persisted into state so `delete` honors it without props.
+   * @default true
+   */
+  skipFinalSnapshot?: boolean;
+  /**
+   * Identifier for the final snapshot taken when `skipFinalSnapshot` is
+   * `false`. Defaults to `<instance-identifier>-final-<timestamp>` so
+   * repeated destroy/create cycles never collide on snapshot names.
+   */
+  finalDBSnapshotIdentifier?: string;
 }
 
 export interface DBInstance extends Resource<
   "AWS.RDS.DBInstance",
   DBInstanceProps,
   {
+    /**
+     * Identifier of the instance.
+     */
     dbInstanceIdentifier: string;
+    /**
+     * ARN of the instance.
+     */
     dbInstanceArn: string;
+    /**
+     * Aurora cluster the instance belongs to, if any.
+     */
     dbClusterIdentifier: string | undefined;
+    /**
+     * DNS address of the instance endpoint.
+     */
     endpointAddress: string | undefined;
+    /**
+     * Port of the instance endpoint.
+     */
     endpointPort: number | undefined;
+    /**
+     * Instance class (e.g. `db.serverless`, `db.t3.micro`).
+     */
     dbInstanceClass: string | undefined;
+    /**
+     * Database engine.
+     */
     engine: string | undefined;
+    /**
+     * Engine version in use.
+     */
     engineVersion: string | undefined;
+    /**
+     * Status of the instance (e.g. `available`).
+     */
     status: string | undefined;
+    /**
+     * Failover promotion tier inside the cluster.
+     */
     promotionTier: number | undefined;
+    /**
+     * Whether the instance has a public address.
+     */
     publiclyAccessible: boolean | undefined;
+    /**
+     * Subnet group the instance is placed in.
+     */
     dbSubnetGroupName: string | undefined;
+    /**
+     * Parameter groups applied to the instance.
+     */
     dbParameterGroupNames: string[];
+    /**
+     * Allocated storage in GiB.
+     */
     allocatedStorage: number | undefined;
+    /**
+     * Storage autoscaling ceiling in GiB.
+     */
     maxAllocatedStorage: number | undefined;
+    /**
+     * Storage type (e.g. `gp3`, `io1`, `aurora`).
+     */
     storageType: string | undefined;
+    /**
+     * Provisioned IOPS.
+     */
     iops: number | undefined;
+    /**
+     * Storage throughput in MiBps (gp3).
+     */
     storageThroughput: number | undefined;
+    /**
+     * Whether the instance is Multi-AZ.
+     */
     multiAZ: boolean | undefined;
+    /**
+     * Availability Zone of the instance.
+     */
     availabilityZone: string | undefined;
+    /**
+     * Standby AZ for Multi-AZ deployments.
+     */
     secondaryAvailabilityZone: string | undefined;
+    /**
+     * Backup retention period in days.
+     */
     backupRetentionPeriod: number | undefined;
+    /**
+     * Daily backup window (`hh:mm-hh:mm` UTC).
+     */
     preferredBackupWindow: string | undefined;
+    /**
+     * Weekly maintenance window.
+     */
     preferredMaintenanceWindow: string | undefined;
+    /**
+     * KMS key used for storage encryption.
+     */
     kmsKeyId: string | undefined;
+    /**
+     * Whether storage is encrypted.
+     */
     storageEncrypted: boolean | undefined;
+    /**
+     * CA certificate identifier.
+     */
     caCertificateIdentifier: string | undefined;
+    /**
+     * Whether IAM database authentication is enabled.
+     */
     iamDatabaseAuthenticationEnabled: boolean | undefined;
+    /**
+     * Whether Performance Insights is enabled.
+     */
     performanceInsightsEnabled: boolean | undefined;
+    /**
+     * Enhanced-monitoring granularity in seconds.
+     */
     monitoringInterval: number | undefined;
+    /**
+     * ARN of the enhanced-monitoring CloudWatch Logs stream.
+     */
     enhancedMonitoringResourceArn: string | undefined;
+    /**
+     * Log types exported to CloudWatch Logs.
+     */
     enabledCloudwatchLogsExports: string[];
+    /**
+     * Whether deletion protection is enabled.
+     */
     deletionProtection: boolean | undefined;
+    /**
+     * Immutable region-unique instance resource ID (used in IAM auth ARNs).
+     */
     dbiResourceId: string | undefined;
+    /**
+     * Master username.
+     */
     masterUsername: string | undefined;
+    /**
+     * Whether the final snapshot is skipped on delete, persisted from the
+     * prop of the same name. `delete` receives only the stored attributes,
+     * never live props, so the snapshot decision must ride in state;
+     * `undefined` (older state without this attr) is treated as skip.
+     */
+    skipFinalSnapshot: boolean | undefined;
+    /**
+     * Identifier used for the final snapshot when `skipFinalSnapshot` is
+     * `false`, persisted from props so `delete` can name the snapshot without
+     * live props. `undefined` means `delete` falls back to the default
+     * `<instance-identifier>-final-<timestamp>` naming scheme.
+     */
+    finalDBSnapshotIdentifier: string | undefined;
+    /**
+     * ARN of the Secrets Manager secret holding master credentials.
+     */
     masterUserSecretArn: string | undefined;
+    /**
+     * Option group memberships.
+     */
     optionGroupMemberships: string[];
+    /**
+     * License model.
+     */
     licenseModel: string | undefined;
+    /**
+     * Configured database port.
+     */
     dbInstancePort: number | undefined;
+    /**
+     * Network type (`IPV4` or `DUAL`).
+     */
     networkType: string | undefined;
+    /**
+     * Tags on the instance.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -270,7 +428,7 @@ export interface DBInstance extends Resource<
  *   storageType: "gp3",
  *   masterUsername: "admin",
  *   masterUserPassword: Redacted.make("supersecret"),
- *   backupRetentionPeriod: 7,
+ *   backupRetentionPeriod: "7 days",
  *   deletionProtection: false,
  * });
  * ```
@@ -292,7 +450,7 @@ export interface DBInstance extends Resource<
  *   engine: "postgres",
  *   dbInstanceClass: "db.t3.micro",
  *   allocatedStorage: 20,
- *   monitoringInterval: 60,
+ *   monitoringInterval: "60 seconds",
  *   monitoringRoleArn: monitoringRole.roleArn,
  *   enablePerformanceInsights: true,
  *   enableCloudwatchLogsExports: ["postgresql", "upgrade"],
@@ -316,10 +474,16 @@ const toTagRecord = (
 const toAttrs = ({
   instance,
   tags,
+  skipFinalSnapshot,
+  finalDBSnapshotIdentifier,
 }: {
   instance: rds.DBInstance;
   tags: Record<string, string>;
+  skipFinalSnapshot?: boolean | undefined;
+  finalDBSnapshotIdentifier?: string | undefined;
 }): DBInstance["Attributes"] => ({
+  skipFinalSnapshot,
+  finalDBSnapshotIdentifier,
   dbInstanceIdentifier: instance.DBInstanceIdentifier ?? "",
   dbInstanceArn: instance.DBInstanceArn ?? "",
   dbClusterIdentifier: instance.DBClusterIdentifier,
@@ -519,13 +683,28 @@ export const DBInstanceProvider = () =>
           if (!instance?.DBInstanceArn) {
             return undefined;
           }
-          return toAttrs({ instance, tags: toTagRecord(instance.TagList) });
+          return toAttrs({
+            instance,
+            tags: toTagRecord(instance.TagList),
+            // Not observable from AWS — carry the stored deletion behavior
+            // forward so a refresh doesn't drop it.
+            skipFinalSnapshot: output?.skipFinalSnapshot,
+            finalDBSnapshotIdentifier: output?.finalDBSnapshotIdentifier,
+          });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const identifier =
             output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          // Duration props → the exact wire units the RDS API expects.
+          const backupRetentionDays = toWireDays(news.backupRetentionPeriod);
+          const performanceInsightsRetentionDays = toWireDays(
+            news.performanceInsightsRetentionPeriod,
+          );
+          const monitoringIntervalSeconds = toWireSeconds(
+            news.monitoringInterval,
+          );
 
           // Observe — fetch live instance state.
           let observed = yield* readInstance(identifier);
@@ -553,7 +732,7 @@ export const DBInstanceProvider = () =>
                 Port: news.port,
                 MultiAZ: news.multiAZ,
                 AvailabilityZone: news.availabilityZone,
-                BackupRetentionPeriod: news.backupRetentionPeriod,
+                BackupRetentionPeriod: backupRetentionDays,
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 DBSubnetGroupName: news.dbSubnetGroupName,
@@ -568,13 +747,18 @@ export const DBInstanceProvider = () =>
                 EnablePerformanceInsights: news.enablePerformanceInsights,
                 PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
                 PerformanceInsightsRetentionPeriod:
-                  news.performanceInsightsRetentionPeriod,
-                MonitoringInterval: news.monitoringInterval,
+                  performanceInsightsRetentionDays,
+                MonitoringInterval: monitoringIntervalSeconds,
                 MonitoringRoleArn: news.monitoringRoleArn,
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
                 DeletionProtection: news.deletionProtection,
                 NetworkType: news.networkType,
-                VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+                // Cluster members inherit VPC security groups from the DB
+                // cluster; passing them fails with InvalidParameterCombination
+                // ("Set vpc security group for the DB Cluster").
+                VpcSecurityGroupIds: news.dbClusterIdentifier
+                  ? undefined
+                  : news.vpcSecurityGroupIds,
                 PubliclyAccessible: news.publiclyAccessible,
                 PromotionTier: news.promotionTier,
                 AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
@@ -624,7 +808,7 @@ export const DBInstanceProvider = () =>
             setIf("Iops", news.iops, observed.Iops);
             setIf("StorageThroughput", news.storageThroughput, observed.StorageThroughput); // prettier-ignore
             setIf("MultiAZ", news.multiAZ, observed.MultiAZ);
-            setIf("BackupRetentionPeriod", news.backupRetentionPeriod, observed.BackupRetentionPeriod); // prettier-ignore
+            setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
             setIf("DBPortNumber", news.port, observed.DbInstancePort);
@@ -634,8 +818,8 @@ export const DBInstanceProvider = () =>
             setIf("EnableIAMDatabaseAuthentication", news.enableIAMDatabaseAuthentication, observed.IAMDatabaseAuthenticationEnabled); // prettier-ignore
             setIf("EnablePerformanceInsights", news.enablePerformanceInsights, observed.PerformanceInsightsEnabled); // prettier-ignore
             setIf("PerformanceInsightsKMSKeyId", news.performanceInsightsKMSKeyId, observed.PerformanceInsightsKMSKeyId); // prettier-ignore
-            setIf("PerformanceInsightsRetentionPeriod", news.performanceInsightsRetentionPeriod, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
-            setIf("MonitoringInterval", news.monitoringInterval, observed.MonitoringInterval); // prettier-ignore
+            setIf("PerformanceInsightsRetentionPeriod", performanceInsightsRetentionDays, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
+            setIf("MonitoringInterval", monitoringIntervalSeconds, observed.MonitoringInterval); // prettier-ignore
             setIf("MonitoringRoleArn", news.monitoringRoleArn, observed.MonitoringRoleArn); // prettier-ignore
             setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore
             setIf("NetworkType", news.networkType, observed.NetworkType);
@@ -644,7 +828,13 @@ export const DBInstanceProvider = () =>
             setIf("PromotionTier", news.promotionTier, observed.PromotionTier);
             setIf("AutoMinorVersionUpgrade", news.autoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade); // prettier-ignore
             setIf("CopyTagsToSnapshot", news.copyTagsToSnapshot, observed.CopyTagsToSnapshot); // prettier-ignore
-            if (news.vpcSecurityGroupIds !== undefined) {
+            // Security groups on Aurora cluster members are managed by the DB
+            // cluster (ModifyDBCluster), so only sync them for standalone
+            // instances.
+            if (
+              news.vpcSecurityGroupIds !== undefined &&
+              news.dbClusterIdentifier === undefined
+            ) {
               core.VpcSecurityGroupIds = news.vpcSecurityGroupIds;
               coreDirty = true;
             }
@@ -702,13 +892,31 @@ export const DBInstanceProvider = () =>
           }
 
           yield* session.note(dbInstanceArn || identifier);
-          return toAttrs({ instance: observed, tags: desiredTags });
+          return toAttrs({
+            instance: observed,
+            tags: desiredTags,
+            skipFinalSnapshot: news.skipFinalSnapshot,
+            finalDBSnapshotIdentifier: news.finalDBSnapshotIdentifier,
+          });
         }),
         delete: Effect.fn(function* ({ output }) {
+          // Default preserves the existing behavior (no final snapshot). When
+          // the resource was declared with `skipFinalSnapshot: false`, take
+          // one — timestamped by default so repeated destroy/create cycles
+          // never collide on snapshot names.
+          const skipFinalSnapshot = output.skipFinalSnapshot ?? true;
+          const finalDBSnapshotIdentifier = skipFinalSnapshot
+            ? undefined
+            : (output.finalDBSnapshotIdentifier ??
+              `${output.dbInstanceIdentifier}-final-${new Date()
+                .toISOString()
+                .replaceAll(/[:.]/g, "-")
+                .toLowerCase()}`);
           yield* rds
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,
-              SkipFinalSnapshot: true,
+              SkipFinalSnapshot: skipFinalSnapshot,
+              FinalDBSnapshotIdentifier: finalDBSnapshotIdentifier,
             })
             .pipe(
               Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
@@ -731,7 +939,9 @@ export const DBInstanceProvider = () =>
             {
               schedule: Schedule.max([
                 Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
+                // A final snapshot serializes before the delete, so give
+                // that path a larger budget than the plain-delete wait.
+                Schedule.recurs(skipFinalSnapshot ? 40 : 80),
               ]),
               until: (exists) => exists === false,
             },

@@ -30,7 +30,7 @@ export default class TestTask extends AWS.ECS.Task<TestTask>()(
     },
     // Docker Hub's `oven/bun` image; the public.ecr.aws default mirror
     // aggressively rate-limits anonymous pulls (429) during local builds.
-    docker: { base: "oven/bun:1" },
+    image: "oven/bun:1",
   },
   Effect.gen(function* () {
     const host = yield* ServerHost;

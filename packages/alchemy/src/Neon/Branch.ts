@@ -16,7 +16,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { listSqlFiles, readSqlFile } from "../Sql/SqlFile.ts";
+import { listSqlFiles, readSqlFile } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
@@ -239,10 +239,12 @@ export const BranchProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      const newName = yield* createBranchName(id, news.name);
-      const oldName = output?.branchName
-        ? output.branchName
-        : yield* createBranchName(id, olds.name);
+      const oldName =
+        output?.branchName ?? (yield* createBranchName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const newName = news.name ?? oldName;
       if (
         newName !== oldName ||
         (news.protected ?? false) !== (output?.protected ?? false) ||
@@ -339,7 +341,13 @@ export const BranchProvider = () =>
       };
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const newName = yield* createBranchName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts. An
+      // explicit `news.name` still renames the branch in place.
+      const newName =
+        news.name ??
+        output?.branchName ??
+        (yield* createBranchName(id, news.name));
 
       // Ensure — when no prior output exists we create the branch;
       // otherwise sync the mutable scalar fields on the existing

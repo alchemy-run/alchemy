@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import { amazonLinux2023, Instance, Subnet, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -37,20 +38,28 @@ test.provider(
             vpcId: vpc.vpcId,
             cidrBlock: "10.0.1.0/24",
           });
-          return yield* Instance("ListInstance", {
+          const instance = yield* Instance("ListInstance", {
             imageId,
             instanceType: "t3.micro",
             subnetId: subnet.subnetId,
           });
+          return { vpc, instance };
         }),
       );
 
       const provider = yield* Provider.findProvider(Instance);
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.instanceId === deployed.instanceId)).toBe(true);
+      expect(
+        all.some((x) => x.instanceId === deployed.instance.instanceId),
+      ).toBe(true);
 
       yield* stack.destroy();
+
+      // Zero-orphan proof: the instance reached a terminal state and the VPC
+      // (which cannot delete while any ENI lingers) is gone.
+      yield* assertInstanceTerminated(deployed.instance.instanceId);
+      yield* assertVpcGone(deployed.vpc.vpcId);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { TargetGroup } from "@/AWS/ELBv2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { getDefaultVpc } from "../DefaultVpc.ts";
@@ -28,6 +29,9 @@ test.provider(
             port: 80,
             protocol: "HTTP",
             targetType: "ip",
+            // Duration.Input props — verified on the wire below.
+            healthCheckInterval: "45 seconds",
+            healthCheckTimeout: "20 seconds",
           });
 
           return { targetGroup };
@@ -35,6 +39,16 @@ test.provider(
       );
 
       expect(deployed.targetGroup.targetGroupArn).toBeDefined();
+
+      // Out-of-band: Duration.Input health-check props reach the wire as
+      // whole seconds.
+      const observed = yield* elbv2
+        .describeTargetGroups({
+          TargetGroupArns: [deployed.targetGroup.targetGroupArn],
+        })
+        .pipe(Effect.map((r) => r.TargetGroups?.[0]));
+      expect(observed?.HealthCheckIntervalSeconds).toBe(45);
+      expect(observed?.HealthCheckTimeoutSeconds).toBe(20);
 
       const provider = yield* Provider.findProvider(TargetGroup);
       const all = yield* provider.list();
@@ -46,6 +60,19 @@ test.provider(
       ).toBe(true);
 
       yield* stack.destroy();
+
+      // Out-of-band: the target group is gone after destroy.
+      const after = yield* elbv2
+        .describeTargetGroups({
+          TargetGroupArns: [deployed.targetGroup.targetGroupArn],
+        })
+        .pipe(
+          Effect.map((r) => r.TargetGroups?.length ?? 0),
+          Effect.catchTag("TargetGroupNotFoundException", () =>
+            Effect.succeed(0),
+          ),
+        );
+      expect(after).toBe(0);
     }),
   { timeout: 240_000 },
 );

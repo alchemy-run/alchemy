@@ -5,6 +5,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertEipGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,5 +32,7 @@ test.provider("list enumerates the deployed EIP", (stack) =>
     );
 
     yield* stack.destroy();
+
+    yield* assertEipGone(deployed.allocationId);
   }).pipe(logLevel),
 );

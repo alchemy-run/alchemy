@@ -10,7 +10,7 @@ import { relations, Widgets } from "./schema.ts";
  * Regression guard for the ExecutionContext-in-Workflow fix
  * (https://github.com/alchemy-run/alchemy/pull/515).
  *
- * `Drizzle.postgres` resolves its pool through `ExecutionContext`, which
+ * `Drizzle.Postgres` resolves its pool through `ExecutionContext`, which
  * `WorkflowBridge.run` now provides per run and `task` threads into each
  * step. Without the fix the query inside a `task` dies on the missing
  * service and the run goes `errored`.
@@ -24,7 +24,7 @@ export default class DrizzleWorkflow extends Cloudflare.Workflow<DrizzleWorkflow
     // `proxyChain` defers the connect to the first query, so the pool opens
     // inside a step — where `ExecutionContext` is provided — not here at init.
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     return Effect.fn(function* (input: { id: number; name: string }) {
       const inserted = yield* Cloudflare.Workflows.task(

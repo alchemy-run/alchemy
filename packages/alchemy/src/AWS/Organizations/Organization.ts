@@ -21,14 +21,36 @@ export interface Organization extends Resource<
   "AWS.Organizations.Organization",
   OrganizationProps,
   {
+    /**
+     * ID of the organization (e.g. `o-exampleorgid`).
+     */
     organizationId: OrganizationId;
+    /**
+     * ARN of the organization.
+     */
     organizationArn: OrganizationArn;
+    /**
+     * Feature set enabled on the organization (`ALL` or
+     * `CONSOLIDATED_BILLING`).
+     */
     featureSet: organizations.OrganizationFeatureSet | undefined;
+    /**
+     * ARN of the management account.
+     */
     managementAccountArn: string | undefined;
+    /**
+     * 12-digit ID of the management account.
+     */
     managementAccountId: string | undefined;
+    /**
+     * Email address of the management account.
+     */
     managementAccountEmail:
       | organizations.Organization["MasterAccountEmail"]
       | undefined;
+    /**
+     * Policy types available to the organization.
+     */
     availablePolicyTypes: organizations.PolicyTypeSummary[];
   },
   never,

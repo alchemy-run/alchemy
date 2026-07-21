@@ -1,11 +1,13 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
@@ -52,7 +54,7 @@ export interface DistributionOrigin {
    */
   s3OriginConfig?: {
     originAccessIdentity?: string;
-    originReadTimeout?: number;
+    originReadTimeout?: Duration.Input;
   };
   /**
    * Optional custom origin settings.
@@ -61,8 +63,8 @@ export interface DistributionOrigin {
     httpPort?: number;
     httpsPort?: number;
     originProtocolPolicy?: cloudfront.OriginProtocolPolicy;
-    originReadTimeout?: number;
-    originKeepaliveTimeout?: number;
+    originReadTimeout?: Duration.Input;
+    originKeepaliveTimeout?: Duration.Input;
     originSslProtocols?: cloudfront.SslProtocol[];
     /**
      * IP address type CloudFront uses to connect to the origin.
@@ -81,8 +83,8 @@ export interface DistributionOrigin {
    */
   vpcOriginConfig?: {
     vpcOriginId: Input<string>;
-    originReadTimeout?: number;
-    originKeepaliveTimeout?: number;
+    originReadTimeout?: Duration.Input;
+    originKeepaliveTimeout?: Duration.Input;
     ownerAccountId?: string;
   };
   /**
@@ -101,32 +103,81 @@ export interface DistributionOrigin {
    */
   connectionAttempts?: number;
   /**
-   * Seconds CloudFront waits when trying to establish a connection (1-10).
+   * How long CloudFront waits when trying to establish a connection (1-10
+   * seconds), e.g. `"5 seconds"` (a bare number is milliseconds).
    */
-  connectionTimeout?: number;
+  connectionTimeout?: Duration.Input;
   /**
-   * Seconds CloudFront waits for the origin to deliver a complete response.
+   * How long CloudFront waits for the origin to deliver a complete response,
+   * e.g. `"30 seconds"` (a bare number is milliseconds).
    */
-  responseCompletionTimeout?: number;
+  responseCompletionTimeout?: Duration.Input;
 }
 
 export interface DistributionBehavior {
+  /**
+   * ID of the origin (or origin group) this behavior routes requests to.
+   */
   targetOriginId: string;
+  /**
+   * How viewers may connect (e.g. `redirect-to-https`, `https-only`).
+   */
   viewerProtocolPolicy?: cloudfront.ViewerProtocolPolicy;
+  /**
+   * HTTP methods CloudFront accepts and forwards to the origin.
+   */
   allowedMethods?: cloudfront.Method[];
+  /**
+   * HTTP methods whose responses CloudFront caches.
+   */
   cachedMethods?: cloudfront.Method[];
+  /**
+   * Whether CloudFront automatically compresses eligible responses.
+   */
   compress?: boolean;
+  /**
+   * Cache policy ID (a managed policy or a `CachePolicy`) controlling the
+   * cache key and TTLs.
+   */
   cachePolicyId?: string;
+  /**
+   * Origin request policy ID controlling which viewer values CloudFront
+   * forwards to the origin.
+   */
   originRequestPolicyId?: string;
+  /**
+   * Response headers policy ID applied to viewer responses.
+   */
   responseHeadersPolicyId?: string;
+  /**
+   * Legacy forwarded-values settings. Prefer `cachePolicyId` /
+   * `originRequestPolicyId` for new configurations.
+   */
   forwardedValues?: cloudfront.ForwardedValues;
-  minTtl?: number;
-  defaultTtl?: number;
-  maxTtl?: number;
+  /**
+   * Minimum time responses stay cached, e.g. `"1 hour"` (a bare number is
+   * milliseconds). Used with `forwardedValues`.
+   */
+  minTtl?: Duration.Input;
+  /**
+   * Default time responses stay cached when the origin sends no caching
+   * headers.
+   */
+  defaultTtl?: Duration.Input;
+  /**
+   * Maximum time responses stay cached.
+   */
+  maxTtl?: Duration.Input;
+  /**
+   * CloudFront Functions to run on viewer request/response events.
+   */
   functionAssociations?: {
     functionArn: string;
     eventType: cloudfront.EventType;
   }[];
+  /**
+   * Lambda@Edge functions to run on viewer/origin request/response events.
+   */
   lambdaFunctionAssociations?: {
     lambdaFunctionArn: string;
     eventType: cloudfront.EventType;
@@ -161,9 +212,23 @@ export interface DistributionBehavior {
 }
 
 export interface DistributionViewerCertificate {
+  /**
+   * Serve HTTPS with the default `*.cloudfront.net` certificate (no custom
+   * domains).
+   */
   cloudFrontDefaultCertificate?: boolean;
+  /**
+   * ARN of an ACM certificate (must live in `us-east-1`) covering the
+   * distribution's aliases.
+   */
   acmCertificateArn?: string;
+  /**
+   * How CloudFront serves HTTPS to viewers (`sni-only` for modern clients).
+   */
   sslSupportMethod?: cloudfront.SSLSupportMethod;
+  /**
+   * Minimum TLS protocol version viewers must support.
+   */
   minimumProtocolVersion?: cloudfront.MinimumProtocolVersion;
   /**
    * Legacy IAM certificate ID.
@@ -396,6 +461,28 @@ export interface Distribution extends Resource<
  * hosted zone ID needed for Route 53 alias records.
  * @resource
  * @section Creating Distributions
+ * @example CDN in Front of an HTTP Origin
+ * ```typescript
+ * import * as AWS from "alchemy/AWS";
+ *
+ * const distribution = yield* AWS.CloudFront.Distribution("ApiCdn", {
+ *   origins: [
+ *     {
+ *       id: "api",
+ *       domainName: "abc123.lambda-url.us-west-2.on.aws",
+ *       customOriginConfig: { originProtocolPolicy: "https-only" },
+ *     },
+ *   ],
+ *   defaultCacheBehavior: {
+ *     targetOriginId: "api",
+ *     viewerProtocolPolicy: "redirect-to-https",
+ *     cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
+ *     originRequestPolicyId:
+ *       AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+ *   },
+ * });
+ * ```
+ *
  * @example Private S3 Origin
  * ```typescript
  * const distribution = yield* Distribution("WebsiteCdn", {
@@ -420,6 +507,20 @@ export interface Distribution extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Invalidating the Cache
+ * @example Purge Paths on Deploy
+ * ```typescript
+ * // declaratively, whenever `version` changes:
+ * yield* AWS.CloudFront.Invalidation("PurgeBlog", {
+ *   distributionId: distribution.distributionId,
+ *   paths: ["/blog/*"],
+ *   version: buildId,
+ * });
+ * ```
+ *
+ * To purge at runtime from a Lambda Function, bind
+ * `CloudFront.CreateInvalidation(distribution)` instead.
  */
 export const Distribution = Resource<Distribution>(
   "AWS.CloudFront.Distribution",
@@ -1046,9 +1147,9 @@ const toBehavior = (
   OriginRequestPolicyId: behavior.originRequestPolicyId,
   ResponseHeadersPolicyId: behavior.responseHeadersPolicyId,
   ForwardedValues: behavior.forwardedValues,
-  MinTTL: behavior.minTtl,
-  DefaultTTL: behavior.defaultTtl,
-  MaxTTL: behavior.maxTtl,
+  MinTTL: toWireSeconds(behavior.minTtl),
+  DefaultTTL: toWireSeconds(behavior.defaultTtl),
+  MaxTTL: toWireSeconds(behavior.maxTtl),
   TrustedKeyGroups: behavior.trustedKeyGroups
     ? {
         Enabled: (behavior.trustedKeyGroups as string[]).length > 0,
@@ -1119,22 +1220,27 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
         }
       : undefined,
     ConnectionAttempts: origin.connectionAttempts,
-    ConnectionTimeout: origin.connectionTimeout,
-    ResponseCompletionTimeout: origin.responseCompletionTimeout,
+    ConnectionTimeout: toWireSeconds(origin.connectionTimeout),
+    ResponseCompletionTimeout: toWireSeconds(origin.responseCompletionTimeout),
     VpcOriginConfig: isVpcOrigin
       ? {
           VpcOriginId: origin.vpcOriginConfig!.vpcOriginId as string,
           OwnerAccountId: origin.vpcOriginConfig!.ownerAccountId,
-          OriginReadTimeout: origin.vpcOriginConfig!.originReadTimeout,
-          OriginKeepaliveTimeout:
+          OriginReadTimeout: toWireSeconds(
+            origin.vpcOriginConfig!.originReadTimeout,
+          ),
+          OriginKeepaliveTimeout: toWireSeconds(
             origin.vpcOriginConfig!.originKeepaliveTimeout,
+          ),
         }
       : undefined,
     S3OriginConfig: isS3Origin
       ? {
           OriginAccessIdentity:
             origin.s3OriginConfig?.originAccessIdentity ?? "",
-          OriginReadTimeout: origin.s3OriginConfig?.originReadTimeout,
+          OriginReadTimeout: toWireSeconds(
+            origin.s3OriginConfig?.originReadTimeout,
+          ),
         }
       : undefined,
     CustomOriginConfig:
@@ -1153,9 +1259,12 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
                 "TLSv1.2",
               ],
             },
-            OriginReadTimeout: origin.customOriginConfig?.originReadTimeout,
-            OriginKeepaliveTimeout:
+            OriginReadTimeout: toWireSeconds(
+              origin.customOriginConfig?.originReadTimeout,
+            ),
+            OriginKeepaliveTimeout: toWireSeconds(
               origin.customOriginConfig?.originKeepaliveTimeout,
+            ),
             IpAddressType: origin.customOriginConfig?.ipAddressType,
             OriginMtlsConfig: origin.customOriginConfig?.originMtlsConfig
               ? {

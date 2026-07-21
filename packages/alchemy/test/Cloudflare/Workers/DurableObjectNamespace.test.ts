@@ -71,6 +71,75 @@ test(
   { timeout: 60_000 },
 );
 
+// Every name here is a fresh UUID, so each is CREATED by this test's request —
+// which is the only moment a `locationHint` has any say.
+const coloFor = (url: string, hint?: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    const query = `name=${crypto.randomUUID()}${hint ? `&hint=${hint}` : ""}`;
+    return yield* client.get(`${url}/colo?${query}`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.flatMap(res.json, (body) => {
+              const colo = (body as { colo?: string }).colo;
+              return colo && colo !== "unknown"
+                ? Effect.succeed(colo)
+                : Effect.fail(new Error(`no colo: ${JSON.stringify(body)}`));
+            })
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+  });
+
+// The CONTROL for the test below. Without a hint, an instance is created
+// wherever its first request came from — so two unhinted instances, created by
+// two requests from this same test, must land in the same colo.
+//
+// This is what makes "the hinted pair differ" mean anything. If unhinted
+// instances could scatter across colos on their own, a passing hint test would
+// prove nothing: the difference could just be noise in how this box's requests
+// get routed. Pinning the baseline first rules that out.
+test(
+  "unhinted instances are created in the caller's colo",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+
+    const [first, second] = yield* Effect.all([coloFor(url), coloFor(url)], {
+      concurrency: 2,
+    });
+
+    expect(first).toBe(second);
+  }).pipe(logLevel),
+  { timeout: 60_000 },
+);
+
+// `locationHint` steers where an instance is CREATED. Two brand-new names are
+// hinted at opposite sides of the planet and asked which colo they ended up
+// in. Given the control above — unhinted instances all land in this caller's
+// one colo — the pair can only come apart if the hint reached the runtime. If
+// it were dropped on the floor (the old `getByName(name)` signature ignored
+// Cloudflare's options bag), both would be created in that same colo and this
+// fails.
+//
+// The assertion is "different colos", not "this exact colo": a hint is
+// best-effort — Cloudflare places the instance in the nearest location it can
+// to the hinted region, which is not necessarily a colo inside it.
+test(
+  "locationHint places new instances in different regions",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+
+    const [wnam, apac] = yield* Effect.all(
+      [coloFor(url, "wnam"), coloFor(url, "apac")],
+      { concurrency: 2 },
+    );
+
+    expect(wnam).not.toBe(apac);
+  }).pipe(logLevel),
+  { timeout: 60_000 },
+);
+
 // Reproduces the `tick` streaming example from the Durable Objects tutorial:
 // https://alchemy.run/cloudflare/compute/durable-objects
 //
