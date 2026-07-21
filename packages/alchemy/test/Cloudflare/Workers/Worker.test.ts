@@ -1027,6 +1027,69 @@ describe.concurrent("Cloudflare.Worker", () => {
     { timeout: 360_000 },
   );
 
+  // #874 (comments): an Output-valued `worker.bind` binding must also
+  // converge. Terminal apply commits must persist the RESOLVED binding
+  // payload — raw `node.bindings` hold the Output expression, which JSON
+  // state stores silently drop, so every later plan's `diffBindings` would
+  // compare a lossy stored shape against resolved data and re-update
+  // forever (the PR #266 path).
+  test.provider(
+    "Output-valued worker.bind binding converges to a noop plan",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const program = () =>
+          Effect.gen(function* () {
+            const source = yield* Cloudflare.Worker("BindTextSource", {
+              main,
+            });
+            const host = yield* Cloudflare.Worker("BindTextHost", {
+              main,
+            });
+            // `source.workerName` is an Output<string> at plan time — the
+            // same shape as an Action-produced value bound as plain_text.
+            yield* host.bind`REV`({
+              bindings: [
+                { type: "plain_text", name: "REV", text: source.workerName },
+              ],
+            });
+            return { source, host };
+          });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const deployed = yield* stack.deploy(program());
+
+        // The resolved text must have landed in the live binding.
+        const settings = yield* workers.getScriptScriptAndVersionSetting({
+          accountId,
+          scriptName: deployed.host.workerName,
+        });
+        expect(settings.bindings).toContainEqual(
+          expect.objectContaining({
+            type: "plain_text",
+            name: "REV",
+            text: deployed.source.workerName,
+          }),
+        );
+
+        const settled = yield* stack.plan(program());
+        expect(actionOf(settled, "BindTextSource")).toBe("noop");
+        expect(actionOf(settled, "BindTextHost")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.host.workerName, accountId);
+        yield* waitForWorkerToBeDeleted(deployed.source.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
   // `domains` should reflect the workers.dev URL when the subdomain is
   // enabled and be empty when it isn't. `worker.url` is just `domains[0]`,
   // so the two must stay in lockstep across deploys.
