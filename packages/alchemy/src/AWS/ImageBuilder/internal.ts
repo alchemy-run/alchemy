@@ -1,6 +1,7 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -75,12 +76,9 @@ export const deleteImageBuilderLogGroup = Effect.fn(function* (
     const present = yield* logs.describeLogGroups
       .items({ logGroupNamePrefix: logGroupName })
       .pipe(
-        Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).some(
-            (group) => group.logGroupName === logGroupName,
-          ),
-        ),
+        Stream.filter((group) => group.logGroupName === logGroupName),
+        Stream.runHead,
+        Effect.map(Option.isSome),
       );
     if (!present) return;
     yield* Effect.sleep("500 millis");

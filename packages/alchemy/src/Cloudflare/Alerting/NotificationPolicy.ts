@@ -1,5 +1,6 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
@@ -337,13 +338,10 @@ const observePolicy = (accountId: string, policyId: string) =>
 
 const findPolicyByName = (accountId: string, name: string) =>
   alerting.listPolicies.items({ accountId }).pipe(
-    Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk)
-        .filter((p) => p.name === name)
-        .map(narrowPolicy)
-        .find((p) => p !== undefined),
-    ),
+    Stream.filter((p) => p.name === name && p.id != null),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((p) => (p === undefined ? undefined : narrowPolicy(p))),
   );
 
 const toPolicyAttributes = (

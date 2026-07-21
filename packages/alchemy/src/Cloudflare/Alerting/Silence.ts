@@ -1,6 +1,7 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -346,18 +347,16 @@ const findSilence = (
   endTime: string,
 ) =>
   alerting.listSilences.items({ accountId }).pipe(
-    Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk)
-        .filter(
-          (s) =>
-            s.policyId === policyId &&
-            sameInstant(undef(s.startTime), startTime) &&
-            sameInstant(undef(s.endTime), endTime),
-        )
-        .map(narrowSilence)
-        .find((s) => s !== undefined),
+    Stream.filter(
+      (s) =>
+        s.id != null &&
+        s.policyId === policyId &&
+        sameInstant(undef(s.startTime), startTime) &&
+        sameInstant(undef(s.endTime), endTime),
     ),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((s) => (s === undefined ? undefined : narrowSilence(s))),
   );
 
 /** Compare two ISO8601 timestamps by the instant they denote. */

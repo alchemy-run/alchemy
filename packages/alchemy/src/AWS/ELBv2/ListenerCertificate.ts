@@ -1,5 +1,6 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -79,12 +80,11 @@ export const ListenerCertificateProvider = () =>
       const attached = yield* elbv2.describeListenerCertificates
         .items({ ListenerArn: output.listenerArn })
         .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).some(
-              (c) => !c.IsDefault && c.CertificateArn === output.certificateArn,
-            ),
+          Stream.filter(
+            (c) => !c.IsDefault && c.CertificateArn === output.certificateArn,
           ),
+          Stream.runHead,
+          Effect.map(Option.isSome),
           Effect.catchTag("ListenerNotFoundException", () =>
             Effect.succeed(false),
           ),
@@ -159,12 +159,11 @@ export const ListenerCertificateProvider = () =>
       const attached = yield* elbv2.describeListenerCertificates
         .items({ ListenerArn: listenerArn })
         .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).some(
-              (c) => !c.IsDefault && c.CertificateArn === news.certificateArn,
-            ),
+          Stream.filter(
+            (c) => !c.IsDefault && c.CertificateArn === news.certificateArn,
           ),
+          Stream.runHead,
+          Effect.map(Option.isSome),
         );
 
       // Ensure — the API is an idempotent add, but skip the call on no-op.

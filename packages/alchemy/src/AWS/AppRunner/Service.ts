@@ -5,6 +5,7 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -1114,17 +1115,17 @@ await Effect.runPromise(program).catch((err) => {
 
       /** Find a live service by name (list has no name filter). */
       const findByName = Effect.fn(function* (name: string) {
-        const summaries = yield* apprunner.listServices.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.ServiceSummaryList ?? []),
+        const summary = yield* apprunner.listServices.pages({}).pipe(
+          Stream.map((page) => page.ServiceSummaryList ?? []),
+          Stream.flattenIterable,
+          Stream.filter(
+            (s) =>
+              s.ServiceName === name &&
+              !statusIs(s.Status, "DELETED") &&
+              s.ServiceArn !== undefined,
           ),
-        );
-        const summary = summaries.find(
-          (s) =>
-            s.ServiceName === name &&
-            !statusIs(s.Status, "DELETED") &&
-            s.ServiceArn !== undefined,
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
         );
         if (!summary?.ServiceArn) return undefined;
         return yield* readService(summary.ServiceArn);

@@ -1,5 +1,6 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -100,12 +101,11 @@ export const PublicKeyProvider = () =>
 
       const getByName = Effect.fn(function* (name: string) {
         const summary = yield* cloudfront.listPublicKeys.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk)
-              .flatMap((page) => page.PublicKeyList?.Items ?? [])
-              .find((item) => item.Name === name),
-          ),
+          Stream.map((page) => page.PublicKeyList?.Items ?? []),
+          Stream.flattenIterable,
+          Stream.filter((item) => item.Name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
         );
         if (!summary?.Id) return undefined;
         return yield* getById(summary.Id).pipe(

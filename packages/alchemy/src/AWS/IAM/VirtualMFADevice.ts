@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -106,12 +107,9 @@ export const VirtualMFADeviceProvider = () =>
           const device = yield* iam.listVirtualMFADevices
             .items({ AssignmentStatus: "Unassigned" })
             .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).find(
-                  (entry) => entry.SerialNumber === serialNumber,
-                ),
-              ),
+              Stream.filter((entry) => entry.SerialNumber === serialNumber),
+              Stream.runHead,
+              Effect.map(Option.getOrUndefined),
             );
           return device
             ? {

@@ -1,5 +1,6 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 
@@ -323,13 +324,10 @@ const observeWebhook = (accountId: string, webhookId: string) =>
 
 const findWebhookByName = (accountId: string, name: string) =>
   alerting.listDestinationWebhooks.items({ accountId }).pipe(
-    Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk)
-        .filter((w) => w.name === name)
-        .map(narrowWebhook)
-        .find((w) => w !== undefined),
-    ),
+    Stream.filter((w) => w.name === name && w.id != null),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((w) => (w === undefined ? undefined : narrowWebhook(w))),
   );
 
 const toWebhookAttributes = (

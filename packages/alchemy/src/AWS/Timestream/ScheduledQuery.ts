@@ -1,5 +1,6 @@
 import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as EffectStream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -215,14 +216,14 @@ const readScheduledQuery = Effect.fn(function* (scheduledQueryArn: string) {
 });
 
 const findScheduledQueryByName = Effect.fn(function* (name: string) {
-  const summaries = yield* withQueryEndpoint(
-    TSQ.listScheduledQueries.pages({}).pipe(EffectStream.runCollect),
-  ).pipe(
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.ScheduledQueries ?? []),
+  const match = yield* withQueryEndpoint(
+    TSQ.listScheduledQueries.pages({}).pipe(
+      EffectStream.map((page) => page.ScheduledQueries ?? []),
+      EffectStream.flattenIterable,
+      EffectStream.filter((summary) => summary.Name === name),
+      EffectStream.runHead,
     ),
-  );
-  const match = summaries.find((summary) => summary.Name === name);
+  ).pipe(Effect.map(Option.getOrUndefined));
   if (!match) return undefined;
   return yield* readScheduledQuery(match.Arn);
 });

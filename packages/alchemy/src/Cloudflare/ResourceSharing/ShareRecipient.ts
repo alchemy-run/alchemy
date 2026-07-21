@@ -1,5 +1,6 @@
 import * as resourceSharing from "@distilled.cloud/cloudflare/resource-sharing";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
@@ -291,13 +292,12 @@ const findRecipient = (accountId: string, shareId: string, target: string) =>
   resourceSharing.listRecipients
     .items({ accountId, shareId, perPage: 50 })
     .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).find(
-          (r) =>
-            r.accountId === target && r.associationStatus !== "disassociated",
-        ),
+      Stream.filter(
+        (r) =>
+          r.accountId === target && r.associationStatus !== "disassociated",
       ),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
       Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
     );
 
