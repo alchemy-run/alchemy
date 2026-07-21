@@ -11,17 +11,17 @@ no machines to operate.
 
 The Kubernetes primitives you'll meet here:
 
-- A **cluster** is one Kubernetes installation: the API server
-  plus the nodes that run your containers.
+- A **Cluster** is one Kubernetes installation: the API server
+  plus the Nodes that run your containers.
 - A **Pod** is one or more containers running together — the unit
-  Kubernetes schedules onto nodes.
+  Kubernetes schedules onto Nodes.
 - A **Deployment** keeps a set number of identical Pods running,
   replacing ones that fail. A **Service** gives them one stable
   address — and, as type `LoadBalancer`, a public one.
 - A **Job** runs a Pod to completion; a **CronJob** does that on a
   schedule.
 - Everything in Kubernetes is an object described by a
-  **manifest** you apply to the cluster.
+  **manifest** you apply to the Cluster.
 
 Alchemy models these directly:
 [`Cluster`](/providers/aws/eks/cluster) with `compute: "auto"`
