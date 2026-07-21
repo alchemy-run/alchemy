@@ -12,12 +12,13 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Creating a real repository + variable requires an owner (user login or org)
-// the token can write to.
-const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run";
+// Creating a real repository + variable requires an owner the token can
+// write to — the dedicated test org (never a real one). Set
+// GITHUB_TEST_OWNER="" to skip.
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 const repo = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
 
-test.provider(
+test.provider.skipIf(!owner)(
   "list enumerates the deployed variable",
   (stack) =>
     Effect.gen(function* () {

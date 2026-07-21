@@ -160,6 +160,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Add Drizzle ORM](https://alchemy.run/cloudflare/data/drizzle) — Replace raw pg with Drizzle's effect-postgres integration, manage your schema as a resource, and have alchemy generate and apply migrations on every deploy — on Neon or PlanetScale.
 - [Branch from a shared database](https://alchemy.run/cloudflare/data/branch-from-shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, cheap branches, no extra clusters.
 - [D1](https://alchemy.run/cloudflare/data/d1) — Cloudflare D1 is serverless SQLite — create a database, apply migrations on deploy, and query it from a Worker through a typed binding.
+- [Drizzle on D1](https://alchemy.run/cloudflare/data/d1-drizzle) — Manage your Drizzle schema as a resource, apply migrations to D1 on every deploy, and query from a Worker with the effect-d1 driver or the raw @effect/sql-d1 client.
 - [Hyperdrive](https://alchemy.run/cloudflare/data/hyperdrive) — Cloudflare Hyperdrive pools connections to your external Postgres or MySQL database at the edge — provision a database (Neon or PlanetScale), front it with Hyperdrive, and bind the connection into your Worker.
 - [KV](https://alchemy.run/cloudflare/data/kv) — Cloudflare Workers KV is edge key-value storage — create a namespace, bind it into a Worker with read/write-scoped bindings, and get/put values with metadata.
 - [R2](https://alchemy.run/cloudflare/data/r2) — Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.
@@ -225,8 +226,8 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 - [Lambda MicroVMs](https://alchemy.run/aws/compute/microvms) — Build a Firecracker MicroVM image from TypeScript or a Dockerfile, then launch and drive isolated stateful instances from a Lambda Function with typed lifecycle bindings and RPC.
 - [Choosing a runtime](https://alchemy.run/aws/compute/choosing-a-runtime) — Lambda vs ECS vs EC2 for Alchemy apps — cold starts, cost shape, packaging, and how much of each Alchemy currently covers.
 - [EC2](https://alchemy.run/aws/compute/ec2) — Launch virtual machines with the Instance resource — as a raw compute primitive, or hosting a bundled long-lived Effect program served straight off the box.
-- [ECS](https://alchemy.run/aws/compute/ecs) — Run a long-lived Effect program as a container on Fargate — Alchemy builds and pushes the Docker image, provisions the roles and log group, and can front the service with a public ALB.
-- [EKS](https://alchemy.run/aws/compute/eks) — Stand up an EKS Auto Mode cluster on a Network and declare Kubernetes workloads in TypeScript — deployments, load-balanced services, and Pod Identity, with no YAML and no kubectl.
+- [ECS](https://alchemy.run/aws/compute/ecs) — Run containers on AWS with ECS and Fargate — Task definitions that run to completion, Services that keep containers running behind a load balancer, with images bundled from an Effect program, built from your Dockerfile, or mirrored from a registry.
+- [EKS](https://alchemy.run/aws/compute/eks) — Stand up an EKS Auto Mode cluster on a Network and run containers on it — Deployments for servers, Jobs for run-to-completion work, Manifests for everything else. No YAML, no kubectl.
 - [Lambda](https://alchemy.run/aws/compute/lambda) — Stand up an AWS Lambda Function from a single Effect, expose it over a Function URL, and call it from a test.
 
 ## AWS — Frontend
@@ -325,20 +326,18 @@ Local and CI Docker as Stack resources — images, containers, networks, and vol
 - [Local services: Postgres with containers, networks, and volumes](https://alchemy.run/docker/local-services) — Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
 - [Build & push images](https://alchemy.run/docker/build-and-push) — Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
 
-## Kubernetes
+## SQL
 
-Kubernetes objects (Namespace, Deployment, Service, ConfigMap, Job, ServiceAccount) defined in TypeScript and converged onto an EKS cluster via server-side apply; cluster provisioning and workload guides live under AWS → EKS.
+One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.
 
-- [Kubernetes](https://alchemy.run/kubernetes) — Kubernetes objects defined in TypeScript and applied to your EKS cluster — no YAML, no kubectl, no kubeconfig.
-- [Setup](https://alchemy.run/kubernetes/setup) — AWS credentials are the credentials — no kubeconfig.
-- [How objects deploy](https://alchemy.run/kubernetes/objects-as-bindings) — The mechanics of Kubernetes objects as bindings — how helpers attach object definitions to the EKS Cluster, and how its reconcile server-side-applies, orders, and prunes them.
-
-## Drizzle
-
-Drizzle schemas as Stack resources — migration SQL regenerated on deploy and applied by whichever database resource consumes it; Worker runtime wiring lives under Cloudflare → Data.
-
-- [Drizzle](https://alchemy.run/drizzle) — Your Drizzle schema as a Stack resource — migration SQL regenerated on deploy and applied by whichever database consumes it.
-- [Migrations as resources](https://alchemy.run/drizzle/migrations) — Drizzle.Schema regenerates migration SQL as part of every deploy, and wiring its out output into a database's migrationsDir input orders generation before application.
+- [SQL](https://alchemy.run/sql) — One home for SQL in alchemy — low-level effect-sql clients, Drizzle ORM, schema migrations in the deploy graph, and the per-execution connection lifecycle.
+- [Postgres](https://alchemy.run/sql/effect-sql/postgres) — SQL.Postgres turns a connection string into an @effect/sql-pg client — tagged-template queries with typed errors, one pool per execution.
+- [D1](https://alchemy.run/sql/effect-sql/d1) — SQL.D1 wraps a bound D1 database in an @effect/sql-d1 client — tagged-template queries with typed errors over the native binding.
+- [Migrations](https://alchemy.run/sql/effect-sql/migrations) — Commit a directory of ordered .sql files and point a database resource's migrationsDir at it — pending files apply as part of every deploy.
+- [Connection lifecycle](https://alchemy.run/sql/effect-sql/lifecycle) — SQL clients build lazily on first query, memoize per execution, and tear down when the event settles — why, and what that means on workerd and Lambda.
+- [Postgres](https://alchemy.run/sql/drizzle/postgres) — Drizzle on Postgres — declare the schema, generate and apply migrations on deploy, and query from a Worker with Drizzle.Postgres over Hyperdrive.
+- [D1](https://alchemy.run/sql/drizzle/d1) — Drizzle on Cloudflare D1 — declare the schema, generate and apply migrations on deploy, and query from a Worker with Drizzle.D1.
+- [Migrations](https://alchemy.run/sql/drizzle/migrations) — Drizzle.Schema runs drizzle-kit generate as part of deploy — unambiguous schema changes regenerate automatically, ambiguous ones stop and ask you.
 
 ## Command
 
