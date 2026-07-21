@@ -100,7 +100,7 @@ order — a 404 response is tolerated, so an already-gone object is
 not an error.
 
 On `stack destroy`, each resource deletes its own objects before its
-AWS-side pieces (the pod-identity association, ECR repository, and
+AWS-side pieces (the Pod Identity association, ECR repository, and
 IAM role for the platforms). If the cluster itself was destroyed
 first, its objects went with it — deletion detects the missing
 cluster and skips cleanly.
@@ -112,7 +112,7 @@ and a `v1 Service`; `Job` applies a `ServiceAccount` and a
 `batch/v1 Job` (or `CronJob` when `schedule` is set). The refs are
 visible on the `kubernetesObjects` attribute, and the K8s-native
 names come back as attributes (`deploymentName`, `serviceName`,
-`serviceAccountName`, `jobName`). To adjust the synthesized pod
+`serviceAccountName`, `jobName`). To adjust the synthesized Pod
 template, pass `podTemplate` — a typed deep-partial merge — before
 reaching for a raw `Manifest`:
 

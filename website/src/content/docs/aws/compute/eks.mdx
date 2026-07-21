@@ -13,12 +13,12 @@ The Kubernetes primitives you'll meet here:
 
 - A **cluster** is one Kubernetes installation: the API server
   plus the nodes that run your containers.
-- A **pod** is one or more containers running together — the unit
+- A **Pod** is one or more containers running together — the unit
   Kubernetes schedules onto nodes.
-- A **Deployment** keeps a set number of identical pods running,
+- A **Deployment** keeps a set number of identical Pods running,
   replacing ones that fail. A **Service** gives them one stable
   address — and, as type `LoadBalancer`, a public one.
-- A **Job** runs a pod to completion; a **CronJob** does that on a
+- A **Job** runs a Pod to completion; a **CronJob** does that on a
   schedule.
 - Everything in Kubernetes is an object described by a
   **manifest** you apply to the cluster.
@@ -136,8 +136,8 @@ bundled into a generated image instead — the same authoring model as
 [Lambda](/aws/compute/lambda). Bindings work identically too:
 `Deployment` accepts the same `{ env, policyStatements }` binding
 contract as a Lambda `Function`, so every AWS `Binding.Service`
-attaches environment variables to the pod spec and IAM policy
-statements to a generated **pod-identity role**:
+attaches environment variables to the Pod spec and IAM policy
+statements to a generated **Pod Identity role**:
 
 ```typescript
 const api = yield* AWS.EKS.Deployment(
@@ -155,10 +155,10 @@ const api = yield* AWS.EKS.Deployment(
 );
 ```
 
-Every EKS platform gets pod identity as standard: Alchemy creates
-the IAM role, wires it to the workload's service account with a
+Every EKS platform gets Pod Identity as standard: Alchemy creates
+the IAM role, wires it to the workload's ServiceAccount with a
 [`PodIdentityAssociation`](/providers/aws/eks/podidentityassociation),
-and pods resolve credentials through the EKS Pod Identity
+and Pods resolve credentials through the EKS Pod Identity
 container-credentials chain — no OIDC provider or IRSA annotation
 ceremony. The tagged form
 (`class Api extends AWS.EKS.Deployment<Api, Shape>()("Api") {}` +
@@ -169,8 +169,8 @@ Cloudflare Workers.
 
 [`Job`](/providers/aws/eks/job) runs a container to completion —
 the Kubernetes analog of `AWS.ECS.Task`. Same three image sources,
-same bindings and pod identity; an Effect impl returns `{ run }`
-instead of `{ fetch }`, executing to completion inside the pod:
+same bindings and Pod Identity; an Effect impl returns `{ run }`
+instead of `{ fetch }`, executing to completion inside the Pod:
 
 ```typescript
 const migrate = yield* AWS.EKS.Job("DbMigrate", {

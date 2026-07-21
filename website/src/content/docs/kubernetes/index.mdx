@@ -76,7 +76,7 @@ How apply, ordering, and pruning work is covered in
 You rarely need raw manifests for your own code.
 `AWS.EKS.Deployment` and `AWS.EKS.Job` synthesize the Kubernetes
 objects (Deployment + Service + ServiceAccount; Job or CronJob) plus
-the container image, ECR repository, and pod-identity IAM wiring in
+the container image, ECR repository, and Pod Identity IAM wiring in
 one resource — with the same authoring triad as Lambda and
 Cloudflare Workers (external image, inline Effect, tagged Effect):
 
@@ -91,7 +91,7 @@ const api = yield* AWS.EKS.Deployment("Api", {
 ```
 
 The [EKS guide](/aws/compute/eks) covers both platforms, bindings,
-and pod identity. When a platform's synthesized pod template needs
+and Pod Identity. When a platform's synthesized Pod template needs
 tuning, the escape hatch is typed too:
 
 ```typescript
