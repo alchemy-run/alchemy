@@ -331,12 +331,13 @@ Local and CI Docker as Stack resources — images, containers, networks, and vol
 One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.
 
 - [SQL](https://alchemy.run/sql) — One home for SQL in alchemy — low-level effect-sql clients, Drizzle ORM, schema migrations in the deploy graph, and the per-execution connection lifecycle.
-- [Effect SQL clients](https://alchemy.run/sql/effect-sql/clients) — SQL.Postgres and SQL.D1 turn a connection string or D1 binding into an @effect/sql client — tagged-template queries with typed errors, built per execution.
-- [Services & Layers](https://alchemy.run/sql/effect-sql/layers) — Provide a SQL client through Effect context — write services against SqlClient.SqlClient and choose the database with one Effect.provide.
+- [Postgres](https://alchemy.run/sql/effect-sql/postgres) — SQL.Postgres turns a connection string into an @effect/sql-pg client — tagged-template queries with typed errors, one pool per execution.
+- [D1](https://alchemy.run/sql/effect-sql/d1) — SQL.D1 wraps a bound D1 database in an @effect/sql-d1 client — tagged-template queries with typed errors over the native binding.
+- [Migrations](https://alchemy.run/sql/effect-sql/migrations) — Commit a directory of ordered .sql files and point a database resource's migrationsDir at it — pending files apply as part of every deploy.
 - [Connection lifecycle](https://alchemy.run/sql/effect-sql/lifecycle) — SQL clients build lazily on first query, memoize per execution, and tear down when the event settles — why, and what that means on workerd and Lambda.
-- [Drizzle queries](https://alchemy.run/sql/drizzle/queries) — Drizzle.Postgres and Drizzle.D1 return a drizzle-orm client whose queries are Effects — select builders, relational queries, and typed errors, per execution.
-- [Drizzle migrations](https://alchemy.run/sql/drizzle/migrations) — Drizzle.Schema regenerates migration SQL as part of every deploy, and wiring its out output into a database's migrationsDir input orders generation before application.
-- [The migrationsDir contract](https://alchemy.run/sql/migrations) — A directory of ordered .sql files is the one migration contract every alchemy database speaks — hand-written or generated, applied as part of deploy.
+- [Postgres](https://alchemy.run/sql/drizzle/postgres) — Drizzle on Postgres — declare the schema, generate and apply migrations on deploy, and query from a Worker with Drizzle.Postgres over Hyperdrive.
+- [D1](https://alchemy.run/sql/drizzle/d1) — Drizzle on Cloudflare D1 — declare the schema, generate and apply migrations on deploy, and query from a Worker with Drizzle.D1.
+- [Migrations](https://alchemy.run/sql/drizzle/migrations) — Drizzle.Schema runs drizzle-kit generate as part of deploy — unambiguous schema changes regenerate automatically, ambiguous ones stop and ask you.
 
 ## Command
 

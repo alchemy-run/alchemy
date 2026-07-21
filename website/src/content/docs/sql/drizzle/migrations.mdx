@@ -1,97 +1,58 @@
 ---
-title: Drizzle migrations
-description: Drizzle.Schema regenerates migration SQL as part of every deploy, and wiring its out output into a database's migrationsDir input orders generation before application.
+title: Migrations
+description: Drizzle.Schema runs drizzle-kit generate as part of deploy — unambiguous schema changes regenerate automatically, ambiguous ones stop and ask you.
 ---
 
-`Drizzle.Schema` makes schema generation part of the deploy graph:
-drizzle-kit runs as a resource, and the migration SQL it emits is a
-resource output. Passing that output — the `out` directory — to a
-database resource's `migrationsDir` input creates a dependency edge,
-so every deploy regenerates pending migrations first and applies them
-second, in one `alchemy deploy`.
-
-This page covers the generation side. The application side — how a
-directory of `.sql` files is ordered, hashed, and applied by D1,
-Neon, or PlanetScale — is the
-[migrationsDir contract](/sql/migrations), and it works the same
-whether the files are generated or hand-written.
-
-`drizzle-kit` and `drizzle-orm` are optional peer dependencies of
-alchemy, so install both in your project. Register the provider with
-`Drizzle.providers()` in your Stack.
-
-## Declare the schema
+`Drizzle.Schema` puts `drizzle-kit generate` inside the deploy
+graph: on each deploy it diffs your schema module against the latest
+checked-in snapshot, writes any pending migration SQL to `out`, and
+the database resource downstream applies it via `migrationsDir` — in
+that order, because `schema.out` is an `Output` the database depends
+on.
 
 ```typescript
 const schema = yield* Drizzle.Schema("app-schema", {
   schema: "./src/schema.ts",
+  out: "./migrations",
+  dialect: "sqlite",
+});
+
+const db = yield* Cloudflare.D1.Database("app-db", {
+  migrationsDir: schema.out,
+  migrationsTable: "drizzle_migrations",
 });
 ```
 
-`schema` points at your schema module, which is loaded via dynamic
-`import()` so drizzle-kit can introspect the table definitions and
-diff them against the latest snapshot. Generated migrations land
-under `out` (default `./migrations`), each written as
-`{out}/{timestamp}_migration/` containing `migration.sql` and
-`snapshot.json`; `dialect` selects which `drizzle-kit/api-*` module
-loads and defaults to `"postgres"`.
+## What a deploy actually does
 
-## Wire it into the graph
+- **No drift** — the schema matches the latest snapshot: nothing is
+  generated, the resource is a noop, and nothing cascades into the
+  database resource.
+- **Unambiguous drift** — a new table, a new column: the migration
+  SQL is generated automatically and applied in the same deploy.
+- **Ambiguous drift** — a change drizzle-kit cannot decide alone
+  (did you rename `email` to `contact`, or drop one column and add
+  another? a change that would lose data): it needs your answer.
+  - In a terminal, `alchemy deploy` surfaces drizzle-kit's
+    interactive prompts and you answer inline.
+  - Non-interactively (CI, `--yes` pipelines), the deploy **fails**
+    with drizzle-kit's report and instructions: run
+    `drizzle-kit generate` yourself, answer the prompts, commit the
+    generated files, and redeploy. The generated SQL is applied to a
+    real database in the same deploy — alchemy never guesses on a
+    destructive choice.
 
-```typescript
-export const NeonDb = Effect.gen(function* () {
-  const schema = yield* Drizzle.Schema("app-schema", {
-    schema: "./src/schema.ts",
-    out: "./migrations",
-  });
+Generated files land under `out` as ordered migration directories
+containing `migration.sql` and `snapshot.json`. Commit them — they
+are source code, shared with every other environment that deploys
+the same app.
 
-  const project = yield* Neon.Project("app-db", {
-    region: "aws-us-east-1",
-  });
-
-  const branch = yield* Neon.Branch("app-branch", {
-    project,
-    migrationsDir: schema.out,
-  });
-
-  return { project, branch, schema };
-});
-```
-
-`schema.out` is an `Output`, not a plain string — passing it to
-`migrationsDir` is what creates the dependency edge that forces the
-engine to run `Drizzle.Schema` before `Neon.Branch`, even though both
-values happen to spell `./migrations`. On D1 the same wiring is
-`migrationsDir: schema.out` on `Cloudflare.D1.Database`, with
-`dialect: "sqlite"` on the schema —
-[Drizzle on D1](/cloudflare/data/d1-drizzle) walks through it
-end-to-end.
-
-## What a deploy does
-
-```typescript
-{
-  out: string;          // migrations directory, cwd-relative
-  snapshotHash: string; // sha256 of the latest snapshot.json
-  migrations: string[]; // migration directory names, in order
-}
-```
-
-On each deploy the resource diffs the schema module against the
-latest snapshot and regenerates only when drizzle-kit would emit new
-SQL — an unchanged schema is a noop, not an update (a regression test
-in `Schema.test.ts` guards this: an unconditional update cascaded
-into spurious `Neon.Branch` updates downstream). The attributes above
-are what downstream consumers read: `out` is kept cwd-relative so
-state stays portable across machines, and `snapshotHash` /
-`migrations` let a `migrationsDir` consumer detect drift and reapply.
-
-## Checked-in drizzle-kit output
+## Or: run drizzle-kit yourself
 
 `Drizzle.Schema` is optional. If you prefer to run
-`drizzle-kit generate` yourself and commit the output, point
-`migrationsDir` at the checked-in directory — the
-[contract](/sql/migrations) only sees `.sql` files:
+`drizzle-kit generate` manually and commit the output, point
+`migrationsDir` at the checked-in directory — the database resource
+only sees `.sql` files:
 
 ```typescript
 const db = yield* Cloudflare.D1.Database("app-db", {
@@ -99,48 +60,35 @@ const db = yield* Cloudflare.D1.Database("app-db", {
 });
 ```
 
-This is the working path for MySQL today, where schema generation is
-not wired through `Drizzle.Schema` — generate with
-`drizzle-kit generate --dialect mysql` and check the files in.
+This is also the working path for MySQL today, where schema
+generation is not wired through `Drizzle.Schema`.
 
 ## The migrations table
 
-Drizzle's own migrator tracks applied files in a
+Drizzle's tooling expects applied migrations tracked in a
 `drizzle_migrations` table. D1's `migrationsTable` prop exists for
-this compatibility:
-
-```typescript
-const db = yield* Cloudflare.D1.Database("app-db", {
-  migrationsDir: schema.out,
-  migrationsTable: "drizzle_migrations",
-});
-```
-
-The tracking schema is wrangler-compatible
+this compatibility; the tracking schema is wrangler-compatible
 (`id, name, applied_at`), so moving between wrangler, drizzle-kit,
 and alchemy does not re-apply history.
 
 ## Destroy never deletes migrations
 
-The provider's `delete` operation is a deliberate no-op. Removing the
-resource (or destroying the stack) never wipes the migrations
-directory, because migration files are source code you commit, not
-cloud state to tear down.
+The provider's `delete` operation is a deliberate no-op. Removing
+the resource (or destroying the stack) never wipes the migrations
+directory — migration files are source code you commit, not cloud
+state to tear down.
 
 ## Dialects
 
-`postgres` is the default. `sqlite` is the D1 path — pass
-`dialect: "sqlite"` and wire `schema.out` into
-`Cloudflare.D1.Database`'s `migrationsDir`. `mysql` uses the
-checked-in flow above. Application mechanics per provider are indexed
-in the [migrationsDir contract](/sql/migrations#per-provider-notes).
+`dialect` selects drizzle-kit's target: `"postgres"` (the default)
+for [Neon / PlanetScale / Hyperdrive-fronted
+Postgres](/sql/drizzle/postgres), `"sqlite"` for
+[D1](/sql/drizzle/d1). `mysql` uses the run-it-yourself flow above.
 
 ## Where next
 
-- [The migrationsDir contract](/sql/migrations) — the application
-  side: ordering, hashing, tracking.
-- [Add Drizzle ORM](/cloudflare/data/drizzle) — schema + queries on
-  Postgres, end to end.
-- [Drizzle on D1](/cloudflare/data/d1-drizzle) — the same flow on
-  D1.
+- [Postgres](/sql/drizzle/postgres) / [D1](/sql/drizzle/d1) — the
+  full schema-to-queries flow per database.
+- [Effect SQL migrations](/sql/effect-sql/migrations) — the same
+  `migrationsDir` application without an ORM.
 - [Schema API reference](/providers/drizzle/schema)

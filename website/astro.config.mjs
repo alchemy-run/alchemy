@@ -1017,11 +1017,9 @@ export default defineConfig({
             {
               label: "Effect SQL",
               items: [
-                { label: "Clients", link: "/sql/effect-sql/clients" },
-                {
-                  label: "Services & Layers",
-                  link: "/sql/effect-sql/layers",
-                },
+                { label: "Postgres", link: "/sql/effect-sql/postgres" },
+                { label: "D1", link: "/sql/effect-sql/d1" },
+                { label: "Migrations", link: "/sql/effect-sql/migrations" },
                 {
                   label: "Connection lifecycle",
                   link: "/sql/effect-sql/lifecycle",
@@ -1031,17 +1029,9 @@ export default defineConfig({
             {
               label: "Drizzle",
               items: [
-                { label: "Queries", link: "/sql/drizzle/queries" },
+                { label: "Postgres", link: "/sql/drizzle/postgres" },
+                { label: "D1", link: "/sql/drizzle/d1" },
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
-              ],
-            },
-            {
-              label: "Migrations",
-              items: [
-                {
-                  label: "The migrationsDir contract",
-                  link: "/sql/migrations",
-                },
               ],
             },
             providerResourcesEntry("SQL", "Drizzle"),

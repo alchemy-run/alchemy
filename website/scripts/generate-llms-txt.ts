@@ -367,12 +367,13 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "sql/index",
-        "sql/effect-sql/clients",
-        "sql/effect-sql/layers",
+        "sql/effect-sql/postgres",
+        "sql/effect-sql/d1",
+        "sql/effect-sql/migrations",
         "sql/effect-sql/lifecycle",
-        "sql/drizzle/queries",
+        "sql/drizzle/postgres",
+        "sql/drizzle/d1",
         "sql/drizzle/migrations",
-        "sql/migrations",
       ],
     },
   },

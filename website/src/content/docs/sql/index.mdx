@@ -49,13 +49,13 @@ explains why.
 
 | Goal | Reach for |
 | --- | --- |
-| Raw SQL without an ORM | [SQL.Postgres / SQL.D1](/sql/effect-sql/clients) |
-| Typed schema + relational queries | [Drizzle queries](/sql/drizzle/queries) |
-| A service that runs on any database | [Services & Layers](/sql/effect-sql/layers) |
+| Raw SQL on Postgres | [Effect SQL: Postgres](/sql/effect-sql/postgres) |
+| Raw SQL on D1 | [Effect SQL: D1](/sql/effect-sql/d1) |
+| Typed schema + queries on Postgres | [Drizzle: Postgres](/sql/drizzle/postgres) |
+| Typed schema + queries on D1 | [Drizzle: D1](/sql/drizzle/d1) |
 | Schema changes applied on deploy | [Drizzle migrations](/sql/drizzle/migrations) |
-| Hand-written `.sql` migrations | [The migrationsDir contract](/sql/migrations) |
-| SQLite at the edge | [Drizzle on D1](/cloudflare/data/d1-drizzle) |
-| Postgres from a Worker | [Add Drizzle ORM](/cloudflare/data/drizzle) |
+| Hand-written `.sql` migrations | [Effect SQL migrations](/sql/effect-sql/migrations) |
+| A service that runs on any database | `SqlClient` + Layers — see [Provide as a service](/sql/effect-sql/postgres#provide-as-a-service) |
 
 MySQL support is in flight: drizzle's `effect-mysql2` driver and
 Hyperdrive's text-protocol requirements are being reconciled upstream
@@ -64,9 +64,10 @@ today.
 
 ## Where next
 
-- [Clients](/sql/effect-sql/clients) — `SQL.Postgres` and `SQL.D1`.
-- [Drizzle queries](/sql/drizzle/queries) — `Drizzle.Postgres` and
-  `Drizzle.D1`.
+- [Effect SQL: Postgres](/sql/effect-sql/postgres) /
+  [D1](/sql/effect-sql/d1) — the raw clients.
+- [Drizzle: Postgres](/sql/drizzle/postgres) /
+  [D1](/sql/drizzle/d1) — schema to queries, end to end.
 - [Add Drizzle ORM](/cloudflare/data/drizzle) — full Worker wiring on
   Postgres via Hyperdrive.
 - [Drizzle on D1](/cloudflare/data/d1-drizzle) — full Worker wiring
