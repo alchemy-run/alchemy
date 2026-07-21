@@ -35,7 +35,9 @@ import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
   findProviderByType,
+  missingProviderError,
   Provider,
+  tryFindProviderByType,
   type ProviderService,
 } from "./Provider.ts";
 import {
@@ -313,9 +315,11 @@ export const make = <A>(
                   ? oldState.old.props
                   : oldState.props;
 
-              const oldBindings = oldState.bindings ?? [];
-              // Collapse duplicate bindings by sid so the binding set handed to
-              // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+              // Normalize both sides through `dedupeBindings` so the binding
+              // sets handed to `diff` are deduped AND sid-sorted — provider
+              // diffs that hash/compare the arrays never churn on
+              // registration-order flips (or on legacy unsorted state).
+              const oldBindings = dedupeBindings(oldState.bindings ?? []);
               const newBindings = dedupeBindings(
                 stack.bindings[resource.FQN] ?? [],
               );
@@ -362,6 +366,19 @@ export const make = <A>(
                 return withStables(oldState?.attr);
               } else if (diff.action === "replace") {
                 return resourceExpr;
+              }
+              // `--force` upgrades this resource's noop to an update (see the
+              // diff mapping in the resource-graph pass below), so its
+              // `reconcile` WILL re-run and may produce fresh attributes —
+              // that is the point of --force. Returning the persisted attr
+              // snapshot here would bake potentially-stale values into every
+              // consumer's plan props and binding data, so consumers would
+              // keep the stale attrs even though the upstream just
+              // re-reconciled. Expose only the stable attributes and let
+              // apply re-evaluate the rest against the forced reconcile's
+              // fresh output.
+              if (options.force) {
+                return withStables(oldState?.attr);
               }
               if (
                 oldState.status === "created" ||
@@ -802,7 +819,8 @@ export const make = <A>(
               }
             }
 
-            const oldBindings = oldState?.bindings ?? [];
+            // Sid-sorted like `newBindings` (see the resolveResource note).
+            const oldBindings = dedupeBindings(oldState?.bindings ?? []);
             const bindingDiffs = diffBindings(oldBindings, newBindings);
 
             const Node = <T extends Apply>(
@@ -1284,7 +1302,19 @@ export const make = <A>(
             if (oldState) {
               const { logicalId } = parseFqn(fqn);
               const resourceType = oldState.resourceType;
-              const provider = yield* findProviderByType(resourceType);
+              // A "zombie" row references a type with no registered provider
+              // (removed from the program, or renamed without an alias).
+              // That is fatal: the program and state disagree, and without
+              // the provider the row's physical resource cannot be deleted
+              // anyway. Die at plan time with a typed error naming the row
+              // and the remediation instead of limping into a partial apply.
+              const providerOption = yield* tryFindProviderByType(resourceType);
+              if (Option.isNone(providerOption)) {
+                return yield* Effect.die(
+                  missingProviderError(resourceType, fqn),
+                );
+              }
+              const provider = providerOption.value;
               // NOTE: an attr-less row (interrupted create) is NOT recovered
               // here. Apply's `deleteResource` performs the authoritative
               // read-then-delete recovery — it also covers replaced-chain

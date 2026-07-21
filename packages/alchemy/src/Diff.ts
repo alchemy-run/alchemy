@@ -214,7 +214,26 @@ const canonicalize = (value: unknown, stripNullish: boolean): unknown => {
 };
 
 /**
- * Collapse bindings that share the same `sid`, keeping the last occurrence.
+ * Deterministic ordering for binding rows.
+ *
+ * Bindings are registered by concurrently-built layers (a Function/Worker's
+ * capability layers run real IO — bundling, fs — before calling `host.bind`),
+ * so the registration order of `stack.bindings[fqn]` is not stable across
+ * deploys. `diffBindings` itself is sid-keyed and order-insensitive, but the
+ * row order flows into provider `diff`/`reconcile` inputs and persisted
+ * state — any consumer that hashes or deep-compares the binding array (e.g.
+ * a metadata hash over bindings) would churn on registration-order flips.
+ * Sorting by `sid` at every boundary makes binding rows stable.
+ */
+const bySid = (a: { sid: string }, b: { sid: string }): number =>
+  a.sid < b.sid ? -1 : a.sid > b.sid ? 1 : 0;
+
+export const sortBindings = <B extends { sid: string }>(bindings: B[]): B[] =>
+  [...bindings].sort(bySid);
+
+/**
+ * Collapse bindings that share the same `sid`, keeping the last occurrence,
+ * and return them in deterministic (sid-sorted) order.
  *
  * The same binding can be recorded more than once on a target resource — e.g.
  * a KV namespace bound to both a Worker and a Workflow ends up pushed twice to
@@ -224,7 +243,7 @@ const canonicalize = (value: unknown, stripNullish: boolean): unknown => {
  * binding set, keeping plan-time hashing consistent with deploy-time.
  */
 export const dedupeBindings = <B extends ResourceBinding>(bindings: B[]): B[] =>
-  Array.from(new Map(bindings.map((b) => [b.sid, b])).values());
+  sortBindings(Array.from(new Map(bindings.map((b) => [b.sid, b])).values()));
 
 export const diffBindings = (
   oldBindings: ResourceBinding[],
@@ -232,7 +251,7 @@ export const diffBindings = (
 ): BindingNode[] => {
   const oldMap = new Map(oldBindings.map((b) => [b.sid, b]));
   const newMap = new Map(newBindings.map((b) => [b.sid, b]));
-  return [
+  return sortBindings([
     ...Array.from(oldMap)
       .filter(([sid]) => !newMap.has(sid))
       .map(([sid, old]) => ({
@@ -252,5 +271,5 @@ export const diffBindings = (
         data: binding.data,
       };
     }),
-  ];
+  ]);
 };

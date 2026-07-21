@@ -1079,11 +1079,12 @@ describe("duplicate bindings are collapsed by sid before diff", () => {
         { sid: "Shared", data: { env: { K: "last" } } },
       ]);
 
-      // The duplicated sid retains its first-seen position but takes the
-      // last value (matching `diffBindings`' `Map`-based collapse).
+      // The duplicated sid takes the last value (matching `diffBindings`'
+      // `Map`-based collapse) and the result is sid-sorted so binding rows
+      // are deterministic regardless of registration order.
       expect(deduped).toEqual([
-        { sid: "Shared", data: { env: { K: "last" } } },
         { sid: "Other", data: { env: { K: "x" } } },
+        { sid: "Shared", data: { env: { K: "last" } } },
       ]);
     }),
   );
@@ -3345,6 +3346,56 @@ describe("type aliases", () => {
       }),
     );
   });
+});
+
+describe("zombie rows", () => {
+  // A state row whose resource type has no registered provider (the type
+  // was removed from the program, or renamed without an alias) is FATAL:
+  // the program and state disagree, and without the provider the row's
+  // physical resource cannot be deleted anyway. Planning dies with a typed
+  // MissingProviderError naming the row and the remediation (see
+  // destroy-robustness.test.ts for the deploy/destroy behavior).
+  test(
+    "a row whose resource type has no provider fails the plan",
+    Effect.gen(function* () {
+      yield* seed({
+        Ghost: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Ghost",
+          fqn: "Ghost",
+          namespace: undefined,
+          resourceType: "Test.Vanished",
+          status: "created",
+          props: { name: "ghost" },
+          attr: { name: "ghost" },
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          yield* Bucket("Survivor", { name: "survivor" });
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      const defect = Exit.isFailure(exit)
+        ? exit.cause.reasons.find(
+            (r) =>
+              Cause.isDieReason(r) &&
+              r.defect instanceof Provider.MissingProviderError,
+          )
+        : undefined;
+      expect(defect && Cause.isDieReason(defect)).toBe(true);
+      if (defect && Cause.isDieReason(defect)) {
+        const error = defect.defect as Provider.MissingProviderError;
+        expect(error.resourceType).toBe("Test.Vanished");
+        expect(error.fqn).toBe("Ghost");
+        expect(error.message).toContain("aliases");
+      }
+    }),
+  );
 });
 
 describe("read is never handed unresolved persisted props", () => {
