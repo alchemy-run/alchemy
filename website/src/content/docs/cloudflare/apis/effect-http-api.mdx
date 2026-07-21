@@ -565,13 +565,13 @@ under the hood:
 
  Effect.gen(function* () {
    const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
-+    const tasksDO = yield* TasksObject;
++  const tasksDO = yield* TasksObject;
 +
-+    const getTaskDOClient = (id: string = "default") =>
-+      HttpApiClient.makeWith(TaskDOApi, {
-+        baseUrl: "http://localhost",
-+        httpClient: Cloudflare.toHttpClient(tasksDO.getByName(id)),
-+      });
++  const getTaskDOClient = (id: string = "default") =>
++    HttpApiClient.makeWith(TaskDOApi, {
++      baseUrl: "http://localhost",
++      httpClient: Cloudflare.toHttpClient(tasksDO.getByName(id)),
++    });
 ```
 
 The `baseUrl` is irrelevant — requests never leave the isolate; the

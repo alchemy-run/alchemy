@@ -379,8 +379,8 @@ The handler returns a `Stream<number>` directly:
    const handlersLayer = TaskRpcs.toLayer({
      getTask: /* ... */,
      createTask: /* ... */,
-+      countTasks: ({ upto }) =>
-+        Stream.fromIterable(Array.from({ length: upto }, (_, i) => i + 1)),
++    countTasks: ({ upto }) =>
++      Stream.fromIterable(Array.from({ length: upto }, (_, i) => i + 1)),
    });
 ```
 
