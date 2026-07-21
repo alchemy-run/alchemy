@@ -86,7 +86,7 @@ export interface JobPropsBase extends PlatformProps {
   backoffLimit?: number;
   /**
    * Cron schedule (standard 5-field cron, e.g. `"0 3 * * *"`). When set, a
-   * Kubernetes `CronJob` is synthesized instead of a one-shot `Job`.
+   * Kubernetes `CronJob` is synthesized instead of a plain `Job`.
    */
   schedule?: string;
   /**
@@ -206,8 +206,8 @@ export interface Job extends Resource<
 export type JobServices = Credentials | Region | AWSEnvironment;
 
 /**
- * The one-shot impl shape: `{ run, ...rpc }`. `run` executes to completion
- * inside the pod; the process exits when it returns.
+ * The impl shape: `{ run, ...rpc }`. `run` executes to completion inside
+ * the pod; the process exits when it returns.
  */
 export type JobMain<InitServices = never> = void | {
   run?: Effect.Effect<
@@ -246,7 +246,7 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Inline Effect one-shot with a DynamoDB binding
+ * @example Inline Effect program with a DynamoDB binding
  * ```typescript
  * const seed = yield* AWS.EKS.Job(
  *   "SeedData",
@@ -262,7 +262,7 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
- * @example Tagged Effect one-shot
+ * @example Tagged Effect program
  * ```typescript
  * export class Backfill extends AWS.EKS.Job<Backfill, {
  *   progress: () => Effect.Effect<number>;

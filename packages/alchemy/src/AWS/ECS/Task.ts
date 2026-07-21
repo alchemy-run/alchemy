@@ -276,17 +276,16 @@ export interface Task extends Resource<
 export type TaskServices = Credentials | Region | ServerHost | AWSEnvironment;
 
 /**
- * The impl shape for an effectful `Task`: a one-shot `run` entry that
- * executes to completion when the container starts, and/or a `fetch` HTTP
- * handler for tasks deployed as servers (e.g. referenced by an
- * `ECS.Service`).
+ * The impl shape for an effectful `Task`: a `run` entry that executes to
+ * completion when the container starts, and/or a `fetch` HTTP handler for
+ * tasks deployed as servers (e.g. referenced by an `ECS.Service`).
  */
 export type TaskShape =
   | void
   | (Exclude<Main<TaskServices>, void> & {
       /**
-       * One-shot entry: runs to completion when the container starts, after
-       * which the container exits.
+       * Runs to completion when the container starts, after which the
+       * container exits.
        */
       run?: Effect.Effect<
         void,
@@ -345,9 +344,10 @@ export const createContainerRuntimeContext =
  * `Task` provisions task + execution IAM roles, a CloudWatch log group, and
  * an ECR repository holding the built (or mirrored) image, then registers a
  * Fargate task definition. Each reconcile registers a new immutable
- * revision. Tasks are the one-shot compute unit — the target of
- * `AWS.ECS.RunTask` / `StopTask` bindings and `AWS.ECS.Schedule`; effectful
- * impls return `{ run }`, executed to completion when the container starts.
+ * revision. A launched task runs until its process exits — it is the target
+ * of `AWS.ECS.RunTask` / `StopTask` bindings and `AWS.ECS.Schedule`;
+ * effectful impls return `{ run }`, executed to completion when the
+ * container starts.
  *
  * Beyond the primary container you can declare task-level configuration
  * (volumes, runtime platform, ephemeral storage, IPC/PID mode, placement
@@ -383,7 +383,7 @@ export const createContainerRuntimeContext =
  *     const receive = yield* AWS.SQS.ReceiveMessage(queue);
  *     return {
  *       run: Effect.gen(function* () {
- *         // one-shot entry: runs to completion
+ *         // runs to completion, then the container exits
  *         const batch = yield* receive({ MaxNumberOfMessages: 10 });
  *       }),
  *     };

@@ -1,6 +1,6 @@
 ---
 title: EKS
-description: Stand up an EKS Auto Mode cluster on a Network and run containers on it with the same authoring model as Lambda — Deployments for servers, Jobs for one-shots, Manifests for everything else. No YAML, no kubectl.
+description: Stand up an EKS Auto Mode cluster on a Network and run containers on it — Deployments for servers, Jobs for run-to-completion work, Manifests for everything else. No YAML, no kubectl.
 ---
 
 **EKS** is managed Kubernetes. Alchemy targets **Auto Mode**, where
@@ -148,10 +148,10 @@ Cloudflare Workers.
 
 ## Run-to-completion work with Job
 
-[`Job`](/providers/aws/eks/job) is the one-shot counterpart — the
-Kubernetes analog of `AWS.ECS.Task`. Same three image sources, same
-bindings and pod identity; an Effect impl returns `{ run }` instead
-of `{ fetch }`, executing to completion inside the pod:
+[`Job`](/providers/aws/eks/job) runs a container to completion —
+the Kubernetes analog of `AWS.ECS.Task`. Same three image sources,
+same bindings and pod identity; an Effect impl returns `{ run }`
+instead of `{ fetch }`, executing to completion inside the pod:
 
 ```typescript
 const migrate = yield* AWS.EKS.Job("DbMigrate", {
@@ -162,7 +162,7 @@ const migrate = yield* AWS.EKS.Job("DbMigrate", {
 ```
 
 Set `schedule` (standard 5-field cron) and a Kubernetes `CronJob` is
-synthesized instead of a one-shot `Job`:
+synthesized instead of a plain `Job`:
 
 ```typescript
 const nightly = yield* AWS.EKS.Job("NightlyBackfill", {

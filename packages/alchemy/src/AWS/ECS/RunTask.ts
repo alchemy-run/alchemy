@@ -13,7 +13,7 @@ export interface RunTaskRequest extends Omit<
  * Runtime binding for `ecs:RunTask`.
  *
  * Bind this operation to a `Cluster` and `Task` inside a function runtime to
- * get a callable that starts a one-shot Fargate task from the bound task
+ * get a callable that starts a Fargate task from the bound task
  * definition. The cluster and task definition ARNs are injected automatically;
  * the host is granted `ecs:RunTask` on the task definition plus `iam:PassRole`
  * on the task and execution roles.

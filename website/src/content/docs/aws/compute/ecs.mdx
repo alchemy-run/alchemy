@@ -1,30 +1,35 @@
 ---
 title: ECS
-description: Containers on Fargate with the same authoring model as Lambda — Task for one-shot work, Service for always-on servers behind a load balancer, with images bundled from an Effect program, built from your Dockerfile, or mirrored from a registry.
+description: Run containers on AWS with ECS and Fargate — Task definitions that run to completion, Services that keep containers running behind a load balancer, with images bundled from an Effect program, built from your Dockerfile, or mirrored from a registry.
 ---
 
-**ECS** is the runtime for workloads that don't fit Lambda's
-request/response window: WebSocket servers, workers that hold
-connections open, jobs longer than 15 minutes, anything that
-should be always-on. Alchemy models it with two container
-platforms on a [`Cluster`](/providers/aws/ecs/cluster):
-[`Task`](/providers/aws/ecs/task) — the one-shot compute unit,
-target of `RunTask` and schedules — and
-[`Service`](/providers/aws/ecs/service) — N copies kept alive,
-optionally behind a load balancer. Both are driven by the same
-pattern as [Lambda](/aws/compute/lambda): declare the resource,
-optionally hand it an Effect program, keep composing around it.
+**ECS** (Elastic Container Service) is AWS's managed container
+orchestrator: you describe a container — image, CPU, memory — and
+ECS runs it. With **Fargate**, AWS also provides the machines, so
+there are no servers to manage.
 
-The trade against Lambda: you pay for running tasks whether or
-not they're serving traffic, containers take tens of seconds to
-launch instead of milliseconds. See
-[Choosing a runtime](/aws/compute/choosing-a-runtime) for the full
-comparison.
+ECS has four primitives:
 
-## Run a one-shot Task
+- A **cluster** is the space your containers run in.
+- A **task definition** is the blueprint: which image, how much
+  CPU and memory, which IAM roles, which ports.
+- A **task** is a running container launched from a task
+  definition. It runs until its process exits.
+- A **service** keeps a set number of tasks running — restarting
+  ones that stop, optionally routing traffic to them through a
+  load balancer.
 
-A `Task` is a Fargate task definition plus one-shot semantics.
-The simplest form runs a pre-built registry image — no Effect
+Alchemy models these directly:
+[`Cluster`](/providers/aws/ecs/cluster),
+[`Task`](/providers/aws/ecs/task) — a task definition plus
+everything needed to build and publish its image — and
+[`Service`](/providers/aws/ecs/service). Each can run a plain
+container image, or an Effect program that Alchemy bundles into
+one.
+
+## Run a Task
+
+The simplest `Task` runs a pre-built registry image — no Effect
 runtime in the container:
 
 ```typescript
@@ -39,8 +44,8 @@ const migrate = yield* AWS.ECS.Task("DbMigrate", {
 });
 ```
 
-Deploying a `Task` automates the container supply chain either
-way: Alchemy provisions the **task and execution IAM roles**, a
+Deploying a `Task` automates the container supply chain:
+Alchemy provisions the **task and execution IAM roles**, a
 **CloudWatch log group**, and a **generated ECR repository**
 holding the image, then registers a Fargate task definition. Each
 deploy registers a new immutable revision.
@@ -81,13 +86,13 @@ a registry rate-limits your local pulls, switch the environment
 base with `image: "oven/bun:1"`.
 :::
 
-## Effect one-shots
+## Run an Effect program in a Task
 
 Pass `main: import.meta.url` and an init Effect whose impl
-returns `{ run }` — a one-shot entry that executes to completion
-when the container starts, after which the container exits.
-Bindings work exactly as on Lambda, attaching environment
-variables and IAM policy statements to the task:
+returns `{ run }` — the program runs to completion when the
+container starts, then the container exits. Bindings work exactly
+as on Lambda, attaching environment variables and IAM policy
+statements to the task:
 
 ```typescript
 const drainer = yield* AWS.ECS.Task(
@@ -97,7 +102,7 @@ const drainer = yield* AWS.ECS.Task(
     const receive = yield* AWS.SQS.ReceiveMessage(queue);
     return {
       run: Effect.gen(function* () {
-        // one-shot entry: runs to completion
+        // runs to completion, then the container exits
         const batch = yield* receive({ MaxNumberOfMessages: 10 });
       }),
     };
@@ -177,8 +182,8 @@ dedicated VPC with the [`Network`](/providers/aws/ec2/network)
 helper and pass `vpcId` + `subnets` — see
 [VPC & networking](/aws/networking).
 
-An effectful `Service` is the server counterpart of a `Task`
-one-shot — its impl returns `{ fetch }`:
+An effectful `Service` is the server counterpart: where a `Task`
+impl returns `{ run }`, a `Service` impl returns `{ fetch }`:
 
 ```typescript
 const api = yield* AWS.ECS.Service(
@@ -254,8 +259,8 @@ import * as Effect from "effect/Effect";
   }),
 ```
 
-This is the shape Lambda can't give you: a polling loop, a queue
-drainer, or an open connection that outlives any single request.
+Use this for polling loops, queue drainers, or connections that
+stay open across requests.
 
 ## Process scope vs request scope
 
