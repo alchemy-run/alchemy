@@ -217,6 +217,36 @@ Stack converges cloud resources. Unknown kinds resolve through the
 Kubernetes API discovery endpoint, so CRDs work without any
 registration.
 
+## Install a Helm chart
+
+[`HelmChart`](/providers/aws/eks/helmchart) renders a chart with the
+local `helm` CLI (`helm template` — install helm on your machine,
+like Docker for image builds) and applies the rendered objects
+through the same server-side-apply path as `Manifest`:
+
+```typescript
+const ingress = yield* AWS.EKS.HelmChart("IngressNginx", {
+  cluster,
+  chart: "ingress-nginx",
+  repo: "https://kubernetes.github.io/ingress-nginx",
+  version: "4.11.2",
+  namespace: "ingress-nginx",
+  createNamespace: true,
+  values: {
+    controller: { replicaCount: 2 },
+  },
+});
+```
+
+`chart` also accepts `oci://` references and local chart directories,
+and `values` is a literal object — the same shape as a `values.yaml`
+file. Because the objects are applied (not `helm install`ed), Alchemy
+owns their lifecycle: drift is corrected on every deploy, objects
+that drop out of the render are pruned, and destroy deletes them —
+there is no in-cluster Helm release record. Charts that rely on
+install/upgrade hooks for correctness should be installed with Helm
+directly.
+
 ## Where next
 
 - [VPC & networking](/aws/networking) — what the `Network` helper

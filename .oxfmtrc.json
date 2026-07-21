@@ -18,6 +18,7 @@
     "**/*.md",
     "**/.vendor/**",
     "**/package.json",
-    "./distilled"
+    "./distilled",
+    "**/fixtures/chart/templates/**"
   ]
 }
