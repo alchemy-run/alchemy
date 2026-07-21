@@ -3350,12 +3350,13 @@ describe("type aliases", () => {
 
 describe("zombie rows", () => {
   // A state row whose resource type has no registered provider (the type
-  // was removed from the program, or renamed without an alias). Planning
-  // must not die — the row becomes a normal deletion node whose lifecycle
-  // fails with a typed MissingProviderError at APPLY time, so everything
-  // else still deploys/destroys (see destroy-robustness.test.ts).
+  // was removed from the program, or renamed without an alias) is FATAL:
+  // the program and state disagree, and without the provider the row's
+  // physical resource cannot be deleted anyway. Planning dies with a typed
+  // MissingProviderError naming the row and the remediation (see
+  // destroy-robustness.test.ts for the deploy/destroy behavior).
   test(
-    "a row whose resource type has no provider still plans",
+    "a row whose resource type has no provider fails the plan",
     Effect.gen(function* () {
       yield* seed({
         Ghost: {
@@ -3372,16 +3373,27 @@ describe("zombie rows", () => {
           downstream: [],
         },
       });
-      const plan = yield* makePlan(
+      const exit = yield* makePlan(
         Effect.gen(function* () {
           yield* Bucket("Survivor", { name: "survivor" });
         }),
-      );
-      expect(plan.resources.Survivor?.action).toBe("create");
-      expect(plan.deletions.Ghost).toMatchObject({
-        action: "delete",
-        resource: { LogicalId: "Ghost", Type: "Test.Vanished" },
-      });
+      ).pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      const defect = Exit.isFailure(exit)
+        ? exit.cause.reasons.find(
+            (r) =>
+              Cause.isDieReason(r) &&
+              r.defect instanceof Provider.MissingProviderError,
+          )
+        : undefined;
+      expect(defect && Cause.isDieReason(defect)).toBe(true);
+      if (defect && Cause.isDieReason(defect)) {
+        const error = defect.defect as Provider.MissingProviderError;
+        expect(error.resourceType).toBe("Test.Vanished");
+        expect(error.fqn).toBe("Ghost");
+        expect(error.message).toContain("aliases");
+      }
     }),
   );
 });

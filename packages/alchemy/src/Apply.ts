@@ -31,7 +31,7 @@ import {
   type Delete,
   type Plan,
 } from "./Plan.ts";
-import { missingProviderStub, tryFindProviderByType } from "./Provider.ts";
+import { missingProviderError, tryFindProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -1648,12 +1648,21 @@ const collectGarbage = Effect.fn(function* (
               downstream: node.old.downstream,
               props: node.old.props,
               attr: node.old.attr,
-              // Zombie-tolerant lookup — see the deletions builder in
-              // Plan.ts. A missing provider fails THIS row's deletion with
-              // a typed MissingProviderError instead of killing the apply.
-              provider: Option.getOrElse(
-                yield* tryFindProviderByType(node.old.resourceType),
-                () => missingProviderStub(node.old.resourceType, node.fqn),
+              // A missing provider is fatal — plan already dies on zombie
+              // rows (see the deletions builder in Plan.ts); this guards
+              // the replaced-chain generations that bypass plan.
+              provider: yield* tryFindProviderByType(
+                node.old.resourceType,
+              ).pipe(
+                Effect.flatMap(
+                  Option.match({
+                    onNone: () =>
+                      Effect.die(
+                        missingProviderError(node.old.resourceType, node.fqn),
+                      ),
+                    onSome: Effect.succeed,
+                  }),
+                ),
               ),
             };
 
