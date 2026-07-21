@@ -79,17 +79,15 @@ export interface AwsResolvedCredentials {
 }
 
 /**
- * An explicitly-set region env var always wins over the region recorded in an
- * SSO profile (`~/.aws/config`) or in stored credentials:
- * `AWS_REGION` > `AWS_DEFAULT_REGION` > profile/stored region.
+ * An explicitly-set `AWS_REGION` env var wins over the region recorded in an
+ * SSO profile (`~/.aws/config`) or in stored credentials. `AWS_DEFAULT_REGION`
+ * deliberately does NOT override — it is a *default* for when no region is
+ * configured anywhere, and the profile's region is explicit configuration.
  */
 export const applyEnvRegionOverride = <C extends { region: string }>(
   creds: C,
 ): Effect.Effect<C> =>
   getEnv("AWS_REGION").pipe(
-    Effect.flatMap((region) =>
-      region ? Effect.succeed(region) : getEnv("AWS_DEFAULT_REGION"),
-    ),
     Effect.map((envRegion) =>
       envRegion ? { ...creds, region: envRegion } : creds,
     ),
