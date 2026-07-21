@@ -367,6 +367,19 @@ export const make = <A>(
               } else if (diff.action === "replace") {
                 return resourceExpr;
               }
+              // `--force` upgrades this resource's noop to an update (see the
+              // diff mapping in the resource-graph pass below), so its
+              // `reconcile` WILL re-run and may produce fresh attributes —
+              // that is the point of --force. Returning the persisted attr
+              // snapshot here would bake potentially-stale values into every
+              // consumer's plan props and binding data, so consumers would
+              // keep the stale attrs even though the upstream just
+              // re-reconciled. Expose only the stable attributes and let
+              // apply re-evaluate the rest against the forced reconcile's
+              // fresh output.
+              if (options.force) {
+                return withStables(oldState?.attr);
+              }
               if (
                 oldState.status === "created" ||
                 oldState.status === "updated" ||
