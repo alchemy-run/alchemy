@@ -195,9 +195,11 @@ export interface Deployment extends Resource<
     /** The ID of the Pod Identity association binding the role. */
     associationId: string;
     /**
-     * The LoadBalancer hostname when `serviceType` is `LoadBalancer`, otherwise
-     * `undefined`. May be `undefined` immediately after a create while the
-     * cloud load balancer is still provisioning.
+     * The LoadBalancer URL (`http://<hostname>[:port]` — the NLB listens on
+     * the Service `port`, so a non-80 port is part of the URL) when
+     * `serviceType` is `LoadBalancer`, otherwise `undefined`. May be
+     * `undefined` immediately after a create while the cloud load balancer
+     * is still provisioning.
      */
     url: string | undefined;
     /** References to the Kubernetes objects created for the deployment. */
@@ -252,7 +254,7 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  *   port: 80,
  *   serviceType: "LoadBalancer",
  * });
- * nginx.url;            // LB hostname
+ * nginx.url;            // LB URL, e.g. "http://k8s-….elb.amazonaws.com"
  * nginx.deploymentName; // K8s-native attrs
  * ```
  *
@@ -423,7 +425,7 @@ const program = handler.pipe(
   Effect.scoped
 );
 
-console.log("EKS Deployment bootstrap starting...");
+console.log(\`EKS Deployment bootstrap starting on port \${process.env.PORT ?? 3000}...\`);
 await Effect.runPromise(program).catch((err) => {
   console.error("EKS Deployment bootstrap failed:", err);
   process.exit(1);
@@ -638,10 +640,15 @@ export const DeploymentProvider = () =>
           // Synthesize the Kubernetes objects. Container env merges binding
           // env (Output-referenced resource attributes flow via the
           // RuntimeContext into `news.env`), alchemy env, and user env.
+          // Unlike ECS/Fargate (whose agent injects `AWS_REGION`), EKS pods
+          // get no region env var — inject it so the bootstrap's
+          // `Region.fromEnv()` resolves inside the pod.
+          const { region } = yield* AWSEnvironment.current;
           const labels = news.labels ?? { "app.kubernetes.io/name": baseName };
           const containerEnv = {
             ...bindingEnv,
             ...alchemyEnv,
+            AWS_REGION: region,
             PORT: String(port),
             ...news.env,
           };
@@ -687,6 +694,35 @@ export const DeploymentProvider = () =>
               template: podTemplate,
             },
           };
+          // EKS Auto Mode's built-in load balancer controller only reconciles
+          // `LoadBalancer` Services whose `spec.loadBalancerClass` is
+          // `eks.amazonaws.com/nlb` (there is no in-tree cloud provider on
+          // Auto Mode), and it defaults new NLBs to the *internal* scheme.
+          // Detect the Auto Mode LB capability from the live cluster and
+          // default to an internet-facing NLB so the returned `url` is
+          // actually reachable. User `serviceAnnotations` always win.
+          let loadBalancerClass: string | undefined;
+          let serviceAnnotations = news.serviceAnnotations;
+          if (serviceType === "LoadBalancer") {
+            const described = yield* eks
+              .describeCluster({ name: clusterName })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            if (
+              described?.cluster?.kubernetesNetworkConfig?.elasticLoadBalancing
+                ?.enabled
+            ) {
+              loadBalancerClass = "eks.amazonaws.com/nlb";
+            }
+            serviceAnnotations = {
+              "service.beta.kubernetes.io/aws-load-balancer-scheme":
+                "internet-facing",
+              ...news.serviceAnnotations,
+            };
+          }
           const serviceObject: KubernetesObjectDefinition = {
             apiVersion: "v1",
             kind: "Service",
@@ -694,10 +730,11 @@ export const DeploymentProvider = () =>
               name: baseName,
               namespace,
               labels,
-              annotations: news.serviceAnnotations,
+              annotations: serviceAnnotations,
             },
             spec: {
               type: serviceType,
+              ...(loadBalancerClass !== undefined ? { loadBalancerClass } : {}),
               selector: labels,
               ports: [{ port, targetPort: port, protocol: "TCP" }],
             },
@@ -719,14 +756,23 @@ export const DeploymentProvider = () =>
             `Applied EKS Deployment ${namespace}/${baseName}`,
           );
 
-          // Resolve the LoadBalancer hostname if applicable.
-          const url =
+          // Resolve the LoadBalancer URL if applicable. The NLB listener is
+          // the Service `port` (Kubernetes maps `spec.ports[].port` 1:1 to
+          // the cloud listener), so the URL carries the port unless it's 80
+          // — mirroring `AWS.ECS.Service`'s url semantics.
+          const hostname =
             serviceType === "LoadBalancer"
               ? yield* waitForLoadBalancer(
                   connection,
                   toKubernetesObjectRef(serviceObject),
                 )
               : undefined;
+          const url =
+            hostname === undefined
+              ? undefined
+              : port === 80
+                ? `http://${hostname}`
+                : `http://${hostname}:${port}`;
 
           return {
             clusterName,
@@ -748,35 +794,55 @@ export const DeploymentProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Delete the in-cluster objects. Re-describe the cluster for a fresh
-          // endpoint + CA (the Attributes don't cache them). If the cluster is
-          // already gone (destroyed alongside the Deployment), its objects went
-          // with it — skip. Tolerate any API failure so delete stays idempotent.
-          if ((output.kubernetesObjects ?? []).length > 0) {
-            const described = yield* eks
-              .describeCluster({ name: output.clusterName })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
-            const cluster = described?.cluster;
-            if (cluster?.endpoint && cluster.certificateAuthority?.data) {
-              yield* deleteObjects({
-                connection: {
-                  clusterName: output.clusterName,
-                  endpoint: cluster.endpoint,
-                  certificateAuthorityData: cluster.certificateAuthority.data,
-                },
-                objects: output.kubernetesObjects ?? [],
-              }).pipe(Effect.catch(() => Effect.void));
-            }
+          // Re-describe the cluster for a fresh endpoint + CA (the Attributes
+          // don't cache them). If the cluster is gone or already DELETING
+          // (destroyed alongside the Deployment — e.g. a full-stack destroy
+          // deletes both concurrently), everything cluster-scoped (in-cluster
+          // objects, the pod identity association) dies with it — skip those
+          // and only clean up the resources that outlive the cluster (ECR
+          // repo, pod IAM role).
+          const described = yield* eks
+            .describeCluster({ name: output.clusterName })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const cluster =
+            described?.cluster && described.cluster.status !== "DELETING"
+              ? described.cluster
+              : undefined;
+
+          // Delete the in-cluster objects. Tolerate any API failure so delete
+          // stays idempotent.
+          if (
+            (output.kubernetesObjects ?? []).length > 0 &&
+            cluster?.endpoint &&
+            cluster.certificateAuthority?.data
+          ) {
+            yield* deleteObjects({
+              connection: {
+                clusterName: output.clusterName,
+                endpoint: cluster.endpoint,
+                certificateAuthorityData: cluster.certificateAuthority.data,
+              },
+              objects: output.kubernetesObjects ?? [],
+            }).pipe(Effect.catch(() => Effect.void));
           }
 
-          yield* deleteAssociation({
-            clusterName: output.clusterName,
-            associationId: output.associationId,
-          });
+          if (cluster) {
+            // The cluster may still transition to DELETING between the
+            // describe above and this call — EKS then rejects with
+            // `InvalidRequestException: Cluster is in invalid state` — the
+            // association is being torn down with the cluster, so treat it
+            // as already deleted.
+            yield* deleteAssociation({
+              clusterName: output.clusterName,
+              associationId: output.associationId,
+            }).pipe(
+              Effect.catchTag("InvalidRequestException", () => Effect.void),
+            );
+          }
 
           yield* ecr
             .deleteRepository({

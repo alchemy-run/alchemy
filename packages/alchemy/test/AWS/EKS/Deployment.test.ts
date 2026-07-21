@@ -90,8 +90,10 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
           return yield* EksHostApi;
         }),
       );
+      // `url` is a full URL (`http://<nlb-hostname>:<port>` — the NLB
+      // listener is the Service port, not 80).
       expect(host.url).toBeTruthy();
-      baseUrl = `http://${host.url!.replace(/\/+$/, "")}`;
+      baseUrl = host.url!.replace(/\/+$/, "");
 
       // NLB DNS + pod readiness ramp — retry /health.
       yield* HttpClient.get(`${baseUrl}/health`).pipe(
@@ -104,10 +106,16 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
         Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 60 }),
       );
     }),
-    { timeout: 1_500_000 },
+    // Cluster create (~18 min) + image build/push + Auto Mode node launch +
+    // NLB provisioning/DNS + URL readiness poll (~5–10 min) routinely total
+    // 35+ min end-to-end (observed 2026-07-20: deploy completed at ~33 min
+    // and the readiness poll ran out a 35-min budget).
+    { timeout: 2_700_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 600_000 });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+    timeout: 600_000,
+  });
 
   test.provider(
     "bound DynamoDB PutItem writes an item from inside the pod",

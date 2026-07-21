@@ -52,7 +52,7 @@ export interface BundledImageSource {
   /**
    * Base image for the generated Dockerfile. Only meaningful with
    * {@link main}.
-   * @default "public.ecr.aws/docker/library/bun:1"
+   * @default "oven/bun:1"
    */
   baseImage?: string;
   /**
@@ -453,7 +453,9 @@ export const makeImageSource = Effect.gen(function* () {
 
   /** Generated Dockerfile for a bundled `main` program. */
   const generateDockerfile = (source: BundledImageSource, port?: number) => {
-    const base = source.baseImage ?? "public.ecr.aws/docker/library/bun:1";
+    // `oven/bun` is Docker-Hub only — there is no `docker/library/bun` (bun
+    // is not a Docker official image) and no `public.ecr.aws/oven/bun`.
+    const base = source.baseImage ?? "oven/bun:1";
     const lines = [
       `FROM ${base}`,
       `WORKDIR /app`,

@@ -664,32 +664,51 @@ export const JobProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // If the cluster is gone or already DELETING (destroyed alongside
+          // the Job), everything cluster-scoped (in-cluster objects, the pod
+          // identity association) dies with it — skip those and only clean up
+          // the resources that outlive the cluster (ECR repo, pod IAM role).
+          const described = yield* eks
+            .describeCluster({ name: output.clusterName })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const cluster =
+            described?.cluster && described.cluster.status !== "DELETING"
+              ? described.cluster
+              : undefined;
+
           // Delete the in-cluster objects (skip if the cluster is gone).
-          if ((output.kubernetesObjects ?? []).length > 0) {
-            const described = yield* eks
-              .describeCluster({ name: output.clusterName })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
-            const cluster = described?.cluster;
-            if (cluster?.endpoint && cluster.certificateAuthority?.data) {
-              yield* deleteObjects({
-                connection: {
-                  clusterName: output.clusterName,
-                  endpoint: cluster.endpoint,
-                  certificateAuthorityData: cluster.certificateAuthority.data,
-                },
-                objects: output.kubernetesObjects ?? [],
-              }).pipe(Effect.catch(() => Effect.void));
-            }
+          if (
+            (output.kubernetesObjects ?? []).length > 0 &&
+            cluster?.endpoint &&
+            cluster.certificateAuthority?.data
+          ) {
+            yield* deleteObjects({
+              connection: {
+                clusterName: output.clusterName,
+                endpoint: cluster.endpoint,
+                certificateAuthorityData: cluster.certificateAuthority.data,
+              },
+              objects: output.kubernetesObjects ?? [],
+            }).pipe(Effect.catch(() => Effect.void));
           }
 
-          yield* deleteAssociation({
-            clusterName: output.clusterName,
-            associationId: output.associationId,
-          });
+          if (cluster) {
+            // The cluster may still transition to DELETING between the
+            // describe above and this call — EKS then rejects with
+            // `InvalidRequestException: Cluster is in invalid state` — the
+            // association is being torn down with the cluster, so treat it
+            // as already deleted.
+            yield* deleteAssociation({
+              clusterName: output.clusterName,
+              associationId: output.associationId,
+            }).pipe(
+              Effect.catchTag("InvalidRequestException", () => Effect.void),
+            );
+          }
 
           yield* ecr
             .deleteRepository({
