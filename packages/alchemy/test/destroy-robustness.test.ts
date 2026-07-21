@@ -6,9 +6,10 @@
  *  - a failing provider `delete` must not interrupt sibling deletions
  *  - an upstream's delete is skipped (state retained) when a dependent fails
  *  - a "zombie" state row whose resource type has no registered provider
- *    (the type was removed/renamed without an alias) must not crash planning
- *    — everything else is destroyed and the zombie surfaces as a typed
- *    `MissingProviderError` in the aggregated failure
+ *    (the type was removed/renamed without an alias) is FATAL at plan time:
+ *    the plan dies with a typed `MissingProviderError` and nothing is
+ *    deployed or destroyed — the program and state disagree, and without
+ *    the provider the row cannot be deleted anyway
  *  - an attr-less row whose `read` recovery fails must not block siblings
  */
 import { MissingProviderError } from "@/Provider";
@@ -32,6 +33,12 @@ const getState = Effect.fn(function* (fqn: string) {
   const state = yield* yield* State;
   const stk = yield* Stack;
   return yield* state.get({ stack: stk.name, stage: stk.stage, fqn });
+});
+
+const clearState = Effect.fn(function* (fqn: string) {
+  const state = yield* yield* State;
+  const stk = yield* Stack;
+  yield* state.delete({ stack: stk.name, stage: stk.stage, fqn });
 });
 
 const seed = Effect.fn(function* (fqn: string, value: ResourceState) {
@@ -185,41 +192,46 @@ describe("zombie rows (no registered provider)", () => {
     downstream: [],
   });
 
-  test.provider(
-    "destroy deletes everything else and reports the zombie",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.deploy(
-          Effect.gen(function* () {
-            yield* TestResource("A", { string: "a" });
-          }),
-        );
-        yield* seed("Ghost", ghostRow("Ghost"));
+  const diesWithMissingProvider = (
+    exit: Exit.Exit<unknown, unknown>,
+  ): MissingProviderError | undefined => {
+    if (!Exit.isFailure(exit)) return undefined;
+    const reason = exit.cause.reasons.find(
+      (r) => Cause.isDieReason(r) && r.defect instanceof MissingProviderError,
+    );
+    return reason && Cause.isDieReason(reason)
+      ? (reason.defect as MissingProviderError)
+      : undefined;
+  };
 
-        const exit = yield* stack.destroy().pipe(Effect.exit);
+  test.provider("destroy dies at plan time and destroys nothing", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* TestResource("A", { string: "a" });
+        }),
+      );
+      yield* seed("Ghost", ghostRow("Ghost"));
 
-        expect(failsWith(exit, "MissingProviderError")).toBe(true);
-        if (Exit.isFailure(exit)) {
-          const reason = exit.cause.reasons.find(
-            (r) =>
-              Cause.isFailReason(r) && r.error instanceof MissingProviderError,
-          );
-          expect(
-            reason && Cause.isFailReason(reason)
-              ? (reason.error as MissingProviderError).resourceType
-              : undefined,
-          ).toBe("Test.Vanished");
-        }
-        // Everything with a provider was destroyed.
-        expect(yield* getState("A")).toBeUndefined();
-        // The zombie row is retained so re-registering the provider (or an
-        // alias) lets a later destroy reclaim the physical resource.
-        expect(yield* getState("Ghost")).toBeDefined();
-      }),
+      const exit = yield* stack.destroy().pipe(Effect.exit);
+
+      const defect = diesWithMissingProvider(exit);
+      expect(defect?.resourceType).toBe("Test.Vanished");
+      expect(defect?.fqn).toBe("Ghost");
+      // Fatal at plan time: NOTHING was destroyed — A's state is intact.
+      expect((yield* getState("A"))?.status).toBe("created");
+      expect(yield* getState("Ghost")).toBeDefined();
+
+      // Remediation path: clear the zombie row (as the error message
+      // instructs), then destroy proceeds normally.
+      yield* clearState("Ghost");
+      yield* stack.destroy();
+      expect(yield* getState("A")).toBeUndefined();
+    }),
   );
 
   test.provider(
-    "a deploy with a zombie orphan still applies the program",
+    "a deploy with a zombie orphan dies at plan time and applies nothing",
     (stack) =>
       Effect.gen(function* () {
         yield* seed("Ghost", ghostRow("Ghost"));
@@ -233,11 +245,14 @@ describe("zombie rows (no registered provider)", () => {
           )
           .pipe(Effect.exit);
 
-        // The zombie orphan fails the deploy's GC phase...
-        expect(failsWith(exit, "MissingProviderError")).toBe(true);
-        // ...but the program's resources were still applied.
-        expect((yield* getState("A"))?.status).toBe("created");
+        expect(diesWithMissingProvider(exit)?.resourceType).toBe(
+          "Test.Vanished",
+        );
+        // Fatal at plan time: the program was NOT applied.
+        expect(yield* getState("A")).toBeUndefined();
         expect(yield* getState("Ghost")).toBeDefined();
+
+        yield* clearState("Ghost");
       }),
   );
 });
