@@ -1,0 +1,232 @@
+import * as Effect from "effect/Effect";
+import type { MemoOptions } from "../../Command/Memo.ts";
+import type { InputProps } from "../../Input.ts";
+import { effectClass } from "../../Util/effect.ts";
+import type { Providers } from "../Providers.ts";
+import type { AssetsConfig } from "../Workers/Assets.ts";
+import {
+  Worker,
+  type NormalizedBindings,
+  type WorkerAssetsConfig,
+  type WorkerBindingProps,
+  type WorkerProps,
+} from "../Workers/Worker.ts";
+
+export interface SvelteKitProps<
+  Bindings extends WorkerBindingProps = {},
+> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets" | "source"> {
+  /**
+   * SvelteKit project root (the directory containing `package.json` and
+   * `src/routes`). Relative paths resolve from the process working
+   * directory.
+   * @default process.cwd()
+   */
+  rootDir?: string;
+  /**
+   * Controls which files are content-hashed to decide whether a rebuild is
+   * needed. By default every non-gitignored file under `rootDir` (plus the
+   * nearest package-manager lockfile) is hashed; narrow the scope with
+   * `include`/`exclude` globs when the project sits in a large repository.
+   */
+  memo?: MemoOptions;
+  /**
+   * SvelteKit configuration passed to the `sveltekit(config)` Vite plugin.
+   * Since kit v3 the configuration lives in memory (a `svelte.config.js` on
+   * disk is an upstream error), so this is the place for `alias`, `paths`,
+   * `prerender`, and the rest of the kit config surface. The `adapter`
+   * field is injected by Alchemy's wrangler-free Cloudflare adapter — do
+   * not set it here. Must be JSON-serializable (it persists in state).
+   */
+  kit?: Record<string, unknown>;
+  /**
+   * Options for the wrangler-free Cloudflare adapter.
+   */
+  adapter?: {
+    /**
+     * Name of the static-assets binding the generated worker serves files
+     * through.
+     * @default "ASSETS"
+     */
+    assetsBinding?: string;
+    /**
+     * Fallback-page generation, mirroring Workers static assets
+     * `not_found_handling`: `"404-page"` writes a `404.html`,
+     * `"single-page-application"` writes an app-shell `index.html`.
+     * @default "none"
+     */
+    notFoundHandling?: "none" | "404-page" | "single-page-application";
+    /**
+     * With `notFoundHandling: "404-page"`: `"spa"` renders the app shell
+     * as the fallback, `"plaintext"` writes a plain `Not Found` page.
+     * @default "plaintext"
+     */
+    fallback?: "spa" | "plaintext";
+  };
+  /**
+   * Optional configuration for static asset routing behavior.
+   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+   */
+  assets?: AssetsConfig;
+}
+
+/**
+ * A Cloudflare Worker deployed from a SvelteKit project.
+ *
+ * `SvelteKit` builds the app with SvelteKit's own Vite pipeline and a
+ * wrangler-free in-memory Cloudflare adapter, then re-bundles the
+ * Node-flavored server output for workerd — no `svelte.config.js`, no
+ * `@sveltejs/adapter-cloudflare`, no Wrangler configuration required.
+ * Client assets and prerendered pages are deployed as Worker static
+ * assets; dynamic routes are served by the generated Worker.
+ *
+ * The `@distilled.cloud/sveltekit` package must be installed in your
+ * project — it is loaded dynamically at deploy time.
+ *
+ * Input files are content-hashed (respecting `.gitignore` by default) so
+ * unchanged projects skip the build and deploy entirely.
+ *
+ * SvelteKit's server code runs under `nodejs_compat` (the server graph is
+ * built for Node), so the flag is always included in the Worker's
+ * compatibility flags.
+ *
+ * Note on local dev: `alchemy dev` runs SvelteKit's own Vite dev server
+ * (Node SSR with full HMR). `platform.env` is a stub populated from the
+ * Worker's literal `env` values (strings and secrets) — real Cloudflare
+ * bindings (KV, R2, D1, ...) inside dev's `platform.env` arrive with the
+ * cloudflare-runtime Node-side bindings proxy, which is a tracked
+ * follow-up.
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
+ *
+ * @section Deploying a SvelteKit App
+ * A single call builds and deploys the app — server-rendered routes,
+ * prerendered pages, and client assets included.
+ *
+ * @example Basic SvelteKit site
+ * ```typescript
+ * const site = yield* Cloudflare.Website.SvelteKit("Website");
+ * ```
+ *
+ * @section Bindings
+ * Values passed via `env` are exposed to server routes through
+ * SvelteKit's `platform.env`.
+ *
+ * @example Reading env from a server route
+ * ```typescript
+ * const site = yield* Cloudflare.Website.SvelteKit("Website", {
+ *   env: {
+ *     API_KEY: Alchemy.secret("API_KEY"),
+ *   },
+ * });
+ *
+ * // src/routes/+page.server.ts
+ * // export const load = ({ platform }) => ({
+ * //   hasKey: platform?.env?.API_KEY !== undefined,
+ * // });
+ * ```
+ *
+ * @section Kit and Adapter Options
+ * The kit config surface is passed in-memory via `kit`; the generated
+ * Cloudflare adapter is configured via `adapter`.
+ *
+ * @example SPA-style 404 fallback
+ * ```typescript
+ * const site = yield* Cloudflare.Website.SvelteKit("Website", {
+ *   adapter: {
+ *     notFoundHandling: "404-page",
+ *     fallback: "spa",
+ *   },
+ * });
+ * ```
+ *
+ * @section Custom Rebuild Scope
+ * By default, every non-gitignored file is hashed to decide whether a
+ * rebuild is needed. Use `memo` to narrow the scope when the project
+ * lives in a large repository.
+ *
+ * @example Narrowing the memo scope
+ * ```typescript
+ * const site = yield* Cloudflare.Website.SvelteKit("Website", {
+ *   memo: {
+ *     include: ["src/**", "static/**", "package.json"],
+ *   },
+ * });
+ * ```
+ *
+ * @section Class Form
+ * Calling `SvelteKit` with no arguments returns a constructor you can
+ * `extend` to declare the Worker as a named class. The class is both an
+ * `Effect` you can `yield*` to deploy and a type you can reference
+ * elsewhere — useful when other resources need to bind to this Worker.
+ *
+ * @example Declaring a Worker class
+ * ```typescript
+ * class Website extends Cloudflare.Website.SvelteKit<Website>()(
+ *   "Website",
+ * ) {}
+ *
+ * const site = yield* Website;
+ * ```
+ */
+export const SvelteKit: {
+  <Self>(): {
+    <const Bindings extends WorkerBindingProps = {}, Req = never>(
+      id: string,
+      propsEff?:
+        | InputProps<SvelteKitProps<Bindings>>
+        | Effect.Effect<InputProps<SvelteKitProps<Bindings>>, never, Req>,
+    ): Effect.Effect<Self, never, Req | Providers> & {
+      new (): Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }>;
+    };
+  };
+  <const Bindings extends WorkerBindingProps = {}, Req = never>(
+    id: string,
+    propsEff?:
+      | InputProps<SvelteKitProps<Bindings>>
+      | Effect.Effect<InputProps<SvelteKitProps<Bindings>>, never, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }>,
+    never,
+    Req | Providers
+  >;
+} = ((id?: any, propsEff?: any) =>
+  id === undefined
+    ? (id: string, propsEff: any) => effectClass(SvelteKit(id, propsEff))
+    : Worker(
+        id,
+        Effect.map(
+          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+          (props) => ({
+            ...props,
+            compatibility: {
+              ...props?.compatibility,
+              // SvelteKit's server graph is built for Node — nodejs_compat
+              // is effectively required for the workerd re-bundle to run.
+              flags: props?.compatibility?.flags?.includes("nodejs_compat")
+                ? props.compatibility.flags
+                : [...(props?.compatibility?.flags ?? []), "nodejs_compat"],
+            },
+            source: {
+              provider: "@distilled.cloud/sveltekit/source",
+              options: {
+                rootDir: props?.rootDir,
+                memo: props?.memo,
+                kit: props?.kit,
+                adapter: props?.adapter,
+              },
+            },
+          }),
+        ),
+      )) as any;
