@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -500,6 +501,55 @@ export const findProvider: {
   ): Effect.Effect<ProviderService<R>>;
 } = (resource: { Type?: string; key?: string }) =>
   findProviderByType((resource.Type ?? resource.key) as string) as any;
+
+/**
+ * A persisted state row references a resource type with no registered
+ * provider — the type was removed from the program (or renamed without an
+ * alias) while its state row still exists ("zombie" row).
+ *
+ * Raised from the row's delete lifecycle at APPLY time (never at plan time)
+ * so a destroy/deploy still processes every other resource and surfaces the
+ * zombie through the aggregated failure.
+ */
+export class MissingProviderError extends Data.TaggedError(
+  "MissingProviderError",
+)<{
+  message: string;
+  resourceType: string;
+  fqn: string;
+}> {}
+
+/**
+ * Stand-in {@link ProviderService} for a state row whose resource type has
+ * no registered provider (see {@link MissingProviderError}). Every lifecycle
+ * operation fails with the typed error; the engine's delete path keeps the
+ * row so a later run — with the provider re-registered or aliased — can
+ * reclaim the physical resource.
+ */
+export const missingProviderStub = (
+  resourceType: string,
+  fqn: string,
+): ProviderService => {
+  const fail = Effect.fail(
+    new MissingProviderError({
+      message:
+        `No provider is registered for resource type '${resourceType}' ` +
+        `(state row '${fqn}'). The type was removed from the program or ` +
+        "renamed without an alias. Re-register the provider (or add the " +
+        "old name to the resource's `aliases`) so this row can be " +
+        "destroyed, or clear the state row manually if the physical " +
+        "resource is already gone.",
+      resourceType,
+      fqn,
+    }),
+  );
+  return {
+    list: () => fail as Effect.Effect<never>,
+    read: () => fail,
+    reconcile: () => fail as Effect.Effect<never>,
+    delete: () => fail,
+  };
+};
 
 export const tryFindProviderByType: {
   <R extends ResourceLike>(

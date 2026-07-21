@@ -3348,6 +3348,44 @@ describe("type aliases", () => {
   });
 });
 
+describe("zombie rows", () => {
+  // A state row whose resource type has no registered provider (the type
+  // was removed from the program, or renamed without an alias). Planning
+  // must not die — the row becomes a normal deletion node whose lifecycle
+  // fails with a typed MissingProviderError at APPLY time, so everything
+  // else still deploys/destroys (see destroy-robustness.test.ts).
+  test(
+    "a row whose resource type has no provider still plans",
+    Effect.gen(function* () {
+      yield* seed({
+        Ghost: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Ghost",
+          fqn: "Ghost",
+          namespace: undefined,
+          resourceType: "Test.Vanished",
+          status: "created",
+          props: { name: "ghost" },
+          attr: { name: "ghost" },
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* Bucket("Survivor", { name: "survivor" });
+        }),
+      );
+      expect(plan.resources.Survivor?.action).toBe("create");
+      expect(plan.deletions.Ghost).toMatchObject({
+        action: "delete",
+        resource: { LogicalId: "Ghost", Type: "Test.Vanished" },
+      });
+    }),
+  );
+});
+
 describe("read is never handed unresolved persisted props", () => {
   // A failed create persists `creating` state carrying the RAW plan-time
   // props, which may contain unresolved Output expressions (e.g. a prop
