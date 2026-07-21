@@ -225,18 +225,21 @@ export const CertificateProvider = () =>
         id: string,
         props: CertificateProps,
       ) {
-        const listed = yield* withCertRegion(props.region)(
-          acm.listCertificates({
-            Includes: {
-              keyTypes: props.keyAlgorithm ? [props.keyAlgorithm] : undefined,
-            },
-          } as any),
+        const summaries = yield* withCertRegion(props.region)(
+          acm.listCertificates
+            .items({
+              Includes: {
+                keyTypes: props.keyAlgorithm ? [props.keyAlgorithm] : undefined,
+              },
+            } as any)
+            .pipe(
+              Stream.filter(
+                (summary) => summary.DomainName === props.domainName,
+              ),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            ),
         );
-
-        const summaries =
-          listed.CertificateSummaryList?.filter(
-            (summary) => summary.DomainName === props.domainName,
-          ) ?? [];
 
         for (const summary of summaries) {
           if (!summary.CertificateArn) {

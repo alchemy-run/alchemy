@@ -1,5 +1,6 @@
 import * as r53r from "@distilled.cloud/aws/route53resolver";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -243,12 +244,15 @@ export const ResolverEndpointProvider = () =>
             return byId;
           }
         }
-        const listed = yield* r53r.listResolverEndpoints({
-          Filters: [{ Name: "CreatorRequestId", Values: [name] }],
-        });
-        return (listed.ResolverEndpoints ?? []).find(
-          (endpoint) => endpoint.Status !== "DELETING",
-        );
+        return yield* r53r.listResolverEndpoints
+          .items({
+            Filters: [{ Name: "CreatorRequestId", Values: [name] }],
+          })
+          .pipe(
+            Stream.filter((endpoint) => endpoint.Status !== "DELETING"),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
       });
 
       return ResolverEndpoint.Provider.of({

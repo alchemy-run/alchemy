@@ -336,9 +336,10 @@ const observePolicy = (accountId: string, policyId: string) =>
   );
 
 const findPolicyByName = (accountId: string, name: string) =>
-  alerting.listPolicies({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
+  alerting.listPolicies.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .filter((p) => p.name === name)
         .map(narrowPolicy)
         .find((p) => p !== undefined),

@@ -103,12 +103,16 @@ export const VirtualMFADeviceProvider = () =>
         userName: string | undefined;
       }) {
         if (!userName) {
-          const listed = yield* iam.listVirtualMFADevices({
-            AssignmentStatus: "Unassigned",
-          });
-          const device = listed.VirtualMFADevices.find(
-            (entry) => entry.SerialNumber === serialNumber,
-          );
+          const device = yield* iam.listVirtualMFADevices
+            .items({ AssignmentStatus: "Unassigned" })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).find(
+                  (entry) => entry.SerialNumber === serialNumber,
+                ),
+              ),
+            );
           return device
             ? {
                 SerialNumber: device.SerialNumber,

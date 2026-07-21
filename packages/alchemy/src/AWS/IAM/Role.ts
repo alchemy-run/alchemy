@@ -244,11 +244,14 @@ export const RoleProvider = () =>
           : createPhysicalName({ id, maxLength: 64 });
 
       const readInlinePolicies = Effect.fn(function* (roleName: string) {
-        const listed = yield* iam.listRolePolicies({
-          RoleName: roleName,
-        });
+        const policyNames = yield* iam.listRolePolicies
+          .items({ RoleName: roleName })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
         const entries = yield* Effect.all(
-          (listed.PolicyNames ?? []).map((policyName) =>
+          policyNames.map((policyName) =>
             iam
               .getRolePolicy({
                 RoleName: roleName,
@@ -277,10 +280,13 @@ export const RoleProvider = () =>
       });
 
       const readManagedPolicies = Effect.fn(function* (roleName: string) {
-        const listed = yield* iam.listAttachedRolePolicies({
-          RoleName: roleName,
-        });
-        return (listed.AttachedPolicies ?? [])
+        const attached = yield* iam.listAttachedRolePolicies
+          .items({ RoleName: roleName })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
+        return attached
           .map((policy) => policy.PolicyArn)
           .filter(
             (policyArn): policyArn is string => typeof policyArn === "string",
@@ -680,48 +686,36 @@ export const RoleProvider = () =>
             })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
 
-          yield* iam.listRolePolicies({ RoleName: output.roleName }).pipe(
-            Effect.flatMap((policies) =>
-              Effect.all(
-                (policies.PolicyNames ?? []).map((policyName) =>
-                  iam
-                    .deleteRolePolicy({
-                      RoleName: output.roleName,
-                      PolicyName: policyName,
-                    })
-                    .pipe(
-                      Effect.catchTag(
-                        "NoSuchEntityException",
-                        () => Effect.void,
-                      ),
-                    ),
+          yield* iam.listRolePolicies.items({ RoleName: output.roleName }).pipe(
+            Stream.mapEffect((policyName) =>
+              iam
+                .deleteRolePolicy({
+                  RoleName: output.roleName,
+                  PolicyName: policyName,
+                })
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
                 ),
-              ),
             ),
+            Stream.runDrain,
             // The role itself may already be gone.
             Effect.catchTag("NoSuchEntityException", () => Effect.void),
           );
 
-          yield* iam
-            .listAttachedRolePolicies({ RoleName: output.roleName })
+          yield* iam.listAttachedRolePolicies
+            .items({ RoleName: output.roleName })
             .pipe(
-              Effect.flatMap((policies) =>
-                Effect.all(
-                  (policies.AttachedPolicies ?? []).map((policy) =>
-                    iam
-                      .detachRolePolicy({
-                        RoleName: output.roleName,
-                        PolicyArn: policy.PolicyArn!,
-                      })
-                      .pipe(
-                        Effect.catchTag(
-                          "NoSuchEntityException",
-                          () => Effect.void,
-                        ),
-                      ),
+              Stream.mapEffect((policy) =>
+                iam
+                  .detachRolePolicy({
+                    RoleName: output.roleName,
+                    PolicyArn: policy.PolicyArn!,
+                  })
+                  .pipe(
+                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
                   ),
-                ),
               ),
+              Stream.runDrain,
               // The role itself may already be gone.
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );

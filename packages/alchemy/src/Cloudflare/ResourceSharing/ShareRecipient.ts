@@ -288,15 +288,18 @@ const getRecipient = (
  * surfaces as `ShareNotFound` — treat it as "no recipient".
  */
 const findRecipient = (accountId: string, shareId: string, target: string) =>
-  resourceSharing.listRecipients({ accountId, shareId, perPage: 50 }).pipe(
-    Effect.map((list) =>
-      list.result.find(
-        (r) =>
-          r.accountId === target && r.associationStatus !== "disassociated",
+  resourceSharing.listRecipients
+    .items({ accountId, shareId, perPage: 50 })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((chunk) =>
+        Array.from(chunk).find(
+          (r) =>
+            r.accountId === target && r.associationStatus !== "disassociated",
+        ),
       ),
-    ),
-    Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
-  );
+      Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
+    );
 
 const toAttributes = (
   recipient:

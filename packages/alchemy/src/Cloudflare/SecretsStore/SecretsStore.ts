@@ -59,12 +59,15 @@ export const SecretsStoreProvider = () =>
     // ever invoked when no store exists yet.
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const stores = yield* secretsStore.listStores({
-        accountId: output?.accountId ?? accountId,
-      });
+      const stores = yield* secretsStore.listStores
+        .items({ accountId: output?.accountId ?? accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
       const match = output?.storeId
-        ? stores.result.find((s) => s.id === output.storeId)
-        : stores.result[0];
+        ? stores.find((s) => s.id === output.storeId)
+        : stores[0];
       if (!match) return undefined;
       return {
         storeId: match.id,
@@ -79,11 +82,15 @@ export const SecretsStoreProvider = () =>
       // Observe — Cloudflare permits exactly one Secrets Store per
       // account. List the account's stores; reuse the cached one if
       // it still exists, otherwise reuse the first one.
-      const stores = yield* secretsStore.listStores({ accountId: acct });
+      const stores = yield* secretsStore.listStores
+        .items({ accountId: acct })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
       const observed = output?.storeId
-        ? (stores.result.find((s) => s.id === output.storeId) ??
-          stores.result[0])
-        : stores.result[0];
+        ? (stores.find((s) => s.id === output.storeId) ?? stores[0])
+        : stores[0];
 
       if (observed) {
         return {
@@ -117,8 +124,13 @@ export const SecretsStoreProvider = () =>
         };
       }
 
-      const after = yield* secretsStore.listStores({ accountId: acct });
-      const first = after.result[0];
+      const after = yield* secretsStore.listStores
+        .items({ accountId: acct })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
+      const first = after[0];
       if (first) {
         return {
           storeId: first.id,

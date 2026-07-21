@@ -1,5 +1,6 @@
 import * as r53r from "@distilled.cloud/aws/route53resolver";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { diffTags } from "../../Tags.ts";
 
 /**
@@ -11,11 +12,12 @@ import { diffTags } from "../../Tags.ts";
  * @internal
  */
 export const fetchResolverTags = (arn: string) =>
-  r53r.listTagsForResource({ ResourceArn: arn }).pipe(
+  r53r.listTagsForResource.items({ ResourceArn: arn }).pipe(
+    Stream.runCollect,
     Effect.map(
-      (r) =>
+      (chunk) =>
         Object.fromEntries(
-          (r.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
+          Array.from(chunk).map((tag) => [tag.Key, tag.Value]),
         ) as Record<string, string>,
     ),
     Effect.catch(() => Effect.succeed({} as Record<string, string>)),

@@ -235,10 +235,19 @@ export const ParameterProvider = () =>
       // allowedPattern, and the KMS key id. It is eventually consistent, so
       // treat an absent result as "no metadata yet" rather than "missing".
       const describeByName = Effect.fn(function* (name: string) {
-        const result = yield* ssm.describeParameters({
-          ParameterFilters: [{ Key: "Name", Option: "Equals", Values: [name] }],
-        });
-        return result.Parameters?.[0];
+        const parameters = yield* ssm.describeParameters
+          .pages({
+            ParameterFilters: [
+              { Key: "Name", Option: "Equals", Values: [name] },
+            ],
+          })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
+            ),
+          );
+        return parameters[0];
       });
 
       // Resolve a key id/alias/ARN to the key ARN for the `keyArn` attribute.

@@ -322,9 +322,10 @@ const observeWebhook = (accountId: string, webhookId: string) =>
   );
 
 const findWebhookByName = (accountId: string, name: string) =>
-  alerting.listDestinationWebhooks({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
+  alerting.listDestinationWebhooks.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .filter((w) => w.name === name)
         .map(narrowWebhook)
         .find((w) => w !== undefined),

@@ -222,12 +222,20 @@ export const ServiceProvider = () =>
             return byId;
           }
         }
-        const listed = yield* sd.listServices({
-          Filters: [
-            { Name: "NAMESPACE_ID", Values: [namespaceId], Condition: "EQ" },
-          ],
-        });
-        const summary = listed.Services?.find((s) => s.Name === name);
+        const summary = yield* sd.listServices
+          .pages({
+            Filters: [
+              { Name: "NAMESPACE_ID", Values: [namespaceId], Condition: "EQ" },
+            ],
+          })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk)
+                .flatMap((page) => page.Services ?? [])
+                .find((s) => s.Name === name),
+            ),
+          );
         if (summary?.Id === undefined) {
           return undefined;
         }

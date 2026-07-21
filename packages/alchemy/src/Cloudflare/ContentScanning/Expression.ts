@@ -195,9 +195,12 @@ export const ExpressionProvider = () =>
       //    a guarantee: a missing expression falls through to the payload
       //    scan and then to create. (Scanning must be enabled here — a
       //    disabled zone fails with the typed ContentScanningNotEnabled.)
-      const expressions = yield* contentScanning
-        .listPayloads({ zoneId })
-        .pipe(Effect.map((r) => r.result));
+      const expressions = yield* contentScanning.listPayloads
+        .items({ zoneId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
       let observed = output?.expressionId
         ? expressions.find((e) => e.id === output.expressionId)
         : undefined;
@@ -254,9 +257,10 @@ type ObservedExpression = { id?: string | null; payload?: string | null };
  * (scanning disabled on the zone, or the zone itself gone) to `undefined`.
  */
 const listExpressions = (zoneId: string) =>
-  contentScanning.listPayloads({ zoneId }).pipe(
-    Effect.map(
-      (response): readonly ObservedExpression[] | undefined => response.result,
+  contentScanning.listPayloads.items({ zoneId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk): readonly ObservedExpression[] | undefined =>
+      Array.from(chunk),
     ),
     Effect.catchTag("ContentScanningNotEnabled", () =>
       Effect.succeed(undefined),

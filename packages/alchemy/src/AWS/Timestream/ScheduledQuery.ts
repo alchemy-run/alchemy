@@ -193,21 +193,24 @@ const readScheduledQuery = Effect.fn(function* (scheduledQueryArn: string) {
     return undefined;
   }
   const scheduledQuery = response.ScheduledQuery;
-  const tagsResponse = yield* withQueryEndpoint(
-    TSQ.listTagsForResource({ ResourceARN: scheduledQuery.Arn }),
+  const tags = yield* withQueryEndpoint(
+    TSQ.listTagsForResource.items({ ResourceARN: scheduledQuery.Arn }).pipe(
+      EffectStream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    ),
   ).pipe(
     Effect.catchTag("ResourceNotFoundException", () =>
       Effect.succeed(undefined),
     ),
   );
-  if (!tagsResponse) {
+  if (!tags) {
     return undefined;
   }
   return {
     scheduledQueryArn: scheduledQuery.Arn,
     name: scheduledQuery.Name,
     state: scheduledQuery.State,
-    tags: toTagRecord(tagsResponse.Tags),
+    tags: toTagRecord(tags),
   } satisfies ScheduledQuery["Attributes"];
 });
 

@@ -587,10 +587,11 @@ export const JobProvider = () =>
           // with ConflictException ("is used in job …") long after DeleteJob
           // itself succeeds. Stop in-flight runs and wait (bounded) for every
           // run to reach a terminal state before deleting the job.
-          const runs = yield* databrew
-            .listJobRuns({ Name: output.jobName })
+          const runs = yield* databrew.listJobRuns
+            .items({ Name: output.jobName })
             .pipe(
-              Effect.map((r) => r.JobRuns ?? []),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
               Effect.catchTag("ResourceNotFoundException", () =>
                 Effect.succeed([]),
               ),
@@ -615,9 +616,10 @@ export const JobProvider = () =>
                 ),
           );
           if (runs.some((run) => isActive(run.State))) {
-            yield* databrew.listJobRuns({ Name: output.jobName }).pipe(
-              Effect.map((r) =>
-                (r.JobRuns ?? []).every((run) => !isActive(run.State)),
+            yield* databrew.listJobRuns.items({ Name: output.jobName }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).every((run) => !isActive(run.State)),
               ),
               Effect.catchTag("ResourceNotFoundException", () =>
                 Effect.succeed(true),

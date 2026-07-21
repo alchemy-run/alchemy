@@ -78,10 +78,14 @@ export const KeyValueStoreProvider = () =>
     KeyValueStore,
     Effect.gen(function* () {
       const getByName = Effect.fn(function* (name: string) {
-        const listed = yield* cloudfront.listKeyValueStores({});
-        const store =
-          listed.KeyValueStoreList?.Items?.find((item) => item.Name === name) ??
-          undefined;
+        const store = yield* cloudfront.listKeyValueStores.pages({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk)
+              .flatMap((page) => page.KeyValueStoreList?.Items ?? [])
+              .find((item) => item.Name === name),
+          ),
+        );
         if (!store?.Name) {
           return undefined;
         }

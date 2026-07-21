@@ -345,9 +345,10 @@ const findSilence = (
   startTime: string,
   endTime: string,
 ) =>
-  alerting.listSilences({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
+  alerting.listSilences.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .filter(
           (s) =>
             s.policyId === policyId &&

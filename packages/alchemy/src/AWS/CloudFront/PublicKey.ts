@@ -99,9 +99,13 @@ export const PublicKeyProvider = () =>
       });
 
       const getByName = Effect.fn(function* (name: string) {
-        const listed = yield* cloudfront.listPublicKeys({});
-        const summary = listed.PublicKeyList?.Items?.find(
-          (item) => item.Name === name,
+        const summary = yield* cloudfront.listPublicKeys.pages({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk)
+              .flatMap((page) => page.PublicKeyList?.Items ?? [])
+              .find((item) => item.Name === name),
+          ),
         );
         if (!summary?.Id) return undefined;
         return yield* getById(summary.Id).pipe(

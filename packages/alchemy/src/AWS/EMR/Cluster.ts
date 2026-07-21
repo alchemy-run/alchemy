@@ -656,12 +656,13 @@ export const ClusterProvider = () =>
           // Core instance-group resize (in place between non-zero counts).
           const desiredCore = props.instances?.coreInstanceCount ?? 1;
           if (desiredCore > 0) {
-            const groups = yield* emr.listInstanceGroups({
-              ClusterId: clusterId,
-            });
-            const core = (groups.InstanceGroups ?? []).find(
-              (g) => g.InstanceGroupType === "CORE",
-            );
+            const groups = yield* emr.listInstanceGroups
+              .items({ ClusterId: clusterId })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) => Array.from(chunk)),
+              );
+            const core = groups.find((g) => g.InstanceGroupType === "CORE");
             if (
               core?.Id !== undefined &&
               (core.RequestedInstanceCount ?? 0) !== desiredCore

@@ -136,8 +136,12 @@ const describeDetector = Effect.fn(function* (
   },
 ) {
   const request = toDescribeRequest(props);
-  const response = yield* cloudwatch.describeAnomalyDetectors(request);
-  const detectors = response.AnomalyDetectors ?? [];
+  const detectors = yield* cloudwatch.describeAnomalyDetectors
+    .items(request)
+    .pipe(
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const detector = detectors.find((candidate) =>
     matchesDetectorIdentity(candidate, props),
   );

@@ -1,5 +1,6 @@
 import * as r53r from "@distilled.cloud/aws/route53resolver";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -211,12 +212,15 @@ export const ResolverRuleProvider = () =>
             return byId;
           }
         }
-        const listed = yield* r53r.listResolverRules({
-          Filters: [{ Name: "CreatorRequestId", Values: [name] }],
-        });
-        return (listed.ResolverRules ?? []).find(
-          (rule) => rule.Status !== "DELETING",
-        );
+        return yield* r53r.listResolverRules
+          .items({
+            Filters: [{ Name: "CreatorRequestId", Values: [name] }],
+          })
+          .pipe(
+            Stream.filter((rule) => rule.Status !== "DELETING"),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
       });
 
       // Desired-vs-observed comparison of target IPs, tolerant of the

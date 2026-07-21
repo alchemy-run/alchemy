@@ -2,6 +2,7 @@ import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
@@ -71,13 +72,16 @@ export const deleteImageBuilderLogGroup = Effect.fn(function* (
   );
 
   for (let attempt = 0; attempt < 20; attempt++) {
-    const response = yield* logs.describeLogGroups({
-      logGroupNamePrefix: logGroupName,
-      limit: 1,
-    });
-    const present = (response.logGroups ?? []).some(
-      (group) => group.logGroupName === logGroupName,
-    );
+    const present = yield* logs.describeLogGroups
+      .items({ logGroupNamePrefix: logGroupName })
+      .pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).some(
+            (group) => group.logGroupName === logGroupName,
+          ),
+        ),
+      );
     if (!present) return;
     yield* Effect.sleep("500 millis");
   }
