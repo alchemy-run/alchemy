@@ -62,7 +62,15 @@ export const D1 = <E = never, R = never>(
         return Context.get(d1Ctx, D1Client.D1Client);
       }),
     ),
-    (client) => proxyChain<D1Client.D1Client>(client),
+    (client) =>
+      // `proxyChain` requires a channel-free Effect; this cast is the
+      // deliberate, audited erasure for this boundary: `Scope` defers
+      // to the per-event execution scope (`makeExecutionMemo`), a
+      // failed client build surfaces as the same `SqlError` every
+      // statement already declares, and the `database` effect's
+      // channels (e.g. `RuntimeContext` from the D1 binding) are
+      // satisfied by the event context where the first query runs.
+      proxyChain(client as Effect.Effect<D1Client.D1Client>),
   );
 
 /**

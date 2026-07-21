@@ -59,7 +59,15 @@ export const Postgres = <E = never, R = never>(config: PostgresConfig<E, R>) =>
         return Context.get(pgCtx, PgClient.PgClient);
       }),
     ),
-    (client) => proxyChain<PgClient.PgClient>(client),
+    (client) =>
+      // `proxyChain` requires a channel-free Effect; this cast is the
+      // deliberate, audited erasure for this boundary: `Scope` defers
+      // to the per-event execution scope (`makeExecutionMemo`), a
+      // failed pool build surfaces as the same `SqlError` every
+      // statement already declares, and the `url` effect's channels
+      // (e.g. `RuntimeContext` from a Hyperdrive/DSQL Connect) are
+      // satisfied by the event context where the first query runs.
+      proxyChain(client as Effect.Effect<PgClient.PgClient>),
   );
 
 /**

@@ -66,6 +66,14 @@ export const D1 = <
       }),
     ),
     (db) =>
+      // `proxyChain` requires a channel-free Effect; the cast is a
+      // deliberate erasure so the handle stays exactly
+      // `EffectSQLiteD1Database`, preserving drizzle's generic
+      // `select()`/`from()` inference. The erased channels are
+      // accounted for: `Scope` is provided by every runtime bridge's
+      // per-event scope (which `makeExecutionMemo` targets), and a
+      // failed client build surfaces as the same `SqlError` the
+      // drizzle query effects already declare.
       proxyChain<
         EffectSQLiteD1Database<TRelations> & {
           $client: D1Client.D1Client;
