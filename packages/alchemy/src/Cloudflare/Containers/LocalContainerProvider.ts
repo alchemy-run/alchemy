@@ -11,14 +11,17 @@ import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
 import type {
+  AnyContainerApplicationProps,
   ContainerApplication,
-  ContainerApplicationProps,
   DevContainerImage,
 } from "./ContainerApplication.ts";
+import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
   createContainerApplicationName,
   makeContainerEnv,
+  materializeInlineDockerfileContext,
   prepareContainerBuildContext,
+  validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
@@ -55,8 +58,9 @@ export const LocalContainerProvider = () =>
       // `Output`s there and get skipped. Caching env here would freeze that
       // incomplete env and start the container without its bindings;
       // `makeAttributes` attaches the freshly-computed env instead.
-      const prepareImage = (id: string, news: ContainerApplicationProps) =>
+      const prepareImage = (id: string, news: AnyContainerApplicationProps) =>
         Effect.gen(function* () {
+          yield* validateContainerImageProps(news);
           // Variant 1 — Effect-native program. Bundle `main` and write it
           // (plus the generated Dockerfile) into a stable build context
           // directory. `Docker.build` in cloudflare-runtime reads `dockerfile`
@@ -84,9 +88,38 @@ export const LocalContainerProvider = () =>
             };
           }
 
-          // Variant 3 — user-supplied Dockerfile + build context directory.
-          // The runtime builds the user's Dockerfile against the (real-path'd)
-          // context, exactly like the live provider's `external` variant.
+          // Variant 3a — inline Dockerfile content: materialize into the
+          // same stable generated context the live provider uses and point
+          // the runtime's build at it.
+          if (
+            news.dockerfile !== undefined &&
+            isInlineDockerfile(news.dockerfile)
+          ) {
+            const content = news.dockerfile.content;
+            if (typeof content !== "string") {
+              return yield* Effect.die(
+                new Error(
+                  "Inline `dockerfile` content is an unresolved Output at image-build time — its dependencies have not resolved yet. Break the cycle or inline the resolved value.",
+                ),
+              );
+            }
+            const { context } = yield* materializeInlineDockerfileContext(
+              id,
+              content,
+            );
+            return {
+              dev: {
+                context: path.relative(process.cwd(), context),
+                dockerfile: "Dockerfile",
+              } as DevContainerImage,
+              hash: yield* sha256Object({ dockerfile: content }),
+            };
+          }
+
+          // Variant 3b — user-supplied Dockerfile path + build context
+          // directory. The runtime builds the user's Dockerfile against the
+          // (real-path'd) context, exactly like the live provider's
+          // `external` variant.
           const context = yield* fs.realPath(news.context ?? ".");
           const dockerfile = news.dockerfile
             ? yield* fs.realPath(news.dockerfile)
@@ -106,7 +139,7 @@ export const LocalContainerProvider = () =>
         }).pipe(Artifacts.cached(`container-image:${id}`));
 
       const placeholderConfiguration = (
-        props: ContainerApplicationProps,
+        props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
       ) =>
         normalizeNulls({
@@ -137,7 +170,7 @@ export const LocalContainerProvider = () =>
         output,
       }: {
         id: string;
-        news: ContainerApplicationProps;
+        news: AnyContainerApplicationProps;
         output: ContainerApplication["Attributes"] | undefined;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;

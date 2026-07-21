@@ -131,7 +131,7 @@ describe("makeExecutionMemo", () => {
           ),
         );
 
-        // The Drizzle.postgres shape: build a Layer against the ambient
+        // The Drizzle.Postgres shape: build a Layer against the ambient
         // execution scope so its release fires when the event settles.
         const accessor = yield* makeExecutionMemo(
           Effect.gen(function* () {

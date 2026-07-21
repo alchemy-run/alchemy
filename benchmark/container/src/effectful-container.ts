@@ -18,7 +18,7 @@ export class EffectfulContainer extends Cloudflare.Container<
 export default EffectfulContainer.make(
   {
     main: import.meta.filename,
-    dockerfile: "FROM oven/bun:latest",
+    image: "oven/bun:latest",
     // Match wrangler's container config so the comparison isolates the
     // framework, not the tier: max_instances 100 (Alchemy defaults to 1),
     // instance_type "lite", and instances 0 (pure scale-from-zero).

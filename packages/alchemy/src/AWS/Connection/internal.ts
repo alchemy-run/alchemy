@@ -3,7 +3,7 @@ import * as Redacted from "effect/Redacted";
 /**
  * Connection descriptor shared by every SQL-wire `Connect` binding
  * (RDS/Aurora, DSQL, Redshift, ...). The `url` field is the RFC-3986
- * connection URL — it feeds `Drizzle.postgres` / a Hyperdrive origin
+ * connection URL — it feeds `Drizzle.Postgres` / a Hyperdrive origin
  * directly, so consumers need zero per-engine glue.
  */
 export interface SqlConnectionInfo {
@@ -23,7 +23,7 @@ export interface SqlConnectionInfo {
   /** Whether the connection requires TLS. */
   ssl: boolean;
   /**
-   * RFC-3986 connection URL — feeds `Drizzle.postgres` / Hyperdrive
+   * RFC-3986 connection URL — feeds `Drizzle.Postgres` / Hyperdrive
    * origin directly.
    */
   url: Redacted.Redacted<string>;

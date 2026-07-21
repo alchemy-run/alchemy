@@ -404,8 +404,10 @@ const waitForAddonActive = Effect.fn(function* ({
     }),
     Effect.retry({
       while: (error) => error instanceof AddonNotReady,
+      // Flat 5s polls, ~10 min budget (uncapped exponential sleeps for
+      // multi-minute stretches late in the wait — looks like a deadlock).
       schedule: Schedule.max([
-        Schedule.exponential("1 second"),
+        Schedule.spaced("5 seconds"),
         Schedule.recurs(120),
       ]),
     }),
@@ -430,8 +432,10 @@ const waitForAddonDeleted = Effect.fn(function* ({
     ),
     Effect.retry({
       while: (error) => error instanceof AddonStillExists,
+      // Flat 5s polls, ~10 min budget (uncapped exponential sleeps for
+      // multi-minute stretches late in the wait — looks like a deadlock).
       schedule: Schedule.max([
-        Schedule.exponential("1 second"),
+        Schedule.spaced("5 seconds"),
         Schedule.recurs(120),
       ]),
     }),

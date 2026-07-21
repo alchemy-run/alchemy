@@ -187,12 +187,6 @@
       "worker": "./src/Endpoint/index.ts",
       "import": "./lib/Endpoint/index.js"
     },
-    "./Kubernetes": {
-      "types": "./lib/Kubernetes/index.d.ts",
-      "bun": "./src/Kubernetes/index.ts",
-      "worker": "./src/Kubernetes/index.ts",
-      "import": "./lib/Kubernetes/index.js"
-    },
     "./Neon": {
       "types": "./lib/Neon/index.d.ts",
       "bun": "./src/Neon/index.ts",
@@ -234,6 +228,12 @@
       "bun": "./src/Process/index.ts",
       "worker": "./src/Process/index.ts",
       "import": "./lib/Process/index.js"
+    },
+    "./SQL": {
+      "types": "./lib/SQL/index.d.ts",
+      "bun": "./src/SQL/index.ts",
+      "worker": "./src/SQL/index.ts",
+      "import": "./lib/SQL/index.js"
     },
     "./SQLite": {
       "types": "./lib/SQLite/index.d.ts",
@@ -321,6 +321,7 @@
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@effect/sql-d1": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@octokit/webhooks": "^14.2.0",
@@ -336,7 +337,6 @@
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "mongodb": "^6.10.0",
-    "mysql2": "^3.15.3",
     "pathe": "^2.0.3",
     "pg": "^8.13.0",
     "picomatch": "^4.0.4",

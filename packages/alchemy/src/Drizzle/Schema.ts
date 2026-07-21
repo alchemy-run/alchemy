@@ -244,12 +244,36 @@ export const SchemaProvider = () =>
                 new Error(`drizzle-kit generate failed: ${String(cause)}`),
             ),
           );
-          const output = `${result.stdout}\n${result.stderr}`;
-          if (result.exitCode !== 0 || /^Error:/m.test(output)) {
+          if (result.exitCode === 0) return;
+
+          // Since drizzle-kit 1.0.0-rc.4 the non-interactive CLI refuses
+          // ambiguous decisions (rename-vs-create, data-loss confirmation)
+          // with a `missing_hints` report on exit 2. These are deliberate
+          // safety prompts — the generated SQL is applied to the real
+          // database later in the same deploy — so we never answer them
+          // automatically. Ask the user to decide.
+          if (result.exitCode === 2) {
             return yield* Effect.fail(
-              new Error(`drizzle-kit generate failed: ${output}`),
+              new Error(
+                [
+                  `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively (rename vs create, or a change that loses data):`,
+                  "",
+                  result.stdout.trim(),
+                  "",
+                  "To resolve, generate the migration yourself and commit it:",
+                  `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
+                  "then re-run the deploy (the schema resource will see no drift and apply the committed migration).",
+                  "Alternatively, run the deploy in a terminal to answer drizzle-kit's prompts interactively.",
+                ].join("\n"),
+              ),
             );
           }
+
+          return yield* Effect.fail(
+            new Error(
+              `drizzle-kit generate failed: ${result.stdout}\n${result.stderr}`,
+            ),
+          );
         });
 
       // List `<ts>_*` migration directories under `out`, sorted by numeric

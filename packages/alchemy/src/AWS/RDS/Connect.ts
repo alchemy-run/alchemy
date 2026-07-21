@@ -22,7 +22,7 @@ export interface ConnectionInfo {
   password?: string;
   ssl: boolean;
   /**
-   * RFC-3986 connection URL — feeds `Drizzle.postgres` / a Hyperdrive
+   * RFC-3986 connection URL — feeds `Drizzle.Postgres` / a Hyperdrive
    * origin directly. `Redacted` because it embeds the password.
    */
   url: Redacted.Redacted<string>;

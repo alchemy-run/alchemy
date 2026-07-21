@@ -81,7 +81,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
   "Notifier",
   Effect.gen(function* () {
     const rooms = yield* Room;
-+   const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
++    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
@@ -118,17 +118,17 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
 
-+     const stored = yield* Cloudflare.Workflows.task(
-+       "kv-roundtrip",
-+       Effect.gen(function* () {
-+         const key = `workflow:${roomId}`;
-+         yield* kv.put(key, message);
-+         return yield* kv.get(key);
-+       }).pipe(Effect.orDie),
-+     );
++      const stored = yield* Cloudflare.Workflows.task(
++        "kv-roundtrip",
++        Effect.gen(function* () {
++          const key = `workflow:${roomId}`;
++          yield* kv.put(key, message);
++          return yield* kv.get(key);
++        }).pipe(Effect.orDie),
++      );
 
--     return { roomId, message };
-+     return { roomId, message: stored };
+-      return { roomId, message };
++      return { roomId, message: stored };
     });
   }),
 ) {}
@@ -175,11 +175,11 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
         }).pipe(Effect.orDie),
       );
 
-+     const room = rooms.getByName(roomId);
-+     yield* Cloudflare.Workflows.task(
-+       "broadcast",
-+       room.broadcast(`[workflow] ${stored}`),
-+     );
++      const room = rooms.getByName(roomId);
++      yield* Cloudflare.Workflows.task(
++        "broadcast",
++        room.broadcast(`[workflow] ${stored}`),
++      );
 
       return { roomId, message: stored };
     });
@@ -227,12 +227,12 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
         room.broadcast(`[workflow] ${stored}`),
       );
 
-+     yield* Cloudflare.Workflows.sleep("cooldown", "2 seconds");
++      yield* Cloudflare.Workflows.sleep("cooldown", "2 seconds");
 +
-+     yield* Cloudflare.Workflows.task(
-+       "finalize",
-+       room.broadcast(`[workflow] complete for ${roomId}`),
-+     );
++      yield* Cloudflare.Workflows.task(
++        "finalize",
++        room.broadcast(`[workflow] complete for ${roomId}`),
++      );
 
       return { roomId, message: stored };
     });
@@ -348,32 +348,32 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-+   const notifier = yield* NotifyWorkflow;
++    const notifier = yield* NotifyWorkflow;
 
     return {
       fetch: Effect.gen(function* () {
-+       const request = yield* HttpServerRequest;
++        const request = yield* HttpServerRequest;
 +
-+       if (
-+         request.url.startsWith("/workflow/start/") &&
-+         request.method === "POST"
-+       ) {
-+         const roomId = request.url.split("/").pop()!;
-+         const instance = yield* notifier.create({
-+           params: {
-+             roomId,
-+             message: "hello from workflow",
-+           },
-+         });
-+         return yield* HttpServerResponse.json({ instanceId: instance.id });
-+       }
++        if (
++          request.url.startsWith("/workflow/start/") &&
++          request.method === "POST"
++        ) {
++          const roomId = request.url.split("/").pop()!;
++          const instance = yield* notifier.create({
++            params: {
++              roomId,
++              message: "hello from workflow",
++            },
++          });
++          return yield* HttpServerResponse.json({ instanceId: instance.id });
++        }
 +
-+       if (request.url.startsWith("/workflow/status/")) {
-+         const instanceId = request.url.split("/").pop()!;
-+         const instance = yield* notifier.get(instanceId);
-+         const status = yield* instance.status();
-+         return yield* HttpServerResponse.json(status);
-+       }
++        if (request.url.startsWith("/workflow/status/")) {
++          const instanceId = request.url.split("/").pop()!;
++          const instance = yield* notifier.get(instanceId);
++          const status = yield* instance.status();
++          return yield* HttpServerResponse.json(status);
++        }
 +
         return HttpServerResponse.text("Hello from my Worker!");
       }),

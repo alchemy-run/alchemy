@@ -5,6 +5,7 @@ import * as Command from "effect/unstable/cli/Command";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
+import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileLive } from "alchemy/Auth/Profile";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
@@ -57,6 +58,10 @@ const services = Layer.mergeAll(
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
   Layer.provide(ProfileLive, PlatformServices),
   Layer.provide(CredentialsStoreLive, PlatformServices),
+  // Ambient per-CLI-run artifact root. Commands that define their own run
+  // boundary (deploy, sync) provide a fresh store closer to the work, which
+  // wins over this one.
+  Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   TelemetryLive,

@@ -74,16 +74,16 @@ asset layer to fall back to `index.html`:
 
 ```diff lang="typescript"
 // alchemy.run.ts
- const worker = yield* Cloudflare.Website.Vite("Vue", {
-   compatibility: {
-     flags: ["nodejs_compat"],
-   },
-   memo: {},
+const worker = yield* Cloudflare.Website.Vite("Vue", {
+  compatibility: {
+    flags: ["nodejs_compat"],
+  },
+  memo: {},
 +  assets: {
 +    htmlHandling: "auto-trailing-slash",
 +    notFoundHandling: "single-page-application",
 +  },
- });
+});
 ```
 
 With `notFoundHandling: "single-page-application"`, unmatched
@@ -99,11 +99,11 @@ your Stack is baked into the bundle at build time — pass a
 
 ```diff lang="typescript"
 // alchemy.run.ts
- const worker = yield* Cloudflare.Website.Vite("Vue", {
+const worker = yield* Cloudflare.Website.Vite("Vue", {
 +  env: {
 +    VITE_API_URL: backend.url,
 +  },
- });
+});
 ```
 
 See [Environment](/cloudflare/frontend/vite#environment) for the

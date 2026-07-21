@@ -33,7 +33,7 @@ export default class DrizzleWorkflowWorker extends Cloudflare.Worker<DrizzleWork
     // inside a fetch event — where the per-event scope is provided — not
     // here at init.
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     return {
       fetch: Effect.gen(function* () {

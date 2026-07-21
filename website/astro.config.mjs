@@ -4,7 +4,6 @@ import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
-import astroBrokenLinksChecker from "astro-broken-links-checker";
 import { defineConfig } from "astro/config";
 import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
@@ -52,7 +51,6 @@ function providersSidebarEntry() {
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
-      { label: "Kubernetes", link: "/kubernetes" },
       { label: "Drizzle", link: "/drizzle" },
       { label: "Command", link: "/command" },
     ],
@@ -73,7 +71,9 @@ function providerResourcesEntry(provider) {
   return {
     label: "Resources",
     collapsed: false,
-    autogenerate: { directory: `providers/${provider}`, collapsed: true },
+    items: [
+      { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
+    ],
   };
 }
 
@@ -103,26 +103,27 @@ function copyMarkdownSources() {
           } catch {
             return;
           }
-          for (const entry of entries) {
-            const full = path.join(srcDir, entry.name);
-            if (entry.isDirectory()) {
-              await walk(full, opts, relTo);
-              continue;
-            }
-            if (!entry.isFile()) continue;
-            const ext = path.extname(entry.name).toLowerCase();
-            if (ext !== ".md" && ext !== ".mdx") continue;
-            let rel = path.relative(relTo, full);
-            rel = rel.slice(0, rel.length - ext.length) + ".md";
-            // Starlight lowercases doc URLs (e.g. CamelCase source
-            // `providers/AWS/S3/Bucket.md` is served at `/providers/aws/s3/bucket`),
-            // so the raw-markdown copy must live at the lowercased path or the
-            // worker's `/providers/aws/s3/bucket.md` lookup 404s into HTML.
-            if (opts.lowercase) rel = rel.toLowerCase();
-            const target = path.join(outDir, rel);
-            await fs.mkdir(path.dirname(target), { recursive: true });
-            await fs.copyFile(full, target);
-          }
+          // Fan the copies out — thousands of tiny files; serial awaits
+          // dominate the hook's runtime otherwise.
+          await Promise.all(
+            entries.map(async (entry) => {
+              const full = path.join(srcDir, entry.name);
+              if (entry.isDirectory()) return walk(full, opts, relTo);
+              if (!entry.isFile()) return;
+              const ext = path.extname(entry.name).toLowerCase();
+              if (ext !== ".md" && ext !== ".mdx") return;
+              let rel = path.relative(relTo, full);
+              rel = rel.slice(0, rel.length - ext.length) + ".md";
+              // Starlight lowercases doc URLs (e.g. CamelCase source
+              // `providers/AWS/S3/Bucket.md` is served at `/providers/aws/s3/bucket`),
+              // so the raw-markdown copy must live at the lowercased path or the
+              // worker's `/providers/aws/s3/bucket.md` lookup 404s into HTML.
+              if (opts.lowercase) rel = rel.toLowerCase();
+              const target = path.join(outDir, rel);
+              await fs.mkdir(path.dirname(target), { recursive: true });
+              await fs.copyFile(full, target);
+            }),
+          );
         }
 
         // Docs (Starlight content collection) — preserves nested layout under
@@ -141,17 +142,35 @@ function copyMarkdownSources() {
 }
 
 /**
- * Case-sensitive internal-link checker. astro-broken-links-checker uses
- * `fs.existsSync`, which is case-insensitive on macOS — so `/foo/Bar` will
- * resolve to `/foo/bar` locally but 404 on Linux CI. This integration walks
- * the build output once into a case-sensitive Set of paths and validates
- * every `href`/`src` against it.
+ * Build-output checks — one pass over every rendered HTML page:
+ *
+ * 1. Case-sensitive internal-link check: validates every internal
+ *    `<a href>` / `<img src>` against a case-sensitive Set of output
+ *    paths. Case-sensitivity matters: `fs.existsSync`-based checkers
+ *    (e.g. astro-broken-links-checker, which this replaced) resolve
+ *    `/foo/Bar` to `/foo/bar` on macOS but 404 on Linux CI.
+ *
+ * 2. Diff-block indent check: in every rendered ```diff code block,
+ *    each line's indentation must be even (the docs use 2-space
+ *    indents everywhere). An odd indent means a `+`/`-` marker line
+ *    was authored in the wrong convention — expressive-code strips
+ *    only the marker character, so markers must be written as an
+ *    EXTRA column followed by the line's full indentation, with
+ *    context lines flush. See git history: three different authoring
+ *    conventions had accumulated and all rendered misaligned.
+ *
+ * 3. `og:image` check: every page's og:image URL must not contain
+ *    "undefined"/"null" (a broken slug lookup — Starlight 0.39 renamed
+ *    routeData `slug` to `id` and the old field silently reads as
+ *    undefined), and when OG images were emitted (full builds; the
+ *    DOCS_FAST target skips them) the URL's path must exist in the
+ *    build output.
  *
  * @returns {import("astro").AstroIntegration}
  */
-function caseSensitiveLinkChecker() {
+function buildOutputChecks() {
   return {
-    name: "case-sensitive-link-checker",
+    name: "build-output-checks",
     hooks: {
       "astro:build:done": async ({ dir, logger }) => {
         const distPath = fileURLToPath(dir);
@@ -179,9 +198,17 @@ function caseSensitiveLinkChecker() {
 
         /** @type {Map<string, Set<string>>} */
         const broken = new Map();
+        /** @type {{ file: string, line: string }[]} */
+        const oddIndents = [];
+        /** @type {{ file: string, url: string }[]} */
+        const badOgImages = [];
         const htmlFiles = [...paths].filter((p) => p.endsWith(".html"));
+        const hasOgImages = [...paths].some(
+          (p) => p.startsWith("/og/") && p.endsWith(".png"),
+        );
 
-        for (const htmlFile of htmlFiles) {
+        /** @param {string} htmlFile */
+        async function checkFile(htmlFile) {
           const html = await fs.readFile(
             path.join(distPath, htmlFile.slice(1)),
             "utf8",
@@ -206,6 +233,69 @@ function caseSensitiveLinkChecker() {
               broken.get(link)?.add(htmlFile);
             }
           }
+
+          // og:image check (see integration docstring).
+          for (const m of html.matchAll(
+            /property="og:image"\s+content="([^"]+)"/g,
+          )) {
+            const url = m[1];
+            let pathname;
+            try {
+              pathname = new URL(url).pathname;
+            } catch {
+              badOgImages.push({ file: htmlFile, url });
+              continue;
+            }
+            if (
+              /\b(?:undefined|null)\b/.test(pathname) ||
+              (hasOgImages && !paths.has(pathname))
+            ) {
+              badOgImages.push({ file: htmlFile, url });
+            }
+          }
+
+          // Diff-block indent check (see integration docstring).
+          if (
+            html.includes("highlight ins") ||
+            html.includes("highlight del")
+          ) {
+            for (const fig of html.matchAll(
+              /<figure class="frame[^"]*">.*?<\/figure>/gs,
+            )) {
+              const block = fig[0];
+              if (
+                !block.includes("highlight ins") &&
+                !block.includes("highlight del")
+              )
+                continue;
+              for (const m of block.matchAll(
+                /<div class="ec-line[^"]*"><div class="code">(.*?)<\/div><\/div>/gs,
+              )) {
+                const text = m[1]
+                  .replace(/<[^>]+>/g, "")
+                  .replace(/&quot;/g, '"')
+                  .replace(/&#39;/g, "'")
+                  .replace(/&lt;/g, "<")
+                  .replace(/&gt;/g, ">")
+                  .replace(/&amp;/g, "&");
+                const trimmed = text.trim();
+                if (!trimmed) continue;
+                // JSDoc continuation lines legitimately indent by one.
+                if (trimmed.startsWith("*")) continue;
+                const indent = text.length - text.trimStart().length;
+                if (indent % 2 === 1) {
+                  oddIndents.push({ file: htmlFile, line: text.slice(0, 60) });
+                }
+              }
+            }
+          }
+        }
+
+        // Read/scan in bounded parallel batches — serial reads dominate
+        // the checker's runtime on 4k+ pages.
+        const BATCH = 64;
+        for (let i = 0; i < htmlFiles.length; i += BATCH) {
+          await Promise.all(htmlFiles.slice(i, i + BATCH).map(checkFile));
         }
 
         if (broken.size > 0) {
@@ -219,8 +309,31 @@ function caseSensitiveLinkChecker() {
             `Case-sensitive broken links detected (${broken.size})`,
           );
         }
+        if (badOgImages.length > 0) {
+          let msg = "Broken og:image URLs detected:\n";
+          for (const { file, url } of badOgImages.slice(0, 20)) {
+            msg += `  ${file}: ${url}\n`;
+          }
+          logger.error(msg);
+          throw new Error(
+            `Broken og:image URLs detected (${badOgImages.length})`,
+          );
+        }
+        if (oddIndents.length > 0) {
+          let msg =
+            "Misindented diff-block lines detected (write markers as an " +
+            "extra column before the line's full indentation, context " +
+            "lines flush):\n";
+          for (const { file, line } of oddIndents.slice(0, 20)) {
+            msg += `  ${file}: ${JSON.stringify(line)}\n`;
+          }
+          logger.error(msg);
+          throw new Error(
+            `Misindented diff-block lines detected (${oddIndents.length})`,
+          );
+        }
         logger.info(
-          `Case-sensitive link check passed (${htmlFiles.length} pages)`,
+          `Build-output checks passed (${htmlFiles.length} pages: links + diff indents)`,
         );
       },
     },
@@ -235,11 +348,7 @@ export default defineConfig({
     react(),
     pagefindIgnoreNoise(),
     copyMarkdownSources(),
-    astroBrokenLinksChecker({
-      checkExternalLinks: false,
-      throwError: true,
-    }),
-    caseSensitiveLinkChecker(),
+    buildOutputChecks(),
     sitemap({
       filter: (page) =>
         !page.endsWith(".html") &&
@@ -494,7 +603,7 @@ export default defineConfig({
             { label: "Setup", link: "/cloudflare/setup" },
             {
               label: "Tutorial",
-              autogenerate: { directory: "cloudflare/tutorial" },
+              items: [{ autogenerate: { directory: "cloudflare/tutorial" } }],
             },
             {
               label: "Compute",
@@ -593,6 +702,7 @@ export default defineConfig({
                 { label: "R2", link: "/cloudflare/data/r2" },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
+                { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
                 {
                   label: "Shared database",
                   link: "/cloudflare/data/shared-database",
@@ -693,7 +803,7 @@ export default defineConfig({
             { label: "Setup", link: "/aws/setup" },
             {
               label: "Tutorial",
-              autogenerate: { directory: "aws/tutorial" },
+              items: [{ autogenerate: { directory: "aws/tutorial" } }],
             },
             {
               label: "Compute",
@@ -885,18 +995,6 @@ export default defineConfig({
           ],
         },
         {
-          label: "Kubernetes",
-          items: [
-            { label: "Overview", link: "/kubernetes" },
-            { label: "Setup", link: "/kubernetes/setup" },
-            {
-              label: "How objects deploy",
-              link: "/kubernetes/objects-as-bindings",
-            },
-            providerResourcesEntry("Kubernetes"),
-          ],
-        },
-        {
           label: "Drizzle",
           items: [
             { label: "Overview", link: "/drizzle" },
@@ -931,5 +1029,13 @@ export default defineConfig({
   ],
   vite: {
     plugins: [tailwindcss()],
+    ssr: {
+      // Sätteri (Astro 7's markdown processor) loads a platform-native
+      // binding via CJS require. Bundling its JS loader into the prerender
+      // chunks breaks that resolution under bun's isolated node_modules
+      // layout, so keep it external — it resolves from website/node_modules
+      // (declared as a direct dependency) instead.
+      external: ["satteri"],
+    },
   },
 });

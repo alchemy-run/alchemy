@@ -2,6 +2,7 @@ import * as PgClient from "@effect/sql-pg/PgClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
+import type { EffectDrizzlePgConfig } from "drizzle-orm/pg-core/effect/utils";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
@@ -18,7 +19,7 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * yielded as an Effect. Callers don't need a separate `yield* conn` step:
  *
  * ```typescript
- * const db = yield* Drizzle.postgres(hd.connectionString);
+ * const db = yield* Drizzle.Postgres(hd.connectionString);
  *
  * fetch: Effect.gen(function* () {
  *   const rows = yield* db.select().from(users);
@@ -44,13 +45,13 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * @binding
  */
 
-export const postgres = <
+export const Postgres = <
   TRelations extends AnyRelations = EmptyRelations,
   E = never,
   R = never,
 >(
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
-  config?: PgDrizzle.EffectDrizzlePgConfig<TRelations>,
+  config?: EffectDrizzlePgConfig<TRelations>,
 ) =>
   Effect.map(
     makeExecutionMemo(

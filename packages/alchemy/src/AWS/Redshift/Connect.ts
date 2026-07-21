@@ -90,7 +90,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * IAM policy (scoped to the cluster's `dbname`/`dbuser` ARNs) and publishes
  * the cluster endpoint as environment variables. At runtime it calls the
  * corresponding SDK operation to mint short-lived credentials and returns a
- * typed {@link ClusterConnectionInfo} whose `url` feeds `Drizzle.postgres`
+ * typed {@link ClusterConnectionInfo} whose `url` feeds `Drizzle.Postgres`
  * directly.
  *
  * The Redshift Data API ({@link RedshiftData.Statements}) remains the
@@ -125,7 +125,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * @example Drizzle over the Connection URL
  * ```typescript
  * const connect = yield* Redshift.Connect(cluster);
- * const db = yield* Drizzle.postgres(
+ * const db = yield* Drizzle.Postgres(
  *   Effect.map(connect, (info) => info.url),
  *   { prepare: false },
  * );

@@ -220,7 +220,7 @@ completes instead of when the handler returns.
 workerd has no isolate-teardown hook, so a finalizer added in the
 init closure **never runs** — acquire anything that needs cleanup
 (connections, pools) inside handlers, where it's scoped to the
-event. `Drizzle.postgres` follows this pattern: one pool per event,
+event. `Drizzle.Postgres` follows this pattern: one pool per event,
 opened on the first query, closed when the event settles. See
 [Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
 for the model across all runtimes.

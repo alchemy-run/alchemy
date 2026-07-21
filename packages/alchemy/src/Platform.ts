@@ -296,6 +296,16 @@ export const Platform = <
     // Workflow). Allow an ambient requirement (`any`) rather than forcing
     // `never`; it is discharged by the surrounding provider context.
     onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
+    /**
+     * Transform the user-supplied props before the underlying resource is
+     * declared. Runs in the resource-construction context (Stack, Namespace,
+     * and providers are available), so the hook may compose REAL child
+     * resources (the `StaticSite` pattern) and return derived props that
+     * reference their Outputs. Implementations MUST be a no-op at runtime
+     * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
+     * wherever the props effect is, including inside deployed bundles.
+     */
+    transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -304,6 +314,19 @@ export const Platform = <
 
   const resource = Resource(type);
   const PlatformContext = RuntimeContext;
+
+  // Apply the optional `transformProps` hook to a (possibly Effect-valued)
+  // props argument. Returns the props untouched when no hook is installed so
+  // the plain-object fast paths below keep working.
+  const applyTransformProps = (id: string, props: any): any =>
+    hooks.transformProps === undefined
+      ? props
+      : Effect.flatMap(
+          Effect.isEffect(props)
+            ? (props as Effect.Effect<any>)
+            : Effect.succeed(props ?? {}),
+          (resolved) => hooks.transformProps!(id, resolved),
+        );
 
   const constructor = (
     id?: string,
@@ -335,19 +358,25 @@ export const Platform = <
             // }
             resource(
               id,
-              Effect.isEffect(props)
-                ? Effect.map(props, (p: any) => ({ ...p, isExternal: true }))
-                : {
-                    ...props,
-                    isExternal: true,
-                  },
+              (() => {
+                const transformed = applyTransformProps(id, props);
+                return Effect.isEffect(transformed)
+                  ? Effect.map(transformed, (p: any) => ({
+                      ...p,
+                      isExternal: true,
+                    }))
+                  : {
+                      ...transformed,
+                      isExternal: true,
+                    };
+              })(),
             )
           : Effect.flatMap(
               // this is a tagged resource
               Effect.serviceOption(cls.Self),
               Option.match({
                 // we are likely running at runtime, so we create
-                onNone: () => resource(id, props),
+                onNone: () => resource(id, applyTransformProps(id, props)),
                 onSome: Effect.succeed,
               }),
             )
@@ -418,7 +447,12 @@ export const Platform = <
           Self,
           Effect.flatMap(
             Effect.all([
-              Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+              (() => {
+                const transformed = applyTransformProps(id, props);
+                return Effect.isEffect(transformed)
+                  ? (transformed as Effect.Effect<any>)
+                  : Effect.succeed(transformed ?? {});
+              })(),
               Effect.sync(() => hooks.createRuntimeContext(id)),
               Effect.context<never>(),
             ]),

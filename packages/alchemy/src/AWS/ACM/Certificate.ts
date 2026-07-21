@@ -59,6 +59,16 @@ export interface CertificateProps {
    */
   export?: "ENABLED" | "DISABLED" | undefined;
   /**
+   * AWS region to request the certificate in.
+   *
+   * Defaults to `us-east-1` (the region CloudFront viewer certificates must
+   * live in). Set this to the region of a regional consumer — e.g. an ALB
+   * HTTPS listener requires the certificate in the load balancer's own
+   * region. Changing the region replaces the certificate.
+   * @default "us-east-1"
+   */
+  region?: string;
+  /**
    * User-defined tags to apply to the certificate.
    */
   tags?: Record<string, string>;
@@ -188,32 +198,34 @@ export const CertificateProvider = () =>
     Certificate,
     Effect.gen(function* () {
       const describeCertificate = Effect.fn(function* (certificateArn: string) {
-        return yield* withAcmRegion(
-          acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
+        return yield* acm
+          .describeCertificate({ CertificateArn: certificateArn })
+          .pipe(
             Effect.map((response) => response.Certificate),
             Effect.catchTag("ResourceNotFoundException", () =>
               Effect.succeed(undefined),
             ),
-          ),
-        );
+            withCertRegion(regionOfCertificateArn(certificateArn)),
+          );
       });
 
       const listCertificateTags = Effect.fn(function* (certificateArn: string) {
-        return yield* withAcmRegion(
-          acm.listTagsForCertificate({ CertificateArn: certificateArn }).pipe(
+        return yield* acm
+          .listTagsForCertificate({ CertificateArn: certificateArn })
+          .pipe(
             Effect.map((response) => toTagRecord(response.Tags)),
             Effect.catchTag("ResourceNotFoundException", () =>
               Effect.succeed({}),
             ),
-          ),
-        );
+            withCertRegion(regionOfCertificateArn(certificateArn)),
+          );
       });
 
       const findManagedCertificate = Effect.fn(function* (
         id: string,
         props: CertificateProps,
       ) {
-        const listed = yield* withAcmRegion(
+        const listed = yield* withCertRegion(props.region)(
           acm.listCertificates({
             Includes: {
               keyTypes: props.keyAlgorithm ? [props.keyAlgorithm] : undefined,
@@ -354,19 +366,25 @@ export const CertificateProvider = () =>
         stables: ["certificateArn"],
         list: () =>
           Effect.gen(function* () {
-            // ACM certificates for CloudFront live in us-east-1; enumerate
-            // every certificate in the ambient account/region, then hydrate
-            // each to the full Attributes shape via describe + list tags.
-            const summaries = yield* withAcmRegion(
-              acm.listCertificates.pages({}).pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap(
-                    (page) => page.CertificateSummaryList ?? [],
-                  ),
+            // ACM certificates default to us-east-1 (CloudFront), but a
+            // `region` prop can place them in the ambient region (e.g. for
+            // ALB listeners) — enumerate both and dedupe by ARN, then
+            // hydrate each to the full Attributes shape via describe + tags.
+            const listPage = acm.listCertificates.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap(
+                  (page) => page.CertificateSummaryList ?? [],
                 ),
               ),
             );
+            const summaries = [
+              ...new Map(
+                [...(yield* withAcmRegion(listPage)), ...(yield* listPage)].map(
+                  (summary) => [summary.CertificateArn, summary] as const,
+                ),
+              ).values(),
+            ];
             const rows = yield* Effect.forEach(
               summaries,
               (summary) =>
@@ -412,6 +430,8 @@ export const CertificateProvider = () =>
               (news.validationMethod ?? defaultValidationMethod) ||
             olds.hostedZoneId !== news.hostedZoneId ||
             olds.keyAlgorithm !== news.keyAlgorithm ||
+            // Certificates cannot move regions — a region change replaces.
+            (olds.region ?? ACM_REGION) !== (news.region ?? ACM_REGION) ||
             // Exportability is fixed at request time — ACM rejects
             // `UpdateCertificateOptions` for it ("Export option for
             // certificates cannot be updated").
@@ -473,7 +493,7 @@ export const CertificateProvider = () =>
           // `IdempotencyToken` (derived from `instanceId`) makes the
           // request safe to retry.
           if (!certificate?.CertificateArn) {
-            certificate = yield* withAcmRegion(
+            certificate = yield* withCertRegion(news.region)(
               acm
                 .requestCertificate({
                   DomainName: news.domainName,
@@ -546,7 +566,7 @@ export const CertificateProvider = () =>
             news.certificateTransparencyLoggingPreference !==
               observedOptions.CertificateTransparencyLoggingPreference;
           if (wantsCtChange) {
-            yield* withAcmRegion(
+            yield* withCertRegion(regionOfCertificateArn(certificateArn))(
               acm.updateCertificateOptions({
                 CertificateArn: certificateArn,
                 Options: {
@@ -564,7 +584,7 @@ export const CertificateProvider = () =>
           const { removed, upsert } = diffTags(observedTags, desiredTags);
 
           if (upsert.length > 0) {
-            yield* withAcmRegion(
+            yield* withCertRegion(regionOfCertificateArn(certificateArn))(
               acm.addTagsToCertificate({
                 CertificateArn: certificateArn,
                 Tags: upsert,
@@ -572,7 +592,7 @@ export const CertificateProvider = () =>
             );
           }
           if (removed.length > 0) {
-            yield* withAcmRegion(
+            yield* withCertRegion(regionOfCertificateArn(certificateArn))(
               acm.removeTagsFromCertificate({
                 CertificateArn: certificateArn,
                 Tags: removed.map((Key) => ({ Key })),
@@ -585,7 +605,7 @@ export const CertificateProvider = () =>
           return toAttrs(news, certificate, finalTags);
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* withAcmRegion(
+          yield* withCertRegion(regionOfCertificateArn(output.certificateArn))(
             acm
               .deleteCertificate({
                 CertificateArn: output.certificateArn,
@@ -633,11 +653,33 @@ export const waitForRoute53Change = Effect.fn(function* (changeId: string) {
 const ACM_REGION = "us-east-1" as const;
 const defaultValidationMethod = "DNS" as const;
 
+/**
+ * Region an existing certificate lives in, parsed from its ARN
+ * (`arn:aws:acm:{region}:{account}:certificate/...`).
+ */
+const regionOfCertificateArn = (certificateArn: string) =>
+  certificateArn.split(":")[3] || ACM_REGION;
+
 const withAcmRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // `AwsRegion`'s service value is an `Effect<RegionName>` (see
   // `@distilled.cloud/aws/Region`), so it must be provided as an effect, not a
   // bare string — providing a raw string yields a primitive into the run loop.
   effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(ACM_REGION)));
+
+/**
+ * Pin ACM calls to the certificate's region: the props-requested region for
+ * new certificates (default `us-east-1`), or the region parsed from an
+ * existing certificate's ARN.
+ */
+const withCertRegion =
+  (region: string | undefined) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.provideService(
+        AwsRegion,
+        Effect.succeed((region ?? ACM_REGION) as typeof ACM_REGION),
+      ),
+    );
 
 const normalizeHostedZoneId = (hostedZoneId: string) =>
   hostedZoneId.replace(/^\/hostedzone\//, "");
