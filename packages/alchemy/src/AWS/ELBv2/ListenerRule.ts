@@ -1,4 +1,5 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -19,6 +20,29 @@ import type { Listener, ListenerArn } from "./Listener.ts";
 
 export type RuleArn =
   `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:listener-rule/${string}`;
+
+/**
+ * The requested rule priority is already taken by another rule on the same
+ * listener. Surfaced instead of the raw `PriorityInUseException` so the
+ * failure names the conflicting priority and the fix: rules composed with an
+ * auto-derived priority (e.g. `AWS.ECS.Service` shared load balancer rules)
+ * should set an explicit `priority` to resolve the collision. The engine
+ * never probes for a free slot — priorities stay deterministic.
+ */
+export class ListenerRulePriorityInUse extends Data.TaggedError(
+  "ListenerRulePriorityInUse",
+)<{
+  readonly listenerArn: string;
+  readonly priority: number;
+  readonly message: string;
+}> {}
+
+const priorityInUse = (listenerArn: string, priority: number) =>
+  new ListenerRulePriorityInUse({
+    listenerArn,
+    priority,
+    message: `Listener rule priority ${priority} is already in use on ${listenerArn}. Set an explicit \`priority\` on the rule to resolve the conflict.`,
+  });
 
 export interface ListenerRuleProps {
   /** The listener this rule attaches to. Changing it replaces the rule. */
@@ -222,16 +246,22 @@ export const ListenerRuleProvider = () =>
 
       // Ensure — create if missing.
       if (!rule?.RuleArn) {
-        const created = yield* elbv2.createRule({
-          ListenerArn: listenerArn,
-          Priority: news.priority,
-          Conditions: conditions,
-          Actions: actions,
-          Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-            Key,
-            Value,
-          })),
-        });
+        const created = yield* elbv2
+          .createRule({
+            ListenerArn: listenerArn,
+            Priority: news.priority,
+            Conditions: conditions,
+            Actions: actions,
+            Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+              Key,
+              Value,
+            })),
+          })
+          .pipe(
+            Effect.catchTag("PriorityInUseException", () =>
+              Effect.fail(priorityInUse(listenerArn, news.priority)),
+            ),
+          );
         rule = created.Rules?.[0];
         if (!rule?.RuleArn) {
           return yield* Effect.die(new Error("createRule returned no rule"));
@@ -247,11 +277,17 @@ export const ListenerRuleProvider = () =>
 
         // Sync priority — not mutable via modifyRule.
         if (Number(rule.Priority) !== news.priority) {
-          yield* elbv2.setRulePriorities({
-            RulePriorities: [
-              { RuleArn: rule.RuleArn, Priority: news.priority },
-            ],
-          });
+          yield* elbv2
+            .setRulePriorities({
+              RulePriorities: [
+                { RuleArn: rule.RuleArn, Priority: news.priority },
+              ],
+            })
+            .pipe(
+              Effect.catchTag("PriorityInUseException", () =>
+                Effect.fail(priorityInUse(listenerArn, news.priority)),
+              ),
+            );
         }
       }
 

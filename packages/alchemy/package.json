@@ -187,12 +187,6 @@
       "worker": "./src/Endpoint/index.ts",
       "import": "./lib/Endpoint/index.js"
     },
-    "./Kubernetes": {
-      "types": "./lib/Kubernetes/index.d.ts",
-      "bun": "./src/Kubernetes/index.ts",
-      "worker": "./src/Kubernetes/index.ts",
-      "import": "./lib/Kubernetes/index.js"
-    },
     "./Neon": {
       "types": "./lib/Neon/index.d.ts",
       "bun": "./src/Neon/index.ts",

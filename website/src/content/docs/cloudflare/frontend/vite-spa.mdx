@@ -171,12 +171,12 @@ as if you'd run `VITE_API_URL=https://… vite build`:
 
 ```diff lang="typescript"
 // alchemy.run.ts
- const worker = yield* Worker;
- const web = yield* Cloudflare.Website.Vite("Website", {
+const worker = yield* Worker;
+const web = yield* Cloudflare.Website.Vite("Website", {
 +  env: {
 +    VITE_API_URL: worker.url.as<string>(),
 +  },
- });
+});
 ```
 
 Then read it from the SPA:
@@ -355,9 +355,9 @@ only if you want the local URL to stay the same across runs:
 
 ```diff lang="typescript"
 // alchemy.run.ts
- const web = yield* Cloudflare.Website.Vite("Website", {
+const web = yield* Cloudflare.Website.Vite("Website", {
 +  dev: { port: 3000 },
- });
+});
 ```
 
 See [Local Development](/environments/local-development) for the full
@@ -416,11 +416,11 @@ Add the bucket to the Vite worker's `bindings` map:
 // alchemy.run.ts
 +import { Bucket } from "./src/backend.ts";
 
- const web = yield* Cloudflare.Website.Vite("Website", {
+const web = yield* Cloudflare.Website.Vite("Website", {
 +  env: {
 +    BUCKET: Bucket,
 +  },
- });
+});
 ```
 
 The key (`BUCKET`) is the field name on `env`; the value identifies
@@ -439,16 +439,16 @@ bun add -d @cloudflare/workers-types
 
 ```diff lang="json"
 // tsconfig.json
- {
-   "compilerOptions": {
-     "types": [
-       "bun",
+{
+  "compilerOptions": {
+    "types": [
+      "bun",
 -      "vite/client"
 +      "vite/client",
 +      "@cloudflare/workers-types"
-     ]
-   }
- }
+    ]
+  }
+}
 ```
 
 Without this you'll see `Cannot find name 'Bucket'` (or `Service`,
@@ -492,12 +492,12 @@ concurrency), factor it into its own Worker:
 
 ```diff lang="typescript"
 // src/backend.ts
- import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "alchemy/Cloudflare";
 +import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 +import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
- export const Bucket = Cloudflare.R2.Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 +
 +export default class Backend extends Cloudflare.Worker<Backend>()(
 +  "Backend",
@@ -544,12 +544,12 @@ Add `Backend` next to (or instead of) `BUCKET` in the Vite worker's
 -import { Bucket } from "./src/backend.ts";
 +import Backend, { Bucket } from "./src/backend.ts";
 
- const web = yield* Cloudflare.Website.Vite("Website", {
-   env: {
-     BUCKET: Bucket,
+const web = yield* Cloudflare.Website.Vite("Website", {
+  env: {
+    BUCKET: Bucket,
 +    BACKEND: Backend,
-   },
- });
+  },
+});
 ```
 
 `env.BACKEND` is a Cloudflare service binding, typed for the wire
@@ -563,9 +563,9 @@ service-binding `fetch`. Use it like any other HTTP service:
 
 ```diff lang="typescript"
 // src/routes/api.hello.ts
-       GET: async ({ request }) => {
-         const key = new URL(request.url).searchParams.get("key");
-         if (!key) return new Response("Missing 'key'", { status: 400 });
+      GET: async ({ request }) => {
+        const key = new URL(request.url).searchParams.get("key");
+        if (!key) return new Response("Missing 'key'", { status: 400 });
 
 -        // option 1 — use the async binding directly
 -        const object = await env.BUCKET.get(key);
@@ -575,7 +575,7 @@ service-binding `fetch`. Use it like any other HTTP service:
 +        return env.BACKEND.fetch(
 +          `https://backend/?key=${encodeURIComponent(key)}`,
 +        );
-       },
+      },
 ```
 
 The Backend already handles the R2 lookup behind its own `fetch`,
@@ -593,10 +593,10 @@ API:
 
 ```diff lang="typescript"
 // src/routes/api.hello.ts
- import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 +import * as Cloudflare from "alchemy/Cloudflare/Bridge";
 +import type Backend from "../backend.ts";
- import { env } from "../env.ts";
+import { env } from "../env.ts";
 
 +const backend = Cloudflare.toRpcAsync<Backend>(env.BACKEND);
 ```
@@ -612,9 +612,9 @@ Now `hello` is a normal typed `await`:
 
 ```diff lang="typescript"
 // src/routes/api.hello.ts
-       GET: async ({ request }) => {
-         const key = new URL(request.url).searchParams.get("key");
-         if (!key) return new Response("Missing 'key'", { status: 400 });
+      GET: async ({ request }) => {
+        const key = new URL(request.url).searchParams.get("key");
+        if (!key) return new Response("Missing 'key'", { status: 400 });
 
 -        // option 2 — call the worker's fetch handler
 -        return env.BACKEND.fetch(
@@ -624,7 +624,7 @@ Now `hello` is a normal typed `await`:
 +        const value = await backend.hello(key);
 +        if (value === null) return new Response("Not found", { status: 404 });
 +        return new Response(value);
-       },
+      },
 ```
 
 RPC keeps you off the HTTP detour — the call is a typed function,

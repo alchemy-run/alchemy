@@ -27,7 +27,7 @@ the inner one returns the public API.
 Create `src/counter.ts` with the smallest possible DO — empty
 public API, no state yet:
 
-```typescript twoslash
+```typescript
 // src/counter.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -211,19 +211,19 @@ const { test, beforeAll, deploy } = Test.make({
 const stack = beforeAll(deploy(Stack));
 
 +test(
-+   "Counter persists per key",
-+   Effect.gen(function* () {
-+     const { url } = yield* stack;
++    "Counter persists per key",
++    Effect.gen(function* () {
++      const { url } = yield* stack;
 +
-+     const a1 = yield* HttpClient.post(`${url}/counter/foo`);
-+     expect(yield* a1.text).toBe("1");
++      const a1 = yield* HttpClient.post(`${url}/counter/foo`);
++      expect(yield* a1.text).toBe("1");
 +
-+     const a2 = yield* HttpClient.post(`${url}/counter/foo`);
-+     expect(yield* a2.text).toBe("2");
++      const a2 = yield* HttpClient.post(`${url}/counter/foo`);
++      expect(yield* a2.text).toBe("2");
 +
-+     const b1 = yield* HttpClient.post(`${url}/counter/bar`);
-+     expect(yield* b1.text).toBe("1");
-+   }),
++      const b1 = yield* HttpClient.post(`${url}/counter/bar`);
++      expect(yield* b1.text).toBe("1");
++    }),
 +);
 ```
 
@@ -339,18 +339,18 @@ const { test, beforeAll, deploy } = Test.make({
 const stack = beforeAll(deploy(Stack));
 
 +test(
-+   "tick streams 5 sequential values",
-+   Effect.gen(function* () {
-+     const { url } = yield* stack;
++    "tick streams 5 sequential values",
++    Effect.gen(function* () {
++      const { url } = yield* stack;
 +
-+     const response = yield* HttpClient.get(`${url}/tick/5`);
-+     const lines = yield* response.stream.pipe(
-+       Stream.decodeText,
-+       Stream.splitLines,
-+       Stream.runCollect,
-+     );
-+     expect([...lines]).toEqual(["0", "1", "2", "3", "4"]);
-+   }),
++      const response = yield* HttpClient.get(`${url}/tick/5`);
++      const lines = yield* response.stream.pipe(
++        Stream.decodeText,
++        Stream.splitLines,
++        Stream.runCollect,
++      );
++      expect([...lines]).toEqual(["0", "1", "2", "3", "4"]);
++    }),
 +);
 ```
 

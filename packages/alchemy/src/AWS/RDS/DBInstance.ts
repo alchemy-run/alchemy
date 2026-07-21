@@ -204,6 +204,20 @@ export interface DBInstanceProps {
    * User-defined tags.
    */
   tags?: Record<string, string>;
+  /**
+   * Skip the final snapshot when the instance is deleted. Set `false` to
+   * have RDS take a final snapshot on teardown — belt-and-suspenders beyond
+   * `deletionProtection` for databases whose data must survive a deliberate
+   * destroy. Persisted into state so `delete` honors it without props.
+   * @default true
+   */
+  skipFinalSnapshot?: boolean;
+  /**
+   * Identifier for the final snapshot taken when `skipFinalSnapshot` is
+   * `false`. Defaults to `<instance-identifier>-final-<timestamp>` so
+   * repeated destroy/create cycles never collide on snapshot names.
+   */
+  finalDBSnapshotIdentifier?: string;
 }
 
 export interface DBInstance extends Resource<
@@ -351,6 +365,20 @@ export interface DBInstance extends Resource<
      */
     masterUsername: string | undefined;
     /**
+     * Whether the final snapshot is skipped on delete, persisted from the
+     * prop of the same name. `delete` receives only the stored attributes,
+     * never live props, so the snapshot decision must ride in state;
+     * `undefined` (older state without this attr) is treated as skip.
+     */
+    skipFinalSnapshot: boolean | undefined;
+    /**
+     * Identifier used for the final snapshot when `skipFinalSnapshot` is
+     * `false`, persisted from props so `delete` can name the snapshot without
+     * live props. `undefined` means `delete` falls back to the default
+     * `<instance-identifier>-final-<timestamp>` naming scheme.
+     */
+    finalDBSnapshotIdentifier: string | undefined;
+    /**
      * ARN of the Secrets Manager secret holding master credentials.
      */
     masterUserSecretArn: string | undefined;
@@ -446,10 +474,16 @@ const toTagRecord = (
 const toAttrs = ({
   instance,
   tags,
+  skipFinalSnapshot,
+  finalDBSnapshotIdentifier,
 }: {
   instance: rds.DBInstance;
   tags: Record<string, string>;
+  skipFinalSnapshot?: boolean | undefined;
+  finalDBSnapshotIdentifier?: string | undefined;
 }): DBInstance["Attributes"] => ({
+  skipFinalSnapshot,
+  finalDBSnapshotIdentifier,
   dbInstanceIdentifier: instance.DBInstanceIdentifier ?? "",
   dbInstanceArn: instance.DBInstanceArn ?? "",
   dbClusterIdentifier: instance.DBClusterIdentifier,
@@ -649,7 +683,14 @@ export const DBInstanceProvider = () =>
           if (!instance?.DBInstanceArn) {
             return undefined;
           }
-          return toAttrs({ instance, tags: toTagRecord(instance.TagList) });
+          return toAttrs({
+            instance,
+            tags: toTagRecord(instance.TagList),
+            // Not observable from AWS — carry the stored deletion behavior
+            // forward so a refresh doesn't drop it.
+            skipFinalSnapshot: output?.skipFinalSnapshot,
+            finalDBSnapshotIdentifier: output?.finalDBSnapshotIdentifier,
+          });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const identifier =
@@ -851,13 +892,31 @@ export const DBInstanceProvider = () =>
           }
 
           yield* session.note(dbInstanceArn || identifier);
-          return toAttrs({ instance: observed, tags: desiredTags });
+          return toAttrs({
+            instance: observed,
+            tags: desiredTags,
+            skipFinalSnapshot: news.skipFinalSnapshot,
+            finalDBSnapshotIdentifier: news.finalDBSnapshotIdentifier,
+          });
         }),
         delete: Effect.fn(function* ({ output }) {
+          // Default preserves the existing behavior (no final snapshot). When
+          // the resource was declared with `skipFinalSnapshot: false`, take
+          // one — timestamped by default so repeated destroy/create cycles
+          // never collide on snapshot names.
+          const skipFinalSnapshot = output.skipFinalSnapshot ?? true;
+          const finalDBSnapshotIdentifier = skipFinalSnapshot
+            ? undefined
+            : (output.finalDBSnapshotIdentifier ??
+              `${output.dbInstanceIdentifier}-final-${new Date()
+                .toISOString()
+                .replaceAll(/[:.]/g, "-")
+                .toLowerCase()}`);
           yield* rds
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,
-              SkipFinalSnapshot: true,
+              SkipFinalSnapshot: skipFinalSnapshot,
+              FinalDBSnapshotIdentifier: finalDBSnapshotIdentifier,
             })
             .pipe(
               Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
@@ -880,7 +939,9 @@ export const DBInstanceProvider = () =>
             {
               schedule: Schedule.max([
                 Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
+                // A final snapshot serializes before the delete, so give
+                // that path a larger budget than the plain-delete wait.
+                Schedule.recurs(skipFinalSnapshot ? 40 : 80),
               ]),
               until: (exists) => exists === false,
             },
