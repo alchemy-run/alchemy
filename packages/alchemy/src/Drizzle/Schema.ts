@@ -118,36 +118,6 @@ const dialectModule = (dialect: Dialect): string => {
 
 const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
-type GenerateEnvelope = {
-  status: "missing_hints";
-  unresolved: Array<{
-    type: "rename_or_create" | "confirm_data_loss";
-    kind: string;
-    entity: string[];
-  }>;
-};
-
-/**
- * Parse the JSON envelope `drizzle-kit generate --output json` writes to
- * stdout. Returns `undefined` when stdout carries no parseable envelope
- * (e.g. a typed CLI error printed as plain text).
- */
-const parseGenerateEnvelope = (
-  stdout: string,
-): GenerateEnvelope | undefined => {
-  for (const line of stdout.trim().split("\n").reverse()) {
-    try {
-      const parsed = JSON.parse(line) as { status?: unknown };
-      if (parsed.status === "missing_hints") {
-        return parsed as GenerateEnvelope;
-      }
-    } catch {
-      // not JSON — keep scanning
-    }
-  }
-  return undefined;
-};
-
 const tsStamp = () =>
   new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
 
@@ -266,44 +236,35 @@ export const SchemaProvider = () =>
             return;
           }
 
-          const runOnce = (extraArgs: string[]) =>
-            exec(
-              ChildProcess.make(
-                nodeExecPath,
-                [...args, ...extraArgs],
-                commandOptions,
-              ),
-            ).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new Error(`drizzle-kit generate failed: ${String(cause)}`),
-              ),
-            );
-
-          const result = yield* runOnce(["--output", "json"]);
+          const result = yield* exec(
+            ChildProcess.make(nodeExecPath, args, commandOptions),
+          ).pipe(
+            Effect.mapError(
+              (cause) =>
+                new Error(`drizzle-kit generate failed: ${String(cause)}`),
+            ),
+          );
           if (result.exitCode === 0) return;
 
-          // Since 1.0.0-rc.4 the non-interactive CLI refuses ambiguous
-          // decisions (rename-vs-create, data-loss confirmation) with a
-          // structured `missing_hints` report on exit 2. Resolve every
-          // decision the same way the programmatic API does — new entities
-          // are creates, generated SQL is confirmed — and re-run once.
-          const envelope = parseGenerateEnvelope(result.stdout);
-          if (envelope?.status === "missing_hints") {
-            const hints = envelope.unresolved.map((item) =>
-              item.type === "rename_or_create"
-                ? { type: "create", kind: item.kind, entity: item.entity }
-                : {
-                    type: "confirm_data_loss",
-                    kind: item.kind,
-                    entity: item.entity,
-                  },
-            );
-            const retry = yield* runOnce(["--hints", JSON.stringify(hints)]);
-            if (retry.exitCode === 0) return;
+          // Since drizzle-kit 1.0.0-rc.4 the non-interactive CLI refuses
+          // ambiguous decisions (rename-vs-create, data-loss confirmation)
+          // with a `missing_hints` report on exit 2. These are deliberate
+          // safety prompts — the generated SQL is applied to the real
+          // database later in the same deploy — so we never answer them
+          // automatically. Ask the user to decide.
+          if (result.exitCode === 2) {
             return yield* Effect.fail(
               new Error(
-                `drizzle-kit generate failed: ${retry.stdout}\n${retry.stderr}`,
+                [
+                  `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively (rename vs create, or a change that loses data):`,
+                  "",
+                  result.stdout.trim(),
+                  "",
+                  "To resolve, generate the migration yourself and commit it:",
+                  `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
+                  "then re-run the deploy (the schema resource will see no drift and apply the committed migration).",
+                  "Alternatively, run the deploy in a terminal to answer drizzle-kit's prompts interactively.",
+                ].join("\n"),
               ),
             );
           }
