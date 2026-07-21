@@ -1,5 +1,4 @@
 import * as AWS from "alchemy/AWS";
-import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -32,7 +31,7 @@ import { EntriesTable, GuestbookCluster, GuestbookNamespace } from "./infra.ts";
  *   pod resolves credentials through the EKS Pod Identity
  *   container-credentials chain — no static keys, no IRSA annotations.
  *
- * `podTemplate` is the typed Kubernetes escape hatch: a DeepPartial pod
+ * `podTemplate` is the Kubernetes escape hatch: a literal deep-partial Pod
  * template merged into the synthesized one (objects merge recursively;
  * arrays and primitives replace).
  */
@@ -56,9 +55,9 @@ export default Api.make(
         requests: { cpu: "100m", memory: "128Mi" },
         limits: { cpu: "500m", memory: "256Mi" },
       },
-      // Kubernetes escape hatch: tune the synthesized pod template with the
-      // typed builder (completions via alchemy/Kubernetes).
-      podTemplate: Kubernetes.podTemplate({
+      // Kubernetes escape hatch: tune the synthesized Pod template with a
+      // literal deep-partial object merged onto it.
+      podTemplate: {
         metadata: {
           annotations: {
             "prometheus.io/scrape": "true",
@@ -66,7 +65,7 @@ export default Api.make(
           },
         },
         spec: { terminationGracePeriodSeconds: 30 },
-      }),
+      },
     };
   }),
   Effect.gen(function* () {

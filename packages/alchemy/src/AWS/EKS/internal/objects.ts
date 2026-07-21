@@ -1,7 +1,8 @@
 /**
  * Internal Kubernetes object model + ordering/path helpers powering
  * `AWS.EKS.Manifest` and the EKS platforms (`Deployment`, `Job`). Not part of
- * the public surface — the public Kubernetes types live in `src/Kubernetes`.
+ * the public surface — the public manifest shape is the literal
+ * `KubernetesManifest` on `AWS.EKS.Manifest`.
  */
 
 export interface KubernetesObjectMetadata {

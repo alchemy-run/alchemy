@@ -52,7 +52,6 @@ function providersSidebarEntry() {
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
-      { label: "Kubernetes", link: "/kubernetes" },
       { label: "Drizzle", link: "/drizzle" },
       { label: "Command", link: "/command" },
     ],
@@ -882,17 +881,6 @@ export default defineConfig({
             { label: "Run local services", link: "/docker/local-services" },
             { label: "Build & push images", link: "/docker/build-and-push" },
             providerResourcesEntry("Docker"),
-          ],
-        },
-        {
-          label: "Kubernetes",
-          items: [
-            { label: "Overview", link: "/kubernetes" },
-            { label: "Setup", link: "/kubernetes/setup" },
-            {
-              label: "How objects deploy",
-              link: "/kubernetes/objects-as-bindings",
-            },
           ],
         },
         {

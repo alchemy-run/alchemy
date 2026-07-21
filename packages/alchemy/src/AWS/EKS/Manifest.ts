@@ -5,7 +5,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { Cluster } from "./Cluster.ts";
-import type * as Kubernetes from "../../Kubernetes/index.ts";
 import {
   applyObject,
   deleteObject,
@@ -28,6 +27,25 @@ type ClusterConnectionProps = Pick<
   "clusterName" | "endpoint" | "certificateAuthorityData"
 >;
 
+/**
+ * A literal Kubernetes object: `apiVersion` + `kind` + `metadata`, with the
+ * rest of the object's fields (`spec`, `data`, …) carried as-is. Any kind is
+ * accepted — built-in objects and CRDs alike; the API server validates the
+ * shape on apply.
+ */
+export interface KubernetesManifest {
+  apiVersion: string;
+  kind: string;
+  metadata?: {
+    name?: string;
+    namespace?: string;
+    labels?: Record<string, string>;
+    annotations?: Record<string, string>;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface ManifestProps {
   /**
    * Target EKS cluster the manifest is applied onto. Pass the
@@ -37,12 +55,10 @@ export interface ManifestProps {
   cluster: ClusterConnectionProps;
   /**
    * The Kubernetes object to apply (server-side apply, field manager
-   * `alchemy`). Use the typed builders from `alchemy/Kubernetes`
-   * (`Kubernetes.statefulSet({...})`, `Kubernetes.configMap({...})`, …) for
-   * completions, or pass any raw object — arbitrary CRDs are supported via
-   * API discovery.
+   * `alchemy`) — a literal object with `apiVersion`, `kind`, `metadata`, and
+   * the kind's own fields. Arbitrary CRDs are supported via API discovery.
    */
-  manifest: Kubernetes.Manifest;
+  manifest: KubernetesManifest;
 }
 
 export interface Manifest extends Resource<
@@ -72,19 +88,18 @@ export interface Manifest extends Resource<
  * Applies a raw Kubernetes manifest onto an `AWS.EKS.Cluster` via
  * server-side apply.
  *
- * Any object is accepted: the kinds modeled by the opt-in `alchemy/Kubernetes`
- * types (with full completions through the zero-runtime builders) or untyped
- * custom resources — unknown kinds are resolved through the Kubernetes API
- * discovery endpoint, so CRDs work without any registration.
+ * Any literal object is accepted — built-in kinds and custom resources
+ * alike; unknown kinds are resolved through the Kubernetes API discovery
+ * endpoint, so CRDs work without any registration.
  * @resource
  * @section Applying Manifests
- * @example Typed StatefulSet via the Kubernetes builders
+ * @example StatefulSet
  * ```typescript
- * import * as Kubernetes from "alchemy/Kubernetes";
- *
  * const sts = yield* AWS.EKS.Manifest("Cache", {
  *   cluster,
- *   manifest: Kubernetes.statefulSet({
+ *   manifest: {
+ *     apiVersion: "apps/v1",
+ *     kind: "StatefulSet",
  *     metadata: { name: "cache", namespace: "apps" },
  *     spec: {
  *       serviceName: "cache",
@@ -95,11 +110,11 @@ export interface Manifest extends Resource<
  *         spec: { containers: [{ name: "redis", image: "redis:7" }] },
  *       },
  *     },
- *   }),
+ *   },
  * });
  * ```
  *
- * @example Untyped custom resource (CRD)
+ * @example Custom resource (CRD)
  * ```typescript
  * const widget = yield* AWS.EKS.Manifest("Widget", {
  *   cluster,
@@ -117,7 +132,11 @@ export interface Manifest extends Resource<
  * ```typescript
  * const ns = yield* AWS.EKS.Manifest("AppsNamespace", {
  *   cluster,
- *   manifest: Kubernetes.namespace({ metadata: { name: "apps" } }),
+ *   manifest: {
+ *     apiVersion: "v1",
+ *     kind: "Namespace",
+ *     metadata: { name: "apps" },
+ *   },
  * });
  * ```
  */
@@ -139,7 +158,7 @@ const toConnection = (
 };
 
 const toObjectDefinition = (
-  manifest: Kubernetes.Manifest,
+  manifest: KubernetesManifest,
 ): Effect.Effect<KubernetesObjectDefinition, Error> => {
   const name = manifest.metadata?.name;
   if (!name) {
@@ -187,10 +206,8 @@ export const ManifestProvider = () =>
         list: () => Effect.succeed([] as Manifest["Attributes"][]),
         diff: Effect.fn(function* ({ olds = {} as ManifestProps, news }) {
           if (!isResolved(news)) return;
-          const oldManifest = olds.manifest as
-            | Kubernetes.CustomManifest
-            | undefined;
-          const newManifest = news.manifest as Kubernetes.CustomManifest;
+          const oldManifest = olds.manifest as KubernetesManifest | undefined;
+          const newManifest = news.manifest as KubernetesManifest;
           // Object identity (cluster, group/version/kind, name, namespace) is
           // immutable — changing any of it is a replacement.
           if (

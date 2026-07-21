@@ -88,27 +88,50 @@ describe("AWS ImageSource composition", () => {
   );
 });
 
-describe("Cloudflare container environment composition", () => {
-  test("containerEnvPreamble: image ref becomes FROM line", () => {
-    expect(containerEnvPreamble({ image: "oven/bun:1" })).toBe(
-      "FROM oven/bun:1",
+/**
+ * Run an Effect that may die and report whether it did — validation
+ * helpers surface invalid props as defects (`Effect.die`), never typed
+ * errors or raw throws.
+ */
+const dies = <A>(effect: Effect.Effect<A>) =>
+  Effect.gen(function* () {
+    const result = yield* Effect.result(
+      effect.pipe(Effect.catchDefect((defect) => Effect.fail(defect as Error))),
     );
-    expect(containerEnvPreamble({})).toBeUndefined();
+    return Result.isFailure(result);
   });
 
-  test("containerEnvPreamble: inline content used verbatim", () => {
-    const preamble = containerEnvPreamble({
-      dockerfile: Dockerfile.inline`FROM oven/bun:1
+describe("Cloudflare container environment composition", () => {
+  it.effect("containerEnvPreamble: image ref becomes FROM line", () =>
+    Effect.gen(function* () {
+      expect(yield* containerEnvPreamble({ image: "oven/bun:1" })).toBe(
+        "FROM oven/bun:1",
+      );
+      expect(yield* containerEnvPreamble({})).toBeUndefined();
+    }),
+  );
+
+  it.effect("containerEnvPreamble: inline content used verbatim", () =>
+    Effect.gen(function* () {
+      const preamble = yield* containerEnvPreamble({
+        dockerfile: Dockerfile.inline`FROM oven/bun:1
 RUN apt-get install -y ffmpeg`,
-    });
-    expect(preamble).toContain("RUN apt-get install -y ffmpeg");
-  });
+      });
+      expect(preamble).toContain("RUN apt-get install -y ffmpeg");
+    }),
+  );
 
-  test("containerEnvPreamble: rejects Dockerfile content passed as image", () => {
-    expect(() =>
-      containerEnvPreamble({ image: "FROM oven/bun:1\nRUN echo hi" }),
-    ).toThrow(/plain image reference/);
-  });
+  it.effect(
+    "containerEnvPreamble: dies on Dockerfile content passed as image",
+    () =>
+      Effect.gen(function* () {
+        expect(
+          yield* dies(
+            containerEnvPreamble({ image: "FROM oven/bun:1\nRUN echo hi" }),
+          ),
+        ).toBe(true);
+      }),
+  );
 
   test("buildFinalDockerfile layers the bundle on top of the preamble", () => {
     const dockerfile = buildFinalDockerfile(
@@ -131,54 +154,74 @@ RUN apt-get install -y ffmpeg`,
     );
   });
 
-  test("validateContainerImageProps enforces exclusivity", () => {
-    // main + image and main + inline dockerfile are the two environments.
-    expect(() =>
-      validateContainerImageProps({ main: "./i.ts", image: "oven/bun:1" }),
-    ).not.toThrow();
-    expect(() =>
-      validateContainerImageProps({
-        main: "./i.ts",
-        dockerfile: Dockerfile.inline`FROM x`,
-      }),
-    ).not.toThrow();
-    expect(() =>
-      validateContainerImageProps({
-        main: "./i.ts",
-        image: "oven/bun:1",
-        dockerfile: Dockerfile.inline`FROM x`,
-      }),
-    ).toThrow(/mutually exclusive/);
-    // A path dockerfile cannot be an environment on Cloudflare.
-    expect(() =>
-      validateContainerImageProps({
-        main: "./i.ts",
-        dockerfile: "./Dockerfile",
-      }),
-    ).toThrow(/PATH/);
-    expect(() =>
-      validateContainerImageProps({ main: "./i.ts", context: "./app" }),
-    ).toThrow(/context/);
-    // Without main: image is exclusive with dockerfile/context.
-    expect(() =>
-      validateContainerImageProps({ image: "busybox", dockerfile: "./f" }),
-    ).toThrow(/mutually exclusive/);
-    expect(() =>
-      validateContainerImageProps({ image: "busybox", context: "./app" }),
-    ).toThrow(/mutually exclusive/);
-    // Inline content has no build context.
-    expect(() =>
-      validateContainerImageProps({
-        dockerfile: Dockerfile.inline`FROM x`,
-        context: "./app",
-      }),
-    ).toThrow(/no build context/);
-    // The plain external build stays valid.
-    expect(() =>
-      validateContainerImageProps({
-        context: "./app",
-        dockerfile: "./app/Dockerfile",
-      }),
-    ).not.toThrow();
-  });
+  it.effect("validateContainerImageProps enforces exclusivity", () =>
+    Effect.gen(function* () {
+      // main + image and main + inline dockerfile are the two environments.
+      expect(
+        yield* dies(
+          validateContainerImageProps({ main: "./i.ts", image: "oven/bun:1" }),
+        ),
+      ).toBe(false);
+      expect(
+        yield* dies(
+          validateContainerImageProps({
+            main: "./i.ts",
+            dockerfile: Dockerfile.inline`FROM x`,
+          }),
+        ),
+      ).toBe(false);
+      expect(
+        yield* dies(
+          validateContainerImageProps({
+            main: "./i.ts",
+            image: "oven/bun:1",
+            dockerfile: Dockerfile.inline`FROM x`,
+          }),
+        ),
+      ).toBe(true);
+      // A path dockerfile cannot be an environment on Cloudflare.
+      expect(
+        yield* dies(
+          validateContainerImageProps({
+            main: "./i.ts",
+            dockerfile: "./Dockerfile",
+          }),
+        ),
+      ).toBe(true);
+      expect(
+        yield* dies(
+          validateContainerImageProps({ main: "./i.ts", context: "./app" }),
+        ),
+      ).toBe(true);
+      // Without main: image is exclusive with dockerfile/context.
+      expect(
+        yield* dies(
+          validateContainerImageProps({ image: "busybox", dockerfile: "./f" }),
+        ),
+      ).toBe(true);
+      expect(
+        yield* dies(
+          validateContainerImageProps({ image: "busybox", context: "./app" }),
+        ),
+      ).toBe(true);
+      // Inline content has no build context.
+      expect(
+        yield* dies(
+          validateContainerImageProps({
+            dockerfile: Dockerfile.inline`FROM x`,
+            context: "./app",
+          }),
+        ),
+      ).toBe(true);
+      // The plain external build stays valid.
+      expect(
+        yield* dies(
+          validateContainerImageProps({
+            context: "./app",
+            dockerfile: "./app/Dockerfile",
+          }),
+        ),
+      ).toBe(false);
+    }),
+  );
 });

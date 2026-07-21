@@ -5,7 +5,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
-import type { DeepPartial, PodTemplateSpec } from "../../Kubernetes/index.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
@@ -127,12 +126,12 @@ export interface DeploymentPropsBase extends PlatformProps {
    */
   architecture?: "amd64" | "arm64";
   /**
-   * Deep-partial Kubernetes pod template merged into the synthesized
-   * template (objects merge recursively; arrays and primitives replace).
-   * Typed by the opt-in `alchemy/Kubernetes` types — use
-   * `Kubernetes.podTemplate({...})` for completions.
+   * Deep-partial Kubernetes Pod template merged into the synthesized
+   * template (objects merge recursively; arrays and primitives replace) —
+   * a literal object in the shape of `PodTemplateSpec`, e.g.
+   * `{ spec: { tolerations: [...], nodeSelector: {...} } }`.
    */
-  podTemplate?: DeepPartial<PodTemplateSpec>;
+  podTemplate?: Record<string, unknown>;
   /**
    * Managed policy ARNs attached to the generated pod-identity role in
    * addition to the inline policy synthesized from bindings.
@@ -309,18 +308,16 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * @section Kubernetes Escape Hatch
  * @example Tune the synthesized pod template
  * ```typescript
- * import * as Kubernetes from "alchemy/Kubernetes";
- *
  * const tuned = yield* AWS.EKS.Deployment("Api", {
  *   cluster,
  *   main: import.meta.url,
  *   port: 3000,
- *   podTemplate: Kubernetes.podTemplate({
+ *   podTemplate: {
  *     spec: {
  *       tolerations: [{ key: "gpu", operator: "Exists" }],
  *       nodeSelector: { pool: "arm" },
  *     },
- *   }),
+ *   },
  * });
  * ```
  */

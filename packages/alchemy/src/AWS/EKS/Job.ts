@@ -4,7 +4,6 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import { isResolved } from "../../Diff.ts";
-import type { DeepPartial, PodTemplateSpec } from "../../Kubernetes/index.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
   Platform,
@@ -126,12 +125,12 @@ export interface JobPropsBase extends PlatformProps {
    */
   architecture?: "amd64" | "arm64";
   /**
-   * Deep-partial Kubernetes pod template merged into the synthesized
-   * template (objects merge recursively; arrays and primitives replace).
-   * Typed by the opt-in `alchemy/Kubernetes` types — use
-   * `Kubernetes.podTemplate({...})` for completions.
+   * Deep-partial Kubernetes Pod template merged into the synthesized
+   * template (objects merge recursively; arrays and primitives replace) —
+   * a literal object in the shape of `PodTemplateSpec`, e.g.
+   * `{ spec: { tolerations: [...], nodeSelector: {...} } }`.
    */
-  podTemplate?: DeepPartial<PodTemplateSpec>;
+  podTemplate?: Record<string, unknown>;
   /**
    * Managed policy ARNs attached to the generated pod-identity role in
    * addition to the inline policy synthesized from bindings.

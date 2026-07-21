@@ -194,17 +194,18 @@ const nightly = yield* AWS.EKS.Job("NightlyBackfill", {
 ## Everything else is a Manifest
 
 [`Manifest`](/providers/aws/eks/manifest) applies any raw Kubernetes
-object — StatefulSets, Namespaces, CRDs — via server-side apply,
-typed by the opt-in zero-runtime builders from `alchemy/Kubernetes`:
+object — StatefulSets, Namespaces, CRDs — via server-side apply.
+The manifest is a literal object, exactly as you would write it in
+YAML:
 
 ```typescript
-import * as Kubernetes from "alchemy/Kubernetes";
-
 const namespace = yield* AWS.EKS.Manifest("DemoNamespace", {
   cluster,
-  manifest: Kubernetes.namespace({
+  manifest: {
+    apiVersion: "v1",
+    kind: "Namespace",
     metadata: { name: "demo" },
-  }),
+  },
 });
 ```
 
@@ -212,10 +213,9 @@ There is no kubeconfig step: Alchemy authenticates to the cluster's
 API with your AWS credentials (a presigned STS token) and applies
 objects via **server-side apply** under the `alchemy` field manager,
 so deploys converge the live objects the same way the rest of your
-Stack converges cloud resources. The full object model — typed
-builders, CRD discovery, apply ordering — lives in the
-[Kubernetes hub](/kubernetes)
-([How objects deploy](/kubernetes/objects-as-bindings)).
+Stack converges cloud resources. Unknown kinds resolve through the
+Kubernetes API discovery endpoint, so CRDs work without any
+registration.
 
 ## Where next
 
@@ -223,8 +223,6 @@ builders, CRD discovery, apply ordering — lives in the
   builds under the cluster.
 - [Choosing a runtime](/aws/compute/choosing-a-runtime) — when Lambda or ECS
   is the better fit than running your own Kubernetes workloads.
-- [Kubernetes hub](/kubernetes) — the opt-in types and builders, and
-  how objects deploy.
 - [`Cluster` reference](/providers/aws/eks/cluster),
   [`Deployment` reference](/providers/aws/eks/deployment),
   [`Job` reference](/providers/aws/eks/job),

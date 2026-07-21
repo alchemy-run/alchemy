@@ -179,7 +179,7 @@ export const LiveContainerProvider = () =>
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
-        validateContainerImageProps(props);
+        yield* validateContainerImageProps(props);
 
         // Variant 1 — Effect-native program. Bundle `main` and build a
         // generated Dockerfile around it; the environment preamble comes
@@ -195,7 +195,7 @@ export const LiveContainerProvider = () =>
             external: props.external,
           });
           const finalDockerfile = buildFinalDockerfile(
-            containerEnvPreamble(props),
+            yield* containerEnvPreamble(props),
             runtime,
             props.external,
             props.autoInstallExternals,
@@ -353,7 +353,7 @@ export const LiveContainerProvider = () =>
             `${id}-container`,
           );
           const finalDockerfile = buildFinalDockerfile(
-            containerEnvPreamble(props),
+            yield* containerEnvPreamble(props),
             runtime,
             props.external,
             props.autoInstallExternals,
