@@ -132,13 +132,15 @@ export class DiskNotReady extends Data.TaggedError("DiskNotReady")<{
  *
  * @section Running Commands on a Disk
  * @example Execute bash from a Function or Worker
- * Bind {@link Exec} to run shell commands in an ephemeral container with the
- * disk mounted at `/mnt/archil` — a real OS with coreutils, python3, and
- * node, billed per millisecond of execution.
+ * Bind {@link Client} and pin the disk through its accessor to run shell
+ * commands in an ephemeral container with the disk mounted at
+ * `/mnt/archil` — a real OS with coreutils, python3, and node, billed per
+ * millisecond of execution.
  * ```typescript
- * const run = yield* Archil.Exec(disk);
+ * const archil = yield* Archil.Client();
+ * const data = archil.disk(yield* disk.diskId);
  *
- * const { stdout, exitCode } = yield* run(
+ * const { stdout, exitCode } = yield* data.exec(
  *   "wc -l /mnt/archil/data/*.csv",
  * );
  * ```

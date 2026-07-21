@@ -43,7 +43,7 @@ const fetchExecResult = (url: string) =>
   );
 
 test.provider.skipIf(!hasArchil)(
-  "deployed Worker runs bash on a disk via the Exec binding",
+  "deployed Worker manages and executes disks via the Client binding",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -55,14 +55,22 @@ test.provider.skipIf(!hasArchil)(
         }),
       );
 
-      // Exec: the Worker writes + reads a file on the disk over HTTPS using
-      // its own minted Archil API token.
-      const exec = yield* fetchExecResult(`${url}/exec`);
+      // Static: exec on the deploy-time disk pinned through its accessor.
+      const exec = yield* fetchExecResult(`${url}/static`);
       expect(exec.exitCode).toBe(0);
       expect(exec.stdout.trim()).toBe("worker-was-here");
       expect(exec.timing.executeMs).toBeGreaterThanOrEqual(0);
 
-      // MultiExec: same disk mounted at a named relative path.
+      // Dynamic: the Worker provisions a disk at request time, runs bash on
+      // it, and deletes it — no disk reference existed at deploy time.
+      const dynamic = (yield* fetchExecResult(
+        `${url}/dynamic`,
+      )) as Archil.ExecResult & { diskId: string };
+      expect(dynamic.exitCode).toBe(0);
+      expect(dynamic.stdout.trim()).toBe("dynamic-was-here");
+      expect(dynamic.diskId).toMatch(/^dsk-[0-9a-f]{16}$/);
+
+      // MultiExec: same pinned disk mounted at a named relative path.
       const multi = yield* fetchExecResult(`${url}/multi`);
       expect(multi.exitCode).toBe(0);
       expect(multi.stdout.trim()).toBe("worker-was-here");

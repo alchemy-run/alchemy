@@ -1,30 +1,42 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as Redacted from "effect/Redacted";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import {
+  createDisk,
+  deleteDisk,
   exec,
   execDisk,
+  getDisk,
   grepDisk,
+  listDisks,
+  removeDiskUser,
+  addDiskUser,
+  type DiskStatus,
+  type DiskUserSpec,
   type ExecMountSpec,
   type GrepRequest,
+  type MountConfig,
 } from "./Api.ts";
-import { ApiToken } from "./ApiToken.ts";
+import type {
+  ArchilClient,
+  ClientExecRequest,
+  DiskClient,
+  DiskRefOptions,
+} from "./Client.ts";
 import { Credentials } from "./Credentials.ts";
-import { isDisk, type Disk } from "./Disk.ts";
-import type { MultiExecMount, MultiExecMounts } from "./MultiExec.ts";
 import { DEFAULT_REGION, type ArchilRegion } from "./Region.ts";
 
 /**
- * Shared scaffolding for the Archil capability binding layers.
+ * Shared scaffolding for the Archil {@link Client} binding layers.
  *
- * The `*Http` layers mint a dedicated {@link ApiToken} per host and read it
- * back through the bound accessor at runtime; the `*Local` layers capture the
- * ambient deploy-time credentials. Both produce an {@link ArchilAuth} so every
- * capability shares the exact same runtime client implementations below.
+ * `ClientHttp` mints a dedicated `Archil.ApiToken` per host and reads it
+ * back through the bound accessor at runtime; `ClientLocal` captures the
+ * ambient deploy-time credentials. Both produce an {@link ArchilAuth} so the
+ * layers share the exact same {@link makeArchilClient} implementation.
  *
  * NOT exported from `index.ts`.
  */
@@ -58,128 +70,156 @@ export const authorizeWith = (
 });
 
 /**
- * Auth for the `*Http` layers: mint one `Archil.ApiToken` per host
- * Function/Worker and bind its value as a secret. The accessor machinery
- * delivers the token to the host environment on every cloud (secret binding
- * on Workers, env var on Lambda/ECS/EKS), so the same layer works anywhere.
+ * Disks report `creating` briefly after create; poll (bounded, ~20s max)
+ * until `available` so the returned handle never races a half-provisioned
+ * disk. A disk that is briefly invisible right after create counts as still
+ * `creating`.
  */
-export const makeHttpAuth = Effect.gen(function* () {
-  const Token = yield* ApiToken;
-  return Effect.gen(function* () {
-    // Binding.Host (requirement-free, unlike `Self`) resolves the host
-    // Function/Worker on every platform — Lambda's `FunctionServices` does
-    // not admit a `Self` requirement.
-    const host = yield* Binding.Host;
-    const token = yield* Token(`${host.LogicalId}ArchilToken`);
-    const value = yield* token.value;
-    return authorizeWith(value);
-  });
-});
+const waitAvailable = (region: ArchilRegion, diskId: string) =>
+  getDisk({ region, diskId }).pipe(
+    Effect.map((d) => d.status),
+    Effect.catchTag("DiskNotFound", () =>
+      Effect.succeed("creating" as DiskStatus),
+    ),
+    Effect.repeat({
+      until: (status: DiskStatus): boolean => status === "available",
+      schedule: Schedule.exponential("200 millis", 1.5),
+      times: 10,
+    }),
+    Effect.asVoid,
+  );
 
-/**
- * Auth for the `*Local` layers: capture the ambient current-credentials
- * context (the stack's providers layer) so ops run with the CLI/profile
- * API key. Registers no binding on any host.
- */
-export const makeLocalAuth = Effect.gen(function* () {
-  const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
-  const auth: ArchilAuth = {
-    authorize: (eff) => eff.pipe(Effect.provideContext(context)),
+/** Build the {@link ArchilClient} shared by the Http and Local layers. */
+export const makeArchilClient = (
+  auth: ArchilAuth,
+  clientRegion: Effect.Effect<ArchilRegion>,
+): ArchilClient => {
+  const regionOf = (options?: DiskRefOptions): Effect.Effect<ArchilRegion> =>
+    options?.region === undefined
+      ? clientRegion
+      : Effect.isEffect(options.region)
+        ? options.region
+        : Effect.succeed(options.region);
+
+  const makeDisk = (
+    id: Effect.Effect<string>,
+    region: Effect.Effect<ArchilRegion>,
+  ): DiskClient => ({
+    id,
+    region,
+    exec: Effect.fn("Archil.Client.disk.exec")(function* (command: string) {
+      return yield* auth.authorize(
+        execDisk({ region: yield* region, diskId: yield* id, command }),
+      );
+    }),
+    grep: Effect.fn("Archil.Client.disk.grep")(function* (
+      request: GrepRequest,
+    ) {
+      return yield* auth.authorize(
+        grepDisk({ region: yield* region, diskId: yield* id, ...request }),
+      );
+    }),
+    get: Effect.fn("Archil.Client.disk.get")(function* () {
+      return yield* auth.authorize(
+        getDisk({ region: yield* region, diskId: yield* id }),
+      );
+    }),
+    delete: Effect.fn("Archil.Client.disk.delete")(function* () {
+      yield* auth
+        .authorize(deleteDisk({ region: yield* region, diskId: yield* id }))
+        .pipe(Effect.catchTag("DiskNotFound", () => Effect.void));
+    }),
+    addUser: Effect.fn("Archil.Client.disk.addUser")(function* (
+      user: DiskUserSpec,
+    ) {
+      return yield* auth.authorize(
+        addDiskUser({ region: yield* region, diskId: yield* id, user }),
+      );
+    }),
+    removeUser: Effect.fn("Archil.Client.disk.removeUser")(function* (input: {
+      type: "token" | "awssts";
+      identifier?: string;
+    }) {
+      yield* auth.authorize(
+        removeDiskUser({
+          region: yield* region,
+          diskId: yield* id,
+          userType: input.type,
+          identifier: input.identifier,
+        }),
+      );
+    }),
+  });
+
+  return {
+    disk: (id, options) =>
+      makeDisk(
+        typeof id === "string" ? Effect.succeed(id) : id,
+        regionOf(options),
+      ),
+    listDisks: Effect.fn("Archil.Client.listDisks")(function* (options?: {
+      name?: string;
+      limit?: number;
+      cursor?: string;
+    }) {
+      return yield* auth.authorize(
+        listDisks({ region: yield* clientRegion, ...options }),
+      );
+    }),
+    createDisk: Effect.fn("Archil.Client.createDisk")(function* (options: {
+      name: string;
+      mounts?: MountConfig[];
+    }) {
+      const region = yield* clientRegion;
+      const created = yield* auth.authorize(
+        createDisk({ region, name: options.name, mounts: options.mounts }),
+      );
+      yield* auth.authorize(waitAvailable(region, created.diskId));
+      const tokenUser = created.authorizedUsers?.find(
+        (u) => u.token !== undefined,
+      );
+      return {
+        disk: makeDisk(Effect.succeed(created.diskId), Effect.succeed(region)),
+        diskId: created.diskId,
+        diskToken: tokenUser?.token
+          ? Redacted.make(tokenUser.token)
+          : undefined,
+      };
+    }),
+    getDisk: Effect.fn("Archil.Client.getDisk")(function* (id: string) {
+      return yield* auth.authorize(
+        getDisk({ region: yield* clientRegion, diskId: id }),
+      );
+    }),
+    deleteDisk: Effect.fn("Archil.Client.deleteDisk")(function* (id: string) {
+      yield* auth
+        .authorize(deleteDisk({ region: yield* clientRegion, diskId: id }))
+        .pipe(Effect.catchTag("DiskNotFound", () => Effect.void));
+    }),
+    exec: Effect.fn("Archil.Client.exec")(function* (
+      request: ClientExecRequest,
+    ) {
+      const region = yield* clientRegion;
+      const disks: Record<string, string | ExecMountSpec> = {};
+      for (const [path, mount] of Object.entries(request.disks)) {
+        if (typeof mount === "string") {
+          disks[path] = mount;
+        } else if ("disk" in mount) {
+          disks[path] = {
+            disk:
+              typeof mount.disk === "string"
+                ? mount.disk
+                : yield* mount.disk.id,
+            subdirectory: mount.subdirectory,
+            readOnly: mount.readOnly,
+          };
+        } else {
+          disks[path] = yield* mount.id;
+        }
+      }
+      return yield* auth.authorize(
+        exec({ region, disks, command: request.command }),
+      );
+    }),
   };
-  return Effect.succeed(auth);
-});
-
-// ============================================================================
-// Runtime clients (shared by Http + Local layers)
-// ============================================================================
-
-export const makeExecClient = (
-  auth: ArchilAuth,
-  diskId: Effect.Effect<string>,
-  region: Effect.Effect<ArchilRegion>,
-) =>
-  Effect.fn("Archil.Exec")(function* (command: string) {
-    return yield* auth.authorize(
-      execDisk({
-        region: yield* region,
-        diskId: yield* diskId,
-        command,
-      }),
-    );
-  });
-
-export const makeGrepClient = (
-  auth: ArchilAuth,
-  diskId: Effect.Effect<string>,
-  region: Effect.Effect<ArchilRegion>,
-) =>
-  Effect.fn("Archil.Grep")(function* (request: GrepRequest) {
-    return yield* auth.authorize(
-      grepDisk({
-        region: yield* region,
-        diskId: yield* diskId,
-        ...request,
-      }),
-    );
-  });
-
-export interface ResolvedMount {
-  path: string;
-  diskId: Effect.Effect<string>;
-  subdirectory: string | undefined;
-  readOnly: boolean | undefined;
-}
-
-const diskOf = (mount: MultiExecMount): Disk =>
-  isDisk(mount) ? mount : mount.disk;
-
-/**
- * Resolve a {@link MultiExecMounts} map into deferred per-mount accessors
- * plus the shared region (taken from the first disk — Archil requires all
- * disks of one exec to live in the same region).
- */
-export const resolveMounts = Effect.fn(function* (disks: MultiExecMounts) {
-  const mounts: ResolvedMount[] = [];
-  let region: Effect.Effect<ArchilRegion> | undefined;
-  for (const [path, mount] of Object.entries(disks)) {
-    const disk = diskOf(mount);
-    if (region === undefined) {
-      region = yield* disk.region;
-    }
-    mounts.push({
-      path,
-      diskId: yield* disk.diskId,
-      subdirectory: isDisk(mount) ? undefined : mount.subdirectory,
-      readOnly: isDisk(mount) ? undefined : mount.readOnly,
-    });
-  }
-  if (region === undefined) {
-    return yield* Effect.die(
-      "Archil.MultiExec requires at least one disk to mount.",
-    );
-  }
-  return { mounts, region };
-});
-
-export const makeMultiExecClient = (
-  auth: ArchilAuth,
-  region: Effect.Effect<ArchilRegion>,
-  mounts: ResolvedMount[],
-) =>
-  Effect.fn("Archil.MultiExec")(function* (command: string) {
-    const disks: Record<string, string | ExecMountSpec> = {};
-    for (const mount of mounts) {
-      const id = yield* mount.diskId;
-      disks[mount.path] =
-        mount.subdirectory !== undefined || mount.readOnly !== undefined
-          ? {
-              disk: id,
-              subdirectory: mount.subdirectory,
-              readOnly: mount.readOnly,
-            }
-          : id;
-    }
-    return yield* auth.authorize(
-      exec({ region: yield* region, disks, command }),
-    );
-  });
+};

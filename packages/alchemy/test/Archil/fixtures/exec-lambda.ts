@@ -3,16 +3,15 @@ import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { LambdaDisk } from "./disk.ts";
 
 export class ArchilExecFunction extends Lambda.Function<Lambda.Function>()(
   "ArchilExecFunction",
 ) {}
 
 /**
- * Lambda fixture exercising the same Archil `Exec` binding from the Node
- * runtime — the exact same capability layer as the Worker fixture, proving
- * the binding is host-agnostic.
+ * Lambda fixture exercising the same Archil {@link Archil.Client} binding
+ * from the Node runtime — the exact same capability layer as the Worker
+ * fixture, proving the binding is host-agnostic.
  */
 export default ArchilExecFunction.make(
   {
@@ -20,7 +19,11 @@ export default ArchilExecFunction.make(
     url: true,
   },
   Effect.gen(function* () {
-    const run = yield* Archil.Exec(LambdaDisk);
+    const disk = yield* Archil.Disk("LambdaDisk");
+    const archil = yield* Archil.Client();
+    const data = archil.disk(yield* disk.diskId, {
+      region: yield* disk.region,
+    });
 
     return {
       fetch: Effect.gen(function* () {
@@ -28,14 +31,16 @@ export default ArchilExecFunction.make(
         const url = new URL(request.originalUrl);
 
         if (url.pathname === "/exec") {
-          const result = yield* run(
-            "echo lambda-was-here > /mnt/archil/from-lambda.txt && cat /mnt/archil/from-lambda.txt",
-          ).pipe(Effect.orDie);
+          const result = yield* data
+            .exec(
+              "echo lambda-was-here > /mnt/archil/from-lambda.txt && cat /mnt/archil/from-lambda.txt",
+            )
+            .pipe(Effect.orDie);
           return yield* HttpServerResponse.json(result);
         }
 
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Archil.ExecHttp)),
+  }).pipe(Effect.provide(Archil.ClientHttp)),
 );
