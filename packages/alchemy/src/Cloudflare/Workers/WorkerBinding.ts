@@ -61,11 +61,63 @@ export type WorkerSettingsBinding = Exclude<
   null | undefined
 >[number];
 
+/**
+ * Raw service-binding descriptor for binding a Worker by script name —
+ * including Workers managed outside this stack — with an optional named
+ * `entrypoint` class (a `WorkerEntrypoint` RPC target) and `environment`.
+ *
+ * Declaring a service binding as a {@link Worker} resource always targets the
+ * script's default export, so a fleet whose scripts expose several named
+ * `WorkerEntrypoint` classes cannot address the non-default ones. This spec
+ * fills that gap: it passes straight through to the Workers API
+ * service-binding metadata, which accepts `entrypoint`/`environment`.
+ *
+ * @example
+ * ```ts
+ * const worker = yield* Cloudflare.Worker("api", {
+ *   env: {
+ *     BILLING: {
+ *       $binding: "service",
+ *       service: "billing-worker",
+ *       entrypoint: "BillingRpc",
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export interface ServiceBindingSpec {
+  /** Discriminant marking this object as a raw service-binding descriptor. */
+  readonly $binding: "service";
+  /** Name of the target Worker script to bind to. */
+  readonly service: string;
+  /**
+   * Optional named `WorkerEntrypoint` class on the target script. When
+   * omitted, the binding targets the script's default export.
+   */
+  readonly entrypoint?: string;
+  /** Optional target environment on the bound service. */
+  readonly environment?: string;
+}
+
+/**
+ * Type guard for {@link ServiceBindingSpec} — matches any object carrying the
+ * `$binding: "service"` discriminant and a `service` script name.
+ */
+export const isServiceBindingSpec = (
+  value: unknown,
+): value is ServiceBindingSpec =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as ServiceBindingSpec).$binding === "service" &&
+  typeof (value as ServiceBindingSpec).service === "string";
+
 export type WorkerBindingResource =
   // Config values
   | Json
   | Redacted.Redacted<Json>
   | Config.Config<Json>
+  // Raw service-binding descriptor (entrypoint-capable)
+  | ServiceBindingSpec
   // CF resources
   | Assets
   | Bucket

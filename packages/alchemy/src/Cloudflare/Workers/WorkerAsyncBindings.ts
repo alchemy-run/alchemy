@@ -34,7 +34,11 @@ import { isRateLimit } from "./RateLimit.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
-import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+import {
+  isServiceBindingSpec,
+  type WorkerBinding,
+  type WorkerBindingResource,
+} from "./WorkerBinding.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 
 export const bindWorkerAsyncBindings = Effect.fn(function* (
@@ -266,6 +270,17 @@ const toBinding = (
       type: "service",
       name: bindingName,
       service: binding.workerName,
+    };
+  } else if (isServiceBindingSpec(binding)) {
+    // Raw service-binding spec: bind a Worker by script name (possibly one
+    // managed outside this stack) and, when given, target a named
+    // `WorkerEntrypoint` class / environment on it.
+    return {
+      type: "service",
+      name: bindingName,
+      service: binding.service,
+      entrypoint: binding.entrypoint,
+      environment: binding.environment,
     };
   } else if (isIndex(binding)) {
     return {
