@@ -1,4 +1,5 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as SQL from "alchemy/SQL";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -23,7 +24,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
-    const sql = yield* Cloudflare.D1.SqlClient(d1);
+    const sql = yield* SQL.D1(d1);
 
     return {
       fetch: Effect.gen(function* () {

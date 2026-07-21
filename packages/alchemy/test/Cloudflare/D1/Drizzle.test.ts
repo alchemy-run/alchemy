@@ -57,7 +57,7 @@ const untilOk = <E, R>(
  *   `drizzle_migrations` table;
  * - `Drizzle.D1(d1, { relations })` drives insert/select/relational queries
  *   through the drizzle-orm `effect-d1` driver;
- * - `SqlClient(d1)` drives raw tagged-template SQL through `@effect/sql-d1`.
+ * - `SQL.D1(d1)` drives raw tagged-template SQL through `@effect/sql-d1`.
  */
 const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
@@ -65,7 +65,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
 });
 
 test(
-  "Drizzle.D1 + SqlClient exercise the deployed database",
+  "Drizzle.D1 + SQL.D1 exercise the deployed database",
   Effect.gen(function* () {
     const { url } = yield* stack;
 

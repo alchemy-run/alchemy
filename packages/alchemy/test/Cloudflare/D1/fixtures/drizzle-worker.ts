@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Drizzle from "@/Drizzle/index.ts";
+import * as SQL from "@/SQL/index.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -11,7 +12,7 @@ import { Posts, relations, Users } from "./drizzle-schema.ts";
  *
  * - `Drizzle.D1(d1, { relations })` — the drizzle-orm `effect-d1` driver
  *   (typed query builder + relational queries);
- * - `Cloudflare.D1.SqlClient(d1)` — the raw `@effect/sql-d1` client
+ * - `SQL.D1(d1)` — the raw `@effect/sql-d1` client
  *   (tagged-template SQL).
  */
 export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>()(
@@ -23,7 +24,7 @@ export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>(
     const database = yield* DrizzleDb;
     const d1 = yield* Cloudflare.D1.QueryDatabase(database);
     const db = yield* Drizzle.D1(d1, { relations });
-    const sql = yield* Cloudflare.D1.SqlClient(d1);
+    const sql = yield* SQL.D1(d1);
 
     return {
       fetch: Effect.gen(function* () {

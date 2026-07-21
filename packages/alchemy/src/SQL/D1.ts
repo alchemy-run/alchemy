@@ -4,8 +4,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Sql from "effect/unstable/sql/SqlClient";
-import { makeExecutionMemo } from "../../Runtime/ExecutionMemo.ts";
-import { proxyChain } from "../../Util/proxy-chain.ts";
+import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
+import { proxyChain } from "../Util/proxy-chain.ts";
 
 /**
  * A source of the raw Cloudflare `D1Database` binding. Structurally matches
@@ -20,7 +20,7 @@ export type D1DatabaseSource<E, R> =
  * Options forwarded to `@effect/sql-d1`'s `D1Client` (everything except the
  * `db` binding itself, which alchemy resolves from the Worker environment).
  */
-export type SqlClientConfig = Omit<D1Client.D1ClientConfig, "db">;
+export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
 
 /**
  * Open an `@effect/sql-d1` client over a Cloudflare D1 binding.
@@ -31,8 +31,10 @@ export type SqlClientConfig = Omit<D1Client.D1ClientConfig, "db">;
  * resolved once at Worker init and used from any handler:
  *
  * ```typescript
+ * import * as SQL from "alchemy/SQL";
+ *
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
- * const sql = yield* Cloudflare.D1.SqlClient(d1);
+ * const sql = yield* SQL.D1(d1);
  *
  * fetch: Effect.gen(function* () {
  *   const users = yield* sql`SELECT * FROM users`;
@@ -48,9 +50,9 @@ export type SqlClientConfig = Omit<D1Client.D1ClientConfig, "db">;
  *
  * @binding
  */
-export const SqlClient = <E = never, R = never>(
+export const D1 = <E = never, R = never>(
   database: D1DatabaseSource<E, R>,
-  config?: SqlClientConfig,
+  config?: D1Config,
 ) =>
   Effect.map(
     makeExecutionMemo(
@@ -71,17 +73,15 @@ export const SqlClient = <E = never, R = never>(
  *
  * ```typescript
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
- * const app = yield* makeApp.pipe(
- *   Effect.provide(Cloudflare.D1.SqlClientLayer(d1)),
- * );
+ * const app = yield* makeApp.pipe(Effect.provide(SQL.D1Layer(d1)));
  * ```
  *
  * The layer itself builds synchronously at Worker init; the underlying
- * `D1Client` is created lazily per execution (see {@link SqlClient}).
+ * `D1Client` is created lazily per execution (see {@link D1}).
  */
-export const SqlClientLayer = <E = never, R = never>(
+export const D1Layer = <E = never, R = never>(
   database: D1DatabaseSource<E, R>,
-  config?: SqlClientConfig,
+  config?: D1Config,
 ) =>
   // Derive SqlClient from the single D1Client build so both tags share one
   // per-execution client (and one prepared-statement cache).
@@ -91,7 +91,5 @@ export const SqlClientLayer = <E = never, R = never>(
       return yield* D1Client.D1Client;
     }),
   ).pipe(
-    Layer.provideMerge(
-      Layer.effect(D1Client.D1Client, SqlClient(database, config)),
-    ),
+    Layer.provideMerge(Layer.effect(D1Client.D1Client, D1(database, config))),
   );

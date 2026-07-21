@@ -26,7 +26,7 @@ import {
   hashMigrations,
   listSqlFiles,
   readSqlFile,
-} from "../Sql/SqlFile.ts";
+} from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";

@@ -118,15 +118,17 @@ escape hatch.
 ## SQL with `@effect/sql-d1`
 
 Prefer tagged-template SQL over hand-written prepared statements?
-`Cloudflare.D1.SqlClient` wraps the same binding in an
-`@effect/sql-d1` `D1Client` — interpolated values are
-parameterized, every query is an Effect, and failures surface as
-typed `SqlError`s:
+`SQL.D1` (from `alchemy/SQL`, the home of all low-level effect-sql
+clients) wraps the same binding in an `@effect/sql-d1` `D1Client` —
+interpolated values are parameterized, every query is an Effect, and
+failures surface as typed `SqlError`s:
 
 ```typescript
+import * as SQL from "alchemy/SQL";
+
 Effect.gen(function* () {
   const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
-  const sql = yield* Cloudflare.D1.SqlClient(d1);
+  const sql = yield* SQL.D1(d1);
 
   return {
     fetch: Effect.gen(function* () {
@@ -154,7 +156,7 @@ const makeApp = Effect.gen(function* () {
 });
 
 const app = yield* makeApp.pipe(
-  Effect.provide(Cloudflare.D1.SqlClientLayer(d1)),
+  Effect.provide(SQL.D1Layer(d1)),
 );
 ```
 

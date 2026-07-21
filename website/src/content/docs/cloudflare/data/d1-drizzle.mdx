@@ -211,10 +211,10 @@ applies the new file; an unchanged schema is a no-op.
 ## Prefer tagged-template SQL?
 
 Drizzle is one consumer of the binding, not a requirement. The same
-`QueryDatabase` client also powers `Cloudflare.D1.SqlClient` — the
-raw `@effect/sql-d1` client with tagged-template SQL and Effect's
-generic `SqlClient` interface, no ORM involved. That path is
-covered in
+`QueryDatabase` client also powers `SQL.D1` (from `alchemy/SQL`) —
+the raw `@effect/sql-d1` client with tagged-template SQL and
+Effect's generic `SqlClient` interface, no ORM involved. That path
+is covered in
 [SQL with @effect/sql-d1](/cloudflare/data/d1#sql-with-effectsql-d1)
 with a complete runnable project in
 [`cloudflare-effect-sql-d1`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-effect-sql-d1).
@@ -229,7 +229,7 @@ statements in one round-trip) where you need atomicity.
 ## Local dev
 
 `alchemy dev` runs the same Worker against a local D1 database via
-miniflare — `Drizzle.D1` and `SqlClient` work unchanged because they
+miniflare — `Drizzle.D1` and `SQL.D1` work unchanged because they
 resolve whatever `D1Database` binding the runtime provides.
 
 ## Where next

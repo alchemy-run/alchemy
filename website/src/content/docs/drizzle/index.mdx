@@ -117,6 +117,12 @@ wiring itself follow [Drizzle on Workers](/cloudflare/data/drizzle)
 [Drizzle on D1](/cloudflare/data/d1-drizzle) (native binding,
 `@effect/sql-d1`, and the raw tagged-template client).
 
+Each Drizzle client has a raw effect-sql sibling in `alchemy/SQL` —
+the one home for the low-level clients when you want tagged-template
+SQL without an ORM: `SQL.Postgres({ url })` and `SQL.D1(d1)` return
+the underlying `PgClient` / `D1Client`, memoized per execution with
+the same lifecycle as their Drizzle counterparts.
+
 ## Compose with your cloud
 
 [Drizzle on Workers](/cloudflare/data/drizzle) is the canonical
@@ -138,4 +144,6 @@ built on the same schema resource, see
 
 [Schema](/providers/drizzle/schema) ·
 [Postgres](/providers/drizzle/postgres) ·
-[D1](/providers/drizzle/d1)
+[D1](/providers/drizzle/d1) ·
+[SQL.Postgres](/providers/sql/postgres) ·
+[SQL.D1](/providers/sql/d1)
