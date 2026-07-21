@@ -821,12 +821,12 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
         .pipe(
           // `familyPrefix` is a prefix match — filter to the exact family so
           // a family that happens to prefix another resource's is untouched.
+          // A nonexistent family is an empty list, not an error, so nothing
+          // is caught here: a real list failure must propagate — swallowing
+          // it would silently skip the sweep and leak the revisions.
           Stream.filter((arn) => taskFamilyOfArn(arn) === output.taskFamily),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("ClientException", () =>
-            Effect.succeed([] as string[]),
-          ),
         )
     : [];
   const revisionArns = [...new Set([output.taskDefinitionArn, ...familyArns])];
