@@ -91,10 +91,10 @@ Your handler stays the same — just update the type import:
 +import type { WorkerEnv } from "../alchemy.run.ts";
 
 export default {
-- async fetch(request: Request, env: Env) {
-+ async fetch(request: Request, env: WorkerEnv) {
--   const object = await env.BUCKET.get("key");
-+   const object = await env.Bucket.get("key");
+-  async fetch(request: Request, env: Env) {
++  async fetch(request: Request, env: WorkerEnv) {
+-    const object = await env.BUCKET.get("key");
++    const object = await env.Bucket.get("key");
     return new Response(object?.body ?? null);
   },
 };
@@ -260,7 +260,7 @@ export default Alchemy.Stack(
   "MyApp",
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
-+   const bucket = yield* Bucket;
++    const bucket = yield* Bucket;
     const worker = yield* Worker;
     return { url: worker.url };
   }),

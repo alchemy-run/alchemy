@@ -50,9 +50,9 @@ export default Cloudflare.Worker(
   "Worker",
   {
     main: import.meta.url,
-+   dev: {
-+     port: 3000,
-+   },
++    dev: {
++      port: 3000,
++    },
   },
   // ...
 );
@@ -70,7 +70,7 @@ process — same wiring as `bun alchemy dev`, no extra terminal.
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-+ dev: true,
++  dev: true,
 });
 ```
 
@@ -89,7 +89,7 @@ laptop.
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-- dev: true,
+-  dev: true,
 });
 ```
 

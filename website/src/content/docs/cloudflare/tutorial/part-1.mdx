@@ -110,7 +110,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Layer.empty,
-+   state: Cloudflare.state(),
++    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     // we'll add resources here next
@@ -160,7 +160,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-+   const bucket = yield* Cloudflare.R2.Bucket("Bucket");
++    const bucket = yield* Cloudflare.R2.Bucket("Bucket");
   }),
 );
 ```
@@ -183,7 +183,7 @@ import * as Effect from "effect/Effect";
 export default Alchemy.Stack(
   "MyApp",
   {
-+   providers: Cloudflare.providers(),
++    providers: Cloudflare.providers(),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
@@ -216,8 +216,8 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 
-+   return {
-+     bucketName: bucket.bucketName,
++    return {
++      bucketName: bucket.bucketName,
     };
   }),
 );

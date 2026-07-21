@@ -133,7 +133,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-+   const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
++    const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
     return {};
   }),
@@ -379,8 +379,8 @@ The handler returns a `Stream<number>` directly:
     const handlersLayer = TaskRpcs.toLayer({
       getTask: /* ... */,
       createTask: /* ... */,
-+     countTasks: ({ upto }) =>
-+       Stream.fromIterable(Array.from({ length: upto }, (_, i) => i + 1)),
++      countTasks: ({ upto }) =>
++        Stream.fromIterable(Array.from({ length: upto }, (_, i) => i + 1)),
     });
 ```
 
