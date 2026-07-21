@@ -2,62 +2,49 @@ import { proxyChain } from "@/Util/proxy-chain.ts";
 import * as Effect from "effect/Effect";
 
 /**
- * Compile-time regression tests for `proxyChain`'s channel preservation:
- * the cached effect's error and requirement channels must survive onto
- * every Effect yielded through the chain (they used to be erased), while
- * a channel-free cached effect keeps the exact original type.
+ * Compile-time regression tests for `proxyChain`'s soundness contract:
+ * the handle is exactly `T` — generic method signatures survive
+ * untouched — which is only sound because the cached effect must be
+ * channel-free. An error or requirement channel is rejected at the call
+ * site instead of silently erased (as it used to be).
  */
 
 class ConnectError {
   readonly _tag = "ConnectError";
 }
-class QueryError {
-  readonly _tag = "QueryError";
-}
 interface Session {
-  readonly _: unique symbol;
-}
-interface Reactivity {
   readonly _: unique symbol;
 }
 
 interface Db {
-  select(): {
-    from(table: string): Effect.Effect<string[], QueryError, Reactivity>;
+  // generic method — must survive the handle untouched
+  select<A>(fields: A): {
+    from(table: string): Effect.Effect<A[], never, never>;
   };
 }
 
-declare const withChannels: Effect.Effect<Db, ConnectError, Session>;
-export const handle = proxyChain(withChannels);
-export const query = handle.select().from("users");
+declare const channelFree: Effect.Effect<Db>;
+export const handle = proxyChain(channelFree);
 
-type ErrorOf<T> =
-  T extends Effect.Effect<unknown, infer X, unknown> ? X : never;
-type RequirementsOf<T> =
-  T extends Effect.Effect<unknown, unknown, infer X> ? X : never;
 type Assert<T extends true> = T;
 
-type _CachedErrorSurvives = Assert<
-  ConnectError extends ErrorOf<typeof query> ? true : false
->;
-type _LeafErrorKept = Assert<
-  QueryError extends ErrorOf<typeof query> ? true : false
->;
-type _CachedRequirementSurvives = Assert<
-  Session extends RequirementsOf<typeof query> ? true : false
->;
-type _LeafRequirementKept = Assert<
-  Reactivity extends RequirementsOf<typeof query> ? true : false
+type _HandleIsExactlyT = Assert<
+  typeof handle extends Db ? (Db extends typeof handle ? true : false) : false
 >;
 
-// A channel-free cached effect is the identity: the handle is exactly `T`,
-// preserving generic method signatures (the drizzle fast path).
-declare const channelFree: Effect.Effect<Db>;
-export const plainHandle = proxyChain(channelFree);
-type _IdentityWhenChannelFree = Assert<
-  typeof plainHandle extends Db
-    ? Db extends typeof plainHandle
-      ? true
-      : false
+// generic inference flows through the untouched signature
+export const rows = handle.select({ id: 1 }).from("users");
+type _GenericInferencePreserved = Assert<
+  typeof rows extends Effect.Effect<{ id: number }[], never, never>
+    ? true
     : false
 >;
+
+declare const failing: Effect.Effect<Db, ConnectError>;
+declare const requiring: Effect.Effect<Db, never, Session>;
+
+// @ts-expect-error — an error channel would be erased from the handle
+export const rejectsErrorChannel = proxyChain(failing);
+
+// @ts-expect-error — a requirement channel would be erased from the handle
+export const rejectsRequirementChannel = proxyChain(requiring);

@@ -162,25 +162,31 @@ describe("proxyChain", () => {
 
   it.effect("propagates failures from the underlying (cached) effect", () =>
     Effect.gen(function* () {
-      const db = proxyChain<Db, string>(Effect.fail("connect failed"));
+      // `proxyChain` requires a channel-free effect; the cast simulates a
+      // cached effect whose failure a caller deliberately erased (e.g. a
+      // failed pool build) to pin the runtime propagation behavior.
+      const db = proxyChain(
+        Effect.fail("connect failed") as unknown as Effect.Effect<Db>,
+      );
       const error = yield* Effect.flip(db.select().from("users"));
       expect(error).toBe("connect failed");
     }),
   );
 
-  it.effect("threads the cached effect's requirements through the chain", () =>
+  it.effect("ambient context at the yield site reaches the cached effect", () =>
     Effect.gen(function* () {
       class Prefix extends Context.Service<
         Prefix,
         { readonly value: string }
       >()("test/proxy-chain/Prefix") {}
-      // Effect<Db, never, Prefix> — the requirement must survive onto the
-      // yielded chain instead of being erased.
+      // Pins the pattern Drizzle.postgres relies on for `Scope`: a
+      // requirement deliberately erased from the cached effect's type is
+      // satisfied by the context ambient where the chain is yielded.
       const db = proxyChain(
         Effect.gen(function* () {
           const prefix = yield* Prefix;
           return makeDb(prefix.value);
-        }),
+        }) as unknown as Effect.Effect<Db>,
       );
       const rows = yield* db
         .select()
