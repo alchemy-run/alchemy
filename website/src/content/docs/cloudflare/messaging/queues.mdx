@@ -97,10 +97,10 @@ expected to return `Effect.Effect<void>`.
 +  sentAt: number;
 +}
 
-  Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
-    const queueResource = yield* Queue;
-    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
+ Effect.gen(function* () {
+   const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+   const queueResource = yield* Queue;
+   const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
 +    yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
 +      queueResource,

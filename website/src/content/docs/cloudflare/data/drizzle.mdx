@@ -219,16 +219,16 @@ export them from `src/schema.ts`:
 ```diff lang="typescript"
 // src/schema.ts
 +import { defineRelations } from "drizzle-orm";
- import {
-   integer,
-   pgTable,
-   serial,
-   text,
-   timestamp,
- } from "drizzle-orm/pg-core";
+import {
+  integer,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
- export const Users = pgTable("users", { /* ... */ });
- export const Posts = pgTable("posts", { /* ... */ });
+export const Users = pgTable("users", { /* ... */ });
+export const Posts = pgTable("posts", { /* ... */ });
 
 +export const relations = defineRelations({ Users, Posts }, (t) => ({
 +  Users: {
@@ -255,19 +255,19 @@ keyed by your table names:
 
 ```diff lang="typescript"
 // src/Api.ts
- import { Hyperdrive } from "./Db.ts";
+import { Hyperdrive } from "./Db.ts";
 -import { Users } from "./schema.ts";
 +import { relations, Users } from "./schema.ts";
 
- Effect.gen(function* () {
-   const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+Effect.gen(function* () {
+  const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
 -  const db = yield* Drizzle.postgres(hd.connectionString);
 +  const db = yield* Drizzle.postgres(hd.connectionString, {
 +    relations,
 +  });
 
-   return {
-     fetch: Effect.gen(function* () {
+  return {
+    fetch: Effect.gen(function* () {
 -      const users = yield* db.select().from(Users);
 -      return yield* HttpServerResponse.json(users);
 +      const user = yield* db.query.Users.findFirst({
@@ -275,9 +275,9 @@ keyed by your table names:
 +        with: { posts: true },
 +      });
 +      return yield* HttpServerResponse.json({ user });
-     }),
-   };
- })
+    }),
+  };
+})
 ```
 
 `db.query.Users.findFirst` is fully typed: `where` accepts a typed

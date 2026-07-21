@@ -49,21 +49,21 @@ visible. We'll tune more knobs at the end of the tutorial.
 ```diff lang="typescript"
 // alchemy.run.ts
 +import { Gateway } from "./src/AiGateway.ts";
- import Api from "./src/Api.ts";
+import Api from "./src/Api.ts";
 
- export default Alchemy.Stack(
-   "CloudflareWorkerExample",
-   { providers: Cloudflare.providers(), state: Cloudflare.state() },
-   Effect.gen(function* () {
-     const api = yield* Api;
+export default Alchemy.Stack(
+  "CloudflareWorkerExample",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
 +    const gateway = yield* Gateway;
 
-     return {
-       url: api.url.as<string>(),
+    return {
+      url: api.url.as<string>(),
 +      gatewayId: gateway.gatewayId,
-     };
-   }),
- );
+    };
+  }),
+);
 ```
 
 `yield* Gateway` registers the resource so it gets created/updated on
@@ -79,24 +79,24 @@ the gateway endpoint, `getLog`/`patchLog` for the request log, and
 
 ```diff lang="typescript"
 // src/Api.ts
- import * as Cloudflare from "alchemy/Cloudflare";
- import * as Effect from "effect/Effect";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 +import { Gateway } from "./AiGateway.ts";
 
- export default class Api extends Cloudflare.Worker<Api>()(
-   "Api",
-   { main: import.meta.url },
-   Effect.gen(function* () {
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
 +    const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
-     return {
-       fetch: Effect.gen(function* () {
-         // …existing routes
-       }),
-     };
+    return {
+      fetch: Effect.gen(function* () {
+        // …existing routes
+      }),
+    };
 -  }),
 +  }).pipe(Effect.provide(Cloudflare.AI.QueryGatewayBinding)),
- ) {}
+) {}
 ```
 
 `Cloudflare.AI.QueryGatewayBinding` is the runtime side of the

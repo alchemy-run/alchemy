@@ -376,12 +376,12 @@ The handler returns a `Stream<number>` directly:
 ```diff lang="typescript"
 +import * as Stream from "effect/Stream";
 
-    const handlersLayer = TaskRpcs.toLayer({
-      getTask: /* ... */,
-      createTask: /* ... */,
+   const handlersLayer = TaskRpcs.toLayer({
+     getTask: /* ... */,
+     createTask: /* ... */,
 +      countTasks: ({ upto }) =>
 +        Stream.fromIterable(Array.from({ length: upto }, (_, i) => i + 1)),
-    });
+   });
 ```
 
 On the client, `client.countTasks({ upto: 5 })` is a `Stream<number>`
