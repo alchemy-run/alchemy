@@ -51,7 +51,7 @@ function providersSidebarEntry() {
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
-      { label: "Drizzle", link: "/drizzle" },
+      { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
     ],
   };
@@ -61,20 +61,21 @@ function providersSidebarEntry() {
  * A cloud hub's "Resources" section: that provider's slice of the generated
  * reference tree below Guides, expanded one level (categories/services show,
  * everything inside them stays collapsed) so each hub is self-sufficient.
+ * A hub that fronts several provider namespaces (e.g. SQL + Drizzle) passes
+ * them all and gets one merged Resources group.
  *
- * @param {string} provider Provider label / directory name (e.g. "Cloudflare")
+ * @param {...string} providers Provider labels / directory names (e.g. "Cloudflare")
  */
-function providerResourcesEntry(provider) {
-  const group = providersSidebar()?.find((p) => p.label === provider);
-  if (group)
-    return { label: "Resources", collapsed: false, items: group.items };
-  return {
-    label: "Resources",
-    collapsed: false,
-    items: [
+function providerResourcesEntry(...providers) {
+  const sidebar = providersSidebar();
+  const items = providers.flatMap((provider) => {
+    const group = sidebar?.find((p) => p.label === provider);
+    if (group) return group.items;
+    return [
       { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
-    ],
-  };
+    ];
+  });
+  return { label: "Resources", collapsed: false, items };
 }
 
 /**
@@ -342,6 +343,10 @@ function buildOutputChecks() {
 
 export default defineConfig({
   site: "https://alchemy.run",
+  redirects: {
+    "/drizzle": "/sql",
+    "/drizzle/migrations": "/sql/drizzle/migrations",
+  },
   prefetch: true,
   trailingSlash: "ignore",
   integrations: [
@@ -995,14 +1000,40 @@ export default defineConfig({
           ],
         },
         {
-          label: "Drizzle",
+          label: "SQL",
           items: [
-            { label: "Overview", link: "/drizzle" },
+            { label: "Overview", link: "/sql" },
             {
-              label: "Migrations as resources",
-              link: "/drizzle/migrations",
+              label: "Effect SQL",
+              items: [
+                { label: "Clients", link: "/sql/effect-sql/clients" },
+                {
+                  label: "Services & Layers",
+                  link: "/sql/effect-sql/layers",
+                },
+                {
+                  label: "Connection lifecycle",
+                  link: "/sql/effect-sql/lifecycle",
+                },
+              ],
             },
-            providerResourcesEntry("Drizzle"),
+            {
+              label: "Drizzle",
+              items: [
+                { label: "Queries", link: "/sql/drizzle/queries" },
+                { label: "Migrations", link: "/sql/drizzle/migrations" },
+              ],
+            },
+            {
+              label: "Migrations",
+              items: [
+                {
+                  label: "The migrationsDir contract",
+                  link: "/sql/migrations",
+                },
+              ],
+            },
+            providerResourcesEntry("SQL", "Drizzle"),
           ],
         },
         {

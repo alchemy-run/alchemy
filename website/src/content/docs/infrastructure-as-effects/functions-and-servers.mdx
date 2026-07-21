@@ -319,7 +319,8 @@ Effect.gen(function* () {
 Resources shared across calls within one event are memoized on the
 request scope: `Drizzle.Postgres` opens its pool on the first query of
 an event, every query in that event reuses it, and the pool closes when
-the event settles.
+the event settles — the [SQL connection lifecycle](/sql/effect-sql/lifecycle)
+is the canonical statement of this contract for database clients.
 
 ### Request finalizers
 

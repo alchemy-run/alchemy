@@ -79,12 +79,12 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "images · containers · networks",
   },
   {
-    label: "Drizzle",
-    href: "/drizzle",
-    prefixes: ["/drizzle", "/providers/drizzle"],
+    label: "SQL",
+    href: "/sql",
+    prefixes: ["/sql", "/drizzle", "/providers/drizzle", "/providers/sql"],
     slot: "more",
     category: "Data",
-    hint: "schema · migrations · orm",
+    hint: "effect-sql · drizzle · migrations",
   },
   {
     label: "Command",

@@ -138,7 +138,7 @@ export const Database = Effect.gen(function* () {
 `migrationsTable` names the wrangler-compatible tracking table so
 already-applied migrations are skipped on subsequent deploys —
 [D1 migrations](/cloudflare/data/d1#migrations) covers the
-mechanics, and [Migrations as resources](/drizzle/migrations) the
+mechanics, and [Drizzle migrations](/sql/drizzle/migrations) the
 deploy-graph pattern.
 
 ## Query from the Worker with `Drizzle.D1`
@@ -238,9 +238,9 @@ resolve whatever `D1Database` binding the runtime provides.
   — the complete runnable project from this guide.
 - [D1](/cloudflare/data/d1) — the database resource: replication,
   jurisdictions, imports, cloning.
-- [Migrations as resources](/drizzle/migrations) — how
+- [Drizzle migrations](/sql/drizzle/migrations) — how
   `Drizzle.Schema` fits into the deploy graph.
-- [Drizzle overview](/drizzle) — the provider hub.
+- [SQL hub](/sql) — the provider hub.
 - [Add Drizzle ORM](/cloudflare/data/drizzle) — the same flow on
   Postgres via Hyperdrive (Neon / PlanetScale).
 

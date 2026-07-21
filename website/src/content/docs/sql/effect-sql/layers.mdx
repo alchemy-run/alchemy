@@ -1,0 +1,117 @@
+---
+title: Services & Layers
+description: Provide a SQL client through Effect context — write services against SqlClient.SqlClient and choose the database with one Effect.provide.
+---
+
+`SQL.Postgres` and `SQL.D1` hand you a client as a value. That is
+the right shape inside one Worker file, and it stops scaling the
+moment two services need the same database: every function signature
+grows a `sql` parameter, and swapping the database means editing all
+of them.
+
+Effect's idiom for shared dependencies is the context. Write your
+logic against the generic `SqlClient` tag, and let one
+`Effect.provide` at the edge decide which database is behind it.
+
+## Depend on the tag
+
+A service that needs SQL asks the context for `SqlClient.SqlClient`.
+It imports no driver and mentions no database:
+
+```typescript
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+
+export class Users extends Context.Service<Users, {
+  find: (id: number) => Effect.Effect<User | undefined, SqlError>;
+}>()("Users") {}
+
+export const UsersLive = Layer.effect(
+  Users,
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    return {
+      find: (id) =>
+        sql<User>`SELECT * FROM users WHERE id = ${id}`.pipe(
+          Effect.map((rows) => rows[0]),
+        ),
+    };
+  }),
+);
+```
+
+## Provide the database with a Layer
+
+`SQL.D1Layer` and `SQL.PostgresLayer` satisfy that requirement. The
+service graph stays identical; only the provided layer names a
+database:
+
+```typescript
+// D1 today…
+const users = yield* Users.pipe(
+  Effect.provide(UsersLive),
+  Effect.provide(SQL.D1Layer(d1)),
+);
+
+// …Postgres tomorrow, UsersLive unchanged
+const users = yield* Users.pipe(
+  Effect.provide(UsersLive),
+  Effect.provide(SQL.PostgresLayer({ url: hd.connectionString })),
+);
+```
+
+Compose the layers with `Layer.provide` and provide the stack once —
+see [Layers](/infrastructure-as-effects/layers) for the composition
+rules alchemy programs follow.
+
+## Two tags, one client
+
+Each layer provides two services from a single per-execution client
+build: the generic `SqlClient.SqlClient`, and the driver tag —
+`D1Client` from `@effect/sql-d1` or `PgClient` from `@effect/sql-pg`.
+Portable code depends on the generic tag. Code that needs
+driver-specific capabilities (Postgres `LISTEN/NOTIFY`, D1 config)
+asks for the driver tag and gets the same underlying client, same
+prepared-statement cache, same lifecycle.
+
+The driver tags are also exactly what drizzle's effect drivers
+require, so the layers double as a bring-your-own-layers drizzle
+setup:
+
+```typescript
+import * as SQLiteD1Drizzle from "drizzle-orm/effect-d1";
+
+const db = yield* SQLiteD1Drizzle.makeWithDefaults({ relations }).pipe(
+  Effect.provide(SQL.D1Layer(d1)),
+);
+```
+
+[`Drizzle.D1`](/sql/drizzle/queries) is this exact composition,
+packaged.
+
+## Swap by stage
+
+Because the choice is one layer, it can follow the stage — a
+per-developer D1 database in dev, the shared Postgres in prod:
+
+```typescript
+const { stage } = yield* Alchemy.Stack;
+
+const SqlLive = stage === "prod"
+  ? SQL.PostgresLayer({ url: hd.connectionString })
+  : SQL.D1Layer(d1);
+```
+
+The same move powers tests: provide a client for a local database
+(pglite, or D1 under [local dev](/environments/local-development)'s
+miniflare) and the service graph never knows.
+
+## Where next
+
+- [Clients](/sql/effect-sql/clients) — the direct, non-Layer form.
+- [Connection lifecycle](/sql/effect-sql/lifecycle) — the layers
+  build at init; clients still connect per execution.
+- [Layers](/infrastructure-as-effects/layers) — how alchemy programs
+  compose Effect layers generally.
