@@ -213,18 +213,19 @@ export interface Cluster extends Resource<
  * @example High level: an effectful Job pinned to HyperPod nodes
  * ```typescript
  * // AWS.EKS.Job / AWS.EKS.Deployment run on HyperPod via the orchestrating
- * // EKS cluster; hyperpodScheduling produces the namespace, Kueue labels,
- * // and node selector.
+ * // EKS cluster; the `hyperpod` prop derives the node selector, namespace,
+ * // and Kueue labels — pass the ComputeQuota resource to submit through
+ * // task governance.
  * const evaluate = yield* AWS.EKS.Job(
  *   "Evaluate",
  *   {
  *     cluster: eksCluster,
  *     main: import.meta.url,
- *     ...AWS.SageMaker.hyperpodScheduling({
+ *     hyperpod: {
  *       instanceGroup: "workers",
- *       team: "research",
+ *       quota,
  *       priorityClass: "training",
- *     }),
+ *     },
  *   },
  *   Effect.gen(function* () {
  *     const putItem = yield* AWS.DynamoDB.PutItem(resultsTable);
@@ -250,7 +251,7 @@ export interface Cluster extends Resource<
  * });
  *
  * // Creates the hyperpod-ns-research namespace + Kueue LocalQueue that
- * // hyperpodScheduling({ team: "research" }) submits into.
+ * // `hyperpod: { quota }` on an EKS Job/Deployment submits into.
  * const quota = yield* AWS.SageMaker.ComputeQuota("ResearchQuota", {
  *   clusterArn: hyperpod.clusterArn,
  *   computeQuotaTarget: { TeamName: "research", FairShareWeight: 10 },

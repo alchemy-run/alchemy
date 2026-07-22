@@ -35,6 +35,12 @@ import {
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  hyperpodNamespace,
+  hyperpodNodeSelector,
+  hyperpodWorkloadLabels,
+  type HyperPodWorkloadProps,
+} from "./HyperPod.ts";
 import { reconcileObjects, deleteObjects } from "./internal/client.ts";
 import type {
   KubernetesObjectDefinition,
@@ -75,9 +81,17 @@ export interface JobPropsBase extends PlatformProps {
   /**
    * Kubernetes namespace to run in. The namespace must already exist (Auto
    * Mode clusters ship a `default` namespace).
-   * @default "default"
+   * @default "default" (or `hyperpod-ns-<team>` when `hyperpod.quota` is set)
    */
   namespace?: string;
+  /**
+   * Run on SageMaker HyperPod nodes attached to this EKS cluster: pin to an
+   * instance group, keep off unhealthy nodes, and optionally submit through
+   * HyperPod task governance by passing the team's
+   * `AWS.SageMaker.ComputeQuota` (which derives the namespace and Kueue
+   * labels).
+   */
+  hyperpod?: HyperPodWorkloadProps;
   /**
    * Number of retries before the Job is marked failed (Kubernetes
    * `backoffLimit`).
@@ -472,9 +486,11 @@ export const JobProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+          const effectiveNamespace = (props: JobProps) =>
+            props.namespace ?? hyperpodNamespace(props.hyperpod) ?? "default";
           if (
-            olds.namespace !== undefined &&
-            (olds.namespace ?? "default") !== (news.namespace ?? "default")
+            olds.cluster?.clusterName !== undefined &&
+            effectiveNamespace(olds) !== effectiveNamespace(news)
           ) {
             return { action: "replace" } as const;
           }
@@ -515,7 +531,8 @@ export const JobProvider = () =>
         }) {
           const connection = toConnection(news.cluster);
           const clusterName = news.cluster.clusterName;
-          const namespace = news.namespace ?? "default";
+          const namespace =
+            news.namespace ?? hyperpodNamespace(news.hyperpod) ?? "default";
 
           const baseName = yield* toBaseName(id, news);
           const serviceAccountName = output?.serviceAccountName ?? baseName;
@@ -569,7 +586,10 @@ export const JobProvider = () =>
           });
 
           // Synthesize the Kubernetes objects.
-          const labels = news.labels ?? { "app.kubernetes.io/name": baseName };
+          const labels = {
+            ...(news.labels ?? { "app.kubernetes.io/name": baseName }),
+            ...hyperpodWorkloadLabels(news.hyperpod),
+          };
           const containerEnv = {
             ...bindingEnv,
             ...alchemyEnv,
@@ -586,6 +606,7 @@ export const JobProvider = () =>
               metadata: { labels },
               spec: {
                 serviceAccountName,
+                nodeSelector: hyperpodNodeSelector(news.hyperpod),
                 restartPolicy: news.restartPolicy ?? "Never",
                 containers: [
                   {

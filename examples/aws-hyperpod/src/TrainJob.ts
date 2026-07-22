@@ -5,8 +5,10 @@ import { HyperPodEksInfra } from "./eks-infra.ts";
 /**
  * The HIGH-LEVEL tier: an effectful `AWS.EKS.Job` running ON HyperPod
  * nodes. The Effect program is bundled into a generated image
- * (`main: import.meta.url`), and `hyperpodScheduling` pins it to the
- * `workers` instance group on health-checked nodes.
+ * (`main: import.meta.url`), and the `hyperpod` prop pins it to the
+ * `workers` instance group on health-checked nodes and submits it through
+ * task governance under the research team's quota — the namespace, Kueue
+ * labels, and node selector all derive from the props.
  *
  * Swap `run` for a real training/eval harness; bindings (DynamoDB, S3, SQS,
  * ...) resolve in init and land IAM on the pod-identity role, exactly like
@@ -15,15 +17,15 @@ import { HyperPodEksInfra } from "./eks-infra.ts";
 export default AWS.EKS.Job(
   "TrainJob",
   Effect.gen(function* () {
-    const { eks } = yield* HyperPodEksInfra;
-    const scheduling = AWS.SageMaker.hyperpodScheduling({
-      instanceGroup: "workers",
-    });
+    const { eks, researchQuota } = yield* HyperPodEksInfra;
     return {
       cluster: eks,
       main: import.meta.url,
-      labels: scheduling.labels,
-      podTemplate: scheduling.podTemplate,
+      hyperpod: {
+        instanceGroup: "workers",
+        quota: researchQuota,
+        priorityClass: "training",
+      },
       backoffLimit: 2,
     };
   }),

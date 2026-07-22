@@ -9,7 +9,7 @@
  *   to HyperPod nodes with the well-known node labels and submitted
  *   through task governance with the Kueue labels (below),
  * - HIGH LEVEL: `src/TrainJob.ts`, an effectful `AWS.EKS.Job` bundled from
- *   TypeScript and pinned via `AWS.SageMaker.hyperpodScheduling`.
+ *   TypeScript and pinned + governed via the `hyperpod:` prop.
  *
  * Deploy with `bun alchemy deploy ./eks.run.ts`. The EKS control plane
  * takes ~10-15 minutes and the HyperPod cluster another ~10-20.
@@ -70,8 +70,8 @@ export default Alchemy.Stack(
       },
     });
 
-    // ── HIGH LEVEL: the effectful Job (bundled TypeScript, pinned via
-    // hyperpodScheduling). See src/TrainJob.ts.
+    // ── HIGH LEVEL: the effectful Job (bundled TypeScript, pinned +
+    // governed via the `hyperpod:` prop). See src/TrainJob.ts.
     const trainJob = yield* TrainJob;
 
     return {

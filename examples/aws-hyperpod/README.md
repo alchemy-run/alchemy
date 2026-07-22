@@ -11,7 +11,7 @@ it depends on the orchestrator you pick at creation:
 |---|---|---|
 | Provision | [`alchemy.run.ts`](./alchemy.run.ts) | [`eks.run.ts`](./eks.run.ts) |
 | Low-level workloads | `ssm start-session` → `sbatch` | `AWS.EKS.Manifest` (or `kubectl`) |
-| High-level workloads | — (no submission API) | `AWS.EKS.Job` / `AWS.EKS.Deployment` + `AWS.SageMaker.hyperpodScheduling` |
+| High-level workloads | — (no submission API) | `AWS.EKS.Job` / `AWS.EKS.Deployment` with the `hyperpod:` prop |
 | Governance | Slurm accounting | `ClusterSchedulerConfig` + `ComputeQuota` (Kueue) |
 
 ## The Slurm stack (`alchemy.run.ts`)
@@ -66,13 +66,19 @@ sbatch --nodes=1 train.sbatch
   ```
 
 - **High level** ([`src/TrainJob.ts`](./src/TrainJob.ts)) — an effectful
-  `AWS.EKS.Job` bundled from TypeScript, pinned via the typed helper:
+  `AWS.EKS.Job` bundled from TypeScript. The `hyperpod:` prop takes the
+  quota **resource**, so the namespace, Kueue labels, node selector, and
+  the quota → job ordering all derive from the data flow:
 
   ```typescript
-  const scheduling = AWS.SageMaker.hyperpodScheduling({
-    instanceGroup: "workers",
-    team: "research",          // → hyperpod-ns-research + Kueue queue label
-    priorityClass: "training", // → training-priority
+  yield* AWS.EKS.Job("TrainJob", {
+    cluster: eks,
+    main: import.meta.url,
+    hyperpod: {
+      instanceGroup: "workers",   // pin to the instance group
+      quota: researchQuota,       // → hyperpod-ns-research + Kueue queue label
+      priorityClass: "training",  // → training-priority
+    },
   });
   ```
 
