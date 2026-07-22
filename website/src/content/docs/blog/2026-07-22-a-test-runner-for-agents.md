@@ -1,7 +1,6 @@
 ---
 title: A Test Runner for Agents
 date: 2026-07-22T07:00:00Z
-draft: true
 excerpt: Alchemy's test suite is 4,000+ live tests against real clouds, and some take minutes. Vitest forked processes and reloaded our generated SDK on every fork; bun test assumes tests are fast and runs them one file at a time. So we wrote our own runner — one bun process, everything concurrent, plain output tuned for agents and a live TUI for humans.
 ---
 
