@@ -1,28 +1,23 @@
 /**
- * The Engineer — the craft agent that writes the fix. Prose that hires
- * tools: referencing a tool is what places it in the agent's
- * dependency graph, so an agent that never mentions ${Approve} cannot
- * be granted merge authority by any Layer.
+ * The Engineer — the craft agent that writes the fix. Prose that
+ * hires capability: the ${Coding} skill carries the checkout craft
+ * (tools + discipline), ${OpenPullRequest} is the one direct
+ * authority. An agent that never mentions ${Approve} cannot be
+ * granted merge authority by any Layer.
  *
- * Per-environment compositions (AI.layer(Engineer) + the local toolbox
- * vs the same contract over a DevBox container) live in the
+ * Per-environment compositions (AI.layer(Engineer) + the local
+ * toolbox vs the same contract over a DevBox container) live in the
  * ENTRYPOINTS — never here.
  */
 import * as AI from "alchemy/AI";
-import {
-  Bash,
-  EditFile,
-  Grep,
-  OpenPullRequest,
-  ReadFile,
-} from "./tools.ts";
+import { Coding } from "./coding.ts";
+import { OpenPullRequest } from "./tools/index.ts";
 import { issue } from "./vocabulary.ts";
 
 export class Engineer extends AI.Agent<Engineer>()("Engineer")`
 You receive exactly one ${issue} whose acceptance criteria are your
-entire specification. ${Grep} before you ${ReadFile}; ${ReadFile}
-before you ${EditFile}. ${Bash} runs the tests after every edit —
-all green is the only definition of done you may use. When green,
+entire specification. ${Coding} is your craft; all tests green is
+the only definition of done you may use. When green,
 ${OpenPullRequest} citing the issue.
 
 You do not review your own work, and you do not merge.` {}

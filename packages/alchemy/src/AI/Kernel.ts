@@ -1,12 +1,16 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import type { Actor } from "./Actor.ts";
 import type { Agent } from "./Agent.ts";
 import type { KernelError } from "./Errors.ts";
 import type { Accepts } from "./Event.ts";
 import type { Process } from "./Process.ts";
+import type { Services } from "./Services.ts";
+import { isSkill, type Skill, type SkillService } from "./Skill.ts";
+import { isTool } from "./Tool.ts";
 
 /**
  * The two term kinds the Kernel can interpret. Capability terms
@@ -90,9 +94,41 @@ export const interpret = <T extends Interpretable>(
  * tag is its declared Shape — only its hand-written Layer knows how
  * to build that, so there is nothing for a default to do.
  */
-export const layer = <
-  L extends Agent<any, any, any[], any> & Context.Service<any, any>,
->(
-  term: L,
-): Layer.Layer<L["Identifier"], never, Kernel | L["~alchemy/Req"]> =>
-  Layer.effect(term, interpret(term) as any) as any;
+export const layer: {
+  /**
+   * The default SKILL Layer: the skill's tag out, its TOOLS' tags in —
+   * the bundle is nominal (charters require `Coding`, never `Grep`)
+   * and providing this Layer is what surfaces the tool requirements.
+   * A custom `Layer.effect(Coding, …)` may instead build the whole
+   * bundle's physics inline.
+   */
+  <L extends Skill<any, any[], any> & Context.Service<any, any>>(
+    term: L,
+  ): Layer.Layer<L["Identifier"], never, Services<L["refs"]>>;
+  <L extends Agent<any, any, any[], any> & Context.Service<any, any>>(
+    term: L,
+  ): Layer.Layer<L["Identifier"], never, Kernel | L["~alchemy/Req"]>;
+} = ((term: any) =>
+  isSkill(term)
+    ? Layer.effect(
+        term as any,
+        Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
+          const tools: SkillService["tools"] = {};
+          for (const ref of term.refs) {
+            if (!isTool(ref)) continue;
+            const name = (ref as { "~alchemy/Name": string })["~alchemy/Name"];
+            const service = Context.getOption(context, ref as any);
+            if (Option.isNone(service)) {
+              return yield* Effect.die(
+                `AI.layer: no implementation provided for tool '${name}' of skill '${term["~alchemy/Name"]}'`,
+              );
+            }
+            tools[name] = Effect.isEffect(service.value)
+              ? yield* service.value as Effect.Effect<any>
+              : service.value;
+          }
+          return { tools } satisfies SkillService;
+        }) as any,
+      )
+    : Layer.effect(term, interpret(term) as any)) as any;

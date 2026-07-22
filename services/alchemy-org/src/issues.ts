@@ -22,7 +22,12 @@ import * as Match from "effect/Match";
 import { Engineer } from "./engineer.ts";
 import { Ledger } from "./ledger.ts";
 import { testAlchemy } from "./repos.ts";
-import { CloseIssue, Comment, LinkIssues, SearchIssues } from "./tools.ts";
+import {
+  CloseIssue,
+  Comment,
+  LinkIssues,
+  SearchIssues,
+} from "./tools/index.ts";
 
 /** What the org may ask of the Issues owner from code: read, never drive. */
 export interface IssuesService {
@@ -80,11 +85,7 @@ export const IssuesLive = Layer.effect(
     yield* GitHub.consumeRepositoryEvents(
       testAlchemy,
       {
-        events: [
-          GitHub.IssueOpened,
-          GitHub.IssueCommented,
-          GitHub.IssueClosed,
-        ],
+        events: [GitHub.IssueOpened, GitHub.IssueCommented, GitHub.IssueClosed],
       },
       (event) =>
         Match.value(event).pipe(

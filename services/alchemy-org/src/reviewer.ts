@@ -4,7 +4,7 @@
  * reasoning: independent judgment is the value of a second agent.
  */
 import * as AI from "alchemy/AI";
-import { Approve, Comment } from "./tools.ts";
+import { Approve, Comment } from "./tools/index.ts";
 import { issue, pr } from "./vocabulary.ts";
 
 export class Reviewer extends AI.Agent<Reviewer>()("Reviewer")`

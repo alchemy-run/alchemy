@@ -14,7 +14,9 @@
     "dev": "alchemy dev",
     "destroy": "alchemy destroy",
     "local": "bun run src/local.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "test:tools": "bun test test/tools test/coding.test.ts",
+    "typecheck": "bun tsc -b tsconfig.json"
   },
   "dependencies": {
     "@effect/ai-anthropic": "catalog:",

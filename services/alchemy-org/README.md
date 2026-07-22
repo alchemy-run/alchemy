@@ -14,7 +14,23 @@ One file, one purpose:
   (an un-yielded `GitHub.Repository` const; the Stack yields the same
   const to provision it).
 - `src/vocabulary.ts` — the typed Parameters everything interpolates.
-- `src/tools.ts` — the Tool contracts (pure terms; physics elsewhere).
+- `src/tools/` — one file per tool: the contract co-located with its
+  implementation Layer(s) (GitHub-binding physics, local Workspace
+  physics, model-visible TODO stubs), same convention as alchemy's
+  resources.
+- `src/workspace.ts` — the Workspace service: WHICH checkout the
+  local tool physics work in (the entrypoint's choice), with
+  canonical path/symlink containment. Bash is trusted-host execution,
+  not an OS sandbox.
+- `src/coding.ts` — the **Coding** skill: the checkout craft
+  (Grep/Glob/ListDirectory/ReadFile/EditFile/ApplyPatch/WriteFile/
+  Bash/ReadOutput + the discipline for using them),
+  referenced by Engineer and Distilled. Skills grant ACCESS at the
+  type level but stay dormant until activated — or arrive
+  pre-activated when a spawner hands them to a worker.
+  Authority-bearing tools (merge, close, approve) are never bundled
+  into skills: they stay direct splices, so the capability lines
+  stay visible in prose.
 
 The processes (`AI.Process<Self, Shape>`) — prose describing how work
 moves, referencing the agents that do it. A process's tag resolves to
@@ -49,11 +65,15 @@ no charter mentions cannot be granted by any Layer.
 
 ## Physics and seams (code)
 
-- `src/github-tools.ts` — tool physics over the `GitHub.*` API
-  bindings (business rules like merge-needs-approval live here;
-  missing bindings fail model-visibly with TODOs).
-- `src/toolbox.ts` — the Engineer's local workspace physics
-  (FileSystem / shell, sandboxed).
+- `src/tools/*.ts` — each tool's implementation Layer(s) live with
+  its contract: GitHub-binding physics (business rules like
+  merge-needs-approval), local Workspace physics (FileSystem /
+  shell), and model-visible TODO stubs where plumbing is
+  pending.
+- `src/internal/` — shared safe file operations, true-byte output
+  truncation, scoped output artifacts, and process execution.
+- `src/patch/` — strict Codex-style patch parser, matcher, virtual
+  preflight planner, staged commit, and best-effort rollback.
 - `src/ledger.ts` — the dedupe/liveness seam (Memory | Sqlite | D1).
 - `alchemy.run.ts` — the Stack: provisions the repository.
 

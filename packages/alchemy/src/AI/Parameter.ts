@@ -63,3 +63,8 @@ const makeParameter = (
     template,
     refs,
   }) as any;
+
+export const isParameter = (value: unknown): value is Parameter =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  (value as Record<string, unknown>)["~alchemy/Kind"] === "Param";

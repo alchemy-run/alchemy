@@ -18,10 +18,11 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
+import { Coding } from "./coding.ts";
 import { Engineer } from "./engineer.ts";
 import { Ledger } from "./ledger.ts";
 import { testAlchemy } from "./repos.ts";
-import { Bash, Grep, OpenIssue, OpenPullRequest, ReadFile } from "./tools.ts";
+import { OpenIssue, OpenPullRequest } from "./tools/index.ts";
 
 /** The event: value is the term (spliced into the charter), type is the payload. */
 export class Wake extends AI.Event("Wake", {
@@ -42,9 +43,7 @@ export interface DistilledService {
    * `2026-07-17`): re-fires with the same stamp collapse in the
    * Ledger, so an at-least-once scheduler still runs one pass.
    */
-  readonly wake: (
-    stamp: string,
-  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly wake: (stamp: string) => Effect.Effect<void, never, RuntimeContext>;
 }
 
 export class Distilled extends AI.Process<Distilled, DistilledService>()(
@@ -53,16 +52,15 @@ export class Distilled extends AI.Process<Distilled, DistilledService>()(
 This process keeps the ./distilled submodule of ${testAlchemy}
 current against upstream provider specs.
 
-Each ${Wake} begins a pass: ${Bash} fetches the upstream specs and
-diffs them against the checked-in generation. No changes ends the
+Each ${Wake} begins a ${Coding} pass: fetch the upstream specs and
+diff them against the checked-in generation. No changes ends the
 pass — a run that changes nothing is a good run.
 
-When specs did change, ${Bash} regenerates, and the fallout is read
-with ${Grep} and ${ReadFile} over the diff, sorted into (a)
-mechanical churn, (b) new surface — resources, operations, fields
-not covered yet — and (c) breaking changes to covered surface.
-${Bash} then runs the test suite; it is the only oracle of whether
-alchemy still holds.
+When specs did change, regenerate and read the fallout over the
+diff, sorted into (a) mechanical churn, (b) new surface — resources,
+operations, fields not covered yet — and (c) breaking changes to
+covered surface. Then run the test suite; it is the only oracle of
+whether alchemy still holds.
 
 Tests green: ${OpenPullRequest} carries the regeneration,
 summarizing the upstream changes and calling out new surface worth
@@ -95,7 +93,8 @@ export const DistilledLive = Layer.effect(
         Effect.gen(function* () {
           const wake = new Wake({ stamp });
           const { status } = yield* ledger.offer("distilled", stamp, wake);
-          if (status === "accepted") yield* distilled.send(wake, { key: stamp });
+          if (status === "accepted")
+            yield* distilled.send(wake, { key: stamp });
         }),
     };
   }),

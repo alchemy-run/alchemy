@@ -24,7 +24,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Ledger } from "./ledger.ts";
 import { testAlchemy } from "./repos.ts";
-import { OpenIssue, Reply, SearchIssues } from "./tools.ts";
+import { OpenIssue, Reply, SearchIssues } from "./tools/index.ts";
 
 /**
  * What the org may ask of the FrontDesk from code. `mention` is a

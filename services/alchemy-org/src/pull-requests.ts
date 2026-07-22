@@ -20,7 +20,7 @@ import * as Match from "effect/Match";
 import { Ledger } from "./ledger.ts";
 import { testAlchemy } from "./repos.ts";
 import { Reviewer } from "./reviewer.ts";
-import { Comment, MergePullRequest } from "./tools.ts";
+import { Comment, MergePullRequest } from "./tools/index.ts";
 
 /** What the org may ask of the PullRequests owner from code: read, never drive. */
 export interface PullRequestsService {

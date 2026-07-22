@@ -5,14 +5,15 @@ import type { ToolImpl } from "./Tool.ts";
  * The requirement contributed by a single interpolated ref — its
  * **tag**:
  *
- * - a `Tool<Self>`, `Agent<Self>`, or `Process<Self, Shape>` class is a
- *   `Context.Service`; interpolating it contributes the tag itself.
- *   Transitivity lives in Layer composition, not the type computation:
- *   an agent's tools are requirements of the *agent's Layer*
- *   (`AI.layer(Engineer): Layer<Engineer, never, Kernel | Grep | …>`),
- *   eliminated by `Layer.provide` — which is what lets two agents in
- *   one runtime hold different implementations of the same tool
- *   contract.
+ * - a `Tool<Self>`, `Agent<Self>`, `Process<Self, Shape>`, or
+ *   `Skill<Self>` class is a `Context.Service`; interpolating it
+ *   contributes the tag itself — for a skill that means the SKILL's
+ *   tag, never its tools': the bundle is nominal and encapsulated,
+ *   and the tool tags surface only as the skill LAYER's own
+ *   requirements (`AI.layer(Coding): Layer<Coding, never, Grep | …>`).
+ *   Transitivity lives in Layer composition, not the type
+ *   computation — which is what lets two agents in one runtime hold
+ *   different implementations of the same contract.
  * - a raw `ToolImpl` contributes its implementation's own requirements
  *   (the impl is inline; there is no tag to defer to).
  * - everything else (parameters, plain values) contributes nothing.

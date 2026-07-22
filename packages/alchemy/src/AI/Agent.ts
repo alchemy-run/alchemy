@@ -86,9 +86,9 @@ export const Agent: {
         (template: TemplateStringsArray, ...refs: any[]) =>
           makeTerm("Agent", name, template, refs)) as any;
 
-/** Shared constructor for the interpretable terms (Agent, Process). */
+/** Shared constructor for the tag-bearing terms (Agent, Process, Skill). */
 export const makeTerm = (
-  kind: "Agent" | "Process",
+  kind: "Agent" | "Process" | "Skill",
   name: string,
   template: TemplateStringsArray,
   refs: any[],
