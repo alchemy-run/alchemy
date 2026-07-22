@@ -142,6 +142,12 @@ export const HyperPodEksInfra = Effect.gen(function* () {
     chart: chart.chartPath,
     releaseName: "dependencies",
     namespace: "kube-system",
+    values: {
+      // The vendored legacy mpi-operator CRD fails Kubernetes >=1.34
+      // strict server-side-apply validation, and MPI jobs aren't part of
+      // this example.
+      "mpi-operator": { enabled: false },
+    },
   });
 
   // The shared instance-group spec — referenced by the cluster below AND

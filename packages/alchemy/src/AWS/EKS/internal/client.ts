@@ -170,7 +170,20 @@ const requestJson = Effect.fn(function* ({
         : new Error(
             `Failed Kubernetes ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`,
           ),
-  });
+  }).pipe(
+    // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS)
+    // are transient — a fresh EKS endpoint's NLB can refuse connections
+    // for a short window after the cluster reports ACTIVE. Every request
+    // here is idempotent (GET / SSA PATCH / DELETE), so retry them; HTTP
+    // errors (KubernetesApiError) are handled by the callers.
+    Effect.retry({
+      while: (e): boolean => !(e instanceof KubernetesApiError),
+      schedule: Schedule.max([
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(8),
+      ]),
+    }),
+  );
 });
 
 // ─────────────────────────────────────────────────────── kind discovery ──
