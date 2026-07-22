@@ -24,9 +24,11 @@ export const KUEUE_PRIORITY_CLASS_LABEL = "kueue.x-k8s.io/priority-class";
 export interface HyperPodWorkloadProps {
   /**
    * Pin the workload to a HyperPod instance group (matches the
-   * `sagemaker.amazonaws.com/instance-group-name` node label).
+   * `sagemaker.amazonaws.com/instance-group-name` node label). Pass the
+   * same group object given to the cluster's `instanceGroups` — one source
+   * of truth for the name — or a plain name string.
    */
-  instanceGroup?: string;
+  instanceGroup?: string | { InstanceGroupName?: string };
   /**
    * Only schedule onto nodes that passed HyperPod health checks
    * (`sagemaker.amazonaws.com/node-health-status: Schedulable`).
@@ -72,17 +74,22 @@ export const hyperpodWorkloadLabels = (
     : {}),
 });
 
+/** @internal The instance-group name from either reference form. */
+const instanceGroupName = (
+  group: string | { InstanceGroupName?: string } | undefined,
+): string | undefined =>
+  typeof group === "string" ? group : group?.InstanceGroupName;
+
 /** @internal Node selector pinning pods onto HyperPod nodes. */
 export const hyperpodNodeSelector = (
   hyperpod: HyperPodWorkloadProps | undefined,
-): Record<string, string> | undefined =>
-  hyperpod === undefined
-    ? undefined
-    : {
-        ...(hyperpod.healthyNodesOnly !== false
-          ? { [HYPERPOD_NODE_HEALTH_LABEL]: "Schedulable" }
-          : {}),
-        ...(hyperpod.instanceGroup !== undefined
-          ? { [HYPERPOD_INSTANCE_GROUP_LABEL]: hyperpod.instanceGroup }
-          : {}),
-      };
+): Record<string, string> | undefined => {
+  if (hyperpod === undefined) return undefined;
+  const group = instanceGroupName(hyperpod.instanceGroup);
+  return {
+    ...(hyperpod.healthyNodesOnly !== false
+      ? { [HYPERPOD_NODE_HEALTH_LABEL]: "Schedulable" }
+      : {}),
+    ...(group !== undefined ? { [HYPERPOD_INSTANCE_GROUP_LABEL]: group } : {}),
+  };
+};

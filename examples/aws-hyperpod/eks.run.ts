@@ -28,7 +28,7 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const { eks, hyperpod, scheduler, researchQuota } =
+    const { eks, workers, hyperpod, scheduler, researchQuota } =
       yield* HyperPodEksInfra;
 
     // ── LOW LEVEL: any Kubernetes object, applied as data. This one is
@@ -54,7 +54,8 @@ export default Alchemy.Stack(
             spec: {
               nodeSelector: {
                 "sagemaker.amazonaws.com/node-health-status": "Schedulable",
-                "sagemaker.amazonaws.com/instance-group-name": "workers",
+                "sagemaker.amazonaws.com/instance-group-name":
+                  workers.InstanceGroupName,
               },
               containers: [
                 {

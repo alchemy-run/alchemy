@@ -1,6 +1,7 @@
 import * as AWS from "alchemy/AWS";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import { FetchHyperPodChart } from "./hyperpod-chart.ts";
 import { UploadLifecycleScript } from "./lifecycle.ts";
 
 /**
@@ -128,10 +129,47 @@ export const HyperPodEksInfra = Effect.gen(function* () {
     },
   });
 
+  // The HyperPod dependencies Helm chart (health-monitoring agent,
+  // training operators, device plugins, RBAC) is MANDATORY — SageMaker
+  // validates it and fails the cluster with "missing one or more required
+  // dependencies" otherwise. Rendered locally and applied to the EKS
+  // cluster before the HyperPod cluster attaches.
+  const chart = yield* FetchHyperPodChart({
+    repo: "https://github.com/aws/sagemaker-hyperpod-cli.git",
+  });
+  const dependencies = yield* AWS.EKS.HelmChart("HyperPodDependencies", {
+    cluster: eks,
+    chart: chart.chartPath,
+    releaseName: "dependencies",
+    namespace: "kube-system",
+  });
+
+  // The shared instance-group spec — referenced by the cluster below AND
+  // by workloads (`hyperpod: { instanceGroup: workers }`), so the group
+  // name has one source of truth.
+  const workers = {
+    InstanceGroupName: "workers",
+    InstanceType: "ml.t3.medium",
+    InstanceCount: 1,
+    ExecutionRole: role.roleArn,
+    LifeCycleConfig: {
+      SourceS3Uri: script.sourceS3Uri,
+      OnCreate: script.onCreate,
+    },
+  };
+
   // The HyperPod cluster, attached to the EKS control plane. SageMaker
   // creates the EKS access entry for the node role automatically.
+  // `Output.all` holds the attach until the dependencies chart is applied.
   const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
-    orchestrator: { Eks: { ClusterArn: eks.clusterArn } },
+    orchestrator: {
+      Eks: {
+        ClusterArn: Output.map(
+          Output.all(eks.clusterArn, dependencies.releaseName),
+          ([clusterArn]) => clusterArn,
+        ),
+      },
+    },
     vpcConfig: {
       // The EKS-managed cluster security group already allows node ↔
       // control-plane and intra-cluster traffic.
@@ -143,18 +181,7 @@ export const HyperPodEksInfra = Effect.gen(function* () {
       ],
       Subnets: network.privateSubnetIds,
     },
-    instanceGroups: [
-      {
-        InstanceGroupName: "workers",
-        InstanceType: "ml.t3.medium",
-        InstanceCount: 1,
-        ExecutionRole: role.roleArn,
-        LifeCycleConfig: {
-          SourceS3Uri: script.sourceS3Uri,
-          OnCreate: script.onCreate,
-        },
-      },
-    ],
+    instanceGroups: [workers],
     // Node auto-replacement is not supported for CPU instances.
     nodeRecovery: "None",
     tags: { app: "aws-hyperpod-example" },
@@ -201,5 +228,14 @@ export const HyperPodEksInfra = Effect.gen(function* () {
     },
   });
 
-  return { network, eks, role, hyperpod, governance, scheduler, researchQuota };
+  return {
+    network,
+    eks,
+    role,
+    workers,
+    hyperpod,
+    governance,
+    scheduler,
+    researchQuota,
+  };
 });
