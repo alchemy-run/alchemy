@@ -672,43 +672,33 @@ export const ClusterProvider = () =>
       });
 
       const deleteManagedRole = Effect.fn(function* (roleName: string) {
-        yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed({ AttachedPolicies: [] }),
-          ),
-          Effect.flatMap((policies) =>
-            Effect.all(
-              (policies.AttachedPolicies ?? []).map((policy) =>
-                iam
-                  .detachRolePolicy({
-                    RoleName: roleName,
-                    PolicyArn: policy.PolicyArn!,
-                  })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
+        yield* iam.listAttachedRolePolicies.items({ RoleName: roleName }).pipe(
+          Stream.mapEffect((policy) =>
+            iam
+              .detachRolePolicy({
+                RoleName: roleName,
+                PolicyArn: policy.PolicyArn!,
+              })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
               ),
-            ),
           ),
+          Stream.runDrain,
+          Effect.catchTag("NoSuchEntityException", () => Effect.void),
         );
-        yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed({ PolicyNames: [] as string[] }),
-          ),
-          Effect.flatMap((policies) =>
-            Effect.all(
-              (policies.PolicyNames ?? []).map((policyName) =>
-                iam
-                  .deleteRolePolicy({
-                    RoleName: roleName,
-                    PolicyName: policyName,
-                  })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
+        yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
+          Stream.mapEffect((policyName) =>
+            iam
+              .deleteRolePolicy({
+                RoleName: roleName,
+                PolicyName: policyName,
+              })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
               ),
-            ),
           ),
+          Stream.runDrain,
+          Effect.catchTag("NoSuchEntityException", () => Effect.void),
         );
         yield* iam
           .deleteRole({ RoleName: roleName })

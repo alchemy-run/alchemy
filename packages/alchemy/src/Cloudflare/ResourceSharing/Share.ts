@@ -284,12 +284,13 @@ export const ShareProvider = () =>
 
       // Sync recipients — diff observed cloud state against desired and
       // apply add/remove deltas through the recipient sub-API.
-      const observedRecipients = yield* resourceSharing.listRecipients({
-        accountId: acct,
-        shareId: observed.id,
-        perPage: 50,
-      });
-      const liveRecipients = observedRecipients.result.filter(
+      const observedRecipients = yield* resourceSharing.listRecipients
+        .items({ accountId: acct, shareId: observed.id, perPage: 50 })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
+      const liveRecipients = observedRecipients.filter(
         (r) => r.associationStatus !== "disassociated",
       );
       for (const desired of desiredRecipients) {
@@ -322,12 +323,13 @@ export const ShareProvider = () =>
 
       // Sync resources — keyed by (resourceType, resourceId): create
       // missing entries, update `meta` in place, delete extras.
-      const observedResources = yield* resourceSharing.listResources({
-        accountId: acct,
-        shareId: observed.id,
-        perPage: 50,
-      });
-      const liveResources = observedResources.result.filter(
+      const observedResources = yield* resourceSharing.listResources
+        .items({ accountId: acct, shareId: observed.id, perPage: 50 })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
+      const liveResources = observedResources.filter(
         (r) => r.status !== "deleted" && r.status !== "deleting",
       );
       for (const desired of desiredResources) {

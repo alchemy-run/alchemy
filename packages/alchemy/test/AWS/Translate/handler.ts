@@ -193,8 +193,8 @@ export default TranslateTestFunction.make(
               got.TerminologyProperties?.SourceLanguageCode ?? null,
             downloadLocation:
               got.TerminologyDataLocation?.RepositoryType ?? null,
-            listedNames: (listed.TerminologyPropertiesList ?? []).flatMap((t) =>
-              t.Name ? [t.Name] : [],
+            listedNames: (listed.TerminologyPropertiesList ?? []).flatMap(
+              (t) => (t.Name ? [t.Name] : []),
             ),
           });
         }

@@ -251,10 +251,11 @@ const getPeer = (accountId: string, peerId: string) =>
  * pick the lexicographically-first id for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  dns.listZoneTransferPeers({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((p) => p.name === name)
+  dns.listZoneTransferPeers.items({ accountId }).pipe(
+    Stream.filter((p) => p.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.id.localeCompare(b.id))
         .at(0),
     ),

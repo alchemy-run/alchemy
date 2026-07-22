@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
@@ -436,20 +437,25 @@ export const SubnetProvider = () =>
                     if (news.cidrBlock === undefined) {
                       return yield* Effect.fail(error);
                     }
-                    const lookup = yield* ec2.describeSubnets({
-                      Filters: [
-                        { Name: "vpc-id", Values: [news.vpcId] },
-                        { Name: "cidr-block", Values: [news.cidrBlock] },
-                      ],
-                    });
-                    const existing = lookup.Subnets?.find((s) =>
-                      hasTags(
-                        alchemyTags,
-                        Object.fromEntries(
-                          (s.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
+                    const existing = yield* ec2.describeSubnets
+                      .items({
+                        Filters: [
+                          { Name: "vpc-id", Values: [news.vpcId] },
+                          { Name: "cidr-block", Values: [news.cidrBlock] },
+                        ],
+                      })
+                      .pipe(
+                        Stream.filter((s) =>
+                          hasTags(
+                            alchemyTags,
+                            Object.fromEntries(
+                              (s.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
+                            ),
+                          ),
                         ),
-                      ),
-                    );
+                        Stream.runHead,
+                        Effect.map(Option.getOrUndefined),
+                      );
                     if (existing?.SubnetId === undefined) {
                       return yield* Effect.fail(error);
                     }

@@ -198,20 +198,19 @@ export const ListenerRuleProvider = () =>
       const rows = yield* Effect.forEach(
         listenerArns.flat(),
         (listenerArn) =>
-          elbv2.describeRules({ ListenerArn: listenerArn }).pipe(
-            Effect.map((res) =>
-              (res.Rules ?? [])
-                .filter(
-                  (r): r is typeof r & { RuleArn: string } =>
-                    r.RuleArn != null && !r.IsDefault,
-                )
-                .map((rule) => ({
-                  ruleArn: rule.RuleArn as RuleArn,
-                  listenerArn,
-                  priority: Number(rule.Priority ?? 0),
-                  isDefault: rule.IsDefault ?? false,
-                })),
+          elbv2.describeRules.items({ ListenerArn: listenerArn }).pipe(
+            Stream.filter(
+              (r): r is typeof r & { RuleArn: string } =>
+                r.RuleArn != null && !r.IsDefault,
             ),
+            Stream.map((rule) => ({
+              ruleArn: rule.RuleArn as RuleArn,
+              listenerArn,
+              priority: Number(rule.Priority ?? 0),
+              isDefault: rule.IsDefault ?? false,
+            })),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("ListenerNotFoundException", () =>
               Effect.succeed([]),
             ),

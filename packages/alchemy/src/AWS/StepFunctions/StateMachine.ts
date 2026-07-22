@@ -923,22 +923,18 @@ export const StateMachineProvider = () =>
           // being partially or fully gone already.
           if (output.roleName !== undefined) {
             const roleName = output.roleName;
-            yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
-              Effect.flatMap((policies) =>
-                Effect.forEach(policies.PolicyNames ?? [], (policyName) =>
-                  iam
-                    .deleteRolePolicy({
-                      RoleName: roleName,
-                      PolicyName: policyName,
-                    })
-                    .pipe(
-                      Effect.catchTag(
-                        "NoSuchEntityException",
-                        () => Effect.void,
-                      ),
-                    ),
-                ),
+            yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
+              Stream.mapEffect((policyName) =>
+                iam
+                  .deleteRolePolicy({
+                    RoleName: roleName,
+                    PolicyName: policyName,
+                  })
+                  .pipe(
+                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                  ),
               ),
+              Stream.runDrain,
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
             yield* iam

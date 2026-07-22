@@ -369,10 +369,11 @@ const getFeed = (accountId: string, feedId: number) =>
  * determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  intel.listIndicatorFeeds({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((f) => f.name === name)
+  intel.listIndicatorFeeds.items({ accountId }).pipe(
+    Stream.filter((f) => f.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => (a.createdOn ?? "").localeCompare(b.createdOn ?? ""))
         .at(0),
     ),

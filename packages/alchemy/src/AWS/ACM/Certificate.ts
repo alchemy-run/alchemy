@@ -2,6 +2,7 @@ import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -225,50 +226,62 @@ export const CertificateProvider = () =>
         id: string,
         props: CertificateProps,
       ) {
-        const listed = yield* withCertRegion(props.region)(
-          acm.listCertificates({
-            Includes: {
-              keyTypes: props.keyAlgorithm ? [props.keyAlgorithm] : undefined,
-            },
-          } as any),
+        // Describe candidates lazily as pages stream in and stop at the first
+        // match, so pagination terminates early instead of draining every page.
+        return yield* withCertRegion(props.region)(
+          acm.listCertificates
+            .items({
+              Includes: {
+                keyTypes: props.keyAlgorithm ? [props.keyAlgorithm] : undefined,
+              },
+            } as any)
+            .pipe(
+              Stream.filter(
+                (summary) => summary.DomainName === props.domainName,
+              ),
+              Stream.mapEffect((summary) =>
+                Effect.gen(function* () {
+                  if (!summary.CertificateArn) {
+                    return undefined;
+                  }
+                  const detail = yield* describeCertificate(
+                    summary.CertificateArn,
+                  );
+                  if (!detail?.CertificateArn) {
+                    return undefined;
+                  }
+                  if (
+                    detail.DomainName !== props.domainName ||
+                    JSON.stringify(
+                      normalizeSanList(detail.SubjectAlternativeNames),
+                    ) !==
+                      JSON.stringify(
+                        normalizeSanList(props.subjectAlternativeNames),
+                      )
+                  ) {
+                    return undefined;
+                  }
+                  // Exportability is fixed at request time, so a certificate
+                  // with a different export option can never converge to these
+                  // props — it is the doomed half of a replacement, not a
+                  // match.
+                  if (
+                    (props.export ?? "DISABLED") !==
+                    (detail.Options?.Export ?? "DISABLED")
+                  ) {
+                    return undefined;
+                  }
+                  const tags = yield* listCertificateTags(
+                    detail.CertificateArn,
+                  );
+                  return (yield* hasAlchemyTags(id, tags)) ? detail : undefined;
+                }),
+              ),
+              Stream.filter((detail) => detail !== undefined),
+              Stream.runHead,
+              Effect.map(Option.getOrUndefined),
+            ),
         );
-
-        const summaries =
-          listed.CertificateSummaryList?.filter(
-            (summary) => summary.DomainName === props.domainName,
-          ) ?? [];
-
-        for (const summary of summaries) {
-          if (!summary.CertificateArn) {
-            continue;
-          }
-          const detail = yield* describeCertificate(summary.CertificateArn);
-          if (!detail?.CertificateArn) {
-            continue;
-          }
-          if (
-            detail.DomainName !== props.domainName ||
-            JSON.stringify(normalizeSanList(detail.SubjectAlternativeNames)) !==
-              JSON.stringify(normalizeSanList(props.subjectAlternativeNames))
-          ) {
-            continue;
-          }
-          // Exportability is fixed at request time, so a certificate with a
-          // different export option can never converge to these props — it
-          // is the doomed half of a replacement, not a match.
-          if (
-            (props.export ?? "DISABLED") !==
-            (detail.Options?.Export ?? "DISABLED")
-          ) {
-            continue;
-          }
-          const tags = yield* listCertificateTags(detail.CertificateArn);
-          if (yield* hasAlchemyTags(id, tags)) {
-            return detail;
-          }
-        }
-
-        return undefined;
       });
 
       const waitForValidationRecords = Effect.fn(function* (

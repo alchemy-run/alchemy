@@ -2,6 +2,7 @@ import * as databrew from "@distilled.cloud/aws/databrew";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -587,10 +588,11 @@ export const JobProvider = () =>
           // with ConflictException ("is used in job …") long after DeleteJob
           // itself succeeds. Stop in-flight runs and wait (bounded) for every
           // run to reach a terminal state before deleting the job.
-          const runs = yield* databrew
-            .listJobRuns({ Name: output.jobName })
+          const runs = yield* databrew.listJobRuns
+            .items({ Name: output.jobName })
             .pipe(
-              Effect.map((r) => r.JobRuns ?? []),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
               Effect.catchTag("ResourceNotFoundException", () =>
                 Effect.succeed([]),
               ),
@@ -615,10 +617,12 @@ export const JobProvider = () =>
                 ),
           );
           if (runs.some((run) => isActive(run.State))) {
-            yield* databrew.listJobRuns({ Name: output.jobName }).pipe(
-              Effect.map((r) =>
-                (r.JobRuns ?? []).every((run) => !isActive(run.State)),
-              ),
+            yield* databrew.listJobRuns.items({ Name: output.jobName }).pipe(
+              // Settled = no active run observed; stop paginating at the
+              // first active run instead of draining every page.
+              Stream.filter((run) => isActive(run.State)),
+              Stream.runHead,
+              Effect.map(Option.isNone),
               Effect.catchTag("ResourceNotFoundException", () =>
                 Effect.succeed(true),
               ),

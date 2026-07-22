@@ -136,8 +136,17 @@ const describeDetector = Effect.fn(function* (
   },
 ) {
   const request = toDescribeRequest(props);
-  const response = yield* cloudwatch.describeAnomalyDetectors(request);
-  const detectors = response.AnomalyDetectors ?? [];
+  // Stop paginating at the first identity match; a miss drains every page
+  // anyway, which is exactly what the miss diagnostics below need.
+  const detectors = yield* cloudwatch.describeAnomalyDetectors
+    .items(request)
+    .pipe(
+      Stream.takeUntil((candidate) =>
+        matchesDetectorIdentity(candidate, props),
+      ),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const detector = detectors.find((candidate) =>
     matchesDetectorIdentity(candidate, props),
   );

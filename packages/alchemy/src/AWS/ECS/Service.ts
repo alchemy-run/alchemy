@@ -8,6 +8,7 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -1379,10 +1380,15 @@ const parseListenSpec = (serviceId: string, spec: string, kind: string) =>
  * and the provider's network resolution.
  */
 const lookupDefaultNetwork = Effect.gen(function* () {
-  const vpcs = yield* ec2.describeVpcs({
-    Filters: [{ Name: "isDefault", Values: ["true"] }],
-  });
-  const vpc = (vpcs.Vpcs ?? []).find((v) => v.IsDefault);
+  const vpc = yield* ec2.describeVpcs
+    .items({
+      Filters: [{ Name: "isDefault", Values: ["true"] }],
+    })
+    .pipe(
+      Stream.filter((v) => v.IsDefault === true),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+    );
   if (!vpc?.VpcId) {
     return yield* Effect.die(
       new Error(
@@ -1390,15 +1396,19 @@ const lookupDefaultNetwork = Effect.gen(function* () {
       ),
     );
   }
-  const subnets = yield* ec2.describeSubnets({
-    Filters: [
-      { Name: "vpc-id", Values: [vpc.VpcId] },
-      { Name: "default-for-az", Values: ["true"] },
-    ],
-  });
-  const subnetIds = (subnets.Subnets ?? [])
-    .map((s) => s.SubnetId)
-    .filter((s): s is string => s !== undefined);
+  const subnetIds = yield* ec2.describeSubnets
+    .items({
+      Filters: [
+        { Name: "vpc-id", Values: [vpc.VpcId] },
+        { Name: "default-for-az", Values: ["true"] },
+      ],
+    })
+    .pipe(
+      Stream.map((s) => s.SubnetId),
+      Stream.filter((s): s is string => s !== undefined),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   if (subnetIds.length === 0) {
     return yield* Effect.die(
       new Error(
@@ -2075,7 +2085,9 @@ const composeManagedIngress = (
       }
     }
 
-    const actionToListenerAction = (action: NormalizedAction): ListenerAction =>
+    const actionToListenerAction = (
+      action: NormalizedAction,
+    ): ListenerAction =>
       action.type === "redirect"
         ? {
             type: "redirect",

@@ -109,7 +109,10 @@ export const ClusterParameterGroupProvider = () =>
   Provider.effect(
     ClusterParameterGroup,
     Effect.gen(function* () {
-      const toName = (id: string, props: Partial<ClusterParameterGroupProps>) =>
+      const toName = (
+        id: string,
+        props: Partial<ClusterParameterGroupProps>,
+      ) =>
         props.clusterParameterGroupName
           ? Effect.succeed(props.clusterParameterGroupName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });

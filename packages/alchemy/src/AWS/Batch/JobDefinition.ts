@@ -535,7 +535,10 @@ export const JobDefinitionProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
-      const toName = (id: string, props: { jobDefinitionName?: string } = {}) =>
+      const toName = (
+        id: string,
+        props: { jobDefinitionName?: string } = {},
+      ) =>
         props.jobDefinitionName
           ? Effect.succeed(props.jobDefinitionName)
           : createPhysicalName({ id, maxLength: 128 });
@@ -594,13 +597,13 @@ export const JobDefinitionProvider = () =>
         family: string,
         status: "ACTIVE" | "INACTIVE",
       ) =>
-        ecs.listTaskDefinitions({ familyPrefix: family, status }).pipe(
-          Effect.map((response) =>
-            (response.taskDefinitionArns ?? []).filter((arn) => {
-              const suffix = arn.split("/").at(-1);
-              return suffix?.slice(0, suffix.lastIndexOf(":")) === family;
-            }),
-          ),
+        ecs.listTaskDefinitions.items({ familyPrefix: family, status }).pipe(
+          Stream.filter((arn) => {
+            const suffix = arn.split("/").at(-1);
+            return suffix?.slice(0, suffix.lastIndexOf(":")) === family;
+          }),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
         );
 
       const waitUntilBackingRevisionDeletionStarted = (
@@ -1060,29 +1063,24 @@ await Effect.runPromise(program).then(
           platform.executionRoleName,
         ]) {
           if (!roleName) continue;
-          yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed({ PolicyNames: [] as string[] }),
+          yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
+            Stream.mapEffect((policyName) =>
+              iam
+                .deleteRolePolicy({
+                  RoleName: roleName,
+                  PolicyName: policyName,
+                })
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                ),
             ),
-            Effect.flatMap((policies) =>
-              Effect.forEach(policies.PolicyNames ?? [], (policyName) =>
-                iam
-                  .deleteRolePolicy({
-                    RoleName: roleName,
-                    PolicyName: policyName,
-                  })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
-              ),
-            ),
+            Stream.runDrain,
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
           );
-          yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed({ AttachedPolicies: [] }),
-            ),
-            Effect.flatMap((policies) =>
-              Effect.forEach(policies.AttachedPolicies ?? [], (policy) =>
+          yield* iam.listAttachedRolePolicies
+            .items({ RoleName: roleName })
+            .pipe(
+              Stream.mapEffect((policy) =>
                 iam
                   .detachRolePolicy({
                     RoleName: roleName,
@@ -1092,8 +1090,9 @@ await Effect.runPromise(program).then(
                     Effect.catchTag("NoSuchEntityException", () => Effect.void),
                   ),
               ),
-            ),
-          );
+              Stream.runDrain,
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            );
           yield* iam
             .deleteRole({ RoleName: roleName })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
