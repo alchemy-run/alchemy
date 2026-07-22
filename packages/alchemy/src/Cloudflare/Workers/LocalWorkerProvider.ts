@@ -270,41 +270,64 @@ export const LocalWorkerProvider = () =>
           1,
         )(
           Effect.gen(function* () {
-            const previous = workerdScopes.get(worker.id);
-            if (previous) {
-              // Both runtimes use the same registry key. Close the old scope first so
-              // its unregister finalizer cannot delete the replacement registration.
-              yield* Scope.close(previous, Exit.void);
-              workerdScopes.delete(worker.id);
+            while (true) {
+              const previous = workerdScopes.get(worker.id);
+              if (previous) {
+                // Both runtimes use the same registry key. Close the old scope first so
+                // its unregister finalizer cannot delete the replacement registration.
+                yield* Scope.close(previous, Exit.void);
+                workerdScopes.delete(worker.id);
+              }
+              // Snapshot the start-time runtime wiring. A sibling `Consumer`
+              // reconcile can mutate `localRuntimeState.queueConsumers` while
+              // `runtime.start` is in flight; its `restartScripts` call would
+              // find no restart hook yet (registered below, after start) and
+              // silently no-op — the worker would then run without its queue
+              // consumer and every produced message would be dropped. Re-check
+              // after start and serve again if the wiring changed mid-start.
+              const queueConsumers = yield* getQueueConsumers(worker.name);
+              const scope = yield* Scope.fork(parentScope);
+              const url = yield* runtime
+                .start({
+                  name: worker.name,
+                  compatibilityDate: worker.compatibility.date,
+                  compatibilityFlags: worker.compatibility.flags,
+                  bindings: worker.workerBindings as never,
+                  hyperdrives: worker.hyperdrives,
+                  durableObjectNamespaces: worker.durableObjectNamespaces,
+                  queueConsumers,
+                  modules: yield* toRuntimeModules(bundle),
+                  assets: toRuntimeAssets(worker.assets),
+                })
+                .pipe(Scope.provide(scope));
+              workerdScopes.set(worker.id, scope);
+              latestServes.set(worker.id, {
+                worker,
+                bundle,
+                proxy,
+                scope: parentScope,
+              });
+              // Register the restart hook BEFORE the wiring re-check below:
+              // any consumer change that lands after the re-check will find
+              // the hook and queue a restart behind this serve's lock, so no
+              // update can fall between the two mechanisms.
+              MutableHashMap.set(
+                localRuntimeState.workerRestarts,
+                worker.name,
+                restartWorker(worker.id),
+              );
+              const currentConsumers = yield* getQueueConsumers(worker.name);
+              if (
+                JSON.stringify(currentConsumers) !==
+                JSON.stringify(queueConsumers)
+              ) {
+                // Wiring changed while workerd was starting — serve again with
+                // the fresh consumers before exposing the instance.
+                continue;
+              }
+              yield* proxy.set(url);
+              return url;
             }
-            const scope = yield* Scope.fork(parentScope);
-            const url = yield* runtime
-              .start({
-                name: worker.name,
-                compatibilityDate: worker.compatibility.date,
-                compatibilityFlags: worker.compatibility.flags,
-                bindings: worker.workerBindings as never,
-                hyperdrives: worker.hyperdrives,
-                durableObjectNamespaces: worker.durableObjectNamespaces,
-                queueConsumers: yield* getQueueConsumers(worker.name),
-                modules: yield* toRuntimeModules(bundle),
-                assets: toRuntimeAssets(worker.assets),
-              })
-              .pipe(Scope.provide(scope));
-            workerdScopes.set(worker.id, scope);
-            latestServes.set(worker.id, {
-              worker,
-              bundle,
-              proxy,
-              scope: parentScope,
-            });
-            MutableHashMap.set(
-              localRuntimeState.workerRestarts,
-              worker.name,
-              restartWorker(worker.id),
-            );
-            yield* proxy.set(url);
-            return url;
           }),
         );
 
