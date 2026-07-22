@@ -103,6 +103,10 @@ export interface Cluster extends Resource<
      * The cluster's status (`InService` once reconciled).
      */
     clusterStatus: ClusterStatus;
+    /**
+     * ARN of the orchestrating EKS cluster, when EKS-orchestrated.
+     */
+    orchestratorEksClusterArn: string | undefined;
   },
   never,
   Providers
@@ -162,9 +166,77 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
+ * @section Running Workloads (Slurm)
+ * @example Submit jobs from the login node over SSM
+ * ```sh
+ * # Slurm jobs are submitted on the cluster itself. Each node is an SSM
+ * # target named sagemaker-cluster:<cluster-id>_<instance-group>-<instance-id>
+ * # (list nodes with `aws sagemaker list-cluster-nodes`).
+ * aws ssm start-session \
+ *   --target sagemaker-cluster:6wl4at0i68c6_controller-i-0123456789abcdef0
+ * # then, on the node:
+ * sbatch --nodes=4 train.sbatch
+ * ```
+ *
+ * @section Running Workloads (EKS)
+ * @example Low level: apply any Kubernetes manifest to the orchestrator
+ * ```typescript
+ * // HyperPod nodes are ordinary EKS nodes — target them from a raw
+ * // manifest (a PyTorchJob CRD, a batch/v1 Job, ...) with the well-known
+ * // node labels.
+ * const job = yield* AWS.EKS.Manifest("RawTrainJob", {
+ *   cluster: eksCluster,
+ *   manifest: {
+ *     apiVersion: "batch/v1",
+ *     kind: "Job",
+ *     metadata: { name: "raw-train", namespace: "default" },
+ *     spec: {
+ *       template: {
+ *         spec: {
+ *           nodeSelector: {
+ *             "sagemaker.amazonaws.com/node-health-status": "Schedulable",
+ *             "sagemaker.amazonaws.com/instance-group-name": "workers",
+ *           },
+ *           containers: [{ name: "train", image: "ghcr.io/acme/train:v3" }],
+ *           restartPolicy: "Never",
+ *         },
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * @example High level: an effectful Job pinned to HyperPod nodes
+ * ```typescript
+ * // AWS.EKS.Job / AWS.EKS.Deployment run on HyperPod via the orchestrating
+ * // EKS cluster; hyperpodScheduling produces the namespace, Kueue labels,
+ * // and node selector.
+ * const evaluate = yield* AWS.EKS.Job(
+ *   "Evaluate",
+ *   {
+ *     cluster: eksCluster,
+ *     main: import.meta.url,
+ *     ...AWS.SageMaker.hyperpodScheduling({
+ *       instanceGroup: "workers",
+ *       team: "research",
+ *       priorityClass: "training",
+ *     }),
+ *   },
+ *   Effect.gen(function* () {
+ *     const putItem = yield* AWS.DynamoDB.PutItem(resultsTable);
+ *     return {
+ *       run: Effect.gen(function* () {
+ *         // evaluation logic; bindings land IAM on the pod-identity role
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+ * );
+ * ```
+ *
  * @section Task Governance
  * @example Prioritize workloads with a scheduler policy and team quotas
  * ```typescript
+ * // Requires the amazon-sagemaker-hyperpod-taskgovernance EKS add-on.
  * const policy = yield* AWS.SageMaker.ClusterSchedulerConfig("Scheduler", {
  *   clusterArn: hyperpod.clusterArn,
  *   schedulerConfig: {
@@ -173,6 +245,8 @@ export interface Cluster extends Resource<
  *   },
  * });
  *
+ * // Creates the hyperpod-ns-research namespace + Kueue LocalQueue that
+ * // hyperpodScheduling({ team: "research" }) submits into.
  * const quota = yield* AWS.SageMaker.ComputeQuota("ResearchQuota", {
  *   clusterArn: hyperpod.clusterArn,
  *   computeQuotaTarget: { TeamName: "research", FairShareWeight: 10 },
@@ -218,6 +292,7 @@ const toAttrs = (
   clusterName: described.ClusterName ?? "",
   clusterArn: described.ClusterArn,
   clusterStatus: described.ClusterStatus,
+  orchestratorEksClusterArn: described.Orchestrator?.Eks?.ClusterArn,
 });
 
 /**
@@ -344,6 +419,7 @@ export const ClusterProvider = () =>
                       clusterName: s.ClusterName,
                       clusterArn: s.ClusterArn,
                       clusterStatus: s.ClusterStatus ?? "InService",
+                      orchestratorEksClusterArn: undefined,
                     },
                   ]
                 : [],

@@ -3,6 +3,7 @@ export * from "./BatchGetRecordHttp.ts";
 export * from "./Cluster.ts";
 export * from "./ClusterSchedulerConfig.ts";
 export * from "./ComputeQuota.ts";
+export * from "./HyperPodScheduling.ts";
 export * from "./BatchWriteRecord.ts";
 export * from "./BatchWriteRecordHttp.ts";
 export * from "./DeleteRecord.ts";

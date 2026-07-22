@@ -79,6 +79,11 @@ export interface ComputeQuota extends Resource<
      * The allocation's current version (incremented on every update).
      */
     computeQuotaVersion: number;
+    /**
+     * The team the quota is allocated to. Task governance materializes the
+     * `hyperpod-ns-<teamName>` namespace and its Kueue LocalQueue from it.
+     */
+    teamName: string;
   },
   never,
   Providers
@@ -155,6 +160,7 @@ const toAttrs = (
   name: described.Name,
   clusterArn: described.ClusterArn ?? "",
   computeQuotaVersion: described.ComputeQuotaVersion,
+  teamName: described.ComputeQuotaTarget?.TeamName ?? "",
 });
 
 /**
@@ -261,6 +267,7 @@ export const ComputeQuotaProvider = () =>
                       name: s.Name ?? "",
                       clusterArn: s.ClusterArn ?? "",
                       computeQuotaVersion: s.ComputeQuotaVersion ?? 1,
+                      teamName: s.ComputeQuotaTarget?.TeamName ?? "",
                     },
                   ]
                 : [],
