@@ -866,6 +866,12 @@ export default defineConfig({
               ],
             },
             {
+              label: "AI",
+              items: [
+                { label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" },
+              ],
+            },
+            {
               label: "Messaging & events",
               items: [
                 { label: "SQS", link: "/aws/messaging/sqs" },
