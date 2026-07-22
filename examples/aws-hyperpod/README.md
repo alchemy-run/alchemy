@@ -48,8 +48,8 @@ sbatch --nodes=1 train.sbatch
   identity grants), the HyperPod cluster attached via
   `orchestrator: { Eks: { ClusterArn } }`, the
   `amazon-sagemaker-hyperpod-taskgovernance` add-on, a scheduler policy,
-  and the research team's compute quota. `LifeCycleConfig` is optional
-  under EKS orchestration.
+  and the research team's compute quota. `LifeCycleConfig` is required
+  here too — the API enforces it for EKS-orchestrated instance groups.
 - **Low level** (`eks.run.ts`) — a raw batch/v1 Job applied with
   `AWS.EKS.Manifest`, pinned to HyperPod nodes with the well-known labels
   and submitted through governance with the Kueue labels:

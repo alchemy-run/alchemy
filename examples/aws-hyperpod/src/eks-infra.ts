@@ -1,6 +1,7 @@
 import * as AWS from "alchemy/AWS";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import { UploadLifecycleScript } from "./lifecycle.ts";
 
 /**
  * Shared infrastructure for the EKS-orchestrated HyperPod stack:
@@ -34,12 +35,27 @@ export const HyperPodEksInfra = Effect.gen(function* () {
     managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"],
   });
 
-  // The orchestrator: a plain EKS control plane (auth mode `API`, the
-  // provider default, is what HyperPod requires). HyperPod provides the
+  // The orchestrator: a plain EKS control plane. HyperPod requires the
+  // `API` (or `API_AND_CONFIG_MAP`) authentication mode — EKS's own
+  // CONFIG_MAP default is rejected by CreateCluster. HyperPod provides the
   // nodes, so there is no compute config here.
   const eks = yield* AWS.EKS.Cluster("Orchestrator", {
     roleArn: eksRole.roleArn,
     resourcesVpcConfig: { subnetIds: network.privateSubnetIds },
+    accessConfig: {
+      authenticationMode: "API",
+      bootstrapClusterCreatorAdminPermissions: true,
+    },
+  });
+
+  // Lifecycle scripts are REQUIRED for EKS-orchestrated instance groups
+  // (and Slurm continuous provisioning): every node runs its `OnCreate`
+  // script from S3 when it boots.
+  const lifecycleBucket = yield* AWS.S3.Bucket("EksLifecycleScripts", {
+    forceDestroy: true,
+  });
+  const script = yield* UploadLifecycleScript({
+    bucketName: lifecycleBucket.bucketName,
   });
 
   // The HyperPod instance role: the AWS-managed cluster-instance policy
@@ -96,14 +112,21 @@ export const HyperPodEksInfra = Effect.gen(function* () {
             Action: ["ec2:CreateTags"],
             Resource: ["arn:aws:ec2:*:*:network-interface/*"],
           },
+          {
+            Effect: "Allow",
+            Action: ["s3:GetObject", "s3:ListBucket"],
+            Resource: [
+              lifecycleBucket.bucketArn,
+              Output.interpolate`${lifecycleBucket.bucketArn}/*`,
+            ],
+          },
         ],
       },
     },
   });
 
   // The HyperPod cluster, attached to the EKS control plane. SageMaker
-  // creates the EKS access entry for the node role automatically. No
-  // LifeCycleConfig — it's optional under EKS orchestration.
+  // creates the EKS access entry for the node role automatically.
   const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
     orchestrator: { Eks: { ClusterArn: eks.clusterArn } },
     vpcConfig: {
@@ -123,6 +146,10 @@ export const HyperPodEksInfra = Effect.gen(function* () {
         InstanceType: "ml.t3.medium",
         InstanceCount: 1,
         ExecutionRole: role.roleArn,
+        LifeCycleConfig: {
+          SourceS3Uri: script.sourceS3Uri,
+          OnCreate: script.onCreate,
+        },
       },
     ],
     // Node auto-replacement is not supported for CPU instances.

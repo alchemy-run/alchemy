@@ -144,6 +144,10 @@ export interface Cluster extends Resource<
  *
  * @example EKS-Orchestrated Cluster
  * ```typescript
+ * // The EKS cluster must use the `API` (or `API_AND_CONFIG_MAP`)
+ * // authentication mode — pass `accessConfig` explicitly, EKS's own
+ * // CONFIG_MAP default is rejected. LifeCycleConfig is required for
+ * // EKS-orchestrated instance groups too.
  * const hyperpod = yield* AWS.SageMaker.Cluster("EksHyperPod", {
  *   orchestrator: { Eks: { ClusterArn: eksCluster.clusterArn } },
  *   vpcConfig: {
