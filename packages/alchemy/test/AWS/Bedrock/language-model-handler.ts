@@ -19,6 +19,8 @@ const main = path.resolve(import.meta.dirname, "language-model-handler.ts");
 // on-demand conversational model in the testing account, with full
 // Converse tool-use + streaming support.
 const MODEL = "us.amazon.nova-micro-v1:0";
+// A second bound model to exercise the per-call `modelId` override.
+const LITE_MODEL = "us.amazon.nova-lite-v1:0";
 
 const GetWeather = Tool.make("get_weather", {
   description:
@@ -59,7 +61,7 @@ export default BedrockLanguageModelFunction.make(
     timeout: Duration.seconds(120),
   },
   Effect.gen(function* () {
-    const model = yield* Bedrock.LanguageModel(MODEL, {
+    const model = yield* Bedrock.LanguageModel([MODEL, LITE_MODEL], {
       parameters: { maxTokens: 1024, temperature: 0.2 },
     });
 
@@ -86,6 +88,31 @@ export default BedrockLanguageModelFunction.make(
               inputTokens: response.usage.inputTokens.total,
               outputTokens: response.usage.outputTokens.total,
             },
+          });
+        }
+
+        if (pathname === "/generate-short") {
+          // Runtime override: clamp the same bound model to a tiny budget.
+          const response = yield* AiLanguageModel.generateText({
+            prompt,
+          }).pipe(
+            Bedrock.withModelParameters({ maxTokens: 8, temperature: 0 }),
+          );
+          return yield* HttpServerResponse.json({
+            text: response.text,
+            finishReason: response.finishReason,
+            outputTokens: response.usage.outputTokens.total,
+          });
+        }
+
+        if (pathname === "/generate-lite") {
+          // Runtime override: route this call to the second bound model.
+          const response = yield* AiLanguageModel.generateText({
+            prompt,
+          }).pipe(Bedrock.withModelParameters({ modelId: LITE_MODEL }));
+          return yield* HttpServerResponse.json({
+            text: response.text,
+            finishReason: response.finishReason,
           });
         }
 

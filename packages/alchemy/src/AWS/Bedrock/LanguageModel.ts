@@ -1,4 +1,5 @@
 import type * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -50,10 +51,63 @@ export interface LanguageModelParameters {
  */
 export interface LanguageModelOptions {
   /**
-   * Default inference parameters for every call made through this model.
+   * Default inference parameters. Every field can be overridden per call
+   * with {@link withModelParameters}.
    */
   parameters?: LanguageModelParameters;
 }
+
+/**
+ * Per-call overrides applied with {@link withModelParameters}: any
+ * {@link LanguageModelParameters} field plus the model to run the call on.
+ */
+export interface LanguageModelCallParameters extends LanguageModelParameters {
+  /**
+   * The model to run inference on for this call. Must be one of the model
+   * ids the {@link LanguageModel} binding was created with (IAM is scoped to
+   * exactly those).
+   * @default the first bound model id
+   */
+  modelId?: string;
+}
+
+/**
+ * Fiber-scoped {@link LanguageModelCallParameters} consulted on every
+ * generateText / streamText call made through a Bedrock-backed
+ * `LanguageModel`. Set it for a region of your program with
+ * {@link withModelParameters}.
+ */
+export const CurrentModelParameters =
+  Context.Reference<LanguageModelCallParameters>(
+    "AWS.Bedrock.CurrentModelParameters",
+    {
+      defaultValue: () => ({}),
+    },
+  );
+
+/**
+ * Scope per-call inference parameters (and optionally the target model)
+ * onto an Effect or Stream that talks to a Bedrock-backed `LanguageModel`.
+ * Defined fields override the binding's construction-time `parameters`;
+ * everything else falls through to those defaults.
+ *
+ * ```typescript
+ * const response = yield* LanguageModel.generateText({ prompt }).pipe(
+ *   Bedrock.withModelParameters({ temperature: 0, maxTokens: 64 }),
+ * );
+ * ```
+ */
+export const withModelParameters =
+  (parameters: LanguageModelCallParameters) =>
+  <S extends Effect.Effect<any, any, any> | Stream.Stream<any, any, any>>(
+    self: S,
+  ): S =>
+    (Effect.isEffect(self)
+      ? Effect.provideService(CurrentModelParameters, parameters)(self)
+      : Stream.provideService(
+          CurrentModelParameters,
+          parameters,
+        )(self as Stream.Stream<any, any, any>)) as S;
 
 /**
  * Runtime binding that turns an Amazon Bedrock model into an
@@ -64,11 +118,13 @@ export interface LanguageModelOptions {
  * Calls are translated to the Bedrock Converse API — Bedrock's unified
  * messages API that works across all conversational foundation models
  * (Amazon Nova, Anthropic Claude, Meta Llama, Mistral, ...) — so one binding
- * covers every model. The binding grants the function `bedrock:InvokeModel`
- * and `bedrock:InvokeModelWithResponseStream` scoped to exactly the bound
- * model. A model reference may be a foundation-model id, a cross-region
- * inference profile id (e.g. `us.amazon.nova-micro-v1:0`), or a full Bedrock
- * ARN.
+ * covers every model. Bind one model or a list of models: the function is
+ * granted `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
+ * scoped to exactly those models, the first is the default, and runtime code
+ * picks between them (and tunes inference parameters) per call with
+ * {@link withModelParameters}. A model reference may be a foundation-model
+ * id, a cross-region inference profile id (e.g. `us.amazon.nova-micro-v1:0`),
+ * or a full Bedrock ARN.
  *
  * Model access is an account entitlement — enable the model in the Bedrock
  * console (Model access) before invoking, otherwise calls fail with
@@ -100,6 +156,34 @@ export interface LanguageModelOptions {
  * // parts is a Stream of text-start / text-delta / ... / finish parts
  * ```
  *
+ * @section Runtime Configuration
+ * @example Override Parameters Per Call
+ * The binding's `parameters` are only defaults — scope overrides onto any
+ * call with `withModelParameters`.
+ * ```typescript
+ * const response = yield* LanguageModel.generateText({ prompt }).pipe(
+ *   Bedrock.withModelParameters({ temperature: 0, maxTokens: 64 }),
+ * );
+ * ```
+ *
+ * @example Bind Multiple Models and Pick Per Call
+ * IAM access is fixed at deploy time (scoped to the bound list); which of
+ * those models serves a given request is a runtime decision.
+ * ```typescript
+ * // init: one Layer, IAM for both models, Nova Micro is the default
+ * const model = yield* Bedrock.LanguageModel([
+ *   "us.amazon.nova-micro-v1:0",
+ *   "us.anthropic.claude-sonnet-4-20250514-v1:0",
+ * ]);
+ *
+ * // runtime: route this call to Claude
+ * const response = yield* LanguageModel.generateText({ prompt }).pipe(
+ *   Bedrock.withModelParameters({
+ *     modelId: "us.anthropic.claude-sonnet-4-20250514-v1:0",
+ *   }),
+ * );
+ * ```
+ *
  * @section Tool Calling
  * @example Call Tools with a Toolkit
  * ```typescript
@@ -128,7 +212,7 @@ export interface LanguageModel extends Binding.Service<
   LanguageModel,
   "AWS.Bedrock.LanguageModel",
   (
-    model: string,
+    model: string | readonly [string, ...string[]],
     options?: LanguageModelOptions,
   ) => Effect.Effect<Layer.Layer<AiLanguageModel.LanguageModel>>
 > {}
@@ -178,7 +262,14 @@ export const makeLanguageModel = ({
   AiLanguageModel.make({
     generateText: (options) =>
       Effect.gen(function* () {
-        const request = toConverseRequest({ options, parameters });
+        // Read the fiber-scoped per-call overrides (withModelParameters)
+        // and merge them over the binding's construction-time defaults.
+        const call = yield* CurrentModelParameters;
+        const request = toConverseRequest({
+          options,
+          parameters: mergeParameters(parameters, call),
+          modelId: call.modelId,
+        });
         const response = yield* converse(request).pipe(
           Effect.mapError((cause) => toAiError(cause, "generateText")),
         );
@@ -188,7 +279,12 @@ export const makeLanguageModel = ({
       Stream.unwrap(
         Effect.gen(function* () {
           const idGen = yield* IdGenerator.IdGenerator;
-          const request = toConverseRequest({ options, parameters });
+          const call = yield* CurrentModelParameters;
+          const request = toConverseRequest({
+            options,
+            parameters: mergeParameters(parameters, call),
+            modelId: call.modelId,
+          });
           const response = yield* converseStream(request).pipe(
             Effect.mapError((cause) => toAiError(cause, "streamText")),
           );
@@ -405,12 +501,31 @@ const toToolConfig = (
 // Request assembly
 // ---------------------------------------------------------------------------
 
+/**
+ * Merge per-call overrides over construction-time defaults, field by field —
+ * an undefined override field never clobbers a configured default.
+ */
+const mergeParameters = (
+  defaults: LanguageModelParameters | undefined,
+  overrides: LanguageModelCallParameters,
+): LanguageModelParameters => ({
+  maxTokens: overrides.maxTokens ?? defaults?.maxTokens,
+  temperature: overrides.temperature ?? defaults?.temperature,
+  topP: overrides.topP ?? defaults?.topP,
+  stopSequences: overrides.stopSequences ?? defaults?.stopSequences,
+  additionalModelRequestFields:
+    overrides.additionalModelRequestFields ??
+    defaults?.additionalModelRequestFields,
+});
+
 const toConverseRequest = ({
   options,
   parameters,
+  modelId,
 }: {
   readonly options: AiLanguageModel.ProviderOptions;
   readonly parameters: LanguageModelParameters | undefined;
+  readonly modelId?: string | undefined;
 }): ConverseRequest & ConverseStreamRequest => {
   const { system, messages } = convertPrompt(options.prompt);
   const toolConfig = toToolConfig(options.tools, options.toolChoice, messages);
@@ -428,6 +543,7 @@ const toConverseRequest = ({
   };
   return {
     messages,
+    ...(modelId !== undefined ? { modelId } : {}),
     ...(system.length > 0 ? { system } : {}),
     ...(Object.keys(inferenceConfig).length > 0 ? { inferenceConfig } : {}),
     ...(toolConfig !== undefined ? { toolConfig } : {}),

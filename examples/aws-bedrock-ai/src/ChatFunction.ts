@@ -86,8 +86,21 @@ export default class ChatFunction extends AWS.Lambda.Function<ChatFunction>()(
           });
         }
 
-        // GET /?prompt=... — single-shot text generation.
-        const response = yield* AiLanguageModel.generateText({ prompt });
+        // GET /?prompt=...&temperature=0.2&maxTokens=64 — single-shot text
+        // generation. IAM access to the model is bound at deploy time, but
+        // inference parameters are a per-request decision:
+        // `withModelParameters` overrides the binding's defaults for just
+        // this call.
+        const maxTokens = url.searchParams.get("maxTokens");
+        const temperature = url.searchParams.get("temperature");
+        const response = yield* AiLanguageModel.generateText({ prompt }).pipe(
+          AWS.Bedrock.withModelParameters({
+            ...(maxTokens !== null ? { maxTokens: Number(maxTokens) } : {}),
+            ...(temperature !== null
+              ? { temperature: Number(temperature) }
+              : {}),
+          }),
+        );
         return yield* HttpServerResponse.json({
           text: response.text,
           finishReason: response.finishReason,

@@ -142,6 +142,52 @@ describe("Bedrock LanguageModel", () => {
   );
 
   test.provider(
+    "withModelParameters overrides maxTokens at runtime",
+    (_stack) =>
+      Effect.gen(function* () {
+        // The binding's default is maxTokens: 1024; the route clamps to 8
+        // via withModelParameters. Truncation proves the override reached
+        // Bedrock: the model runs out of budget mid-answer.
+        const response = (yield* send(
+          HttpClientRequest.get(
+            `${baseUrl}/generate-short?prompt=${encodeURIComponent(
+              "Write a detailed multi-paragraph essay about the history of infrastructure as code.",
+            )}`,
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          finishReason: string;
+          outputTokens: number;
+        };
+
+        expect(response.finishReason).toBe("length");
+        expect(response.outputTokens).toBeLessThanOrEqual(8);
+      }),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "withModelParameters routes a call to another bound model",
+    (_stack) =>
+      Effect.gen(function* () {
+        // The layer binds [nova-micro, nova-lite]; this route overrides
+        // modelId to nova-lite. A 200 with text proves the per-call model
+        // selection and the multi-model IAM grant both work.
+        const response = (yield* send(
+          HttpClientRequest.get(
+            `${baseUrl}/generate-lite?prompt=${encodeURIComponent("Say pong.")}`,
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          text: string;
+          finishReason: string;
+        };
+
+        expect(response.text.length).toBeGreaterThan(0);
+        expect(["stop", "length"]).toContain(response.finishReason);
+      }),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
     "streamText emits ordered parts: text-start → text-delta+ → text-end → finish",
     (_stack) =>
       Effect.gen(function* () {

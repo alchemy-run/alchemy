@@ -21,10 +21,14 @@ export const LanguageModelHttp = Layer.effect(
   Effect.gen(function* () {
     const converse = yield* Converse;
     const converseStream = yield* ConverseStream;
-    return Effect.fn(function* (model: string, options?: LanguageModelOptions) {
+    return Effect.fn(function* (
+      model: string | readonly [string, ...string[]],
+      options?: LanguageModelOptions,
+    ) {
+      const [first, ...rest] = typeof model === "string" ? [model] : model;
       return makeLanguageModelLayer({
-        converse: yield* converse(model),
-        converseStream: yield* converseStream(model),
+        converse: yield* converse(first, ...rest),
+        converseStream: yield* converseStream(first, ...rest),
         parameters: options?.parameters,
       });
     });

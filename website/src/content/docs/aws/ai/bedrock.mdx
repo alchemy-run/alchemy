@@ -127,36 +127,62 @@ const response = yield* LanguageModel.generateText({
 response.toolResults; // typed results, executed by your handlers
 ```
 
-## Multiple models
+## Configure parameters at runtime
 
-Each `LanguageModel(...)` call is its own layer with its own IAM
-grant, so you can bind several models and pick per route:
+Binding is the IAM boundary — *which models* the Function may call
+is fixed at deploy time. Everything else is a runtime decision. The
+`parameters` passed to the binding are only defaults; scope per-call
+overrides onto any call with `AWS.Bedrock.withModelParameters`:
 
 ```typescript
-const fast = yield* AWS.Bedrock.LanguageModel("us.amazon.nova-micro-v1:0");
-const smart = yield* AWS.Bedrock.LanguageModel(
-  "us.anthropic.claude-sonnet-4-20250514-v1:0",
+const response = yield* LanguageModel.generateText({ prompt }).pipe(
+  AWS.Bedrock.withModelParameters({ temperature: 0, maxTokens: 64 }),
 );
 ```
 
-## Model-specific parameters
+It works on streams the same way:
+
+```typescript
+const parts = LanguageModel.streamText({ prompt }).pipe(
+  Stream.provide(model),
+  AWS.Bedrock.withModelParameters({ temperature: 0.9 }),
+);
+```
+
+The override is fiber-scoped (a `Context.Reference`), so it applies
+to exactly the calls inside the piped region — concurrent requests
+with different settings never interfere. Defined fields win over the
+binding's defaults; omitted fields fall through.
 
 `parameters` covers the Converse API's portable `inferenceConfig`
 (`maxTokens`, `temperature`, `topP`, `stopSequences`). Anything
 model-specific passes through `additionalModelRequestFields`
-verbatim:
+verbatim — e.g. `{ top_k: 50 }` for Anthropic models.
+
+## Multiple models
+
+Bind a list of models to grant IAM for all of them in one layer —
+the first is the default, and `modelId` picks per call:
 
 ```typescript
-const model = yield* AWS.Bedrock.LanguageModel(
+// init: IAM for both models, Nova Micro is the default
+const model = yield* AWS.Bedrock.LanguageModel([
+  "us.amazon.nova-micro-v1:0",
   "us.anthropic.claude-sonnet-4-20250514-v1:0",
-  {
-    parameters: {
-      maxTokens: 2048,
-      additionalModelRequestFields: { top_k: 50 },
-    },
-  },
+]);
+
+// runtime: route this request to Claude, tuned for this call
+const response = yield* LanguageModel.generateText({ prompt }).pipe(
+  AWS.Bedrock.withModelParameters({
+    modelId: "us.anthropic.claude-sonnet-4-20250514-v1:0",
+    maxTokens: 2048,
+  }),
 );
 ```
+
+Separate `LanguageModel(...)` calls also work — each is its own
+layer with its own grant — when you'd rather select a model by
+providing a different layer per route.
 
 ## Why not an OpenAI-compatible endpoint?
 
