@@ -270,6 +270,11 @@ export const LocalWorkerProvider = () =>
           1,
         )(
           Effect.gen(function* () {
+            // Queue-consumer wiring can change while `runtime.start` is in
+            // flight (a sibling `Consumer` reconcile), before the restart
+            // hook below exists to pick it up. We hold the serve lock, so a
+            // restart would deadlock — instead, loop and serve again until
+            // the wiring is stable across a start.
             while (true) {
               const previous = workerdScopes.get(worker.id);
               if (previous) {
@@ -278,13 +283,6 @@ export const LocalWorkerProvider = () =>
                 yield* Scope.close(previous, Exit.void);
                 workerdScopes.delete(worker.id);
               }
-              // Snapshot the start-time runtime wiring. A sibling `Consumer`
-              // reconcile can mutate `localRuntimeState.queueConsumers` while
-              // `runtime.start` is in flight; its `restartScripts` call would
-              // find no restart hook yet (registered below, after start) and
-              // silently no-op — the worker would then run without its queue
-              // consumer and every produced message would be dropped. Re-check
-              // after start and serve again if the wiring changed mid-start.
               const queueConsumers = yield* getQueueConsumers(worker.name);
               const scope = yield* Scope.fork(parentScope);
               const url = yield* runtime
@@ -307,10 +305,9 @@ export const LocalWorkerProvider = () =>
                 proxy,
                 scope: parentScope,
               });
-              // Register the restart hook BEFORE the wiring re-check below:
-              // any consumer change that lands after the re-check will find
-              // the hook and queue a restart behind this serve's lock, so no
-              // update can fall between the two mechanisms.
+              // Register the restart hook before the re-check below: changes
+              // landing after the re-check find the hook; changes before it
+              // are caught by the re-check. Nothing falls in between.
               MutableHashMap.set(
                 localRuntimeState.workerRestarts,
                 worker.name,
