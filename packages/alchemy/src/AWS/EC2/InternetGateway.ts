@@ -396,9 +396,12 @@ export const InternetGatewayProvider = () =>
                     while: (e) => {
                       return e._tag === "DependencyViolation";
                     },
+                    // Public addresses on a draining EKS/HyperPod control
+                    // plane's ENIs can take several minutes to release —
+                    // 5s x 60 = ~5 min.
                     schedule: Schedule.max([
                       Schedule.fixed(5000),
-                      Schedule.recurs(10),
+                      Schedule.recurs(60),
                     ]).pipe(
                       Schedule.tap(({ attempt }) =>
                         session.note(
@@ -424,7 +427,9 @@ export const InternetGatewayProvider = () =>
                 "InvalidInternetGatewayID.NotFound",
                 () => Effect.void,
               ),
-              // Retry on dependency violations
+              // Retry on dependency violations. Public addresses on a
+              // draining EKS/HyperPod control plane's ENIs can take
+              // several minutes to release — 5s x 60 = ~5 min.
               Effect.retry({
                 while: (e) => {
                   return (
@@ -435,7 +440,7 @@ export const InternetGatewayProvider = () =>
                 },
                 schedule: Schedule.max([
                   Schedule.fixed(5000),
-                  Schedule.recurs(10),
+                  Schedule.recurs(60),
                 ]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(
