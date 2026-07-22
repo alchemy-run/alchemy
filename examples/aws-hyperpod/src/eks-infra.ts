@@ -41,6 +41,9 @@ export const HyperPodEksInfra = Effect.gen(function* () {
   // nodes, so there is no compute config here.
   const eks = yield* AWS.EKS.Cluster("Orchestrator", {
     roleArn: eksRole.roleArn,
+    // HyperPod trails the newest EKS Kubernetes version — pin one it
+    // supports (1.28-1.35 today) rather than taking the EKS default.
+    version: "1.34",
     resourcesVpcConfig: { subnetIds: network.privateSubnetIds },
     accessConfig: {
       authenticationMode: "API",
