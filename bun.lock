@@ -591,6 +591,16 @@
         "effect": "catalog:",
       },
     },
+    "examples/aws-hyperpod": {
+      "name": "aws-hyperpod-example",
+      "version": "0.0.0",
+      "dependencies": {
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/aws-lambda": {
       "name": "aws-lambda",
       "version": "0.0.0",
@@ -2700,6 +2710,8 @@
     "aws-ecs-example": ["aws-ecs-example@workspace:examples/aws-ecs"],
 
     "aws-eks-example": ["aws-eks-example@workspace:examples/aws-eks"],
+
+    "aws-hyperpod-example": ["aws-hyperpod-example@workspace:examples/aws-hyperpod"],
 
     "aws-lambda": ["aws-lambda@workspace:examples/aws-lambda"],
 
