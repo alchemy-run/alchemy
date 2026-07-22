@@ -233,8 +233,14 @@ export const AddonProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds }) {
+          const clusterName = olds.clusterName as string | undefined;
+          // A crashed prior run can persist a row before its unresolved
+          // inputs were stripped — nothing observable yet.
+          if (clusterName === undefined || olds.addonName === undefined) {
+            return undefined;
+          }
           const state = yield* readAddon({
-            clusterName: olds.clusterName as string,
+            clusterName,
             addonName: olds.addonName,
           });
           if (!state) return undefined;

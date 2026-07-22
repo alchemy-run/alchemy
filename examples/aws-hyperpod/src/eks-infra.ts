@@ -19,10 +19,26 @@ export const HyperPodEksInfra = Effect.gen(function* () {
     nat: "single",
   });
 
+  // The control-plane role for the orchestrating EKS cluster.
+  const eksRole = yield* AWS.IAM.Role("OrchestratorRole", {
+    assumeRolePolicyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { Service: "eks.amazonaws.com" },
+          Action: ["sts:AssumeRole"],
+        },
+      ],
+    },
+    managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"],
+  });
+
   // The orchestrator: a plain EKS control plane (auth mode `API`, the
   // provider default, is what HyperPod requires). HyperPod provides the
   // nodes, so there is no compute config here.
   const eks = yield* AWS.EKS.Cluster("Orchestrator", {
+    roleArn: eksRole.roleArn,
     resourcesVpcConfig: { subnetIds: network.privateSubnetIds },
   });
 
