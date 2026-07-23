@@ -8,6 +8,7 @@ import {
   type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
+  type Workflow as RuntimeWorkflow,
   type RuntimeServices,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
@@ -294,6 +295,7 @@ export const LocalWorkerProvider = () =>
                   bindings: worker.workerBindings as never,
                   hyperdrives: worker.hyperdrives,
                   durableObjectNamespaces: worker.durableObjectNamespaces,
+                  workflows: worker.workflows,
                   queueConsumers,
                   modules: yield* toRuntimeModules(bundle),
                   assets: yield* toRuntimeAssets(worker.assets),
@@ -409,6 +411,7 @@ export const LocalWorkerProvider = () =>
           string,
           RuntimeDurableObject & { uniqueKey: string }
         > = {};
+        const workflows: Record<string, RuntimeWorkflow> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
         const containers: Record<string, ContainerImage> = {};
         for (const { data } of bindings) {
@@ -436,6 +439,18 @@ export const LocalWorkerProvider = () =>
                 }),
               );
             } else {
+              if (
+                binding.type === "workflow" &&
+                // Same ownership rule as DOs: only declare workflows hosted by
+                // this worker. Cross-script workflow bindings are routed via
+                // the registry proxy.
+                (!binding.scriptName || binding.scriptName === name)
+              ) {
+                workflows[binding.workflowName] = {
+                  workflowName: binding.workflowName,
+                  className: binding.className,
+                };
+              }
               workerBindings.push(yield* toRuntimeBinding(binding));
             }
           }
@@ -480,6 +495,7 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          workflows: Object.values(workflows),
           viteMain: props.vite?.main,
           viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
@@ -587,6 +603,7 @@ export const LocalWorkerProvider = () =>
               name: worker.name,
               bindings: worker.workerBindings,
               durableObjectNamespaces: worker.durableObjectNamespaces,
+              workflows: worker.workflows,
               hyperdrives: worker.hyperdrives,
               queueConsumers: yield* getQueueConsumers(worker.name),
               assets: yield* toRuntimeAssets(worker.assets),
