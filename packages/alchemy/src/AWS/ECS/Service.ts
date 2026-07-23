@@ -2792,6 +2792,20 @@ export const ServiceProvider = () =>
         const taskRoleArn =
           output?.taskRoleArn ??
           (yield* createTaskRoleIfNotExists({ id, roleName: taskRoleName }));
+
+        // `taskRoleManagedPolicyArns` is part of the inherited
+        // `TaskDefinitionConfig` surface — attach it exactly like the
+        // standalone Task provider does (its sibling
+        // `executionRoleManagedPolicyArns` is already honored below).
+        for (const policyArn of news.taskRoleManagedPolicyArns ?? []) {
+          yield* iam
+            .attachRolePolicy({
+              RoleName: taskRoleName,
+              PolicyArn: policyArn,
+            })
+            .pipe(Effect.catchTag("LimitExceededException", () => Effect.void));
+        }
+
         const executionRoleArn =
           output?.executionRoleArn ??
           (yield* ensureTaskExecutionRole({
