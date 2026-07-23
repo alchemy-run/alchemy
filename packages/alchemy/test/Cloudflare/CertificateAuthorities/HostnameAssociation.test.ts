@@ -2,16 +2,14 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as certificateAuthorities from "@distilled.cloud/cloudflare/certificate-authorities";
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { CA_CERT_1, CA_CERT_2 } from "./fixtures/certs.ts";
-import { describe } from "vitest";
-
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -86,9 +84,10 @@ const waitForHostnames = (
       // Bounded: 25 polls x 3s = max ~75s. PUT→GET convergence at the edge
       // runs well past the earlier ~30s under full-suite parallel load (the
       // API is being throttled, which stretches the propagation window).
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(25)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(25),
+      ]),
     }),
   );
 
@@ -106,9 +105,10 @@ const waitForCertDelete = (accountId: string, mtlsCertificateId: string) =>
       // delete only completes once the hostname-association clear (issued
       // first by destroy) has propagated, and under full-suite load that
       // combined window was observed to exceed the previous ~30s budget.
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 

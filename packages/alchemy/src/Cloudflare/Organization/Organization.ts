@@ -183,7 +183,9 @@ export type Organization = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/setup/manage-organizations/
  */
-export const Organization = Resource<Organization>(TypeId);
+export const Organization = Resource<Organization>(TypeId, {
+  aliases: ["Cloudflare.Organization"],
+});
 
 /**
  * Returns true if the given value is an Organization resource.

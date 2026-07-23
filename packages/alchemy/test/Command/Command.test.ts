@@ -1,8 +1,8 @@
 import type { ScopedPlanStatusSession } from "@/Cli/Cli.ts";
 import * as Command from "@/Command";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as pathe from "pathe";
@@ -130,6 +130,7 @@ test.provider(
       // diff() must return "update" because the output is stale.
       const refreshed = yield* provider.diff!({
         id: "test-build",
+        fqn: "test-build",
         instanceId: "legacy",
         olds: news,
         news,
@@ -142,6 +143,7 @@ test.provider(
       // reconcile() must rebuild and return a new output.
       const reconciled = yield* provider.reconcile({
         id: "test-build",
+        fqn: "test-build",
         instanceId: "legacy",
         news,
         olds: news,
@@ -149,13 +151,19 @@ test.provider(
         session: stubSession,
         bindings: [],
       });
-      expect(reconciled.hash).toStrictEqual(baseline.hash);
+      // Inputs didn't change, so the input hash must match. The output hash
+      // can't be compared: build.sh embeds `$(date)` in dist/output.txt (the
+      // rebuild marker Build.test.ts relies on), so two builds only hash
+      // equal when they land in the same wall-clock second.
+      expect(reconciled.hash.input).toStrictEqual(baseline.hash.input);
+      expect(reconciled.hash.output).toEqual(expect.any(String));
       expect(pathe.isAbsolute(reconciled.outdir)).toBe(false);
       expect(pathe.resolve(reconciled.outdir)).toBe(distDir);
 
       // delete() must resolve the absolute outdir and remove the directory.
       yield* provider.delete({
         id: "test-build",
+        fqn: "test-build",
         instanceId: "legacy",
         olds: news,
         output: legacyOutput,

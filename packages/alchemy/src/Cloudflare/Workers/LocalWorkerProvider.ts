@@ -54,17 +54,19 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { isResolved } from "../../Diff.ts";
+import { isResolved, stripEffects } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
-import { sha256 } from "../../Util/index.ts";
+import { sha256, unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
@@ -167,6 +169,35 @@ export const LocalWorkerProvider = () =>
       ) {
         const modules: Module[] = [];
         for (const file of bundle.files) {
+          // Vendored Python packages are opaque Data modules named by their
+          // `python_modules/<relpath>` — mirroring the deploy path — except
+          // the `workers-runtime-sdk` JS shims, which the runtime imports
+          // as ES modules via `import_from_javascript()`.
+          if (file.path.startsWith("python_modules/")) {
+            const isJsShim =
+              file.path.startsWith("python_modules/workers/") &&
+              /\.m?js$/.test(file.path);
+            modules.push(
+              isJsShim
+                ? {
+                    name: file.path,
+                    type: "ESModule",
+                    content:
+                      typeof file.content === "string"
+                        ? file.content
+                        : new TextDecoder().decode(file.content),
+                  }
+                : {
+                    name: file.path,
+                    type: "Data",
+                    content:
+                      typeof file.content === "string"
+                        ? new TextEncoder().encode(file.content)
+                        : file.content,
+                  },
+            );
+            continue;
+          }
           const ext = path.extname(file.path);
           const type = moduleTypeFromExtension(ext);
           if (type === "SourceMap") continue;
@@ -199,33 +230,152 @@ export const LocalWorkerProvider = () =>
         return modules;
       });
 
+      // Latest successful serve per worker id, so runtime wiring changes
+      // that arrive AFTER workerd started (e.g. a sibling `Consumer`
+      // resource registering this script as a queue consumer) can restart
+      // the instance with the same bundle. `scope` is the parent scope the
+      // workerd child scope is forked from (the instance scope), NOT the
+      // caller's ambient scope — restarts are triggered from other
+      // providers' reconcile fibers whose scopes must not own workerd.
+      const latestServes = new Map<
+        string,
+        {
+          worker: WorkerConfig;
+          bundle: Bundle.BundleOutput;
+          proxy: WorkerProxy.WorkerProxyInstance;
+          scope: Scope.Scope;
+        }
+      >();
+      // Serializes serves per worker id: a restart triggered by a sibling
+      // resource may otherwise interleave with a rebuild-triggered serve
+      // and leak a workerd scope.
+      const serveLocks = new Map<string, Semaphore.Semaphore>();
+      const serveLock = (id: string) => {
+        let lock = serveLocks.get(id);
+        if (!lock) {
+          lock = Semaphore.makeUnsafe(1);
+          serveLocks.set(id, lock);
+        }
+        return lock;
+      };
+
+      const serveWith = (
+        worker: WorkerConfig,
+        bundle: Bundle.BundleOutput,
+        proxy: WorkerProxy.WorkerProxyInstance,
+        parentScope: Scope.Scope,
+      ) =>
+        Semaphore.withPermits(
+          serveLock(worker.id),
+          1,
+        )(
+          Effect.gen(function* () {
+            // Queue-consumer wiring can change while `runtime.start` is in
+            // flight (a sibling `Consumer` reconcile), before the restart
+            // hook below exists to pick it up. We hold the serve lock, so a
+            // restart would deadlock — instead, loop and serve again until
+            // the wiring is stable across a start.
+            while (true) {
+              const previous = workerdScopes.get(worker.id);
+              if (previous) {
+                // Both runtimes use the same registry key. Close the old scope first so
+                // its unregister finalizer cannot delete the replacement registration.
+                yield* Scope.close(previous, Exit.void);
+                workerdScopes.delete(worker.id);
+              }
+              const queueConsumers = yield* getQueueConsumers(worker.name);
+              const scope = yield* Scope.fork(parentScope);
+              const url = yield* runtime
+                .start({
+                  name: worker.name,
+                  compatibilityDate: worker.compatibility.date,
+                  compatibilityFlags: worker.compatibility.flags,
+                  bindings: worker.workerBindings as never,
+                  hyperdrives: worker.hyperdrives,
+                  durableObjectNamespaces: worker.durableObjectNamespaces,
+                  queueConsumers,
+                  modules: yield* toRuntimeModules(bundle),
+                  assets: toRuntimeAssets(worker.assets),
+                })
+                .pipe(Scope.provide(scope));
+              workerdScopes.set(worker.id, scope);
+              latestServes.set(worker.id, {
+                worker,
+                bundle,
+                proxy,
+                scope: parentScope,
+              });
+              // Register the restart hook before the re-check below: changes
+              // landing after the re-check find the hook; changes before it
+              // are caught by the re-check. Nothing falls in between.
+              MutableHashMap.set(
+                localRuntimeState.workerRestarts,
+                worker.name,
+                restartWorker(worker.id),
+              );
+              const currentConsumers = yield* getQueueConsumers(worker.name);
+              if (
+                JSON.stringify(currentConsumers) !==
+                JSON.stringify(queueConsumers)
+              ) {
+                // Wiring changed while workerd was starting — serve again with
+                // the fresh consumers before exposing the instance.
+                continue;
+              }
+              yield* proxy.set(url);
+              return url;
+            }
+          }),
+        );
+
       const serveScoped = Effect.fn(function* (
         worker: WorkerConfig,
         bundle: Bundle.BundleOutput,
         proxy: WorkerProxy.WorkerProxyInstance,
       ) {
-        const scope = yield* Effect.scope.pipe(Effect.flatMap(Scope.fork));
-        const url = yield* runtime
-          .start({
-            name: worker.name,
-            compatibilityDate: worker.compatibility.date,
-            compatibilityFlags: worker.compatibility.flags,
-            bindings: worker.workerBindings as never,
-            hyperdrives: worker.hyperdrives,
-            durableObjectNamespaces: worker.durableObjectNamespaces,
-            queueConsumers: yield* getQueueConsumers(worker.name),
-            modules: yield* toRuntimeModules(bundle),
-            assets: toRuntimeAssets(worker.assets),
-          })
-          .pipe(Scope.provide(scope));
-        const previous = workerdScopes.get(worker.id);
-        if (previous) {
-          yield* Effect.forkDetach(Scope.close(previous, Exit.void));
-        }
-        workerdScopes.set(worker.id, scope);
-        yield* proxy.set(url);
-        return url;
+        const parentScope = yield* Effect.scope;
+        return yield* serveWith(worker, bundle, proxy, parentScope);
       });
+
+      /**
+       * Restart a running worker with its latest bundle so start-time
+       * runtime wiring (queue consumers) is re-read from
+       * {@link LocalRuntimeState}. No-op if the worker hasn't served yet —
+       * the pending first serve will already observe the updated state.
+       */
+      const restartWorker = (id: string) =>
+        Effect.suspend(() => {
+          const latest = latestServes.get(id);
+          if (!latest) return Effect.void;
+          return serveWith(
+            latest.worker,
+            latest.bundle,
+            latest.proxy,
+            latest.scope,
+          ).pipe(
+            Effect.asVoid,
+            Effect.catchCause((cause) =>
+              Effect.logWarning(
+                `[${id}] Failed to restart local worker`,
+                Cause.squash(cause),
+              ),
+            ),
+          );
+        });
+
+      // Note: `serveLocks` entries are intentionally retained — an
+      // in-flight restart may still hold the semaphore when the instance
+      // is torn down, and a same-id re-create must serialize against it.
+      const dropServeState = (id: string) => {
+        const latest = latestServes.get(id);
+        if (latest) {
+          MutableHashMap.remove(
+            localRuntimeState.workerRestarts,
+            latest.worker.name,
+          );
+          latestServes.delete(id);
+        }
+      };
 
       const buildConfig = Effect.fn(function* ({
         id,
@@ -296,9 +446,7 @@ export const LocalWorkerProvider = () =>
                 port: origin.port,
                 user: origin.user,
                 database: origin.database,
-                password: Redacted.isRedacted(origin.password)
-                  ? Redacted.value(origin.password)
-                  : origin.password,
+                password: unwrapRedacted(origin.password),
                 sslmode: origin.sslmode,
               };
             }
@@ -310,7 +458,10 @@ export const LocalWorkerProvider = () =>
                   `Container ${container.className} has no dev image`,
                 );
               }
-              containers[container.className] = container.dev;
+              containers[container.className] = {
+                ...container.dev,
+                env: unwrapRedacted(container.dev.env),
+              };
             }
           }
         }
@@ -328,6 +479,7 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          viteMain: props.vite?.main,
           viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
           env: props.env,
@@ -356,7 +508,15 @@ export const LocalWorkerProvider = () =>
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
-        yield* bundler.watch(worker.bundleOptions).pipe(
+        yield* (
+          isPythonMain(worker.bundleOptions.main)
+            ? watchPythonWorkerBundle({
+                id: worker.bundleOptions.id,
+                main: worker.bundleOptions.main,
+                compatibility: worker.compatibility,
+              })
+            : bundler.watch(worker.bundleOptions)
+        ).pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               start = Date.now();
@@ -418,6 +578,7 @@ export const LocalWorkerProvider = () =>
           rootDir,
           worker.env ?? {},
           {
+            main: worker.viteMain,
             compatibilityDate: worker.compatibility.date,
             compatibilityFlags: worker.compatibility.flags,
             viteEnvironments: worker.viteEnvironments,
@@ -478,6 +639,7 @@ export const LocalWorkerProvider = () =>
             ]),
           ),
           domains: [url],
+          routes: [],
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
           ),
@@ -496,7 +658,12 @@ export const LocalWorkerProvider = () =>
             (instance) => Fiber.join(instance.fiber),
             { concurrency: "unbounded" },
           ),
-        diff: Effect.fn(function* ({ id, news, newBindings, output }) {
+        diff: Effect.fn(function* ({ id, news: desired, newBindings, output }) {
+          // Effect-valued `env` entries (tagged Worker classes) never resolve
+          // at plan time; their identity is carried by the resolved binding
+          // data. Strip them so the signature-based diff still runs — same
+          // rationale as the cloud WorkerProvider (#874).
+          const news = stripEffects(desired);
           if (!isResolved(news) || !isResolved(newBindings)) return undefined;
           const options = {
             id,
@@ -545,6 +712,7 @@ export const LocalWorkerProvider = () =>
             tags: [],
             durableObjectNamespaces,
             domains: url ? [url] : [],
+            routes: [],
             crons: Array.from(
               new Set([...getCronBindings(bindings), ...(news.crons ?? [])]),
             ),
@@ -564,6 +732,7 @@ export const LocalWorkerProvider = () =>
               yield* Fiber.interrupt(existing.fiber);
               yield* Scope.close(existing.scope, Exit.void);
               instances.delete(id);
+              dropServeState(id);
             }
             const name = yield* createWorkerName(id, news.name);
             return {
@@ -576,6 +745,7 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces: {},
               accountId,
               domains: [],
+              routes: [],
               crons: news.crons ?? [],
             } satisfies Worker["Attributes"];
           }
@@ -595,6 +765,7 @@ export const LocalWorkerProvider = () =>
             yield* Fiber.interrupt(existing.fiber);
             yield* Scope.close(existing.scope, Exit.void);
             instances.delete(options.id);
+            dropServeState(options.id);
           }
           const scope = yield* Scope.fork(rootScope);
           const fiber = yield* runInstance(options).pipe(
@@ -618,6 +789,7 @@ export const LocalWorkerProvider = () =>
             yield* Fiber.interrupt(existing.fiber);
             yield* Scope.close(existing.scope, Exit.void);
             instances.delete(id);
+            dropServeState(id);
           }
         }),
       };
@@ -824,6 +996,8 @@ const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {
       return "ESModule";
     case ".cjs":
       return "CommonJsModule";
+    case ".py":
+      return "PythonModule";
     case ".map":
       return "SourceMap";
     default:

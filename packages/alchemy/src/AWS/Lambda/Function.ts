@@ -5,13 +5,17 @@ import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type * as rolldown from "rolldown";
@@ -27,13 +31,14 @@ import {
 } from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import type { HttpEffect } from "../../Http.ts";
+import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { packEnvValue, unpackEnvValue } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
@@ -51,6 +56,10 @@ import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  syncEventInvokeConfig,
+  type EventInvokeConfig,
+} from "./EventInvokeConfig.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
@@ -67,6 +76,34 @@ export const isFunction = (value: any): value is Function => {
     value !== null &&
     "Type" in value &&
     value.Type === "AWS.Lambda.Function"
+  );
+};
+
+/**
+ * True for any Alchemy host that accepts the `{ env, policyStatements }`
+ * binding contract: the Lambda `Function`, the ECS `Task` and `Service`, and
+ * the EKS `ServerHost`. AWS `Binding.Service` implementations guard their
+ * deploy-time
+ * `host.bind` registration with this predicate so every existing capability
+ * (S3, DynamoDB, SQS, …) lands its IAM on whichever of the three hosts is in
+ * context — the Lambda execution role, the ECS task role, or the EKS
+ * pod-identity role.
+ *
+ * The type guard narrows to `Function` deliberately: all three hosts expose an
+ * identical `{ env, policyStatements }` bind contract and only `host.bind` /
+ * `host.LogicalId` are ever touched inside the guarded block, so downstream
+ * typing is unchanged while the runtime check widens to all three.
+ */
+export const isBindingHost = (value: any): value is Function => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "Type" in value &&
+    (value.Type === "AWS.Lambda.Function" ||
+      value.Type === "AWS.ECS.Task" ||
+      value.Type === "AWS.ECS.Service" ||
+      value.Type === "AWS.EKS.Deployment" ||
+      value.Type === "AWS.EKS.Job")
   );
 };
 
@@ -90,6 +127,28 @@ export interface FunctionBuildOptions extends Partial<rolldown.InputOptions> {
 }
 
 export type FunctionArchitecture = "x86_64" | "arm64";
+
+/**
+ * Reference to an EFS access point: a raw access point ARN or anything
+ * exposing an `accessPointArn` attribute (e.g. an `AWS.EFS.AccessPoint`
+ * resource).
+ */
+export type AccessPointRef = string | { accessPointArn: string };
+
+/**
+ * Resolve an {@link AccessPointRef} (or the legacy raw-`arn` field) on a
+ * `fileSystemConfigs` entry to the access point ARN.
+ */
+const accessPointArnOf = (config: {
+  accessPoint?: AccessPointRef;
+  arn?: string;
+}): string | undefined =>
+  typeof config.accessPoint === "string"
+    ? config.accessPoint
+    : typeof (config.accessPoint as { accessPointArn?: unknown } | undefined)
+          ?.accessPointArn === "string"
+      ? (config.accessPoint as { accessPointArn: string }).accessPointArn
+      : config.arn;
 
 export interface FunctionUrlConfig {
   /**
@@ -148,6 +207,39 @@ export interface FunctionProps extends PlatformProps {
     securityGroupIds: string[];
   };
   /**
+   * EFS file systems to mount into the function's execution environment.
+   * Each entry mounts an EFS access point — pass the `AWS.EFS.AccessPoint`
+   * resource itself (or its ARN) — at a local path that must begin with
+   * `/mnt/`. Requires `vpc`: the function must be attached to a VPC that can
+   * reach an available EFS mount target for the file system. The execution
+   * role is automatically granted EFS client access
+   * (`AmazonElasticFileSystemClientReadWriteAccess`).
+   *
+   * Prefer the host-agnostic `AWS.EFS.Mount` binding
+   * (`yield* AWS.EFS.mount(accessPoint, { path: "/mnt/data" })` inside the
+   * function body with the `AWS.EFS.MountLive` layer) — it wires the same
+   * config plus least-privilege IAM through the binding channel and also
+   * works on ECS.
+   */
+  fileSystemConfigs?: {
+    /**
+     * The EFS access point to mount — an `AWS.EFS.AccessPoint` resource or
+     * its ARN. Exactly one of `accessPoint` or `arn` is required.
+     */
+    accessPoint?: AccessPointRef;
+    /**
+     * ARN of the EFS access point to mount
+     * (e.g. `accessPoint.accessPointArn`). Alias of {@link accessPoint} for
+     * raw-string configs.
+     */
+    arn?: string;
+    /**
+     * Local mount path inside the function. Must begin with `/mnt/`
+     * (e.g. `/mnt/files`).
+     */
+    localMountPath: string;
+  }[];
+  /**
    * Maximum execution time before the function is forcibly terminated.
    * Rounded up to whole seconds.
    *
@@ -159,6 +251,35 @@ export interface FunctionProps extends PlatformProps {
    * Omit to remove the function-level reserved concurrency limit.
    */
   reservedConcurrentExecutions?: number;
+  /**
+   * AWS X-Ray tracing mode for the function.
+   *
+   * `"Active"` samples and records incoming requests as X-Ray traces and
+   * attaches the `AWSXRayDaemonWriteAccess` managed policy to the execution
+   * role so the runtime can publish trace segments. `"PassThrough"` only
+   * forwards an upstream trace header without sampling.
+   *
+   * @default "PassThrough"
+   */
+  tracing?: "Active" | "PassThrough";
+  /**
+   * Asynchronous invocation settings (retries, event age, destinations) for
+   * the unqualified function. Omit to remove any existing config and fall
+   * back to Lambda's defaults (2 retries, 6-hour max event age, no
+   * destinations). Use {@link AliasProps.eventInvokeConfig} to scope the
+   * config to an alias instead.
+   */
+  eventInvokeConfig?: EventInvokeConfig;
+  /**
+   * Wire-level `DurableConfig` applied at `CreateFunction`.
+   *
+   * @internal Set exclusively by the `AWS.Lambda.DurableFunction` wrapper —
+   * never set this directly. Durability is a **create-time** property of a
+   * Lambda function, so a presence change replaces the function (see `diff`).
+   * The base Function is otherwise durability-agnostic; author durable
+   * orchestrators with `AWS.Lambda.DurableFunction`.
+   */
+  durableConfig?: Lambda.DurableConfig;
 }
 
 /**
@@ -208,6 +329,27 @@ export interface Function extends Resource<
   {
     env?: Record<string, any>;
     policyStatements?: PolicyStatement[];
+    /**
+     * VPC attachment requested by a binding (e.g. `RDS.Connect` with
+     * `subnetIds`/`securityGroupIds`). Merged (set-union) with the
+     * Function's own `vpc` prop and any other bindings' requests — both
+     * paths converge on the same underlying Lambda VPC config.
+     */
+    vpc?: {
+      subnetIds: string[];
+      securityGroupIds: string[];
+    };
+    /**
+     * EFS mounts requested through the binding channel (e.g. `EFS.Mount`).
+     * Merged (deduped by `localMountPath`) with the Function's own
+     * `fileSystemConfigs` prop.
+     */
+    fileSystemConfigs?: {
+      /** ARN of the EFS access point to mount. */
+      arn: string;
+      /** Local mount path inside the function (must begin with `/mnt/`). */
+      localMountPath: string;
+    }[];
   },
   Providers
 > {}
@@ -275,10 +417,24 @@ const matchesConfiguredExternal = (
  * - **Async** — plain handler export, no Effect runtime in the bundle.
  * - **Effect** — Effect implementation with typed bindings and event sources.
  *
- * See the {@link https://alchemy.run/guides/async-lambda | Async Lambda Guide}
+ * See [Effect handlers vs async handlers](/infrastructure-as-effects/functions-and-servers#effect-handlers-vs-async-handlers)
  * for plain handler patterns, or the
- * {@link https://alchemy.run/guides/lambda | Effect Lambda Guide}
+ * [Lambda guide](/aws/compute/lambda)
  * for the full Effect-based approach with bindings, event sources, and sinks.
+ *
+ * :::caution[Request finalizers block the response — there is no `waitUntil` on Lambda]
+ * `Effect.addFinalizer` in a handler runs **before the response is
+ * returned**: a buffered invocation's response is not released until the
+ * Invoke phase completes, and no deferral scheme is reliable (dangling
+ * promises are dropped on crash/timeout resets and their sockets rarely
+ * survive the freeze — silent data loss). Keep request finalizers cheap
+ * (closing a pool is milliseconds), and write anything that must not be
+ * lost durably — a queue, a table — inside the handler itself. Init-level
+ * finalizers instead run in the 500 ms `SIGTERM` window at sandbox
+ * shutdown, which the generated entry obtains by registering an internal
+ * extension. See
+ * [Sandbox scope vs invocation scope](/aws/compute/lambda#sandbox-scope-vs-invocation-scope).
+ * :::
  * @resource
  * @section Async Functions
  * Point `main` at a file that exports a standard Lambda handler. No
@@ -382,6 +538,60 @@ const matchesConfiguredExternal = (
  *     securityGroupIds: ["sg-xyz789"],
  *   },
  * });
+ * ```
+ *
+ * @example Async invocation retries and failure destination
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("AsyncFunction", {
+ *   main: "./src/handler.ts",
+ *   eventInvokeConfig: {
+ *     maximumRetryAttempts: 0,
+ *     maximumEventAge: "1 minute",
+ *     destinationConfig: {
+ *       OnFailure: {
+ *         Destination: queue.queueArn,
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * @section EFS File Systems
+ * Mount an EFS access point into the function's `/mnt/…` file system. The
+ * function must be attached to a VPC that can reach an EFS mount target for
+ * the file system.
+ *
+ * @example Mount an EFS access point via props
+ * ```typescript
+ * const accessPoint = yield* AWS.EFS.AccessPoint("FilesAccess", {
+ *   fileSystemId: fileSystem.fileSystemId,
+ *   posixUser: { uid: 1000, gid: 1000 },
+ * });
+ *
+ * const func = yield* AWS.Lambda.Function("FilesFunction", {
+ *   main: "./src/handler.ts",
+ *   vpc: { subnetIds, securityGroupIds },
+ *   fileSystemConfigs: [
+ *     // pass the AccessPoint resource itself (or its ARN via `arn`)
+ *     { accessPoint, localMountPath: "/mnt/files" },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Mount via the host-agnostic EFS.mount binding
+ * `EFS.mount` wires the same mount config plus least-privilege IAM through
+ * the binding channel and works on both Lambda and ECS hosts.
+ * ```typescript
+ * export default class FilesFunction extends AWS.Lambda.Function<FilesFunction>()(
+ *   "FilesFunction",
+ *   { main: import.meta.url, vpc: { subnetIds, securityGroupIds } },
+ *   Effect.gen(function* () {
+ *     const files = yield* AWS.EFS.mount(accessPoint, { path: "/mnt/files" });
+ *     return Effect.fn(function* (event: unknown) {
+ *       return { mountedAt: files.path };
+ *     });
+ *   }).pipe(Effect.provide(AWS.EFS.MountLive)),
+ * ) {}
  * ```
  *
  * @section S3 Bindings
@@ -539,55 +749,17 @@ export const Function: Platform<
       set: (id: string, output: Output.Output) =>
         Effect.sync(() => {
           // Key is already canonical (see RuntimeContext.sanitizeKey); store it
-          // verbatim.
+          // verbatim. `packEnvValue` marker-packs Redacted values so they
+          // survive the Output → Lambda env var round-trip.
           const key = id;
-          // Preserve `Redacted`-ness across the Output → Lambda env var
-          // round-trip. `JSON.stringify(Redacted)` would emit the literal
-          // string `"<redacted>"` and lose the value, so secrets are
-          // serialized with a `{_tag: "Redacted", value: ...}` marker
-          // that the runtime `get` path detects and rebuilds.
-          env[key] = output.pipe(
-            Output.map((value) =>
-              Redacted.isRedacted(value)
-                ? JSON.stringify({
-                    _tag: "Redacted",
-                    value: Redacted.value(value),
-                  })
-                : JSON.stringify(value),
-            ),
-          );
+          env[key] = output.pipe(Output.map(packEnvValue));
           return key;
         }),
       get: <T>(key: string) =>
-        // Read the captured value straight from `process.env`. We must NOT
-        // resolve through `Config.string` here: at runtime the ambient
-        // `ConfigProvider` is the interceptor installed in `Platform.ts`,
-        // whose runtime branch calls back into `ctx.get(key)`. Going through
-        // `Config` would re-enter that interceptor for the same key and
-        // recurse forever, allocating until the Lambda init OOMs. The Worker
-        // runtime reads from `WorkerEnvironment` for the same reason.
-        Effect.sync(() => {
-          // Key is already canonical (see RuntimeContext.sanitizeKey).
-          const val = process.env[key];
-          if (val === undefined) {
-            return undefined;
-          }
-          try {
-            const value = JSON.parse(val);
-            if (
-              typeof value === "object" &&
-              value?._tag === "Redacted" &&
-              "value" in value
-            ) {
-              return Redacted.make(
-                (value as { value: unknown }).value,
-              ) as unknown as T;
-            }
-            return value as T;
-          } catch {
-            return val as unknown as T; // assume it's just a string
-          }
-        }),
+        // Key is already canonical (see RuntimeContext.sanitizeKey). Read
+        // straight from `process.env` — see `unpackEnvValue` for why this
+        // must never resolve through `Config.string`.
+        Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         // @ts-ignore
         ctx.listen(makeFunctionHttpHandler(handler)),
@@ -613,11 +785,39 @@ export const Function: Platform<
               for (const handler of handlers) {
                 const eff = handler(event);
                 if (Effect.isEffect(eff)) {
-                  return await eff.pipe(
-                    Effect.provideService(HandlerContext, context),
+                  // Each invocation gets a fresh request scope, matching the
+                  // Worker / Durable Object / Workflow bridges. The scope is
+                  // settled inline before returning: a buffered Lambda
+                  // response is not released to the caller until the Invoke
+                  // phase completes, so deferring cleanup (e.g. via an
+                  // INVOKE-subscribed extension window) shows up as response
+                  // latency anyway — keep request finalizers fast. A failing
+                  // finalizer is logged and ignored so it can't mask the
+                  // invocation's outcome.
+                  const scope = Scope.makeUnsafe();
+                  const exit = await eff.pipe(
+                    Effect.provide(
+                      Layer.mergeAll(
+                        Layer.succeed(HandlerContext, context),
+                        Layer.succeed(Scope.Scope, scope),
+                      ),
+                    ),
                     Effect.tap(Effect.logDebug),
-                    Effect.runPromise,
+                    Effect.runPromiseExit,
                   );
+                  if (!isScopeEjected(scope)) {
+                    await Scope.close(scope, exit).pipe(
+                      Effect.ignoreCause({
+                        log: "Warn",
+                        message: "Lambda invocation scope close failed",
+                      }),
+                      Effect.runPromise,
+                    );
+                  }
+                  if (Exit.isSuccess(exit)) {
+                    return exit.value;
+                  }
+                  throw Cause.squash(exit.cause);
                 }
               }
               throw new Error("No event handler found");
@@ -706,6 +906,33 @@ export const FunctionProvider = () =>
               }),
             ) ?? [],
         );
+        // VPC attachments requested through the binding channel (DECISION
+        // #5) — set-union across bindings; merged with the `vpc` prop in
+        // `reconcile`.
+        const vpcRequests = activeBindings.flatMap((binding) =>
+          binding?.data?.vpc ? [binding.data.vpc] : [],
+        );
+        const vpc =
+          vpcRequests.length > 0
+            ? {
+                subnetIds: [
+                  ...new Set(vpcRequests.flatMap((v) => v.subnetIds)),
+                ],
+                securityGroupIds: [
+                  ...new Set(vpcRequests.flatMap((v) => v.securityGroupIds)),
+                ],
+              }
+            : undefined;
+        // EFS mounts requested through the binding channel (`EFS.Mount`) —
+        // deduped by mount path; merged with the `fileSystemConfigs` prop in
+        // `reconcile`.
+        const fileSystemConfigs = [
+          ...new Map(
+            activeBindings
+              .flatMap((binding) => binding?.data?.fileSystemConfigs ?? [])
+              .map((config) => [config.localMountPath, config] as const),
+          ).values(),
+        ];
 
         if (policyStatements.length > 0) {
           yield* iam.putRolePolicy({
@@ -725,7 +952,41 @@ export const FunctionProvider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         }
 
-        return env;
+        return { env, vpc, fileSystemConfigs };
+      });
+
+      const xrayWriteAccessPolicyArn =
+        "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess";
+
+      /**
+       * Converge the X-Ray write managed policy on the execution role with
+       * the desired tracing mode. Attaching is idempotent; detaching is only
+       * attempted when the previous state may have had it attached (routine
+       * update from `Active`, or adoption where the prior props are unknown)
+       * to avoid a wasted IAM call on every deploy.
+       */
+      const syncTracingPolicy = Effect.fn(function* ({
+        roleName,
+        tracing,
+        mayHaveBeenActive,
+      }: {
+        roleName: string;
+        tracing: FunctionProps["tracing"];
+        mayHaveBeenActive: boolean;
+      }) {
+        if (tracing === "Active") {
+          yield* iam.attachRolePolicy({
+            RoleName: roleName,
+            PolicyArn: xrayWriteAccessPolicyArn,
+          });
+        } else if (mayHaveBeenActive) {
+          yield* iam
+            .detachRolePolicy({
+              RoleName: roleName,
+              PolicyArn: xrayWriteAccessPolicyArn,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }
       });
 
       const createRoleIfNotExists = Effect.fn(function* ({
@@ -739,33 +1000,44 @@ export const FunctionProvider = () =>
       }) {
         yield* Effect.logDebug(`creating role ${id}`);
         const tags = yield* createInternalTags(id);
-        // Engine has cleared us via `read` — foreign-tagged functions are
-        // surfaced as `Unowned` and require `--adopt`. On a race between
-        // read and create, treat `EntityAlreadyExistsException` as adoption.
-        const role = yield* iam
-          .createRole({
-            RoleName: roleName,
-            AssumeRolePolicyDocument: JSON.stringify({
-              Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Principal: {
-                    Service: "lambda.amazonaws.com",
-                  },
-                  Action: "sts:AssumeRole",
-                },
-              ],
-            }),
-            Tags: createTagsList(tags),
-          })
+        // Observe before ensure. Reconcile calls this even with persisted
+        // output so an execution role deleted out-of-band is recreated, but
+        // the normal update path avoids provoking an expected
+        // EntityAlreadyExists exception (important under high concurrency).
+        let role = yield* iam
+          .getRole({ RoleName: roleName })
           .pipe(
-            Effect.catchTag("EntityAlreadyExistsException", () =>
-              iam.getRole({
-                RoleName: roleName,
-              }),
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
             ),
           );
+        if (role === undefined) {
+          // Engine has cleared us via `read` — foreign-tagged functions are
+          // surfaced as `Unowned` and require `--adopt`. On a race between
+          // observe and create, read the role created by the peer reconciler.
+          role = yield* iam
+            .createRole({
+              RoleName: roleName,
+              AssumeRolePolicyDocument: JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: {
+                      Service: "lambda.amazonaws.com",
+                    },
+                    Action: "sts:AssumeRole",
+                  },
+                ],
+              }),
+              Tags: createTagsList(tags),
+            })
+            .pipe(
+              Effect.catchTag("EntityAlreadyExistsException", () =>
+                iam.getRole({ RoleName: roleName }),
+              ),
+            );
+        }
 
         yield* Effect.logDebug(`attaching policy ${id}`);
         yield* iam
@@ -845,6 +1117,24 @@ export const FunctionProvider = () =>
               cwd,
               external: externalOption,
               platform: "node",
+              // Workspace tests and generated service patches execute
+              // distilled from `src` through its `bun` export condition.
+              // Resolve the deployed Lambda bundle the same way so a live
+              // binding test cannot silently exercise stale `lib` output.
+              resolve: {
+                ...inputOptions.resolve,
+                conditionNames: [
+                  "bun",
+                  ...(
+                    inputOptions.resolve?.conditionNames ?? [
+                      "node",
+                      "import",
+                      "module",
+                      "default",
+                    ]
+                  ).filter((condition) => condition !== "bun"),
+                ],
+              },
               plugins: [inputOptions.plugins, plugins],
             },
             {
@@ -866,19 +1156,33 @@ export const FunctionProvider = () =>
                 (importPath) => `
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer } from "alchemy/Runtime";
+import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { registerLambdaExtension } from "alchemy/AWS/Lambda/RuntimeExtension";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
+import * as Scope from "effect/Scope";
 import { MinimumLogLevel } from "effect/References";
 
 import entrypoint from ${JSON.stringify(importPath)};
+
+// Register the internal extension: it buys the Shutdown phase (SIGTERM +
+// 500 ms) — without any registered extension the sandbox is killed with no
+// signal at all, and init-level finalizers would never run.
+await registerLambdaExtension();
+
+// Instance scope: the sandbox-lifetime layer build lives under it, and it is
+// closed on SIGTERM (Lambda's Shutdown phase) so init-level finalizers run
+// before the sandbox dies. Each invocation still gets its own request scope
+// from the handler dispatch.
+const instanceScope = Scope.makeUnsafe();
 
 const tag = Context.Service("${Self.key}")
 const layer = makeEntrypointLayer(tag, entrypoint);
@@ -905,33 +1209,55 @@ const stack = Layer.effect(
   )
 );
 
-const handlerEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.flatMap(exports => exports.handler),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(Credentials.fromEnv()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
-        )
-      ),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
-        )
-      ),
+const entryLayer = layer.pipe(
+  Layer.provideMerge(stack),
+  Layer.provideMerge(Credentials.fromEnv()),
+  Layer.provideMerge(Region.fromEnv()),
+  Layer.provideMerge(platform),
+  Layer.provideMerge(
+    Layer.succeed(
+      ConfigProvider.ConfigProvider,
+      // Auto-bound \`Config\` values arrive in the env as
+      // \`{"_tag":"Redacted","value":...}\` markers; reify them so a \`Config\`
+      // re-read inside a handler decodes the raw source value.
+      reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
     )
   ),
-  Effect.scoped
+  Layer.provideMerge(
+    Layer.succeed(
+      MinimumLogLevel,
+      process.env.DEBUG ? "Debug" : "Info",
+    )
+  ),
 );
 
-export default await Effect.runPromise(handlerEffect)
+// Build the layer stack against the instance scope (not a transient
+// \`Effect.provide\`/\`Effect.scoped\` region) so services and init-level
+// finalizers live for the sandbox and are released at Shutdown.
+const handlerEffect = Layer.buildWithScope(entryLayer, instanceScope).pipe(
+  Effect.flatMap((context) =>
+    tag.pipe(
+      Effect.flatMap(func => func.RuntimeContext.exports),
+      Effect.flatMap(exports => exports.handler),
+      Effect.provideContext(context),
+    )
+  ),
+  Scope.provide(instanceScope),
+);
+
+const handler = await Effect.runPromise(handlerEffect);
+
+// Lambda's Shutdown phase: close the instance scope so init-level
+// finalizers run, then exit inside the 500 ms budget. SIGKILL follows if we
+// overstay, so finalizers must be fast and best-effort.
+process.on("SIGTERM", () => {
+  console.log("[alchemy] SIGTERM — closing instance scope");
+  Effect.runPromise(Scope.close(instanceScope, Exit.void))
+    .catch((error) => console.error("[alchemy] shutdown finalizers failed", error))
+    .finally(() => process.exit(0));
+});
+
+export default handler;
 `,
               ),
             );
@@ -1029,9 +1355,10 @@ export default await Effect.runPromise(handlerEffect)
         while: (e: any) =>
           e._tag === "ResourceConflictException" ||
           e._tag === "TooManyRequestsException",
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(30)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential(100),
+          Schedule.recurs(30),
+        ]),
       }) as <A, R, Err>(
         self: Effect.Effect<A, Err, R>,
       ) => Effect.Effect<A, Err, R>;
@@ -1089,6 +1416,13 @@ export default await Effect.runPromise(handlerEffect)
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
+        // Resolved EFS mounts. `undefined` leaves the function's existing
+        // config untouched (precreate stub); `[]` explicitly clears mounts.
+        fileSystemConfigs?: Lambda.FileSystemConfig[];
+        // Effective VPC attachment (prop ∪ binding-channel requests).
+        // Defaults to `news.vpc` when omitted (precreate stub, before
+        // bindings are known).
+        vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
       }) => Effect.Effect<
         void,
@@ -1103,6 +1437,8 @@ export default await Effect.runPromise(handlerEffect)
         env,
         functionName,
         preferUpdate,
+        fileSystemConfigs,
+        vpc = news.vpc,
         session,
       }: {
         id: string;
@@ -1113,6 +1449,8 @@ export default await Effect.runPromise(handlerEffect)
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
+        fileSystemConfigs?: Lambda.FileSystemConfig[];
+        vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
@@ -1125,6 +1463,11 @@ export default await Effect.runPromise(handlerEffect)
         ) =>
           e._tag === "InvalidParameterValueException" &&
           (e.message?.includes("cannot be assumed by Lambda") ||
+            // Freshly attached AWSLambdaVPCAccessExecutionRole still
+            // propagating when a VPC-attached function is created/updated.
+            e.message?.includes(
+              "does not have permissions to call CreateNetworkInterface",
+            ) ||
             (e.message?.includes("KMS key is invalid for CreateGrant") &&
               e.message?.includes("ARN does not refer to a valid principal")));
 
@@ -1158,7 +1501,12 @@ export default await Effect.runPromise(handlerEffect)
 
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
-          Handler: `index.${news.handler ?? "default"}`,
+          // Effect-mode functions are wrapped in a generated entry whose ONLY
+          // export is `default` — `handler` names an export of the USER's
+          // module and can only address it when the module is bundled as-is
+          // (isExternal). Honoring it in Effect mode deploys a Lambda that
+          // dies at init with Runtime.HandlerNotFound.
+          Handler: `index.${news.isExternal ? (news.handler ?? "default") : "default"}`,
           Role: roleArn,
           Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",
@@ -1174,12 +1522,19 @@ export default await Effect.runPromise(handlerEffect)
             : undefined,
           Tags: tags,
           Timeout: toTimeoutSeconds(news.timeout),
-          VpcConfig: news.vpc
+          // Always explicit so removing the `tracing` prop converges back to
+          // the AWS default on update.
+          TracingConfig: { Mode: news.tracing ?? "PassThrough" },
+          // Durability is create-time-only; a presence flip is a replacement
+          // (see `diff`), so passing the same value on update is a no-op.
+          DurableConfig: news.durableConfig,
+          VpcConfig: vpc
             ? {
-                SubnetIds: news.vpc.subnetIds,
-                SecurityGroupIds: news.vpc.securityGroupIds,
+                SubnetIds: vpc.subnetIds,
+                SecurityGroupIds: vpc.securityGroupIds,
               }
             : undefined,
+          FileSystemConfigs: fileSystemConfigs,
         };
 
         const getAndUpdate = Lambda.getFunction({
@@ -1240,6 +1595,7 @@ export default await Effect.runPromise(handlerEffect)
                 Timeout: createFunctionRequest.Timeout,
                 TracingConfig: createFunctionRequest.TracingConfig,
                 VpcConfig: createFunctionRequest.VpcConfig,
+                DurableConfig: createFunctionRequest.DurableConfig,
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
@@ -1267,7 +1623,7 @@ export default await Effect.runPromise(handlerEffect)
           Effect.retry({
             while: (e) => isRolePropagationError(e),
             schedule: Schedule.fixed(1000).pipe(
-              Schedule.tapOutput(() => noteRolePropagationWait()),
+              Schedule.tap(() => noteRolePropagationWait()),
             ),
           }),
           Effect.catchTags({
@@ -1432,11 +1788,18 @@ export default await Effect.runPromise(handlerEffect)
           if (!output) {
             return undefined;
           }
-          if (
-            // function name changed
-            output.functionName !==
-            (yield* createFunctionName(id, news.functionName))
-          ) {
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id
+          // differently today. Only an explicit user-provided functionName
+          // can force a replace.
+          const newFunctionName = news.functionName ?? output.functionName;
+          if (output.functionName !== newFunctionName) {
+            return { action: "replace" };
+          }
+          if (!!olds.durableConfig !== !!news.durableConfig) {
+            // DurableConfig can only be enabled/disabled at CreateFunction —
+            // switching a logical id between Function and DurableFunction (or
+            // vice versa) must replace the physical function.
             return { action: "replace" };
           }
           if (
@@ -1627,21 +1990,118 @@ export default await Effect.runPromise(handlerEffect)
           output,
           session,
         }) {
-          const { roleName, policyName, functionName, functionArn } =
-            yield* createNames(id, news.functionName);
+          const generated = yield* createNames(id, news.functionName);
+          // Prefer the deployed identifiers: regenerating would target
+          // different physical resources if the generator's output for this
+          // id ever drifts. (An explicit functionName change arrives here as
+          // a fresh replacement instance with no output.)
+          const functionName = output?.functionName ?? generated.functionName;
+          const roleName = output?.roleName ?? generated.roleName;
+          const functionArn = output?.functionArn ?? generated.functionArn;
+          const policyName = generated.policyName;
 
-          const roleArn =
-            output?.roleArn ??
-            (yield* createRoleIfNotExists({ id, roleName, vpc: news.vpc })).Role
-              .Arn;
+          // State is only a cache: the execution role may have been removed
+          // out-of-band (or by a previously interrupted cleanup) while the
+          // function output remains persisted. Always observe/ensure the
+          // deterministic role before syncing binding policies so reconcile
+          // can recover from that partial state instead of failing the first
+          // `putRolePolicy` with `NoSuchEntityException`.
+          const ensuredRole = yield* createRoleIfNotExists({
+            id,
+            roleName,
+            vpc: news.vpc,
+          });
+          const roleArn = ensuredRole.Role.Arn ?? output?.roleArn;
 
-          const env = yield* attachBindings({
+          const {
+            env,
+            vpc: bindingVpc,
+            fileSystemConfigs: bindingFileSystemConfigs,
+          } = yield* attachBindings({
             roleName,
             policyName,
             functionArn,
             functionName,
             bindings,
           });
+
+          // Both VPC paths (the `vpc` prop and binding-channel requests)
+          // converge on one Lambda VPC config: set-union of subnets and
+          // security groups.
+          const vpc =
+            news.vpc || bindingVpc
+              ? {
+                  subnetIds: [
+                    ...new Set([
+                      ...(news.vpc?.subnetIds ?? []),
+                      ...(bindingVpc?.subnetIds ?? []),
+                    ]),
+                  ],
+                  securityGroupIds: [
+                    ...new Set([
+                      ...(news.vpc?.securityGroupIds ?? []),
+                      ...(bindingVpc?.securityGroupIds ?? []),
+                    ]),
+                  ],
+                }
+              : undefined;
+
+          // The role may predate the VPC request (precreate stub, or a
+          // binding newly asking for attachment) — the ENI permissions must
+          // be on the role before the function config references the VPC.
+          // Attaching is idempotent.
+          if (vpc) {
+            yield* iam.attachRolePolicy({
+              RoleName: roleName,
+              PolicyArn:
+                "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+            });
+          }
+
+          yield* syncTracingPolicy({
+            roleName,
+            tracing: news.tracing,
+            // Routine update from Active, or adoption (output without olds)
+            // where the prior tracing mode is unknown.
+            mayHaveBeenActive:
+              olds?.tracing === "Active" ||
+              (olds === undefined && output !== undefined),
+          });
+
+          // Desired EFS mounts: the `fileSystemConfigs` prop (access-point
+          // references resolved to ARNs) merged with binding-channel
+          // requests (`EFS.Mount`), deduped by mount path.
+          const desiredFileSystemConfigs = [
+            ...new Map(
+              [
+                ...(news.fileSystemConfigs ?? []).map((c) => {
+                  const arn = accessPointArnOf(c);
+                  if (arn === undefined) {
+                    throw new Error(
+                      `Function(${id}): fileSystemConfigs entry for ${c.localMountPath} needs an access point — set \`accessPoint\` (an AWS.EFS.AccessPoint resource or its ARN) or \`arn\``,
+                    );
+                  }
+                  return { Arn: arn, LocalMountPath: c.localMountPath };
+                }),
+                ...bindingFileSystemConfigs.map((c) => ({
+                  Arn: c.arn,
+                  LocalMountPath: c.localMountPath,
+                })),
+              ].map((config) => [config.LocalMountPath, config] as const),
+            ).values(),
+          ];
+
+          // EFS mounts authenticate the execution role against the access
+          // point at sandbox start — grant client access before the function
+          // configuration references the file system. Attaching is
+          // idempotent; the policy is detached with the rest on delete.
+          if (desiredFileSystemConfigs.length > 0) {
+            yield* iam.attachRolePolicy({
+              RoleName: roleName,
+              PolicyArn:
+                "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
+            });
+          }
 
           const { identityHash, buildArchive } = yield* bundleCode(id, news);
           const { archive, archiveHash } = yield* buildArchive;
@@ -1657,7 +2117,17 @@ export default await Effect.runPromise(handlerEffect)
               ...news.env,
             },
             functionName,
+            vpc,
             preferUpdate: output !== undefined,
+            // `[]` (when the prop/bindings were removed on a function that
+            // previously had mounts) explicitly clears the file-system
+            // config; `undefined` when it never had any leaves it untouched.
+            fileSystemConfigs:
+              desiredFileSystemConfigs.length > 0
+                ? desiredFileSystemConfigs
+                : olds?.fileSystemConfigs || output !== undefined
+                  ? []
+                  : undefined,
             session,
           });
 
@@ -1666,6 +2136,11 @@ export default await Effect.runPromise(handlerEffect)
               functionName,
               reservedConcurrentExecutions: news.reservedConcurrentExecutions,
             });
+
+          yield* syncEventInvokeConfig({
+            functionName,
+            config: news.eventInvokeConfig,
+          });
 
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
@@ -1748,11 +2223,198 @@ export default await Effect.runPromise(handlerEffect)
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
 
-          yield* iam
-            .deleteRole({
-              RoleName: output.roleName,
+          // Release the execution role before the auxiliary CloudWatch Logs
+          // reap below. A recently invoked function can keep that reap alive
+          // for ~40 seconds while Lambda flushes its final log batches; if the
+          // process is interrupted during that window, leaving role deletion
+          // until afterwards strands the deterministic role. IAM can briefly
+          // report the just-detached role as still in use, so retry those
+          // eventual-consistency conflicts on a bounded schedule.
+          yield* iam.deleteRole({ RoleName: output.roleName }).pipe(
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "DeleteConflictException" ||
+                error._tag === "ConcurrentModificationException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+            }),
+          );
+
+          // Lambda auto-creates /aws/lambda/{name} on the first invoke and
+          // deleteFunction does NOT remove it — without this every deleted
+          // function leaks an orphaned log group. Worse, the Lambda service
+          // flushes the final log batch asynchronously (observed up to ~35s
+          // after the last invoke, even after BOTH the function and its role
+          // are already deleted), silently re-creating a just-deleted group.
+          // The only reliable reap is a bounded watch over that flush window.
+          // A provably-quiescent group (last ingestion > 2 minutes ago —
+          // every pending flush has long since landed) deletes in a single
+          // call, so routine deletes of idle functions stay fast; a group
+          // with recent ingestion — or one that does not exist yet, where a
+          // first flush may still be in flight — is re-reaped on a short
+          // bounded schedule.
+          const logGroupName = `/aws/lambda/${output.functionName}`;
+          const reapLogGroup = logs.deleteLogGroup({ logGroupName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            // CloudWatch Logs can sit in its SDK retry path for minutes
+            // under a full parallel sweep. Log-group cleanup is auxiliary
+            // to the already-completed Lambda delete, so bound each reap
+            // attempt while preserving the t=0/20/40 flush watch below.
+            Effect.timeoutOrElse({
+              duration: "5 seconds",
+              orElse: () =>
+                Effect.logWarning(
+                  `Timed out reaping Lambda log group ${logGroupName}`,
+                ),
+            }),
+          );
+          const lastIngestion = yield* logs
+            .describeLogStreams({
+              logGroupName,
+              orderBy: "LastEventTime",
+              descending: true,
+              limit: 1,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+            .pipe(
+              Effect.map((r) => r.logStreams?.[0]?.lastIngestionTime),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.timeoutOrElse({
+                duration: "5 seconds",
+                orElse: () =>
+                  Effect.gen(function* () {
+                    yield* Effect.logWarning(
+                      `Timed out inspecting Lambda log group ${logGroupName}`,
+                    );
+                    return undefined;
+                  }),
+              }),
+            );
+          const now = yield* Effect.sync(() => Date.now());
+          const quiescent =
+            lastIngestion !== undefined && now - lastIngestion > 120_000;
+          if (quiescent) {
+            yield* reapLogGroup;
+          } else {
+            // Reaps at t=0s / 20s / 40s — each attempt is idempotent.
+            yield* reapLogGroup.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("20 seconds"),
+                times: 2,
+              }),
+            );
+          }
+
+          // A timed-out delete attempt above is not deletion proof, and the
+          // Lambda service keeps flushing buffered logs AFTER the function is
+          // deleted (typically ~35s, occasionally much longer), silently
+          // re-creating a just-deleted group. Converge with a bounded
+          // observe→delete loop: any reappearance is simply deleted again
+          // (every delete is idempotent — ResourceNotFoundException means
+          // done). A recreation we deleted counts as gone; a flush landing
+          // after our final check is inherently unobservable and the next
+          // nuke census is the backstop. We only fail loudly if the group is
+          // still observable at budget exhaustion AND a final delete attempt
+          // did not remove it — i.e. the group is genuinely undeletable.
+          const describeLogGroup = logs
+            .describeLogGroups({
+              logGroupNamePrefix: logGroupName,
+              limit: 1,
+            })
+            .pipe(
+              Effect.map((response) =>
+                (response.logGroups ?? []).some(
+                  (group) => group.logGroupName === logGroupName,
+                ),
+              ),
+            );
+
+          // Loop observation: a describe that can't complete in time (API
+          // throttling under a busy account / saturated test run) is NOT
+          // deletion proof — assume the group is still present and let the
+          // bounded loop keep converging instead of dying on a slow read.
+          const observeLogGroup = describeLogGroup.pipe(
+            Effect.timeoutOrElse({
+              duration: "30 seconds",
+              orElse: () =>
+                Effect.logWarning(
+                  `Timed out observing Lambda log group ${logGroupName} — assuming still present`,
+                ).pipe(Effect.as(true)),
+            }),
+          );
+
+          // Final authoritative observation: here a timeout must fail loudly,
+          // since we are about to declare the delete converged.
+          const observeLogGroupOrDie = describeLogGroup.pipe(
+            Effect.timeoutOrElse({
+              duration: "30 seconds",
+              orElse: () =>
+                Effect.die(
+                  new Error(
+                    `Timed out confirming Lambda log group deletion: ${logGroupName}`,
+                  ),
+                ),
+            }),
+          );
+
+          const deleteLogGroupAgain = logs
+            .deleteLogGroup({ logGroupName })
+            .pipe(
+              Effect.retry({
+                while: (error) =>
+                  error._tag === "OperationAbortedException" ||
+                  error._tag === "ServiceUnavailableException",
+                schedule: Schedule.max([
+                  Schedule.exponential("250 millis"),
+                  Schedule.recurs(8),
+                ]),
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.timeoutOrElse({
+                duration: "45 seconds",
+                orElse: () =>
+                  Effect.die(
+                    new Error(
+                      `Timed out deleting Lambda log group ${logGroupName}`,
+                    ),
+                  ),
+              }),
+            );
+
+          const reapIfObserved = Effect.gen(function* () {
+            const present = yield* observeLogGroup;
+            if (present) {
+              yield* deleteLogGroupAgain;
+            }
+            return present;
+          });
+
+          // Happy path (no reappearance): a single describe, done. On a
+          // post-delete flush recreation: delete and re-check every 5s for
+          // up to ~90s after the last reappearance-free observation.
+          const observedAtBudgetEnd = yield* reapIfObserved.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (present) => !present,
+              times: 18,
+            }),
+          );
+
+          // Budget exhausted with the group still reappearing: the last loop
+          // iteration already issued a delete. One final authoritative
+          // observation decides — absent means our delete of the latest
+          // recreation stuck (gone); present means the group survives its own
+          // deletion (denied/undeletable) and must fail loudly.
+          if (observedAtBudgetEnd && (yield* observeLogGroupOrDie)) {
+            yield* Effect.die(
+              new Error(
+                `Lambda log group ${logGroupName} remained observable after delete`,
+              ),
+            );
+          }
+
           return null as any;
         }),
         tail: ({ output }) => {

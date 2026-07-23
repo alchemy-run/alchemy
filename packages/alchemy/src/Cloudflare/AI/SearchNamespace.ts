@@ -1,12 +1,11 @@
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -176,13 +175,15 @@ export type SearchNamespace = Resource<
  *
  * @see https://developers.cloudflare.com/ai-search/
  */
-export const SearchNamespace = Resource<SearchNamespace>(TypeId);
+export const SearchNamespace = Resource<SearchNamespace>(TypeId, {
+  aliases: ["Cloudflare.AiSearch.Namespace"],
+});
 
 /**
  * Returns true if the given value is a SearchNamespace resource.
  */
 export const isSearchNamespace = (value: unknown): value is SearchNamespace =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+  isResourceOfType(value, TypeId);
 
 export const SearchNamespaceProvider = () =>
   Provider.succeed(SearchNamespace, {
@@ -196,9 +197,12 @@ export const SearchNamespaceProvider = () =>
       // The name is the namespace's identity (it is the API path
       // parameter) — renaming is a replacement. Props are all optional, so a
       // no-props resource resolves `news`/`olds` to `undefined` at runtime.
-      const newName = yield* createNamespaceName(id, news?.name);
       const oldName =
         output?.name ?? (yield* createNamespaceName(id, olds?.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const newName = news?.name ?? oldName;
       if (newName !== oldName) {
         // A user-pinned name collides with the still-existing old
         // namespace only when both resolve to the same string — they

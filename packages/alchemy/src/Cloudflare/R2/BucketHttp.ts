@@ -1,12 +1,29 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { Self } from "../../Self.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Credentials } from "../Credentials.ts";
 import type { Bucket } from "./Bucket.ts";
 import { R2Error, type R2Object } from "./BucketTypes.ts";
+
+/**
+ * Injectable auth used by the R2 HTTP client builders. Both the token-scoped
+ * `*Http` layers and the current-credentials `*Local` layers build one of
+ * these so they can share the exact same client implementation.
+ */
+export interface R2Auth {
+  /** Provide credentials + HTTP client to a raw distilled R2 op. */
+  authorize: <A, E>(
+    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ) => Effect.Effect<A, E, RuntimeContext>;
+  /** Resolve the Cloudflare account id. */
+  accountId: Effect.Effect<string>;
+}
 
 export const makeHttpBucketBinding = <Client>(options: {
   permissionGroups: PermissionGroup[];
@@ -66,16 +83,16 @@ type PermissionGroup = (typeof R2_HTTP_PERMISSION_GROUPS)[number];
 
 /** Resolve the account, bucket, and jurisdiction once per operation. */
 export const makeR2HttpScope = (
-  token: HttpToken,
+  accountId: Effect.Effect<string>,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
 ): Effect.Effect<HttpScope> =>
   Effect.gen(function* () {
-    const accountId = yield* token.accountId;
+    const accountId_ = yield* accountId;
     const bucket = yield* bucketName;
     const j = yield* jurisdiction;
     return {
-      accountId,
+      accountId: accountId_,
       bucketName: bucket,
       cfR2Jurisdiction: j === "default" ? undefined : j,
     };

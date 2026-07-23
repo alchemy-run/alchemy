@@ -190,7 +190,9 @@ export type Dnssec = Resource<
  * });
  * ```
  */
-export const Dnssec = Resource<Dnssec>(TypeId);
+export const Dnssec = Resource<Dnssec>(TypeId, {
+  aliases: ["Cloudflare.Dns.Dnssec"],
+});
 
 /**
  * Returns true if the given value is a Dnssec resource.
@@ -378,7 +380,9 @@ interface InitialDnssec {
  * desired family (`pending` is on its way to `active`,
  * `pending-disabled` / `error` / unknown collapse to `disabled`).
  */
-const statusFamily = (status: string | null | undefined): DnssecDesiredStatus =>
+const statusFamily = (
+  status: string | null | undefined,
+): DnssecDesiredStatus =>
   status === "active" || status === "pending" ? "active" : "disabled";
 
 const flag = (v: boolean | null | undefined): boolean => v ?? false;

@@ -1,12 +1,11 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -137,7 +136,7 @@ export const Index = Resource<Index>(TypeId);
  * Returns true if the given value is a Vectorize Index resource.
  */
 export const isIndex = (value: unknown): value is Index =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+  isResourceOfType(value, TypeId);
 
 export const IndexProvider = () =>
   Provider.succeed(Index, {
@@ -148,10 +147,12 @@ export const IndexProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createIndexName(id, news.name);
-      const oldName = output?.indexName
-        ? output.indexName
-        : yield* createIndexName(id, olds.name);
+      const oldName =
+        output?.indexName ?? (yield* createIndexName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         (news.preset ?? undefined) !== (olds.preset ?? undefined) ||
@@ -177,9 +178,12 @@ export const IndexProvider = () =>
           ),
         );
     }),
-    reconcile: Effect.fn(function* ({ id, news = {} }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const indexName = yield* createIndexName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // index if the generator's output for this id ever drifts.
+      const indexName =
+        output?.indexName ?? (yield* createIndexName(id, news.name));
 
       // Observe — read the live index by name. The name is the stable
       // identifier; fall back through a NotFound to the create path so

@@ -1,9 +1,9 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as user from "@distilled.cloud/cloudflare/user";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -120,9 +120,7 @@ describe.skip("UserApiToken", () => {
       Effect.flatMap(() => Effect.fail(new TokenStillExists())),
       Effect.retry({
         while: (e): e is TokenStillExists => e instanceof TokenStillExists,
-        schedule: Schedule.exponential(200).pipe(
-          Schedule.both(Schedule.recurs(8)),
-        ),
+        schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
       }),
       Effect.catchTag("TokenStillExists", () =>
         Effect.die(

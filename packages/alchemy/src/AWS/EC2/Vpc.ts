@@ -516,9 +516,13 @@ export const VpcProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.Vpcs ?? []).map((vpc) =>
-                    vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
-                  ),
+                  (page.Vpcs ?? [])
+                    // The default VPC is account furniture AWS provisions (and
+                    // test/AWS/DefaultVpc.ts recreates); never census/nuke it.
+                    .filter((vpc) => !vpc.IsDefault)
+                    .map((vpc) =>
+                      vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
+                    ),
                 ),
               ),
             );
@@ -550,11 +554,17 @@ export const VpcProvider = () =>
                   );
                 },
                 // Use fixed 5s delay instead of exponential to avoid very long waits
-                schedule: Schedule.fixed(5000).pipe(
-                  Schedule.both(Schedule.recurs(60)), // Up to 5 minutes total
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.fixed(5000),
+                  // A dependency that has not drained within ~50s is a real
+                  // cleanup defect. Preserve state and fail promptly so a
+                  // subsequent destroy/nuke can retry after fixing the child,
+                  // rather than hanging this resource for five minutes.
+                  Schedule.recurs(10),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                      `Waiting for dependencies to clear... (attempt ${attempt})`,
                     ),
                   ),
                 ),
@@ -609,12 +619,11 @@ const waitForVpcAvailable = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof VpcPending,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(30)), // Max 60 seconds
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(30)]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
-                `Waiting for VPC to be available... (${(attempt + 1) * 2}s)`,
+                `Waiting for VPC to be available... (${attempt * 2}s)`,
               )
             : Effect.void,
         ),
@@ -644,10 +653,9 @@ const waitForVpcDeleted = (vpcId: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof VpcStillExists,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(15)), // Max 30 seconds
-        Schedule.tapOutput(([, attempt]) =>
-          session.note(`Waiting for VPC deletion... (${(attempt + 1) * 2}s)`),
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for VPC deletion... (${attempt * 2}s)`),
         ),
       ),
     }),

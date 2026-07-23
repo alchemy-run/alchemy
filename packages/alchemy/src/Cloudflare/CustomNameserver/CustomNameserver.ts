@@ -132,7 +132,9 @@ export type CustomNameserver = Resource<
  *
  * @see https://developers.cloudflare.com/dns/nameservers/custom-nameservers/account-custom-nameservers/
  */
-export const CustomNameserver = Resource<CustomNameserver>(TypeId);
+export const CustomNameserver = Resource<CustomNameserver>(TypeId, {
+  aliases: ["Cloudflare.CustomNameserver"],
+});
 
 /**
  * Returns true if the given value is a CustomNameserver resource.

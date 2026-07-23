@@ -8,7 +8,27 @@ export interface DescribeStreamRequest extends Omit<
   "StreamName" | "StreamARN"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `kinesis:DescribeStream`.
+ *
+ * Bind this operation to a `Stream` to read its full description, including
+ * the shard map — the stream name is injected automatically. For status and
+ * counts without the shard list, prefer `AWS.Kinesis.DescribeStreamSummary`.
+ * Provide the implementation with
+ * `Effect.provide(AWS.Kinesis.DescribeStreamHttp)`.
+ * @binding
+ * @section Inspecting Streams
+ * @example Describe the Bound Stream
+ * ```typescript
+ * // init
+ * const describeStream = yield* AWS.Kinesis.DescribeStream(stream);
+ *
+ * // runtime
+ * const result = yield* describeStream();
+ * const status = result.StreamDescription.StreamStatus;
+ * const shards = result.StreamDescription.Shards;
+ * ```
+ */
 export interface DescribeStream extends Binding.Service<
   DescribeStream,
   "AWS.Kinesis.DescribeStream",

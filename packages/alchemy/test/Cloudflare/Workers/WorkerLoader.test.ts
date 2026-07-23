@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -33,9 +33,10 @@ const readJson = (url: string) =>
     ),
     Effect.retry({
       while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 
@@ -58,6 +59,31 @@ test(
     const { effectWorkerUrl } = yield* stack;
     const body = yield* readJson(effectWorkerUrl);
     expect(body).toMatchObject({ mode: "effect", ok: true });
+  }),
+  { timeout: 180_000 },
+);
+
+// `globalOutbound: null` must reach the runtime as `null` — coercing it to
+// `undefined` (the old `?.raw` behavior) silently restores default outbound
+// access for workers meant to be sandboxed (#746). The fixture's dynamic
+// worker attempts an outbound fetch and reports whether the runtime allowed
+// it.
+test(
+  "dynamic worker loaded with globalOutbound: null cannot reach the network",
+  Effect.gen(function* () {
+    const { effectWorkerUrl } = yield* stack;
+    const body = yield* readJson(`${effectWorkerUrl}/outbound/sandboxed`);
+    expect(body).toMatchObject({ outbound: "blocked" });
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "dynamic worker loaded without globalOutbound has default network access",
+  Effect.gen(function* () {
+    const { effectWorkerUrl } = yield* stack;
+    const body = yield* readJson(`${effectWorkerUrl}/outbound/open`);
+    expect(body).toMatchObject({ outbound: "allowed", status: 200 });
   }),
   { timeout: 180_000 },
 );

@@ -111,7 +111,9 @@ export type Reserve = Resource<
  *
  * @see https://developers.cloudflare.com/cache/advanced-configuration/cache-reserve/
  */
-export const Reserve = Resource<Reserve>(TypeId);
+export const Reserve = Resource<Reserve>(TypeId, {
+  aliases: ["Cloudflare.Cache.CacheReserve"],
+});
 
 /**
  * Returns true if the given value is a Reserve resource.

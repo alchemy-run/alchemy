@@ -1,9 +1,10 @@
 import * as AWS from "@/AWS";
 import { BasePathMapping } from "@/AWS/ApiGateway/BasePathMapping";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "./Test.ts";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,7 +34,9 @@ test.provider.skipIf(!!process.env.FAST)(
     }),
 );
 
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(
+  !!process.env.FAST || !testDomainName || !testCertificateArn,
+)(
   "list includes a deployed base path mapping",
   (stack) =>
     Effect.gen(function* () {
@@ -91,6 +94,7 @@ test.provider.skipIf(!!process.env.FAST)(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(deployed.restApiId);
     }),
   { timeout: 600_000 },
 );

@@ -9,13 +9,12 @@ import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import type { Scope } from "effect/Scope";
+import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Dependencies } from "./Dependencies.ts";
-import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Named, Tag } from "./Named.ts";
@@ -43,6 +42,44 @@ export interface PlatformProps {
    */
   isExternal?: boolean;
 }
+
+/**
+ * Provide the platform class's layer (`cls.make(props, impl)`) with a
+ * lifetime that matches the phase.
+ *
+ * **At runtime** (`__ALCHEMY_RUNTIME__`, folded to `true` in every bundled
+ * artifact) the layer builds against the AMBIENT scope. `Effect.provide` is
+ * implemented with `scopedWith`, so its transient region scope would tear
+ * the layer down — firing init-level finalizers and releasing
+ * `Layer.scoped` services — the moment init completes. The runtime bridges
+ * evaluate the entrypoint under the instance-lifetime build scope (closed
+ * at instance shutdown where the platform offers one — Lambda's SIGTERM
+ * window — and never on workerd), so building against it keeps instance
+ * services alive for the instance.
+ *
+ * **At plan/deploy** it stays `Effect.provide`: the transient region evicts
+ * the layer's memo entry when each `yield*` of the class completes, so
+ * every deploy in a session re-evaluates the resource and re-registers its
+ * Output sources. Building on the session scope would keep the memo alive
+ * across deploys and a second `stack.deploy` would skip source
+ * registration (`MissingSourceError`).
+ */
+const provideClassLayer =
+  <ROut, E2, RIn>(layer: Layer.Layer<ROut, E2, RIn>) =>
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | E2, RIn | Scope | Exclude<R, ROut>> =>
+    (globalThis.__ALCHEMY_RUNTIME__
+      ? Effect.flatMap(Effect.scope, (scope) =>
+          Effect.flatMap(Layer.buildWithScope(layer, scope), (context) =>
+            Effect.provideContext(self, context),
+          ),
+        )
+      : Effect.provide(self, layer)) as Effect.Effect<
+      A,
+      E | E2,
+      RIn | Scope | Exclude<R, ROut>
+    >;
 
 export type Main<InitServices = never> = void | {
   fetch?:
@@ -98,14 +135,17 @@ export type MakeShape<Shape, BaseShape> = [
   ? Exclude<BaseShape, void | undefined>
   : Exclude<Shape, void | undefined> & Exclude<BaseShape, void | undefined>;
 
-// services provided to the Resource
+// Services provided to the Resource's init/props effects. Deliberately does
+// NOT include `Scope`: init runs once per instance under a build scope that
+// closes at instance shutdown at best (Lambda's SIGTERM window; never on
+// workerd), so init code that needs a scope must not typecheck. Handlers get
+// a fresh per-event `Scope` from the bridge — note the explicit `| Scope` on
+// the handler positions in `Main` / `MainRpc` above.
 export type PlatformServices =
   | NodeServices
-  | ExecutionContext
   | HttpClient
   | Provider<any>
   | ProviderCollectionLike
-  | Scope
   | Stack
   | StackServices
   | Stage;
@@ -160,7 +200,11 @@ export interface Platform<
       id: Id,
       props:
         | InputProps<Resource["Props"]>
-        | Effect.Effect<Resource["Props"], ConfigError.ConfigError, PropsReq>,
+        | Effect.Effect<
+            InputProps<Resource["Props"]>,
+            ConfigError.ConfigError,
+            PropsReq
+          >,
       impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
@@ -252,6 +296,16 @@ export const Platform = <
     // Workflow). Allow an ambient requirement (`any`) rather than forcing
     // `never`; it is discharged by the surrounding provider context.
     onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
+    /**
+     * Transform the user-supplied props before the underlying resource is
+     * declared. Runs in the resource-construction context (Stack, Namespace,
+     * and providers are available), so the hook may compose REAL child
+     * resources (the `StaticSite` pattern) and return derived props that
+     * reference their Outputs. Implementations MUST be a no-op at runtime
+     * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
+     * wherever the props effect is, including inside deployed bundles.
+     */
+    transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -260,6 +314,19 @@ export const Platform = <
 
   const resource = Resource(type);
   const PlatformContext = RuntimeContext;
+
+  // Apply the optional `transformProps` hook to a (possibly Effect-valued)
+  // props argument. Returns the props untouched when no hook is installed so
+  // the plain-object fast paths below keep working.
+  const applyTransformProps = (id: string, props: any): any =>
+    hooks.transformProps === undefined
+      ? props
+      : Effect.flatMap(
+          Effect.isEffect(props)
+            ? (props as Effect.Effect<any>)
+            : Effect.succeed(props ?? {}),
+          (resolved) => hooks.transformProps!(id, resolved),
+        );
 
   const constructor = (
     id?: string,
@@ -291,19 +358,25 @@ export const Platform = <
             // }
             resource(
               id,
-              Effect.isEffect(props)
-                ? Effect.map(props, (p: any) => ({ ...p, isExternal: true }))
-                : {
-                    ...props,
-                    isExternal: true,
-                  },
+              (() => {
+                const transformed = applyTransformProps(id, props);
+                return Effect.isEffect(transformed)
+                  ? Effect.map(transformed, (p: any) => ({
+                      ...p,
+                      isExternal: true,
+                    }))
+                  : {
+                      ...transformed,
+                      isExternal: true,
+                    };
+              })(),
             )
           : Effect.flatMap(
               // this is a tagged resource
               Effect.serviceOption(cls.Self),
               Option.match({
                 // we are likely running at runtime, so we create
-                onNone: () => resource(id, props),
+                onNone: () => resource(id, applyTransformProps(id, props)),
                 onSome: Effect.succeed,
               }),
             )
@@ -324,7 +397,7 @@ export const Platform = <
         );
       return Object.assign(
         function (props: Props, impl: Impl) {
-          return cls.Self.pipe(Effect.provide(cls.make(props, impl)));
+          return cls.Self.pipe(provideClassLayer(cls.make(props, impl)));
         },
         // we splice in the Effect so this can be yielded to indicate a non-Effect native instance
         // e.g. here, we yield it - in this case we don't want to provide an implementation
@@ -345,12 +418,24 @@ export const Platform = <
       // e.g.
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id);
-      return cls.Self.pipe(Effect.provide(cls.make(props, impl)), effectClass);
+      return Object.assign(
+        cls.Self.pipe(provideClassLayer(cls.make(props, impl)), effectClass),
+        // Expose the logical id statically (mirrors `makeClass`) so a class
+        // reference identifies its resource without being yielded.
+        { LogicalId: id },
+      );
     }
   };
 
   const makeClass = (id: string) => {
     class Platform {
+      /**
+       * Logical id of the resource this class declares. Statically readable
+       * — e.g. `DurableObjectProps.transferredFrom` accepts a Worker class
+       * and takes its identity from here without yielding it (yielding
+       * would add a dependency edge on the referenced resource).
+       */
+      static readonly LogicalId = id;
       static readonly Self = Self(`${type}<${id}>`);
       static readonly Platform = Context.Service<Platform, Platform>(
         `Platform<${type}<${id}>>`,
@@ -362,11 +447,28 @@ export const Platform = <
           Self,
           Effect.flatMap(
             Effect.all([
-              Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+              (() => {
+                const transformed = applyTransformProps(id, props);
+                return Effect.isEffect(transformed)
+                  ? (transformed as Effect.Effect<any>)
+                  : Effect.succeed(transformed ?? {});
+              })(),
               Effect.sync(() => hooks.createRuntimeContext(id)),
               Effect.context<never>(),
             ]),
             Effect.fn(function* ([props, runtimeContext, outerServices]) {
+              // The init effect (`impl`) is evaluated inside an
+              // `Effect.provide(...)` region below, whose implementation
+              // (`scopedWith`) would otherwise shadow the ambient `Scope`
+              // with a transient one that closes the moment init returns.
+              // Pin init's ambient scope to this layer's build scope
+              // instead: under the runtime bridges that scope belongs to
+              // the instance-lifetime build, so init-level finalizers run
+              // at instance shutdown or not at all — never per event
+              // (workerd never closes it; the Lambda entry closes it in the
+              // SIGTERM window). Request-coupled cleanup belongs in
+              // handlers, where the bridge provides a per-event scope.
+              const buildScope = yield* Effect.scope;
               const instance = Object.assign(
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
@@ -455,6 +557,18 @@ export const Platform = <
                   ).pipe(
                     Layer.provideMerge(
                       Layer.mergeAll(
+                        // Pin init's ambient `Scope` to this layer's build
+                        // scope. `Effect.provide` (`scopedWith`) would
+                        // otherwise shadow it with a transient scope that
+                        // closes the moment init returns; the build scope
+                        // lives for the instance under the runtime bridges,
+                        // so init-level finalizers run at instance shutdown
+                        // (Lambda's SIGTERM window) or never (workerd) —
+                        // request-coupled cleanup belongs in handlers, where
+                        // the bridge provides a per-event scope. It also
+                        // wins over any `Scope` captured in `outerServices`
+                        // below.
+                        Layer.succeed(Scope, buildScope),
                         Layer.succeed(Platform.Platform, runtimeContext),
                         Layer.succeed(PlatformContext, runtimeContext),
                         Layer.succeed(RuntimeContext, runtimeContext),

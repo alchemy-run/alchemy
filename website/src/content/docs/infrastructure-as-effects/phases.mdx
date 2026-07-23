@@ -39,6 +39,9 @@ Cloudflare.Worker(
 The `bucket` value is established once during init and captured by
 the runtime closure. Init runs at most once per cold start; the
 runtime body runs per request with everything already wired up.
+Each phase has its own `Scope` with very different lifetimes —
+[Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
+covers where cleanup can (and cannot) happen.
 
 The runtime phase is the *only* place where `Alchemy.RuntimeContext`
 is available. Any Effect whose requirements include `RuntimeContext`

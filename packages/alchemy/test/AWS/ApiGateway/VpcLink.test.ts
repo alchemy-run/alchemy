@@ -1,9 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { assertVpcLinkDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -12,10 +13,12 @@ const targetArn = process.env.ALCHEMY_TEST_VPC_LINK_TARGET_ARN;
 /**
  * Requires a load balancer ARN accepted by API Gateway VPC links (set env when running live).
  */
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !targetArn)(
   "create, update description, delete VPC link",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const arn = targetArn!;
 
       const link = yield* stack.deploy(
@@ -42,6 +45,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(remote.description).toEqual("v2");
 
       yield* stack.destroy();
+      yield* assertVpcLinkDeleted(link.vpcLinkId);
     }),
 );
 
@@ -49,7 +53,7 @@ test.provider.skipIf(!!process.env.FAST)(
  * A VPC link requires an NLB target ARN, which is heavy to provision in CI,
  * so this is gated behind the same env vars as the lifecycle test above.
  */
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !targetArn)(
   "list enumerates the deployed VPC link",
   (stack) =>
     Effect.gen(function* () {
@@ -72,5 +76,6 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(all.some((v) => v.vpcLinkId === link.vpcLinkId)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertVpcLinkDeleted(link.vpcLinkId);
     }),
 );

@@ -24,6 +24,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
   Drizzle: b("drizzle"),
+  SQL: l("database"),
   Command: l("square-terminal"),
   Reference: l("code"),
   Blog: l("newspaper"),
@@ -69,6 +70,9 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
   Drizzle: b("drizzle"),
+  SQL: l("database"),
+  "Effect SQL": l("database-zap"),
+  Migrations: l("list-ordered"),
   Command: l("square-terminal"),
   Stripe: b("stripe"),
 };

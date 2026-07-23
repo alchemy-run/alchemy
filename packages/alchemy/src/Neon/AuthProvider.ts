@@ -129,7 +129,7 @@ export const NeonAuth = AuthProviderLayer<
                 ? Effect.fail(
                     new AuthError({
                       message:
-                        "Neon stored credentials not found. Run: alchemy-effect login --configure",
+                        "Neon stored credentials not found. Run: alchemy login --configure",
                     }),
                   )
                 : Effect.succeed({
@@ -207,9 +207,6 @@ export const NeonAuth = AuthProviderLayer<
             Console.log(`  source: ${sourceStr}`),
           ]);
         }),
-        Effect.catch((e) =>
-          Console.error(`  Failed to retrieve credentials: ${e}`),
-        ),
       );
 
     return {

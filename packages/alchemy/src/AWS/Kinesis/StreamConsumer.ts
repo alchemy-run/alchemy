@@ -44,11 +44,29 @@ export interface StreamConsumer extends Resource<
   "AWS.Kinesis.StreamConsumer",
   StreamConsumerProps,
   {
+    /**
+     * The consumer's physical name.
+     */
     consumerName: ConsumerName;
+    /**
+     * ARN of the registered consumer.
+     */
     consumerArn: ConsumerArn;
+    /**
+     * Current lifecycle status of the consumer.
+     */
     consumerStatus: ConsumerStatus;
+    /**
+     * ARN of the stream the consumer is registered on.
+     */
     streamArn: StreamArn;
+    /**
+     * When the consumer was registered.
+     */
     consumerCreationTimestamp: Date;
+    /**
+     * Current tags reported for the consumer.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -178,9 +196,7 @@ const adoptExistingConsumer = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConsumerRegistryNotConsistent",
-      schedule: Schedule.exponential(250).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(8)]),
     }),
     Effect.catchTag("ConsumerRegistryNotConsistent", () =>
       Effect.fail(
@@ -210,9 +226,7 @@ const waitForConsumerStatus = (
     Effect.retry({
       while: (e: { _tag: string }) =>
         e._tag === "ConsumerStatusNotReady" || e._tag === "ParseError",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
     }),
   );
 
@@ -226,9 +240,7 @@ const waitForConsumerDeleted = (consumerArn: string) =>
     Effect.retry({
       while: (e: { _tag: string }) =>
         e._tag === "ConsumerStillExists" || e._tag === "ParseError",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -309,9 +321,10 @@ export const StreamConsumerProvider = () =>
             // propagation window before giving up.
             Effect.retry({
               while: (e) => e._tag === "ResourceNotFoundException",
-              schedule: Schedule.exponential(500).pipe(
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential(500),
+                Schedule.recurs(8),
+              ]),
             }),
             Effect.asVoid,
             Effect.catchTag("ResourceInUseException", () =>

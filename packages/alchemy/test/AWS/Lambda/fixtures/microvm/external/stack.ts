@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
+import { fileURLToPath } from "node:url";
 
 /**
  * External MicroVM stack: builds a user-provided Dockerfile + context
@@ -16,7 +17,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const buildRole = yield* AWS.IAM.Role("ExternalMicrovmBuildRole", {});
     const image = yield* AWS.Lambda.MicrovmImage("ExternalSandbox", {
-      context: new URL("./", import.meta.url).pathname,
+      context: fileURLToPath(new URL("./", import.meta.url)),
       buildRole,
     });
     return {

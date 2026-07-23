@@ -1,11 +1,12 @@
 import * as AWS from "@/AWS";
 import { KeyPair } from "@/AWS/EC2/KeyPair.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { assertKeyPairGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -68,5 +69,7 @@ test.provider("list enumerates the deployed key pair", (stack) =>
     expect(all.some((k) => k.keyPairId === keyPair.keyPairId)).toBe(true);
 
     yield* stack.destroy();
+
+    yield* assertKeyPairGone(keyPair.keyPairId);
   }),
 );

@@ -413,9 +413,10 @@ export const MicrovmImageProvider = () =>
             while: (e): e is ValidationException =>
               e._tag === "ValidationException" &&
               e.message.includes("running MicroVMs"),
-            schedule: Schedule.fixed(5_000).pipe(
-              Schedule.both(Schedule.recurs(12)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed(5_000),
+              Schedule.recurs(12),
+            ]),
           }),
         );
       yield* waitForDeleted(output.imageArn, session);
@@ -489,9 +490,8 @@ const terminateRunningMicrovms = Effect.fn(function* (
     ),
     Effect.retry({
       while: (e) => e._tag === "MicrovmsActive",
-      schedule: Schedule.fixed(5_000).pipe(
-        Schedule.both(Schedule.recurs(24)),
-        Schedule.tapOutput(() =>
+      schedule: Schedule.max([Schedule.fixed(5_000), Schedule.recurs(24)]).pipe(
+        Schedule.tap(() =>
           session.note("Waiting for MicroVMs to terminate..."),
         ),
       ),
@@ -557,12 +557,12 @@ const waitForReady = (imageArn: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ImageBuilding",
-      schedule: Schedule.fixed(10_000).pipe(
-        Schedule.both(Schedule.recurs(72)), // up to ~12 minutes
-        Schedule.tapOutput(([, attempt]) =>
-          session.note(
-            `Waiting for MicroVM image build... (${(attempt + 1) * 10}s)`,
-          ),
+      schedule: Schedule.max([
+        Schedule.fixed(10_000),
+        Schedule.recurs(72),
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for MicroVM image build... (${attempt * 10}s)`),
         ),
       ),
     }),
@@ -585,11 +585,13 @@ const waitForDeleted = (imageArn: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ImageBuilding",
-      schedule: Schedule.fixed(10_000).pipe(
-        Schedule.both(Schedule.recurs(72)),
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([
+        Schedule.fixed(10_000),
+        Schedule.recurs(72),
+      ]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
-            `Waiting for MicroVM image deletion... (${(attempt + 1) * 10}s)`,
+            `Waiting for MicroVM image deletion... (${attempt * 10}s)`,
           ),
         ),
       ),

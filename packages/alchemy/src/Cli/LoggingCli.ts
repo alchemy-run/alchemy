@@ -113,16 +113,19 @@ export const LoggingCli = Layer.succeed(
 
         const counts = { ok: 0, fail: 0 };
         return {
+          // Write through the Effect Console SERVICE (not the global
+          // `console`) so environments that override it — e.g. the
+          // alchemy-test runner's per-test buffering console — capture
+          // apply progress instead of having it leak to stdout.
           emit: (event: ApplyEvent) =>
-            Effect.sync(() => {
+            Effect.suspend(() => {
               if (event.kind === "log") {
                 // captured Effect.log* lines already reach the terminal via
                 // the merged default logger — don't double-print
-                return;
+                return Effect.void;
               }
               if (event.kind === "annotate") {
-                console.log(`${tag(event.id)} ${blue(event.message)}`);
-                return;
+                return Console.log(`${tag(event.id)} ${blue(event.message)}`);
               }
               if (event.kind === "status-change") {
                 const id = event.bindingId
@@ -132,14 +135,15 @@ export const LoggingCli = Layer.succeed(
                 const msg = event.message
                   ? ` ${dim("—")} ${event.message}`
                   : "";
-                console.log(`${tag(id)} ${status}${msg}`);
                 if (isTerminal(event.status)) {
                   if (event.status === "fail") counts.fail++;
                   else counts.ok++;
                 }
+                return Console.log(`${tag(id)} ${status}${msg}`);
               }
               // other kinds (op-start / op-end / annotation / future events)
               // are dashboard/journal detail — ignore them here
+              return Effect.void;
             }),
           done: () =>
             Console.log(

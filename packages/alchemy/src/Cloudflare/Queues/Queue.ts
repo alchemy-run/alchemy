@@ -9,7 +9,7 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   generateLocalId,
@@ -20,8 +20,7 @@ import {
 import type { Providers } from "../Providers.ts";
 
 export const isQueue = (value: unknown): value is Queue =>
-  typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.Queues.Queue";
+  isResourceOfType(value, "Cloudflare.Queues.Queue");
 
 export type QueueProps = {
   /**
@@ -104,7 +103,9 @@ export type Queue = Resource<
  * );
  * ```
  */
-export const Queue = Resource<Queue>("Cloudflare.Queues.Queue");
+export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
+  aliases: ["Cloudflare.Queue"],
+});
 
 export const ProviderLive = () =>
   Provider.succeed(Queue, {
@@ -121,10 +122,12 @@ export const ProviderLive = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createQueueName(id, news.name);
-      const oldName = output?.queueName
-        ? output.queueName
-        : yield* createQueueName(id, olds.name);
+      const oldName =
+        output?.queueName ?? (yield* createQueueName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "replace" } as const;
       }
@@ -207,9 +210,10 @@ export const ProviderLive = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "QueueInUseByEventNotification",
-            schedule: Schedule.exponential("1 second").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("1 second"),
+              Schedule.recurs(8),
+            ]),
           }),
           Effect.catchTag("QueueNotFound", () => Effect.void),
         );

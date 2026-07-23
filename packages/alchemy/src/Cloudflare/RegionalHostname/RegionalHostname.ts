@@ -95,7 +95,9 @@ export type RegionalHostname = Resource<
  *
  * @see https://developers.cloudflare.com/data-localization/regional-services/
  */
-export const RegionalHostname = Resource<RegionalHostname>(TypeId);
+export const RegionalHostname = Resource<RegionalHostname>(TypeId, {
+  aliases: ["Cloudflare.RegionalHostname"],
+});
 
 /**
  * Returns true if the given value is a RegionalHostname resource.

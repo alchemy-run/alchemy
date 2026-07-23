@@ -238,7 +238,9 @@ export type Firewall = Resource<
  *
  * @see https://developers.cloudflare.com/dns/dns-firewall/
  */
-export const Firewall = Resource<Firewall>(TypeId);
+export const Firewall = Resource<Firewall>(TypeId, {
+  aliases: ["Cloudflare.DnsFirewall"],
+});
 
 /**
  * Returns true if the given value is a DnsFirewall resource.
@@ -256,8 +258,11 @@ export const FirewallProvider = () =>
         return { action: "replace" } as const;
       }
       // The name is the cold-state recovery identity — renames replace.
-      const name = yield* createClusterName(id, news.name);
       const oldName = output?.name ?? (yield* createClusterName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "replace" } as const;
       }
@@ -311,7 +316,9 @@ export const FirewallProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createClusterName(id, news.name);
+      // Prefer the deployed name: regenerating would rename the deployed
+      // cluster if the generator's output for this id ever drifts.
+      const name = output?.name ?? (yield* createClusterName(id, news.name));
 
       // Observe — the id cached on `output` is a hint, not a guarantee: a
       // missing cluster falls through to "missing" and we recreate.

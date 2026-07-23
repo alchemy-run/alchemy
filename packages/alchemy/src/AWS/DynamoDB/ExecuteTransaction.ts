@@ -8,7 +8,36 @@ export interface ExecuteTransactionRequest
 
 export type ExecuteTransactionTables = [Table, ...Table[]];
 
-/** @binding */
+/**
+ * Runtime binding for `dynamodb:ExecuteTransaction`.
+ *
+ * Bind this operation to one or more tables inside a function runtime to get a
+ * callable that runs a PartiQL transaction. Statements reference the bound
+ * tables by their physical names (resolve them via `table.tableName`); the
+ * host is granted the transactional read/write actions on every bound table.
+ * Provide the `ExecuteTransactionHttp` layer on the Function to satisfy the
+ * binding.
+ * @binding
+ * @section PartiQL
+ * @example Run a PartiQL Transaction
+ * ```typescript
+ * const executeTransaction = yield* AWS.DynamoDB.ExecuteTransaction(table);
+ * const tableName = yield* table.tableName;
+ *
+ * yield* executeTransaction({
+ *   TransactStatements: [
+ *     {
+ *       Statement: `UPDATE "${tableName}" SET balance = balance - 10 WHERE pk = ? AND sk = ?`,
+ *       Parameters: [{ S: "account#1" }, { S: "balance" }],
+ *     },
+ *     {
+ *       Statement: `UPDATE "${tableName}" SET balance = balance + 10 WHERE pk = ? AND sk = ?`,
+ *       Parameters: [{ S: "account#2" }, { S: "balance" }],
+ *     },
+ *   ],
+ * });
+ * ```
+ */
 export interface ExecuteTransaction extends Binding.Service<
   ExecuteTransaction,
   "AWS.DynamoDB.ExecuteTransaction",

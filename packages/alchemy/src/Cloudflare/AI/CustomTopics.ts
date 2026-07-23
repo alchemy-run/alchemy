@@ -101,7 +101,9 @@ export type CustomTopics = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/firewall-for-ai/
  */
-export const CustomTopics = Resource<CustomTopics>(TypeId);
+export const CustomTopics = Resource<CustomTopics>(TypeId, {
+  aliases: ["Cloudflare.AiSecurity.CustomTopics"],
+});
 
 /**
  * Returns true if the given value is a CustomTopics resource.

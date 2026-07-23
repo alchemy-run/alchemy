@@ -4,7 +4,7 @@ import type {
   ResourceState,
   StateService,
 } from "@/State";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 

@@ -65,7 +65,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
 
   return RpcProviderProxy.of({
     get: Effect.fn(function* (mainUrl, providerName) {
-      const session = yield* cache.lookup(mainUrl);
+      const session = yield* Cache.get(cache, mainUrl);
       const provider = yield* Effect.promise(
         () =>
           session.getProvider(providerName) as ReturnType<

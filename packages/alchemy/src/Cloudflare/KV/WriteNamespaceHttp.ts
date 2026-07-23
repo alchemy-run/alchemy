@@ -1,12 +1,12 @@
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { authorizeWith } from "../HttpClientUtils.ts";
 import {
   makeHttpKVNamespaceBinding,
+  makeKVAuth,
   makeKVHttpScope,
   toKVNamespaceError,
-  type HttpToken,
+  type KVAuth,
 } from "./NamespaceHttp.ts";
 import { NamespaceError } from "./NamespaceTypes.ts";
 import { WriteNamespace, type WriteNamespaceClient } from "./WriteNamespace.ts";
@@ -22,17 +22,18 @@ export const WriteNamespaceHttp = Layer.effect(
   Effect.suspend(() =>
     makeHttpKVNamespaceBinding({
       permissionGroups: ["Workers KV Storage Write"],
-      makeClient: makeWriteKVHttpClient,
+      makeClient: (token, namespaceId) =>
+        makeWriteKVHttpClient(makeKVAuth(token), namespaceId),
     }),
   ),
 );
 
 export const makeWriteKVHttpClient = (
-  token: HttpToken,
+  auth: KVAuth,
   namespaceId: Effect.Effect<string>,
 ): WriteNamespaceClient => {
-  const authorize = authorizeWith(token);
-  const scope = makeKVHttpScope(token, namespaceId);
+  const { authorize } = auth;
+  const scope = makeKVHttpScope(auth, namespaceId);
 
   return {
     put: ((

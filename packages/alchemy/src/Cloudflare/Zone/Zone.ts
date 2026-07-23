@@ -190,6 +190,7 @@ export type Zone = Resource<
  */
 export const Zone = Resource<Zone>("Cloudflare.Zone.Zone", {
   defaultRemovalPolicy: "retain",
+  aliases: ["Cloudflare.Zone"],
 });
 
 export const ZoneProvider = () =>

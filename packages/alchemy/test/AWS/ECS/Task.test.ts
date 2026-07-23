@@ -2,10 +2,11 @@ import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import { Task } from "@/AWS/ECS/Task.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -30,6 +31,14 @@ test.provider(
       const logGroupName = "/alchemy/test/ecs-task-list";
       const taskRoleName = "alchemy-test-ecs-task-list-task-role";
       const executionRoleName = "alchemy-test-ecs-task-list-execution-role";
+
+      // Reclaim any revisions a previously-killed run left behind, and
+      // guarantee full deletion (deregister + delete) on success, failure,
+      // and interruption.
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -60,13 +69,6 @@ test.provider(
       });
       const arn = registered.taskDefinition?.taskDefinitionArn;
       expect(arn).toBeDefined();
-      // Safety net: deregister the out-of-band task definition on scope close
-      // even if the assertions below fail.
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: arn! })
-          .pipe(Effect.ignore),
-      );
 
       const provider = yield* Provider.findProvider(Task);
       const all = yield* provider.list();
@@ -87,9 +89,7 @@ test.provider(
       expect(found?.taskRoleName).toBe(taskRoleName);
       expect(found?.executionRoleName).toBe(executionRoleName);
 
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: arn! })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 240_000 },
 );
@@ -106,6 +106,14 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const family = "alchemy-test-ecs-task-multicontainer";
+
+      // Reclaim any revisions a previously-killed run left behind, and
+      // guarantee full deletion of BOTH revisions registered below on
+      // success, failure, and interruption.
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
+      );
 
       const registered = yield* ecs.registerTaskDefinition({
         family,
@@ -141,11 +149,6 @@ test.provider(
       const td = registered.taskDefinition;
       const arn = td?.taskDefinitionArn;
       expect(arn).toBeDefined();
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({ taskDefinition: arn! })
-          .pipe(Effect.ignore),
-      );
 
       const described = yield* ecs.describeTaskDefinition({
         taskDefinition: arn!,
@@ -180,13 +183,84 @@ test.provider(
         ],
       });
       expect(updated.taskDefinition?.revision).toBeGreaterThan(td!.revision!);
-      yield* Effect.addFinalizer(() =>
-        ecs
-          .deregisterTaskDefinition({
-            taskDefinition: updated.taskDefinition!.taskDefinitionArn!,
-          })
-          .pipe(Effect.ignore),
-      );
+
+      yield* reclaimTaskDefinitionFamily(family);
     }),
   { timeout: 120_000 },
+);
+
+// Revision hygiene: every reconcile registers a NEW task-definition
+// revision, so the superseded revision must be reaped (deregistered + hard
+// deleted) on the spot, and destroy must sweep every remaining revision of
+// the family. Uses the registry-image form (`image:` mirrored into ECR via a
+// local docker pull/tag/push of a tiny busybox) — no Fargate placement, no
+// bundling. Requires a local Docker daemon (same as the Service platform
+// tests).
+test.provider(
+  "superseded task-definition revisions are reaped on reconcile and destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (marker: string) =>
+        Effect.gen(function* () {
+          return yield* Task("RevisionReapTask", {
+            // Docker Hub busybox: the public.ecr.aws mirror aggressively
+            // rate-limits anonymous pulls during local builds.
+            image: "busybox:stable",
+            command: ["sh", "-c", "true"],
+            cpu: 256,
+            memory: 512,
+            env: { MARKER: marker },
+          });
+        });
+
+      const deployed = yield* stack.deploy(program("one"));
+      expect(deployed.taskDefinitionArn).toBeTruthy();
+
+      // Redeploy with a changed env var → a new revision in the same family.
+      const redeployed = yield* stack.deploy(program("two"));
+      expect(redeployed.taskFamily).toBe(deployed.taskFamily);
+      expect(redeployed.taskDefinitionArn).not.toBe(deployed.taskDefinitionArn);
+
+      const newRevision = yield* ecs.describeTaskDefinition({
+        taskDefinition: redeployed.taskDefinitionArn,
+      });
+      expect(newRevision.taskDefinition?.status).toBe("ACTIVE");
+      expect(
+        newRevision.taskDefinition?.containerDefinitions?.[0]?.environment?.find(
+          (e) => e.name === "MARKER",
+        )?.value,
+      ).toBe("two");
+
+      // The superseded revision was reaped by the redeploy, not left ACTIVE.
+      const supersededReaped = yield* ecs
+        .describeTaskDefinition({
+          taskDefinition: deployed.taskDefinitionArn,
+        })
+        .pipe(
+          Effect.map((r) => r.taskDefinition?.status !== "ACTIVE"),
+          Effect.catchTag("ClientException", () => Effect.succeed(true)),
+        );
+      expect(supersededReaped).toBe(true);
+
+      yield* stack.destroy();
+
+      // Zero-orphan proof: no revision of the family survives destroy as
+      // ACTIVE.
+      const activeRevisions = yield* ecs
+        .listTaskDefinitions({
+          familyPrefix: deployed.taskFamily,
+          status: "ACTIVE",
+        })
+        .pipe(
+          Effect.map((r) =>
+            (r.taskDefinitionArns ?? []).filter((arn) =>
+              arn.includes(`/${deployed.taskFamily}:`),
+            ),
+          ),
+        );
+      expect(activeRevisions).toEqual([]);
+    }),
+  { timeout: 240_000 },
 );

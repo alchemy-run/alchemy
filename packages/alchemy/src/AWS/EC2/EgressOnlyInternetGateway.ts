@@ -347,11 +347,13 @@ export const EgressOnlyInternetGatewayProvider = () =>
               Effect.retry({
                 while: (e: { _tag: string }) =>
                   e._tag === "DependencyViolation",
-                schedule: Schedule.fixed(5000).pipe(
-                  Schedule.both(Schedule.recurs(30)), // Up to ~2.5 minutes
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.fixed(5000),
+                  Schedule.recurs(30),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                      `Waiting for dependencies to clear... (attempt ${attempt})`,
                     ),
                   ),
                 ),

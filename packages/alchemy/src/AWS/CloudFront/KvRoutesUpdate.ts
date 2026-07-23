@@ -30,9 +30,21 @@ export interface KvRoutesUpdate extends Resource<
   "AWS.CloudFront.KvRoutesUpdate",
   KvRoutesUpdateProps,
   {
+    /**
+     * The ARN of the key value store holding the routes.
+     */
     store: string;
+    /**
+     * The namespace prefix the routes were written under.
+     */
     namespace: string;
+    /**
+     * The key the route table was written to.
+     */
     key: string;
+    /**
+     * The serialized route table value that was written.
+     */
     entry: string;
   },
   never,
@@ -187,9 +199,10 @@ export const KvRoutesUpdateProvider = () =>
             while: (error) =>
               error._tag === "ValidationException" &&
               isKvsPreconditionFailed(error),
-            schedule: Schedule.exponential("100 millis").pipe(
-              Schedule.both(Schedule.recurs(24)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("100 millis"),
+              Schedule.recurs(24),
+            ]),
           }),
         );
 
@@ -219,9 +232,10 @@ export const KvRoutesUpdateProvider = () =>
             while: (error) =>
               error._tag === "ValidationException" &&
               isKvsPreconditionFailed(error),
-            schedule: Schedule.exponential("100 millis").pipe(
-              Schedule.both(Schedule.recurs(24)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("100 millis"),
+              Schedule.recurs(24),
+            ]),
           }),
         );
 

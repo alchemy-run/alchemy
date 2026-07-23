@@ -1,10 +1,10 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -73,9 +73,10 @@ const expectLegacyPipelineGone = (accountId: string, pipelineName: string) =>
     Effect.catchTag("PipelineNotExists", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PipelineNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

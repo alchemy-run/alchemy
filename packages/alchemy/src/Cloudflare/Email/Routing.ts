@@ -71,7 +71,9 @@ export type Routing = Resource<
  * });
  * ```
  */
-export const Routing = Resource<Routing>("Cloudflare.Email.Routing");
+export const Routing = Resource<Routing>("Cloudflare.Email.Routing", {
+  aliases: ["Cloudflare.EmailRouting"],
+});
 
 const resolve = Effect.fn(function* (zone: Reference) {
   const { accountId } = yield* yield* CloudflareEnvironment;

@@ -91,7 +91,9 @@ export type LeakedCredentialCheck = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/leaked-credentials/
  */
-export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(TypeId);
+export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(TypeId, {
+  aliases: ["Cloudflare.LeakedCredentialCheck"],
+});
 
 /**
  * Returns true if the given value is a LeakedCredentialCheck resource.

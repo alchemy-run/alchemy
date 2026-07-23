@@ -4,9 +4,9 @@ import { RateLimit } from "@/Cloudflare/Workers/RateLimit.ts";
 import { VersionMetadata } from "@/Cloudflare/Workers/VersionMetadata.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import { Resource } from "@/Resource";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { effectClass } from "@/Util/effect.ts";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { TestLayers, TestResource } from "./test.resources.ts";
 

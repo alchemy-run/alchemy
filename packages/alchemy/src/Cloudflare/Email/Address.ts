@@ -55,7 +55,9 @@ export type Address = Resource<
  * Cloudflare sends a verification email when the address is first created.
  * The address must be verified before it can receive routed mail.
  */
-export const Address = Resource<Address>("Cloudflare.Email.Address");
+export const Address = Resource<Address>("Cloudflare.Email.Address", {
+  aliases: ["Cloudflare.EmailAddress"],
+});
 
 const toAttrs = (
   accountId: string,

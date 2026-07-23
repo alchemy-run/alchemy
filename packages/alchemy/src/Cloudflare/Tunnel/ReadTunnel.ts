@@ -15,8 +15,7 @@ import * as Binding from "../../Binding.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { type Token } from "./TunnelBinding.ts";
-import { authorizeWith } from "../HttpClientUtils.ts";
+import { type TunnelAuth } from "./TunnelBinding.ts";
 
 /**
  * Binding that lets a Worker read Cloudflare Tunnels at runtime.
@@ -117,31 +116,31 @@ export interface ReadTunnelClient {
   >;
 }
 
-/** Build the read-only client over a bound token. */
-export const readClient = (token: Token): ReadTunnelClient => {
-  const authorize = authorizeWith(token);
+/** Build the read-only client over an injectable {@link TunnelAuth}. */
+export const readClient = (auth: TunnelAuth): ReadTunnelClient => {
+  const { authorize } = auth;
   return {
     get: Effect.fn("Cloudflare.Tunnel.get")(function* (tunnelId) {
-      const accountId = yield* token.accountId;
+      const accountId = yield* auth.accountId;
       return yield* authorize(
         zeroTrust.getTunnelCloudflared({ accountId, tunnelId }),
       );
     }),
     list: Effect.fn("Cloudflare.Tunnel.list")(function* (request) {
-      const accountId = yield* token.accountId;
+      const accountId = yield* auth.accountId;
       return yield* authorize(
         zeroTrust.listTunnelCloudflareds({ accountId, ...request }),
       );
     }),
     getToken: Effect.fn("Cloudflare.Tunnel.getToken")(function* (tunnelId) {
-      const accountId = yield* token.accountId;
+      const accountId = yield* auth.accountId;
       return yield* authorize(
         zeroTrust.getTunnelCloudflaredToken({ accountId, tunnelId }),
       );
     }),
     getConfiguration: Effect.fn("Cloudflare.Tunnel.getConfiguration")(
       function* (tunnelId) {
-        const accountId = yield* token.accountId;
+        const accountId = yield* auth.accountId;
         return yield* authorize(
           zeroTrust.getTunnelCloudflaredConfiguration({ accountId, tunnelId }),
         );

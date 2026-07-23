@@ -1,4 +1,5 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -6,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { durationToSeconds } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface RecordAliasTarget {
@@ -24,9 +26,23 @@ export interface RecordAliasTarget {
   evaluateTargetHealth?: boolean;
 }
 
+/**
+ * Fully-resolved alias target as stored in the record's attributes — a
+ * `RecordAliasTarget` with all `Input` values resolved.
+ */
 export interface ResolvedRecordAliasTarget {
+  /**
+   * Hosted zone ID for the alias target.
+   */
   hostedZoneId: string;
+  /**
+   * DNS name for the alias target.
+   */
   dnsName: string;
+  /**
+   * Whether Route 53 evaluates target health for the alias.
+   * @default false
+   */
   evaluateTargetHealth?: boolean;
 }
 
@@ -85,9 +101,10 @@ export interface RecordProps {
    */
   type: route53.RRType;
   /**
-   * TTL in seconds for non-alias records.
+   * TTL for non-alias records, e.g. `"60 seconds"` or `Duration.minutes(5)`
+   * (a bare number is milliseconds). Rounded to whole seconds on the wire.
    */
-  ttl?: number;
+  ttl?: Duration.Input;
   /**
    * Record values for non-alias records.
    */
@@ -233,7 +250,7 @@ export interface Record extends Resource<
  *   hostedZoneId: "Z1234567890",
  *   name: "_acme-challenge.example.com",
  *   type: "TXT",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["\"value\""],
  * });
  * ```
@@ -245,7 +262,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "blue",
  *   weight: 90,
@@ -254,7 +271,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["5.6.7.8"],
  *   setIdentifier: "green",
  *   weight: 10,
@@ -267,7 +284,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "app.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "primary",
  *   failover: "PRIMARY",
@@ -277,7 +294,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "app.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["5.6.7.8"],
  *   setIdentifier: "secondary",
  *   failover: "SECONDARY",
@@ -290,7 +307,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "us-east-1",
  *   region: "us-east-1",
@@ -303,7 +320,7 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "www.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "default",
  *   geoLocation: { countryCode: "*" },
@@ -409,7 +426,6 @@ const toRecordSet = (
     RecordProps,
     | "name"
     | "type"
-    | "ttl"
     | "records"
     | "aliasTarget"
     | "setIdentifier"
@@ -421,7 +437,10 @@ const toRecordSet = (
     | "multiValueAnswer"
     | "cidrRoutingConfig"
     | "healthCheckId"
-  >,
+  > & {
+    /** TTL already converted to wire seconds. */
+    ttl?: number;
+  },
 ): route53.ResourceRecordSet => ({
   Name: normalizeName(props.name),
   Type: props.type,
@@ -477,17 +496,23 @@ export const RecordProvider = () =>
       // Poll `getChange` until the change reaches INSYNC. `getChange` is
       // eventually consistent and can briefly return `NoSuchChange` right after
       // submit, so coalesce that to a non-INSYNC status and keep polling.
+      // `ChangeInfo.Id` comes back as "/change/C..." but `getChange` only
+      // accepts the bare id — the prefixed form returns `NoSuchChange`
+      // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53.getChange({ Id: changeId }).pipe(
-          Effect.map((response) => response.ChangeInfo.Status),
-          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
-          Effect.repeat({
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
-            until: (status) => status === "INSYNC",
-          }),
-        );
+        return yield* route53
+          .getChange({ Id: changeId.replace(/^\/change\//, "") })
+          .pipe(
+            Effect.map((response) => response.ChangeInfo.Status),
+            Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+            Effect.repeat({
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(60),
+              ]),
+              until: (status) => status === "INSYNC",
+            }),
+          );
       });
 
       const findRecord = Effect.fn(function* (
@@ -523,7 +548,10 @@ export const RecordProvider = () =>
             Changes: [
               {
                 Action: "UPSERT",
-                ResourceRecordSet: toRecordSet(props),
+                ResourceRecordSet: toRecordSet({
+                  ...props,
+                  ttl: durationToSeconds(props.ttl),
+                }),
               },
             ],
           },
@@ -590,10 +618,16 @@ export const RecordProvider = () =>
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
+          // Identity change → replace, but only when the old value is known —
+          // a half-created state row can't round-trip Output-valued props
+          // (they deserialize as `undefined`), and an unknown old identity
+          // must fall through to the create/update recovery path.
           if (
-            normalizeHostedZoneId(olds.hostedZoneId) !==
-              normalizeHostedZoneId(news.hostedZoneId) ||
-            normalizeName(olds.name) !== normalizeName(news.name) ||
+            (olds.hostedZoneId !== undefined &&
+              normalizeHostedZoneId(olds.hostedZoneId) !==
+                normalizeHostedZoneId(news.hostedZoneId)) ||
+            (olds.name !== undefined &&
+              normalizeName(olds.name) !== normalizeName(news.name)) ||
             olds.type !== news.type ||
             olds.setIdentifier !== news.setIdentifier
           ) {
@@ -601,20 +635,31 @@ export const RecordProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const recordSet = yield* findRecord(
-            output?.hostedZoneId ?? olds!.hostedZoneId,
-            {
-              name: output?.name ?? olds!.name,
-              type: output?.type ?? olds!.type,
-              setIdentifier: output?.setIdentifier ?? olds!.setIdentifier,
-            },
-          );
+          const hostedZoneId = output?.hostedZoneId ?? olds?.hostedZoneId;
+          const name = output?.name ?? olds?.name;
+          const type = output?.type ?? olds?.type;
+          if (
+            hostedZoneId === undefined ||
+            name === undefined ||
+            type === undefined
+          ) {
+            // Output-valued props don't survive a `creating`-state round-trip
+            // — without the record's identity we can't look it up. Report
+            // "not found" so the engine re-drives the create (the UPSERT in
+            // reconcile converges on any half-created record).
+            return undefined;
+          }
+          const recordSet = yield* findRecord(hostedZoneId, {
+            name,
+            type,
+            setIdentifier: output?.setIdentifier ?? olds?.setIdentifier,
+          });
 
           if (!recordSet) {
             return undefined;
           }
 
-          return toAttrs(recordSet, output?.hostedZoneId ?? olds!.hostedZoneId);
+          return toAttrs(recordSet, hostedZoneId);
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
           // Route 53 `changeResourceRecordSets` with `UPSERT` is naturally

@@ -1,14 +1,12 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
@@ -37,12 +35,15 @@ const requestTimeout = "5 seconds";
 // status codes, so we explicitly `Effect.fail` non-2xx responses to force a
 // retry through `readinessRetry`.
 // Cap exponential backoff at 3s so cold-start retries stay bounded when
-// CF edge propagation is slow.
+// CF edge propagation is slow. Fresh `*.workers.dev` subdomains routinely
+// take over a minute to stop serving the placeholder page, so the budget
+// must comfortably exceed that (~2 minutes here).
 const readinessRetry = {
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.either(Schedule.spaced("3 seconds")),
-  ),
-  times: 15,
+  schedule: Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("3 seconds"),
+  ]),
+  times: 40,
 } as const;
 
 const requestUntilReady = (
@@ -128,16 +129,11 @@ const rpcUntilReady = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const withCounterKey = (key: string) =>
   HttpClient.mapRequest(HttpClientRequest.setHeader("x-counter-key", key));
 
-// Build a typed `RpcClient<CounterRpcs>` against WorkerA's URL.
-// Every call rides through the same JSON edge as the worker.dev URL,
-// so we share the readiness retry below at the test layer.
-const rpcClientLayer = (url: string) =>
-  RpcClient.layerProtocolHttp({ url }).pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(
-      Layer.succeed(RpcSerialization.RpcSerialization, RpcSerialization.ndjson),
-    ),
-  );
+// WorkerA's typed RPC transport is `Test.rpcClientLayer` (see Test/Http.ts).
+// Its transport-level retry fires only on non-ndjson responses — edge pages
+// that prove the handler never ran (see `isEdgeNotReadyRpc` above) — so it
+// is safe for the non-idempotent increment bodies below.
+const rpcClientLayer = Test.rpcClientLayer;
 
 // Drive a typed `RpcClient<CounterRpcs>` body against WorkerA's URL.
 // Each call gets its own scope (so the client is freed promptly).
@@ -168,6 +164,16 @@ const resetHttp = (url: string, key: string) =>
 
 // `reset` is idempotent, so it's safe to retry — this doubles as the
 // per-test readiness gate for WorkerA's RPC edge.
+//
+// Cold-start hazards on this path can also surface as DEFECTS, not failures:
+// while the deploy propagates, the Cloudflare runtime throws
+// "Worker not found." (service/DO binding not yet resolvable) or
+// "Handler does not export a fetch() function." (the pre-created stub
+// script, uploaded before the real bundle, is still live on the PoP).
+// The RPC server serializes those as defects and the client re-raises them
+// as defects, which `Effect.retry` will NOT retry. Since `reset` is
+// idempotent, demote defects to failures so the readiness retry rides
+// them out like any other cold-start blip.
 const resetA = (url: string, key: string) =>
   withRpcA(
     url,
@@ -175,7 +181,10 @@ const resetA = (url: string, key: string) =>
       const c = yield* RpcClient.make(CounterRpcs);
       yield* c.reset({ key });
     }),
-  ).pipe(Effect.retry(readinessRetry));
+  ).pipe(
+    Effect.catchDefect((defect) => Effect.fail(defect)),
+    Effect.retry(readinessRetry),
+  );
 
 // Gate the deploy on all three workers' edges being resolvable (via the
 // idempotent reset path), then let propagation settle, so the non-retried
@@ -195,6 +204,9 @@ const stack = beforeAll(
     // just give it some extra time to propagate
     Effect.tap(Effect.sleep("5 seconds")),
   ),
+  // deploy + the ~2-minute warmup retry budget can exceed the default
+  // 120s hook timeout when workers.dev propagation is slow
+  { timeout: 300_000 },
 );
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
@@ -282,9 +294,7 @@ test(
     );
 
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
-    const fromB = yield* httpClient
-      .get(`${urlB}/do`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    const fromB = yield* requestUntilReady(httpClient.get(`${urlB}/do`));
     expect(fromB.status).toBe(200);
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
@@ -336,9 +346,10 @@ test(
         }),
       ),
       predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(30),
+      ]),
     });
     expect(d1.value).toBe(2);
     expect(dox.value).toBe(1);

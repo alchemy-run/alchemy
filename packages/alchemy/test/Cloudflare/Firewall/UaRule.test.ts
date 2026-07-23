@@ -3,9 +3,9 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as firewall from "@distilled.cloud/cloudflare/firewall";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -85,9 +85,10 @@ const expectUaRuleGone = (zoneId: string, uaRuleId: string) =>
     Effect.catchTag("UaRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "UaRuleNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

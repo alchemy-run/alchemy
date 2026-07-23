@@ -4,7 +4,7 @@ import {
   repositoryFromImageRef,
   withRegistryHost,
 } from "@/Docker/Registry";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 
 describe("repositoryFromImageRef", () => {
   it("strips a simple tag", () => {

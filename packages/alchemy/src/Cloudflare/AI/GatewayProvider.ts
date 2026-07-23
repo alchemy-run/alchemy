@@ -145,10 +145,11 @@ export type GatewayProvider = Resource<
  * });
  *
  * // The secret name must be `{gatewayId}_{providerSlug}_{alias}`.
+ * // Prefer `Cloudflare.AI.ProviderKey` to wire this secret automatically.
  * const secret = yield* Cloudflare.SecretsStore.Secret("OpenAiKey", {
  *   store,
  *   name: "my-gateway_openai_default",
- *   value: Redacted.make(process.env.OPENAI_API_KEY!),
+ *   value: yield* Config.redacted("OPENAI_API_KEY"),
  *   scopes: ["ai_gateway"],
  * });
  *
@@ -175,7 +176,9 @@ export type GatewayProvider = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/
  */
-export const GatewayProvider = Resource<GatewayProvider>(TypeId);
+export const GatewayProvider = Resource<GatewayProvider>(TypeId, {
+  aliases: ["Cloudflare.AiGateway.ProviderConfig"],
+});
 
 /**
  * Returns true if the given value is a GatewayProvider resource.
@@ -186,7 +189,7 @@ export const isGatewayProvider = (value: unknown): value is GatewayProvider =>
 export const GatewayProviderProvider = () =>
   Provider.succeed(GatewayProvider, {
     stables: ["providerConfigId", "accountId", "gatewayId"],
-    diff: Effect.fn(function* ({ id, news, output }) {
+    diff: Effect.fn(function* ({ id, olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -196,7 +199,10 @@ export const GatewayProviderProvider = () =>
       // Provider configs have no update API — any change is a replacement.
       // Delete first: a gateway rejects a second config for the same
       // provider slug/alias with "already exists".
-      const newAlias = yield* createAlias(id, news.alias);
+      // Auto-generated aliases are engine-owned: the deployed alias stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided alias can force a replace.
+      const newAlias = news.alias ?? output.alias;
       if (
         output.gatewayId !== news.gatewayId ||
         output.providerSlug !== news.providerSlug ||
@@ -232,7 +238,14 @@ export const GatewayProviderProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const alias = yield* createAlias(id, news.alias);
+      // An explicit user-provided alias always wins (an alias change can
+      // reach reconcile as an update when diff saw unresolved inputs, e.g.
+      // a secretId still pending from a same-deploy secret replacement).
+      // Absent that, prefer the deployed alias: regenerating would target a
+      // different resource if the generator's output for this id ever
+      // drifts.
+      const alias =
+        news.alias ?? output?.alias ?? (yield* createAlias(id, undefined));
       return yield* reconcileProviderConfig({
         accountId,
         gatewayId: news.gatewayId as string,
@@ -336,6 +349,8 @@ const reconcileProviderConfig = (desired: {
   } = desired;
 
   const matchesDesired = (attrs: GatewayProviderAttributes) =>
+    attrs.alias === alias &&
+    attrs.providerSlug === providerSlug &&
     attrs.secretId === secretId &&
     attrs.defaultConfig === defaultConfig &&
     attrs.rateLimit === rateLimit &&

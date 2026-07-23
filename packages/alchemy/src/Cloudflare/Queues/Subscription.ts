@@ -193,7 +193,9 @@ export type Subscription = Resource<
  *
  * @see https://developers.cloudflare.com/queues/event-subscriptions/
  */
-export const Subscription = Resource<Subscription>(TypeId);
+export const Subscription = Resource<Subscription>(TypeId, {
+  aliases: ["Cloudflare.Queue.Subscription"],
+});
 
 /**
  * Returns true if the given value is a Subscription resource.

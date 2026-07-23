@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AGENT_PROMPT as PROMPT } from "./agentPrompt";
+import { useAgentPrompt } from "./agentPrompt";
 
 export default function HeroCta() {
   return (
@@ -41,6 +41,7 @@ export default function HeroCta() {
 
 function InlineCopyChip() {
   const [copied, setCopied] = useState(false);
+  const PROMPT = useAgentPrompt();
   const onCopy = () => copy(PROMPT, setCopied);
   return (
     <button
@@ -57,6 +58,7 @@ function InlineCopyChip() {
 
 function CopyCard() {
   const [copied, setCopied] = useState(false);
+  const PROMPT = useAgentPrompt();
   const onCopy = () => copy(PROMPT, setCopied);
   return (
     <button

@@ -14,6 +14,19 @@ export class DurableObjectState extends Context.Service<
     readonly id: cf.DurableObjectId;
     readonly storage: DurableObjectStorage;
     container?: cf.Container;
+    /**
+     * Run an Effect in the background without blocking the current event,
+     * keeping the Durable Object alive until it settles. The Effect runs with
+     * the caller's full context (services, tracing), and the resulting
+     * promise is registered with workerd's `state.waitUntil`.
+     */
+    waitUntil<A, E, R>(
+      effect: Effect.Effect<A, E, R>,
+    ): Effect.Effect<void, never, R | RuntimeContext>;
+    /**
+     * The raw workerd DurableObjectState, for interop with async APIs.
+     */
+    readonly raw: cf.DurableObjectState;
     blockConcurrencyWhile<T>(
       callback: () => Effect.Effect<T, never, RuntimeContext>,
     ): Effect.Effect<T, never, RuntimeContext>;
@@ -54,6 +67,18 @@ export const fromDurableObjectState = (
   id: state.id,
   container: state.container,
   storage: fromDurableObjectStorage(state.storage),
+  raw: state,
+  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>();
+      // Register the promise with workerd un-awaited — waitUntil extends the
+      // event's lifetime without blocking the caller.
+      yield* Effect.sync(() =>
+        state.waitUntil(
+          Effect.runPromise(effect.pipe(Effect.provide(context))),
+        ),
+      );
+    }),
   blockConcurrencyWhile: <T>(callback: () => Effect.Effect<T>) =>
     Effect.tryPromise(() =>
       state.blockConcurrencyWhile(() => Effect.runPromise(callback())),

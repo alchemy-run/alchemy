@@ -167,7 +167,9 @@ export type MtlsCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  */
-export const MtlsCertificate = Resource<MtlsCertificate>(TypeId);
+export const MtlsCertificate = Resource<MtlsCertificate>(TypeId, {
+  aliases: ["Cloudflare.MtlsCertificate"],
+});
 
 /**
  * Returns true if the given value is a MtlsCertificate resource.
@@ -184,10 +186,12 @@ export const MtlsCertificateProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createCertificateName(id, news.name);
-      const oldName = output?.name
-        ? output.name
-        : yield* createCertificateName(id, olds.name);
+      const oldName =
+        output?.name ?? (yield* createCertificateName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         (news.ca ?? undefined) !== (olds.ca ?? undefined) ||

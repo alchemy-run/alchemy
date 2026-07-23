@@ -10,7 +10,7 @@ import {
   readHttpMetadata,
   toBody,
   toR2Error,
-  type HttpToken,
+  type R2Auth,
 } from "./BucketHttp.ts";
 import { R2Error, type PutOptions } from "./BucketTypes.ts";
 import { WriteBucket, type WriteBucketClient } from "./WriteBucket.ts";
@@ -25,19 +25,24 @@ export const WriteBucketHttp = Layer.effect(
   Effect.suspend(() =>
     makeHttpBucketBinding({
       permissionGroups: ["Workers R2 Storage Write"],
-      makeClient: makeWriteR2HttpClient,
+      makeClient: (token, bucketName, jurisdiction) =>
+        makeWriteR2HttpClient(
+          { authorize: authorizeWith(token), accountId: token.accountId },
+          bucketName,
+          jurisdiction,
+        ),
     }),
   ),
 );
 
 /** Build the write half of the HTTP-backed {@link ReadWrite} client. */
 export const makeWriteR2HttpClient = (
-  token: HttpToken,
+  auth: R2Auth,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
 ): WriteBucketClient => {
-  const authorize = authorizeWith(token);
-  const scope = makeR2HttpScope(token, bucketName, jurisdiction);
+  const authorize = auth.authorize;
+  const scope = makeR2HttpScope(auth.accountId, bucketName, jurisdiction);
 
   return {
     put: ((

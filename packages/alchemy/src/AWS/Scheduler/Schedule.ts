@@ -106,9 +106,21 @@ export interface Schedule extends Resource<
   "AWS.Scheduler.Schedule",
   ScheduleProps,
   {
+    /**
+     * ARN of the schedule.
+     */
     scheduleArn: string;
+    /**
+     * Name of the schedule.
+     */
     scheduleName: string;
+    /**
+     * Name of the schedule group containing the schedule.
+     */
     groupName: string;
+    /**
+     * Current state of the schedule (`ENABLED` or `DISABLED`).
+     */
     state: string | undefined;
   },
   never,

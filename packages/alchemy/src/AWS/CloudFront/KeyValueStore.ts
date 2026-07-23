@@ -1,5 +1,6 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -78,10 +79,13 @@ export const KeyValueStoreProvider = () =>
     KeyValueStore,
     Effect.gen(function* () {
       const getByName = Effect.fn(function* (name: string) {
-        const listed = yield* cloudfront.listKeyValueStores({});
-        const store =
-          listed.KeyValueStoreList?.Items?.find((item) => item.Name === name) ??
-          undefined;
+        const store = yield* cloudfront.listKeyValueStores.pages({}).pipe(
+          Stream.map((page) => page.KeyValueStoreList?.Items ?? []),
+          Stream.flattenIterable,
+          Stream.filter((item) => item.Name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
         if (!store?.Name) {
           return undefined;
         }

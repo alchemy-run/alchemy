@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -36,9 +36,10 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
 }> {}
 
-const ready = Schedule.exponential("500 millis").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
+const ready = Schedule.max([
+  Schedule.exponential("500 millis"),
+  Schedule.recurs(30),
+]);
 
 const fetchWhenReady = (url: string) =>
   Effect.gen(function* () {

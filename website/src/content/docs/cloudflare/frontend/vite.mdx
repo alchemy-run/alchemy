@@ -22,8 +22,8 @@ const site = yield* Cloudflare.Website.Vite("Website");
 ```
 
 Alchemy loads **your** project's Vite install (resolved from
-`rootDir`'s `package.json`), appends the Cloudflare Vite plugin —
-Alchemy's fork of `@cloudflare/vite-plugin` — to the plugins your
+`rootDir`'s `package.json`), appends Alchemy's own Cloudflare Vite
+plugin to the plugins your
 `vite.config.ts` already declares, and runs `builder.buildApp()`.
 Client assets are uploaded as Worker static assets; if the build
 emits a server bundle (SSR), that bundle becomes the Worker entry —
@@ -59,9 +59,9 @@ directory of files.
 ## Remove `@cloudflare/vite-plugin`
 
 :::caution[Remove @cloudflare/vite-plugin if present]
-Alchemy appends its own fork of the Cloudflare Vite plugin
+Alchemy appends its own Cloudflare Vite plugin
 (`@distilled.cloud/cloudflare-vite-plugin`) and is **not
-compatible** with the upstream `@cloudflare/vite-plugin` in your
+compatible** with `@cloudflare/vite-plugin` in your
 `vite.config.ts`. Remove it — this applies to every framework
 deployed with this resource:
 

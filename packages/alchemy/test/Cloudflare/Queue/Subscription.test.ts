@@ -1,14 +1,12 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as queues from "@distilled.cloud/cloudflare/queues";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { describe } from "vitest";
-
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -40,13 +38,19 @@ const expectGone = (accountId: string, subscriptionId: string) =>
     Effect.catchTag("SubscriptionNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SubscriptionNotDeleted",
-      schedule: Schedule.fixed("500 millis").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("500 millis"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 
-describe("Subscription", () => {
+// Sequential: Cloudflare allows only ONE subscription per source per
+// account, and every test here uses the same `{ type: "r2" }` (or kv)
+// source. Run concurrently they adopt/patch/delete each other's
+// subscription via the AlreadyExists fallback and fail with queueId
+// mismatches and SubscriptionNotFound.
+describe.sequential("Subscription", () => {
   test.provider(
     "create r2 event subscription into a queue and destroy it",
     (stack) =>

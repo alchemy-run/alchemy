@@ -1,11 +1,33 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Credentials } from "../Credentials.ts";
 import type { Queue } from "./Queue.ts";
 import { SendError } from "./QueueTypes.ts";
+
+/**
+ * Injectable auth used by the Queue HTTP client builder. Both the
+ * scoped-token HTTP variant ({@link makeWriteQueueHttpClient}) and the
+ * current-credentials Local variant build this so they share the exact
+ * same request path — only the way credentials reach the SDK op differs.
+ *
+ * - `authorize` runs a raw distilled op (which needs
+ *   `Credentials | HttpClient`) and discharges those requirements down to
+ *   {@link RuntimeContext}. The HTTP variant provides a minted token; the
+ *   Local variant provides the ambient current-credentials context.
+ * - `accountId` resolves the Cloudflare account the queue lives in.
+ */
+export interface QueueAuth {
+  authorize: <A, E>(
+    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ) => Effect.Effect<A, E, RuntimeContext>;
+  accountId: Effect.Effect<string>;
+}
 
 /**
  * Shared scaffolding for the HTTP-backed Queue services.
@@ -50,11 +72,11 @@ export const makeHttpQueueBinding = <Client>(options: {
 
 /** Resolve the account and queue id once per operation. */
 export const makeQueueHttpScope = (
-  token: HttpToken,
+  auth: QueueAuth,
   queueId: Effect.Effect<string>,
 ): Effect.Effect<HttpScope> =>
   Effect.gen(function* () {
-    const accountId = yield* token.accountId;
+    const accountId = yield* auth.accountId;
     const id = yield* queueId;
     return { accountId, queueId: id };
   });

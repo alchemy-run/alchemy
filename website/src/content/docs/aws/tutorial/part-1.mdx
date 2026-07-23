@@ -136,7 +136,7 @@ export default Alchemy.Stack(
     state: AWS.state(),
   },
   Effect.gen(function* () {
-+   const bucket = yield* AWS.S3.Bucket("Bucket");
++    const bucket = yield* AWS.S3.Bucket("Bucket");
   }),
 );
 ```

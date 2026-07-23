@@ -31,10 +31,25 @@ export interface DBParameterGroup extends Resource<
   "AWS.RDS.DBParameterGroup",
   DBParameterGroupProps,
   {
+    /**
+     * Name of the parameter group.
+     */
     dbParameterGroupName: string;
+    /**
+     * ARN of the parameter group.
+     */
     dbParameterGroupArn: string | undefined;
+    /**
+     * Parameter group family (e.g. `aurora-postgresql16`).
+     */
     family: string;
+    /**
+     * Description of the parameter group.
+     */
     description: string | undefined;
+    /**
+     * Tags on the parameter group.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -42,8 +57,30 @@ export interface DBParameterGroup extends Resource<
 > {}
 
 /**
- * An RDS DB parameter group, useful for Aurora cluster instances.
+ * An RDS DB parameter group — instance-level engine settings, applied to a
+ * `DBInstance` (as opposed to the cluster-wide `DBClusterParameterGroup`).
+ *
+ * Name, family, and description changes force a replacement (RDS has no
+ * modify API for these); tags update in place.
  * @resource
+ * @section Creating a Parameter Group
+ * @example Parameter Group for Aurora Postgres 16 Instances
+ * ```typescript
+ * const instanceParams = yield* DBParameterGroup("InstanceParams", {
+ *   family: "aurora-postgresql16",
+ *   description: "Instance-level settings for the app database",
+ * });
+ * ```
+ *
+ * @example Attach to an Instance
+ * ```typescript
+ * const writer = yield* DBInstance("Writer", {
+ *   dbClusterIdentifier: cluster.dbClusterIdentifier,
+ *   dbInstanceClass: "db.serverless",
+ *   engine: "aurora-postgresql",
+ *   dbParameterGroupName: instanceParams.dbParameterGroupName,
+ * });
+ * ```
  */
 export const DBParameterGroup = Resource<DBParameterGroup>(
   "AWS.RDS.DBParameterGroup",
