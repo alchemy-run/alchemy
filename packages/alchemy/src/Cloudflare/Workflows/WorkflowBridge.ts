@@ -116,7 +116,7 @@ const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
   schedule: event.schedule,
 });
 
-const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
+export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
   do: <T>(options: WorkflowTaskOptions<T, any, any>): Effect.Effect<T> => {
     const { name } = options;
     // The surrounding body context is already provided in `task`; the bridge
@@ -151,7 +151,7 @@ const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
           rollbackConfig: options.rollbackConfig,
         }
       : undefined;
-    return Effect.tryPromise(() => {
+    return Effect.promise(() => {
       if (config && rollback) return step.do(name, config, callback, rollback);
       if (config) return step.do(name, config, callback);
       if (rollback) return step.do(name, callback, rollback);
@@ -159,14 +159,14 @@ const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
     });
   },
   sleep: (name: string, duration: string | number): Effect.Effect<void> =>
-    Effect.tryPromise(() => step.sleep(name, duration)),
+    Effect.promise(() => step.sleep(name, duration)),
   sleepUntil: (name: string, timestamp: Date | number): Effect.Effect<void> =>
-    Effect.tryPromise(() => step.sleepUntil(name, timestamp)),
+    Effect.promise(() => step.sleepUntil(name, timestamp)),
   waitForEvent: <T>(
     name: string,
     options: any,
   ): Effect.Effect<WorkflowStepEvent<T>> =>
-    Effect.tryPromise(
+    Effect.promise(
       () => step.waitForEvent(name, options) as Promise<WorkflowStepEvent<T>>,
     ),
 });
