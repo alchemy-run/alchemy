@@ -17,15 +17,6 @@
     {
       "path": "./distilled/packages/cloudflare/tsconfig.json"
     },
-    {
-      "path": "./distilled/packages/planetscale/tsconfig.json"
-    },
-    {
-      "path": "./distilled/packages/neon/tsconfig.json"
-    },
-    {
-      "path": "./distilled/packages/axiom/tsconfig.json"
-    },
     // cloudflare-tools (submodule) — reference the composite leaf configs
     // directly; the per-package tsconfig.json files are non-composite
     // solution configs that `tsc -b` cannot reference.
