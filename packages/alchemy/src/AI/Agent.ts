@@ -1,111 +1,150 @@
 import * as Context from "effect/Context";
+import type * as Layer from "effect/Layer";
 import type { Actor } from "./Actor.ts";
-import type { Accepts } from "./Event.ts";
+import {
+  layer,
+  type Charter,
+  type CharterServices,
+  type Kernel,
+  type TurnServices,
+} from "./Kernel.ts";
+import { prose } from "./Prose.ts";
 import type { Services } from "./Services.ts";
 
 /**
- * An `Agent` term is a callable persona: prose that hires
- * capabilities, as a tagged template whose interpolations declare the
- * tools, skills, and fellow agents it may use. Like all terms it is
- * pure data — behavior comes from an interpreter (a {@link Kernel}
- * implementation). At runtime an agent is a minimal event-driven,
- * asynchronous entity: a mailbox, a serial run loop, actions out.
+ * An `Agent` term is a callable persona — a NAME, declared as a
+ * `Context.Service` tag and nothing else. The agent's behavior (its
+ * prose, tools, skills, delegates) lives in a CHARTER supplied where
+ * the agent is implemented — `Engineer.make(charter)` — never on
+ * the declaration. Decoupling the two is deliberate: one contract can
+ * carry many charters (a strict Engineer in prod, a chatty one in
+ * dev), and a charter can be dynamic (re-evaluated at every sampling
+ * boundary) without the declaration knowing.
  *
  * Every agent's tag resolves to the SAME interface — the
- * {@link Actor} verbs — because agents exist to be called:
- * an owner hands the Engineer a ready issue (`dispatch`) and awaits
- * the pull request. A term whose public surface should be a
- * domain-specific, deterministic interface instead is a
- * {@link Process}, not an agent.
+ * {@link Actor} verbs — because agents exist to be called: an owner
+ * hands the Engineer a ready issue (`dispatch`) and awaits the pull
+ * request. A domain-specific, deterministic surface (a business
+ * process) is not a term: declare a plain `Context.Service` Shape,
+ * declare a PRIVATE (un-exported) agent beside it with its own `make`
+ * Layer, and have the Shape's Layer resolve the agent's tag — the
+ * verbs stay sealed inside the Layer, and the world drives them.
  *
- * The `<Self>()` form makes the agent a `Context.Service` **tag**:
+ * ```ts
+ * export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
  *
- * - Interpolating `${Engineer}` in another charter contributes the tag
- *   `Engineer` to that charter's `Req` — not the agent's tools.
- *   Transitivity lives in Layer composition: each agent gets its own
- *   capability provisioning
- *   (`AI.layer(Engineer).pipe(Layer.provide(BashDevBox))` vs
- *   `AI.layer(Judge).pipe(Layer.provide(BashReadOnly))` — one
- *   contract, different physics, side by side in one runtime).
- * - Yielding `Engineer` in `Effect.gen` resolves the live service from
- *   context.
+ * export const EngineerLive = Engineer.make`
+ * You receive exactly one ${issue}. ${Coding} is your craft; when
+ * green, ${OpenPullRequest} citing the issue.`;
+ * ```
+ *
+ * Capability lives entirely in the charter's fragments: interpolating
+ * `${Engineer}` in ANOTHER charter's prose contributes the tag
+ * `Engineer` to that charter's requirements — not the agent's tools.
+ * Transitivity lives in Layer composition: each agent gets its own
+ * capability provisioning
+ * (`Engineer.make(c1).pipe(Layer.provide(BashDevBox))` vs
+ * `Judge.make(c2).pipe(Layer.provide(BashReadOnly))` — one
+ * contract, different physics, side by side in one runtime).
  *
  * Capability denial by omission: a charter that never interpolates
  * `${Approve}` has no `Approve` anywhere in its Layer graph's
  * requirements; no Layer can grant it merge authority. Constitutional
  * constraints are enforced by the type system, not by prose.
  */
-export interface Agent<
-  Req = never,
-  Name extends string = string,
-  Refs extends any[] = any[],
-  Self = unknown,
-> {
+export interface Agent<Name extends string = string, Self = unknown> {
   "~alchemy/Kind": "Agent";
   "~alchemy/Name": Name;
-  template: TemplateStringsArray;
-  refs: Refs;
-  /** Phantom: the requirements of this agent's implementation Layer. */
-  "~alchemy/Req": Req;
   /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
   "~alchemy/Self": Self;
   /**
+   * The kernel-default implementation Layer: interpret the CHARTER
+   * (init → turn), publish the resulting actor verbs as this tag's
+   * service.
+   *
+   * A persona whose stance never changes writes its charter as a
+   * TAGGED TEMPLATE directly on `make` — the static shorthand:
+   *
+   * ```ts
+   * export const ReviewerLive = Reviewer.make`
+   *   You review each ${pr} against its originating ${issue}.
+   *   Verdict via ${Approve} or changes via ${Comment}.`;
+   * ```
+   *
+   * A dynamic persona passes the full init → turn charter:
+   *
+   * ```ts
+   * export const EngineerLive = Engineer.make(Effect.gen(function* () {
+   *   const done = yield* Ref.make(false);        // init: Refs, bindings for tools
+   *   return Effect.gen(function* () {            // turn: every sampling
+   *     const { count } = yield* AI.Tick;         // runtime facts live here
+   *     return yield* AI.prose`…`;
+   *   });
+   * }));
+   * ```
+   */
+  readonly make: {
+    /**
+     * Static charter shorthand. Splices are still evaluated at render
+     * time, every tick — an `Effect` splice may read `AI.Thread`/
+     * `AI.Tick` — so their requirements are charged as TURN
+     * requirements.
+     */
+    <const Refs extends any[]>(
+      template: TemplateStringsArray,
+      ...refs: Refs
+    ): Layer.Layer<Self, never, Kernel | Exclude<Services<Refs>, TurnServices>>;
+    <C extends Charter>(
+      charter: C,
+    ): Layer.Layer<Self, never, Kernel | CharterServices<C>>;
+  };
+  /**
    * Instances are branded with the agent's name so distinct agents
    * remain distinct types (and therefore distinct tags). The instance
-   * shape is always the one agent interface: the actor verbs, with
-   * the input alphabet derived from the charter's event splices.
+   * shape is always the one agent interface: the actor verbs.
    */
-  new (_: never): Actor<Accepts<Refs>> & { readonly "~alchemy/Name": Name };
+  new (_: never): Actor & { readonly "~alchemy/Name": Name };
 }
 
 export const Agent: {
   <Self>(): {
     <Name extends string>(
       name: Name,
-    ): {
-      <const Refs extends any[]>(
-        template: TemplateStringsArray,
-        ...refs: Refs
-      ): Agent<Services<Refs>, Name, Refs, Self> &
-        Context.Service<Self, Actor<Accepts<Refs>>>;
-    };
+    ): Agent<Name, Self> & Context.Service<Self, Actor>;
   };
-  <Name extends string>(
-    name: Name,
-  ): {
-    <const Refs extends any[]>(
-      template: TemplateStringsArray,
-      ...refs: Refs
-    ): Agent<Services<Refs>, Name, Refs>;
-  };
-} = ((name?: string) =>
-  name
-    ? (template: TemplateStringsArray, ...refs: any[]) =>
-        makeTerm("Agent", name, template, refs)
-    : (name: string) =>
-        (template: TemplateStringsArray, ...refs: any[]) =>
-          makeTerm("Agent", name, template, refs)) as any;
+} = (() => (name: string) => makeTerm("Agent", name)) as any;
 
-/** Shared constructor for the tag-bearing terms (Agent, Process, Skill). */
+/** Shared constructor for the tag-bearing terms (Agent, Skill). */
 export const makeTerm = (
-  kind: "Agent" | "Process" | "Skill",
+  kind: "Agent" | "Skill",
   name: string,
-  template: TemplateStringsArray,
-  refs: any[],
-) =>
-  Object.assign(
-    class extends (Context.Service<any, any>()(
-      `alchemy/AI/${kind}/${name}`,
-    ) as any) {},
-    {
-      "~alchemy/Kind": kind,
-      "~alchemy/Name": name,
-      refs,
-      template,
-    },
-  ) as any;
+  template?: TemplateStringsArray,
+  refs?: any[],
+) => {
+  const cls = class extends (Context.Service<any, any>()(
+    `alchemy/AI/${kind}/${name}`,
+  ) as any) {};
+  return Object.assign(cls, {
+    "~alchemy/Kind": kind,
+    "~alchemy/Name": name,
+    ...(template !== undefined ? { template, refs } : {}),
+    // the kernel-default Layer: `Engineer.make(charter)`, the static
+    // tagged-template shorthand `Reviewer.make`…``, or `Coding.make()`
+    make: (charterOrTemplate?: any, ...refs: any[]) =>
+      layer(
+        cls as any,
+        isTemplateStringsArray(charterOrTemplate)
+          ? prose(charterOrTemplate, ...refs)
+          : charterOrTemplate,
+      ),
+  }) as any;
+};
 
-export const isAgent = (value: unknown): value is Agent<any, any, any[], any> =>
+const isTemplateStringsArray = (
+  value: unknown,
+): value is TemplateStringsArray => Array.isArray(value) && "raw" in value;
+
+export const isAgent = (value: unknown): value is Agent<any, any> =>
   (typeof value === "object" || typeof value === "function") &&
   value !== null &&
   (value as Record<string, unknown>)["~alchemy/Kind"] === "Agent";

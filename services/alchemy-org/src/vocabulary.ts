@@ -6,16 +6,20 @@
 import * as AI from "alchemy/AI";
 import * as S from "effect/Schema";
 
+// S.Int, not S.Number: S.Number's JSON schema is a 4-way anyOf
+// (number | "NaN" | "Infinity" | "-Infinity") and Anthropic hard-caps
+// union-typed parameters per request (16) — a toolkit of refs blows
+// through it. Issue/PR numbers are integers anyway.
 export const IssueRef = S.Struct({
   owner: S.String,
   repository: S.String,
-  number: S.Number,
+  number: S.Int,
 });
 
 export const PullRequestRef = S.Struct({
   owner: S.String,
   repository: S.String,
-  number: S.Number,
+  number: S.Int,
   url: S.String,
 });
 

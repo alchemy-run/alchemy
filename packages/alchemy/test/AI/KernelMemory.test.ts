@@ -26,15 +26,24 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as S from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import {
   Archives,
   Researcher,
+  ResearcherCharter,
   Scholar,
+  ScholarCharter,
   Search,
 } from "./fixtures/researcher.ts";
 import * as Model from "./fixtures/ScriptedModel.ts";
-import { Engineer, Lead } from "./fixtures/team.ts";
+import {
+  Engineer,
+  EngineerCharter,
+  Lead,
+  LeadCharter,
+} from "./fixtures/team.ts";
 
 /** Search physics that records every invocation. */
 const recordingSearch = () => {
@@ -49,12 +58,23 @@ const recordingSearch = () => {
 
 const testLayer = (
   model: Model.ScriptedModel,
-  capabilities: Layer.Layer<any, any, any>,
+  capabilities: Layer.Layer<never, any, any>,
 ) =>
   Layer.mergeAll(
     KernelMemory.pipe(Layer.provide(model.layer)),
     capabilities,
     RuntimeContext.phantom,
+  );
+
+/**
+ * These tests exercise the KERNEL CONTRACT directly —
+ * `Kernel.interpret(term, charter)` — the primitive that
+ * `Agent.make(charter)` packages as a Layer. Application code never
+ * calls this; it resolves the agent's tag.
+ */
+const interpret = (term: AI.Interpretable, charter: AI.Charter) =>
+  Effect.orDie(
+    Effect.flatMap(AI.Kernel, (kernel) => kernel.interpret(term, charter)),
   );
 
 describe("KernelMemory", () => {
@@ -67,7 +87,7 @@ describe("KernelMemory", () => {
     ]);
     const search = recordingSearch();
     return Effect.gen(function* () {
-      const researcher = yield* AI.interpret(Researcher);
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
       const answer = yield* researcher.dispatch("What is alchemy?");
       expect(answer).toBe("Alchemy is Infrastructure-as-Effects.");
 
@@ -95,7 +115,7 @@ describe("KernelMemory", () => {
     ]);
     const search = recordingSearch();
     return Effect.gen(function* () {
-      const researcher = yield* AI.interpret(Researcher);
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
       const answer = yield* researcher.dispatch("What is alchemy?");
       expect(answer).toBe("It is IaE.");
 
@@ -130,7 +150,7 @@ describe("KernelMemory", () => {
         })) as never);
 
       const answer = yield* Effect.gen(function* () {
-        const researcher = yield* AI.interpret(Researcher);
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
         const fiber = yield* Effect.forkChild(
           researcher.dispatch("Research alchemy"),
         );
@@ -178,7 +198,7 @@ describe("KernelMemory", () => {
         }),
       );
     return Effect.gen(function* () {
-      const researcher = yield* AI.interpret(Researcher);
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
 
       // keyed admission — the run is addressable by world identity
       const first = yield* researcher.dispatch("issue opened", {
@@ -224,7 +244,7 @@ describe("KernelMemory", () => {
     ]);
     const kernel = KernelMemory.pipe(Layer.provide(model.layer));
     return Effect.gen(function* () {
-      const lead = yield* AI.interpret(Lead);
+      const lead = yield* interpret(Lead, LeadCharter);
       const answer = yield* lead.dispatch("The parser is broken");
       expect(answer).toBe("Engineer patched the parser.");
       expect(model.calls).toHaveLength(3);
@@ -252,7 +272,7 @@ describe("KernelMemory", () => {
           kernel,
           // the Engineer is an ordinary Layer — the kernel-default
           // implementation over the same kernel
-          AI.layer(Engineer).pipe(Layer.provide(kernel)),
+          Engineer.make(EngineerCharter).pipe(Layer.provide(kernel)),
           RuntimeContext.phantom,
         ),
       ),
@@ -282,7 +302,7 @@ describe("KernelMemory", () => {
     ]);
     const search = recordingSearch();
     return Effect.gen(function* () {
-      const researcher = yield* AI.interpret(Researcher);
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
       const answer = yield* researcher.dispatch("Check the claim");
       expect(answer).toBe("The claim is verified.");
       expect(model.calls).toHaveLength(4);
@@ -329,7 +349,7 @@ describe("KernelMemory", () => {
       ]);
       const search = recordingSearch();
       return Effect.gen(function* () {
-        const scholar = yield* AI.interpret(Scholar);
+        const scholar = yield* interpret(Scholar, ScholarCharter);
         const answer = yield* scholar.dispatch("When did Rome fall?");
         expect(answer).toBe("Rome fell in 476.");
         expect(model.calls).toHaveLength(4);
@@ -353,10 +373,7 @@ describe("KernelMemory", () => {
         // the charter requires the SKILL's tag; the skill's Layer is
         // what pulls in the tool physics — nominal and encapsulated
         Effect.provide(
-          testLayer(
-            model,
-            AI.layer(Archives).pipe(Layer.provide(search.layer)),
-          ),
+          testLayer(model, Archives.make().pipe(Layer.provide(search.layer))),
         ),
       );
     },
@@ -385,7 +402,7 @@ describe("KernelMemory", () => {
     ]);
     const search = recordingSearch();
     return Effect.gen(function* () {
-      const scholar = yield* AI.interpret(Scholar);
+      const scholar = yield* interpret(Scholar, ScholarCharter);
       const answer = yield* scholar.dispatch("When did Rome fall?");
       expect(answer).toBe("Rome fell in 476 AD.");
       expect(model.calls).toHaveLength(4);
@@ -401,10 +418,316 @@ describe("KernelMemory", () => {
     }).pipe(
       Effect.scoped,
       Effect.provide(
-        testLayer(model, AI.layer(Archives).pipe(Layer.provide(search.layer))),
+        testLayer(model, Archives.make().pipe(Layer.provide(search.layer))),
       ),
     );
   });
+
+  it.live(
+    "a dynamic charter re-renders per tick: an inline tool flips the stance",
+    () => {
+      const model = Model.make([
+        // tick 1: read-only stance — the model enters the sandbox
+        () => [Model.toolCall("enter_sandbox", {}), Model.finish("tool-calls")],
+        // tick 2: flipped stance arrived as a situation — answer
+        () => [Model.text("done, sandboxed"), Model.finish()],
+        // tick 3 (steered awake): stance unchanged — answer again
+        () => [Model.text("still sandboxed"), Model.finish()],
+      ]);
+      const calls = (count: number) =>
+        Effect.sync(() => model.calls.length).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (length) => length >= count,
+            times: 200,
+          }),
+        );
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          // INIT — once per run: plain Ref state + an inline tool closing over it
+          const sandboxed = yield* Ref.make(false);
+          const enter = yield* AI.Tool("enter_sandbox")`
+Enter the sandbox.`(() =>
+            Ref.set(sandboxed, true).pipe(Effect.as("you are now sandboxed")),
+          );
+          // TURN — before every sampling: the stance follows the state
+          return Effect.gen(function* () {
+            return yield* (yield* Ref.get(sandboxed))
+              ? AI.prose`You are IN the sandbox; nothing you run is real.`
+              : AI.prose`You are read-only until you ${enter}.`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        const answer = yield* researcher.dispatch("try the sandbox");
+        expect(answer).toBe("done, sandboxed");
+
+        // tick 1: the read-only stance froze into the head; the inline
+        // tool (closure over the local) was offered
+        const first = Model.promptText(model.calls[0]!);
+        expect(first).toContain("read-only until");
+        expect(model.calls[0]!.tools.map((tool) => tool.name)).toEqual([
+          "enter_sandbox",
+          "spawn",
+        ]);
+
+        // tick 2: the flipped stance arrived as a <situation> message —
+        // the frozen head did NOT change — and the tool retired
+        const second = Model.promptText(model.calls[1]!);
+        expect(second).toContain("read-only until"); // head, byte-stable
+        // (promptText is JSON — the newline after the tag is escaped)
+        expect(second).toContain("<situation>\\nYou are IN the sandbox");
+        expect(model.calls[1]!.tools.map((tool) => tool.name)).toEqual([
+          "spawn",
+        ]);
+
+        // tick 3: the parked run steered awake — the situation text is
+        // unchanged, so it is NOT re-delivered (exactly once in prompt)
+        yield* researcher.steer("still there?");
+        yield* calls(3);
+        const third = Model.promptText(model.calls[2]!);
+        expect(third.match(/nothing you run is real/g)).toHaveLength(1);
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect(
+    "effect splices render at every tick: the run's key in prose",
+    () => {
+      const model = Model.make([() => [Model.text("ack"), Model.finish()]]);
+      return Effect.gen(function* () {
+        // a STATIC charter whose splice is still dynamic — an effect
+        // reading AI.Thread, evaluated at render time with the run provided
+        const charter = AI.prose`
+You are working ${Effect.map(AI.Thread, (thread) => thread.key)}. Answer briefly.`;
+        const researcher = yield* interpret(Researcher, charter);
+        yield* researcher.dispatch("hello", { key: "repo#9" });
+        expect(Model.promptText(model.calls[0]!)).toContain(
+          "You are working repo#9.",
+        );
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect("a non-Fragment turn result settles the run from inside", () => {
+    const model = Model.make([
+      // tick 1: the model marks the work done via the inline tool
+      () => [
+        Model.toolCall("mark_done", { result: 42 }),
+        Model.finish("tool-calls"),
+      ],
+      // (tick 2 never samples — the turn returns the outcome first)
+    ]);
+    return Effect.gen(function* () {
+      const charter = Effect.gen(function* () {
+        const result = AI.Parameter("result", S.Number)`The final result.`;
+        const done = yield* Ref.make<number | undefined>(undefined);
+        const markDone = yield* AI.Tool("mark_done")`
+Record the final ${result}.`((p) =>
+          Ref.set(done, p.result).pipe(Effect.as("recorded")),
+        );
+        return Effect.gen(function* () {
+          const value = yield* Ref.get(done);
+          if (value !== undefined) return { answer: value }; // ← exit = return
+          return yield* AI.prose`Compute the answer, then ${markDone}.`;
+        });
+      });
+      const researcher = yield* interpret(Researcher, charter);
+      // dispatch resolves with the OUTCOME, not the model's last text
+      const outcome = yield* researcher.dispatch("go", { key: "job#1" });
+      expect(outcome).toEqual({ answer: 42 });
+      expect(model.calls).toHaveLength(1); // outcome tick never sampled
+      // a settled run answers late dispatches with its outcome
+      const late = yield* researcher.dispatch("again?", { key: "job#1" });
+      expect(late).toEqual({ answer: 42 });
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.effect(
+    "charter init runs per run: distinct keys get distinct state",
+    () => {
+      const model = Model.make([
+        () => [Model.toolCall("bump", {}), Model.finish("tool-calls")],
+        () => [Model.text("done"), Model.finish()],
+        () => [Model.text("done"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        let inits = 0;
+        const charter = Effect.gen(function* () {
+          inits++;
+          const count = yield* Ref.make(0);
+          const bump = yield* AI.Tool("bump")`Increment the counter.`(() =>
+            Ref.update(count, (n) => n + 1).pipe(Effect.as("bumped")),
+          );
+          return Effect.gen(function* () {
+            return yield* AI.prose`
+Counter: ${Ref.get(count)}. Use ${bump} when told.`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        yield* researcher.dispatch("bump once", { key: "a" }); // bumps a's ref
+        yield* researcher.dispatch("just answer", { key: "b" });
+        expect(inits).toBe(2); // one instance per run
+        // run b's SECOND tick would show its own counter still at 0 —
+        // check via the prompt each run saw
+        expect(Model.promptText(model.calls[1]!)).toContain("Counter: 1"); // a, tick 2
+        expect(Model.promptText(model.calls[2]!)).toContain("Counter: 0"); // b, tick 1
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect("prose margins are stripped; relative indentation survives", () => {
+    const model = Model.make([() => [Model.text("ok"), Model.finish()]]);
+    return Effect.gen(function* () {
+      const charter = AI.prose`
+        You follow the checklist:
+          - search first
+          - answer second
+      `;
+      const researcher = yield* interpret(Researcher, charter);
+      yield* researcher.dispatch("hi");
+      const prompt = Model.promptText(model.calls[0]!);
+      expect(prompt).toContain("You follow the checklist:");
+      expect(prompt).toContain("\\n  - search first"); // margin gone, nesting kept
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.effect(
+    "compaction: a handoff tool resets the thread at the boundary",
+    () => {
+      const model = Model.make([
+        // tick 1: burn some history, then hand off
+        () => [
+          Model.toolCall("handoff", { summary: "tried A; B is next" }),
+          Model.finish("tool-calls"),
+        ],
+        // tick 2: thread was reset — answer
+        () => [Model.text("continuing from summary"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const summary = AI.Parameter("summary", S.String)`
+Decisions made, open threads, blockers.`;
+          // the run is a RUNTIME fact: the handler yields AI.Thread when
+          // it fires — init never sees it
+          const handoff = yield* AI.Tool("handoff")`
+Summarize progress as ${summary}; your context restarts from it.`((p) =>
+            AI.Thread.pipe(
+              Effect.flatMap((thread) =>
+                thread.compact({ reset: { summary: p.summary } }),
+              ),
+              Effect.as("compacted"),
+            ),
+          );
+          return Effect.gen(function* () {
+            return yield* AI.prose`Work the task. ${handoff} when the thread grows stale.`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        const answer = yield* researcher.dispatch("start the work", {
+          key: "c#1",
+        });
+        expect(answer).toBe("continuing from summary");
+        const second = Model.promptText(model.calls[1]!);
+        // the reset thread carries the summary…
+        expect(second).toContain("tried A; B is next");
+        // …and no longer carries the original work item or the tool call
+        expect(second).not.toContain("start the work");
+        expect(second).not.toContain("call-handoff");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect("say delivers once per thread and re-says on changed text", () => {
+    const model = Model.make([
+      () => [Model.toolCall("bump", {}), Model.finish("tool-calls")], // n: 0→1
+      () => [Model.toolCall("bump", {}), Model.finish("tool-calls")], // n: 1→2
+      () => [Model.text("done"), Model.finish()],
+    ]);
+    return Effect.gen(function* () {
+      const charter = Effect.gen(function* () {
+        const attempts = yield* Ref.make(0);
+        const bump = yield* AI.Tool("bump")`Record a failed attempt.`(() =>
+          Ref.update(attempts, (n) => n + 1).pipe(Effect.as("recorded")),
+        );
+        return Effect.gen(function* () {
+          const n = yield* Ref.get(attempts);
+          if (n > 0)
+            yield* AI.say`Attempt ${n} of 5 — park, never retry blind.`;
+          return yield* AI.prose`Work the task; ${bump} after each failure.`;
+        });
+      });
+      const researcher = yield* interpret(Researcher, charter);
+      yield* researcher.dispatch("go", { key: "s#1" });
+
+      // tick 1: n=0 → no note delivered
+      expect(Model.promptText(model.calls[0]!)).not.toContain("Attempt");
+      // tick 2: n=1 → note delivered once
+      const second = Model.promptText(model.calls[1]!);
+      expect(second).toContain("Attempt 1 of 5");
+      // tick 3: n=2 → changed text is a NEW note; "Attempt 1" not repeated
+      const third = Model.promptText(model.calls[2]!);
+      expect(third).toContain("Attempt 2 of 5");
+      expect(third.match(/Attempt 1 of 5/g)).toHaveLength(1);
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.effect(
+    "a compaction reset restates standing state into the fresh thread",
+    () => {
+      const model = Model.make([
+        // tick 1: enter the parked stance
+        () => [Model.toolCall("park", {}), Model.finish("tool-calls")],
+        // tick 2: sees the parked situation; hands off
+        () => [
+          Model.toolCall("handoff", { summary: "asked the author about X" }),
+          Model.finish("tool-calls"),
+        ],
+        // tick 3: fresh thread — must still know it is parked
+        () => [Model.text("waiting"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const summary = AI.Parameter(
+            "summary",
+            S.String,
+          )`What happened so far.`;
+          const parked = yield* Ref.make(false);
+          const park = yield* AI.Tool("park")`Park on the author.`(() =>
+            Ref.set(parked, true).pipe(Effect.as("parked")),
+          );
+          const handoff = yield* AI.Tool("handoff")`
+Summarize as ${summary}; the thread restarts.`((p) =>
+            AI.Thread.pipe(
+              Effect.flatMap((thread) =>
+                thread.compact({ reset: { summary: p.summary } }),
+              ),
+              Effect.as("compacted"),
+            ),
+          );
+          return Effect.gen(function* () {
+            return yield* AI.prose`
+Triage the issue; ${park} when blocked. ${handoff} to compact.
+
+${
+  (yield* Ref.get(parked))
+    ? AI.prose`You are parked on the author; judge their next reply.`
+    : AI.prose``
+}`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        yield* researcher.dispatch("start", { key: "r#1" });
+
+        const third = Model.promptText(model.calls[2]!);
+        // the fresh thread carries the summary AND the re-delivered
+        // standing situation (delivery logs are thread-scoped)…
+        expect(third).toContain("asked the author about X");
+        expect(third).toContain("parked on the author");
+        // …and none of the pre-reset traffic
+        expect(third).not.toContain("call-park");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
 
   it.effect(
     "distinct keys are distinct runs with separate conversations",
@@ -420,7 +743,7 @@ describe("KernelMemory", () => {
       ]);
       const search = recordingSearch();
       return Effect.gen(function* () {
-        const researcher = yield* AI.interpret(Researcher);
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
         const [one, two] = yield* Effect.all([
           researcher.dispatch("first issue", { key: "repo#1" }),
           researcher.dispatch("second issue", { key: "repo#2" }),

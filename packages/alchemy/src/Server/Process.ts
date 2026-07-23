@@ -54,6 +54,12 @@ export interface HostRuntimeContext extends ProcessContext {
   ) => Effect.Effect<void, never, Req>;
   exports: Effect.Effect<{
     readonly program: Effect.Effect<void, never, any>;
+    /**
+     * Whether the constructor registered an HTTP handler (`fetch` or RPC
+     * shape). Recorded in props at plan time so providers know to expect
+     * the runtime to bind a port and report it back.
+     */
+    readonly serves: boolean;
   }>;
 }
 
@@ -69,6 +75,7 @@ export const createHostRuntimeContext =
   (id: string): HostRuntimeContext => {
     const runners: Effect.Effect<void, never, any>[] = [];
     const env: Record<string, any> = {};
+    let serves = false;
 
     return {
       Type: type,
@@ -95,10 +102,12 @@ export const createHostRuntimeContext =
           // Register the HTTP handler as a runner. At container runtime the
           // ambient `HttpServer` (if provided) serves it; `Http.serve` is a
           // no-op when no server is bound, so this never crashes plan/deploy.
+          serves = true;
           runners.push(Http.serve(handler as HttpEffect<any>));
         })) as HostRuntimeContext["serve"],
       exports: Effect.sync(() => ({
         program: Effect.all(runners, { concurrency: "unbounded" }),
+        serves,
       })),
     } satisfies HostRuntimeContext;
   };

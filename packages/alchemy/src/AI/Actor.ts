@@ -7,10 +7,11 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  * actor verbs. Hand it work (`dispatch`/`send`), talk to a run
  * mid-flight (`steer`), resolve a run from the outside (`settle`).
  *
- * Both term kinds interpret into an Actor; they differ in who may
- * hold it. An {@link Agent}'s tag IS its Actor — agents exist to be
- * called. A {@link Process} hides its Actor inside its implementation
- * Layer and exposes only its declared Shape.
+ * Who may hold the Actor is a Layer decision. A PUBLIC {@link Agent}'s
+ * tag IS its Actor — agents exist to be called. A sealed domain
+ * surface (a business process) is a plain `Context.Service` whose
+ * Layer interprets a PRIVATE agent and exposes only its declared
+ * Shape — the Actor never leaves the closure.
  *
  * `In` is the term's input alphabet, DERIVED FROM ITS PROSE: the
  * union of the `AI.Event` payloads its charter splices, plus `string`

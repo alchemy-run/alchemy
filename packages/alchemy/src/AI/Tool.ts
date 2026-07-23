@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Parameter } from "./Parameter.ts";
+import type { Services } from "./Services.ts";
 
 export type ToolParameters<Refs> = {
   [toolName in Extract<Refs, Parameter>["~alchemy/Name"]]: Extract<
@@ -31,16 +32,25 @@ export interface Tool<
   };
   impl: (props: this["params"]) => Effect.Effect<any, any, any>;
   new (): Tool<Name, Refs>;
+  /**
+   * Apply the implementation — the INLINE tool form. The result is an
+   * Effect so the charter's INIT `yield*`s it: that is what charges
+   * the template's own splices (`${Comment}` in the description) to
+   * the init's requirement channel, making the tool's dependencies a
+   * type-level fact of the Layer. The yielded {@link ToolImpl} is then
+   * spliced into prose; the HANDLER's requirements ride the splice
+   * (they are turn-time, satisfied by the kernel at call time).
+   */
   <Err = never, Req = never>(
     impl: Effect.Effect<
       (props: this["params"]) => Effect.Effect<any>,
       Err,
       Req
     >,
-  ): ToolImpl<this, Err, Req>;
+  ): Effect.Effect<ToolImpl<this, Err, Req>, never, Services<Refs>>;
   <Err = never, Req = never>(
     impl: (props: this["params"]) => Effect.Effect<any, Err, Req>,
-  ): ToolImpl<this, Err, Req>;
+  ): Effect.Effect<ToolImpl<this, Err, Req>, never, Services<Refs>>;
 }
 
 export interface ToolImpl<
@@ -106,7 +116,9 @@ const makeTool = (
   refs: any[],
 ) => {
   const term = function (impl: (props: any) => Effect.Effect<any, any, any>) {
-    return { "~alchemy/Kind": "ToolImpl", tool: term, impl };
+    // an Effect, so init `yield*`s it — the template refs' requirements
+    // are phantom on the R channel (see the Tool interface call signature)
+    return Effect.succeed({ "~alchemy/Kind": "ToolImpl", tool: term, impl });
   };
   Object.setPrototypeOf(
     term,
@@ -124,3 +136,17 @@ export const isTool = (value: unknown): value is Tool<any, any> =>
   (typeof value === "object" || typeof value === "function") &&
   value !== null &&
   (value as Record<string, unknown>)["~alchemy/Kind"] === "Tool";
+
+/**
+ * An inline tool — a `Tool` term applied to its implementation and
+ * `yield*`ed in the charter's INIT
+ * (`const park = yield* AI.Tool("park")`…`(() => …)`). Spliced into
+ * the charter's prose, it grants the tool with its physics carried in
+ * the splice: the closure form for run-local affordances (a tool that
+ * flips a phase `Ref`, a persona-private verb no other term should
+ * share).
+ */
+export const isToolImpl = (value: unknown): value is ToolImpl =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  (value as Record<string, unknown>)["~alchemy/Kind"] === "ToolImpl";

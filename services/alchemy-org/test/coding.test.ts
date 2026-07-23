@@ -10,8 +10,10 @@ import { Coding, CodingLocal } from "../src/coding.ts";
 import { workspace } from "../src/workspace.ts";
 import * as Model from "./fixtures/ScriptedModel.ts";
 
-class CodingAgent extends AI.Agent<CodingAgent>()("CodingAgent")`
-Implement the requested change using ${Coding}.` {}
+class CodingAgent extends AI.Agent<CodingAgent>()("CodingAgent") {}
+
+const CodingAgentCharter = AI.prose`
+Implement the requested change using ${Coding}.`;
 
 test("Coding skill activates and completes a local grep/read/edit/bash flow", () => {
   const model = Model.make([
@@ -69,7 +71,7 @@ test("Coding skill activates and completes a local grep/read/edit/bash flow", ()
         Layer.provide(Workspace),
         Layer.provide(BunServices.layer),
       );
-      const AgentLayer = AI.layer(CodingAgent).pipe(
+      const AgentLayer = AI.layer(CodingAgent, CodingAgentCharter).pipe(
         Layer.provide(Layer.mergeAll(Kernel, LocalCoding)),
       );
       const Environment = Layer.mergeAll(

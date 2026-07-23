@@ -324,6 +324,8 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
           program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
             Effect.asVoid,
           ),
+          // a Job never serves HTTP — `serve` collects the one-shot `run`
+          serves: false,
         })),
       };
       return context;

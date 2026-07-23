@@ -108,7 +108,17 @@ export const resolvePort = (options: { port?: number } | undefined) =>
     ? Effect.succeed(options.port)
     : Config.number("PORT").pipe(Config.withDefault(3000));
 
-export const BunHttpServer = () =>
+export interface HttpServerFactoryOptions {
+  /**
+   * Called once the server is listening, with the BOUND address — the
+   * kernel-assigned port when `PORT=0` requested an ephemeral one. Host
+   * entrypoints use this to report the actual port back to whoever
+   * launched the process (e.g. `Server.Service`'s ready file).
+   */
+  onListen?: (address: { port: number }) => Effect.Effect<void>;
+}
+
+export const BunHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
   Layer.effect(
     HttpServer,
     Effect.gen(function* () {
@@ -120,13 +130,19 @@ export const BunHttpServer = () =>
           Effect.gen(function* () {
             const port = yield* resolvePort(options);
             const server = yield* BunHttpServerPlatform.make({ port });
+            if (
+              factoryOptions?.onListen &&
+              server.address._tag === "TcpAddress"
+            ) {
+              yield* factoryOptions.onListen({ port: server.address.port });
+            }
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
       };
     }),
   );
 
-export const NodeHttpServer = () =>
+export const NodeHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
   Layer.effect(
     HttpServer,
     Effect.gen(function* () {
@@ -142,6 +158,12 @@ export const NodeHttpServer = () =>
               NodeHttp.createServer,
               { port },
             );
+            if (
+              factoryOptions?.onListen &&
+              server.address._tag === "TcpAddress"
+            ) {
+              yield* factoryOptions.onListen({ port: server.address.port });
+            }
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
       };

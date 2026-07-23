@@ -37,15 +37,15 @@ import {
 } from "./tools/index.ts";
 
 export class Coding extends AI.Skill<Coding>()("Coding")`
-Writing code in the repository checkout. ${Grep} before you
-${ReadFile}; use ${Glob} for filenames and ${ListDirectory} for
-shallow orientation. ${ReadFile} returns the digest required before
-you touch an existing file. ${EditFile} applies atomic exact-string
-edits; ${ApplyPatch} coordinates guarded multi-file add/update/delete
-or move operations; ${WriteFile} is for new files and complete
-rewrites only. ${Bash} runs the test suite after every edit; when
-search or command output is truncated, page the retained artifact
-with ${ReadOutput}. The suite is the only oracle of done-ness.` {}
+  Writing code in the repository checkout. ${Grep} before you
+  ${ReadFile}; use ${Glob} for filenames and ${ListDirectory} for
+  shallow orientation. ${ReadFile} returns the digest required before
+  you touch an existing file. ${EditFile} applies atomic exact-string
+  edits; ${ApplyPatch} coordinates guarded multi-file add/update/delete
+  or move operations; ${WriteFile} is for new files and complete
+  rewrites only. ${Bash} runs the test suite after every edit; when
+  search or command output is truncated, page the retained artifact
+  with ${ReadOutput}. The suite is the only oracle of done-ness.` {}
 
 /**
  * The default implementation: assembles the bundle from the tool
@@ -53,7 +53,7 @@ with ${ReadOutput}. The suite is the only oracle of done-ness.` {}
  * `Layer<Coding, never, Grep | Glob | ListDirectory | ReadFile |
  * EditFile | ApplyPatch | WriteFile | Bash | ReadOutput>`.
  */
-export const CodingLive = AI.layer(Coding);
+export const CodingLive = Coding.make();
 
 /**
  * Production local/Bun tool composition. The entrypoint still chooses

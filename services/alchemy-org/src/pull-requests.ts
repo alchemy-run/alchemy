@@ -1,19 +1,21 @@
 /**
- * The PullRequests process — the repository's ONE merge authority.
+ * The PullRequests desk — the repository's ONE merge authority.
  * Every pull request, whether the factory's own Engineer opened it or
  * a human contributor did, passes through this charter: review
  * verdict, then merge or relay changes.
  *
  * The Issues and Discord owners deliberately do NOT reference
  * ${MergePullRequest}; capability-by-omission makes this the only
- * term any Layer could ever grant merge authority to.
+ * charter any Layer could ever grant merge authority to.
  *
- * A PROCESS: its tag is {@link PullRequestsService} and nothing else —
- * nobody outside {@link PullRequestsLive} can `send` a fake
- * pull-request event; work enters through GitHub or not at all.
+ * SEALED in practice: {@link PullRequests} is a plain
+ * `Context.Service` resolving to {@link PullRequestsService} and
+ * nothing else — the agent behind it is wired only by
+ * {@link PullRequestsLive}; work enters through GitHub or not at all.
  */
 import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
@@ -31,43 +33,24 @@ export interface PullRequestsService {
   >;
 }
 
-export class PullRequests extends AI.Process<
+export class PullRequests extends Context.Service<
   PullRequests,
   PullRequestsService
->()("PullRequests")`
-This process drives every pull request in ${testAlchemy} to a
-verdict — the factory's own and human contributors' alike.
-
-Each ${GitHub.PullRequestOpened} receives a review from ${Reviewer}
-against its originating issue. A pull request that names no issue
-gets one chance: ${Comment} asks the author to link or state the
-intent, and the review proceeds against that statement when it
-arrives.
-
-A review that requests changes is relayed with ${Comment}, exactly —
-the author hears the Reviewer's words, not a summary. A review that
-approves, with green checks, is followed by ${MergePullRequest}. The
-merge tool itself refuses without an approved review; a refusal is a
-fact about the world to fix, never to work around.
-
-A ${GitHub.PullRequestMerged} or ${GitHub.PullRequestClosed} ends
-this process's involvement — the verdict was delivered, however it
-happened. A pull request whose author has gone quiet after requested
-changes stays open with its review attached — closing other people's
-work is a human's call, and this process never makes it.` {}
+>()("alchemy-org/PullRequests") {}
 
 /**
  * The implementation: one run per pull request, keyed `owner/repo#n`.
- * Opening is `send` (Ledger-deduped), the conversation moving is
- * `steer`, the world merging or closing is `settle` — a merge is the
- * verdict delivered, however it happened.
+ * `send` is the one delivery verb (the kernel admits-or-enqueues by
+ * key; a fresh event after a crash re-admits the run); the Ledger
+ * dedupes deliveries by content; the world merging or closing is
+ * `settle` — a merge is the verdict delivered, however it happened.
  */
 export const PullRequestsLive = Layer.effect(
   PullRequests,
   Effect.gen(function* () {
     const ledger = yield* Ledger;
     const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
-    const pullRequests = yield* AI.interpret(PullRequests);
+    const pullRequests = yield* PullRequestsAgent;
 
     yield* GitHub.consumeRepositoryEvents(
       testAlchemy,
@@ -79,33 +62,52 @@ export const PullRequestsLive = Layer.effect(
         ],
       },
       (event) =>
-        Match.value(event).pipe(
-          Match.tag("PullRequestOpened", (event) =>
-            Effect.gen(function* () {
-              const key = GitHub.eventKey(event)!;
-              const { status } = yield* ledger.offer(
-                "pull-requests",
-                key,
-                event,
-              );
-              yield* status === "accepted"
-                ? pullRequests.send(event, { key })
-                : pullRequests.steer(key, event);
-            }),
-          ),
-          Match.tag("PullRequestMerged", "PullRequestClosed", (event) =>
-            Effect.gen(function* () {
-              const key = GitHub.eventKey(event)!;
-              yield* pullRequests.settle(key, event);
-              yield* ledger.settle("pull-requests", key);
-            }),
-          ),
-          Match.exhaustive,
-        ),
+        Effect.gen(function* () {
+          const key = GitHub.eventKey(event)!;
+          const { status } = yield* ledger.offer(
+            "pull-requests",
+            JSON.stringify(event),
+            event,
+          );
+          if (status === "duplicate") return;
+          yield* Match.value(event).pipe(
+            Match.tag("PullRequestMerged", "PullRequestClosed", (e) =>
+              pullRequests.settle(key, e),
+            ),
+            Match.orElse((e) => pullRequests.send(e, { key })),
+          );
+        }),
     );
 
     return {
       list: () => listPullRequests({ state: "open" }),
     };
   }),
-);
+).pipe(Layer.provide(Layer.suspend(() => PullRequestsAgentLive)));
+
+/** The loop behind the desk — {@link PullRequestsLive} wires the world to it. */
+export class PullRequestsAgent extends AI.Agent<PullRequestsAgent>()(
+  "PullRequests",
+) {}
+
+export const PullRequestsAgentLive = PullRequestsAgent.make`
+  This process drives every pull request in ${testAlchemy} to a
+  verdict — the factory's own and human contributors' alike.
+
+  Each ${GitHub.PullRequestOpened} receives a review from ${Reviewer}
+  against its originating issue. A pull request that names no issue
+  gets one chance: ${Comment} asks the author to link or state the
+  intent, and the review proceeds against that statement when it
+  arrives.
+
+  A review that requests changes is relayed with ${Comment}, exactly —
+  the author hears the Reviewer's words, not a summary. A review that
+  approves, with green checks, is followed by ${MergePullRequest}. The
+  merge tool itself refuses without an approved review; a refusal is a
+  fact about the world to fix, never to work around.
+
+  A ${GitHub.PullRequestMerged} or ${GitHub.PullRequestClosed} ends
+  this process's involvement — the verdict was delivered, however it
+  happened. A pull request whose author has gone quiet after requested
+  changes stays open with its review attached — closing other people's
+  work is a human's call, and this process never makes it.`;

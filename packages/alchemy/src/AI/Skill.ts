@@ -1,12 +1,14 @@
 import type * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { makeTerm } from "./Agent.ts";
+import type { Services } from "./Services.ts";
 
 /**
  * The service shape a skill's tag resolves to: the runtime
  * implementations of the skill's tools, keyed by tool name. The
- * DEFAULT Layer (`AI.layer(Coding)`) assembles this record from the
+ * DEFAULT Layer (`Coding.make()`) assembles this record from the
  * individual tool tags; a custom `Layer.effect(Coding, …)` may build
  * the whole bundle's physics inline — the tools need no Layers of
  * their own.
@@ -26,7 +28,7 @@ export interface SkillService {
  * Referencing a skill in a charter grants ACCESS, not activation —
  * and the access is NOMINAL: the reference contributes the SKILL's
  * tag to the term's `Req` (never the individual tools), so the Layer
- * graph reads the way the prose does. Providing `AI.layer(Coding)`
+ * graph reads the way the prose does. Providing `Coding.make()`
  * is what pulls the tool tags in as that Layer's own requirements —
  * the bundle is encapsulated behind its name:
  *
@@ -35,7 +37,7 @@ export interface SkillService {
  * ${Grep} before ${ReadFile}; ${ReadFile} before ${EditFile}.
  * ${Bash} runs the tests — green is the only done.` {}
  *
- * export const CodingLive = AI.layer(Coding);
+ * export const CodingLive = Coding.make();
  * // Layer<Coding, never, Grep | ReadFile | EditFile | Bash>
  * ```
  *
@@ -59,6 +61,12 @@ export interface Skill<
   refs: Refs;
   /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
   "~alchemy/Self": Self;
+  /**
+   * The default Layer: the skill's tag out, its TOOLS' tags in — the
+   * bundle is nominal (charters require `Coding`, never `Grep`) and
+   * providing `Coding.make()` is what surfaces the tool requirements.
+   */
+  readonly make: () => Layer.Layer<Self, never, Services<Refs>>;
   new (_: never): SkillService & { readonly "~alchemy/Name": Name };
 }
 

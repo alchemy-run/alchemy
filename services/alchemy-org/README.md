@@ -32,11 +32,17 @@ One file, one purpose:
   into skills: they stay direct splices, so the capability lines
   stay visible in prose.
 
-The processes (`AI.Process<Self, Shape>`) — prose describing how work
-moves, referencing the agents that do it. A process's tag resolves to
-its declared deterministic interface ONLY; the actor verbs stay
-private to its implementation Layer, which interprets the charter and
-wires the world (events, schedules, substrate callbacks) to it:
+The processes (`AI.Process<Self, Shape>`) — bare tags whose CHARTERS
+(prose describing how work moves, referencing the agents that do it)
+live with their implementation Layers and are passed to
+`AI.actor(term, charter)`. A charter is init → turn: the init
+effect runs once (allocate `AI.local` state, define inline tools);
+the turn effect re-renders the stance before every sampling, so
+prose, tools, and delegates can follow the run's state. A process's
+tag resolves to its declared deterministic interface ONLY; the actor
+verbs stay private to its implementation Layer, which interprets the
+charter and wires the world (events, schedules, substrate callbacks)
+to it:
 
 - `src/issues.ts` — **Issues**: open → triage/dedupe/link → ready →
   hand to Engineer → close on merged evidence.
@@ -52,7 +58,7 @@ wires the world (events, schedules, substrate callbacks) to it:
 
 The agents (`AI.Agent<Self>`) — callable personas the processes
 delegate to; every agent's tag is the same generic actor interface,
-and `AI.layer(agent)` is the kernel-default implementation:
+and `AI.layer(agent, charter)` is the kernel-default implementation:
 
 - `src/engineer.ts` — **Engineer**: one ready issue in, one PR out.
 - `src/reviewer.ts` — **Reviewer**: diff against spec, approve or

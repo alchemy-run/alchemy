@@ -4,7 +4,6 @@
  * layered kernel. One smoke test, gated on `ANTHROPIC_API_KEY` (run
  * via `doppler run -p alchemy-v2 -c dev -- bun run test …`).
  */
-import * as AI from "@/AI/index.ts";
 import { KernelMemory } from "@/AI/KernelMemory.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
@@ -13,7 +12,11 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { Researcher, Search } from "./fixtures/researcher.ts";
+import {
+  Researcher,
+  ResearcherCharter,
+  Search,
+} from "./fixtures/researcher.ts";
 
 const Anthropic = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
@@ -40,7 +43,9 @@ describe("KernelMemory ⨯ Anthropic", () => {
           return `Fact: the alchemy-effect framework calls its model "Infrastructure-as-Effects" (IaE).`;
         })) as never);
       return Effect.gen(function* () {
-        const researcher = yield* AI.interpret(Researcher);
+        // the user-facing spelling: the agent's default Layer was
+        // provided below; its tag resolves to the actor verbs
+        const researcher = yield* Researcher;
         const answer = (yield* researcher.dispatch(
           "Use the search tool to find out what the alchemy-effect framework calls its model, then answer with that name. You MUST search first.",
         )) as string;
@@ -52,10 +57,14 @@ describe("KernelMemory ⨯ Anthropic", () => {
       }).pipe(
         Effect.scoped,
         Effect.provide(
-          Layer.mergeAll(
-            KernelMemory.pipe(Layer.provide(Anthropic)),
-            search,
-            RuntimeContext.phantom,
+          Researcher.make(ResearcherCharter).pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(
+                KernelMemory.pipe(Layer.provide(Anthropic)),
+                search,
+                RuntimeContext.phantom,
+              ),
+            ),
           ),
         ),
       );
