@@ -8,7 +8,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
-import { hashImports, hashMigrations } from "../Sql/SqlFile.ts";
+import { hashImports, hashMigrations } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
 import {
@@ -484,9 +484,10 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           // rejected with an UnprocessableEntity. Retry until it clears.
           const retryWhileResizing = Effect.retry({
             while: isResizeInProgress,
-            schedule: Schedule.spaced("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(120)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("5 seconds"),
+              Schedule.recurs(120),
+            ]),
           });
           current = desiredProduction
             ? yield* planetscale

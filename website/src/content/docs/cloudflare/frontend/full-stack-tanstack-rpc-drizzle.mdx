@@ -18,7 +18,7 @@ This guide ties four pieces into one deployable app:
   mutations in the browser.
 
 The full project lives in
-[`examples/cloudflare-tanstack-rpc-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-tanstack-rpc-drizzle).
+[`examples/cloudflare-tanstack-rpc-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-tanstack-rpc-drizzle).
 We'll build a Todo app and follow a single value — a `Todo` — from the
 Postgres row all the way to a checkbox in the browser.
 
@@ -38,7 +38,7 @@ TanStack Start worker — /rpc proxy    (src/routes/rpc.ts)
   │  env.BACKEND.fetch(...)            (private service binding)
   ▼
 Backend RpcWorker (TodoRpcs)          (src/backend/api.ts)
-  │  Drizzle.postgres over Hyperdrive
+  │  Drizzle.Postgres over Hyperdrive
   ▼
 Neon Postgres branch
 ```
@@ -201,7 +201,7 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
   { main: import.meta.filename, workersDev: false, schema: TodoRpcs },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     const handlers = TodoRpcs.toLayer({
       listTodos: () =>

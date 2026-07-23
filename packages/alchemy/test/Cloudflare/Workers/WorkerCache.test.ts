@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -146,9 +146,14 @@ test.provider(
       // response parses as JSON — transient placeholders/5xx bodies throw
       // and retry; a parsed `success: false` is a genuine failure and
       // surfaces via the assertion.
-      const purged = yield* fetchCached(`${worker.url}/purge`).pipe(
+      const purged = yield* Effect.sync(
+        () => `${worker.url}/purge?cb=${Date.now()}`,
+      ).pipe(
+        Effect.flatMap(fetchCached),
         Effect.flatMap((res) =>
-          Effect.try(() => JSON.parse(res.body) as { success: boolean }),
+          res.status === 200
+            ? Effect.try(() => JSON.parse(res.body) as { success: boolean })
+            : Effect.fail(new Error(`Purge worker not ready: ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("2 seconds"),

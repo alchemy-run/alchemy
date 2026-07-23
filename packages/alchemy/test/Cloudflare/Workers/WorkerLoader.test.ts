@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -33,9 +33,10 @@ const readJson = (url: string) =>
     ),
     Effect.retry({
       while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 

@@ -65,7 +65,12 @@ export const makeRpcStub = <Shape>(
 };
 
 export const bindEffectRpc = <Rpcs extends Rpc.Any>(
-  namespace: { readonly getByName: (id: string) => { readonly fetch: any } },
+  namespace: {
+    readonly getByName: (
+      id: string,
+      options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
+    ) => { readonly fetch: any };
+  },
   group: RpcGroup.RpcGroup<Rpcs>,
   options?: {
     /**
@@ -77,6 +82,7 @@ export const bindEffectRpc = <Rpcs extends Rpc.Any>(
 ): {
   readonly getByName: (
     id: string,
+    options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
   ) => Effect.Effect<
     RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError>,
     never,
@@ -90,10 +96,13 @@ export const bindEffectRpc = <Rpcs extends Rpc.Any>(
     // can `yield* counter.getByName(id).method(args)` directly. The proxy
     // records the `.method(args)` ops and replays them against the
     // resolved client when the chain is yielded.
-    getByName: Effect.fn(function* (id: string) {
+    getByName: Effect.fn(function* (
+      id: string,
+      options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
+    ) {
       const httpClient = HttpClient.layerMergedContext(
         Effect.sync(() => {
-          const stub = namespace.getByName(id);
+          const stub = namespace.getByName(id, options);
           return HttpClient.make((request) => stub.fetch(request));
         }),
       );

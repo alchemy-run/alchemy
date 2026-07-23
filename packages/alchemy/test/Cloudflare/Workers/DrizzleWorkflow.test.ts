@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Neon from "@/Neon";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -52,9 +52,10 @@ const runToCompletion = (baseUrl: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady =>
           e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential("500 millis"),
+          Schedule.recurs(15),
+        ]),
       }),
     );
     const { instanceId } = (yield* startRes.json) as { instanceId: string };
@@ -87,7 +88,7 @@ const runToCompletion = (baseUrl: string) =>
 /**
  * End-to-end regression guard for the ExecutionContext-in-Workflow fix
  * (PR #515): deploy a Neon project + branch, point a Cloudflare Hyperdrive
- * at it, host a Workflow that runs `Drizzle.postgres` queries inside `task`
+ * at it, host a Workflow that runs `Drizzle.Postgres` queries inside `task`
  * steps, fire an instance over HTTP, and assert the run completes with the
  * row it wrote.
  *
@@ -95,7 +96,7 @@ const runToCompletion = (baseUrl: string) =>
  * `ExecutionContext` service and the run reports `errored` with no output.
  */
 test(
-  "Drizzle.postgres query runs inside a Workflow task (per-run scope provided by the bridge)",
+  "Drizzle.Postgres query runs inside a Workflow task (per-run scope provided by the bridge)",
   Effect.gen(function* () {
     const { url } = yield* stack;
     expect(url).toBeTypeOf("string");
@@ -124,7 +125,7 @@ test(
  * perform I/O on behalf of a different request").
  */
 test(
-  "Drizzle.postgres queries survive sequential and concurrent fetch events",
+  "Drizzle.Postgres queries survive sequential and concurrent fetch events",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -140,9 +141,10 @@ test(
           ),
           Effect.retry({
             while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
         return (yield* res.json) as { rowCount: number };

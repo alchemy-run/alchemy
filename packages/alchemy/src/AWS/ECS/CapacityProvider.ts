@@ -55,14 +55,23 @@ export interface CapacityProvider extends Resource<
   "AWS.ECS.CapacityProvider",
   CapacityProviderProps,
   {
+    /** The ARN of the capacity provider. */
     capacityProviderArn: CapacityProviderArn;
+    /** The name of the capacity provider. */
     name: CapacityProviderName;
+    /** The current status, e.g. `ACTIVE`. */
     status: ecs.CapacityProviderStatus;
+    /** The status of the most recent update to the provider. */
     updateStatus: ecs.CapacityProviderUpdateStatus | undefined;
+    /** The Auto Scaling group backing the provider. */
     autoScalingGroupArn: string;
+    /** The managed scaling configuration. */
     managedScaling: ecs.ManagedScaling | undefined;
+    /** Whether managed termination protection is enabled. */
     managedTerminationProtection: ecs.ManagedTerminationProtection | undefined;
+    /** Whether managed instance draining is enabled. */
     managedDraining: ecs.ManagedDraining | undefined;
+    /** The tags attached to the capacity provider. */
     tags: Record<string, string>;
   },
   never,

@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -32,9 +32,10 @@ const logLevel = Effect.provideService(
 // Cap exponential backoff at 3s so readiness retries poll densely instead of
 // sleeping tens of seconds past the propagation window (an uncapped
 // exponential blows through the 30s test timeouts after ~6 attempts).
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 // The worker fixture wraps the DO calls in `Effect.orDie` / `Stream.orDie`,
 // so a transient `Worker not found.` (the worker→DO namespace binding hasn't
@@ -62,9 +63,10 @@ const stack = beforeAll(
         const result = yield* client.Ping({ message: "warmup" }).pipe(
           Effect.tapError(Console.log),
           Effect.retry({
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.either(Schedule.spaced("3 seconds")),
-            ),
+            schedule: Schedule.min([
+              Schedule.exponential("500 millis"),
+              Schedule.spaced("3 seconds"),
+            ]),
             times: 12,
           }),
         );
@@ -106,7 +108,7 @@ test(
   "RpcServer.toHttpEffect: unary RPC response",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    console.log("url:", url);
+    yield* Effect.log("url:", url);
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
@@ -117,9 +119,10 @@ test(
       const result = yield* client.Ping({ message: "hello" }).pipe(
         Effect.tapError(Console.log),
         Effect.retry({
-          schedule: Schedule.exponential("500 millis").pipe(
-            Schedule.either(Schedule.spaced("2 seconds")),
-          ),
+          schedule: Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("2 seconds"),
+          ]),
           times: 10,
         }),
       );
@@ -198,9 +201,10 @@ test(
             // generosity) backstops timeouts and longer bursts — the previous
             // uncapped `times: 3` (~3.5s window) was the flake.
             Effect.retry({
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.either(Schedule.spaced("2 seconds")),
-              ),
+              schedule: Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("2 seconds"),
+              ]),
               times: 10,
             }),
           ),
@@ -238,9 +242,10 @@ test(
             // single-stream tests' generosity (capped backoff, ~10 attempts)
             // so the whole fan-out rides out propagation.
             Effect.retry({
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.either(Schedule.spaced("2 seconds")),
-              ),
+              schedule: Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("2 seconds"),
+              ]),
               times: 10,
             }),
           ),

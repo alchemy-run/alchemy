@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -93,9 +93,10 @@ const runWorkflowToCompletion = (url: string) =>
       Effect.retry({
         // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
         // sleep after only six attempts and blow the test timeout.
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.either(Schedule.spaced("3 seconds")),
-        ),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
         times: 15,
       }),
     );
@@ -131,7 +132,9 @@ test(
     expect(lastStatus.status).toBe("complete");
     expect(lastStatus.error).toBeFalsy();
     expect(lastStatus.output?.greeting).toBe("Hello, world!");
-    expect(lastStatus.output?.workflowName).toBe("TestWorkflow");
+    // `event.workflowName` carries the account-global *physical* name, which
+    // is derived from the host Worker's unique name (stack-id-stage prefix).
+    expect(lastStatus.output?.workflowName).toMatch(/^workflowbindingstack-/);
     expect(lastStatus.output?.stepAttempt).toBe(1);
     expect(lastStatus.rollback).toBeNull();
     // The body yields `WorkerEnvironment` — if the regression from PR #71 ever
@@ -147,54 +150,78 @@ test(
     const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
 
-    const startRes = yield* client.post(`${url}/workflow/wait/world`).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
-      ),
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
-      }),
-    );
-    const { instanceId } = (yield* startRes.json) as { instanceId: string };
-
-    // Cloudflare reports an instance parked in `waitForEvent` as `running`
-    // (`waiting` is reserved for sleeps), so the wait step itself is not
-    // observable through the coarse instance status. Wait for the instance
-    // to start, then deliver the event.
-    const runningStatus = yield* waitForStatus(
-      client,
-      url,
-      instanceId,
-      (status) => status.status === "running" || isTerminal(status),
-    );
-    expect(runningStatus.status).toBe("running");
-
-    // An event sent in the gap before the `waitForEvent` step registers can
-    // be missed, so re-send until the workflow acknowledges it by reaching a
-    // terminal status.
-    const lastStatus = yield* Effect.gen(function* () {
-      const sendRes = yield* client.post(
-        `${url}/workflow/send/${instanceId}/external-ok`,
-      );
-      if (sendRes.status !== 200) {
-        return yield* Effect.fail(
-          new Error(`sendEvent failed: ${sendRes.status}`),
+    const { instanceId, lastStatus } = yield* Effect.gen(function* () {
+      const { instanceId } = yield* client
+        .post(`${url}/workflow/wait/world`)
+        .pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json.pipe(
+                  Effect.flatMap((body) => {
+                    const instanceId = (body as { instanceId?: unknown })
+                      .instanceId;
+                    return typeof instanceId === "string"
+                      ? Effect.succeed({ instanceId })
+                      : Effect.fail(
+                          new Error("Worker returned no workflow id"),
+                        );
+                  }),
+                )
+              : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("500 millis"),
+            times: 15,
+          }),
         );
-      }
-      const status = yield* waitForStatus(
+
+      // Cloudflare reports an instance parked in `waitForEvent` as `running`
+      // (`waiting` is reserved for sleeps), so the wait step itself is not
+      // observable through the coarse instance status. Wait for the instance
+      // to start, then deliver the event.
+      const runningStatus = yield* waitForStatus(
         client,
         url,
         instanceId,
-        isTerminal,
-        5,
+        (status) => status.status === "running" || isTerminal(status),
       );
-      return isTerminal(status)
-        ? status
-        : yield* Effect.fail(new Error(`workflow still ${status.status}`));
-    }).pipe(Effect.retry({ times: 3 }));
+      if (runningStatus.status !== "running") {
+        return yield* Effect.fail(
+          new Error(
+            `workflow ${runningStatus.status}: ${JSON.stringify(runningStatus.error)}`,
+          ),
+        );
+      }
+
+      // An event sent in the gap before the `waitForEvent` step registers can
+      // be missed, so re-send until the workflow acknowledges it by reaching a
+      // terminal status.
+      const lastStatus = yield* Effect.gen(function* () {
+        const sendRes = yield* client.post(
+          `${url}/workflow/send/${instanceId}/external-ok`,
+        );
+        if (sendRes.status !== 200) {
+          return yield* Effect.fail(
+            new Error(`sendEvent failed: ${sendRes.status}`),
+          );
+        }
+        const status = yield* waitForStatus(
+          client,
+          url,
+          instanceId,
+          isTerminal,
+          5,
+        );
+        return isTerminal(status)
+          ? status
+          : yield* Effect.fail(new Error(`workflow still ${status.status}`));
+      }).pipe(Effect.retry({ times: 3 }));
+      return { instanceId, lastStatus };
+    }).pipe(
+      // A just-deployed workflow can error its first instance while the
+      // binding propagates. Retry the scenario with a fresh instance.
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
+    );
     expect(lastStatus.status).toBe("complete");
     expect(lastStatus.error).toBeFalsy();
     expect(lastStatus.output?.greeting).toBe("external-ok");
@@ -240,7 +267,11 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
       );
       const all = yield* provider.list();
 
-      expect(all.some((w) => w.workflowName === "TestWorkflow")).toBe(true);
+      // Physical names are derived from the host Worker name (which carries
+      // the stack-id-stage prefix), not the exported class name.
+      expect(
+        all.some((w) => w.workflowName.startsWith("workflowbindingstack-")),
+      ).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

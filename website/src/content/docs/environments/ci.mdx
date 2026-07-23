@@ -206,11 +206,10 @@ By the end you'll have:
    request. The comment auto-updates on every push because the
    logical ID stays the same.
 
-   ```typescript twoslash
-   // @noErrors
+   ```diff lang="typescript"
    import * as Alchemy from "alchemy";
-   + import * as GitHub from "alchemy/GitHub";
-   + import * as Output from "alchemy/Output";
+   +import * as GitHub from "alchemy/GitHub";
+   +import * as Output from "alchemy/Output";
    import * as Effect from "effect/Effect";
 
    export default Alchemy.Stack(
@@ -218,25 +217,25 @@ By the end you'll have:
      { providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()) },
      Effect.gen(function* () {
        const app = yield* App;
-   +   const github = yield* GitHub.GitHubEnv;
+   +    const github = yield* GitHub.GitHubEnv;
 
-   +   if (github?.pr) {
-   +     yield* GitHub.Comment("preview-comment", {
-   +       owner: github.owner,
-   +       repository: github.repository,
-   +       issueNumber: github.pr,
-   +       body: Output.interpolate`
-   +         ## Preview Deployed
+   +    if (github?.pr) {
+   +      yield* GitHub.Comment("preview-comment", {
+   +        owner: github.owner,
+   +        repository: github.repository,
+   +        issueNumber: github.pr,
+   +        body: Output.interpolate`
+   +          ## Preview Deployed
    +
-   +         **URL:** ${app.url}
+   +          **URL:** ${app.url}
    +
-   +         Built from commit ${github.sha.slice(0, 7)}
+   +          Built from commit ${github.sha.slice(0, 7)}
    +
-   +         ---
-   +         _This comment updates automatically with each push._
-   +       `,
-   +     });
-   +   }
+   +          ---
+   +          _This comment updates automatically with each push._
+   +        `,
+   +      });
+   +    }
 
        return { url: app.url };
      }),

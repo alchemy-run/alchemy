@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -22,9 +22,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   body: string;
 }> {}
 
-const ready = Schedule.spaced("3 seconds").pipe(
-  Schedule.both(Schedule.recurs(20)),
-);
+const ready = Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]);
 
 /** POST and retry until the producer route accepts the message (202). */
 const post = (base: string, path: string, body?: string) => {

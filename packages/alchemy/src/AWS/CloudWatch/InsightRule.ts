@@ -66,10 +66,15 @@ export interface InsightRule extends Resource<
   "AWS.CloudWatch.InsightRule",
   InsightRuleProps,
   {
+    /** Physical name of the insight rule. */
     ruleName: InsightRuleName;
+    /** ARN of the insight rule. */
     ruleArn: InsightRuleArn;
+    /** Current state of the rule (`ENABLED` or `DISABLED`). */
     state: string | undefined;
+    /** The full InsightRule description as last read from CloudWatch. */
     insightRule: cloudwatch.InsightRule;
+    /** Tags on the insight rule, including the internal Alchemy ownership tags. */
     tags: Record<string, string>;
   },
   never,
@@ -77,7 +82,9 @@ export interface InsightRule extends Resource<
 > {}
 
 /**
- * A CloudWatch Contributor Insights rule.
+ * A CloudWatch Contributor Insights rule — analyzes log group entries to
+ * surface the top-N contributors (IPs, user IDs, …) to a metric derived
+ * from structured logs.
  * @resource
  * @section Creating Insight Rules
  * @example Rule Definition
@@ -89,12 +96,28 @@ export interface InsightRule extends Resource<
  *       Name: "CloudWatchLogRule",
  *       Version: 1,
  *     },
+ *     LogGroupNames: ["/my-app/access-logs"],
  *     LogFormat: "JSON",
  *     Contribution: {
  *       Keys: ["$.ip"],
  *     },
  *     AggregateOn: "Count",
  *   },
+ * });
+ * ```
+ *
+ * @section Reading Reports at Runtime
+ * @example Fetch the Rule's Top Contributors from a Function
+ * ```typescript
+ * // init — bind the rule to the function (see GetInsightRuleReport)
+ * const getInsightRuleReport = yield* AWS.CloudWatch.GetInsightRuleReport(rule);
+ *
+ * // runtime
+ * const now = yield* Effect.sync(() => Date.now());
+ * const report = yield* getInsightRuleReport({
+ *   StartTime: new Date(now - 3_600_000),
+ *   EndTime: new Date(now),
+ *   Period: 300,
  * });
  * ```
  */
@@ -247,7 +270,20 @@ export const InsightRuleProvider = () =>
                       candidate,
                     ): candidate is typeof candidate & {
                       Name: string;
-                    } => candidate.Name != null,
+                    } =>
+                      candidate.Name != null &&
+                      // Rules owned by another service reject
+                      // DeleteInsightRules with AccessDenied. DynamoDB
+                      // Contributor Insights rules are the pathological case:
+                      // they report `ManagedRule: false` yet still can only
+                      // be removed through DynamoDB (verified live), so match
+                      // both the flag and the documented name prefix. Keep
+                      // them out of enumeration for account-wide teardown
+                      // (nuke).
+                      candidate.ManagedRule !== true &&
+                      !candidate.Name.startsWith(
+                        "DynamoDBContributorInsights-",
+                      ),
                   ),
                 ),
               ),

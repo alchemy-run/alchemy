@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -47,9 +47,10 @@ test(
       // serving 200s keeps getting polled steadily, rather than the
       // unbounded exponential delay overshooting the test timeout.
       Effect.retry({
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.either(Schedule.spaced("3 seconds")),
-        ),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
         times: 40,
       }),
     );
@@ -97,9 +98,10 @@ test(
       // serving 200s keeps getting polled steadily, rather than the
       // unbounded exponential delay overshooting the test timeout.
       Effect.retry({
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.either(Schedule.spaced("3 seconds")),
-        ),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
         times: 40,
       }),
     );

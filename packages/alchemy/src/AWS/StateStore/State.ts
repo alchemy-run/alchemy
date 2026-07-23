@@ -416,7 +416,7 @@ const ensureStateBucket = (bucket: string, region: string) =>
       .headBucket({ Bucket: bucket })
       .pipe(
         Effect.retry(
-          Schedule.spaced("1 second").pipe(Schedule.both(Schedule.recurs(15))),
+          Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(15)]),
         ),
       );
   }).pipe(
@@ -430,8 +430,9 @@ const ensureStateBucket = (bucket: string, region: string) =>
         e._tag === "OperationAborted" ||
         e._tag === "NoSuchBucket" ||
         e._tag === "NotFound",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );

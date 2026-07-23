@@ -1,7 +1,7 @@
 import * as Command from "@/Command/index.ts";
 import * as Provider from "@/Provider.ts";
-import * as Test from "@/Test/Vitest";
-import { assert, describe, expect, it } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { assert, describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";

@@ -1,8 +1,9 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -23,7 +24,9 @@ test.provider(
   "create, update, delete function",
   (stack) =>
     Effect.gen(function* () {
-      const { functionName, functionUrl } = yield* stack.deploy(
+      yield* stack.destroy();
+
+      const { functionName, functionUrl, roleName } = yield* stack.deploy(
         TestFunction.pipe(Effect.provide(TestFunctionLive)),
       );
 
@@ -39,9 +42,10 @@ test.provider(
         ),
         Effect.tapError((error) => Effect.logError(error)),
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
 
@@ -57,6 +61,10 @@ test.provider(
           "lambda:InvokedViaFunctionUrl": "true",
         },
       });
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(functionName);
+      yield* assertRoleDeleted(roleName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -68,6 +76,8 @@ test.provider(
   "applies and updates the Lambda timeout",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const initial = yield* stack.deploy(
         AWS.Lambda.Function("TimeoutFn", {
           main: timeoutHandlerPath,
@@ -101,12 +111,16 @@ test.provider(
           () => new Error("Timeout update has not propagated yet"),
         ),
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
       expect(updatedConfig.Configuration?.Timeout).toBe(45);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(initial.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -118,7 +132,9 @@ test.provider(
   "installs explicit external packages into the deployment artifact",
   (stack) =>
     Effect.gen(function* () {
-      const { functionUrl } = yield* stack.deploy(
+      yield* stack.destroy();
+
+      const { functionName, functionUrl } = yield* stack.deploy(
         AWS.Lambda.Function("InstallFn", {
           main: externalPackageHandlerPath,
           handler: "handler",
@@ -139,9 +155,10 @@ test.provider(
               ),
         ),
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
 
@@ -149,6 +166,9 @@ test.provider(
       expect(body.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -185,6 +205,9 @@ test.provider(
 
       expect(updated.functionName).toBe(initial.functionName);
       yield* waitForArchitecture(updated.functionName, "x86_64");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(initial.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -236,6 +259,9 @@ test.provider(
       expect(removed.functionName).toBe(initial.functionName);
       expect(removed.reservedConcurrentExecutions).toBeUndefined();
       yield* waitForReservedConcurrency(removed.functionName, undefined);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(initial.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -268,6 +294,9 @@ test.provider(
       expect(all.some((f) => f.functionName === deployed.functionName)).toBe(
         true,
       );
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(deployed.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -279,6 +308,8 @@ test.provider(
   "updates function URL auth to AWS_IAM",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const initial = yield* stack.deploy(
         AWS.Lambda.Function("IamUrlFn", {
           main: timeoutHandlerPath,
@@ -352,18 +383,51 @@ test.provider(
               ),
         ),
         Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(10),
+          ]),
         }),
       );
       expect(response.status).toBe(403);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(initial.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
   { timeout: 360_000 },
 );
+
+// Out-of-band proof that the trailing destroy actually removed the function
+// from the cloud (bounded retry to ride out delete propagation).
+const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
+  yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+    Effect.flatMap(() =>
+      Effect.fail(new Error(`Function ${functionName} still exists`)),
+    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+    }),
+  );
+});
+
+// Function cleanup owns its generated execution role. Verify the role is not
+// stranded when deletion also waits for Lambda's asynchronous log flush.
+const assertRoleDeleted = Effect.fn(function* (roleName: string) {
+  yield* iam.getRole({ RoleName: roleName }).pipe(
+    Effect.flatMap(() =>
+      Effect.fail(new Error(`Role ${roleName} still exists`)),
+    ),
+    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+});
 
 const getPolicyStatement = Effect.fn(function* (
   functionName: string,
@@ -376,9 +440,7 @@ const getPolicyStatement = Effect.fn(function* (
         : Effect.fail(new Error(`Policy statement ${statementId} not found`)),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -394,9 +456,7 @@ const waitForPolicyStatementAbsent = Effect.fn(function* (
         : Effect.void,
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -441,9 +501,7 @@ const getFunctionUrlConfigWithAuth = Effect.fn(function* (
       () => new Error("Function URL auth has not propagated yet"),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -464,9 +522,7 @@ const waitForReservedConcurrency = Effect.fn(function* (
       () => new Error("Reserved concurrency update has not propagated yet"),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });
@@ -482,9 +538,7 @@ const waitForArchitecture = Effect.fn(function* (
       () => new Error("Lambda architecture update has not propagated yet"),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });

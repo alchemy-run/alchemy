@@ -60,9 +60,10 @@ export function toPostgresClusterSku(input: {
  * routinely take longer than the default 10-minute polling budget, so
  * give change requests a 60-minute budget (720 × 5s).
  */
-const changeRequestSchedule = Schedule.spaced("5 seconds").pipe(
-  Schedule.both(Schedule.recurs(720)),
-);
+const changeRequestSchedule = Schedule.max([
+  Schedule.spaced("5 seconds"),
+  Schedule.recurs(720),
+]);
 
 /**
  * Polls branch change requests until all visible changes are in a terminal

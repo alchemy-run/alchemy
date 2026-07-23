@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeHttpBucketBinding, type HttpToken } from "./BucketHttp.ts";
+import { authorizeWith } from "../HttpClientUtils.ts";
+import { makeHttpBucketBinding, type R2Auth } from "./BucketHttp.ts";
 import { makeReadR2HttpClient } from "./ReadBucketHttp.ts";
 import {
   ReadWriteBucket,
@@ -18,18 +19,23 @@ export const ReadWriteBucketHttp = Layer.effect(
   Effect.suspend(() =>
     makeHttpBucketBinding({
       permissionGroups: ["Workers R2 Storage Read", "Workers R2 Storage Write"],
-      makeClient: makeReadWriteR2HttpClient,
+      makeClient: (token, bucketName, jurisdiction) =>
+        makeReadWriteR2HttpClient(
+          { authorize: authorizeWith(token), accountId: token.accountId },
+          bucketName,
+          jurisdiction,
+        ),
     }),
   ),
 );
 
 /** Build the HTTP-backed {@link ReadWrite} over a bound token + bucket. */
 export const makeReadWriteR2HttpClient = (
-  token: HttpToken,
+  auth: R2Auth,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
 ): ReadWriteBucketClient =>
   ({
-    ...makeReadR2HttpClient(token, bucketName, jurisdiction),
-    ...makeWriteR2HttpClient(token, bucketName, jurisdiction),
+    ...makeReadR2HttpClient(auth, bucketName, jurisdiction),
+    ...makeWriteR2HttpClient(auth, bucketName, jurisdiction),
   }) satisfies ReadWriteBucketClient;

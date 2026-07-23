@@ -3,9 +3,9 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as KV from "@/Cloudflare/KV/index";
 import * as Provider from "@/Provider";
 import { State } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -123,19 +123,17 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Use a fixed title so the namespace's identity persists across a
-      // state-store wipe.
-      const title = `alchemy-test-kv-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-
-      // Phase 1: deploy normally so a real KV namespace exists on Cloudflare.
+      // Phase 1: deploy normally so a real KV namespace exists on
+      // Cloudflare. No explicit `title` — the engine generates a
+      // random-suffixed physical name (collision-free across concurrent
+      // runs); the deploy output hands back the real title, which pins the
+      // namespace's identity for the adoption phase below.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* KV.Namespace("AdoptableNamespace", { title });
+          return yield* KV.Namespace("AdoptableNamespace");
         }),
       );
-      expect(initial.title).toEqual(title);
+      const title = initial.title;
       const initialId = initial.namespaceId;
       expect(initialId).toBeDefined();
 

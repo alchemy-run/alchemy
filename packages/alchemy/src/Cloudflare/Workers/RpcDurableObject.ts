@@ -12,6 +12,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import {
   DurableObject,
+  type DurableObjectGetDurableObjectOptions,
   type DurableObjectLike,
   type DurableObjectProps,
   type DurableObject as DurableObjectType,
@@ -39,6 +40,7 @@ export interface RpcDurableObject<
   Self?: Self;
   readonly getByName: (
     id: string,
+    options?: DurableObjectGetDurableObjectOptions,
   ) => Effect.Effect<
     RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError>,
     never,

@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -279,6 +280,16 @@ export interface ProviderService<
     output: Res["Attributes"];
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
+    /**
+     * Set by account-wide teardown (`alchemy unsafe nuke`) to signal the
+     * operator explicitly requested destructive deletion. Nuke enumerates
+     * resources straight from the cloud, so `olds` carries Attributes rather
+     * than the originally-deployed Props — destructive prerequisites that a
+     * normal destroy gates behind a prop (e.g. emptying a non-empty S3
+     * bucket behind `forceDestroy`) may be performed when this is set.
+     * Normal engine destroys never set it.
+     */
+    force?: boolean;
   }): Effect.Effect<void, any, DeleteReq>;
 }
 
@@ -490,6 +501,42 @@ export const findProvider: {
   ): Effect.Effect<ProviderService<R>>;
 } = (resource: { Type?: string; key?: string }) =>
   findProviderByType((resource.Type ?? resource.key) as string) as any;
+
+/**
+ * A persisted state row references a resource type with no registered
+ * provider — the type was removed from the program (or renamed without an
+ * alias) while its state row still exists ("zombie" row).
+ *
+ * This is FATAL at plan time: the program and state fundamentally disagree,
+ * and without the provider the row's physical resource cannot be deleted
+ * anyway, so proceeding would only strand it silently. The plan dies with
+ * this error; nothing is deployed or destroyed until the provider is
+ * re-registered (or aliased), or the state row is cleared manually.
+ */
+export class MissingProviderError extends Data.TaggedError(
+  "MissingProviderError",
+)<{
+  message: string;
+  resourceType: string;
+  fqn: string;
+}> {}
+
+/** Build the fatal plan-time error for a zombie state row. */
+export const missingProviderError = (
+  resourceType: string,
+  fqn: string,
+): MissingProviderError =>
+  new MissingProviderError({
+    message:
+      `No provider is registered for resource type '${resourceType}' ` +
+      `(state row '${fqn}'). The type was removed from the program or ` +
+      "renamed without an alias. Re-register the provider (or add the " +
+      "old name to the resource's `aliases`) so this row can be " +
+      "destroyed, or clear the state row manually if the physical " +
+      "resource is already gone.",
+    resourceType,
+    fqn,
+  });
 
 export const tryFindProviderByType: {
   <R extends ResourceLike>(

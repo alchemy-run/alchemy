@@ -9,10 +9,15 @@ import type { Providers } from "../Providers.ts";
 import { retryOnApiStatusUpdating } from "./common.ts";
 
 export interface GatewayResponseProps {
+  /** ID of the REST API the response mapping belongs to. */
   restApiId: Input<string>;
+  /** The gateway response type to customize (e.g. `DEFAULT_4XX`, `ACCESS_DENIED`). */
   responseType: ag.GatewayResponseType;
+  /** HTTP status code to return; defaults to the response type's standard code. */
   statusCode?: string;
+  /** Response header parameters (e.g. `gatewayresponse.header.X-Foo`) as mapping expressions. */
   responseParameters?: { [key: string]: string | undefined };
+  /** Response body mapping templates keyed by content type. */
   responseTemplates?: { [key: string]: string | undefined };
 }
 

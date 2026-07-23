@@ -9,7 +9,7 @@ builds the credentials side properly: a lazy `StripeCredentials` service backed
 by an Auth Provider, so the key comes from the configured
 [Profile](/environments/profiles), from env vars in CI, or from a refreshable
 session — never from props or hardcoded config. The steps below mirror the
-in-repo [Neon Auth Provider](https://github.com/sam-goodwin/alchemy-effect/blob/main/packages/alchemy/src/Neon/AuthProvider.ts),
+in-repo [Neon Auth Provider](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Neon/AuthProvider.ts),
 the smallest real implementation.
 
 For what an Auth Provider *is* — the five-method contract, the registry, lazy
@@ -352,7 +352,7 @@ Every built-in bridge — Neon, Planetscale, Cloudflare — has this exact shape
 
 Merge the auth machinery into the same `providers()` Layer that carries the
 resource providers, mirroring
-[`Neon/Providers.ts`](https://github.com/sam-goodwin/alchemy-effect/blob/main/packages/alchemy/src/Neon/Providers.ts):
+[`Neon/Providers.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Neon/Providers.ts):
 
 ```typescript
 // src/stripe/Providers.ts

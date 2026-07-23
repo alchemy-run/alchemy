@@ -32,6 +32,22 @@ export class LocalRuntimeState extends Context.Service<
       Consumer["Attributes"]["consumerId"],
       Consumer["Attributes"]
     >;
+    /**
+     * Restart hooks for locally running Workers, keyed by script name.
+     *
+     * A local workerd instance bakes its queue-consumer wiring in at start
+     * time (`runtime.start({ queueConsumers })`), but the `Consumer`
+     * resource that populates {@link queueConsumers} reconciles as a
+     * *sibling* of the Worker — the engine may start workerd before the
+     * consumer registers. Providers that mutate a worker's runtime wiring
+     * (e.g. `ConsumerProviderLocal`) invoke the script's hook after
+     * updating state so the running instance is reconfigured; the hook is
+     * a no-op until the worker has served at least once.
+     */
+    readonly workerRestarts: MutableHashMap.MutableHashMap<
+      string,
+      Effect.Effect<void>
+    >;
   }
 >()("alchemy/cloudflare/LocalRuntimeState") {}
 
@@ -40,6 +56,7 @@ const LocalRuntimeStateLive = Layer.succeed(
   LocalRuntimeState.of({
     queues: MutableHashMap.empty(),
     queueConsumers: MutableHashMap.empty(),
+    workerRestarts: MutableHashMap.empty(),
   }),
 );
 

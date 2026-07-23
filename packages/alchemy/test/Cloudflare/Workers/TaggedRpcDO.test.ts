@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -35,12 +35,15 @@ const requestTimeout = "5 seconds";
 // status codes, so we explicitly `Effect.fail` non-2xx responses to force a
 // retry through `readinessRetry`.
 // Cap exponential backoff at 3s so cold-start retries stay bounded when
-// CF edge propagation is slow.
+// CF edge propagation is slow. Fresh `*.workers.dev` subdomains routinely
+// take over a minute to stop serving the placeholder page, so the budget
+// must comfortably exceed that (~2 minutes here).
 const readinessRetry = {
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.either(Schedule.spaced("3 seconds")),
-  ),
-  times: 15,
+  schedule: Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("3 seconds"),
+  ]),
+  times: 40,
 } as const;
 
 const requestUntilReady = (
@@ -201,6 +204,9 @@ const stack = beforeAll(
     // just give it some extra time to propagate
     Effect.tap(Effect.sleep("5 seconds")),
   ),
+  // deploy + the ~2-minute warmup retry budget can exceed the default
+  // 120s hook timeout when workers.dev propagation is slow
+  { timeout: 300_000 },
 );
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
@@ -288,9 +294,7 @@ test(
     );
 
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
-    const fromB = yield* httpClient
-      .get(`${urlB}/do`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    const fromB = yield* requestUntilReady(httpClient.get(`${urlB}/do`));
     expect(fromB.status).toBe(200);
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
@@ -342,9 +346,10 @@ test(
         }),
       ),
       predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(30),
+      ]),
     });
     expect(d1.value).toBe(2);
     expect(dox.value).toBe(1);

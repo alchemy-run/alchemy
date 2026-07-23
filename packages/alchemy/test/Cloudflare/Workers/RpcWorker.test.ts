@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -25,9 +25,10 @@ const logLevel = Effect.provideService(
 
 // Cap exponential backoff at 3s so retries stay bounded when the CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 // The caller worker forwards to the target via the service binding and wraps
 // the call in `Effect.orDie` (see fixtures/caller-worker.ts). On a freshly

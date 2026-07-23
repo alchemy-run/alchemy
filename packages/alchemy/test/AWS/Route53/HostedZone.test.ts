@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { HostedZone } from "@/AWS/Route53";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -20,9 +20,10 @@ const assertZoneGone = (id: string) =>
     Effect.catchTag("NoSuchHostedZone", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -143,7 +144,7 @@ test.provider(
   { timeout: 180_000 },
 );
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // An interrupted first deploy persists the zone as `status: "creating"` with
 // no attributes — and an Output-valued `name` does not survive the state

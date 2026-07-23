@@ -1,5 +1,6 @@
 import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -261,7 +262,11 @@ export const RouteTableProvider = () =>
                   (page.RouteTables ?? [])
                     .filter(
                       (rt): rt is ec2.RouteTable & { RouteTableId: string } =>
-                        rt.RouteTableId != null,
+                        rt.RouteTableId != null &&
+                        // Every VPC has an implicit main route table. AWS does
+                        // not allow deleting it directly; deleting the VPC
+                        // removes it automatically.
+                        !rt.Associations?.some((assoc) => assoc.Main === true),
                     )
                     .map((rt) => {
                       const routeTableId = rt.RouteTableId as RouteTableId;
@@ -361,7 +366,10 @@ export const RouteTableProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "InvalidVpcID.NotFound",
-                  schedule: Schedule.exponential(100),
+                  schedule: Schedule.max([
+                    Schedule.fixed(500),
+                    Schedule.recurs(10),
+                  ]),
                 }),
               );
             const newId = createResult.RouteTable!
@@ -458,11 +466,13 @@ export const RouteTableProvider = () =>
                 while: (e) => {
                   return e._tag === "DependencyViolation";
                 },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.both(Schedule.recurs(10)), // Try up to 10 times
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.fixed(3000),
+                  Schedule.recurs(10),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                      `Waiting for dependencies to clear... (attempt ${attempt})`,
                     ),
                   ),
                 ),
@@ -498,10 +508,23 @@ const describeRouteTable = (
 
     const routeTable = result.RouteTables?.[0];
     if (!routeTable) {
-      return yield* Effect.fail(new Error("Route table not found"));
+      // createRouteTable can return before the new ID is visible to
+      // describeRouteTables. Keep the ID in this reconcile and retry the
+      // observation instead of failing after create and losing the only
+      // handle the engine has for cleanup.
+      return yield* new RouteTableNotVisible({ routeTableId });
     }
     return routeTable;
-  });
+  }).pipe(
+    Effect.retry({
+      while: (error) => error instanceof RouteTableNotVisible,
+      schedule: Schedule.max([Schedule.fixed(500), Schedule.recurs(10)]),
+    }),
+  );
+
+class RouteTableNotVisible extends Data.TaggedError("RouteTableNotVisible")<{
+  routeTableId: string;
+}> {}
 
 /**
  * Wait for route table to be deleted
@@ -530,12 +553,13 @@ const waitForRouteTableDeleted = (
         return yield* Effect.fail(new Error("Route table still exists"));
       }),
       {
-        schedule: Schedule.fixed(2000).pipe(
-          // Check every 2 seconds
-          Schedule.both(Schedule.recurs(15)), // Max 30 seconds
-          Schedule.tapOutput(([, attempt]) =>
+        schedule: Schedule.max([
+          Schedule.fixed(2000),
+          Schedule.recurs(10),
+        ]).pipe(
+          Schedule.tap(({ attempt }) =>
             session.note(
-              `Waiting for route table deletion... (${(attempt + 1) * 2}s)`,
+              `Waiting for route table deletion... (${attempt * 2}s)`,
             ),
           ),
         ),

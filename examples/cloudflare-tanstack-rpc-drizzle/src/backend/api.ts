@@ -24,7 +24,7 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     // DB failures are unexpected here, so we `orDie` them into defects. That
     // keeps each handler's typed error channel aligned with its RPC schema

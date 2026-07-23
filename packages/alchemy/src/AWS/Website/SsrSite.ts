@@ -25,20 +25,47 @@ import type {
   WebsiteInvalidationProps,
 } from "./shared.ts";
 
+/**
+ * The dynamic origin CloudFront forwards requests to: a Lambda Function URL,
+ * a public ECS Service, or any plain URL.
+ */
 export type SsrSiteServerOrigin =
   | {
       type: "lambda";
+      /**
+       * Lambda Function created with `url` enabled — its function URL becomes
+       * the origin.
+       */
       function: Function;
+      /**
+       * Protocol CloudFront uses to reach the origin.
+       * @default "https-only"
+       */
       originProtocolPolicy?: "https-only";
     }
   | {
       type: "ecs";
+      /**
+       * ECS Service created with `public: true` — its load balancer URL
+       * becomes the origin.
+       */
       service: Service;
+      /**
+       * Protocol CloudFront uses to reach the origin.
+       * @default "https-only"
+       */
       originProtocolPolicy?: "http-only" | "https-only" | "match-viewer";
     }
   | {
       type: "url";
+      /**
+       * Origin URL to forward requests to.
+       */
       url: Input<string>;
+      /**
+       * Protocol CloudFront uses to reach the origin.
+       * @default "https-only"
+       */
       originProtocolPolicy?: cloudfront.OriginProtocolPolicy;
     };
 
@@ -160,6 +187,41 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  *   },
  *   assets: {
  *     sourcePath: "./dist/client",
+ *   },
+ * });
+ * ```
+ *
+ * @section Custom Domains
+ * @example SSR Site With A Route 53 Domain
+ * ```typescript
+ * const site = yield* SsrSite("App", {
+ *   server: {
+ *     type: "ecs",
+ *     service: webService,
+ *   },
+ *   domain: {
+ *     name: "app.example.com",
+ *     hostedZoneId: zone.hostedZoneId,
+ *   },
+ * });
+ * ```
+ *
+ * @section Router Composition
+ * @example Route Through An Existing Router
+ * ```typescript
+ * // Skip the standalone distribution and register the returned
+ * // routeTargets on an AWS.Website.Router instead.
+ * const site = yield* SsrSite("App", {
+ *   server: {
+ *     type: "lambda",
+ *     function: appFunction,
+ *   },
+ *   cdn: false,
+ * });
+ *
+ * const router = yield* AWS.Website.Router("WebsiteRouter", {
+ *   routes: {
+ *     "/*": site.routeTargets.server,
  *   },
  * });
  * ```

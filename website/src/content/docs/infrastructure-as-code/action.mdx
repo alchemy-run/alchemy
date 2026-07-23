@@ -71,12 +71,13 @@ const hourly  = yield* Sync("hourly",  { table: eventsBucket.name });
 ### Tagged form (service + layer)
 
 When you want to split the contract from the implementation — e.g. for
-testing or to keep stack code declarative — use the class form. It
-mirrors the class form used by Workers and Lambdas
-([Functions & Servers](/infrastructure-as-effects/functions-and-servers)):
+testing or to keep stack code declarative — declare the type with an
+`interface`, build the value with the no-argument overload, then supply
+the runner separately with `.make`:
 
 ```typescript
-export class Sync extends Action<Sync, { table: string }, { rows: number }>()("Sync") {}
+export interface Sync extends Action<"Sync", { table: string }, { rows: number }> {}
+export const Sync = Action<Sync, { table: string }, { rows: number }>()("Sync");
 
 export const SyncLive = Sync.make(
   Effect.gen(function* () {
@@ -89,10 +90,75 @@ export const SyncLive = Sync.make(
 
 // In a stack:
 const rows = yield* Sync({ table: bucket.name });
-//          ^ requires `Sync` — add `SyncLive` to the stack's providers.
+//          ^ requires `Sync` — add `SyncLive` to the stack's providers,
+//            or provide it locally with `Effect.provide(SyncLive)`.
 ```
 
-`.make(...)` accepts either a direct runner or an init Effect.
+`.make(...)` accepts either a direct runner or an init Effect, and the
+init runs under the same context as the inline form — so the resource
+bindings and Output accessors below work here too.
+
+## Binding resources
+
+An Action's body often needs to *talk to* the resources in your stack —
+seed a database, warm a cache, enqueue a job. Bindings like
+[`Cloudflare.D1.QueryDatabase`](/cloudflare/data/d1) normally resolve
+against a deployed Worker's runtime environment, which an Action doesn't
+have. Provide the binding's **`*Local`** layer instead: it talks to the
+service over the provider's HTTP API using your current CLI credentials.
+
+```typescript
+const Seed = Action(
+  "Seed",
+  Effect.gen(function* () {
+    const db = yield* Cloudflare.D1.QueryDatabase(database);
+    return Effect.fn(function* () {
+      yield* db.exec("CREATE TABLE IF NOT EXISTS users (id TEXT, name TEXT)");
+      yield* db
+        .prepare("INSERT INTO users (id, name) VALUES (?, ?)")
+        .bind("1", "Ada")
+        .run();
+    });
+  }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseLocal)),
+);
+```
+
+`*Local` is a third binding variant alongside the native Worker binding
+(`*Binding`) and the scoped-token HTTP client (`*Http`). It registers no
+binding on a host and mints no token — it reuses the credentials Alchemy
+is already deploying with. The runtime client is identical, so the same
+`db.prepare(...).run()` code works whether it runs inside a deployed
+Worker or a deploy-time Action.
+
+Local layers exist for every Cloudflare capability with an HTTP data
+plane — D1, KV, R2, Queues, DNS, Vectorize, Tunnel, AI Search, Flagship,
+and Browser Rendering. Worker-runtime-only bindings (Rate Limiting,
+Version Metadata, service bindings, …) have no Local variant.
+
+### Reading a resource's Outputs
+
+Inside an Action you can `yield*` a resource
+[Output](/infrastructure-as-code/outputs) to get an accessor that
+resolves at apply time — after the resource exists:
+
+```typescript
+const Seed = Action(
+  "Seed",
+  Effect.gen(function* () {
+    const databaseId = yield* database.databaseId;
+    //    ^ deferred accessor — not the value yet
+    return Effect.fn(function* () {
+      const id = yield* databaseId; // resolved during apply
+      yield* Effect.log(`seeding ${id}`);
+    });
+  }),
+);
+```
+
+Capturing an Output this way also makes the Action **depend** on that
+resource, so it runs after the resource is created — the same edge you'd
+get from passing `database.databaseId` as input. This works in both the
+inline and tagged `.make` forms.
 
 ## Lifecycle
 
@@ -126,6 +192,8 @@ alchemy deploy --force
 Actions live in the same FQN namespace as Resources. They can:
 
 - Take Resource outputs as input (`{ table: bucket.name }`)
+- Capture a Resource Output in the init (`yield* bucket.name`) — see
+  [Reading a resource's Outputs](#reading-a-resources-outputs)
 - Be referenced by Resources via `action.output` (downstream resource
   waits for the action before reconciling)
 - Reference other Actions

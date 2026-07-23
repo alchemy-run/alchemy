@@ -27,10 +27,15 @@ export const of = <R extends ResourceLike>(
       metadata.stack,
       metadata.stage,
       metadata.id,
-      // Surface the target's resource type as a statically-known
-      // property so duck-typing classifiers (Worker env bindings)
-      // identify the ref exactly like a locally-declared resource.
-      metadata.type !== undefined ? { Type: metadata.type } : undefined,
+      // Surface the target's resource type and logical id as
+      // statically-known properties so duck-typing classifiers (Worker
+      // env bindings) and label/bind templates (`${resource.LogicalId}`,
+      // `host.bind\`...\``) identify the ref exactly like a
+      // locally-declared resource.
+      {
+        LogicalId: metadata.id,
+        ...(metadata.type !== undefined ? { Type: metadata.type } : {}),
+      },
     ) as any;
   }
   return new ResourceExpr(resource) as any;
@@ -483,7 +488,16 @@ function proxy(self: any): any {
   }
   const proxy = new Proxy(target, {
     has: (_, prop) =>
-      prop === ExprSymbol || prop === inspect ? true : prop in self,
+      prop === ExprSymbol || prop === inspect
+        ? true
+        : // Statically-known literal props (`Type`, `LogicalId` on
+          // resource/ref exprs) are visible to `in` checks so duck-typing
+          // code paths (e.g. `"LogicalId" in arg`) treat them like real
+          // properties, matching what `get` serves.
+          ((isResourceExpr(self) || isRefExpr(self)) &&
+            self.stables !== undefined &&
+            prop in self.stables) ||
+          prop in self,
     get: (target, prop) =>
       prop === Symbol.toPrimitive
         ? (hint: string) => {

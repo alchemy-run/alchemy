@@ -406,12 +406,44 @@ export const DynamicRoutingProvider = () =>
       });
 
       if (current.name !== name) {
-        yield* aiGateway.patchDynamicRouting({
-          accountId,
-          gatewayId,
-          id: routeId,
-          name,
-        });
+        yield* aiGateway
+          .patchDynamicRouting({
+            accountId,
+            gatewayId,
+            id: routeId,
+            name,
+          })
+          .pipe(
+            // Cloudflare does not cascade-delete a gateway's routes when the
+            // gateway itself is deleted: recreating a gateway with the same
+            // id resurrects its old route rows, and a rename onto one of
+            // those ghosts trips the backing `UNIQUE(routes.name,
+            // routes.gateway_id)` constraint (leaked as a 500, typed as
+            // `RouteAlreadyExists` via a distilled patch). Route names are
+            // unique and deterministic, so the holder is a stale duplicate
+            // of this logical resource — delete it and retry the rename.
+            Effect.catchTag("RouteAlreadyExists", (error) =>
+              Effect.gen(function* () {
+                const holder = yield* findByName(accountId, gatewayId, name);
+                if (holder === undefined || holder.id === routeId) {
+                  return yield* Effect.fail(error);
+                }
+                yield* aiGateway
+                  .deleteDynamicRouting({
+                    accountId,
+                    gatewayId,
+                    id: holder.id,
+                  })
+                  .pipe(Effect.catchTag("RouteNotFound", () => Effect.void));
+                yield* aiGateway.patchDynamicRouting({
+                  accountId,
+                  gatewayId,
+                  id: routeId,
+                  name,
+                });
+              }),
+            ),
+          );
       }
 
       // `get` returns the *deployed* version's graph, so an undeployed

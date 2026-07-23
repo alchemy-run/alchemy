@@ -72,8 +72,7 @@ Alchemy uses TypeScript and Effect's type system to catch mistakes at
 compile time. If you forget to provide the right providers for your
 resources, the compiler tells you:
 
-```typescript twoslash
-// @errors: 2322
+```typescript
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -83,6 +82,8 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Layer.empty,
+    // @error: ts(2322) Type 'Layer<never, never, never>' is not assignable to type 'Layer<NoInfer<Providers>, never, StackServices>'.
+    // @error:   Type 'Providers' is not assignable to type 'never'.
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("Bucket");

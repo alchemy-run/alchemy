@@ -8,7 +8,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
  * `main: import.meta.url`.
  *
  * The handler's bearer-token check is the worker side of the bug fixed in
- * https://github.com/alchemy-run/alchemy-effect/pull/598.
+ * https://github.com/alchemy-run/alchemy/pull/598.
  */
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",

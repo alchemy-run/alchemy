@@ -26,7 +26,7 @@ import {
   hashMigrations,
   listSqlFiles,
   readSqlFile,
-} from "../Sql/SqlFile.ts";
+} from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
@@ -235,10 +235,12 @@ export const ProjectProvider = () =>
     }),
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       if (!isResolved(news)) return undefined;
-      const name = yield* createProjectName(id, news.name);
-      const oldName = output?.projectName
-        ? output.projectName
-        : yield* createProjectName(id, olds.name);
+      const oldName =
+        output?.projectName ?? (yield* createProjectName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         (news.region ?? output?.region ?? DEFAULT_REGION) !==
@@ -565,10 +567,10 @@ export const waitForOperations = (
               tag === "GatewayTimeout"
             );
           },
-          schedule: Schedule.both(
+          schedule: Schedule.max([
             Schedule.exponential(Duration.millis(500), 1.5),
             Schedule.recurs(60),
-          ),
+          ]),
         }),
         Effect.catchTag("OperationPending", () => Effect.void),
       );

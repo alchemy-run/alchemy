@@ -54,7 +54,7 @@ needing the other side?* If the provider implements
 `precreate`, the answer is yes.
 
 Here's the Cloudflare `Worker` provider's `precreate`
-(abbreviated from [`Worker.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/Cloudflare/Workers/Worker.ts)):
+(abbreviated from [`Worker.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/Workers/Worker.ts)):
 
 ```typescript
 precreate: Effect.fn(function* ({ id, news, session }) {
@@ -92,7 +92,7 @@ planner detects the cycle, calls `precreate` on the
 participating resources first, and then runs `reconcile` on
 all of them with the cross-references resolved.
 
-For [`AWS/S3/Bucket.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AWS/S3/Bucket.ts)
+For [`AWS/S3/Bucket.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/S3/Bucket.ts)
 the `precreate` is even shorter — it just calls
 `ensureBucketExists`, since for the BucketPolicy → Lambda
 cycle all the other side needs is the bucket ARN, which is
@@ -293,8 +293,8 @@ only invokes it when a cycle is actually present.
 
 - [Guides › Circular Bindings](/infrastructure-as-effects/circular-bindings) —
   the step-by-step Worker A ↔ Worker B walkthrough.
-- [`Cloudflare/Workers/Worker.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/Cloudflare/Workers/Worker.ts)
+- [`Cloudflare/Workers/Worker.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/Workers/Worker.ts)
   — the canonical `precreate` reference, including Durable
   Object namespace reservation.
-- [`AWS/S3/Bucket.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AWS/S3/Bucket.ts)
+- [`AWS/S3/Bucket.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/AWS/S3/Bucket.ts)
   — `precreate` for the BucketPolicy ↔ Lambda Role cycle.

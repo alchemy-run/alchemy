@@ -65,9 +65,10 @@ export const executeWhenReady = (
       ),
       Effect.retry({
         while: (error) => error instanceof WorkerNotReady,
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.both(Schedule.recurs(options?.times ?? 20)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential("500 millis"),
+          Schedule.recurs(options?.times ?? 20),
+        ]),
       }),
     );
   });
@@ -96,9 +97,10 @@ export interface EdgeGuardOptions {
   times?: number;
 }
 
-const defaultGuardSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const defaultGuardSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 /**
  * Guard an `HttpClient` against edge-generated bodies on a freshly deployed

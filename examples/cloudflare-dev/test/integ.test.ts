@@ -29,9 +29,7 @@ const stack = beforeAll(
           HttpClient.get(url).pipe(
             Effect.flatMap(HttpClientResponse.filterStatusOk),
             Effect.retry({
-              schedule: Schedule.spaced("250 millis").pipe(
-                Schedule.both(Schedule.recurs(25)),
-              ),
+              schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
             }),
           ),
         );
@@ -133,9 +131,7 @@ test(
       ),
       Effect.retry({
         while: (error) => error._tag === "MessageNotFound",
-        schedule: Schedule.spaced("250 millis").pipe(
-          Schedule.both(Schedule.recurs(25)),
-        ),
+        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
       }),
     );
     expect(message).toMatchObject({
@@ -192,9 +188,7 @@ test(
       ),
       Effect.retry({
         while: (error) => error._tag === "MessageNotFound",
-        schedule: Schedule.spaced("250 millis").pipe(
-          Schedule.both(Schedule.recurs(25)),
-        ),
+        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
       }),
     );
     expect(message).toMatchObject({

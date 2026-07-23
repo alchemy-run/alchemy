@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeHttpDnsBinding, type Token } from "./DnsHttp.ts";
+import { type DnsAuth, makeHttpDnsBinding } from "./DnsHttp.ts";
 import { dnsReadClient } from "./ReadDnsHttp.ts";
 import { ReadWriteDns, type ReadWriteDnsClient } from "./ReadWriteDns.ts";
 import { dnsWriteClient } from "./WriteDnsHttp.ts";
@@ -16,11 +16,11 @@ export const ReadWriteDnsHttp = Layer.effect(
   ),
 );
 
-/** Build the combined read + write client over a bound token and zone id. */
+/** Build the combined read + write client over an injectable auth and zone id. */
 export const dnsReadWriteClient = (
-  token: Token,
+  auth: DnsAuth,
   zoneId: Effect.Effect<string>,
 ): ReadWriteDnsClient => ({
-  ...dnsReadClient(token, zoneId),
-  ...dnsWriteClient(token, zoneId),
+  ...dnsReadClient(auth, zoneId),
+  ...dnsWriteClient(auth, zoneId),
 });

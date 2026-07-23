@@ -2,9 +2,9 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as images from "@distilled.cloud/cloudflare/images";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -46,9 +46,10 @@ const getVariant = (
       // Polls every 3s rather than every 2s: under full-suite parallel load
       // tighter polling only adds to the API request pressure that stretches
       // these consistency windows in the first place.
-      schedule: Schedule.fixed("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("3 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 
@@ -62,9 +63,10 @@ const expectGone = (accountId: string, variantId: string) =>
       while: (e) => e._tag === "VariantNotDeleted",
       // Bounded fixed spacing (~30s) — see `getVariant` on why the previous
       // uncapped exponential could run past the test timeout.
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(15),
+      ]),
     }),
   );
 

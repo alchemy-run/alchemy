@@ -200,7 +200,11 @@ export interface Platform<
       id: Id,
       props:
         | InputProps<Resource["Props"]>
-        | Effect.Effect<Resource["Props"], ConfigError.ConfigError, PropsReq>,
+        | Effect.Effect<
+            InputProps<Resource["Props"]>,
+            ConfigError.ConfigError,
+            PropsReq
+          >,
       impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
@@ -292,6 +296,16 @@ export const Platform = <
     // Workflow). Allow an ambient requirement (`any`) rather than forcing
     // `never`; it is discharged by the surrounding provider context.
     onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
+    /**
+     * Transform the user-supplied props before the underlying resource is
+     * declared. Runs in the resource-construction context (Stack, Namespace,
+     * and providers are available), so the hook may compose REAL child
+     * resources (the `StaticSite` pattern) and return derived props that
+     * reference their Outputs. Implementations MUST be a no-op at runtime
+     * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
+     * wherever the props effect is, including inside deployed bundles.
+     */
+    transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -300,6 +314,19 @@ export const Platform = <
 
   const resource = Resource(type);
   const PlatformContext = RuntimeContext;
+
+  // Apply the optional `transformProps` hook to a (possibly Effect-valued)
+  // props argument. Returns the props untouched when no hook is installed so
+  // the plain-object fast paths below keep working.
+  const applyTransformProps = (id: string, props: any): any =>
+    hooks.transformProps === undefined
+      ? props
+      : Effect.flatMap(
+          Effect.isEffect(props)
+            ? (props as Effect.Effect<any>)
+            : Effect.succeed(props ?? {}),
+          (resolved) => hooks.transformProps!(id, resolved),
+        );
 
   const constructor = (
     id?: string,
@@ -331,19 +358,25 @@ export const Platform = <
             // }
             resource(
               id,
-              Effect.isEffect(props)
-                ? Effect.map(props, (p: any) => ({ ...p, isExternal: true }))
-                : {
-                    ...props,
-                    isExternal: true,
-                  },
+              (() => {
+                const transformed = applyTransformProps(id, props);
+                return Effect.isEffect(transformed)
+                  ? Effect.map(transformed, (p: any) => ({
+                      ...p,
+                      isExternal: true,
+                    }))
+                  : {
+                      ...transformed,
+                      isExternal: true,
+                    };
+              })(),
             )
           : Effect.flatMap(
               // this is a tagged resource
               Effect.serviceOption(cls.Self),
               Option.match({
                 // we are likely running at runtime, so we create
-                onNone: () => resource(id, props),
+                onNone: () => resource(id, applyTransformProps(id, props)),
                 onSome: Effect.succeed,
               }),
             )
@@ -385,15 +418,24 @@ export const Platform = <
       // e.g.
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id);
-      return cls.Self.pipe(
-        provideClassLayer(cls.make(props, impl)),
-        effectClass,
+      return Object.assign(
+        cls.Self.pipe(provideClassLayer(cls.make(props, impl)), effectClass),
+        // Expose the logical id statically (mirrors `makeClass`) so a class
+        // reference identifies its resource without being yielded.
+        { LogicalId: id },
       );
     }
   };
 
   const makeClass = (id: string) => {
     class Platform {
+      /**
+       * Logical id of the resource this class declares. Statically readable
+       * — e.g. `DurableObjectProps.transferredFrom` accepts a Worker class
+       * and takes its identity from here without yielding it (yielding
+       * would add a dependency edge on the referenced resource).
+       */
+      static readonly LogicalId = id;
       static readonly Self = Self(`${type}<${id}>`);
       static readonly Platform = Context.Service<Platform, Platform>(
         `Platform<${type}<${id}>>`,
@@ -405,7 +447,12 @@ export const Platform = <
           Self,
           Effect.flatMap(
             Effect.all([
-              Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+              (() => {
+                const transformed = applyTransformProps(id, props);
+                return Effect.isEffect(transformed)
+                  ? (transformed as Effect.Effect<any>)
+                  : Effect.succeed(transformed ?? {});
+              })(),
               Effect.sync(() => hooks.createRuntimeContext(id)),
               Effect.context<never>(),
             ]),

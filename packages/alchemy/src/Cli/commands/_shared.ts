@@ -20,8 +20,15 @@ import {
 } from "../../Auth/AuthProvider.ts";
 import {
   type AlchemyProfileProviders,
+  ALCHEMY_PROFILE,
   withProfileOverride,
 } from "../../Auth/Profile.ts";
+import { AwsAuth } from "../../AWS/AuthProvider.ts";
+import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
+import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
+import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
+import { NeonAuth } from "../../Neon/AuthProvider.ts";
+import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
 import * as Stack from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
@@ -155,10 +162,22 @@ export const script = Argument.file("main", {
 
 export const profile = Flag.string("profile").pipe(
   Flag.withDescription(
-    "Auth profile to use (~/.alchemy/profiles.json). Defaults to 'default' or $ALCHEMY_PROFILE.",
+    "Auth profile to use (~/.alchemy/profiles.json). Defaults to $ALCHEMY_PROFILE or 'default'.",
   ),
   Flag.optional,
-  Flag.map(Option.getOrElse(() => "default")),
+  Flag.mapEffect(
+    Effect.fn(function* (profile) {
+      // --profile wins; otherwise fall back to $ALCHEMY_PROFILE (which
+      // itself defaults to "default"). Without this, the flag's default
+      // would shadow the env var via withProfileOverride.
+      if (Option.isSome(profile)) {
+        return profile.value;
+      }
+      return yield* ALCHEMY_PROFILE.pipe(
+        Effect.catch(() => Effect.succeed("default")),
+      );
+    }),
+  ),
 );
 
 export const resourceFilter = Flag.string("filter").pipe(
@@ -427,3 +446,49 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   );
   return { authProviders, context, stackEffect };
 });
+
+/**
+ * The auth providers Alchemy ships with. Used as the baseline registry so
+ * `alchemy login` works from any folder (no `alchemy.run.ts` required) and
+ * `alchemy profile show` can pretty-print any provider a profile mentions,
+ * even one the current stack doesn't wire up.
+ */
+export const builtinAuth = Layer.mergeAll(
+  AwsAuth,
+  AxiomAuth,
+  CloudflareAuth,
+  GitHubAuth,
+  NeonAuth,
+  PlanetscaleAuth,
+);
+
+/**
+ * Build {@link builtinAuth} against `registry` so every built-in auth
+ * provider registers itself, without importing any stack entrypoint.
+ */
+export const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(
+  function* (options: {
+    envFile: Option.Option<string>;
+    profile: string;
+    /** Registry to populate. Defaults to a fresh empty registry. */
+    registry?: AuthProviders["Service"];
+  }) {
+    const authProviders = options.registry ?? {};
+    yield* Layer.build(
+      Layer.provide(
+        builtinAuth,
+        Layer.mergeAll(
+          Layer.succeed(AuthProviders, authProviders),
+          ConfigProvider.layer(
+            withProfileOverride(
+              yield* loadConfigProvider(options.envFile),
+              options.profile,
+            ),
+          ),
+          Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+        ),
+      ),
+    );
+    return authProviders;
+  },
+);

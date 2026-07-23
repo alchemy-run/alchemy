@@ -4,10 +4,10 @@ import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -132,8 +132,9 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error) =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(60),
+      ]),
     }),
   );

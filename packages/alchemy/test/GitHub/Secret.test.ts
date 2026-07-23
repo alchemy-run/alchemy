@@ -2,8 +2,8 @@ import * as GitHub from "@/GitHub";
 import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -16,8 +16,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Deploying a secret needs an owner + repository the token can write to.
-const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run";
+// Deploying a secret needs an owner + repository the token can write to —
+// the dedicated test org (never a real one). Set GITHUB_TEST_OWNER="" to
+// skip.
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 const repository = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
 
 // GitHub never returns a secret's value, only its metadata — so `getRepoSecret`
@@ -40,19 +42,32 @@ const secretExists = (name: string) =>
     });
   });
 
-test.provider(
+test.provider.skipIf(!owner)(
   "Secrets resolves Config values before wrapping them as Redacted",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const [secret] = yield* stack.deploy(
-        GitHub.Secrets({
-          owner,
-          repository,
-          secrets: {
-            ALCHEMY_CONFIG_SECRET: Config.succeed("hunter2"),
-          },
+        Effect.gen(function* () {
+          // `Repository` defaults to `retain`: ensure the host repo exists
+          // (another suite may have deleted/recreated it mid-run) without
+          // ever deleting it on destroy. Reconcile is idempotent.
+          yield* GitHub.Repository("Repo", {
+            owner,
+            name: repository,
+            description: "alchemy-effect secret test host",
+            visibility: "private",
+            autoInit: true,
+          });
+
+          return yield* GitHub.Secrets({
+            owner,
+            repository,
+            secrets: {
+              ALCHEMY_CONFIG_SECRET: Config.succeed("hunter2"),
+            },
+          });
         }),
       );
 
@@ -77,7 +92,7 @@ test.provider(
 // ambient owner/repo scope, and GitHub exposes no account-wide enumeration —
 // only list-secrets *within* a specific repo. So `list()` always returns `[]`,
 // even when a secret exists in the cloud.
-test.provider(
+test.provider.skipIf(!owner)(
   "list returns an empty array for non-enumerable GitHub secrets",
   (stack) =>
     Effect.gen(function* () {

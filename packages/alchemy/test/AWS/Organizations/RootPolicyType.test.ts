@@ -2,8 +2,8 @@ import * as AWS from "@/AWS";
 import { Root, RootPolicyType } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -34,7 +34,7 @@ test.provider("list enumerates root policy types", () =>
   }),
 );
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // An interrupted first deploy persists the enablement as `status: "creating"`
 // with no attributes — and props that could not round-trip (the `rootId` is

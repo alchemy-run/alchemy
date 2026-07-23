@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
-const REPO = { owner: "alchemy-run", repository: "alchemy-effect" } as const;
+const REPO = { owner: "alchemy-run", repository: "alchemy" } as const;
 
 export default Alchemy.Stack(
   "AlchemyGitHubSecrets",
