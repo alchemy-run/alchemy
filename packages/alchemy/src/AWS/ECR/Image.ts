@@ -71,6 +71,8 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform?: string;
     /** Docker build arguments. */
     buildArgs?: Record<string, string>;
+    /** Additional arguments appended to `docker image build`. */
+    args?: string[];
   },
 ) {
   const credentials = yield* getEcrRegistryCredentials;
@@ -80,6 +82,7 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     file: options.dockerfile,
     platform: options.platform,
     "build-arg": options.buildArgs,
+    args: options.args,
   });
   yield* docker.image.push(options.imageUri, credentials);
   return options.imageUri;
