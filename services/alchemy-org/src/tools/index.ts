@@ -22,6 +22,7 @@ export * from "./LinkIssues.ts";
 export * from "./MergePullRequest.ts";
 export * from "./OpenIssue.ts";
 export * from "./OpenPullRequest.ts";
+export * from "./ReadDiff.ts";
 export * from "./ReadFile.ts";
 export * from "./ReadOutput.ts";
 export * from "./Reply.ts";

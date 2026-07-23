@@ -15,7 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import { Coding } from "./coding.ts";
 import { OpenPullRequest } from "./tools/index.ts";
-import { issue, type PullRequestRef } from "./vocabulary.ts";
+import { body, issue, title, type PullRequestRef } from "./vocabulary.ts";
 
 export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
 
@@ -52,12 +52,15 @@ export const EngineerLive = Engineer.make(
     const opened = yield* Ref.make<Pr | undefined>(undefined);
 
     const openPullRequest = yield* AI.Tool("open_pull_request")`
-      Open the pull request resolving ${issue}: the body must cite the
-      issue and the evidence that its criteria are met. Only call this
-      when all tests are green.`((params) =>
+      Open the pull request resolving ${issue}, with ${title} and
+      ${body} — the body must cite the issue ("Closes #N") and the
+      evidence that its criteria are met. Only call this when the work
+      in the workspace is complete.`((params) =>
       open(params).pipe(
         // the code-observed fact the turn's achieve check reads
-        Effect.tap((created) => Ref.set(opened, created as Pr)),
+        Effect.tap((created) =>
+          Ref.set(opened, (created as { pr: Pr }).pr),
+        ),
       ),
     );
 

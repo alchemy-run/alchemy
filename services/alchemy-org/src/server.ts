@@ -43,13 +43,16 @@ import { ReconcilingLive } from "./reconciling.ts";
 import { ResourceEngineerLive } from "./resource-engineer.ts";
 import { ReviewerLive } from "./reviewer.ts";
 import { TypedErrorsLive } from "./typed-errors.ts";
+import { ApprovalsLive } from "./approvals.ts";
+import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
 import {
-  ApproveConsole,
+  ApproveRecorded,
   CloseIssueLive,
   CommentLive,
   LinkIssuesLive,
   MergePullRequestLive,
   OpenPullRequestLive,
+  ReadDiffLive,
   SearchIssuesLive,
 } from "./tools/index.ts";
 import { workspace } from "./workspace.ts";
@@ -66,7 +69,9 @@ const Credentials = GitHub.fromEnv();
  */
 const GitHubBindings = Layer.mergeAll(
   GitHub.CreateIssueCommentLocal,
+  GitHub.CreatePullRequestLocal,
   GitHub.GetIssueLocal,
+  GitHub.GetPullRequestLocal,
   GitHub.ListIssuesLocal,
   GitHub.ListPullRequestReviewsLocal,
   GitHub.ListPullRequestsLocal,
@@ -94,24 +99,78 @@ const Model = AnthropicLanguageModel.layer({
 const Kernel = AI.KernelMemory.pipe(Layer.provide(Model));
 
 /**
- * The checkout the Coding skill works in — the ENTRYPOINT's choice
- * (`ORG_WORKSPACE`, defaulting to the service's cwd).
+ * The checkout the org works in — a CLONE of test-alchemy,
+ * self-provisioned at boot (see `ensureWorkspace`). `ORG_WORKSPACE`
+ * overrides the location.
  */
-const OrgWorkspace = workspace(process.env.ORG_WORKSPACE ?? process.cwd());
+const workspaceRoot =
+  process.env.ORG_WORKSPACE ??
+  `${process.cwd()}/.alchemy/workspaces/test-alchemy`;
+
+const OrgWorkspace = workspace(workspaceRoot);
+
+/**
+ * Boot step, BEFORE the org's Layer graph builds (the Workspace layer
+ * realpaths its root): clone test-alchemy if missing (the clone URL
+ * carries the token, so pushes work), and seed `main` if the repo is
+ * empty (PRs need a base branch).
+ */
+const ensureWorkspace = Effect.promise(async () => {
+  const fs = await import("node:fs");
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const git = async (...args: string[]) =>
+    (await promisify(execFile)("git", args)).stdout.trim();
+
+  if (!fs.existsSync(workspaceRoot)) {
+    const token =
+      process.env.GITHUB_ACCESS_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+    await git(
+      "clone",
+      `https://x-access-token:${token}@github.com/alchemy-run/test-alchemy.git`,
+      workspaceRoot,
+    );
+  }
+  try {
+    await git("-C", workspaceRoot, "rev-parse", "--verify", "origin/main");
+  } catch {
+    // empty repository: seed main so pull requests have a base
+    await git("-C", workspaceRoot, "checkout", "-B", "main");
+    fs.writeFileSync(
+      `${workspaceRoot}/README.md`,
+      "# test-alchemy\n\nSandbox repository managed by the alchemy-org software factory.\n",
+    );
+    await git("-C", workspaceRoot, "add", "-A");
+    await git(
+      "-C",
+      workspaceRoot,
+      "-c",
+      "user.name=alchemy-org[bot]",
+      "-c",
+      "user.email=bot@alchemy.run",
+      "commit",
+      "-m",
+      "chore: seed main",
+    );
+    await git("-C", workspaceRoot, "push", "-u", "origin", "main");
+  }
+});
 
 // ─── the org: agents, then processes ────────────────────────────────
 
-/** The Engineer: local toolbox physics, PR stub, its own kernel loop. */
+/** The Engineer: local toolbox physics + real PR plumbing (branch,
+ * commit, push, pulls.create) over the workspace clone. */
 const EngineerLayer = EngineerLive.pipe(
   Layer.provide(CodingLocal),
-  Layer.provide(OpenPullRequestLive),
+  Layer.provide(OpenPullRequestLive.pipe(Layer.provide(ToolOutputStoreLive))),
   Layer.provide(Kernel),
   Layer.provide(OrgWorkspace),
 );
 
-/** The Reviewer: console approval is the autonomy dial's safe setting. */
+/** The Reviewer: reads the diff, records its verdict in the approvals
+ * ledger (visible as a PR comment) — the merge tool ratifies against it. */
 const ReviewerLayer = ReviewerLive.pipe(
-  Layer.provide(Layer.mergeAll(ApproveConsole, CommentLive)),
+  Layer.provide(Layer.mergeAll(ApproveRecorded, CommentLive, ReadDiffLive)),
   Layer.provide(Kernel),
 );
 
@@ -157,6 +216,9 @@ export const OrgLive = Layer.mergeAll(
   Layer.provide(Kernel),
   Layer.provide(SqliteLedger(".alchemy/org-ledger.sqlite")),
   Layer.provide(GitHub.RepositoryEventSourcePolling({ every: "30 seconds" })),
+  // ONE approvals ledger, shared by the Reviewer's Approve and the
+  // PullRequests desk's merge ratification (memoized by reference)
+  Layer.provideMerge(ApprovalsLive),
   Layer.provide(GitHubBindings),
   Layer.provide(Credentials),
 );
@@ -185,16 +247,23 @@ export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
     // nothing here executes at plan; the detached process builds the
     // Layer graph once at startup and holds its scope open forever.
     yield* host.run(
-      Effect.gen(function* () {
-        const issues = yield* Issues;
-        const pullRequests = yield* PullRequests;
-        const factory = yield* Factory;
-        yield* Ref.set(org, { issues, pullRequests, factory });
-        yield* Effect.log(
-          "alchemy-org is watching test-alchemy (polling every 30s)",
-        );
-        yield* Effect.never; // the processes live in this scope
-      }).pipe(Effect.provide(OrgLive), Effect.scoped, Effect.orDie),
+      // the workspace clone must exist BEFORE the Layer graph builds
+      // (the Workspace layer realpaths its root)
+      ensureWorkspace.pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            const issues = yield* Issues;
+            const pullRequests = yield* PullRequests;
+            const factory = yield* Factory;
+            yield* Ref.set(org, { issues, pullRequests, factory });
+            yield* Effect.log(
+              "alchemy-org is watching test-alchemy (polling every 30s)",
+            );
+            yield* Effect.never; // the processes live in this scope
+          }).pipe(Effect.provide(OrgLive), Effect.scoped),
+        ),
+        Effect.orDie,
+      ),
     );
 
     return {
