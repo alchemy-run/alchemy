@@ -39,6 +39,15 @@ export class HttpMarkerPresent extends Data.TaggedError("HttpMarkerPresent")<{
   bodyExcerpt: string;
 }> {}
 
+export class HttpHeadAssertionFailed extends Data.TaggedError(
+  "HttpHeadAssertionFailed",
+)<{
+  url: string;
+  expected: string;
+  status: number;
+  headers: string;
+}> {}
+
 export interface ExpectUrlContainsOptions {
   /** Maximum total time to retry before failing. Default 90s. */
   timeout?: Duration.Input;
@@ -179,6 +188,96 @@ const fetchOnceAbsent = (url: string, marker: string) =>
             message: e instanceof Error ? e.message : String(e),
           }),
   });
+
+export interface ExpectedResponseHead {
+  status: number;
+  /** Header name → substring its value must contain (e.g. `location`). */
+  headers?: Record<string, string>;
+}
+
+const fetchHeadOnce = (url: string, expected: ExpectedResponseHead) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const u = new URL(url);
+      u.searchParams.set("__alchemy_cb", String(Date.now()));
+      const res = await fetch(u, {
+        signal,
+        // The point is to observe 3xx responses, not follow them.
+        redirect: "manual",
+        cache: "no-store",
+        headers: {
+          "cache-control": "no-cache",
+          pragma: "no-cache",
+          accept: "*/*",
+        },
+      });
+      await res.body?.cancel();
+      const matches =
+        res.status === expected.status &&
+        Object.entries(expected.headers ?? {}).every(([name, marker]) =>
+          (res.headers.get(name) ?? "").includes(marker),
+        );
+      if (!matches) {
+        throw new HttpHeadAssertionFailed({
+          url,
+          expected: JSON.stringify(expected),
+          status: res.status,
+          headers: JSON.stringify(Object.fromEntries(res.headers)),
+        });
+      }
+    },
+    catch: (e) =>
+      e instanceof HttpHeadAssertionFailed
+        ? e
+        : new HttpFetchFailed({
+            url,
+            message: e instanceof Error ? e.message : String(e),
+          }),
+  });
+
+/**
+ * Fetch `url` without following redirects and assert on the response head:
+ * the exact `status`, plus a substring match per named header. Retries with
+ * the same propagation-tolerant backoff as {@link expectUrlContains}. Used
+ * to verify `_redirects` (status + `location`) and `_headers` (injected
+ * header) rules actually apply at the edge — a body assertion can't see
+ * either.
+ */
+export const expectResponseHead = (
+  url: string,
+  expected: ExpectedResponseHead,
+  options: ExpectUrlContainsOptions = {},
+) => {
+  const totalTimeout = Duration.fromInputUnsafe(
+    options.timeout ?? "90 seconds",
+  );
+  const initial = options.initialBackoff ?? "750 millis";
+  const label = options.label ?? "url";
+
+  return fetchHeadOnce(url, expected).pipe(
+    Effect.retry({
+      schedule: Schedule.min([
+        Schedule.exponential(initial, 1.5),
+        Schedule.spaced("8 seconds"),
+      ]),
+    }),
+    Effect.timeoutOrElse({
+      duration: totalTimeout,
+      orElse: () =>
+        Effect.fail(
+          new HttpHeadAssertionFailed({
+            url,
+            expected: JSON.stringify(expected),
+            status: 0,
+            headers: `[timed out after ${Duration.toMillis(totalTimeout)}ms]`,
+          }),
+        ),
+    }),
+    Effect.tapError((error) =>
+      Effect.logError(`expectResponseHead(${label}) failed`, error),
+    ),
+  );
+};
 
 /**
  * Fetch `url` and assert the response body does *not* contain `marker`.

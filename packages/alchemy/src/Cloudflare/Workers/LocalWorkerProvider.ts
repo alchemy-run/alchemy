@@ -64,6 +64,7 @@ import { Stack } from "../../Stack.ts";
 import { sha256, unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
+import { readSpecialAssetFiles } from "./Assets.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
@@ -295,7 +296,7 @@ export const LocalWorkerProvider = () =>
                   durableObjectNamespaces: worker.durableObjectNamespaces,
                   queueConsumers,
                   modules: yield* toRuntimeModules(bundle),
-                  assets: toRuntimeAssets(worker.assets),
+                  assets: yield* toRuntimeAssets(worker.assets),
                 })
                 .pipe(Scope.provide(scope));
               workerdScopes.set(worker.id, scope);
@@ -588,7 +589,7 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces: worker.durableObjectNamespaces,
               hyperdrives: worker.hyperdrives,
               queueConsumers: yield* getQueueConsumers(worker.name),
-              assets: toRuntimeAssets(worker.assets),
+              assets: yield* toRuntimeAssets(worker.assets),
             },
             context,
           },
@@ -949,19 +950,26 @@ const structuralSignature = (value: unknown): Effect.Effect<string> => {
   return sha256(JSON.stringify(normalize(value)));
 };
 
-const toRuntimeAssets = (
+const toRuntimeAssets = Effect.fn(function* (
   assets: WorkerAssetsConfig | undefined,
-): RuntimeAssets | undefined => {
+) {
   if (!assets) return undefined;
+  const directory = typeof assets === "string" ? assets : assets.directory;
+  // Dev serves the same `_headers` / `_redirects` rules as the deployed
+  // edge; the runtime parses them from these strings. Missing files read
+  // as undefined; any other filesystem failure is a defect.
+  const files = yield* readSpecialAssetFiles(directory).pipe(Effect.orDie);
   if (typeof assets === "string") {
     return {
       directory: assets,
-    };
+      headers: files._headers,
+      redirects: files._redirects,
+    } satisfies RuntimeAssets;
   }
   return {
     directory: assets.directory,
-    headers: assets.headers,
-    redirects: assets.redirects,
+    headers: assets.headers ?? files._headers,
+    redirects: assets.redirects ?? files._redirects,
     // Distilled widened generated string enums to open unions (`string & {}`);
     // the API only ever returns the known variants here.
     htmlHandling: assets.htmlHandling as
@@ -977,8 +985,8 @@ const toRuntimeAssets = (
       | undefined,
     runWorkerFirst: assets.runWorkerFirst,
     serveDirectly: assets.serveDirectly,
-  };
-};
+  } satisfies RuntimeAssets;
+});
 
 const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {
   switch (ext) {

@@ -4,8 +4,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
 import type { PlatformError } from "effect/PlatformError";
+import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 
@@ -35,6 +35,17 @@ export interface AssetReadResult {
 
 export interface AssetsProps extends AssetsConfig {
   directory: string;
+}
+
+/**
+ * The contents of the special `_headers` / `_redirects` files from an assets
+ * directory. They are excluded from the upload manifest (Cloudflare must not
+ * serve them) and instead travel as strings on `metadata.assets.config`
+ * (`headers` / `redirects`, encoded to `_headers` / `_redirects` on the wire).
+ */
+export interface SpecialAssetFiles {
+  _headers: string | undefined;
+  _redirects: string | undefined;
 }
 
 export type ValidationError =
@@ -108,6 +119,31 @@ const maybeReadString = Effect.fn(function* (file: string) {
 const createIgnoreMatcher = (patterns: string[]) => {
   const matcher = createIgnore().add(patterns);
   return (file: string) => matcher.ignores(file);
+};
+
+export const readSpecialAssetFiles = Effect.fn(function* (directory: string) {
+  const path = yield* Path.Path;
+  const resolvedDirectory = path.resolve(directory);
+  const [_headers, _redirects] = yield* Effect.all([
+    maybeReadString(path.join(resolvedDirectory, "_headers")),
+    maybeReadString(path.join(resolvedDirectory, "_redirects")),
+  ]);
+  return { _headers, _redirects };
+});
+
+export const withSpecialAssetFiles = (
+  config: AssetsConfig | undefined,
+  files: SpecialAssetFiles,
+): AssetsConfig | undefined => {
+  const headers = config?.headers ?? files._headers;
+  const redirects = config?.redirects ?? files._redirects;
+  return headers === undefined && redirects === undefined
+    ? config
+    : {
+        ...config,
+        ...(headers !== undefined && { headers }),
+        ...(redirects !== undefined && { redirects }),
+      };
 };
 
 export const readAssets = Effect.fn(function* ({

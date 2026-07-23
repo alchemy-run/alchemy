@@ -17,7 +17,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectResponseHead, expectUrlContains } from "../Utils/Http.ts";
 import {
   expectWorkerExists,
   expectWorkersDevPreviews,
@@ -418,6 +418,109 @@ describe.concurrent("Cloudflare.Worker", () => {
         yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 360_000 },
+  );
+
+  test.provider(
+    "Worker assets: _redirects and _headers rules apply and survive every keep-assets path",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        // `_headers` / `_redirects` are config, not content: they are
+        // excluded from the asset manifest and travel as strings on
+        // `metadata.assets.config`. Because every script PUT replaces that
+        // config wholesale, the rules must be re-sent on *every* deploy —
+        // including the two paths that skip the asset upload. Each phase
+        // below pins one of the three `metadataAssets` branches.
+        const dir = yield* cloneFixture(assetsFixtureDir, {
+          prefix: "alchemy-worker-assets-special-",
+        });
+        const headerMarker = `alchemy-header-${Date.now()}`;
+        yield* fs.writeFileString(
+          path.join(dir, "_redirects"),
+          "/legacy /index.html 301\n",
+        );
+        yield* fs.writeFileString(
+          path.join(dir, "_headers"),
+          `/test.txt\n  x-alchemy-test: ${headerMarker}\n`,
+        );
+
+        const workerDir = yield* fs.makeTempDirectory({
+          prefix: "alchemy-worker-assets-special-entry-",
+        });
+        const workerPath = path.join(workerDir, "worker.ts");
+        const writeWorker = (marker: string) =>
+          fs.writeFileString(
+            workerPath,
+            `export default {
+  fetch: async () => new Response(${JSON.stringify(`Hello from SpecialAssets: ${marker}`)}),
+};
+`,
+          );
+
+        const deploy = (assets: string | { directory: string; hash: string }) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Worker("SpecialAssetFiles", {
+                main: workerPath,
+                assets,
+                url: true,
+                subdomain: { enabled: true, previewsEnabled: true },
+                compatibility: { date: "2024-01-01" },
+              });
+            }),
+          );
+
+        const expectRulesLive = (url: string, phase: string) =>
+          Effect.all([
+            expectResponseHead(
+              `${url}/legacy`,
+              { status: 301, headers: { location: "/index.html" } },
+              { timeout: "120 seconds", label: `${phase}: redirect` },
+            ),
+            expectResponseHead(
+              `${url}/test.txt`,
+              { status: 200, headers: { "x-alchemy-test": headerMarker } },
+              { timeout: "120 seconds", label: `${phase}: header` },
+            ),
+          ]);
+
+        // Phase 1 — fresh upload: rules ride along with the manifest upload.
+        yield* writeWorker("v1");
+        const v1 = yield* deploy(dir);
+        expect(v1.hash?.assets).toBeDefined();
+        yield* expectRulesLive(v1.url!, "v1 upload");
+        // The special files themselves must not be served: requests for
+        // them fall through to the user worker.
+        yield* expectUrlContains(
+          `${v1.url!}/_redirects`,
+          "Hello from SpecialAssets",
+          { timeout: "60 seconds", label: "_redirects not served" },
+        );
+
+        // Phase 2 — bundle-only change: assets re-read but byte-identical,
+        // so the manifest is kept. The rules must be re-sent regardless.
+        yield* writeWorker("v2");
+        const v2 = yield* deploy(dir);
+        expect(v2.hash?.assets).toEqual(v1.hash?.assets);
+        expect(v2.hash?.bundle).not.toEqual(v1.hash?.bundle);
+        yield* expectRulesLive(v2.url!, "v2 keep-assets");
+
+        // Phase 3 — precomputed hash matches state, the directory walk is
+        // skipped entirely, and the special files are re-read on their own.
+        yield* writeWorker("v3");
+        const v3 = yield* deploy({ directory: dir, hash: v2.hash!.assets! });
+        expect(v3.hash?.assets).toEqual(v2.hash?.assets);
+        yield* expectRulesLive(v3.url!, "v3 skip-assets");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 600_000 },
   );
 
   test.provider("create, update, delete internal worker", (stack) =>

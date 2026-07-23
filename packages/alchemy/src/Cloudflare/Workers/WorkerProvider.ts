@@ -23,10 +23,16 @@ import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { listAllZones, resolveZoneId } from "../Zone/lookup.ts";
-import { readAssets, uploadAssets } from "./Assets.ts";
+import {
+  readAssets,
+  readSpecialAssetFiles,
+  uploadAssets,
+  withSpecialAssetFiles,
+} from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import {
   Worker,
   type ViteOptions,
@@ -35,7 +41,6 @@ import {
 } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
@@ -1360,8 +1365,8 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
       ) => {
         if (!Predicate.hasProperty(assets, "hash")) return undefined;
-        const { directory: _, hash, ...config } = assets;
-        return { config, hash, skip: hash === output?.hash?.assets };
+        const { directory, hash, ...config } = assets;
+        return { config, directory, hash, skip: hash === output?.hash?.assets };
       };
 
       const putWorker = Effect.fn(function* (
@@ -1445,7 +1450,12 @@ export const LiveWorkerProvider = () =>
             `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
           );
           keepAssets = true;
-          metadataAssets = { config: prebuiltAssets.config };
+          metadataAssets = {
+            config: withSpecialAssetFiles(
+              prebuiltAssets.config,
+              yield* readSpecialAssetFiles(prebuiltAssets.directory),
+            ),
+          };
           metadataBindings.push({
             type: "assets",
             name: "ASSETS",
@@ -1463,7 +1473,9 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
             );
             keepAssets = true;
-            metadataAssets = { config: assets.config };
+            metadataAssets = {
+              config: withSpecialAssetFiles(assets.config, assets),
+            };
           } else {
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
@@ -1476,7 +1488,7 @@ export const LiveWorkerProvider = () =>
             );
             metadataAssets = {
               jwt,
-              config: assets.config,
+              config: withSpecialAssetFiles(assets.config, assets),
             };
           }
           metadataBindings.push({
