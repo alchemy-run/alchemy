@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { ScheduleGroup } from "@/AWS/Scheduler";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -39,9 +39,10 @@ test.provider(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "ScheduleGroupNotListed",
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 

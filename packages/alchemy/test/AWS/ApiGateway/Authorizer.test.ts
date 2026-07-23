@@ -2,11 +2,12 @@ import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
+import { assertRestApiDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,10 +16,12 @@ const authorizerUri = process.env.ALCHEMY_TEST_AUTHORIZER_URI;
 /**
  * Requires a Lambda authorizer invocation URI accepted by API Gateway.
  */
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
   "create and update Lambda TOKEN authorizer",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const uri = authorizerUri!;
 
       const { api, authorizer } = yield* stack.deploy(
@@ -31,7 +34,7 @@ test.provider.skipIf(!!process.env.FAST)(
             type: "TOKEN",
             authorizerUri: uri,
             identitySource: "method.request.header.Authorization",
-            authorizerResultTtlInSeconds: 60,
+            authorizerResultTtl: "60 seconds",
           });
           return { api, authorizer };
         }),
@@ -47,7 +50,7 @@ test.provider.skipIf(!!process.env.FAST)(
             type: "TOKEN",
             authorizerUri: uri,
             identitySource: "method.request.header.Authorization",
-            authorizerResultTtlInSeconds: 120,
+            authorizerResultTtl: "120 seconds",
           });
         }),
       );
@@ -59,6 +62,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(remote.authorizerResultTtlInSeconds).toEqual(120);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
 );
 
@@ -101,6 +105,7 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(authorizer.restApiId);
     }),
   { timeout: 300_000 },
 );

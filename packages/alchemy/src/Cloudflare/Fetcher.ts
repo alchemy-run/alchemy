@@ -70,11 +70,18 @@ export const fromCloudflareFetcher = (
   fetcher: cf.Fetcher | globalThis.Fetcher,
 ): Fetcher => {
   const fetch = (request: Request) =>
-    Effect.promise((signal) =>
-      (fetcher as globalThis.Fetcher).fetch(request, {
-        signal: signal,
-      }),
-    ).pipe(
+    Effect.suspend(() => {
+      // Clone per attempt, keeping `request` pristine: the HandlerNotReady
+      // retry below re-runs this suspend, and replaying a Request whose body
+      // the failed attempt already consumed makes workerd reject with
+      // "TypeError: Cannot reconstruct a Request with a used body".
+      const attempt = request.clone() as Request;
+      return Effect.promise((signal) =>
+        (fetcher as globalThis.Fetcher).fetch(attempt, {
+          signal: signal,
+        }),
+      );
+    }).pipe(
       // The "Handler does not export a fetch()" window is a property of
       // invoking a freshly-deployed Cloudflare binding, so it is ridden out
       // HERE — the one adapter every binding flows through — rather than in any

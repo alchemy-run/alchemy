@@ -28,6 +28,9 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     dev: {
       port: Config.number("PORT").pipe(Config.withDefault(1338)),
     },
+    build: {
+      bundleAnalyzer: true,
+    },
   },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
@@ -73,8 +76,10 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
             );
           }
           const instance = yield* workflow.create({
-            roomId,
-            message: "hello from workflow",
+            params: {
+              roomId,
+              message: "hello from workflow",
+            },
           });
           return yield* HttpServerResponse.json({ instanceId: instance.id });
         } else if (url.pathname.startsWith("/workflow/status/")) {

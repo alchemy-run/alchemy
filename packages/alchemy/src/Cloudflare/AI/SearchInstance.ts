@@ -1,13 +1,12 @@
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -557,13 +556,15 @@ export type SearchInstance = Resource<
  *
  * @see https://developers.cloudflare.com/ai-search/
  */
-export const SearchInstance = Resource<SearchInstance>(TypeId);
+export const SearchInstance = Resource<SearchInstance>(TypeId, {
+  aliases: ["Cloudflare.AiSearch.Instance"],
+});
 
 /**
  * Returns true if the given value is a SearchInstance resource.
  */
 export const isSearchInstance = (value: unknown): value is SearchInstance =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+  isResourceOfType(value, TypeId);
 
 export const SearchInstanceProvider = () =>
   Provider.succeed(SearchInstance, {
@@ -593,9 +594,12 @@ export const SearchInstanceProvider = () =>
         return { action: "replace" } as const;
       }
       // The instance id is its identity — renaming is a replacement.
-      const newId = yield* createInstanceId(id, news.instanceId);
       const oldId =
         output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
+      // Auto-generated ids are engine-owned: the deployed id stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided instanceId can force a replace.
+      const newId = news.instanceId ?? oldId;
       if (newId !== oldId) {
         return { action: "replace" } as const;
       }
@@ -834,9 +838,10 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
       // sparsely and detects a settled token tens of seconds late. Capped
       // polling detects within 6s of propagation completing while still
       // covering a long total window.
-      schedule: Schedule.exponential("1 second", 1.5).pipe(
-        Schedule.either(Schedule.spaced("6 seconds")),
-      ),
+      schedule: Schedule.min([
+        Schedule.exponential("1 second", 1.5),
+        Schedule.spaced("6 seconds"),
+      ]),
       times: 22,
     }),
   );

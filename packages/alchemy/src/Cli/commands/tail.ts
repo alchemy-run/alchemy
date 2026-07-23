@@ -104,6 +104,7 @@ export const tailCommand = Command.make(
               logicalId: resource.LogicalId,
               stream: provider.tail({
                 id: resource.LogicalId,
+                fqn,
                 instanceId: (resourceState as any).instanceId,
                 props: (resourceState as any).props,
                 output: (resourceState as any).attr,

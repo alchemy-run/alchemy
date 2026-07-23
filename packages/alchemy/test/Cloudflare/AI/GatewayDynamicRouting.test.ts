@@ -1,10 +1,10 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -56,9 +56,10 @@ const expectGone = (accountId: string, gatewayId: string, routeId: string) =>
     Effect.flatMap(() => Effect.fail(new RouteStillExists())),
     Effect.retry({
       while: (e): e is RouteStillExists => e instanceof RouteStillExists,
-      schedule: Schedule.exponential("250 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("250 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag("RouteNotFound", () => Effect.void),
     Effect.catchTag("GatewayNotFound", () => Effect.void),
@@ -327,10 +328,10 @@ test.provider(
         // Bound the poll so it converges (or fails with a clear PredicateFailed)
         // well within the test timeout below — the default schedule (50 × 5s)
         // outruns the timeout and surfaces as an opaque "Test timed out".
-        schedule: Schedule.both(
+        schedule: Schedule.max([
           Schedule.spaced("3 seconds"),
           Schedule.recurs(40),
-        ),
+        ]),
       });
 
       const found = all.find((r) => r.routeId === deployed.route.routeId);

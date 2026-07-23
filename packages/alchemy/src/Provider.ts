@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -103,6 +104,14 @@ export interface ProviderService<
    */
   version?: number;
   /**
+   * Legacy type names this provider also answers to. Copied from the
+   * resource class's `aliases` option by {@link succeed}/{@link effect} so
+   * state persisted under a pre-rename type (e.g. `"Cloudflare.Queue"`
+   * before the `"Cloudflare.Queues.Queue"` rename) still resolves to this
+   * provider via {@link tryFindProviderByType}.
+   */
+  aliases?: readonly string[];
+  /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
    * report an endless "deleted but still there" loop. `read`/import are
@@ -148,6 +157,11 @@ export interface ProviderService<
    */
   tail?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     props: Props<Res>;
     output: Res["Attributes"];
@@ -158,6 +172,11 @@ export interface ProviderService<
    */
   logs?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     props: Props<Res>;
     output: Res["Attributes"];
@@ -170,6 +189,11 @@ export interface ProviderService<
   // branch?() {}
   read?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     olds: Props<Res>;
     // what is the ARN?
@@ -181,6 +205,11 @@ export interface ProviderService<
   stables?: Extract<keyof Res["Attributes"], string>[];
   diff?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     olds: Props<Res>;
     // Note: we do not resolve (Res["Props"]) here because diff runs during plan
@@ -193,6 +222,11 @@ export interface ProviderService<
   // dev?:() => Effect.Effect<void, any, DevReq>;
   precreate?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     news: Props<Res>;
     instanceId: string;
     session: ScopedPlanStatusSession;
@@ -222,6 +256,11 @@ export interface ProviderService<
    */
   reconcile(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     news: Props<Res>;
     olds: Props<Res> | undefined;
@@ -231,11 +270,26 @@ export interface ProviderService<
   }): Effect.Effect<Res["Attributes"], any, ReconcileReq>;
   delete(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     olds: Props<Res>;
     output: Res["Attributes"];
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
+    /**
+     * Set by account-wide teardown (`alchemy unsafe nuke`) to signal the
+     * operator explicitly requested destructive deletion. Nuke enumerates
+     * resources straight from the cloud, so `olds` carries Attributes rather
+     * than the originally-deployed Props — destructive prerequisites that a
+     * normal destroy gates behind a prop (e.g. emptying a non-empty S3
+     * bucket behind `forceDestroy`) may be performed when this is set.
+     * Normal engine destroys never set it.
+     */
+    force?: boolean;
   }): Effect.Effect<void, any, DeleteReq>;
 }
 
@@ -275,8 +329,14 @@ export const effect = <
     LifecycleServices
   >
 > =>
-  // @ts-expect-error
-  Layer.effect(Provider(cls.Type), eff) as any;
+  Layer.effect(
+    // @ts-expect-error
+    Provider(cls.Type),
+    Effect.map(eff, (service) => ({
+      aliases: "Aliases" in cls ? cls.Aliases : undefined,
+      ...service,
+    })),
+  ) as any;
 
 export const succeed = <
   R extends ResourceLike,
@@ -310,7 +370,10 @@ export const succeed = <
   >
 > =>
   // @ts-expect-error
-  Layer.succeed(Provider(cls.Type), service);
+  Layer.succeed(Provider(cls.Type), {
+    aliases: "Aliases" in cls ? cls.Aliases : undefined,
+    ...service,
+  });
 
 export interface ProviderCollectionLike {
   kind: "ProviderCollection";
@@ -398,6 +461,20 @@ const isProviderCollectionService = (
   );
 };
 
+/**
+ * Structural check for a {@link ProviderService} living in the Effect
+ * context. Providers are keyed by their canonical resource type; when
+ * searching for a legacy alias, the tag key won't match, so lookup has to
+ * recognize provider services by shape.
+ */
+const isProviderService = (value: unknown): value is ProviderService =>
+  typeof value === "object" &&
+  value !== null &&
+  "reconcile" in value &&
+  typeof (value as ProviderService).reconcile === "function" &&
+  "delete" in value &&
+  typeof (value as ProviderService).delete === "function";
+
 export const findProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
@@ -425,6 +502,42 @@ export const findProvider: {
 } = (resource: { Type?: string; key?: string }) =>
   findProviderByType((resource.Type ?? resource.key) as string) as any;
 
+/**
+ * A persisted state row references a resource type with no registered
+ * provider — the type was removed from the program (or renamed without an
+ * alias) while its state row still exists ("zombie" row).
+ *
+ * This is FATAL at plan time: the program and state fundamentally disagree,
+ * and without the provider the row's physical resource cannot be deleted
+ * anyway, so proceeding would only strand it silently. The plan dies with
+ * this error; nothing is deployed or destroyed until the provider is
+ * re-registered (or aliased), or the state row is cleared manually.
+ */
+export class MissingProviderError extends Data.TaggedError(
+  "MissingProviderError",
+)<{
+  message: string;
+  resourceType: string;
+  fqn: string;
+}> {}
+
+/** Build the fatal plan-time error for a zombie state row. */
+export const missingProviderError = (
+  resourceType: string,
+  fqn: string,
+): MissingProviderError =>
+  new MissingProviderError({
+    message:
+      `No provider is registered for resource type '${resourceType}' ` +
+      `(state row '${fqn}'). The type was removed from the program or ` +
+      "renamed without an alias. Re-register the provider (or add the " +
+      "old name to the resource's `aliases`) so this row can be " +
+      "destroyed, or clear the state row manually if the physical " +
+      "resource is already gone.",
+    resourceType,
+    fqn,
+  });
+
 export const tryFindProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
@@ -446,6 +559,25 @@ export const tryFindProviderByType: {
       if (provider) {
         return Option.some(provider);
       }
+    }
+  }
+
+  // State persisted before a type rename carries the legacy name, so no
+  // provider is keyed under it. Fall back to a provider that declares the
+  // name in its `aliases` — scanning both bare Provider layers and the
+  // members of every ProviderCollection.
+  for (const value of context.mapUnsafe.values()) {
+    if (isProviderCollectionService(value)) {
+      for (const provider of Object.values(value.providers)) {
+        if (provider.aliases?.includes(resourceType)) {
+          return Option.some(provider);
+        }
+      }
+    } else if (
+      isProviderService(value) &&
+      value.aliases?.includes(resourceType)
+    ) {
+      return Option.some(value);
     }
   }
   return Option.none();

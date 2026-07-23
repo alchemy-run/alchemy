@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -42,22 +42,32 @@ const runWorkflowToCompletion = (url: string) =>
     // workers.dev URL, so retry until it returns 200 (a fresh URL also
     // returns 404 transiently, which is not an HTTP error so Effect.retry
     // does not catch it unless we explicitly fail on non-200).
-    const startRes = yield* client.post(`${url}/workflow/start/world`).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
-      ),
-      Effect.retry({
-        // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
-        // sleep after only six attempts and blow the test timeout.
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.either(Schedule.spaced("3 seconds")),
+    const { instanceId } = yield* client
+      .post(`${url}/workflow/start/world`)
+      .pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.json.pipe(
+                Effect.flatMap((body) => {
+                  const instanceId = (body as { instanceId?: unknown })
+                    .instanceId;
+                  return typeof instanceId === "string"
+                    ? Effect.succeed({ instanceId })
+                    : Effect.fail(new Error("Worker returned no workflow id"));
+                }),
+              )
+            : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
         ),
-        times: 15,
-      }),
-    );
-    const { instanceId } = (yield* startRes.json) as { instanceId: string };
+        Effect.retry({
+          // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
+          // sleep after only six attempts and blow the test timeout.
+          schedule: Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("3 seconds"),
+          ]),
+          times: 15,
+        }),
+      );
     expect(instanceId).toBeTypeOf("string");
 
     const lastStatus = yield* client

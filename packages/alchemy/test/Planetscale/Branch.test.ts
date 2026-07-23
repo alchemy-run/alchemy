@@ -1,8 +1,8 @@
 import * as Planetscale from "@/Planetscale";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ops from "@distilled.cloud/planetscale/Operations";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -47,6 +47,7 @@ test.provider("diff tracks Postgres branch replica intent", () =>
 
     const alreadyConvergedToNonHa = yield* provider.diff!({
       id: "Branch",
+      fqn: "Branch",
       instanceId: "instance",
       olds: props(0),
       news: props(0),
@@ -62,6 +63,7 @@ test.provider("diff tracks Postgres branch replica intent", () =>
 
     const exactHaCountChanged = yield* provider.diff!({
       id: "Branch",
+      fqn: "Branch",
       instanceId: "instance",
       olds: props(2),
       news: props(3),

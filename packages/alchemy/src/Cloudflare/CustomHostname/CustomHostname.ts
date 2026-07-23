@@ -280,6 +280,7 @@ export type CustomHostname = Resource<
  */
 export const CustomHostname = Resource<CustomHostname>(
   "Cloudflare.CustomHostname.CustomHostname",
+  { aliases: ["Cloudflare.CustomHostname"] },
 );
 
 export const isCustomHostname = (value: unknown): value is CustomHostname =>

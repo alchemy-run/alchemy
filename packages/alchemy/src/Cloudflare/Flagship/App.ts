@@ -1,10 +1,9 @@
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -150,7 +149,7 @@ export const App = Resource<App>(TypeId);
  * Returns true if the given value is a Flagship App resource.
  */
 export const isApp = (value: unknown): value is App =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+  isResourceOfType(value, TypeId);
 
 export const AppProvider = () =>
   Provider.succeed(App, {
@@ -242,10 +241,11 @@ const getApp = (accountId: string, appId: string) =>
  * oldest for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  flagship.listApps({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((a) => a.name === name)
+  flagship.listApps.items({ accountId }).pipe(
+    Stream.filter((a) => a.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .at(0),
     ),

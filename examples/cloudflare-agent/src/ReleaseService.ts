@@ -13,7 +13,7 @@ export default Cloudflare.Worker(
     yield* Github.consumeRepositoryEvents(
       {
         owner: "alchemy-run",
-        repository: "alchemy-effect",
+        repository: "alchemy",
         events: ["push"],
       },
       (event) => {

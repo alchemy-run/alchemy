@@ -113,6 +113,7 @@ export type SendingSubdomain = Resource<
  */
 export const SendingSubdomain = Resource<SendingSubdomain>(
   SendingSubdomainTypeId,
+  { aliases: ["Cloudflare.EmailSendingSubdomain"] },
 );
 
 /**

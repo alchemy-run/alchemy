@@ -3,9 +3,9 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as healthchecks from "@distilled.cloud/cloudflare/healthchecks";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -79,9 +79,10 @@ const expectGone = (zoneId: string, healthcheckId: string) =>
     Effect.catchTag("HealthcheckNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "HealthcheckNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

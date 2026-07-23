@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
@@ -33,9 +33,10 @@ const TEST_TIMEOUT = 300_000;
 // account must be onboarded to the preview, with a bootstrapped Assets bucket.
 const skip = !process.env.LAMBDA_TEST_MICROVM;
 
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 const readinessRetries = 30;
 
 // Retry a freshly-deployed Lambda URL until it answers 200 (cold-start, IAM

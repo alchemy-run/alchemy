@@ -6,13 +6,13 @@ import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 
 export const isBucket = (value: any): value is Bucket =>
-  typeof value === "object" && (value as any)?.Type === "Cloudflare.R2.Bucket";
+  isResourceOfType(value, "Cloudflare.R2.Bucket");
 
 export type BucketName = string;
 
@@ -99,6 +99,39 @@ export type BucketLifecycleRule = {
   }[];
 };
 
+export type BucketCorsRule = {
+  /**
+   * Optional label for this rule, shown in the Cloudflare dashboard. Not
+   * used to correlate rules across updates — the CORS configuration is
+   * always replaced as a whole.
+   */
+  id?: string;
+  /**
+   * HTTP methods browsers are allowed to use in cross-origin requests.
+   */
+  allowedMethods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
+  /**
+   * Origins allowed to make cross-origin requests, e.g.
+   * `"https://example.com"`. Use `"*"` to allow any origin.
+   */
+  allowedOrigins: string[];
+  /**
+   * Request headers browsers are allowed to send, e.g. `"range"` for
+   * range reads. If omitted, only simple headers are allowed.
+   */
+  allowedHeaders?: string[];
+  /**
+   * Response headers the browser is allowed to expose to the requesting
+   * JavaScript, e.g. `"etag"` or `"content-range"`.
+   */
+  exposeHeaders?: string[];
+  /**
+   * How long (in seconds) browsers may cache CORS preflight responses.
+   * Browsers may cap this at 2 hours or less, even if 86400 is specified.
+   */
+  maxAgeSeconds?: number;
+};
+
 export type BucketProps = {
   /**
    * Name of the bucket. If omitted, a unique name will be generated.
@@ -130,6 +163,13 @@ export type BucketProps = {
    * supported transitions.
    */
   lifecycleRules?: BucketLifecycleRule[];
+  /**
+   * CORS rules applied to the bucket, controlling which cross-origin
+   * browser requests are allowed against the bucket's public or S3 API
+   * endpoints. Pass an empty array (or omit) to remove the CORS
+   * configuration.
+   */
+  cors?: BucketCorsRule[];
 };
 
 export type Bucket = Resource<
@@ -143,6 +183,7 @@ export type Bucket = Resource<
     accountId: string;
     domains: Bucket.CustomDomain[];
     lifecycleRules: Bucket.LifecycleRule[];
+    cors: Bucket.CorsRule[];
   },
   never,
   Cloudflare.Providers
@@ -298,8 +339,60 @@ export type Bucket = Resource<
  *   ],
  * });
  * ```
+ *
+ * @section CORS
+ *
+ * Configure CORS rules so browsers can make cross-origin requests against
+ * the bucket's public (custom domain / r2.dev) or S3 API endpoints. Pass an
+ * empty array (or omit) to remove the CORS configuration. See the
+ * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/cors/)
+ * for details.
+ *
+ * @example Allow cross-origin reads from any origin
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
+ *   cors: [
+ *     {
+ *       allowedMethods: ["GET", "HEAD"],
+ *       allowedOrigins: ["*"],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Browser range reads (e.g. PMTiles map tiles)
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
+ *   domains: [{ name: "tiles.example.com" }],
+ *   cors: [
+ *     {
+ *       allowedMethods: ["GET", "HEAD"],
+ *       allowedOrigins: ["https://map.example.com"],
+ *       allowedHeaders: ["range", "if-match"],
+ *       exposeHeaders: ["etag", "content-range"],
+ *       maxAgeSeconds: 3600,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Allow uploads from a web app
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
+ *   cors: [
+ *     {
+ *       allowedMethods: ["GET", "PUT", "POST"],
+ *       allowedOrigins: ["https://app.example.com"],
+ *       allowedHeaders: ["content-type"],
+ *       exposeHeaders: ["etag"],
+ *     },
+ *   ],
+ * });
+ * ```
  */
-export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket");
+export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
+  aliases: ["Cloudflare.R2Bucket"],
+});
 
 export declare namespace Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";
@@ -321,6 +414,14 @@ export declare namespace Bucket {
           storageClass: "InfrequentAccess";
         }[]
       | undefined;
+  };
+  export type CorsRule = {
+    id: string | undefined;
+    allowedMethods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
+    allowedOrigins: string[];
+    allowedHeaders: string[] | undefined;
+    exposeHeaders: string[] | undefined;
+    maxAgeSeconds: number | undefined;
   };
   export type CustomDomain = {
     domain: string;
@@ -593,7 +694,8 @@ export const BucketProvider = () =>
               perPage,
               startAfter,
             });
-            const page = (response.buckets ?? []).filter(
+            const raw = response.buckets ?? [];
+            const page = raw.filter(
               (b): b is typeof b & { name: string } =>
                 typeof b.name === "string" && b.name !== "",
             );
@@ -607,7 +709,10 @@ export const BucketProvider = () =>
                 location: normalizeLocation(b.location),
               });
             }
-            if (page.length < perPage) break;
+            // Terminate on the RAW page length — the filtered length can be
+            // shorter on a full page (nameless entries), which would end the
+            // walk early and silently drop the remaining buckets.
+            if (raw.length < perPage || page.length === 0) break;
             startAfter = page[page.length - 1].name;
           }
           return all;
@@ -657,6 +762,71 @@ export const BucketProvider = () =>
           return desiredRules;
         });
 
+      const reconcileCorsRules = (
+        bucketName: string,
+        jurisdiction: Bucket.Jurisdiction,
+        desired: BucketCorsRule[],
+      ) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const observed = yield* r2
+            .getBucketCors({
+              accountId,
+              bucketName,
+              jurisdiction,
+            })
+            .pipe(
+              Effect.map((response) => (response.rules ?? []).map(toCorsRule)),
+              // A bucket with no CORS configuration is a typed error, not an
+              // empty rule list — normalize it to [] for the diff below.
+              Effect.catchTag("NoCorsConfiguration", () =>
+                Effect.succeed([] as Bucket.CorsRule[]),
+              ),
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
+
+          const desiredRules = desired.map(normalizeCorsRule);
+
+          if (deepEqual(observed, desiredRules)) {
+            return desiredRules;
+          }
+
+          if (desiredRules.length === 0) {
+            yield* r2
+              .deleteBucketCors({
+                accountId,
+                bucketName,
+                jurisdiction,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                }),
+              );
+            return desiredRules;
+          }
+
+          yield* r2
+            .putBucketCors({
+              accountId,
+              bucketName,
+              jurisdiction,
+              rules: desired.map(toCorsPutPayload),
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
+
+          return desiredRules;
+        });
+
       return {
         stables: ["bucketName", "accountId"],
         list: () =>
@@ -693,28 +863,47 @@ export const BucketProvider = () =>
               buckets,
               (bucket) =>
                 Effect.gen(function* () {
-                  const domains =
-                    (yield* listCustomDomains(
-                      bucket.name,
-                      bucket.jurisdiction,
-                      {
+                  // The three hydration reads are independent — issue them
+                  // concurrently so each bucket costs one round-trip of wall
+                  // clock instead of three (a large leaked-bucket census can
+                  // otherwise blow the nuke scan's per-provider timeout).
+                  const [domains, lifecycleRules, cors] = yield* Effect.all(
+                    [
+                      listCustomDomains(bucket.name, bucket.jurisdiction, {
                         retryMissing: false,
-                      },
-                    )) ?? [];
-                  const lifecycleRules = yield* r2
-                    .getBucketLifecycle({
-                      accountId,
-                      bucketName: bucket.name,
-                      jurisdiction: bucket.jurisdiction,
-                    })
-                    .pipe(
-                      Effect.map((observed) =>
-                        (observed.rules ?? []).map(toLifecycleRule),
-                      ),
-                      Effect.catchTag("NoSuchBucket", () =>
-                        Effect.succeed([] as Bucket.LifecycleRule[]),
-                      ),
-                    );
+                      }).pipe(Effect.map((d) => d ?? [])),
+                      r2
+                        .getBucketLifecycle({
+                          accountId,
+                          bucketName: bucket.name,
+                          jurisdiction: bucket.jurisdiction,
+                        })
+                        .pipe(
+                          Effect.map((observed) =>
+                            (observed.rules ?? []).map(toLifecycleRule),
+                          ),
+                          Effect.catchTag("NoSuchBucket", () =>
+                            Effect.succeed([] as Bucket.LifecycleRule[]),
+                          ),
+                        ),
+                      r2
+                        .getBucketCors({
+                          accountId,
+                          bucketName: bucket.name,
+                          jurisdiction: bucket.jurisdiction,
+                        })
+                        .pipe(
+                          Effect.map((observed) =>
+                            (observed.rules ?? []).map(toCorsRule),
+                          ),
+                          Effect.catchTag(
+                            ["NoSuchBucket", "NoCorsConfiguration"],
+                            () => Effect.succeed([] as Bucket.CorsRule[]),
+                          ),
+                        ),
+                    ] as const,
+                    { concurrency: 3 },
+                  );
                   return {
                     bucketName: bucket.name,
                     storageClass: bucket.storageClass,
@@ -723,16 +912,30 @@ export const BucketProvider = () =>
                     accountId,
                     domains,
                     lifecycleRules,
+                    cors,
                   };
                 }).pipe(
                   // The custom-domain endpoint intermittently 500s ("Failed to
-                  // access or modify the bucket policy"). Ride out the transient
-                  // blip with a bounded retry rather than aborting the whole
-                  // enumeration.
-                  Effect.retry({
-                    while: (e) => e._tag === "InternalServerError",
-                    schedule: r2TransientServerErrorSchedule,
-                  }),
+                  // access or modify the bucket policy"), and some buckets 500
+                  // PERSISTENTLY. The blanket Cloudflare retry policy already
+                  // retries each call's transient blips; don't stack another
+                  // retry here (the budgets multiply into minutes per bucket).
+                  // A bucket that still 500s must not abort the account-wide
+                  // enumeration (nuke would then see ZERO buckets) — degrade
+                  // it to an un-hydrated shape; delete can still tear the
+                  // bucket down.
+                  Effect.catchTag("InternalServerError", () =>
+                    Effect.succeed({
+                      bucketName: bucket.name,
+                      storageClass: bucket.storageClass,
+                      jurisdiction: bucket.jurisdiction,
+                      location: bucket.location,
+                      accountId,
+                      domains: [] as Bucket.CustomDomain[],
+                      lifecycleRules: [] as Bucket.LifecycleRule[],
+                      cors: [] as Bucket.CorsRule[],
+                    }),
+                  ),
                 ),
               { concurrency: 10 },
             );
@@ -740,10 +943,13 @@ export const BucketProvider = () =>
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const name = yield* createBucketName(id, news.name);
-          const oldName = output?.bucketName
-            ? output.bucketName
-            : yield* createBucketName(id, olds.name);
+          const oldName =
+            output?.bucketName ?? (yield* createBucketName(id, olds.name));
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id
+          // differently today. Only an explicit user-provided name can
+          // force a replace.
+          const name = news.name ?? oldName;
           const oldJurisdiction =
             output?.jurisdiction ?? olds.jurisdiction ?? "default";
           const oldStorageClass =
@@ -772,10 +978,16 @@ export const BucketProvider = () =>
           if (!deepEqual(olds.lifecycleRules, news.lifecycleRules)) {
             return { action: "update" } as const;
           }
+          if (!deepEqual(olds.cors, news.cors)) {
+            return { action: "update" } as const;
+          }
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const name = yield* createBucketName(id, news.name);
+          // Prefer the deployed name: regenerating would target a different
+          // bucket if the generator's output for this id ever drifts.
+          const name =
+            output?.bucketName ?? (yield* createBucketName(id, news.name));
           const acct = output?.accountId ?? accountId;
           const jurisdiction =
             output?.jurisdiction ?? news.jurisdiction ?? "default";
@@ -873,10 +1085,17 @@ export const BucketProvider = () =>
             news.lifecycleRules ?? [],
           );
 
+          const cors = yield* reconcileCorsRules(
+            attrs.bucketName,
+            attrs.jurisdiction,
+            news.cors ?? [],
+          );
+
           return {
             ...attrs,
             domains,
             lifecycleRules,
+            cors,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -931,6 +1150,7 @@ export const BucketProvider = () =>
                 accountId: acct,
                 domains: output?.domains ?? [],
                 lifecycleRules: output?.lifecycleRules ?? [],
+                cors: output?.cors ?? [],
               })),
               Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
             );
@@ -943,16 +1163,18 @@ export const BucketProvider = () =>
 // sub-resource endpoints (custom domains, lifecycle) accept it. Retry only
 // that narrow `NoSuchBucket` lag here; not-found sub-resources are still
 // treated as terminal for idempotent deletes.
-const r2BucketEndpointConsistencySchedule = Schedule.exponential(100).pipe(
-  Schedule.both(Schedule.recurs(5)),
-);
+const r2BucketEndpointConsistencySchedule = Schedule.max([
+  Schedule.exponential(100),
+  Schedule.recurs(5),
+]);
 
 // R2 sub-resource reads (notably the custom-domain endpoint, which touches the
 // bucket's public-access policy) can return a transient 500 ("Failed to access
 // or modify the bucket policy"). Ride out the blip with a short bounded retry.
-const r2TransientServerErrorSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.both(Schedule.recurs(6)),
-);
+const r2TransientServerErrorSchedule = Schedule.max([
+  Schedule.exponential("500 millis"),
+  Schedule.recurs(6),
+]);
 
 // Distilled widened generated string enums to open unions (`string & {}`); the
 // API only ever returns the known variants, narrowed in `toCustomDomainAttributes`.
@@ -1021,6 +1243,40 @@ const normalizeLifecycleRule = (
   storageClassTransitions: rule.storageClassTransitions,
 });
 
+type CorsRuleResponse = NonNullable<r2.GetBucketCorsResponse["rules"]>[number];
+
+const toCorsRule = (rule: CorsRuleResponse): Bucket.CorsRule => ({
+  id: rule.id ?? undefined,
+  // Distilled widened generated string enums to open unions.
+  allowedMethods: rule.allowed.methods as Bucket.CorsRule["allowedMethods"],
+  allowedOrigins: rule.allowed.origins,
+  allowedHeaders: rule.allowed.headers ?? undefined,
+  exposeHeaders: rule.exposeHeaders ?? undefined,
+  maxAgeSeconds: rule.maxAgeSeconds ?? undefined,
+});
+
+const normalizeCorsRule = (rule: BucketCorsRule): Bucket.CorsRule => ({
+  id: rule.id,
+  allowedMethods: rule.allowedMethods,
+  allowedOrigins: rule.allowedOrigins,
+  allowedHeaders: rule.allowedHeaders,
+  exposeHeaders: rule.exposeHeaders,
+  maxAgeSeconds: rule.maxAgeSeconds,
+});
+
+const toCorsPutPayload = (
+  rule: BucketCorsRule,
+): NonNullable<r2.PutBucketCorsRequest["rules"]>[number] => ({
+  id: rule.id,
+  allowed: {
+    methods: rule.allowedMethods,
+    origins: rule.allowedOrigins,
+    headers: rule.allowedHeaders,
+  },
+  exposeHeaders: rule.exposeHeaders,
+  maxAgeSeconds: rule.maxAgeSeconds,
+});
+
 const toLifecyclePutPayload = (
   rule: BucketLifecycleRule,
 ): NonNullable<r2.PutBucketLifecycleRequest["rules"]>[number] => ({
@@ -1039,6 +1295,7 @@ const toLifecyclePutPayload = (
 // consistency and retry it on create. Releasing a custom domain after delete
 // can lag a few seconds, so give the conflict a longer, bounded budget than
 // the bucket-endpoint lag above.
-const r2CustomDomainConflictSchedule = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(8)),
-);
+const r2CustomDomainConflictSchedule = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(8),
+]);

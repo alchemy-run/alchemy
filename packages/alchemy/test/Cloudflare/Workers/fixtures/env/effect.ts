@@ -43,6 +43,21 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
     const configStr = yield* Config.string("CONFIG_STR");
     const configNum = yield* Config.number("CONFIG_NUM");
     const configRedactedInit = yield* Config.redacted("CONFIG_REDACTED_INIT");
+    // Composite forms — each member is bound individually, so the whole
+    // shape must survive the deploy → runtime round-trip.
+    const configAllObj = yield* Config.all({
+      str: Config.string("CONFIG_STR"),
+      num: Config.number("CONFIG_NUM"),
+      redacted: Config.redacted("CONFIG_REDACTED_INIT"),
+    });
+    const configAllTuple = yield* Config.all([
+      Config.string("CONFIG_STR"),
+      Config.number("CONFIG_NUM"),
+    ]);
+    // Nested prefix — bound under the flattened `CONFIG_NESTED_HOST` key.
+    const configNested = yield* Config.string("HOST").pipe(
+      Config.nested("CONFIG_NESTED"),
+    );
 
     // Yieldable binding form — attaches the `version_metadata` binding to
     // this Worker and returns a deferred accessor resolved at runtime.
@@ -84,11 +99,72 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
             CONFIG_REDACTED_INIT: Redacted.value(configRedactedInit),
             CONFIG_REDACTED_INIT_IS_REDACTED:
               Redacted.isRedacted(configRedactedInit),
+            CONFIG_ALL_OBJ: {
+              str: configAllObj.str,
+              num: configAllObj.num,
+              redacted: Redacted.value(configAllObj.redacted),
+              redactedIsRedacted: Redacted.isRedacted(configAllObj.redacted),
+            },
+            CONFIG_ALL_TUPLE: configAllTuple,
+            CONFIG_NESTED_HOST: configNested,
+          });
+        }
+
+        if (pathname === "/config-runtime") {
+          // Re-resolve the same Configs captured during Init — this time at
+          // request time, deep inside a nested effect, where the env-backed
+          // runtime ConfigProvider (not the Init interceptor) answers the
+          // read. The bound values arrive in `env` as
+          // `{"_tag":"Redacted","value":...}` markers and must be reified
+          // transparently: `Config.number` must decode the raw source value,
+          // not the marker JSON.
+          const nested = yield* Effect.gen(function* () {
+            const allObj = yield* Config.all({
+              str: Config.string("CONFIG_STR"),
+              num: Config.number("CONFIG_NUM"),
+              redacted: Config.redacted("CONFIG_REDACTED_INIT"),
+            });
+            return {
+              CONFIG_STR: yield* Config.string("CONFIG_STR"),
+              CONFIG_NUM: yield* Config.number("CONFIG_NUM"),
+              // Combinators re-apply at runtime against the bound source.
+              CONFIG_NUM_WITH_DEFAULT: yield* Config.number("CONFIG_NUM").pipe(
+                Config.withDefault(999),
+              ),
+              // Never read during Init, so never bound — the default applies.
+              CONFIG_UNSET_WITH_DEFAULT: yield* Config.number(
+                "CONFIG_UNSET",
+              ).pipe(Config.withDefault(3000)),
+              CONFIG_ALL_OBJ: {
+                str: allObj.str,
+                num: allObj.num,
+                redacted: Redacted.value(allObj.redacted),
+                redactedIsRedacted: Redacted.isRedacted(allObj.redacted),
+              },
+              CONFIG_ALL_TUPLE: yield* Config.all([
+                Config.string("CONFIG_STR"),
+                Config.number("CONFIG_NUM"),
+              ]),
+              CONFIG_NESTED_HOST: yield* Config.string("HOST").pipe(
+                Config.nested("CONFIG_NESTED"),
+              ),
+            };
+          });
+          const redactedAtRuntime = yield* Config.redacted(
+            "CONFIG_REDACTED_INIT",
+          );
+          return yield* HttpServerResponse.json({
+            ...nested,
+            CONFIG_REDACTED_INIT: Redacted.value(redactedAtRuntime),
+            CONFIG_REDACTED_INIT_IS_REDACTED:
+              Redacted.isRedacted(redactedAtRuntime),
           });
         }
 
         return HttpServerResponse.text("ok");
-      }),
+        // The request-time Config reads carry ConfigError; a failed read is
+        // a test bug, so die (surfaces as a 500 the test assertions catch).
+      }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(Cloudflare.Workers.VersionMetadataBinding)),
 ) {}

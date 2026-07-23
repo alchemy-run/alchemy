@@ -4,7 +4,7 @@ import * as Neon from "@/Neon";
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { NodeServices } from "@effect/platform-node";
-import { it } from "@effect/vitest";
+import { it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

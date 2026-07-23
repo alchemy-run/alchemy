@@ -1,5 +1,6 @@
 import * as DynamoDB from "@/AWS/DynamoDB";
 import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -28,6 +29,9 @@ export default DynamoDBTestFunction.make(
       sortKey: "sk",
       attributes: { pk: "S", sk: "S" },
     });
+    const exportBucket = yield* S3.Bucket("ExportBucket", {
+      forceDestroy: true,
+    });
 
     const getItem = yield* DynamoDB.GetItem(sourceTable);
     const batchGetItem = yield* DynamoDB.BatchGetItem(sourceTable);
@@ -53,6 +57,22 @@ export default DynamoDBTestFunction.make(
     );
     const transactGetItems = yield* DynamoDB.TransactGetItems(sourceTable);
     const transactWriteItems = yield* DynamoDB.TransactWriteItems(sourceTable);
+    const createBackup = yield* DynamoDB.CreateBackup(sourceTable);
+    const describeBackup = yield* DynamoDB.DescribeBackup(sourceTable);
+    const listBackups = yield* DynamoDB.ListBackups(sourceTable);
+    const deleteBackup = yield* DynamoDB.DeleteBackup(sourceTable);
+    const describeContinuousBackups =
+      yield* DynamoDB.DescribeContinuousBackups(sourceTable);
+    const restoreTableFromBackup = yield* DynamoDB.RestoreTableFromBackup(
+      sourceTable,
+      restoreTargetTable,
+    );
+    const exportTableToPointInTime = yield* DynamoDB.ExportTableToPointInTime(
+      sourceTable,
+      exportBucket,
+    );
+    const describeExport = yield* DynamoDB.DescribeExport(sourceTable);
+    const listExports = yield* DynamoDB.ListExports(sourceTable);
 
     return {
       fetch: Effect.gen(function* () {
@@ -309,6 +329,120 @@ export default DynamoDBTestFunction.make(
           });
         }
 
+        if (request.method === "POST" && pathname === "/create-backup") {
+          const body = (yield* request.json) as unknown as { name: string };
+          const result = yield* createBackup({ BackupName: body.name });
+          return yield* HttpServerResponse.json({
+            backupArn: result.BackupDetails?.BackupArn,
+            status: result.BackupDetails?.BackupStatus,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/describe-backup") {
+          const arn = url.searchParams.get("arn");
+          if (!arn) {
+            return HttpServerResponse.text("Missing arn", { status: 400 });
+          }
+          const result = yield* describeBackup({ BackupArn: arn });
+          return yield* HttpServerResponse.json({
+            status: result.BackupDescription?.BackupDetails?.BackupStatus,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/list-backups") {
+          const result = yield* listBackups();
+          return yield* HttpServerResponse.json({
+            backupArns: (result.BackupSummaries ?? []).map(
+              (summary) => summary.BackupArn,
+            ),
+          });
+        }
+
+        if (request.method === "DELETE" && pathname === "/delete-backup") {
+          const body = (yield* request.json) as unknown as { arn: string };
+          const result = yield* deleteBackup({ BackupArn: body.arn }).pipe(
+            Effect.map((output) => ({
+              ok: true as const,
+              status: output.BackupDescription?.BackupDetails?.BackupStatus,
+            })),
+            Effect.catch((error) =>
+              Effect.succeed({ ok: false as const, error: error._tag }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (
+          request.method === "GET" &&
+          pathname === "/describe-continuous-backups"
+        ) {
+          const result = yield* describeContinuousBackups();
+          return yield* HttpServerResponse.json({
+            continuousBackupsStatus:
+              result.ContinuousBackupsDescription?.ContinuousBackupsStatus,
+            pitrStatus:
+              result.ContinuousBackupsDescription
+                ?.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/restore-from-backup") {
+          const body = (yield* request.json) as unknown as { arn: string };
+          const result = yield* restoreTableFromBackup({
+            BackupArn: body.arn,
+          }).pipe(
+            Effect.map((output) => ({
+              ok: true as const,
+              status: output.TableDescription?.TableStatus,
+            })),
+            Effect.catch((error) =>
+              Effect.succeed({ ok: false as const, error: error._tag }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (request.method === "POST" && pathname === "/export-table") {
+          const result = yield* exportTableToPointInTime({
+            ExportFormat: "DYNAMODB_JSON",
+          }).pipe(
+            Effect.map((output) => ({
+              ok: true as const,
+              exportArn: output.ExportDescription?.ExportArn,
+            })),
+            Effect.catch((error) =>
+              Effect.succeed({ ok: false as const, error: error._tag }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (request.method === "GET" && pathname === "/list-exports") {
+          const result = yield* listExports();
+          return yield* HttpServerResponse.json({
+            exportArns: (result.ExportSummaries ?? []).map(
+              (summary) => summary.ExportArn,
+            ),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/describe-export") {
+          const arn = url.searchParams.get("arn");
+          if (!arn) {
+            return HttpServerResponse.text("Missing arn", { status: 400 });
+          }
+          const result = yield* describeExport({ ExportArn: arn }).pipe(
+            Effect.map((output) => ({
+              ok: true as const,
+              status: output.ExportDescription?.ExportStatus,
+            })),
+            Effect.catch((error) =>
+              Effect.succeed({ ok: false as const, error: error._tag }),
+            ),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
         if (request.method === "GET" && pathname === "/scan") {
           const result = yield* scan({});
           return yield* HttpServerResponse.json({
@@ -334,6 +468,15 @@ export default DynamoDBTestFunction.make(
         DynamoDB.BatchExecuteStatementHttp,
         DynamoDB.BatchGetItemHttp,
         DynamoDB.BatchWriteItemHttp,
+        DynamoDB.CreateBackupHttp,
+        DynamoDB.DeleteBackupHttp,
+        DynamoDB.DescribeBackupHttp,
+        DynamoDB.DescribeContinuousBackupsHttp,
+        DynamoDB.DescribeExportHttp,
+        DynamoDB.ExportTableToPointInTimeHttp,
+        DynamoDB.ListBackupsHttp,
+        DynamoDB.ListExportsHttp,
+        DynamoDB.RestoreTableFromBackupHttp,
         DynamoDB.DescribeTableHttp,
         DynamoDB.DescribeTimeToLiveHttp,
         DynamoDB.ExecuteStatementHttp,

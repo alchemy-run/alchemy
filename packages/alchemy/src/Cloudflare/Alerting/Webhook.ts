@@ -1,5 +1,6 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 
@@ -211,9 +212,10 @@ export const NotificationWebhookProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
-              schedule: Schedule.exponential("1 second").pipe(
-                Schedule.both(Schedule.recurs(5)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("1 second"),
+                Schedule.recurs(5),
+              ]),
             }),
           );
         if (!created.id) {
@@ -247,9 +249,10 @@ export const NotificationWebhookProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
-              schedule: Schedule.exponential("1 second").pipe(
-                Schedule.both(Schedule.recurs(5)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("1 second"),
+                Schedule.recurs(5),
+              ]),
             }),
           );
         const fresh = yield* observeWebhook(accountId, observed.id);
@@ -320,13 +323,11 @@ const observeWebhook = (accountId: string, webhookId: string) =>
   );
 
 const findWebhookByName = (accountId: string, name: string) =>
-  alerting.listDestinationWebhooks({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((w) => w.name === name)
-        .map(narrowWebhook)
-        .find((w) => w !== undefined),
-    ),
+  alerting.listDestinationWebhooks.items({ accountId }).pipe(
+    Stream.filter((w) => w.name === name && w.id != null),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((w) => (w === undefined ? undefined : narrowWebhook(w))),
   );
 
 const toWebhookAttributes = (

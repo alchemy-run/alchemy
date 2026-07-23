@@ -1,4 +1,5 @@
 import * as iam from "@distilled.cloud/aws/iam";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -6,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import { toRedactedString } from "./common.ts";
 
 export interface ServiceSpecificCredentialProps {
@@ -18,9 +20,11 @@ export interface ServiceSpecificCredentialProps {
    */
   serviceName: string;
   /**
-   * Optional credential age in days.
+   * Optional credential validity duration, e.g. `"30 days"` or
+   * `Duration.days(30)`. Sent to IAM as whole days (a bare number is
+   * milliseconds). Changing it replaces the credential.
    */
-  credentialAgeDays?: number;
+  credentialAge?: Duration.Input;
   /**
    * Desired credential status.
    * @default "Active"
@@ -32,15 +36,25 @@ export interface ServiceSpecificCredential extends Resource<
   "AWS.IAM.ServiceSpecificCredential",
   ServiceSpecificCredentialProps,
   {
+    /** The IAM user the credential belongs to. */
     userName: string;
+    /** The AWS service the credential is scoped to (e.g. `codecommit.amazonaws.com`). */
     serviceName: string;
+    /** The unique ID of the credential. */
     serviceSpecificCredentialId: string;
+    /** Whether the credential is `Active` or `Inactive`. */
     status: iam.StatusType;
+    /** When the credential was created. */
     createDate: Date | undefined;
+    /** When the credential expires, if an age was configured. */
     expirationDate: Date | undefined;
+    /** The generated service-specific user name. */
     serviceUserName: string | undefined;
+    /** The generated credential alias, if the service issues one. */
     serviceCredentialAlias: string | undefined;
+    /** The generated password. AWS only returns it at creation; later reads preserve the originally stored redacted value. */
     servicePassword: Redacted.Redacted<string> | undefined;
+    /** The generated secret. AWS only returns it at creation; later reads preserve the originally stored redacted value. */
     serviceCredentialSecret: Redacted.Redacted<string> | undefined;
   },
   never,
@@ -118,7 +132,7 @@ export const ServiceSpecificCredentialProvider = () =>
       if (
         olds.userName !== news.userName ||
         olds.serviceName !== news.serviceName ||
-        olds.credentialAgeDays !== news.credentialAgeDays
+        toWireDays(olds.credentialAge) !== toWireDays(news.credentialAge)
       ) {
         return { action: "replace" } as const;
       }
@@ -201,7 +215,7 @@ export const ServiceSpecificCredentialProvider = () =>
         const created = yield* iam.createServiceSpecificCredential({
           UserName: news.userName,
           ServiceName: news.serviceName,
-          CredentialAgeDays: news.credentialAgeDays,
+          CredentialAgeDays: toWireDays(news.credentialAge),
         });
         const credential = created.ServiceSpecificCredential;
         if (!credential?.ServiceSpecificCredentialId) {

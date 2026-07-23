@@ -1,9 +1,13 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Output from "../../Output.ts";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
+import type { Credentials } from "../Credentials.ts";
+import { authorizeWith } from "../HttpClientUtils.ts";
 import type { Zone } from "../Zone/Zone.ts";
 
 /**
@@ -21,7 +25,7 @@ import type { Zone } from "../Zone/Zone.ts";
  */
 export const makeHttpDnsBinding = <Client>(options: {
   permissionGroups: PermissionGroupRef[];
-  makeClient: (token: Token, zoneId: Effect.Effect<string>) => Client;
+  makeClient: (auth: DnsAuth, zoneId: Effect.Effect<string>) => Client;
 }) =>
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
@@ -52,9 +56,27 @@ export const makeHttpDnsBinding = <Client>(options: {
         value: yield* token.value,
       } satisfies Token;
       const zoneId = yield* zone.zoneId;
-      return options.makeClient(bound, zoneId);
+      return options.makeClient(makeDnsAuth(bound), zoneId);
     });
   });
+
+/**
+ * Injectable auth for the DNS HTTP client builders. Both the scoped-token
+ * (`*Http`) and current-credentials (`*Local`) variants supply an `authorize`
+ * that provides `Credentials` + `HttpClient` to a raw SDK op, so the client
+ * builders are agnostic to how creds are obtained. DNS record ops are
+ * zone-scoped (the `zoneId` is passed alongside), so no `accountId` is needed.
+ */
+export interface DnsAuth {
+  authorize: <A, E>(
+    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ) => Effect.Effect<A, E, RuntimeContext>;
+}
+
+/** Build a scoped-token {@link DnsAuth} from a bound {@link Token}. */
+export const makeDnsAuth = (token: Token): DnsAuth => ({
+  authorize: authorizeWith(token),
+});
 
 /**
  * Runtime accessor for a DNS binding's token, obtained by binding the

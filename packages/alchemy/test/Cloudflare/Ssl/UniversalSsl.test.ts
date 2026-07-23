@@ -2,14 +2,12 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as ssl from "@distilled.cloud/cloudflare/ssl";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { describe } from "vitest";
-
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -65,8 +63,17 @@ const setBaseline = (zoneId: string, enabled: boolean) =>
     }),
   );
 
+// Toggling Universal SSL off DELETES the standing zone's universal edge
+// certificate; Cloudflare re-issues it minutes later on re-enable — and
+// sometimes not at all (`enabled: true` with zero certificate packs), which
+// breaks every TLS-dependent test on the shared zone (worker routes, R2
+// domains, Hyperdrive origins) until someone re-orders the cert by toggling
+// the setting off→on. The toggle lifecycle is therefore opt-in; the
+// read-only `list` test below always runs.
+const destructive = !!process.env.CLOUDFLARE_TEST_UNIVERSAL_SSL;
+
 describe.sequential("UniversalSsl", () => {
-  test.provider(
+  test.provider.skipIf(!destructive)(
     "disables Universal SSL and restores the original value on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -102,7 +109,7 @@ describe.sequential("UniversalSsl", () => {
     { timeout: 180_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(!destructive)(
     "updates enabled in place and keeps the captured initial value",
     (stack) =>
       Effect.gen(function* () {
@@ -148,7 +155,7 @@ describe.sequential("UniversalSsl", () => {
     { timeout: 180_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(!destructive)(
     "destroy restores a disabled baseline when managing from a disabled zone",
     (stack) =>
       Effect.gen(function* () {

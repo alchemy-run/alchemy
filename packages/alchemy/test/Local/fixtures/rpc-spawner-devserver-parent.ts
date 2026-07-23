@@ -57,6 +57,7 @@ const program = Effect.gen(function* () {
 
   yield* provider.reconcile({
     id: "Dev",
+    fqn: "Dev",
     instanceId: "Dev",
     news: {
       command,

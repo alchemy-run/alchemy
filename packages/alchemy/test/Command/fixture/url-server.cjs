@@ -6,13 +6,13 @@
 // `URL_STREAM` -> "stdout" (default) or "stderr".
 // `URL_DELAY_MS` -> how long to wait before printing (default 0). Lets the
 //   test exercise extraction that happens after reconcile starts awaiting.
+// `URL_LINE_2` / `URL_STREAM_2` / `URL_DELAY_2_MS` -> an optional second line
+//   printed independently. Lets a test print an unrelated URL first and the
+//   real dev-server URL later (issue #695).
 const fs = require("node:fs");
 
 const pidFile = process.env.PID_FILE;
 const marker = process.env.MARKER ?? "default";
-const urlLine = process.env.URL_LINE;
-const urlStream = process.env.URL_STREAM === "stderr" ? "stderr" : "stdout";
-const urlDelayMs = Number(process.env.URL_DELAY_MS ?? 0);
 
 if (!pidFile) {
   console.error("url-server.cjs: PID_FILE env var is required");
@@ -21,10 +21,16 @@ if (!pidFile) {
 
 fs.writeFileSync(pidFile, JSON.stringify({ pid: process.pid, marker }));
 
-if (urlLine) {
+const printLine = (line, streamEnv, delayEnv) => {
+  if (!line) return;
+  const stream = process.env[streamEnv] === "stderr" ? "stderr" : "stdout";
+  const delayMs = Number(process.env[delayEnv] ?? 0);
   setTimeout(() => {
-    process[urlStream].write(`${urlLine}\n`);
-  }, urlDelayMs);
-}
+    process[stream].write(`${line}\n`);
+  }, delayMs);
+};
+
+printLine(process.env.URL_LINE, "URL_STREAM", "URL_DELAY_MS");
+printLine(process.env.URL_LINE_2, "URL_STREAM_2", "URL_DELAY_2_MS");
 
 setInterval(() => {}, 60_000);

@@ -37,5 +37,10 @@ export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDb;
   return yield* Cloudflare.Hyperdrive.Connection("DrizzleWorkflowEdge", {
     origin: branch.origin,
+    // The tests assert read-after-write (insert in one event/step, select in
+    // another). Hyperdrive's default SELECT caching (~60s TTL) can serve a
+    // pre-insert empty result — and keep serving it across retries — so
+    // caching is disabled for correctness assertions.
+    caching: { disabled: true },
   });
 });

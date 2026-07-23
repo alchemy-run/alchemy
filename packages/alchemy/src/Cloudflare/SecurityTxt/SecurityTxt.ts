@@ -150,7 +150,9 @@ export type SecurityTxt = Resource<TypeId, Props, Attributes, never, Providers>;
  *
  * @see https://developers.cloudflare.com/security-center/infrastructure/security-file/
  */
-export const SecurityTxt = Resource<SecurityTxt>(TypeId);
+export const SecurityTxt = Resource<SecurityTxt>(TypeId, {
+  aliases: ["Cloudflare.SecurityTxt"],
+});
 
 /**
  * Returns true if the given value is a SecurityTxt resource.

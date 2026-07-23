@@ -1,23 +1,22 @@
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
-import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
+import { listSqlFiles, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { Credentials } from "../Credentials.ts";
 import type { Providers } from "../Providers.ts";
 import { applyMigrations } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
 
 export const isDatabase = (value: unknown): value is Database =>
-  typeof value === "object" && (value as any)?.Type === "Cloudflare.D1Database";
+  isResourceOfType(value, "Cloudflare.D1Database");
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
 export type PrimaryLocationHint =
@@ -258,10 +257,12 @@ export const DatabaseProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createDatabaseName(id, news.name);
-      const oldName = output?.databaseName
-        ? output.databaseName
-        : yield* createDatabaseName(id, olds.name);
+      const oldName =
+        output?.databaseName ?? (yield* createDatabaseName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       const oldJurisdiction =
         output?.jurisdiction ?? olds.jurisdiction ?? "default";
       if (
@@ -367,8 +368,11 @@ export const DatabaseProvider = () =>
           );
       }
       const name = yield* createDatabaseName(id, olds?.name);
-      const dbs = yield* d1.listDatabases({ accountId, name });
-      const match = dbs.result.find((db) => db.name === name);
+      const match = yield* d1.listDatabases.items({ accountId, name }).pipe(
+        Stream.filter((db) => db.name === name),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
       if (match) {
         return {
           databaseId: match.uuid!,
@@ -415,8 +419,13 @@ export const DatabaseProvider = () =>
           );
       }
       if (!observed) {
-        const dbs = yield* d1.listDatabases({ accountId: acct, name });
-        observed = dbs.result.find((db) => db.name === name);
+        observed = yield* d1.listDatabases
+          .items({ accountId: acct, name })
+          .pipe(
+            Stream.filter((db) => db.name === name),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -436,11 +445,13 @@ export const DatabaseProvider = () =>
           .pipe(
             Effect.catchTag("InvalidProperty", () =>
               Effect.gen(function* () {
-                const dbs = yield* d1.listDatabases({
-                  accountId: acct,
-                  name,
-                });
-                const match = dbs.result.find((db) => db.name === name);
+                const match = yield* d1.listDatabases
+                  .items({ accountId: acct, name })
+                  .pipe(
+                    Stream.filter((db) => db.name === name),
+                    Stream.runHead,
+                    Effect.map(Option.getOrUndefined),
+                  );
                 if (match) {
                   return match;
                 }
@@ -480,11 +491,7 @@ export const DatabaseProvider = () =>
       // Clone is a one-shot seed performed only on first creation.
       // Re-running it on an existing database would clobber data.
       if (isFirstCreation && news.clone) {
-        const sourceId = yield* resolveCloneSource(
-          news.clone,
-          acct,
-          d1.listDatabases,
-        );
+        const sourceId = yield* resolveCloneSource(news.clone, acct);
         yield* cloneDatabase({
           accountId: acct,
           sourceDatabaseId: sourceId,
@@ -556,18 +563,7 @@ const rootDir = Effect.sync(() => process.cwd());
  * Resolve a clone source spec into a concrete database UUID. Looks up by
  * name through `listDatabases` when only a name is provided.
  */
-const resolveCloneSource = (
-  source: CloneSource,
-  accountId: string,
-  listDbs: (input: {
-    accountId: string;
-    name?: string;
-  }) => Effect.Effect<
-    d1.ListDatabasesResponse,
-    d1.ListDatabasesError,
-    Credentials | HttpClient
-  >,
-) =>
+const resolveCloneSource = (source: CloneSource, accountId: string) =>
   Effect.gen(function* () {
     if ("databaseId" in source && source.databaseId) {
       // At lifecycle time, Output<string> attributes have resolved to strings.
@@ -575,8 +571,11 @@ const resolveCloneSource = (
     }
     if ("name" in source && source.name) {
       const name = source.name as unknown as string;
-      const dbs = yield* listDbs({ accountId, name });
-      const match = dbs.result.find((db) => db.name === name);
+      const match = yield* d1.listDatabases.items({ accountId, name }).pipe(
+        Stream.filter((db) => db.name === name),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
       if (!match?.uuid) {
         return yield* Effect.die(
           `Source database "${name}" not found for cloning`,

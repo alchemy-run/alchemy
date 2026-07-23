@@ -35,14 +35,18 @@ export interface OpenIDConnectProvider extends Resource<
   "AWS.IAM.OpenIDConnectProvider",
   OpenIDConnectProviderProps,
   {
+    /** The ARN of the OIDC provider. */
     openIDConnectProviderArn: string;
+    /** The URL of the identity provider. */
     url: string;
+    /** The client IDs (audiences) registered with the provider. */
     clientIDList: string[];
     /**
      * Reflects the desired state — `undefined` when the user opted out of
      * managing thumbprints (AWS auto-manages them for well-known IdPs).
      */
     thumbprintList: string[] | undefined;
+    /** The tags applied to the provider. */
     tags: Record<string, string>;
   },
   never,
@@ -147,7 +151,15 @@ export const OpenIDConnectProviderProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           const providerArn =
             output?.openIDConnectProviderArn ??
-            (yield* oidcArnFromUrl(olds.url));
+            (olds?.url !== undefined
+              ? yield* oidcArnFromUrl(olds.url)
+              : undefined);
+          if (providerArn === undefined) {
+            // An Output-valued `url` doesn't survive a `creating`-state
+            // round-trip (it deserializes as `undefined`) — report "not
+            // found" so the engine re-drives the create.
+            return undefined;
+          }
           const provider = yield* readProvider(providerArn);
           if (!provider?.Url) {
             return undefined;

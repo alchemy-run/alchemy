@@ -20,9 +20,8 @@ import {
   type StoredDeploymentRecord,
 } from "@/State/Deployment.ts";
 import * as Core from "@/Test/Core.ts";
-import { describe, expect, it } from "@effect/vitest";
+import { beforeAll, describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { beforeAll } from "vitest";
 import { deploymentStoreConformance } from "../../State/deploymentStoreConformance.ts";
 
 // ---------------------------------------------------------------------------

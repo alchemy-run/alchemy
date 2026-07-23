@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -86,9 +86,10 @@ const untilOk = <E, R>(
     ),
     Effect.retry({
       while: (e): e is NotReady => e instanceof NotReady,
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(30),
+      ]),
     }),
   );
 

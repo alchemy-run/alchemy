@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -302,10 +302,7 @@ const nullIfZero = (value: number | null | undefined): number | null =>
   value == null || value === 0 ? null : value;
 
 export const isAiGateway = (value: unknown): value is Gateway =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  (value as Gateway).Type === "Cloudflare.AI.Gateway";
+  isResourceOfType(value, "Cloudflare.AI.Gateway");
 
 /**
  * A Cloudflare.AI. Gateway for observability, caching, rate limiting, and
@@ -470,7 +467,9 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * });
  * ```
  */
-export const Gateway = Resource<Gateway>("Cloudflare.AI.Gateway");
+export const Gateway = Resource<Gateway>("Cloudflare.AI.Gateway", {
+  aliases: ["Cloudflare.AiGateway"],
+});
 
 export const GatewayResourceProvider = () =>
   Provider.succeed(Gateway, {
@@ -482,9 +481,13 @@ export const GatewayResourceProvider = () =>
       const next = yield* desired(id, news);
       const oldGatewayId =
         output?.gatewayId ?? (yield* createGatewayId(id, olds.id));
+      // Auto-generated ids are engine-owned: the deployed id stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided id can force a replace.
+      const newGatewayId = news.id ?? oldGatewayId;
       if (
         (output?.accountId ?? accountId) !== accountId ||
-        oldGatewayId !== next.gatewayId
+        oldGatewayId !== newGatewayId
       ) {
         return { action: "replace" } as const;
       }
@@ -520,7 +523,9 @@ export const GatewayResourceProvider = () =>
       // idempotency: a peer reconciler may have created it concurrently,
       // or state persistence may have failed after a previous create.
       if (observed === undefined) {
-        const request = yield* createRequest(id, news);
+        // Prefer the deployed id: regenerating would target a different
+        // resource if the generator's output for this id ever drifts.
+        const request = { ...(yield* createRequest(id, news)), id: gatewayId };
         yield* aiGateway
           .createAiGateway(request)
           .pipe(
@@ -533,7 +538,12 @@ export const GatewayResourceProvider = () =>
       // Sync — the Cloudflare.AI. Gateway update API is a full PATCH that
       // overwrites all mutable fields. We always apply the desired shape
       // so adoption, drift, and routine updates all converge.
-      const update = yield* updateRequest(id, news, acct);
+      // Prefer the deployed id: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const update = {
+        ...(yield* updateRequest(id, news, acct)),
+        id: gatewayId,
+      };
       const gateway = yield* aiGateway.updateAiGateway(update);
       return mapGateway(gateway, acct);
     }),

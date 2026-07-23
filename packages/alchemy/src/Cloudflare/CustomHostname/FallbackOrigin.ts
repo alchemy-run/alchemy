@@ -78,6 +78,7 @@ export type FallbackOrigin = Resource<
  */
 export const FallbackOrigin = Resource<FallbackOrigin>(
   "Cloudflare.CustomHostname.FallbackOrigin",
+  { aliases: ["Cloudflare.FallbackOrigin"] },
 );
 
 export const isFallbackOrigin = (value: unknown): value is FallbackOrigin =>

@@ -1,5 +1,5 @@
 import { proxyChain } from "@/Util/proxy-chain.ts";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const TIMEOUT = 5_000;
@@ -109,6 +109,26 @@ describe("proxyChain", () => {
         .boom()
         .pipe(Effect.catch((e) => Effect.succeed(`recovered:${e}`)));
       expect(result).toBe("recovered:nope");
+    }),
+  );
+
+  it.effect("is recognized by predicate-dispatched Effect operators", () =>
+    Effect.gen(function* () {
+      const api = proxyChain(
+        Effect.succeed({
+          transaction: () => Effect.fail({ _tag: "TestError" } as const),
+        }),
+      );
+
+      const transaction = api.transaction();
+
+      expect(Effect.isEffect(transaction)).toBe(true);
+
+      const result = yield* transaction.pipe(
+        Effect.catchTag("TestError", () => Effect.succeed("recovered")),
+      );
+
+      expect(result).toBe("recovered");
     }),
   );
 

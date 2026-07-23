@@ -50,7 +50,9 @@ export interface Permission extends Resource<
   "AWS.EventBridge.Permission",
   PermissionProps,
   {
+    /** The statement ID identifying the permission on the bus policy. */
     statementId: string;
+    /** The name of the event bus the permission is attached to. */
     eventBusName: string;
   },
   never,

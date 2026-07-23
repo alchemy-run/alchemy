@@ -1,6 +1,8 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -19,18 +21,19 @@ export interface CachePolicyProps {
    */
   comment?: string;
   /**
-   * Minimum amount of time, in seconds, that objects stay in the cache.
+   * Minimum amount of time that objects stay in the cache (e.g.
+   * `"1 minute"` or `Duration.minutes(1)`; a bare number is milliseconds).
    */
-  minTTL: number;
+  minTTL: Duration.Input;
   /**
-   * Default amount of time, in seconds, that objects stay in the cache when
-   * the origin does not send `Cache-Control` or `Expires` headers.
+   * Default amount of time that objects stay in the cache when the origin
+   * does not send `Cache-Control` or `Expires` headers (e.g. `"1 hour"`).
    */
-  defaultTTL?: number;
+  defaultTTL?: Duration.Input;
   /**
-   * Maximum amount of time, in seconds, that objects stay in the cache.
+   * Maximum amount of time that objects stay in the cache (e.g. `"1 day"`).
    */
-  maxTTL?: number;
+  maxTTL?: Duration.Input;
   /**
    * Controls which request values become part of the cache key and which
    * additional headers/cookies/query strings CloudFront forwards to the origin.
@@ -99,8 +102,8 @@ export interface CachePolicy extends Resource<
  * const cachePolicy = yield* CachePolicy("ApiCachePolicy", {
  *   comment: "Cache GETs by query string + Authorization",
  *   minTTL: 0,
- *   defaultTTL: 60,
- *   maxTTL: 3600,
+ *   defaultTTL: "1 minute",
+ *   maxTTL: "1 hour",
  *   parametersInCacheKeyAndForwardedToOrigin: {
  *     EnableAcceptEncodingGzip: true,
  *     EnableAcceptEncodingBrotli: true,
@@ -151,9 +154,9 @@ export const CachePolicyProvider = () =>
       ): cloudfront.CachePolicyConfig => ({
         Name: name,
         Comment: props.comment,
-        MinTTL: props.minTTL,
-        DefaultTTL: props.defaultTTL,
-        MaxTTL: props.maxTTL,
+        MinTTL: toWireSeconds(props.minTTL)!,
+        DefaultTTL: toWireSeconds(props.defaultTTL),
+        MaxTTL: toWireSeconds(props.maxTTL),
         ParametersInCacheKeyAndForwardedToOrigin:
           props.parametersInCacheKeyAndForwardedToOrigin,
       });

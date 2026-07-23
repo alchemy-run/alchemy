@@ -1,10 +1,10 @@
 import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2";
 import { Listener, ListenerRule, LoadBalancer, TargetGroup } from "@/AWS/ELBv2";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { getDefaultVpc } from "../DefaultVpc.ts";
@@ -45,12 +45,15 @@ test.provider(
           Effect.gen(function* () {
             const subnet1 = yield* Subnet("RSubnet1", {
               vpcId: defaultVpc.vpcId,
-              cidrBlock: defaultVpc.subnetCidrBlock(226),
+              // ListenerActions runs in another file and owns 226/227.
+              // Keep a distinct deterministic pair so file concurrency
+              // cannot turn subnet CIDR conflicts into whole-test retries.
+              cidrBlock: defaultVpc.subnetCidrBlock(228),
               availabilityZone: az1,
             });
             const subnet2 = yield* Subnet("RSubnet2", {
               vpcId: defaultVpc.vpcId,
-              cidrBlock: defaultVpc.subnetCidrBlock(227),
+              cidrBlock: defaultVpc.subnetCidrBlock(229),
               availabilityZone: az2,
             });
             const lb = yield* LoadBalancer("RLb", {

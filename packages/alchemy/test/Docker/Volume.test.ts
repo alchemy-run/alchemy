@@ -2,10 +2,9 @@ import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { describe } from "vitest";
 import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
@@ -18,6 +17,7 @@ test.provider("diff replaces a volume when labels change", () =>
     const volumeProvider = yield* Provider.findProvider(Docker.Volume);
     const volumeDiff = yield* volumeProvider.diff!({
       id: "data",
+      fqn: "data",
       instanceId: "instance",
       olds: { name: "data", labels: { usage: "old" } },
       news: { name: "data", labels: { usage: "new" } },

@@ -1,6 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeHttpKVNamespaceBinding, type HttpToken } from "./NamespaceHttp.ts";
+import {
+  makeHttpKVNamespaceBinding,
+  makeKVAuth,
+  type KVAuth,
+} from "./NamespaceHttp.ts";
 import { makeReadKVHttpClient } from "./ReadNamespaceHttp.ts";
 import {
   ReadWriteNamespace,
@@ -19,17 +23,18 @@ export const ReadWriteNamespaceHttp = Layer.effect(
   Effect.suspend(() =>
     makeHttpKVNamespaceBinding({
       permissionGroups: ["Workers KV Storage Read", "Workers KV Storage Write"],
-      makeClient: makeReadWriteKVHttpClient,
+      makeClient: (token, namespaceId) =>
+        makeReadWriteKVHttpClient(makeKVAuth(token), namespaceId),
     }),
   ),
 );
 
-/** Build the HTTP-backed read-write client over a bound token + namespace. */
+/** Build the HTTP-backed read-write client over an auth + namespace. */
 export const makeReadWriteKVHttpClient = (
-  token: HttpToken,
+  auth: KVAuth,
   namespaceId: Effect.Effect<string>,
 ): ReadWriteNamespaceClient =>
   ({
-    ...makeReadKVHttpClient(token, namespaceId),
-    ...makeWriteKVHttpClient(token, namespaceId),
+    ...makeReadKVHttpClient(auth, namespaceId),
+    ...makeWriteKVHttpClient(auth, namespaceId),
   }) as ReadWriteNamespaceClient;

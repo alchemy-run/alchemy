@@ -1,6 +1,13 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+
+/** Internal: the ALB is still visible after `deleteLoadBalancer`. */
+class LoadBalancerStillDeleting extends Data.TaggedError(
+  "LoadBalancerStillDeleting",
+)<{}> {}
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -74,15 +81,25 @@ export interface LoadBalancer extends Resource<
   "AWS.ELBv2.LoadBalancer",
   LoadBalancerProps,
   {
+    /** The ARN of the load balancer. */
     loadBalancerArn: LoadBalancerArn;
+    /** The name of the load balancer. */
     loadBalancerName: LoadBalancerName;
+    /** The public DNS name of the load balancer. */
     dnsName: string;
+    /** The Route 53 hosted zone ID for alias records targeting the load balancer. */
     canonicalHostedZoneId: string;
+    /** The ID of the VPC the load balancer resides in. */
     vpcId: string;
+    /** Whether the load balancer is `internet-facing` or `internal`. */
     scheme: string;
+    /** The load balancer type (`application`, `network`, or `gateway`). */
     type: string;
+    /** The IDs of the security groups attached to the load balancer. */
     securityGroups: string[];
+    /** The IDs of the subnets the load balancer spans. */
     subnets: string[];
+    /** The tags applied to the load balancer. */
     tags: Record<string, string>;
   },
   never,
@@ -459,6 +476,35 @@ export const LoadBalancerProvider = () =>
                 "LoadBalancerNotFoundException",
                 () => Effect.void,
               ),
+            );
+
+          // `deleteLoadBalancer` returns immediately, but the ALB's ENIs
+          // linger for a minute or two afterwards and block deletion of any
+          // subnet or security group they occupy. Wait until the balancer is
+          // fully gone so downstream network resources tear down on the first
+          // attempt instead of spinning on dependency-violation retries.
+          yield* elbv2
+            .describeLoadBalancers({
+              LoadBalancerArns: [output.loadBalancerArn],
+            })
+            .pipe(
+              Effect.flatMap(() =>
+                Effect.fail(new LoadBalancerStillDeleting()),
+              ),
+              Effect.catchTag(
+                "LoadBalancerNotFoundException",
+                () => Effect.void,
+              ),
+              Effect.retry({
+                while: (e) => e._tag === "LoadBalancerStillDeleting",
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(48),
+                ]),
+              }),
+              // Best-effort: if it is somehow still visible after ~4 min, let
+              // the downstream deletes retry rather than fail the teardown.
+              Effect.catchTag("LoadBalancerStillDeleting", () => Effect.void),
             );
         }),
       };

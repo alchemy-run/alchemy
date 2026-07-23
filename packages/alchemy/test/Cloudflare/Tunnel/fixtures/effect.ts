@@ -26,6 +26,21 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
     const write = yield* Cloudflare.Tunnel.WriteTunnel();
     const tunnels = yield* Cloudflare.Tunnel.ReadWriteTunnel();
 
+    // Tests use deterministic tunnel names, and Cloudflare rejects duplicate
+    // names — delete any leftover tunnel from a previously crashed run so
+    // create always succeeds.
+    const purge = Effect.fn(function* (...names: string[]) {
+      for (const name of names) {
+        const list = yield* tunnels
+          .list({ name, isDeleted: false })
+          .pipe(Effect.orDie);
+        yield* Effect.forEach(
+          (list.result ?? []).filter((t) => t.name === name && t.id),
+          (t) => tunnels.delete(t.id!).pipe(Effect.orDie),
+        );
+      }
+    });
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -42,6 +57,7 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
 
         // Write: create then delete with the write-scoped token.
         if (url.pathname === "/write") {
+          yield* purge(name);
           const tunnel = yield* write
             .create({ name, configSrc: "cloudflare" })
             .pipe(Effect.orDie);
@@ -52,8 +68,11 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
           });
         }
 
-        // Read + write: drive the full CRUD surface end to end.
+        // Read + write: drive the full CRUD surface end to end. Purge the
+        // renamed variant too — a crash after the rename step would
+        // otherwise leak it forever.
         if (url.pathname === "/readwrite") {
+          yield* purge(name, `${name}-renamed`);
           const created = yield* tunnels
             .create({ name, configSrc: "cloudflare" })
             .pipe(Effect.orDie);

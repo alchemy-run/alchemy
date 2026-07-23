@@ -170,7 +170,9 @@ export type Domain = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
  */
-export const Domain = Resource<Domain>(EmailSecurityDomainTypeId);
+export const Domain = Resource<Domain>(EmailSecurityDomainTypeId, {
+  aliases: ["Cloudflare.EmailSecurity.Domain"],
+});
 
 /**
  * Returns true if the given value is an Domain resource.

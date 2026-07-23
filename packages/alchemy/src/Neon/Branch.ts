@@ -16,7 +16,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { listSqlFiles, readSqlFile } from "../Sql/SqlFile.ts";
+import { listSqlFiles, readSqlFile } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
@@ -204,13 +204,20 @@ export const BranchProvider = () =>
       // planning engine resolves `news.project` to a plain object carrying that stable id (even when the project is being
       // updated in place). An unchanged project therefore resolves to the same string; a changed/replaced project resolves
       // to either a different string or an unresolved output, so `oldProjectId !== newProjectId` evaluates correctly.
+      // An Output-valued `project` doesn't survive a `creating`-state
+      // round-trip (it deserializes as `undefined`) — when the old project is
+      // unknown, fall through to the create/update recovery path rather than
+      // force a replacement.
       const oldProjectId =
-        output?.projectId ?? resolveProjectId(olds.project as BranchSource);
+        output?.projectId ??
+        (olds.project !== undefined
+          ? maybeResolveProjectId(olds.project as BranchSource)
+          : undefined);
       const newProjectId =
         "project" in news
           ? maybeResolveProjectId(news.project as BranchSource)
           : undefined;
-      if (oldProjectId !== newProjectId) {
+      if (oldProjectId !== undefined && oldProjectId !== newProjectId) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;
@@ -232,10 +239,12 @@ export const BranchProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      const newName = yield* createBranchName(id, news.name);
-      const oldName = output?.branchName
-        ? output.branchName
-        : yield* createBranchName(id, olds.name);
+      const oldName =
+        output?.branchName ?? (yield* createBranchName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const newName = news.name ?? oldName;
       if (
         newName !== oldName ||
         (news.protected ?? false) !== (output?.protected ?? false) ||
@@ -283,7 +292,12 @@ export const BranchProvider = () =>
         );
       }
       if (!olds?.project) return undefined;
-      const projectId = resolveProjectId(olds.project as BranchSource);
+      const projectId = maybeResolveProjectId(olds.project as BranchSource);
+      if (projectId === undefined) {
+        // The project reference survived as an object but its Output-valued
+        // `projectId` did not — there is nothing to look the branch up in.
+        return undefined;
+      }
       const name = yield* createBranchName(id, olds.name);
       const matches = yield* findBranchByName(projectId, name);
       const match = matches[0];
@@ -327,7 +341,13 @@ export const BranchProvider = () =>
       };
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const newName = yield* createBranchName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts. An
+      // explicit `news.name` still renames the branch in place.
+      const newName =
+        news.name ??
+        output?.branchName ??
+        (yield* createBranchName(id, news.name));
 
       // Ensure — when no prior output exists we create the branch;
       // otherwise sync the mutable scalar fields on the existing

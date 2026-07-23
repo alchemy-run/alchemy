@@ -40,11 +40,17 @@ export interface AccountAssignment extends Resource<
   "AWS.IdentityCenter.AccountAssignment",
   AccountAssignmentProps,
   {
+    /** The Identity Center instance the assignment lives in. */
     instanceArn: string;
+    /** The permission set provisioned to the target. */
     permissionSetArn: string;
+    /** The user or group ID that was assigned. */
     principalId: string;
+    /** Whether the principal is a `USER` or `GROUP`. */
     principalType: "USER" | "GROUP";
+    /** The AWS account ID the assignment targets. */
     targetId: string;
+    /** The target type (`AWS_ACCOUNT`). */
     targetType: "AWS_ACCOUNT";
   },
   never,
@@ -384,9 +390,10 @@ const waitForAssignmentCreation = (instanceArn: string, requestId: string) =>
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "AssignmentCreationInProgress",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(120)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(120),
+      ]),
     }),
   );
 
@@ -418,8 +425,9 @@ const waitForAssignmentDeletion = (instanceArn: string, requestId: string) =>
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "AssignmentDeletionInProgress",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(120)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(120),
+      ]),
     }),
   );

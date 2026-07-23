@@ -1,6 +1,7 @@
 import * as cloudConnector from "@distilled.cloud/cloudflare/cloud-connector";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
@@ -268,15 +269,10 @@ export const RulesProvider = () =>
   });
 
 const listObservedRules = (zoneId: string) =>
-  cloudConnector.listRules({ zoneId }).pipe(
-    // A zone that has never had Cloud Connector rules configured reports
-    // "could not find entrypoint ruleset" (code 10003) — that's just an
-    // empty list.
-    Effect.catchTag("CloudConnectorRulesNotFound", () =>
-      Effect.succeed({ result: [] }),
-    ),
-    Effect.map((response): RuleAttribute[] =>
-      response.result.flatMap((rule) =>
+  cloudConnector.listRules.items({ zoneId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk): RuleAttribute[] =>
+      Array.from(chunk).flatMap((rule) =>
         rule.expression == null ||
         rule.provider == null ||
         rule.parameters?.host == null
@@ -292,6 +288,12 @@ const listObservedRules = (zoneId: string) =>
               },
             ],
       ),
+    ),
+    // A zone that has never had Cloud Connector rules configured reports
+    // "could not find entrypoint ruleset" (code 10003) — that's just an
+    // empty list.
+    Effect.catchTag("CloudConnectorRulesNotFound", () =>
+      Effect.succeed([] as RuleAttribute[]),
     ),
   );
 

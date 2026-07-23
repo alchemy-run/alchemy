@@ -5,13 +5,12 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
 export const isNamespace = (value: unknown): value is Namespace =>
-  typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.KV.Namespace";
+  isResourceOfType(value, "Cloudflare.KV.Namespace");
 
 export type NamespaceProps = {
   /**
@@ -68,7 +67,9 @@ export type Namespace = Resource<
  * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
  * write-only access.
  */
-export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace");
+export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace", {
+  aliases: ["Cloudflare.KVNamespace"],
+});
 
 export const NamespaceProvider = () =>
   Provider.succeed(Namespace, {
@@ -79,8 +80,11 @@ export const NamespaceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const title = yield* createTitle(id, news.title);
       const oldTitle = output?.title ?? (yield* createTitle(id, olds.title));
+      // Auto-generated titles are engine-owned: the deployed title stays
+      // authoritative even if the generator would title this id differently
+      // today. Only an explicit user-provided title can force a rename.
+      const title = news.title ?? oldTitle;
       if (title !== oldTitle) {
         return { action: "update" } as const;
       }

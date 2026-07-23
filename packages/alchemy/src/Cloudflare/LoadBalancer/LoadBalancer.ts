@@ -239,7 +239,9 @@ export type LoadBalancer = Resource<
  *
  * @see https://developers.cloudflare.com/load-balancing/
  */
-export const LoadBalancer = Resource<LoadBalancer>(TypeId);
+export const LoadBalancer = Resource<LoadBalancer>(TypeId, {
+  aliases: ["Cloudflare.LoadBalancer"],
+});
 
 /**
  * Returns true if the given value is a LoadBalancer resource.

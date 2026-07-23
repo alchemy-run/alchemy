@@ -1,9 +1,9 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { State } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -542,10 +542,10 @@ const getResults = Effect.fn(function* <T>(
     ),
     Effect.retry({
       while: (e) => e instanceof EmptyResults,
-      schedule: Schedule.both(
+      schedule: Schedule.max([
         Schedule.spaced(Duration.seconds(1)),
         Schedule.recurs(10),
-      ),
+      ]),
     }),
     Effect.orDie,
   );
@@ -562,19 +562,17 @@ test.provider(
 
       yield* stack.destroy();
 
-      const databaseName = `alchemy-test-d1-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-
-      // Phase 1: deploy normally so a real D1 database exists.
+      // Phase 1: deploy normally so a real D1 database exists. No explicit
+      // `name` — the engine generates a random-suffixed physical name
+      // (collision-free across concurrent runs); the deploy output hands
+      // back the real name, which pins the database's identity for the
+      // adoption phase below.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("AdoptableDatabase", {
-            name: databaseName,
-          });
+          return yield* Cloudflare.D1.Database("AdoptableDatabase");
         }),
       );
-      expect(initial.databaseName).toEqual(databaseName);
+      const databaseName = initial.databaseName;
       const initialId = initial.databaseId;
 
       // Phase 2: wipe local state — the database stays on Cloudflare.

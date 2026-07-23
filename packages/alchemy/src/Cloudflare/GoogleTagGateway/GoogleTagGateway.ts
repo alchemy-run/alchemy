@@ -129,7 +129,9 @@ export type GoogleTagGateway = Resource<
  *
  * @see https://developers.cloudflare.com/google-tag-gateway/
  */
-export const GoogleTagGateway = Resource<GoogleTagGateway>(TypeId);
+export const GoogleTagGateway = Resource<GoogleTagGateway>(TypeId, {
+  aliases: ["Cloudflare.GoogleTagGateway"],
+});
 
 /**
  * Returns true if the given value is a GoogleTagGateway resource.
@@ -187,7 +189,10 @@ export const GoogleTagGatewayProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId =
-        output?.zoneId ?? (olds ? yield* resolve(olds.zone) : undefined);
+        // `olds.zone` may be `undefined` when a `creating` row was persisted
+        // before upstream Outputs resolved — report "not found" then.
+        output?.zoneId ??
+        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       const observed = yield* googleTagGateway.getConfig({ zoneId }).pipe(
         // Zone deleted out-of-band — the config is gone with it.

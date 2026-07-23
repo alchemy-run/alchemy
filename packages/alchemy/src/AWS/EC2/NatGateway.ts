@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
@@ -302,13 +303,10 @@ export const NatGatewayProvider = () =>
       // Find NAT Gateway by alchemy tags when we don't have the ID
       const findNatGatewayByTags = Effect.fn(function* (id: string) {
         const filters = yield* createAlchemyTagFilters(id);
-        const result = yield* ec2.describeNatGateways({ Filter: filters });
-
         // Find a NAT Gateway that's not deleted and has matching tags
-        for (const gw of result.NatGateways ?? []) {
-          return gw;
-        }
-        return undefined;
+        return yield* ec2.describeNatGateways
+          .items({ Filter: filters })
+          .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
       });
 
       return {
@@ -533,11 +531,10 @@ const waitForNatGatewayAvailable = (
     Effect.tapError(Effect.logDebug),
     Effect.retry({
       while: (e) => e._tag === "NatGatewayPending",
-      schedule: Schedule.fixed(5000).pipe(
-        Schedule.both(Schedule.recurs(60)), // Max 5 minutes
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
+        Schedule.tap(({ attempt }) =>
           session.note(
-            `Waiting for NAT Gateway to be available... (${(attempt + 1) * 5}s)`,
+            `Waiting for NAT Gateway to be available... (${attempt * 5}s)`,
           ),
         ),
       ),
@@ -580,12 +577,9 @@ const waitForNatGatewayDeleted = (
     Effect.tapError(Effect.logDebug),
     Effect.retry({
       while: (e) => e._tag === "NatGatewayDeleting",
-      schedule: Schedule.fixed(5000).pipe(
-        Schedule.both(Schedule.recurs(60)), // Max 5 minutes
-        Schedule.tapOutput(([, attempt]) =>
-          session.note(
-            `Waiting for NAT Gateway deletion... (${(attempt + 1) * 5}s)`,
-          ),
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for NAT Gateway deletion... (${attempt * 5}s)`),
         ),
       ),
     }),

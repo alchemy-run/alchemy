@@ -36,8 +36,8 @@ import {
 import type { ApplyEvent } from "@/Cli/Event.ts";
 import { State } from "@/State";
 import type { ResourceState } from "@/State/ResourceState.ts";
-import * as Test from "@/Test/Vitest";
-import { describe, expect, it } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { TestLayers, TestResource } from "../test.resources.ts";
 

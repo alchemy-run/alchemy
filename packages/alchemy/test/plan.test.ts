@@ -4,6 +4,7 @@ import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
+import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
@@ -15,8 +16,8 @@ import {
   type ResourceState,
   type ResourceStatus,
 } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -25,6 +26,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import {
+  AliasedWidget,
+  aliasedWidgetProvider,
   ArtifactProbe,
   BindingTarget,
   Bucket,
@@ -1076,11 +1079,12 @@ describe("duplicate bindings are collapsed by sid before diff", () => {
         { sid: "Shared", data: { env: { K: "last" } } },
       ]);
 
-      // The duplicated sid retains its first-seen position but takes the
-      // last value (matching `diffBindings`' `Map`-based collapse).
+      // The duplicated sid takes the last value (matching `diffBindings`'
+      // `Map`-based collapse) and the result is sid-sorted so binding rows
+      // are deterministic regardless of registration order.
       expect(deduped).toEqual([
-        { sid: "Shared", data: { env: { K: "last" } } },
         { sid: "Other", data: { env: { K: "x" } } },
+        { sid: "Shared", data: { env: { K: "last" } } },
       ]);
     }),
   );
@@ -2888,14 +2892,20 @@ describe("engine-level adoption", () => {
       // can't detect from `props` alone.
       expect(plan.resources.Adopted!.action).toBe("update");
 
+      // Planning no longer persists the adopted state (issue #793): it rides
+      // on the plan node and is only committed to the store at apply time.
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
+      expect((node.state as any)?.attr).toMatchObject({ string: "hello" });
+
       const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted?.status).toBe("created");
-      expect((persisted as any)?.attr).toMatchObject({ string: "hello" });
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
@@ -2918,22 +2928,29 @@ describe("engine-level adoption", () => {
       // foreign-owned to subsequent deploys).
       expect(plan.resources.Adopted!.action).toBe("update");
 
-      const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted?.status).toBe("created");
+      // The adopted state rides on the plan node, not the store (issue #793).
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
 
       // The Unowned brand must be fully scrubbed from anything that
-      // reaches the state store — both via the public `Unowned.is`
-      // check *and* via direct symbol inspection (in case someone
-      // accidentally uses `Symbol.for` rather than `Unowned.is`).
-      const persistedAttr = (persisted as any)?.attr as object;
-      expect(Unowned.is(persistedAttr)).toBe(false);
-      expect(Object.getOwnPropertySymbols(persistedAttr).length).toBe(0);
-      expect(JSON.stringify(persistedAttr)).not.toContain("Unowned");
+      // reaches the plan node (and, at apply, the state store) — both via
+      // the public `Unowned.is` check *and* via direct symbol inspection
+      // (in case someone accidentally uses `Symbol.for` rather than
+      // `Unowned.is`).
+      const adoptedAttr = (node.state as any)?.attr as object;
+      expect(Unowned.is(adoptedAttr)).toBe(false);
+      expect(Object.getOwnPropertySymbols(adoptedAttr).length).toBe(0);
+      expect(JSON.stringify(adoptedAttr)).not.toContain("Unowned");
+
+      // Planning wrote nothing to the store.
+      const state = yield* yield* State;
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
@@ -2990,13 +3007,19 @@ describe("engine-level adoption", () => {
 
       expect(plan.resources.Adopted!.action).toBe("update");
 
+      // Adopted state rides on the plan node; planning persists nothing
+      // (issue #793).
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
+
       const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted?.status).toBe("created");
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
@@ -3219,6 +3242,265 @@ describe("StackRefExpr resolution", () => {
         expect(err.stack).toBe("Backend");
         expect(err.stage).toBe("ghost");
       }
+    }),
+  );
+});
+
+describe("type aliases", () => {
+  // State rows persisted before a type rename carry the legacy name
+  // ("Test.Widget"). Provider lookup must fall back to the canonical type
+  // ("Test.Widgets.Widget") via the alias declared on the resource.
+  const legacyWidgetState = (fqn: string): ResourceState => ({
+    instanceId,
+    providerVersion: 0,
+    logicalId: fqn,
+    fqn,
+    namespace: undefined,
+    resourceType: "Test.Widget",
+    status: "created",
+    props: {
+      name: "widget",
+    },
+    attr: {
+      name: "widget",
+    },
+    bindings: [],
+    downstream: [],
+  });
+
+  test(
+    "orphan persisted under a legacy type name plans a delete via alias",
+    Effect.gen(function* () {
+      yield* seed({ LegacyOrphan: legacyWidgetState("LegacyOrphan") });
+      expect(
+        yield* makePlan(Effect.void).pipe(
+          Effect.provide(aliasedWidgetProvider()),
+        ),
+      ).toMatchObject({
+        deletions: {
+          LegacyOrphan: {
+            action: "delete",
+            resource: {
+              LogicalId: "LegacyOrphan",
+              Type: "Test.Widget",
+            },
+          },
+        },
+      });
+    }),
+  );
+
+  test(
+    "declared resource with legacy-typed state plans as a noop update",
+    Effect.gen(function* () {
+      yield* seed({ MyWidget: legacyWidgetState("MyWidget") });
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* AliasedWidget("MyWidget", { name: "widget" });
+        }),
+      ).pipe(Effect.provide(aliasedWidgetProvider()));
+      expect(plan).toMatchObject({
+        resources: {
+          MyWidget: {
+            action: "noop",
+            state: {
+              resourceType: "Test.Widget",
+            },
+          },
+        },
+      });
+      expect(Object.keys(plan.deletions)).toEqual([]);
+    }),
+  );
+
+  describe("via provider collection", () => {
+    class AliasPlanProviders extends Provider.ProviderCollection<AliasPlanProviders>()(
+      "Test.AliasPlanProviders",
+    ) {}
+
+    // The bare provider layer is consumed while building the collection and
+    // is NOT exported — lookup can only succeed through the collection.
+    const widgetCollection = () =>
+      Layer.effect(
+        AliasPlanProviders,
+        Provider.collection([AliasedWidget]),
+      ).pipe(Layer.provide(aliasedWidgetProvider()));
+
+    test(
+      "orphan persisted under a legacy type name plans a delete via alias",
+      Effect.gen(function* () {
+        yield* seed({ LegacyOrphan: legacyWidgetState("LegacyOrphan") });
+        expect(
+          yield* makePlan(Effect.void).pipe(Effect.provide(widgetCollection())),
+        ).toMatchObject({
+          deletions: {
+            LegacyOrphan: {
+              action: "delete",
+              resource: {
+                LogicalId: "LegacyOrphan",
+                Type: "Test.Widget",
+              },
+            },
+          },
+        });
+      }),
+    );
+  });
+});
+
+describe("zombie rows", () => {
+  // A state row whose resource type has no registered provider (the type
+  // was removed from the program, or renamed without an alias) is FATAL:
+  // the program and state disagree, and without the provider the row's
+  // physical resource cannot be deleted anyway. Planning dies with a typed
+  // MissingProviderError naming the row and the remediation (see
+  // destroy-robustness.test.ts for the deploy/destroy behavior).
+  test(
+    "a row whose resource type has no provider fails the plan",
+    Effect.gen(function* () {
+      yield* seed({
+        Ghost: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Ghost",
+          fqn: "Ghost",
+          namespace: undefined,
+          resourceType: "Test.Vanished",
+          status: "created",
+          props: { name: "ghost" },
+          attr: { name: "ghost" },
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          yield* Bucket("Survivor", { name: "survivor" });
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      const defect = Exit.isFailure(exit)
+        ? exit.cause.reasons.find(
+            (r) =>
+              Cause.isDieReason(r) &&
+              r.defect instanceof Provider.MissingProviderError,
+          )
+        : undefined;
+      expect(defect && Cause.isDieReason(defect)).toBe(true);
+      if (defect && Cause.isDieReason(defect)) {
+        const error = defect.defect as Provider.MissingProviderError;
+        expect(error.resourceType).toBe("Test.Vanished");
+        expect(error.fqn).toBe("Ghost");
+        expect(error.message).toContain("aliases");
+      }
+    }),
+  );
+});
+
+describe("read is never handed unresolved persisted props", () => {
+  // A failed create persists `creating` state carrying the RAW plan-time
+  // props, which may contain unresolved Output expressions (e.g. a prop
+  // referencing an upstream resource that was never created). Providers
+  // derive identity from `olds` inside `read` when `output` is undefined,
+  // so the engine must skip the read probe entirely rather than hand it
+  // unresolved exprs (see the isResolved guards in Plan.ts).
+
+  const creatingWithUnresolvedProps = (fqn: string): ResourceState => ({
+    instanceId,
+    providerVersion: 0,
+    logicalId: fqn,
+    fqn,
+    namespace: undefined,
+    resourceType: "Test.TestResource",
+    status: "creating",
+    props: {
+      // an unresolved Output expression, exactly as persisted by a create
+      // that failed before its upstream dependencies resolved
+      string: Output.literal("unresolved") as any,
+    },
+    attr: undefined,
+    bindings: [],
+    downstream: [],
+  });
+
+  const trackReads = () => {
+    const reads: string[] = [];
+    const layer = Layer.succeed(TestResourceHooks, {
+      read: (id: string) =>
+        Effect.sync(() => {
+          reads.push(id);
+          return undefined;
+        }),
+    });
+    return { reads, layer };
+  };
+
+  test(
+    "destroy after failed create with unresolved props skips read and deletes with attr undefined",
+    Effect.gen(function* () {
+      yield* seed({ Zombie: creatingWithUnresolvedProps("Zombie") });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
+      expect(reads).not.toContain("Zombie");
+      expect(plan.deletions.Zombie).toMatchObject({ action: "delete" });
+      expect((plan.deletions.Zombie as any).state.attr).toBeUndefined();
+    }),
+  );
+
+  test(
+    "creating-state recovery with unresolved persisted props skips the read probe and re-drives create",
+    Effect.gen(function* () {
+      yield* seed({ Half: creatingWithUnresolvedProps("Half") });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved-now" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).not.toContain("Half");
+      expect(plan.resources.Half!.action).toBe("create");
+    }),
+  );
+
+  test(
+    "destroy of a creating row defers read recovery to apply even with resolved props",
+    Effect.gen(function* () {
+      // Plan never probes a deleted attr-less row — resolved or not. Apply's
+      // `deleteResource` owns the authoritative read-then-delete recovery
+      // (it also covers replaced-chain old generations that never pass
+      // through plan); see the apply.test.ts destroy-recovery cases.
+      yield* seed({
+        Zombie: {
+          ...creatingWithUnresolvedProps("Zombie"),
+          props: { string: "resolved" },
+        },
+      });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
+      expect(reads).not.toContain("Zombie");
+      expect(plan.deletions.Zombie).toMatchObject({ action: "delete" });
+      expect((plan.deletions.Zombie as any).state.attr).toBeUndefined();
+    }),
+  );
+
+  test(
+    "resolved persisted creating props still go through read recovery when re-declared (control)",
+    Effect.gen(function* () {
+      yield* seed({
+        Half: {
+          ...creatingWithUnresolvedProps("Half"),
+          props: { string: "resolved" },
+        },
+      });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved-now" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toContain("Half");
+      expect(plan.resources.Half!.action).toBe("create");
     }),
   );
 });

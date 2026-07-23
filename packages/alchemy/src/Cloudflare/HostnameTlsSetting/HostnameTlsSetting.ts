@@ -150,7 +150,9 @@ export type HostnameTlsSetting = Resource<
  * @see https://developers.cloudflare.com/ssl/edge-certificates/additional-options/custom-metadata/
  * @see https://developers.cloudflare.com/api/resources/hostnames/subresources/settings/subresources/tls/
  */
-export const HostnameTlsSetting = Resource<HostnameTlsSetting>(TypeId);
+export const HostnameTlsSetting = Resource<HostnameTlsSetting>(TypeId, {
+  aliases: ["Cloudflare.HostnameTlsSetting"],
+});
 
 /**
  * Returns true if the given value is a HostnameTlsSetting resource.

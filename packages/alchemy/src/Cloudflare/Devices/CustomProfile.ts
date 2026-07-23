@@ -560,10 +560,11 @@ const observeLists = Effect.fn(function* (accountId: string, policyId: string) {
  * determinism when names collide).
  */
 const findByName = (accountId: string, name: string) =>
-  zeroTrust.listDevicePolicyCustoms({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((p) => p.name === name && p.policyId != null)
+  zeroTrust.listDevicePolicyCustoms.items({ accountId }).pipe(
+    Stream.filter((p) => p.name === name && p.policyId != null),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => (a.policyId ?? "").localeCompare(b.policyId ?? ""))
         .at(0),
     ),

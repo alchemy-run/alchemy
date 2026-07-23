@@ -12,13 +12,13 @@ import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import {
-  isDurableObjectExport,
-  type DurableObjectExport,
-} from "./DurableObject.ts";
-import {
   isWorkflowExport,
   type WorkflowExport,
 } from "../Workflows/Workflow.ts";
+import {
+  isDurableObjectExport,
+  type DurableObjectExport,
+} from "./DurableObject.ts";
 
 export interface WorkerBundleOptions {
   id: string;

@@ -98,7 +98,9 @@ export type Ruleset = Resource<
  * });
  * ```
  */
-export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset.Ruleset")({});
+export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset.Ruleset", {
+  aliases: ["Cloudflare.Ruleset"],
+})({});
 
 export const RulesetProvider = () =>
   Provider.succeed(Ruleset, {
@@ -124,7 +126,10 @@ export const RulesetProvider = () =>
       }
 
       const oldName = output?.name ?? (yield* createRulesetName(id, olds.name));
-      const name = yield* createRulesetName(id, news.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         olds.description !== news.description ||
@@ -255,8 +260,11 @@ export const toRulesetAttributes = (
 // type statically exposes it as an `Output`. During `diff` (plan time) the
 // zone can still be unresolved — e.g. when it's being created in the same
 // deploy — in which case `zoneId` is not yet a string. Callers must treat a
-// non-string result as "not resolved yet".
-const zoneIdOf = (zone: Zone): string | undefined => {
-  const zoneId = (zone as unknown as Partial<Attributes>).zoneId;
+// non-string result as "not resolved yet". May also receive `undefined`:
+// an Output-valued `zone` doesn't survive a `creating`-state round-trip
+// (it deserializes as `undefined`), and recovery paths hand those props
+// back as `olds`.
+const zoneIdOf = (zone: Zone | undefined): string | undefined => {
+  const zoneId = (zone as unknown as Partial<Attributes> | undefined)?.zoneId;
   return typeof zoneId === "string" ? zoneId : undefined;
 };
