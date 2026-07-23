@@ -5,10 +5,12 @@
  */
 export const managementApiContract = {
   repository: "prisma/pdp-control-plane",
-  commit: "d41acd2502f911132967aa3c589da8621b87a792",
+  commit: "77354f04b2dcd573682a87d0be6fb66a05d27a86",
   routes: [
     "DELETE /v1/apps/{appId}",
     "DELETE /v1/branches/{branchId}",
+    "DELETE /v1/buckets/{bucketId}",
+    "DELETE /v1/buckets/{bucketId}/keys/{keyId}",
     "DELETE /v1/compute-services/versions/{versionId}",
     "DELETE /v1/compute-services/{computeServiceId}",
     "DELETE /v1/connections/{id}",
@@ -27,6 +29,9 @@ export const managementApiContract = {
     "GET /v1/apps/{appId}/domains",
     "GET /v1/branches/{branchId}",
     "GET /v1/builds/{buildId}/logs",
+    "GET /v1/buckets",
+    "GET /v1/buckets/{bucketId}",
+    "GET /v1/buckets/{bucketId}/keys",
     "GET /v1/compute-services",
     "GET /v1/compute-services/versions/{versionId}",
     "GET /v1/compute-services/versions/{versionId}/logs",
@@ -76,6 +81,8 @@ export const managementApiContract = {
     "POST /v1/apps/{appId}/domains",
     "POST /v1/apps/{appId}/promote",
     "POST /v1/apps/{appId}/rollback",
+    "POST /v1/buckets",
+    "POST /v1/buckets/{bucketId}/keys",
     "POST /v1/compute-services",
     "POST /v1/compute-services/versions/{versionId}/start",
     "POST /v1/compute-services/versions/{versionId}/stop",
@@ -134,14 +141,29 @@ export const managementApiContract = {
     "POST /v1/versions/{versionId}/start",
     "POST /v1/versions/{versionId}/stop",
   ],
+  /**
+   * Prisma Object Storage is a new product surface and is intentionally
+   * deferred from this provider revision. Keep these routes visible in the
+   * pinned contract so this omission cannot be mistaken for API coverage.
+   */
+  deferredRoutes: [
+    "DELETE /v1/buckets/{bucketId}",
+    "DELETE /v1/buckets/{bucketId}/keys/{keyId}",
+    "GET /v1/buckets",
+    "GET /v1/buckets/{bucketId}",
+    "GET /v1/buckets/{bucketId}/keys",
+    "POST /v1/buckets",
+    "POST /v1/buckets/{bucketId}/keys",
+  ],
 } as const;
 
 const deprecatedRouteSet = new Set<string>(
   managementApiContract.deprecatedRoutes,
 );
+const deferredRouteSet = new Set<string>(managementApiContract.deferredRoutes);
 
 /** Canonical production routes that Alchemy must map. */
 export const productionManagementApiRoutes =
   managementApiContract.routes.filter(
-    (route) => !deprecatedRouteSet.has(route),
+    (route) => !deprecatedRouteSet.has(route) && !deferredRouteSet.has(route),
   );

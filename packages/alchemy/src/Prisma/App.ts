@@ -34,7 +34,7 @@ export interface AppProps {
   /**
    * Region where the App is placed.
    *
-   * @default "us-east-1"
+   * @default The project's default region, falling back to "us-east-1"
    */
   regionId?: PrismaRegionId;
   /**
@@ -233,16 +233,18 @@ export const AppProvider = () =>
           if (concreteIdsChanged(oldProjectId, newProjectId)) {
             return { action: "replace" } as const;
           }
-          if (
-            isResolved(news.regionId) &&
-            (news.regionId ?? "us-east-1") !==
-              (output?.regionId ?? olds.regionId ?? "us-east-1")
-          ) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma App region is immutable and the Management API cannot atomically move an App without deleting its serving endpoint first. Create a second App with a different display name in the target region, cut traffic over, then remove this App.`,
-              ),
-            );
+          if (isResolved(news.regionId) && news.regionId !== undefined) {
+            const currentRegionId = output?.regionId ?? olds.regionId;
+            if (
+              currentRegionId !== undefined &&
+              news.regionId !== currentRegionId
+            ) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma App region is immutable and the Management API cannot atomically move an App without deleting its serving endpoint first. Create a second App with a different display name in the target region, cut traffic over, then remove this App.`,
+                ),
+              );
+            }
           }
           const updateProps = {
             displayName: news.displayName,
@@ -323,7 +325,7 @@ export const AppProvider = () =>
               .createApp({
                 projectId,
                 displayName: news.displayName,
-                regionId: news.regionId ?? "us-east-1",
+                regionId: news.regionId,
                 branchId: branch.id,
                 branchGitName: undefined,
               })
@@ -354,7 +356,7 @@ export const AppProvider = () =>
           yield* ensureAppImmutableIdentity(
             app,
             projectId,
-            news.regionId ?? "us-east-1",
+            news.regionId ?? output?.regionId ?? app.region.id,
           );
           const needsBranchSync = yield* branchNeedsSync(
             client,

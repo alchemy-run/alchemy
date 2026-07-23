@@ -248,7 +248,7 @@ export interface ComputeProps extends PlatformProps {
   /**
    * Region where the App is placed.
    *
-   * @default "us-east-1"
+   * @default The project's default region, falling back to "us-east-1"
    */
   regionId?: PrismaRegionId;
   /**
@@ -878,7 +878,7 @@ const createApp = (
   client.createApp({
     projectId,
     displayName: props.appName,
-    regionId: props.regionId ?? "us-east-1",
+    regionId: props.regionId,
     branchId,
     branchGitName: undefined,
   });
@@ -1716,7 +1716,7 @@ const ensureApp = Effect.fn(function* (
   yield* ensureAppImmutableIdentity(
     app,
     projectId,
-    props.regionId ?? "us-east-1",
+    props.regionId ?? output?.regionId ?? app.region.id,
   );
   if (app.name !== props.appName || app.branchId !== branch.id) {
     app = yield* client.updateApp(app.id, {
@@ -2112,16 +2112,18 @@ export const ComputeProvider = () =>
             // old and replacement Apps can safely coexist.
             return { action: "replace" } as const;
           }
-          if (
-            isResolved(news.regionId) &&
-            (news.regionId ?? "us-east-1") !==
-              (output?.regionId ?? olds.regionId ?? "us-east-1")
-          ) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma Compute App region is immutable and cannot be changed atomically without deleting the live App first. Deploy a second Compute App under a different appName in the target region, cut traffic over, then remove the original.`,
-              ),
-            );
+          if (isResolved(news.regionId) && news.regionId !== undefined) {
+            const currentRegionId = output?.regionId ?? olds.regionId;
+            if (
+              currentRegionId !== undefined &&
+              news.regionId !== currentRegionId
+            ) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma Compute App region is immutable and cannot be changed atomically without deleting the live App first. Deploy a second Compute App under a different appName in the target region, cut traffic over, then remove the original.`,
+                ),
+              );
+            }
           }
           // Source files/build output can change with no prop change, so
           // reconcile must rerun and decide from the computed artifact hash.

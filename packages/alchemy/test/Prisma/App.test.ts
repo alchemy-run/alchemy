@@ -138,20 +138,24 @@ describe("Prisma App", () => {
   });
 
   it.effect(
-    "creates with a resolved branch ID and verifies convergence",
+    "inherits the project region and creates with a resolved branch ID",
     () => {
       const calls: Array<[string, unknown?]> = [];
+      const regionalApp = (id: string, branchId: string | null) => ({
+        ...app(id, branchId),
+        region: { id: "eu-west-3" as const, name: "Europe West" },
+      });
       const client = {
         listBranches: () => Effect.succeed([branch("branch-wanted")]),
         createApp: (input: unknown) =>
           Effect.sync(() => {
             calls.push(["createApp", input]);
-            return app("app-1", "branch-wrong");
+            return regionalApp("app-1", "branch-wrong");
           }),
         updateApp: (id: string, input: unknown) =>
           Effect.sync(() => {
             calls.push(["updateApp", { id, input }]);
-            return app(id, "branch-wanted");
+            return regionalApp(id, "branch-wanted");
           }),
       } as unknown as PrismaManagementClient;
 
@@ -173,12 +177,13 @@ describe("Prisma App", () => {
         });
 
         expect(output.branchId).toBe("branch-wanted");
+        expect(output.regionId).toBe("eu-west-3");
         expect(calls[0]).toEqual([
           "createApp",
           {
             projectId: "project-1",
             displayName: "api",
-            regionId: "us-east-1",
+            regionId: undefined,
             branchId: "branch-wanted",
             branchGitName: undefined,
           },

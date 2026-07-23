@@ -1596,7 +1596,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             input: {
               displayName: "api",
-              regionId: "us-east-1",
+              regionId: undefined,
               branchId: "branch-main",
               branchGitName: undefined,
             },
@@ -5615,7 +5615,7 @@ describe("Prisma Compute", () => {
             projectId: "project-1",
             input: {
               displayName: "api",
-              regionId: "us-east-1",
+              regionId: undefined,
               branchId: "branch-main",
               branchGitName: undefined,
             },

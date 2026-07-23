@@ -42,7 +42,10 @@ export interface ProjectProps {
   /**
    * Region for the default database created with the project.
    *
-   * @default "us-east-1"
+   * When `createDatabase` is false, omitting this leaves the project's default
+   * region unset.
+   *
+   * @default "us-east-1" when a default database is created
    */
   region?: PrismaRegionId;
   /**
@@ -465,7 +468,7 @@ export const ProjectProvider = () =>
               .createProject({
                 name,
                 createDatabase: news.createDatabase ?? true,
-                region: news.region ?? "us-east-1",
+                region: news.region,
               })
               .pipe(
                 Effect.map((project) => ({

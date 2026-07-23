@@ -204,7 +204,10 @@ const projectDevProvider = () =>
     projectName: news.name ?? id,
     workspaceId: devId("workspace", "local"),
     createdAt: DEV_TIMESTAMP,
-    defaultRegion: news.region ?? "us-east-1",
+    defaultRegion:
+      news.createDatabase === false
+        ? (news.region ?? null)
+        : (news.region ?? "us-east-1"),
     databaseId:
       news.createDatabase === false ? undefined : devId("database", id),
     defaultConnectionId:

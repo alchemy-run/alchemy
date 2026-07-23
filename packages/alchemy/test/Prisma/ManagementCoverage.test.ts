@@ -172,6 +172,13 @@ describe("Prisma Management API coverage", () => {
   it("accounts for every route in the pinned Management API contract", () => {
     expect(managementApiContract.repository).toBe("prisma/pdp-control-plane");
     expect(managementApiContract.commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(managementApiContract.routes).toHaveLength(102);
+    expect(managementApiContract.deferredRoutes).toHaveLength(7);
+    expect(
+      managementApiContract.deferredRoutes.every((route) =>
+        managementApiContract.routes.includes(route),
+      ),
+    ).toBe(true);
     expect(expectedManagementApiRoutes).toHaveLength(71);
     expect(expectedManagementApiRoutes).toEqual(
       [...productionManagementApiRoutes].sort(),

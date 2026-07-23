@@ -5222,7 +5222,7 @@ describe("Prisma resource providers", () => {
       expect(calls.filter(([name]) => name.startsWith("create"))).toEqual([
         [
           "createProject",
-          { name: "app", createDatabase: false, region: "us-east-1" },
+          { name: "app", createDatabase: false, region: undefined },
         ],
         [
           "createDatabase",
@@ -5252,7 +5252,7 @@ describe("Prisma resource providers", () => {
           {
             projectId: "project-1",
             displayName: "api",
-            regionId: "us-east-1",
+            regionId: undefined,
             branchId: "branch-main",
             branchGitName: undefined,
           },
