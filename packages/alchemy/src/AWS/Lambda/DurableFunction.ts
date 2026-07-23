@@ -23,6 +23,7 @@ import {
   Function,
   type FunctionProps,
   type FunctionServices,
+  type FunctionZipProps,
   type HandlerContext,
 } from "./Function.ts";
 
@@ -78,7 +79,7 @@ export type DurableFunctionInitServices =
  * `DurableConfig` tuning knobs below.
  */
 export interface DurableFunctionProps extends Omit<
-  FunctionProps,
+  FunctionZipProps,
   "url" | "durableConfig"
 > {
   /**

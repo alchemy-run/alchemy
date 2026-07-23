@@ -13,6 +13,7 @@ import {
 } from "../../Tags.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { normalizePolicyDocument } from "../IAM/Policy.ts";
 
 /**
  * Docker build input for an image-packaged Lambda function.
@@ -362,25 +363,40 @@ export const makeFunctionImage = Effect.gen(function* () {
     }
 
     const { accountId, region } = yield* AWSEnvironment.current;
-    yield* ecr.setRepositoryPolicy({
-      repositoryName,
-      policyText: JSON.stringify({
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Sid: "LambdaECRImageRetrievalPolicy",
-            Effect: "Allow",
-            Principal: { Service: "lambda.amazonaws.com" },
-            Action: ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
-            Condition: {
-              StringLike: {
-                "aws:sourceArn": `arn:aws:lambda:${region}:${accountId}:function:*`,
-              },
+    const desiredPolicy = JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "LambdaECRImageRetrievalPolicy",
+          Effect: "Allow",
+          Principal: { Service: "lambda.amazonaws.com" },
+          Action: ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
+          Condition: {
+            StringLike: {
+              "aws:sourceArn": `arn:aws:lambda:${region}:${accountId}:function:*`,
             },
           },
-        ],
-      }),
+        },
+      ],
     });
+    const observedPolicy = yield* ecr
+      .getRepositoryPolicy({ repositoryName })
+      .pipe(
+        Effect.map((response) => response.policyText),
+        Effect.catchTag("RepositoryPolicyNotFoundException", () =>
+          Effect.succeed(undefined),
+        ),
+      );
+    if (
+      observedPolicy === undefined ||
+      normalizePolicyDocument(observedPolicy) !==
+        normalizePolicyDocument(desiredPolicy)
+    ) {
+      yield* ecr.setRepositoryPolicy({
+        repositoryName,
+        policyText: desiredPolicy,
+      });
+    }
 
     return {
       repositoryName,
