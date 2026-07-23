@@ -233,7 +233,7 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — start here",
     intro:
-      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.",
+      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.",
     pages: {
       slugs: ["aws/index", "aws/setup", "aws/compute/choosing-a-runtime"],
     },
