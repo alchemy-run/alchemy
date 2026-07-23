@@ -57,7 +57,8 @@ sbatch --nodes=1 train.sbatch
   ```typescript
   nodeSelector: {
     "sagemaker.amazonaws.com/node-health-status": "Schedulable",
-    "sagemaker.amazonaws.com/instance-group-name": "workers",
+    "sagemaker.amazonaws.com/instance-group-name":
+      hyperpod.instanceGroups.workers.InstanceGroupName,
   },
   labels: {
     "kueue.x-k8s.io/queue-name": Output.interpolate`hyperpod-ns-${researchQuota.teamName}-localqueue`,
@@ -66,18 +67,20 @@ sbatch --nodes=1 train.sbatch
   ```
 
 - **High level** ([`src/TrainJob.ts`](./src/TrainJob.ts)) — an effectful
-  `AWS.EKS.Job` bundled from TypeScript. The `hyperpod:` prop takes the
-  quota **resource**, so the namespace, Kueue labels, node selector, and
-  the quota → job ordering all derive from the data flow:
+  `AWS.EKS.Job` bundled from TypeScript. The `hyperpod:` prop references
+  **resources through the graph**: the instance-group keys carry through
+  to the cluster's attributes as types (a typo'd name is a compile
+  error), and the quota resource derives the namespace, Kueue labels, and
+  ordering:
 
   ```typescript
   yield* AWS.EKS.Job("TrainJob", {
     cluster: eks,
     main: import.meta.url,
     hyperpod: {
-      instanceGroup: "workers",   // pin to the instance group
-      quota: researchQuota,       // → hyperpod-ns-research + Kueue queue label
-      priorityClass: "training",  // → training-priority
+      instanceGroup: hyperpod.instanceGroups.workers, // key-typed group ref
+      quota: researchQuota,      // → hyperpod-ns-research + Kueue queue label
+      priorityClass: "training", // → training-priority
     },
   });
   ```
