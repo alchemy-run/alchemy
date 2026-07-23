@@ -1861,9 +1861,13 @@ export const LiveWorkerProvider = () =>
         options: ViteOptions["memo"],
         additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
       ) {
+        // Relative paths participate in memo hashes and surface in outputs;
+        // keep them POSIX so Windows and CI agree.
+        const relativeToRoot = (cwd: string) =>
+          path.relative(rootDir, cwd).replaceAll("\\", "/");
         const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
           hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
-            Effect.map((hash) => `${path.relative(rootDir, cwd)}:${hash}`),
+            Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
           );
         const hashRoot = hashWorkspaceDirectory(rootDir, options);
         if (Array.isArray(options?.workspaces)) {
@@ -1894,9 +1898,7 @@ export const LiveWorkerProvider = () =>
         const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
         return {
           hash,
-          workspaces: Array.from(workspaces).map((cwd) =>
-            path.relative(rootDir, cwd),
-          ),
+          workspaces: Array.from(workspaces).map(relativeToRoot),
         };
       });
 
