@@ -190,8 +190,25 @@ export type Resource<
       ...args: any[]
     ): (binding: Input<Binding>) => Effect.Effect<void>;
   } & {
-    [attr in keyof Attributes]-?: Output.Output<Attributes[attr], never>;
+    [attr in keyof Attributes]-?: AttrOutput<Attributes[attr]>;
   };
+
+/**
+ * Accessor type for one attribute. Pure object attributes upgrade to
+ * {@link Output.ObjectExpr} so nested access is typed —
+ * `hyperpod.instanceGroups.workers` — while primitives, unions with
+ * `undefined`, branded string unions (`"a" | (string & {})`), and arrays
+ * stay plain {@link Output.Output} (running them through `ToOutput` would
+ * classify the `string & {}` branch as an object and explode into
+ * String-method mapped types).
+ */
+type AttrOutput<A> = [A] extends [
+  string | number | boolean | bigint | null | undefined | Date | any[],
+]
+  ? Output.Output<A, never>
+  : [A] extends [Record<string, any>]
+    ? Output.ObjectExpr<A, never>
+    : Output.Output<A, never>;
 
 export interface ResourceOptions {
   /**

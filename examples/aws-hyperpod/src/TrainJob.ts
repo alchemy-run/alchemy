@@ -17,12 +17,14 @@ import { HyperPodEksInfra } from "./eks-infra.ts";
 export default AWS.EKS.Job(
   "TrainJob",
   Effect.gen(function* () {
-    const { eks, workers, researchQuota } = yield* HyperPodEksInfra;
+    const { eks, hyperpod, researchQuota } = yield* HyperPodEksInfra;
     return {
       cluster: eks,
       main: import.meta.url,
       hyperpod: {
-        instanceGroup: workers,
+        // Referenced through the cluster's attributes, so the job is
+        // connected to the HyperPod cluster through the resource graph.
+        instanceGroup: hyperpod.instanceGroups.workers,
         quota: researchQuota,
         priorityClass: "training",
       },

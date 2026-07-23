@@ -18,6 +18,22 @@ import type { Providers } from "../Providers.ts";
 
 export type ClusterStatus = sagemaker.ClusterStatus;
 
+/**
+ * An instance group surfaced on the cluster's attributes — the value EKS
+ * workloads reference via `hyperpod.instanceGroup` to pin themselves to
+ * the group.
+ */
+export interface ClusterInstanceGroupRef {
+  /** The group's name (the `sagemaker.amazonaws.com/instance-group-name` node label). */
+  InstanceGroupName: string;
+  /** The group's instance type (e.g. `ml.g5.xlarge`). */
+  InstanceType: string | undefined;
+  /** Instances currently in service. */
+  CurrentCount: number | undefined;
+  /** Instances the group is converging toward. */
+  TargetCount: number | undefined;
+}
+
 export interface ClusterProps {
   /**
    * Name of the HyperPod cluster. Maximum 63 characters, alphanumeric and
@@ -107,6 +123,13 @@ export interface Cluster extends Resource<
      * ARN of the orchestrating EKS cluster, when EKS-orchestrated.
      */
     orchestratorEksClusterArn: string | undefined;
+    /**
+     * The cluster's instance groups, keyed by group name. Reference one
+     * from an EKS workload's `hyperpod.instanceGroup` to pin the workload
+     * to the group through the resource graph:
+     * `hyperpod.instanceGroups.workers`.
+     */
+    instanceGroups: Record<string, ClusterInstanceGroupRef>;
   },
   never,
   Providers
@@ -298,6 +321,23 @@ const toAttrs = (
   clusterArn: described.ClusterArn,
   clusterStatus: described.ClusterStatus,
   orchestratorEksClusterArn: described.Orchestrator?.Eks?.ClusterArn,
+  instanceGroups: Object.fromEntries(
+    (described.InstanceGroups ?? []).flatMap((group) =>
+      group.InstanceGroupName !== undefined
+        ? [
+            [
+              group.InstanceGroupName,
+              {
+                InstanceGroupName: group.InstanceGroupName,
+                InstanceType: group.InstanceType,
+                CurrentCount: group.CurrentCount,
+                TargetCount: group.TargetCount,
+              },
+            ],
+          ]
+        : [],
+    ),
+  ),
 });
 
 /**
@@ -425,6 +465,7 @@ export const ClusterProvider = () =>
                       clusterArn: s.ClusterArn,
                       clusterStatus: s.ClusterStatus ?? "InService",
                       orchestratorEksClusterArn: undefined,
+                      instanceGroups: {},
                     },
                   ]
                 : [],

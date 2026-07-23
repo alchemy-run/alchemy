@@ -146,24 +146,24 @@ const eks = yield* AWS.EKS.Cluster("Orchestrator", {
   },
 });
 
-const workers = {
-  InstanceGroupName: "workers",
-  InstanceType: "ml.t3.medium",
-  InstanceCount: 1,
-  ExecutionRole: role.roleArn,
-  LifeCycleConfig: {
-    SourceS3Uri: script.sourceS3Uri,
-    OnCreate: script.onCreate,
-  },
-};
-
 const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
   orchestrator: { Eks: { ClusterArn: eks.clusterArn } },
   vpcConfig: {
     SecurityGroupIds: [clusterSecurityGroupId],
     Subnets: network.privateSubnetIds,
   },
-  instanceGroups: [workers],
+  instanceGroups: [
+    {
+      InstanceGroupName: "workers",
+      InstanceType: "ml.t3.medium",
+      InstanceCount: 1,
+      ExecutionRole: role.roleArn,
+      LifeCycleConfig: {
+        SourceS3Uri: script.sourceS3Uri,
+        OnCreate: script.onCreate,
+      },
+    },
+  ],
 });
 ```
 
@@ -176,8 +176,9 @@ HyperPod nodes must live in **private subnets** — the
 HyperPod nodes are ordinary EKS nodes carrying well-known labels.
 [`Deployment`](/providers/aws/eks/deployment) and
 [`Job`](/providers/aws/eks/job) opt onto them with the `hyperpod`
-prop — pass the same instance-group object given to the cluster,
-and the node selector derives from it:
+prop. Reference the instance group through the cluster's
+attributes — the workload is connected to the fleet through the
+resource graph, and the node selector derives from it:
 
 ```typescript
 const train = yield* AWS.EKS.Job(
@@ -185,7 +186,7 @@ const train = yield* AWS.EKS.Job(
   {
     cluster: eks,
     main: import.meta.url,
-    hyperpod: { instanceGroup: workers },
+    hyperpod: { instanceGroup: hyperpod.instanceGroups.workers },
   },
   Effect.gen(function* () {
     return {
@@ -251,7 +252,7 @@ ordering all derive from it:
 
 ```typescript
 hyperpod: {
-  instanceGroup: workers,
+  instanceGroup: hyperpod.instanceGroups.workers,
   quota,                     // → hyperpod-ns-research + queue label
   priorityClass: "training", // → training-priority
 },

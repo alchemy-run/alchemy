@@ -150,9 +150,9 @@ export const HyperPodEksInfra = Effect.gen(function* () {
     },
   });
 
-  // The shared instance-group spec — referenced by the cluster below AND
-  // by workloads (`hyperpod: { instanceGroup: workers }`), so the group
-  // name has one source of truth.
+  // The workers instance group. Workloads reference it through the
+  // cluster's attributes (`hyperpod.instanceGroups.workers`), connecting
+  // them to the fleet through the resource graph.
   const workers = {
     InstanceGroupName: "workers",
     InstanceType: "ml.t3.medium",
@@ -238,7 +238,6 @@ export const HyperPodEksInfra = Effect.gen(function* () {
     network,
     eks,
     role,
-    workers,
     hyperpod,
     governance,
     scheduler,

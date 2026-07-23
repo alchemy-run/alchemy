@@ -24,9 +24,11 @@ export const KUEUE_PRIORITY_CLASS_LABEL = "kueue.x-k8s.io/priority-class";
 export interface HyperPodWorkloadProps {
   /**
    * Pin the workload to a HyperPod instance group (matches the
-   * `sagemaker.amazonaws.com/instance-group-name` node label). Pass the
-   * same group object given to the cluster's `instanceGroups` — one source
-   * of truth for the name — or a plain name string.
+   * `sagemaker.amazonaws.com/instance-group-name` node label). Reference
+   * the group through the cluster's attributes —
+   * `hyperpod.instanceGroups.workers` — so the workload is connected to
+   * the cluster through the resource graph. A plain name string also
+   * works.
    */
   instanceGroup?: string | { InstanceGroupName?: string };
   /**
