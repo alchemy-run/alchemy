@@ -30,7 +30,7 @@ import * as Ref from "effect/Ref";
 import * as S from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import {
-  Archives,
+  ArchivesLive,
   Researcher,
   ResearcherCharter,
   Scholar,
@@ -373,7 +373,7 @@ describe("KernelMemory", () => {
         // the charter requires the SKILL's tag; the skill's Layer is
         // what pulls in the tool physics — nominal and encapsulated
         Effect.provide(
-          testLayer(model, Archives.make().pipe(Layer.provide(search.layer))),
+          testLayer(model, ArchivesLive.pipe(Layer.provide(search.layer))),
         ),
       );
     },
@@ -418,7 +418,7 @@ describe("KernelMemory", () => {
     }).pipe(
       Effect.scoped,
       Effect.provide(
-        testLayer(model, Archives.make().pipe(Layer.provide(search.layer))),
+        testLayer(model, ArchivesLive.pipe(Layer.provide(search.layer))),
       ),
     );
   });

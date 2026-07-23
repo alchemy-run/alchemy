@@ -128,15 +128,20 @@ export const makeTerm = (
     "~alchemy/Kind": kind,
     "~alchemy/Name": name,
     ...(template !== undefined ? { template, refs } : {}),
-    // the kernel-default Layer: `Engineer.make(charter)`, the static
-    // tagged-template shorthand `Reviewer.make`…``, or `Coding.make()`
+    // the implementation Layer: `Engineer.make(charter)`, the static
+    // tagged-template shorthand `Reviewer.make`…``, or a skill's
+    // teaching `Coding.make`…`` — for a Skill the template IS the
+    // service payload (prose + granted tools); for an Agent a
+    // template lifts to a constant charter
     make: (charterOrTemplate?: any, ...refs: any[]) =>
-      layer(
-        cls as any,
-        isTemplateStringsArray(charterOrTemplate)
-          ? prose(charterOrTemplate, ...refs)
-          : charterOrTemplate,
-      ),
+      kind === "Skill"
+        ? layer(cls as any, charterOrTemplate, ...refs)
+        : layer(
+            cls as any,
+            isTemplateStringsArray(charterOrTemplate)
+              ? prose(charterOrTemplate, ...refs)
+              : charterOrTemplate,
+          ),
   }) as any;
 };
 

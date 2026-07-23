@@ -181,15 +181,21 @@ export class Kernel extends Context.Service<Kernel, KernelService>()(
  */
 export const layer: {
   /**
-   * The default SKILL Layer: the skill's tag out, its TOOLS' tags in —
-   * the bundle is nominal (charters require `Coding`, never `Grep`)
-   * and providing this Layer is what surfaces the tool requirements.
-   * A custom `Layer.effect(Coding, …)` may instead build the whole
-   * bundle's physics inline.
+   * The SKILL Layer — `Coding.make`…`` packages this: the skill's tag
+   * out, the TEMPLATE's spliced tools' tags in. The teaching (prose +
+   * splices) rides the service value, so different implementations of
+   * one skill contract may teach different prose over different
+   * tools. A custom `Layer.effect(Coding, …)` may instead build the
+   * whole bundle inline.
    */
-  <L extends Skill<any, any[], any> & Context.Service<any, any>>(
+  <
+    L extends Skill<any, any> & Context.Service<any, any>,
+    const Refs extends any[],
+  >(
     term: L,
-  ): Layer.Layer<L["Identifier"], never, Services<L["refs"]>>;
+    template: TemplateStringsArray,
+    ...refs: Refs
+  ): Layer.Layer<L["Identifier"], never, Services<Refs>>;
   /**
    * The default AGENT Layer: interpret the charter, publish the verbs
    * as the tag's service.
@@ -198,14 +204,15 @@ export const layer: {
     term: A,
     charter: C,
   ): Layer.Layer<A["Identifier"], never, Kernel | CharterServices<C>>;
-} = ((term: any, charter?: any) =>
+} = ((term: any, charterOrTemplate?: any, ...refs: any[]) =>
   isSkill(term)
     ? Layer.effect(
         term as any,
         Effect.gen(function* () {
+          const template = charterOrTemplate as TemplateStringsArray;
           const context = yield* Effect.context<never>();
           const tools: SkillService["tools"] = {};
-          for (const ref of term.refs) {
+          for (const ref of refs) {
             if (!isTool(ref)) continue;
             const name = (ref as { "~alchemy/Name": string })["~alchemy/Name"];
             const service = Context.getOption(context, ref as any);
@@ -218,12 +225,14 @@ export const layer: {
               ? yield* service.value as Effect.Effect<any>
               : service.value;
           }
-          return { tools } satisfies SkillService;
+          return { template, refs, tools } satisfies SkillService;
         }) as any,
       )
     : Layer.effect(
         term,
         Effect.orDie(
-          Effect.flatMap(Kernel, (kernel) => kernel.interpret(term, charter)),
+          Effect.flatMap(Kernel, (kernel) =>
+            kernel.interpret(term, charterOrTemplate),
+          ),
         ) as any,
       )) as any;

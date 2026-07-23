@@ -27,12 +27,15 @@ using ${Search} for anything you do not already know.`;
 /**
  * A skill bundling the Search tool behind how-to prose — DORMANT
  * until the agent activates it (or hands it to a spawn). The
- * charter's requirement is the SKILL's tag; the tool tags surface as
- * `AI.layer(Archives)`'s own requirements.
+ * declaration is a bare tag; the TEACHING lives on the Layer, so the
+ * charter's requirement is the SKILL's tag and the tool tags surface
+ * as {@link ArchivesLive}'s own requirements.
  */
-export class Archives extends AI.Skill<Archives>()("Archives")`
+export class Archives extends AI.Skill<Archives>()("Archives") {}
+
+export const ArchivesLive = Archives.make`
 Searching the historical archives: use ${Search} with precise
-queries, one fact per query, and cite what you find.` {}
+queries, one fact per query, and cite what you find.`;
 
 export class Scholar extends AI.Agent<Scholar>()("Scholar") {}
 

@@ -25,17 +25,24 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import { CodingLocal } from "./coding.ts";
 import { EngineerLive } from "./engineer.ts";
+import { Factory, FactoryLive, type FactoryService } from "./factory.ts";
 import { Issues, IssuesLive, type IssuesService } from "./issues.ts";
 import { SqliteLedger } from "./ledger.ts";
+import { LiveTestingLive } from "./live-testing.ts";
 import {
   PullRequests,
   PullRequestsLive,
   type PullRequestsService,
 } from "./pull-requests.ts";
+import { ReconcilingLive } from "./reconciling.ts";
+import { ResourceEngineerLive } from "./resource-engineer.ts";
 import { ReviewerLive } from "./reviewer.ts";
+import { TypedErrorsLive } from "./typed-errors.ts";
 import {
   ApproveConsole,
   CloseIssueLive,
@@ -109,11 +116,34 @@ const ReviewerLayer = ReviewerLive.pipe(
 );
 
 /**
+ * The ResourceEngineer: the factory's per-service laborer. The ONE
+ * physics bundle is the generic ${Coding} toolbox; the doctrines
+ * (typed errors, reconciling, live testing) are PROSE-ONLY skills —
+ * knowledge, not tools. NOTE: the factory operates on the checkout
+ * at ORG_WORKSPACE — point it at an alchemy repo root (with the
+ * distilled submodule), not at services/alchemy-org.
+ */
+const ResourceEngineerLayer = ResourceEngineerLive.pipe(
+  Layer.provide(
+    Layer.mergeAll(CodingLocal, TypedErrorsLive, ReconcilingLive, LiveTestingLive),
+  ),
+  Layer.provide(Kernel),
+  Layer.provide(OrgWorkspace),
+);
+
+/** The Factory desk: waves of per-service engineers, banked reports. */
+const FactoryLayer = FactoryLive.pipe(Layer.provide(ResourceEngineerLayer));
+
+/**
  * The processes over their world: GitHub events arrive by REST polling
  * (the webhook Layer slots in unchanged on Cloudflare); the Ledger is
  * bun:sqlite so delivery dedupe survives restarts.
  */
-export const OrgLive = Layer.mergeAll(IssuesLive, PullRequestsLive).pipe(
+export const OrgLive = Layer.mergeAll(
+  IssuesLive,
+  PullRequestsLive,
+  FactoryLayer,
+).pipe(
   Layer.provide(Layer.mergeAll(EngineerLayer, ReviewerLayer)),
   Layer.provide(
     Layer.mergeAll(
@@ -136,6 +166,7 @@ export const OrgLive = Layer.mergeAll(IssuesLive, PullRequestsLive).pipe(
 interface OrgHandles {
   readonly issues?: IssuesService;
   readonly pullRequests?: PullRequestsService;
+  readonly factory?: FactoryService;
 }
 
 export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
@@ -157,7 +188,8 @@ export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
       Effect.gen(function* () {
         const issues = yield* Issues;
         const pullRequests = yield* PullRequests;
-        yield* Ref.set(org, { issues, pullRequests });
+        const factory = yield* Factory;
+        yield* Ref.set(org, { issues, pullRequests, factory });
         yield* Effect.log(
           "alchemy-org is watching test-alchemy (polling every 30s)",
         );
@@ -166,20 +198,42 @@ export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
     );
 
     return {
-      // localhost status surface: the processes' sealed Shapes, read-only
+      // localhost surface: the desks' sealed Shapes — read-only status,
+      // plus the factory's one door (`POST /factory/wave`)
       fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
         const handles = yield* Ref.get(org);
-        if (!handles.issues || !handles.pullRequests) {
+        if (!handles.issues || !handles.pullRequests || !handles.factory) {
           return yield* HttpServerResponse.json(
             { phase: "starting" },
             { status: 503 },
           );
         }
+
+        // the factory's door: start a wave, respond immediately — the
+        // order book is where outcomes land as engineers file reports
+        if (request.method === "POST" && request.url.startsWith("/factory/wave")) {
+          const body = (yield* request.json.pipe(Effect.orDie)) as {
+            services: string[];
+            concurrency?: number;
+          };
+          yield* Effect.forkDetach(
+            handles.factory
+              .wave(body.services, { concurrency: body.concurrency })
+              .pipe(Effect.provide(RuntimeContext.phantom)),
+          );
+          return yield* HttpServerResponse.json(
+            { started: body.services },
+            { status: 202 },
+          );
+        }
+
         const status = yield* Effect.all({
           issues: handles.issues.list(),
           pullRequests: handles.pullRequests.list(),
+          factory: handles.factory.orderBook(),
         }).pipe(
-          Effect.map(({ issues, pullRequests }) => ({
+          Effect.map(({ issues, pullRequests, factory }) => ({
             phase: "running",
             openIssues: issues.map((issue) => ({
               number: issue.number,
@@ -189,6 +243,7 @@ export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
               number: pull.number,
               title: pull.title,
             })),
+            factory,
           })),
           Effect.catch((error) =>
             Effect.succeed({

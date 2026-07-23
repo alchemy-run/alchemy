@@ -10,13 +10,6 @@ import { issue, pr } from "./vocabulary.ts";
 
 export class Reviewer extends AI.Agent<Reviewer>()("Reviewer") {}
 
-/**
- * The kernel-default implementation: the Reviewer is PLAIN (its tag
- * is the actor verbs) because it exists to be called — PullRequests
- * dispatches a diff and awaits the verdict. Whether ${Approve} is a
- * human gate or a console auto-approve is the entrypoint's
- * `Layer.provide` — the autonomy dial never appears here.
- */
 export const ReviewerLive = Reviewer.make`
   You review each ${pr} against its originating ${issue} — the diff
   and the spec, nothing else; you did not see the reasoning, and that

@@ -1,14 +1,14 @@
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { issue, pr } from "../vocabulary.ts";
+import { issue } from "../vocabulary.ts";
 
 export class OpenPullRequest extends AI.Tool<OpenPullRequest>()(
   "openPullRequest",
 )`
-Open a pull request resolving ${issue}. Returns the created ${pr}.
-The PR body must cite the issue and the evidence that criteria are
-met.` {}
+Open a pull request resolving ${issue}. Returns the created pull
+request reference. The PR body must cite the issue and the evidence
+that criteria are met.` {}
 
 /**
  * TODO(workspace): opening a pull request needs branch-push plumbing —

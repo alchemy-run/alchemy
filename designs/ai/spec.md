@@ -58,7 +58,10 @@ export const ReviewerLive = Reviewer.make`
 ```
 
 **Terms**: `AI.Agent` (bare Context tag, the ONE interpretable term),
-`AI.Tool` / `AI.Parameter` (capability terms), `AI.Skill` (dormant bundle),
+`AI.Tool` / `AI.Parameter` (capability terms), `AI.Skill` (bare tag; a
+dormant bundle whose TEACHING — prose + granted tools — lives on its
+`make` Layer, so one contract can ship different teachings per
+environment: `Coding.make` `` `${Grep} before ${ReadFile}…` ``),
 `AI.Event` (message vocabulary). There is no Process term: a sealed
 domain surface is a plain `Context.Service` whose Layer resolves a
 PRIVATE agent's tag (provided by that agent's own `make` Layer) and
@@ -97,10 +100,113 @@ Splice semantics at render (every tick):
 | `Tool` term / inline `ToolImpl` | `` `name` `` | the tool, this tick |
 | `Skill` term | `` `name` `` | access (activation via the `skill` intrinsic) |
 | `Agent` term | name | the `dispatch` affordance, this tick |
-| `Process` / `Event` / `Parameter` | name | nothing (identity in prose) |
+| `Event` / `Parameter` | name | nothing (identity in prose) |
 | nested `Fragment` / `Effect<Fragment>` | its blocks (evaluated per tick) | whatever it mentions |
 | `Effect<string>` etc. | the value, inline | — |
 | plain value | `String(value)` | — |
+
+### 2b. Mention is presence — and there is deliberately no silent grant
+
+**Decision (2026-07-23): a capability exists in a tick if and only if its
+term renders in that tick's stance. There is no way to grant a tool
+without rendering it, and none will be added.** This was challenged
+("can you define tools that are not in the system prompt? that's what
+frameworks do — define upfront, let the schema teach, keep the prose in
+domain language") and examined; the challenge fails case by case:
+
+- **Register** ("say *approve it*, never *use the approve tool*") is
+  satisfiable inside the template — a mention is a word in a sentence,
+  or a trailing line:
+
+  ```ts
+  // inline, colloquial — the mention IS the verb
+  Reviewer.make`
+    ${Approve} it, or send the author your exact ${Comment} — they
+    hear your words, not a summary.`
+
+  // trailing list — prose fully natural, grants explicit at the end
+  Reviewer.make`
+    Approve it or request the changes — the author hears your exact
+    words.
+
+    Your tools: ${Approve}, ${Comment}.`
+  ```
+
+  The trailing form costs ~3 rendered tokens per tool. That is the
+  entire savings a silent grant would offer.
+- **Bulk** (nine tools should not be narrated in every charter) is what
+  SKILLS are: `${Coding}` is one mention granting a bundle; the
+  individual tools arrive un-narrated at activation, and the place they
+  are narrated is the skill's teaching, where narration is pedagogy.
+- **"Not worth mentioning"** is a signal, not a problem: a tool that
+  does not deserve six words of prose still costs its schema (~hundreds
+  of tokens) in every request, and toolkit sprawl measurably degrades
+  tool selection. Mention-as-cost is the pressure that keeps charters
+  honest about what they carry.
+- **Dynamism is where a silent channel actively breaks the design.**
+  The stance TEXT is the source of truth; stance diffs are delivered as
+  situation messages, so a toolkit change always arrives with its
+  explanation. Concretely, the Issues desk's turn renders its phase:
+
+  ```ts
+  return yield* AI.prose`
+    This process manages GitHub issues for ${testAlchemy} from open to
+    close.
+
+    ${Ref.get(phase).pipe(
+      Effect.flatMap((phase) =>
+        phase === "triaging"
+          ? AI.prose`
+              …until the issue is READY, ${Comment} asks the author for
+              exactly what is missing and ${awaitAuthor} parks the issue
+              on them.`
+          : AI.prose`
+              This issue is parked on its author. Judge their latest
+              reply: when it closes the gaps, ${resumeTriage} and
+              proceed; when it does not, ask again with ${Comment}.`,
+      ),
+    )}`;
+  ```
+
+  What the model actually experiences across the phase flip:
+
+  ```
+  tick 3 (triaging)   toolkit: [comment, searchIssues, …, await_author]
+    → model calls await_author; the handler flips the phase Ref
+
+  tick 4 (parked)     the re-rendered stance differs; the kernel delivers:
+
+      <situation>
+      This issue is parked on its author. Judge their latest reply:
+      when it closes the gaps, `resume_triage` and proceed; when it
+      does not, ask again with `comment`.
+      </situation>
+
+                      toolkit: [comment, …, resume_triage]
+  ```
+
+  `await_author` is gone AND the text that removed it is the text that
+  explains its absence — the same render produced both, so they cannot
+  disagree. With a silent grant channel the toolkit could change while
+  the stance text stayed identical: no diff, no situation, no trace —
+  exactly the "do I have tool x?" confusion the reconciler exists to
+  prevent. Rendering is not decoration; it is the observability of
+  capability, for the model and for anyone auditing the transcript.
+- **The audit property**: `rg '\$\{Approve\}'` enumerates every charter
+  that could ever hold that authority, and the type system agrees
+  because the mention IS the requirement. A second, non-rendering grant
+  syntax forks that story for a three-token savings.
+
+The reductio: "tools defined here, prose over there" is the first plank
+of the config-object design (tools array + separate system prompt) that
+the template bet rejects. Reading the prose IS reading the capability
+manifest — one artifact, colloquial on purpose.
+
+The one legitimate concern found nearby is WIRE-level, not semantic:
+per-tick toolkit changes churn the provider's tool-block cache. That is
+the deferred **union-toolkit + stance masking** kernel option (§13):
+unmentioned tools may stay in the provider payload and be rejected on
+call — bytes change, the law does not.
 
 ## 3. State is `Ref`
 
@@ -497,7 +603,10 @@ return yield* AI.prose`
 - KernelDurable: snapshot-at-park, passivation, reminders (time as a wake
   source that survives eviction), named-state variant of `Ref`.
 - Union-toolkit + stance masking (cache-stable wire representation of
-  mention-is-presence).
+  mention-is-presence): unmentioned tools stay in the provider payload
+  (tool-block cache intact) and are rejected on call with a
+  model-visible "not in your current stance". A transport decision —
+  the SEMANTICS stay §2b's mention-is-presence, unchanged.
 - **Codemode as a kernel wire-mode** (`KernelCodemode`): one byte-stable
   `execute` tool; the tick's grants become a generated, typed API inside a
   sandbox, bridged to the same handlers — mention-is-presence unchanged as

@@ -278,7 +278,7 @@ interface CompiledToolRef {
 interface Stance {
   readonly blocks: ReadonlyArray<string>;
   readonly tools: Map<string, CompiledToolRef>;
-  readonly skills: Map<string, Skill<string, any[], any>>;
+  readonly skills: Map<string, Skill<string, any>>;
   readonly delegates: Map<string, Agent<any, any>>;
 }
 
@@ -471,7 +471,7 @@ export const KernelMemory: Layer.Layer<
           >;
         }
         const skillCache = new Map<string, ResolvedSkill>();
-        const resolveSkill = (skill: Skill<string, any[], any>) =>
+        const resolveSkill = (skill: Skill<string, any>) =>
           Effect.gen(function* () {
             const skillName = skill["~alchemy/Name"];
             const cached = skillCache.get(skillName);
@@ -482,8 +482,11 @@ export const KernelMemory: Layer.Layer<
                 `KernelMemory: no implementation provided for skill '${skillName}' referenced by '${termName}'`,
               );
             }
+            // the IMPLEMENTATION carries the teaching: prose, spliced
+            // tools, and their physics all come from the resolved
+            // service — the term is only the name
             const impl = service.value as SkillService;
-            const skillTools = skill.refs.filter(isTool);
+            const skillTools = impl.refs.filter(isTool);
             const handlers: ResolvedSkill["handlers"] = {};
             for (const tool of skillTools) {
               const name = tool["~alchemy/Name"];
@@ -496,7 +499,7 @@ export const KernelMemory: Layer.Layer<
               handlers[name] = resolved;
             }
             const entry: ResolvedSkill = {
-              prose: render(skill.template, skill.refs),
+              prose: render(impl.template, impl.refs),
               tools: skillTools.map(compileTool),
               handlers,
             };
@@ -529,7 +532,7 @@ export const KernelMemory: Layer.Layer<
           Effect.gen(function* () {
             const blocks: Array<string> = [];
             const tools = new Map<string, CompiledToolRef>();
-            const skills = new Map<string, Skill<string, any[], any>>();
+            const skills = new Map<string, Skill<string, any>>();
             const delegates = new Map<string, Agent<any, any>>();
             let buffer = "";
             const flush = () => {
