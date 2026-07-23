@@ -247,10 +247,37 @@ there is no in-cluster Helm release record. Charts that rely on
 install/upgrade hooks for correctness should be installed with Helm
 directly.
 
+## Run on SageMaker HyperPod
+
+An EKS cluster can also orchestrate a
+[SageMaker HyperPod](/aws/compute/hyperpod) fleet — persistent,
+health-checked ML compute whose nodes join the cluster as
+ordinary Kubernetes nodes. `Deployment` and `Job` opt onto those
+nodes with the `hyperpod` prop, and passing a team's
+`ComputeQuota` submits the workload through HyperPod task
+governance:
+
+```typescript
+const train = yield* AWS.EKS.Job("Train", {
+  cluster,
+  main: import.meta.url,
+  hyperpod: {
+    instanceGroup: workers, // the group object from the HyperPod cluster
+    quota: researchQuota, // → hyperpod-ns-research + Kueue queue label
+    priorityClass: "training",
+  },
+});
+```
+
+See [HyperPod](/aws/compute/hyperpod) for provisioning the fleet
+and the full governance surface.
+
 ## Where next
 
 - [VPC & networking](/aws/networking) — what the `Network` helper
   builds under the cluster.
+- [HyperPod](/aws/compute/hyperpod) — run training fleets on this
+  cluster's nodes.
 - [Choosing a runtime](/aws/compute/choosing-a-runtime) — when Lambda or ECS
   is the better fit than running your own Kubernetes workloads.
 - [`Cluster` reference](/providers/aws/eks/cluster),

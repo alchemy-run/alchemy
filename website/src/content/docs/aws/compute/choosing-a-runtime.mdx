@@ -96,6 +96,12 @@ and the control plane takes ~10 minutes to create.
 
 → [EKS](/aws/compute/eks)
 
+For ML training fleets specifically — persistent, health-checked
+GPU clusters rather than application containers — EKS pairs with
+[SageMaker HyperPod](/aws/compute/hyperpod): the HyperPod nodes
+join your EKS cluster, and `Deployment`/`Job` opt onto them with
+the `hyperpod` prop.
+
 ## EC2 — when you need the machine
 
 Full-control VMs for workloads that need an OS, a GPU, custom
