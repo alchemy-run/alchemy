@@ -150,23 +150,11 @@ export const HyperPodEksInfra = Effect.gen(function* () {
     },
   });
 
-  // The workers instance group. Workloads reference it through the
-  // cluster's attributes (`hyperpod.instanceGroups.workers`), connecting
-  // them to the fleet through the resource graph.
-  const workers = {
-    InstanceGroupName: "workers",
-    InstanceType: "ml.t3.medium",
-    InstanceCount: 1,
-    ExecutionRole: role.roleArn,
-    LifeCycleConfig: {
-      SourceS3Uri: script.sourceS3Uri,
-      OnCreate: script.onCreate,
-    },
-  };
-
   // The HyperPod cluster, attached to the EKS control plane. SageMaker
   // creates the EKS access entry for the node role automatically.
   // `Output.all` holds the attach until the dependencies chart is applied.
+  // Instance-group keys carry through to the cluster's attributes, so
+  // workloads reference `hyperpod.instanceGroups.workers` — typed per key.
   const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
     orchestrator: {
       Eks: {
@@ -187,7 +175,17 @@ export const HyperPodEksInfra = Effect.gen(function* () {
       ],
       Subnets: network.privateSubnetIds,
     },
-    instanceGroups: [workers],
+    instanceGroups: {
+      workers: {
+        InstanceType: "ml.t3.medium",
+        InstanceCount: 1,
+        ExecutionRole: role.roleArn,
+        LifeCycleConfig: {
+          SourceS3Uri: script.sourceS3Uri,
+          OnCreate: script.onCreate,
+        },
+      },
+    },
     // Node auto-replacement is not supported for CPU instances.
     nodeRecovery: "None",
     tags: { app: "aws-hyperpod-example" },

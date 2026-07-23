@@ -85,9 +85,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
         Effect.gen(function* () {
           const { role } = yield* supporting;
           const cluster = yield* Cluster("TestHyperPod", {
-            instanceGroups: [
-              {
-                InstanceGroupName: "controller",
+            instanceGroups: {
+              controller: {
                 InstanceType: "ml.t3.medium",
                 InstanceCount: 1,
                 ExecutionRole: role.roleArn,
@@ -99,7 +98,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
                   OnCreate: "on_create.sh",
                 },
               },
-            ],
+            },
             nodeRecovery: "None",
             tags: { purpose: "alchemy-test" },
           });

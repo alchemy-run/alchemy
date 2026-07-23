@@ -263,9 +263,8 @@ const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
     SecurityGroupIds: [clusterSecurityGroupId],
     Subnets: network.privateSubnetIds,
   },
-  instanceGroups: [
-    {
-      InstanceGroupName: "workers",
+  instanceGroups: {
+    workers: {
       InstanceType: "ml.g5.xlarge",
       InstanceCount: 4,
       ExecutionRole: role.roleArn,
@@ -274,13 +273,14 @@ const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
         OnCreate: script.onCreate,
       },
     },
-  ],
+  },
 });
 ```
 
 `Deployment` and `Job` then opt onto those nodes with the
-`hyperpod` prop. The instance group is referenced through the
-cluster's attributes — `hyperpod.instanceGroups.workers` — so the
+`hyperpod` prop. The instance-group keys carry through to the
+cluster's attributes as types — `hyperpod.instanceGroups.workers`
+is typed per key and a typo'd name is a compile error — so the
 workload is connected to the fleet through the resource graph,
 and a team's `ComputeQuota` submits it through HyperPod task
 governance:

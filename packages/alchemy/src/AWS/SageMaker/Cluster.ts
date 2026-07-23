@@ -5,6 +5,8 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
+import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -34,6 +36,24 @@ export interface ClusterInstanceGroupRef {
   TargetCount: number | undefined;
 }
 
+/**
+ * One instance group's specification, sans name — the group's name is the
+ * key in {@link ClusterProps.instanceGroups}.
+ */
+export type ClusterInstanceGroup = Omit<
+  sagemaker.ClusterInstanceGroupSpecification,
+  "InstanceGroupName"
+>;
+
+/**
+ * One restricted instance group's specification, sans name — the group's
+ * name is the key in {@link ClusterProps.restrictedInstanceGroups}.
+ */
+export type ClusterRestrictedInstanceGroup = Omit<
+  sagemaker.ClusterRestrictedInstanceGroupSpecification,
+  "InstanceGroupName"
+>;
+
 export interface ClusterProps {
   /**
    * Name of the HyperPod cluster. Maximum 63 characters, alphanumeric and
@@ -42,19 +62,20 @@ export interface ClusterProps {
    */
   clusterName?: string;
   /**
-   * The instance groups of the cluster: each names a group and specifies its
-   * instance type, instance count, lifecycle config (S3 URI + `on_create`
-   * script) and execution role.
+   * The instance groups of the cluster, keyed by group name. Each group
+   * specifies its instance type, instance count, lifecycle config (S3 URI
+   * + `on_create` script) and execution role.
    *
-   * Groups are updated in place; removing a group from this list deletes it
-   * from the cluster.
+   * Groups are updated in place; removing a key deletes the group from the
+   * cluster. The keys carry through to the cluster's `instanceGroups`
+   * attribute, so `hyperpod.instanceGroups.workers` is typed per key.
    */
-  instanceGroups?: sagemaker.ClusterInstanceGroupSpecification[];
+  instanceGroups?: Record<string, ClusterInstanceGroup>;
   /**
    * Restricted instance groups for HyperPod clusters running Amazon-managed
-   * workloads (e.g. Nova model customization).
+   * workloads (e.g. Nova model customization), keyed by group name.
    */
-  restrictedInstanceGroups?: sagemaker.ClusterRestrictedInstanceGroupSpecification[];
+  restrictedInstanceGroups?: Record<string, ClusterRestrictedInstanceGroup>;
   /**
    * Shared environment configuration (e.g. FSx for Lustre) for restricted
    * instance groups.
@@ -135,6 +156,20 @@ export interface Cluster extends Resource<
   Providers
 > {}
 
+const ClusterResource = Resource<Cluster>("AWS.SageMaker.Cluster");
+
+/**
+ * A `Cluster` narrowed to the instance-group keys declared in its props —
+ * `hyperpod.instanceGroups.workers` is typed per key, and a typo'd key is
+ * a compile error.
+ */
+export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
+  instanceGroups: Output.ObjectExpr<
+    { [K in keyof Groups]: ClusterInstanceGroupRef },
+    never
+  >;
+};
+
 /**
  * An Amazon SageMaker HyperPod cluster — a resilient, persistent cluster of
  * ML compute for distributed training and inference, orchestrated by Slurm
@@ -150,9 +185,8 @@ export interface Cluster extends Resource<
  * import * as AWS from "alchemy/AWS";
  *
  * const cluster = yield* AWS.SageMaker.Cluster("TrainingCluster", {
- *   instanceGroups: [
- *     {
- *       InstanceGroupName: "controller",
+ *   instanceGroups: {
+ *     controller: {
  *       InstanceType: "ml.t3.medium",
  *       InstanceCount: 1,
  *       ExecutionRole: role.roleArn,
@@ -161,7 +195,7 @@ export interface Cluster extends Resource<
  *         OnCreate: "on_create.sh",
  *       },
  *     },
- *   ],
+ *   },
  * });
  * ```
  *
@@ -177,9 +211,8 @@ export interface Cluster extends Resource<
  *     SecurityGroupIds: [securityGroupId],
  *     Subnets: network.privateSubnetIds,
  *   },
- *   instanceGroups: [
- *     {
- *       InstanceGroupName: "workers",
+ *   instanceGroups: {
+ *     workers: {
  *       InstanceType: "ml.g5.xlarge",
  *       InstanceCount: 2,
  *       ExecutionRole: role.roleArn,
@@ -188,9 +221,12 @@ export interface Cluster extends Resource<
  *         OnCreate: "on_create.sh",
  *       },
  *     },
- *   ],
+ *   },
  *   nodeRecovery: "Automatic",
  * });
+ *
+ * // The keys carry through to the attributes — typed per key:
+ * const workers = hyperpod.instanceGroups.workers;
  * ```
  *
  * @section Running Workloads (Slurm)
@@ -286,7 +322,20 @@ export interface Cluster extends Resource<
  * });
  * ```
  */
-export const Cluster = Resource<Cluster>("AWS.SageMaker.Cluster");
+export const Cluster: {
+  <
+    const Props extends {
+      [prop in keyof ClusterProps]: Input<ClusterProps[prop]>;
+    },
+  >(
+    id: string,
+    props: Props | Effect.Effect<Props>,
+  ): Effect.Effect<
+    ClusterOf<NonNullable<Props["instanceGroups"]>>,
+    never,
+    Providers
+  >;
+} & typeof ClusterResource = ClusterResource as never;
 
 const createClusterName = (
   id: string,
@@ -434,12 +483,20 @@ const observedGroupIdentity = (
   type: group.InstanceType,
 });
 
-const desiredGroupIdentity = (
-  group: sagemaker.ClusterInstanceGroupSpecification,
-) => ({
+const desiredGroupIdentity = (group: ClusterInstanceGroup) => ({
   count: group.InstanceCount,
   type: group.InstanceType,
 });
+
+/** Fold the keyed props form into the API's named-array form. */
+const toGroupSpecs = <G extends { InstanceGroupName?: string }>(
+  groups: Record<string, Omit<G, "InstanceGroupName">> | undefined,
+): G[] | undefined =>
+  groups === undefined
+    ? undefined
+    : Object.entries(groups).map(
+        ([name, group]) => ({ InstanceGroupName: name, ...group }) as G,
+      );
 
 export const ClusterProvider = () =>
   Provider.effect(
@@ -517,8 +574,10 @@ export const ClusterProvider = () =>
             yield* sagemaker
               .createCluster({
                 ClusterName: name,
-                InstanceGroups: news.instanceGroups,
-                RestrictedInstanceGroups: news.restrictedInstanceGroups,
+                InstanceGroups: toGroupSpecs(news.instanceGroups),
+                RestrictedInstanceGroups: toGroupSpecs(
+                  news.restrictedInstanceGroups,
+                ),
                 RestrictedInstanceGroupsConfig:
                   news.restrictedInstanceGroupsConfig,
                 VpcConfig: news.vpcConfig,
@@ -551,10 +610,8 @@ export const ClusterProvider = () =>
               ),
             );
             const desiredGroups = new Map(
-              (news.instanceGroups ?? []).flatMap((g) =>
-                g.InstanceGroupName !== undefined
-                  ? [[g.InstanceGroupName, desiredGroupIdentity(g)]]
-                  : [],
+              Object.entries(news.instanceGroups ?? {}).map(
+                ([groupName, g]) => [groupName, desiredGroupIdentity(g)],
               ),
             );
             const groupsToDelete = [...observedGroups.keys()].filter(
@@ -582,8 +639,10 @@ export const ClusterProvider = () =>
               yield* sagemaker
                 .updateCluster({
                   ClusterName: name,
-                  InstanceGroups: news.instanceGroups,
-                  RestrictedInstanceGroups: news.restrictedInstanceGroups,
+                  InstanceGroups: toGroupSpecs(news.instanceGroups),
+                  RestrictedInstanceGroups: toGroupSpecs(
+                    news.restrictedInstanceGroups,
+                  ),
                   RestrictedInstanceGroupsConfig:
                     news.restrictedInstanceGroupsConfig,
                   TieredStorageConfig: news.tieredStorageConfig,

@@ -78,9 +78,8 @@ const role = yield* AWS.IAM.Role("HyperPodInstanceRole", {
 });
 
 const cluster = yield* AWS.SageMaker.Cluster("TrainingCluster", {
-  instanceGroups: [
-    {
-      InstanceGroupName: "controller",
+  instanceGroups: {
+    controller: {
       InstanceType: "ml.t3.medium",
       InstanceCount: 1,
       ExecutionRole: role.roleArn,
@@ -89,7 +88,7 @@ const cluster = yield* AWS.SageMaker.Cluster("TrainingCluster", {
         OnCreate: script.onCreate,
       },
     },
-  ],
+  },
 });
 ```
 
@@ -152,9 +151,8 @@ const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
     SecurityGroupIds: [clusterSecurityGroupId],
     Subnets: network.privateSubnetIds,
   },
-  instanceGroups: [
-    {
-      InstanceGroupName: "workers",
+  instanceGroups: {
+    workers: {
       InstanceType: "ml.t3.medium",
       InstanceCount: 1,
       ExecutionRole: role.roleArn,
@@ -163,7 +161,7 @@ const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
         OnCreate: script.onCreate,
       },
     },
-  ],
+  },
 });
 ```
 
@@ -176,9 +174,11 @@ HyperPod nodes must live in **private subnets** — the
 HyperPod nodes are ordinary EKS nodes carrying well-known labels.
 [`Deployment`](/providers/aws/eks/deployment) and
 [`Job`](/providers/aws/eks/job) opt onto them with the `hyperpod`
-prop. Reference the instance group through the cluster's
-attributes — the workload is connected to the fleet through the
-resource graph, and the node selector derives from it:
+prop. The instance-group keys carry through to the cluster's
+attributes as types, so the reference is typed per key (a typo'd
+group name is a compile error), the workload is connected to the
+fleet through the resource graph, and the node selector derives
+from it:
 
 ```typescript
 const train = yield* AWS.EKS.Job(

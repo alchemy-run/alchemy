@@ -34,9 +34,8 @@ export default Alchemy.Stack(
     });
 
     const cluster = yield* AWS.SageMaker.Cluster("TrainingCluster", {
-      instanceGroups: [
-        {
-          InstanceGroupName: "controller",
+      instanceGroups: {
+        controller: {
           InstanceType: "ml.t3.medium",
           InstanceCount: 1,
           ExecutionRole: role.roleArn,
@@ -45,7 +44,7 @@ export default Alchemy.Stack(
             OnCreate: script.onCreate,
           },
         },
-      ],
+      },
       // Automatic recovery replaces faulty nodes; "None" is fine for a demo
       // controller group and avoids replacement churn on tiny instances.
       nodeRecovery: "None",
