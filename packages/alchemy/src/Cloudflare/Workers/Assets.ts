@@ -110,6 +110,44 @@ const createIgnoreMatcher = (patterns: string[]) => {
   return (file: string) => matcher.ignores(file);
 };
 
+/**
+ * Read the special `_headers` / `_redirects` files from an assets
+ * directory. They are excluded from the upload manifest, but their raw
+ * contents must be sent to Cloudflare in the script metadata's asset
+ * config (`config._headers` / `config._redirects`) for the rules to
+ * apply.
+ */
+export const readAssetsConfigFiles = Effect.fn(function* (directory: string) {
+  const path = yield* Path.Path;
+  const resolvedDirectory = path.resolve(directory);
+  const [_headers, _redirects] = yield* Effect.all([
+    maybeReadString(path.join(resolvedDirectory, "_headers")),
+    maybeReadString(path.join(resolvedDirectory, "_redirects")),
+  ]);
+  return { _headers, _redirects };
+});
+
+/**
+ * Merge `_headers` / `_redirects` file contents into an asset config,
+ * producing the config to send in the script-upload metadata. Explicit
+ * `headers` / `redirects` props win over the files.
+ */
+export const mergeAssetsConfigFiles = (
+  config: AssetsConfig | undefined,
+  files: { _headers: string | undefined; _redirects: string | undefined },
+): AssetsConfig | undefined => {
+  const headers = config?.headers ?? files._headers;
+  const redirects = config?.redirects ?? files._redirects;
+  if (headers === undefined && redirects === undefined) {
+    return config;
+  }
+  return {
+    ...config,
+    ...(headers !== undefined ? { headers } : undefined),
+    ...(redirects !== undefined ? { redirects } : undefined),
+  };
+};
+
 export const readAssets = Effect.fn(function* ({
   directory,
   ...config
@@ -193,7 +231,11 @@ export const readAssets = Effect.fn(function* ({
   });
   return {
     directory,
-    config,
+    // Fold the `_headers` / `_redirects` file contents into the config
+    // that gets sent to Cloudflare (`metadata.assets.config`). Merged
+    // *after* hashing so the hash input shape stays stable for
+    // already-deployed workers.
+    config: mergeAssetsConfigFiles(config, { _headers, _redirects }),
     manifest: sortedManifest,
     _headers,
     _redirects,

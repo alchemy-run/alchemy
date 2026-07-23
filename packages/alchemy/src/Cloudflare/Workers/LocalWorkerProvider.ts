@@ -65,6 +65,7 @@ import { sha256, unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
+import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { Worker } from "./Worker.ts";
@@ -295,7 +296,7 @@ export const LocalWorkerProvider = () =>
                   durableObjectNamespaces: worker.durableObjectNamespaces,
                   queueConsumers,
                   modules: yield* toRuntimeModules(bundle),
-                  assets: toRuntimeAssets(worker.assets),
+                  assets: yield* toRuntimeAssets(worker.assets),
                 })
                 .pipe(Scope.provide(scope));
               workerdScopes.set(worker.id, scope);
@@ -588,7 +589,7 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces: worker.durableObjectNamespaces,
               hyperdrives: worker.hyperdrives,
               queueConsumers: yield* getQueueConsumers(worker.name),
-              assets: toRuntimeAssets(worker.assets),
+              assets: yield* toRuntimeAssets(worker.assets),
             },
             context,
           },
@@ -949,19 +950,34 @@ const structuralSignature = (value: unknown): Effect.Effect<string> => {
   return sha256(JSON.stringify(normalize(value)));
 };
 
-const toRuntimeAssets = (
+const toRuntimeAssets = Effect.fn(function* (
   assets: WorkerAssetsConfig | undefined,
-): RuntimeAssets | undefined => {
+) {
   if (!assets) return undefined;
+  // Mirror the deploy path: the special `_headers` / `_redirects` files
+  // in the assets directory carry the rules unless overridden by
+  // explicit `headers` / `redirects` props. The local runtime parses
+  // the raw string contents just like Cloudflare does.
+  const directory = typeof assets === "string" ? assets : assets.directory;
+  // An unreadable file just means no rules here — the assets plugin
+  // reports directory problems itself.
+  const files = yield* readAssetsConfigFiles(directory).pipe(
+    Effect.orElseSucceed(() => ({
+      _headers: undefined,
+      _redirects: undefined,
+    })),
+  );
   if (typeof assets === "string") {
     return {
       directory: assets,
+      headers: files._headers,
+      redirects: files._redirects,
     };
   }
   return {
     directory: assets.directory,
-    headers: assets.headers,
-    redirects: assets.redirects,
+    headers: assets.headers ?? files._headers,
+    redirects: assets.redirects ?? files._redirects,
     // Distilled widened generated string enums to open unions (`string & {}`);
     // the API only ever returns the known variants here.
     htmlHandling: assets.htmlHandling as
@@ -978,7 +994,7 @@ const toRuntimeAssets = (
     runWorkerFirst: assets.runWorkerFirst,
     serveDirectly: assets.serveDirectly,
   };
-};
+});
 
 const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {
   switch (ext) {

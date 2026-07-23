@@ -23,7 +23,12 @@ import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { listAllZones, resolveZoneId } from "../Zone/lookup.ts";
-import { readAssets, uploadAssets } from "./Assets.ts";
+import {
+  mergeAssetsConfigFiles,
+  readAssets,
+  readAssetsConfigFiles,
+  uploadAssets,
+} from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
@@ -1360,8 +1365,8 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
       ) => {
         if (!Predicate.hasProperty(assets, "hash")) return undefined;
-        const { directory: _, hash, ...config } = assets;
-        return { config, hash, skip: hash === output?.hash?.assets };
+        const { directory, hash, ...config } = assets;
+        return { directory, config, hash, skip: hash === output?.hash?.assets };
       };
 
       const putWorker = Effect.fn(function* (
@@ -1445,7 +1450,16 @@ export const LiveWorkerProvider = () =>
             `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
           );
           keepAssets = true;
-          metadataAssets = { config: prebuiltAssets.config };
+          // `keepAssets` only preserves the uploaded files — the PUT
+          // replaces the asset config wholesale. The skip path never
+          // walked the directory, so read just `_headers`/`_redirects`
+          // here or a no-op deploy would wipe their rules.
+          metadataAssets = {
+            config: mergeAssetsConfigFiles(
+              prebuiltAssets.config,
+              yield* readAssetsConfigFiles(prebuiltAssets.directory),
+            ),
+          };
           metadataBindings.push({
             type: "assets",
             name: "ASSETS",
