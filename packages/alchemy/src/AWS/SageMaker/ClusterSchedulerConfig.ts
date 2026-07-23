@@ -27,7 +27,9 @@ export interface ClusterSchedulerConfigProps {
   name?: string;
   /**
    * ARN of the EKS-orchestrated HyperPod cluster the policy applies to.
-   * Changing the cluster replaces the policy.
+   * Changing the cluster replaces the policy. AWS allows ONE cluster
+   * policy per cluster — creating a second fails with the typed
+   * `ClusterSchedulerConfigAlreadyExists` error.
    */
   clusterArn: string;
   /**

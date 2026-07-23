@@ -31,6 +31,10 @@ const findConfig = (configId: string) =>
 // ~30 minutes and real ML + EKS capacity to stand up. Gated behind an
 // existing cluster:
 //   AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN=<arn of an EKS HyperPod cluster>
+//
+// AWS allows ONE cluster policy per cluster. When the provided cluster
+// already carries one (e.g. the examples/aws-hyperpod stack's), this test
+// verifies the typed conflict instead of the full lifecycle.
 test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN)(
   "create cluster policy, update it, destroy",
   (stack) =>
@@ -39,6 +43,27 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN)(
 
       const clusterArn =
         process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN!;
+
+      const existing = yield* sagemaker.listClusterSchedulerConfigs({
+        ClusterArn: clusterArn,
+      });
+      if (
+        (existing.ClusterSchedulerConfigSummaries ?? []).some(
+          (s) => s.Status !== "Deleted",
+        )
+      ) {
+        // One policy per cluster: creating a second must fail with the
+        // typed ClusterSchedulerConfigAlreadyExists tag.
+        const error = yield* Effect.flip(
+          sagemaker.createClusterSchedulerConfig({
+            Name: "alchemy-conflict-probe",
+            ClusterArn: clusterArn,
+            SchedulerConfig: { FairShare: "Enabled" },
+          }),
+        );
+        expect(error._tag).toBe("ClusterSchedulerConfigAlreadyExists");
+        return;
+      }
 
       const { policy } = yield* stack.deploy(
         Effect.gen(function* () {

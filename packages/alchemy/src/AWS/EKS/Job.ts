@@ -641,9 +641,13 @@ export const JobProvider = () =>
           // hash of the spec, and a spec change applies a NEW Job (which
           // runs) while `reconcileObjects` deletes the previous one.
           // CronJobs are mutable and keep the stable base name.
+          // Kubernetes rejects Job names over 63 characters (the API
+          // stamps the name into the batch.kubernetes.io/job-name pod
+          // label, and label values cap at 63) — truncate the base so the
+          // content-address suffix always fits.
           const jobName = news.schedule
-            ? baseName
-            : `${baseName}-${(yield* sha256Object(jobSpec)).slice(0, 8)}`;
+            ? baseName.slice(0, 52).replace(/-+$/, "")
+            : `${baseName.slice(0, 54).replace(/-+$/, "")}-${(yield* sha256Object(jobSpec)).slice(0, 8)}`;
 
           const workloadObject: KubernetesObjectDefinition = news.schedule
             ? {
