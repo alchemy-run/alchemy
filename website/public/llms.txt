@@ -258,6 +258,10 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 - [SNS](https://alchemy.run/aws/messaging/sns) — Create an SNS Topic, publish to it from a Lambda with the Publish binding, fan messages out to SQS queues, and consume notifications as a typed Stream.
 - [SQS](https://alchemy.run/aws/messaging/sqs) — Add an SQS Queue, publish messages from your Lambda, and consume them from a second consumer Lambda — all wired through Alchemy bindings.
 
+## AWS — Email
+
+- [Receiving inbound email](https://alchemy.run/aws/email/receiving) — Receive inbound mail with SES receipt rule sets and rules — store raw messages in S3, fan out to SNS, invoke a Lambda, or bounce, plus IP filters, the active rule set pointer, and the SendBounce runtime binding. Region-limited (us-east-1/us-west-2/eu-west-1).
+
 ## AWS — Security & secrets
 
 - [Secrets & env](https://alchemy.run/aws/security/secrets-env) — Deliver API keys from .env to a Lambda with effect/Config, and graduate to AWS Secrets Manager when the secret is a shared, generated, or rotated cloud resource.
