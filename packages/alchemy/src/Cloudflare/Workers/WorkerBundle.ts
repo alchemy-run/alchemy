@@ -30,6 +30,13 @@ export interface WorkerBuildOptions extends Bundle.BundleExtraOptions {
    * control chunking (`codeSplitting`), minification, etc.
    */
   output?: rolldown.OutputOptions;
+  /**
+   * Forwarded to rolldown's `preserveEntrySignatures` input option. Some
+   * `output.codeSplitting` configurations require relaxing it (e.g.
+   * `includeDependenciesRecursively: false` needs `"allow-extension"`).
+   * Workers must keep their entry exports, so never pass `false`.
+   */
+  preserveEntrySignatures?: rolldown.InputOptions["preserveEntrySignatures"];
 }
 
 export interface WorkerBundleOptions {
@@ -60,6 +67,7 @@ export const WorkerBundle = Effect.gen(function* () {
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
+      preserveEntrySignatures: options.extraOptions?.preserveEntrySignatures,
       // Forever-devtool native modules that vite/chokidar reference behind
       // runtime guards. Rolldown resolves before tree-shaking, so the dead
       // `require('../pkg')` (lightningcss < 1.32) and `require('fsevents')`

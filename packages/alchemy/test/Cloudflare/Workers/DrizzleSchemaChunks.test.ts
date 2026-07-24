@@ -20,14 +20,17 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 /**
  * Regression stack for https://github.com/alchemy-run/alchemy/issues/749.
  *
- * The `build.output.codeSplitting` groups force the chunk layout from the
- * issue: top-level Drizzle schema modules (`schema/*`, `auth/*`) in their own
- * `auth-*` chunk, `drizzle-orm` in a separate `drizzle-*` chunk. Without
- * WorkerBundle's default `strictExecutionOrder: true`, workerd evaluates the
- * schema chunk before drizzle's class bindings initialize and Cloudflare
- * rejects the upload with `ScriptStartupError: Cannot access '<minified>'
- * before initialization` — so the deploy in `beforeAll` is itself the
- * regression assertion.
+ * The `build` options force the *cyclic* chunk layout from the issue: the
+ * schema group captures only the schema modules
+ * (`includeDependenciesRecursively: false`), so `drizzle-orm` stays in the
+ * entry chunk and the graph becomes `worker.js -> auth-*.js -> worker.js`.
+ * ESM evaluation then runs the schema chunk before drizzle's class bindings
+ * initialize. Without WorkerBundle's default `strictExecutionOrder: true`,
+ * Cloudflare rejects the upload with `ScriptStartupError: Cannot access
+ * '<minified>' before initialization` — so the deploy in `beforeAll` is
+ * itself the regression assertion. (An acyclic split — e.g. drizzle in its
+ * own chunk imported by the schema chunk — would NOT regress: plain import
+ * order already evaluates it correctly.)
  */
 const Stack = Alchemy.Stack(
   "DrizzleSchemaChunksTestStack",
@@ -37,15 +40,18 @@ const Stack = Alchemy.Stack(
       main: fixtureMain,
       compatibility: { date: "2026-06-24", flags: ["nodejs_compat"] },
       build: {
+        // Required by `includeDependenciesRecursively: false`; rolldown
+        // rejects it under the default "strict".
+        preserveEntrySignatures: "allow-extension",
         output: {
+          cleanDir: true,
           codeSplitting: {
             groups: [
-              // Claim drizzle-orm first so the schema group can't
-              // recursively capture it into the same chunk. String tests
-              // are regex patterns; RegExp literals wouldn't survive the
-              // engine's props serialization.
-              { name: "drizzle", test: "drizzle-orm" },
-              { name: "auth", test: "drizzle-schema-chunks/(schema|auth)/" },
+              {
+                name: "auth",
+                test: "drizzle-schema-chunks/(schema|auth)/",
+                includeDependenciesRecursively: false,
+              },
             ],
           },
         },
@@ -60,28 +66,35 @@ const bundleDir = Effect.gen(function* () {
   return path.resolve(".alchemy/bundles/DrizzleSchemaChunks");
 });
 
-const stack = beforeAll(
+// `cleanDir: true` on the stack's output options drops chunks from previous
+// runs, so the chunk-layout assertions below can't pass on stale files.
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+test(
+  "code splitting options are applied and produce the cyclic layout",
   Effect.gen(function* () {
-    // Drop chunks from previous runs so the chunk-layout assertion below
-    // can't pass on stale files.
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.remove(yield* bundleDir, { recursive: true }).pipe(Effect.ignore);
-    return yield* deploy(Stack);
+    const path = yield* Path.Path;
+    const dir = yield* bundleDir;
+    const files = yield* fs.readDirectory(dir);
+
+    // The schema modules landed in their own chunk...
+    const authChunk = files.find((f) => /^auth-.*\.js$/.test(f));
+    expect(authChunk).toBeDefined();
+
+    // ...which imports the entry back (drizzle-orm stayed in `worker.js`):
+    // the cyclic `worker.js <-> auth-*.js` graph that TDZ-crashed workerd
+    // startup in #749 before `strictExecutionOrder` became the default.
+    const authContent = yield* fs.readFileString(path.join(dir, authChunk!));
+    expect(authContent).toMatch(/from\s*"\.\/worker\.js"/);
   }),
 );
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 test(
   "worker with drizzle schema modules split into their own chunk deploys and serves (#749)",
   Effect.gen(function* () {
     const { url } = yield* stack;
-
-    // The forced split actually happened: a standalone schema chunk exists
-    // separately from the drizzle-orm chunk.
-    const fs = yield* FileSystem.FileSystem;
-    const files = yield* fs.readDirectory(yield* bundleDir);
-    expect(files.some((f) => /^auth-.*\.js$/.test(f))).toBe(true);
-    expect(files.some((f) => /^drizzle-.*\.js$/.test(f))).toBe(true);
 
     // The worker evaluated its cross-chunk schema at startup and serves.
     const client = yield* HttpClient.HttpClient;
