@@ -202,10 +202,11 @@ export const OrgLive = Layer.mergeAll(
   ]),
   Layer.provide(Kernel),
   Layer.provide(SqliteLedger(".alchemy/org-ledger.sqlite")),
-  // 5s local poll: the loop crosses GitHub three times (issue → PR →
-  // merge), so poll latency dominates wall time; webhooks on Cloudflare
-  // make this push. 3 registrations × ~720 req/hr fits the 5k/hr budget.
-  Layer.provide(GitHub.RepositoryEventSourcePolling({ every: "5 seconds" })),
+  // 3s local poll — the floor: each cycle is 3 REST calls (issues +
+  // comments + PRs), ~3.6k req/hr against GitHub's 5k budget. This is
+  // the one architectural latency left (~2×3s per issue→merge loop);
+  // webhooks on Cloudflare make delivery push and remove it entirely.
+  Layer.provide(GitHub.RepositoryEventSourcePolling({ every: "3 seconds" })),
   // ONE approvals ledger, shared by the Reviewer's Approve and the
   // PullRequests desk's merge ratification (memoized by reference)
   Layer.provideMerge(ApprovalsLive),
