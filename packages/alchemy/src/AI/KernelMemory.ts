@@ -219,21 +219,10 @@ const asUserMessage = (input: unknown): Prompt.MessageEncoded => ({
 });
 
 /**
- * A situation update — the kernel's own voice, delivered in the user
- * role (the only channel existing model APIs accept mid-conversation
- * environment input on) and delimited so it is never mistaken for the
- * human's words. The head's coda teaches the semantics: the latest
- * situation supersedes earlier statements on the same matters.
- */
-const situationMessage = (body: string): Prompt.MessageEncoded => ({
-  role: "user",
-  content: [{ type: "text", text: `<situation>\n${body}\n</situation>` }],
-});
-
-/**
  * A note — the charter's EVENT channel (`AI.say`): a point-in-time
- * remark, delivered once into the current thread, never superseded and
- * never restated. Ordered after any situation of the same tick.
+ * remark, delivered once into the current thread in the user role (the
+ * only channel existing model APIs accept mid-conversation environment
+ * input on), delimited so it is never mistaken for the human's words.
  */
 const noteMessage = (body: string): Prompt.MessageEncoded => ({
   role: "user",
@@ -241,23 +230,14 @@ const noteMessage = (body: string): Prompt.MessageEncoded => ({
 });
 
 /**
- * Delivered when the stance returns to the frozen head after a
- * situation was outstanding: restoration is a transition too, and the
- * superseding contract demands it be announced — otherwise the last
- * situation (which "supersedes instructions above") stands forever.
+ * Appended to every system prompt: how to read the one kernel-authored
+ * channel. Constant text — a static charter's system prompt stays
+ * byte-stable for prompt caching.
  */
-const SITUATION_RESTORED =
-  "The prior situation no longer holds; the original instructions above apply unchanged.";
-
-/**
- * Appended once to every frozen head: how to read the kernel-authored
- * channels. The head never changes after the first tick (prompt-cache
- * discipline); everything dynamic arrives as situations and notes.
- */
-const SITUATION_CODA = `
+const NOTE_CODA = `
 
 ---
-As work proceeds, <situation> messages may arrive describing the current state of this work — the latest situation supersedes earlier statements on the same matters, including instructions above. <note> messages are point-in-time remarks; they are never superseded.`;
+As work proceeds, <note> messages may arrive — point-in-time remarks from the process hosting this work.`;
 
 /** First occurrence wins — a shared tool appears once in a toolkit. */
 const dedupeByName = (tools: ReadonlyArray<AiTool.Any>): Array<AiTool.Any> => {
@@ -307,10 +287,6 @@ interface RunState {
   readonly pendingNotes: Array<Fragment>;
   /** Rendered notes DELIVERED into the current thread (say dedupe). */
   readonly saidLog: Set<string>;
-  /** Frozen on the first tick; never re-rendered (cache discipline). */
-  head?: { readonly text: string; readonly blocks: ReadonlySet<string> };
-  /** The last situation DELIVERED into the current thread ("" = head). */
-  lastSituation?: string;
   /** The last rendered stance — what `spawn`/`skill` grant from. */
   lastStance?: Stance;
 }
@@ -321,8 +297,6 @@ type TickResult =
   | {
       readonly system: string;
       readonly toolkit: Toolkit.WithHandler<any> | undefined;
-      /** A changed situation to inject before this sampling, if any. */
-      readonly inject?: string;
     };
 
 /**
@@ -339,11 +313,13 @@ type TickResult =
  *   — and yields the run's TURN. A static charter (`AI.prose`) lifts
  *   to a constant turn.
  * - Before EVERY sampling the turn is re-evaluated. A `Fragment`
- *   result is the tick's STANCE: its blocks are diffed (first tick
- *   freezes the system prompt; later changes arrive as superseding
- *   `<situation>` messages, and returning to the head is announced);
- *   its mentions are the tick's toolkit. Any OTHER value settles the
- *   run from inside; a `Refused` failure is the run giving up.
+ *   result IS the system prompt, verbatim — no diffing, no derived
+ *   messages: keep it static (the recommended discipline) and it is
+ *   byte-stable for prompt caching; change it and the system prompt
+ *   simply changes. Its mentions are the tick's toolkit. Everything
+ *   dynamic reaches the thread through EXPLICIT channels: `AI.say`
+ *   notes, tool results, and steers. Any OTHER value settles the run
+ *   from inside; a `Refused` failure is the run giving up.
  * - `AI.Run` is provided to init, turn, and tool handlers: kernel
  *   facts (key, tick, tokens) plus read-only thread access and the one
  *   thread mutation — `compact`, applied at tick boundaries only.
@@ -386,11 +362,7 @@ export const KernelMemory: Layer.Layer<
         const makeThreadService = (run: RunState): ThreadService => ({
           key: run.key,
           tokens: Effect.sync(() =>
-            Math.ceil(
-              ((run.head?.text.length ?? 0) +
-                JSON.stringify(run.prompt.content).length) /
-                4,
-            ),
+            Math.ceil(JSON.stringify(run.prompt.content).length / 4),
           ),
           entries: Effect.sync(() => run.prompt.content),
           compact: (plan) =>
@@ -696,10 +668,10 @@ export const KernelMemory: Layer.Layer<
           });
 
         /**
-         * Apply a requested compaction at the tick boundary. The head
-         * is untouched; drops leave an archived marker (restorable
-         * eviction — nothing is silently rewritten); reset restarts
-         * the thread as one summary situation.
+         * Apply a requested compaction at the tick boundary. The
+         * system prompt is untouched; drops leave an archived marker
+         * (restorable eviction — nothing is silently rewritten); reset
+         * restarts the thread from one summary note.
          */
         const applyCompaction = (run: RunState): void => {
           const plan = run.pendingCompaction;
@@ -707,14 +679,12 @@ export const KernelMemory: Layer.Layer<
           run.pendingCompaction = undefined;
           if ("reset" in plan) {
             run.prompt = Prompt.make([
-              situationMessage(
+              noteMessage(
                 `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
               ),
             ]);
-            // delivery logs are THREAD-scoped: the fresh thread has
-            // heard nothing, so the standing situation restates itself
-            // and still-true notes re-deliver on the next tick
-            run.lastSituation = undefined;
+            // the say log is THREAD-scoped: the fresh thread has heard
+            // nothing, so still-true notes re-deliver on the next tick
             run.saidLog.clear();
             return;
           }
@@ -817,9 +787,8 @@ export const KernelMemory: Layer.Layer<
 
         /**
          * One ACTOR tick: evaluate the run's turn. An Outcome settles
-         * the run; a Fragment renders into the stance, this tick's
-         * toolkit, and the situation delta (including the restoration
-         * announcement when the stance returns to the frozen head).
+         * the run; a Fragment renders into this tick's SYSTEM PROMPT
+         * (verbatim) and toolkit.
          */
         const actorTick = (run: RunState): Effect.Effect<TickResult> =>
           Effect.gen(function* () {
@@ -932,31 +901,15 @@ export const KernelMemory: Layer.Layer<
               handlers,
             );
 
-            // first tick: freeze the head (byte-stable forever after)
-            if (run.head === undefined) {
-              run.head = {
-                text: stance.blocks.join("\n\n") + SITUATION_CODA,
-                blocks: new Set(stance.blocks),
-              };
-              return { system: run.head.text, toolkit };
-            }
-            // later ticks: blocks outside the frozen head ARE the
-            // situation. Deliver the full restatement when it changes —
-            // INCLUDING the return to the head state, which must be
-            // announced or the stale situation stands forever.
-            const situation = stance.blocks
-              .filter((block) => !run.head!.blocks.has(block))
-              .join("\n\n");
-            const last = run.lastSituation ?? "";
-            if (situation !== last) {
-              run.lastSituation = situation;
-              return {
-                system: run.head.text,
-                toolkit,
-                inject: situation.length > 0 ? situation : SITUATION_RESTORED,
-              };
-            }
-            return { system: run.head.text, toolkit };
+            // the render IS the system prompt, verbatim — no diffing,
+            // no derived messages. A static charter is byte-stable
+            // (prompt cache); a changed render simply changes the
+            // system prompt, on the author's head. Everything dynamic
+            // reaches the thread explicitly: says, tool results, steers.
+            return {
+              system: stance.blocks.join("\n\n") + NOTE_CODA,
+              toolkit,
+            };
           });
 
         const loop = (
@@ -994,14 +947,8 @@ export const KernelMemory: Layer.Layer<
                 yield* Deferred.succeed(run.settled, tick.outcome.value);
                 break;
               }
-              if (tick.inject !== undefined) {
-                run.prompt = Prompt.concat(run.prompt, [
-                  situationMessage(tick.inject),
-                ]);
-              }
               // deliver collected notes (`AI.say`): dedupe by rendered
-              // text against the CURRENT thread — situation first,
-              // then notes, in emission order
+              // text against the CURRENT thread, in emission order
               for (const note of run.pendingNotes.splice(0)) {
                 const text = render(note.template as TemplateStringsArray, [
                   ...note.refs,

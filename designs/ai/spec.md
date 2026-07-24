@@ -42,7 +42,7 @@ never name them:
 
 | turn result | kernel behavior |
 |---|---|
-| `Fragment` | render stance → diff → deliver situations → build toolkit → sample |
+| `Fragment` | the render IS the system prompt, verbatim → build toolkit → sample |
 | any other value | the run **settles from inside** with that value (waiters resolve with it) |
 | an `Effect` | **loud defect** — you forgot `yield*` on an `AI.prose` |
 | failure (`E`) | retried with backoff; persistent failure fails the run |
@@ -144,9 +144,9 @@ domain language") and examined; the challenge fails case by case:
   tool selection. Mention-as-cost is the pressure that keeps charters
   honest about what they carry.
 - **Dynamism is where a silent channel actively breaks the design.**
-  The stance TEXT is the source of truth; stance diffs are delivered as
-  situation messages, so a toolkit change always arrives with its
-  explanation. Concretely, the Issues desk's turn renders its phase:
+  The stance TEXT is the source of truth and the render IS the system
+  prompt, so a toolkit change always arrives with its explanation.
+  Concretely, the Issues desk's turn renders its phase:
 
   ```ts
   return yield* AI.prose`
@@ -171,27 +171,23 @@ domain language") and examined; the challenge fails case by case:
   What the model actually experiences across the phase flip:
 
   ```
-  tick 3 (triaging)   toolkit: [comment, searchIssues, …, await_author]
-    → model calls await_author; the handler flips the phase Ref
+  tick 3 (triaging)   system prompt: …await_author paragraph…
+                      toolkit: [comment, searchIssues, …, await_author]
+    → model calls await_author; the handler flips the phase Ref;
+      the TOOL RESULT ("parked; the author's next reply resumes this
+      issue") announces the transition in the thread
 
-  tick 4 (parked)     the re-rendered stance differs; the kernel delivers:
-
-      <situation>
-      This issue is parked on its author. Judge their latest reply:
-      when it closes the gaps, `resume_triage` and proceed; when it
-      does not, ask again with `comment`.
-      </situation>
-
+  tick 4 (parked)     system prompt: …parked paragraph… (replaced whole)
                       toolkit: [comment, …, resume_triage]
   ```
 
-  `await_author` is gone AND the text that removed it is the text that
-  explains its absence — the same render produced both, so they cannot
+  `await_author` is gone AND the text that removed it is the current
+  system prompt — the same render produced both, so they cannot
   disagree. With a silent grant channel the toolkit could change while
-  the stance text stayed identical: no diff, no situation, no trace —
-  exactly the "do I have tool x?" confusion the reconciler exists to
-  prevent. Rendering is not decoration; it is the observability of
-  capability, for the model and for anyone auditing the transcript.
+  the stance text stayed identical: no trace — exactly the "do I have
+  tool x?" confusion this design exists to prevent. Rendering is not
+  decoration; it is the observability of capability, for the model and
+  for anyone auditing the transcript.
 - **The audit property**: `rg '\$\{Approve\}'` enumerates every charter
   that could ever hold that authority, and the type system agrees
   because the mention IS the requirement. A second, non-rendering grant
@@ -332,17 +328,27 @@ type CompactPlan =
 The thread stays kernel-owned: `entries` is read-only and `compact` is the
 one, boundary-applied mutation. That asymmetry is the design.
 
-## 4b. The four channels
+## 4b. The channels — every message traces to a call site
 
-Everything that reaches the model travels one of four channels with
-distinct truth semantics:
+The design rule (learned the hard way — an earlier iteration DIFFED the
+stance across ticks and injected the delta as kernel-authored
+"situation" messages, which worked but made the context window emergent
+rather than legible): **the kernel authors no messages of its own.**
+The context window an agent author reasons about is exactly what they
+can point to in code:
 
 | channel | semantics | authored by | delivery |
 |---|---|---|---|
-| **head** | constitution, frozen | first tick's stance | system prompt, byte-stable |
-| **situation** | standing state — supersedes, restores | kernel, derived from stance diffs | on change only, `<situation>` |
+| **system prompt** | the turn's render, verbatim | the charter's returned `Fragment` | whole, every sampling; byte-stable when the render is static |
 | **note** | events — happen once, never revoked | charter, `yield* AI.say` | on first appearance per thread, `<note>` |
+| **tool result** | the outcome of an action, incl. transitions the handler caused | tool handlers | with the call |
 | **steer** | the world's voice | Layer / tools / humans | immediately, as inputs |
+
+A CHANGED render simply replaces the system prompt (cache bust, on the
+author's head) — no diff, no derived message. Keep the prompt static
+and holistic (state every phase's rules; the conversation carries which
+phase is live) and it behaves exactly as anyone would guess; a tool
+handler that flips a phase announces the flip in its own RESULT.
 
 `AI.say` is DECLARATIVE with event semantics — the kernel *collects* says
 during turn evaluation and dedupes by rendered text against the thread's
@@ -363,10 +369,11 @@ return Effect.gen(function* () {
 
 Rules: notes **grant nothing** (a `${Tool}` in a say renders as a name; the
 toolkit comes from the stance alone — capability must never be a function
-of the delivered log); per tick, the situation lands first, then notes in
-emission order; **delivery logs are thread-scoped** — a compaction `reset`
-clears them, so the standing situation restates itself and still-true notes
-re-deliver into the fresh thread, while stale ones stay gone.
+of the delivered log); notes land in emission order; **the say log is
+thread-scoped** — a compaction `reset` clears it, so still-true notes
+re-deliver into the fresh thread, while stale ones stay gone. A state
+that must re-announce after an A→B→A round trip is authored explicitly:
+a `Ref` tracking what was last said, and an `AI.say` on transition.
 
 ## 5. Observation: never fetch raw per tick
 
@@ -507,12 +514,12 @@ const withCompaction = (at: number) => <O, E, R>(turn: Turn<O, E, R>) =>
   });
 ```
 
-The frozen head is never touched by compaction; `reset` restarts the thread
-as head + summary-as-situation, and — because delivery logs are
-thread-scoped (§4b) — the standing situation and still-true notes restate
-themselves into the fresh thread on the next tick. Derivation-shaped
-processes (e.g. Distilled) can reset at every park — the Reactor
-configuration.
+The system prompt is never touched by compaction (the turn's render is
+delivered whole at every sampling — standing state needs no restating);
+`reset` restarts the thread from the summary note alone, and — because
+the say log is thread-scoped (§4b) — still-true notes re-deliver into
+the fresh thread on the next tick. Derivation-shaped processes (e.g.
+Distilled) can reset at every park — the Reactor configuration.
 
 ## 8. Components: init → turn, fractally
 
@@ -644,16 +651,15 @@ Match.tag("CheckRunFailed", (e) =>
 
 - **Per-run init**: the charter runs on first admission of a key; its
   closure is the run's instance. Distinct keys = distinct instances.
-- **Channel delivery order**: per tick, situation first, then notes in
-  emission order; all kernel-authored messages are user-role but
-  delimited (`<situation>`/`<note>`), with both contracts taught once in
-  the head's coda. Delivery logs are thread-scoped (§4b).
-- **Head freeze + situations**: the first tick's document freezes as the
-  system prompt (byte-stable; prompt-cache discipline). Later ticks are
-  set-diffed; changed non-head blocks arrive as one `<situation>` message
-  (full restatement, latest supersedes). Returning to the head state is
-  announced ("the prior situation no longer holds") — restoration is a
-  transition too.
+- **Channel delivery order**: per tick, notes in emission order; notes
+  are user-role but delimited (`<note>`), the one contract taught in
+  the system prompt's constant coda. The say log is thread-scoped
+  (§4b).
+- **The render is the system prompt**: delivered whole at every
+  sampling, no diffing, no kernel-authored messages. A static render is
+  byte-stable (prompt-cache discipline); a changed render replaces the
+  system prompt — legibility over cleverness, the cache cost is the
+  author's choice.
 - **$0 no-op tick**: an unchanged stance with an empty inbox re-parks
   without sampling (matters once resync/reminder wakes exist).
 - **Steer to an unknown key admits** (crash-recovery: a re-polled event

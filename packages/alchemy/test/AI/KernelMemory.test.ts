@@ -429,7 +429,7 @@ describe("KernelMemory", () => {
       const model = Model.make([
         // tick 1: read-only stance — the model enters the sandbox
         () => [Model.toolCall("enter_sandbox", {}), Model.finish("tool-calls")],
-        // tick 2: flipped stance arrived as a situation — answer
+        // tick 2: the SYSTEM PROMPT is the flipped stance — answer
         () => [Model.text("done, sandboxed"), Model.finish()],
         // tick 3 (steered awake): stance unchanged — answer again
         () => [Model.text("still sandboxed"), Model.finish()],
@@ -461,8 +461,8 @@ Enter the sandbox.`(() =>
         const answer = yield* researcher.dispatch("try the sandbox");
         expect(answer).toBe("done, sandboxed");
 
-        // tick 1: the read-only stance froze into the head; the inline
-        // tool (closure over the local) was offered
+        // tick 1: the render IS the system prompt; the inline tool
+        // (closure over the local) was offered
         const first = Model.promptText(model.calls[0]!);
         expect(first).toContain("read-only until");
         expect(model.calls[0]!.tools.map((tool) => tool.name)).toEqual([
@@ -470,18 +470,18 @@ Enter the sandbox.`(() =>
           "spawn",
         ]);
 
-        // tick 2: the flipped stance arrived as a <situation> message —
-        // the frozen head did NOT change — and the tool retired
+        // tick 2: the flipped render REPLACED the system prompt —
+        // no diffing, no derived messages — and the tool retired
         const second = Model.promptText(model.calls[1]!);
-        expect(second).toContain("read-only until"); // head, byte-stable
-        // (promptText is JSON — the newline after the tag is escaped)
-        expect(second).toContain("<situation>\\nYou are IN the sandbox");
+        expect(second).toContain("You are IN the sandbox");
+        expect(second).not.toContain("read-only until");
+        expect(second).not.toContain("<situation>");
         expect(model.calls[1]!.tools.map((tool) => tool.name)).toEqual([
           "spawn",
         ]);
 
-        // tick 3: the parked run steered awake — the situation text is
-        // unchanged, so it is NOT re-delivered (exactly once in prompt)
+        // tick 3: the parked run steered awake — the stance is
+        // unchanged, so the system prompt is byte-identical (once)
         yield* researcher.steer("still there?");
         yield* calls(3);
         const third = Model.promptText(model.calls[2]!);
@@ -683,7 +683,7 @@ Summarize progress as ${summary}; your context restarts from it.`((p) =>
       const model = Model.make([
         // tick 1: enter the parked stance
         () => [Model.toolCall("park", {}), Model.finish("tool-calls")],
-        // tick 2: sees the parked situation; hands off
+        // tick 2: the system prompt now carries the parked stance; hands off
         () => [
           Model.toolCall("handoff", { summary: "asked the author about X" }),
           Model.finish("tool-calls"),
@@ -725,8 +725,8 @@ ${
         yield* researcher.dispatch("start", { key: "r#1" });
 
         const third = Model.promptText(model.calls[2]!);
-        // the fresh thread carries the summary AND the re-delivered
-        // standing situation (delivery logs are thread-scoped)…
+        // the fresh thread carries the summary, and the SYSTEM PROMPT
+        // still states the parked stance (the render is the prompt)…
         expect(third).toContain("asked the author about X");
         expect(third).toContain("parked on the author");
         // …and none of the pre-reset traffic

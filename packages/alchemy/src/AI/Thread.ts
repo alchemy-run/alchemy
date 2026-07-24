@@ -20,13 +20,13 @@ export type CompactPlan =
     }
   | {
       /**
-       * Restart the thread as frozen head + `summary` delivered as a
-       * situation — the reset-with-handoff pattern. Prefer summaries the
-       * MODEL wrote (a `handoff` inline tool): self-authored restatements
-       * commit better than kernel-authored ones. A reset clears the
-       * thread's delivery logs, so standing state (the current
-       * situation) and still-true notes restate themselves into the
-       * fresh thread.
+       * Restart the thread from `summary` alone — the
+       * reset-with-handoff pattern. Prefer summaries the MODEL wrote
+       * (a `handoff` inline tool): self-authored restatements commit
+       * better than kernel-authored ones. A reset clears the thread's
+       * say log, so still-true notes re-deliver into the fresh thread;
+       * the system prompt (the turn's render) needs no restating — it
+       * is delivered whole at every sampling.
        */
       readonly reset: { readonly summary: string };
     };
@@ -105,10 +105,11 @@ export class Tick extends Context.Service<Tick, TickService>()(
  * });
  * ```
  *
- * Notes arrive as `<note>` user messages AFTER any situation of the
- * same tick (read the state, then the remark). Mentions in a note
- * render as names but GRANT NOTHING — capability comes from the
- * stance alone.
+ * Notes arrive as `<note>` user messages, in emission order — the ONE
+ * explicit injection channel: every message in the thread traces to a
+ * `say` call site, a tool result, or a steer from the world. Mentions
+ * in a note render as names but GRANT NOTHING — capability comes from
+ * the stance alone.
  */
 export const say = <const Refs extends any[]>(
   template: TemplateStringsArray,
