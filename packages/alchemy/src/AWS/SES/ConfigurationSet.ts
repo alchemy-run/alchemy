@@ -69,6 +69,30 @@ export interface ConfigurationSetProps {
    */
   suppressedReasons?: SuppressionListReason[];
   /**
+   * A custom domain (a verified subdomain you own with a valid certificate)
+   * SES uses to host open- and click-tracking links for email sent through
+   * this configuration set. Leave undefined to use the default SES tracking
+   * domain.
+   */
+  customRedirectDomain?: string;
+  /**
+   * Whether open/click tracking links use HTTPS (`REQUIRE`), plain HTTP
+   * (`OPTIONAL`), or HTTPS only for the open pixel (`REQUIRE_OPEN_ONLY`). Only
+   * synced when `customRedirectDomain` is set.
+   */
+  trackingHttpsPolicy?: sesv2.HttpsPolicy;
+  /**
+   * Whether SES collects engagement (open/click) metrics for the Virtual
+   * Deliverability Manager dashboard for email sent through this configuration
+   * set. Requires account-level VDM to be enabled.
+   */
+  vdmDashboardEngagementMetrics?: sesv2.FeatureStatus;
+  /**
+   * Whether SES applies Guardian optimized shared delivery to email sent
+   * through this configuration set. Requires account-level VDM to be enabled.
+   */
+  vdmGuardianOptimizedSharedDelivery?: sesv2.FeatureStatus;
+  /**
    * Tags to apply to the configuration set. Merged with internal Alchemy
    * tags.
    */
@@ -330,6 +354,50 @@ export const ConfigurationSetProvider = () =>
             yield* sesv2.putConfigurationSetSuppressionOptions({
               ConfigurationSetName: name,
               SuppressedReasons: news.suppressedReasons,
+            });
+          }
+
+          // Tracking is only synced when a custom redirect domain is
+          // configured so an unset prop keeps the default SES tracking domain.
+          if (
+            news.customRedirectDomain !== undefined &&
+            (observed.TrackingOptions?.CustomRedirectDomain !==
+              news.customRedirectDomain ||
+              (news.trackingHttpsPolicy !== undefined &&
+                observed.TrackingOptions?.HttpsPolicy !==
+                  news.trackingHttpsPolicy))
+          ) {
+            yield* sesv2.putConfigurationSetTrackingOptions({
+              ConfigurationSetName: name,
+              CustomRedirectDomain: news.customRedirectDomain,
+              HttpsPolicy: news.trackingHttpsPolicy,
+            });
+          }
+
+          // VDM is only synced when explicitly configured; it requires
+          // account-level VDM to be enabled.
+          const desiredDashboard = news.vdmDashboardEngagementMetrics;
+          const desiredGuardian = news.vdmGuardianOptimizedSharedDelivery;
+          if (
+            (desiredDashboard !== undefined &&
+              observed.VdmOptions?.DashboardOptions?.EngagementMetrics !==
+                desiredDashboard) ||
+            (desiredGuardian !== undefined &&
+              observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery !==
+                desiredGuardian)
+          ) {
+            yield* sesv2.putConfigurationSetVdmOptions({
+              ConfigurationSetName: name,
+              VdmOptions: {
+                DashboardOptions:
+                  desiredDashboard !== undefined
+                    ? { EngagementMetrics: desiredDashboard }
+                    : undefined,
+                GuardianOptions:
+                  desiredGuardian !== undefined
+                    ? { OptimizedSharedDelivery: desiredGuardian }
+                    : undefined,
+              },
             });
           }
 
