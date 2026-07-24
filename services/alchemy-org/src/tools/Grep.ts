@@ -7,7 +7,7 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import { runProcess } from "../internal/ProcessRunner.ts";
 import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
 import { pattern } from "../vocabulary.ts";
-import { Workspace } from "../workspace.ts";
+import { Workspace } from "alchemy/Workspace";
 
 const pathParam = AI.Parameter("path", S.optionalKey(S.String))`
 Workspace-relative file or directory to search (default: ".").`;

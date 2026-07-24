@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
-import { Workspace } from "../workspace.ts";
+import { Workspace } from "./Workspace.ts";
 
 export interface FileSnapshot {
   readonly path: string;
@@ -28,6 +28,13 @@ const encodeText = (content: string, bom: boolean): Uint8Array => {
   return bytes;
 };
 
+/**
+ * Digest-guarded file physics over the {@link Workspace} — the shared
+ * substrate of every file-mutation tool: UTF-8/BOM-aware reads that
+ * refuse binaries, atomic writes (temp + rename) guarded by the digest
+ * the caller last READ (a stale digest is a model-visible failure, not
+ * a lost update), and digest-guarded deletes.
+ */
 export class WorkspaceFiles extends Context.Service<
   WorkspaceFiles,
   {
@@ -49,7 +56,7 @@ export class WorkspaceFiles extends Context.Service<
       expectedDigest: string,
     ) => Effect.Effect<void, string>;
   }
->()("alchemy-org/WorkspaceFiles") {}
+>()("alchemy/Workspace/Files") {}
 
 /** Safe, digest-aware file operations shared by all mutation tools. */
 export const WorkspaceFilesLive = Layer.effect(

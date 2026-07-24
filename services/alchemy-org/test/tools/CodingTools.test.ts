@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { WorkspaceFilesLive } from "../../src/internal/WorkspaceFiles.ts";
+import { WorkspaceFilesLive } from "alchemy/Workspace";
 import { ToolOutputStoreLive } from "../../src/internal/ToolOutputStore.ts";
 import {
   Bash,
@@ -25,7 +25,7 @@ import {
   WriteFile,
   WriteFileLocal,
 } from "../../src/tools/index.ts";
-import { Workspace, workspace } from "../../src/workspace.ts";
+import { Workspace, fixed as workspace } from "alchemy/Workspace";
 
 const withWorkspace = <A, E>(program: Effect.Effect<A, E, any>): Promise<A> =>
   Effect.runPromise(

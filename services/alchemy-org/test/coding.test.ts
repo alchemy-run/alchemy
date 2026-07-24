@@ -7,7 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { Coding, CodingLocal } from "../src/coding.ts";
-import { workspace } from "../src/workspace.ts";
+import { fixed as workspace } from "alchemy/Workspace";
 import * as Model from "./fixtures/ScriptedModel.ts";
 
 class CodingAgent extends AI.Agent<CodingAgent>()("CodingAgent") {}

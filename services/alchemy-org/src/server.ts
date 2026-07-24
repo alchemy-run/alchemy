@@ -52,7 +52,7 @@ import {
   SearchIssuesLive,
 } from "./tools/index.ts";
 import { TypedErrorsLive } from "./typed-errors.ts";
-import { runWorkspace, workspace } from "./workspace.ts";
+import { fixed as workspace, perRun as runWorkspace } from "alchemy/Workspace";
 
 // ─── the physics (local) ─────────────────────────────────────────────
 

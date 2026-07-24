@@ -14,7 +14,7 @@
 import * as AI from "alchemy/AI";
 import * as Layer from "effect/Layer";
 import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
-import { WorkspaceFilesLive } from "./internal/WorkspaceFiles.ts";
+import { WorkspaceFilesLive } from "alchemy/Workspace";
 import {
   ApplyPatch,
   ApplyPatchLocal,

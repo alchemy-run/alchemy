@@ -1,20 +1,3 @@
-/**
- * The Workspace — the PLACE the local tool physics work in, sandboxed.
- * Tool implementations only ever `yield* Workspace`; which place is a
- * Layer decision:
- *
- * - {@link workspace} (static): one fixed containment root — the
- *   factory desk shape, where every run works the same checkout.
- * - {@link runWorkspace} (per-run): the root IS the current run's
- *   `Git.Workspaces` checkout, derived from `AI.Thread` at CALL time —
- *   the Engineer shape. Tools physically cannot write outside the
- *   run's own worktree, so path discipline needs no prose.
- *
- * (Distinct from the `Coding` SKILL — the skill is the craft, this is
- * the place it is practiced.)
- */
-import * as AI from "alchemy/AI";
-import * as Git from "alchemy/Git";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -22,7 +5,23 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import { Thread } from "../AI/Thread.ts";
+import * as Git from "../Git/index.ts";
 
+/**
+ * The Workspace — the PLACE tool physics work in, sandboxed: a
+ * containment root plus escape-proof path resolution (relative-only
+ * paths, symlink containment). Tool implementations only ever
+ * `yield* Workspace`; which place is a Layer decision:
+ *
+ * - {@link fixed}: one static containment root — a desk that works
+ *   the same checkout for every run.
+ * - {@link perRun}: the root IS the current run's {@link Git.Workspaces}
+ *   checkout, derived from `AI.Thread` at CALL time — the coding-agent
+ *   shape. Tools physically cannot write outside the run's own
+ *   worktree, so path discipline needs no prose, and concurrent runs
+ *   cannot see each other.
+ */
 export class Workspace extends Context.Service<
   Workspace,
   {
@@ -49,7 +48,7 @@ export class Workspace extends Context.Service<
       relative: string,
     ) => Effect.Effect<string, string>;
   }
->()("alchemy-org/Workspace") {}
+>()("alchemy/Workspace") {}
 
 /** The containment resolvers over one canonical root. */
 const makeContainment = (
@@ -131,8 +130,8 @@ const makeContainment = (
   return { resolveExisting, resolveForCreate };
 };
 
-/** The entrypoint's choice of a FIXED containment root. */
-export const workspace = (
+/** A FIXED containment root, created if missing. */
+export const fixed = (
   root: string,
 ): Layer.Layer<Workspace, never, Path.Path | FileSystem.FileSystem> =>
   Layer.effect(
@@ -140,12 +139,10 @@ export const workspace = (
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
-      // self-provisioning: the root is created if missing (checkouts
-      // land under it later — Git.Workspaces populates, we contain)
+      // self-provisioning: checkouts land under it later —
+      // Git.Workspaces populates, we contain
       const resolved = path.resolve(root);
-      yield* fs
-        .makeDirectory(resolved, { recursive: true })
-        .pipe(Effect.orDie);
+      yield* fs.makeDirectory(resolved, { recursive: true }).pipe(Effect.orDie);
       const canonicalRoot = yield* fs.realPath(resolved).pipe(Effect.orDie);
       const containment = makeContainment(canonicalRoot, fs, path);
 
@@ -159,14 +156,14 @@ export const workspace = (
   );
 
 /**
- * The PER-RUN containment root: the current thread's `Git.Workspaces`
- * checkout. Every resolution derives the root from `AI.Thread` at call
- * time (tool handlers run with the thread provided), so an agent's
- * tools are physically confined to its own worktree — concurrent runs
- * cannot see each other, and "which directory am I in" is not a fact
- * the model can get wrong.
+ * The PER-RUN containment root: the current thread's
+ * {@link Git.Workspaces} checkout. Every resolution derives the root
+ * from `AI.Thread` at call time (tool handlers run with the thread
+ * provided), so an agent's tools are physically confined to its own
+ * worktree — "which directory am I in" is not a fact the model can
+ * get wrong.
  */
-export const runWorkspace = (): Layer.Layer<
+export const perRun = (): Layer.Layer<
   Workspace,
   never,
   Path.Path | FileSystem.FileSystem | Git.Workspaces
@@ -180,9 +177,9 @@ export const runWorkspace = (): Layer.Layer<
 
       // AI.Thread is a runtime fact the kernel provides to handlers;
       // the Workspace interface deliberately hides the requirement
-      // (same doctrine as org tool handlers reading AI.Thread).
+      // (the same doctrine as tool handlers reading AI.Thread).
       const root = Effect.gen(function* () {
-        const { key } = yield* AI.Thread;
+        const { key } = yield* Thread;
         const found = yield* workspaces.get(key);
         if (Option.isNone(found)) {
           return yield* Effect.fail(

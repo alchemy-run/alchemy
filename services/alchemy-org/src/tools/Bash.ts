@@ -6,7 +6,7 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import { runProcess } from "../internal/ProcessRunner.ts";
 import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
 import { command } from "../vocabulary.ts";
-import { Workspace } from "../workspace.ts";
+import { Workspace } from "alchemy/Workspace";
 
 const timeout = AI.Parameter(
   "timeout",

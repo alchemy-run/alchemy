@@ -7,7 +7,7 @@ import * as Path from "effect/Path";
 import { applyPatch } from "../../src/patch/apply.ts";
 import { parsePatch } from "../../src/patch/parser.ts";
 import type { ApplyPatchInput } from "../../src/patch/types.ts";
-import { Workspace, workspace } from "../../src/workspace.ts";
+import { Workspace, fixed as workspace } from "alchemy/Workspace";
 
 const digest = (bytes: Uint8Array) =>
   Effect.tryPromise(() =>

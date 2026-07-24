@@ -6,7 +6,7 @@ import * as S from "effect/Schema";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { runProcess } from "../internal/ProcessRunner.ts";
 import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
-import { Workspace } from "../workspace.ts";
+import { Workspace } from "alchemy/Workspace";
 
 const pattern = AI.Parameter("pattern", S.String)`
 Glob pattern such as "*.ts", "**/*.json", or

@@ -187,6 +187,12 @@
       "worker": "./src/Git/index.ts",
       "import": "./lib/Git/index.js"
     },
+    "./Workspace": {
+      "types": "./lib/Workspace/index.d.ts",
+      "bun": "./src/Workspace/index.ts",
+      "worker": "./src/Workspace/index.ts",
+      "import": "./lib/Workspace/index.js"
+    },
     "./GitHub": {
       "types": "./lib/GitHub/index.d.ts",
       "bun": "./src/GitHub/index.ts",

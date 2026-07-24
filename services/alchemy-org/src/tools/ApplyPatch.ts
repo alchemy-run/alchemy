@@ -6,7 +6,7 @@ import * as Path from "effect/Path";
 import { applyPatch } from "../patch/apply.ts";
 import { expectedDigests, patchText } from "../patch/parameters.ts";
 import type { ApplyPatchInput } from "../patch/types.ts";
-import { Workspace } from "../workspace.ts";
+import { Workspace } from "alchemy/Workspace";
 
 /**
  * Apply a structured multi-file patch after validating the complete change.

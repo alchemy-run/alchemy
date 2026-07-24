@@ -4,7 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as S from "effect/Schema";
-import { Workspace } from "../workspace.ts";
+import { Workspace } from "alchemy/Workspace";
 
 const pathParam = AI.Parameter("path", S.optionalKey(S.String))`
 Workspace-relative directory to list (default: ".").`;
