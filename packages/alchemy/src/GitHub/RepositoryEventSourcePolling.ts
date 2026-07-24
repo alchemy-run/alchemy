@@ -356,6 +356,11 @@ const pollIssueComments = (
       if (number === undefined) continue;
       const createdAt = Date.parse(comment.created_at);
       if (createdAt <= since) continue;
+      // GitHub's webhook marks PR-thread comments with
+      // `issue.pull_request`; REST comments reveal it in `html_url`
+      // (`…/pull/33#issuecomment-…`) — synthesize the same marker so
+      // routing can tell the two thread kinds apart.
+      const isPullRequest = comment.html_url?.includes("/pull/") ?? false;
       deliveries.push(
         synthesize(createdAt, {
           id: deliveryId(
@@ -367,7 +372,7 @@ const pollIssueComments = (
           name: "issue_comment",
           payload: {
             action: "created",
-            issue: { number },
+            issue: isPullRequest ? { number, pull_request: {} } : { number },
             comment: {
               user: { login: comment.user?.login ?? "unknown" },
               body: comment.body ?? "",

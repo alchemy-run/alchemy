@@ -60,6 +60,11 @@ export interface Issue {
   readonly labels?: ReadonlyArray<Label>;
   readonly created_at?: string;
   readonly closed_at?: string | null;
+  /**
+   * GitHub's own PR marker: present exactly when this "issue" is a
+   * pull request (`issue_comment` is one door for both thread kinds).
+   */
+  readonly pull_request?: unknown;
 }
 
 export const Issue: S.Schema<Issue> = S.Struct({
@@ -72,6 +77,7 @@ export const Issue: S.Schema<Issue> = S.Struct({
   labels: S.optionalKey(S.Array(Label)),
   created_at: S.optionalKey(S.String),
   closed_at: S.optionalKey(S.NullOr(S.String)),
+  pull_request: S.optionalKey(S.Unknown),
 });
 
 /** The principal fields of an issue comment as delivered by the wire. */
@@ -149,6 +155,15 @@ export class IssueCommented extends Event("IssueCommented", {
 })`
 Someone commented on an issue or pull request — GitHub's one door
 for both.` {}
+
+/**
+ * Whether an {@link IssueCommented} landed on a PULL REQUEST thread
+ * (GitHub delivers both through the one `issue_comment` door; the
+ * `issue.pull_request` marker tells them apart). Routing should send
+ * PR-thread comments to the pull-request owner, not the issues owner.
+ */
+export const isPullRequestComment = (event: IssueCommented): boolean =>
+  event.issue.pull_request !== undefined;
 
 export class IssueClosed extends Event("IssueClosed", {
   repository: RepositoryInfo,

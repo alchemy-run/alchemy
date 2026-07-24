@@ -81,6 +81,15 @@ export const IssuesLive = Layer.effect(
       },
       (event) =>
         Effect.gen(function* () {
+          // GitHub's one comment door serves both thread kinds — a
+          // comment on a PULL REQUEST belongs to the PullRequests
+          // desk, not this one
+          if (
+            event._tag === "IssueCommented" &&
+            GitHub.isPullRequestComment(event)
+          ) {
+            return;
+          }
           const key = GitHub.eventKey(event)!;
           const { status } = yield* ledger.offer(
             "issues",

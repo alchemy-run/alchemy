@@ -59,10 +59,20 @@ export const PullRequestsLive = Layer.effect(
           GitHub.PullRequestOpened,
           GitHub.PullRequestMerged,
           GitHub.PullRequestClosed,
+          // comments ON pull requests (GitHub's one comment door
+          // serves both thread kinds; issue-thread ones are skipped
+          // below) — the wake channel for a parked review thread
+          GitHub.IssueCommented,
         ],
       },
       (event) =>
         Effect.gen(function* () {
+          if (
+            event._tag === "IssueCommented" &&
+            !GitHub.isPullRequestComment(event)
+          ) {
+            return; // an ISSUE thread — the Issues desk's
+          }
           const key = GitHub.eventKey(event)!;
           const { status } = yield* ledger.offer(
             "pull-requests",
@@ -103,8 +113,14 @@ export const PullRequestsAgentLive = PullRequestsAgent.make`
   A review that requests changes is relayed with ${Comment}, exactly —
   the author hears the Reviewer's words, not a summary. A review that
   approves is followed IMMEDIATELY by ${MergePullRequest} in the same
-  turn. The merge tool itself refuses without an approved review; a
-  refusal is a fact about the world to fix, never to work around.
+  turn — an approved-but-unmerged pull request is unfinished work,
+  never a stopping point. The merge tool itself refuses without an
+  approved review; a refusal is a fact about the world to fix, never
+  to work around.
+
+  A ${GitHub.IssueCommented} on the pull request resumes this
+  process: re-read the state — when an approval stands and the pull
+  request is still open, ${MergePullRequest} now.
 
   A ${GitHub.PullRequestMerged} or ${GitHub.PullRequestClosed} ends
   this process's involvement — the verdict was delivered, however it
