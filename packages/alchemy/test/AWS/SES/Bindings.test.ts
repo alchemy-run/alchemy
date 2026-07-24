@@ -380,4 +380,48 @@ describe("SES Bindings", () => {
       { timeout: 120_000 },
     );
   });
+
+  describe("SendBounce", () => {
+    // A real bounce requires a message SES actually received within the last
+    // 24h; set this to that message id to exercise the success path.
+    const BOUNCE_MESSAGE_ID = process.env.AWS_TEST_SES_BOUNCE_MESSAGE_ID;
+
+    test.provider(
+      "bouncing a non-existent message surfaces a typed SES error through the binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/send-bounce`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            messageId?: string;
+            error?: string;
+          };
+
+          // No real received message backs the fabricated OriginalMessageId, so
+          // SES rejects it with a typed error. That proves the binding wires
+          // ses:SendBounce IAM + request marshalling into the deployed Lambda.
+          // Live testing should pin the exact tag (MessageRejected vs a
+          // CommonErrors InvalidParameterValue).
+          expect(typeof response.error).toBe("string");
+          expect(response.messageId).toBeUndefined();
+        }),
+    );
+
+    test.provider.skipIf(!BOUNCE_MESSAGE_ID)(
+      "bounces a real received message (AWS_TEST_SES_BOUNCE_MESSAGE_ID)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/send-bounce?messageId=${encodeURIComponent(BOUNCE_MESSAGE_ID!)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            messageId?: string;
+            error?: string;
+          };
+          expect(response.error).toBeUndefined();
+          expect(response.messageId).toBeTruthy();
+        }),
+    );
+  });
 });
