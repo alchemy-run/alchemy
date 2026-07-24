@@ -33,11 +33,11 @@ export type CompactPlan =
 
 /**
  * The RUN a charter is executing inside — its world identity and its
- * thread (the conversation). A RUNTIME fact: the kernel provides it to
- * the charter's TURN and to tool handlers — never to INIT, which is
- * setup (Refs, bindings for tools, inline tools) and must not depend
- * on the run. A tool that needs the thread yields `AI.Thread` in its
- * handler body.
+ * thread (the conversation). The kernel provides it to INIT (which
+ * runs once per run at admit, when the thread already exists — so
+ * thread-scoped setup like a workspace checkout keyed by `thread.key`
+ * belongs there), to the charter's TURN, and to tool handlers.
+ * `AI.Tick` is the one runtime fact init never sees.
  *
  * The asymmetry is the design: `entries` is READ-ONLY and `compact` is
  * the only mutation — the thread stays kernel-owned; the loop gets a

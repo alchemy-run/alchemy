@@ -208,6 +208,58 @@ the deferred **union-toolkit + stance masking** kernel option (§13):
 unmentioned tools may stay in the provider payload and be rejected on
 call — bytes change, the law does not.
 
+### 2c. The wire seam: `WireMode` and codemode
+
+Direct tool-calling loses what agents are best post-trained on: writing
+CODE that composes primitives (Bash pipes are the canonical case). It
+gains granular access control. Codemode keeps both: the model writes a
+program; the ONLY functions in scope are this tick's granted handlers.
+
+**`WireMode` is an optional service the kernel resolves from the
+interpret context** at every sampling boundary. Absent: every grant is
+its own provider tool (the default, unchanged). Present: the mode
+transforms the tick's grants into their wire presentation. Semantics
+never move — the stance still decides WHAT exists (mention-is-presence,
+§2b); the mode decides how it APPEARS. Kernel intrinsics (`dispatch`,
+`spawn`, `skill`) stay direct tools in every mode: they are
+conversation control, not capabilities.
+
+```ts
+// swap the wire without touching a single charter:
+IssuesLive.pipe(Layer.provide(AI.CodeModeEffect()))  // programs return Effects
+IssuesLive.pipe(Layer.provide(AI.CodeModeAsync()))   // async/await + Promises
+// provide neither: direct tool-calling
+```
+
+Both codemode Layers collapse the grants into ONE `eval` tool whose
+description carries the mode's own TEACHING (how to write the code)
+plus GENERATED SIGNATURES:
+
+```ts
+// from each grant's parameter schemas and its RETURN schema:
+declare function readDiff(input: { pr: { owner: string; … } }): Effect<string>
+```
+
+The return type comes from the Tool's optional second argument —
+`AI.Tool<ReadDiff>()("readDiff", S.String)` — undeclared means
+`unknown`. Direct mode barely needs return schemas; codemode is why
+they exist.
+
+`CodeModeEffect` is the native flavor: the code is the body of a
+function `(Effect, tools) => Effect<A>`, tools are Effect-returning,
+and the whole program runs ON THE KERNEL'S FIBER — interruption,
+tracing, and typed tool failures all compose (`Effect.forEach` for
+concurrency, `Effect.catch` for recovery). `CodeModeAsync` bridges each
+handler through `runPromise` for models that write better `await` code.
+Failures are model-visible either way: a broken program or a failed
+tool call comes back as the eval result, never a loop crash.
+
+v0 evaluation is IN-PROCESS (`new Function`, TypeScript stripped by
+`Bun.Transpiler`) — a composition seam, not an isolation boundary. The
+sandbox-as-service extraction (§13) replaces the evaluator without
+touching this contract, and exposing `thread`/a sub-model through the
+same bridge is the RLM configuration.
+
 ## 3. State is `Ref`
 
 The charter's init closure is the instance; there are no hooks because
@@ -250,9 +302,12 @@ kernel's opt-in named-state variant. Don't tax every charter with naming.
 
 ## 4. `AI.Thread` and `AI.Tick` — kernel facts + affordances
 
-Two run-scoped `Context.Service`s, provided by the kernel to init, turn, and
-tool handlers. `AI.Thread` is the RUN — identity and conversation;
-`AI.Tick` is the current sampling iteration:
+Two run-scoped `Context.Service`s. `AI.Thread` is the RUN — identity and
+conversation — provided to init, turns, and tool handlers alike: init runs
+once per run at admit, when the thread already exists, so thread-scoped
+setup (a checkout keyed by `thread.key`) belongs there. `AI.Tick` is the
+current sampling iteration — no sampling is under way during init, so only
+turns and tool handlers see it:
 
 ```ts
 interface ThreadService {
@@ -337,12 +392,58 @@ const issue = yield* Effect.cachedWithTTL(github.get(key), "2 minutes");
 the model — no timestamps, no etags — and an unchanged world produces an
 unchanged stance, which the kernel re-parks without sampling.
 
+## 5b. Workspaces: the checkout as a capability
+
+A coding agent needs a repository checked out somewhere it can work. That
+"somewhere" is a capability like any other — one contract (`Git.Workspaces`),
+physics chosen by the Layer:
+
+```ts
+// init: the binding, like any other capability
+const workspaces = yield* Git.Workspaces;
+const remote = GitHub.remote(testAlchemy);   // provider → Git, never the reverse
+
+// init is per-run — the thread exists at admit, so the checkout is
+// thread-scoped SETUP the turn and tools close over
+const { key } = yield* AI.Thread;
+const ws = yield* workspaces.checkout({ key, remote });
+
+return Effect.gen(function* () {
+  return yield* AI.prose`
+    …your checkout lives at ${ws.path}; every file you touch lives under it…`;
+});
+```
+
+The laws:
+
+- **Idempotent by key.** `checkout` with the same key returns the same tree —
+  acquired once in init, and a tool handler that derives the same key
+  (`yield* AI.Thread` in the handler) lands in the exact tree the run
+  works in. No workspace value is threaded through prose or params; the
+  KEY is the address.
+- **Isolated across keys.** Two concurrent runs get two trees. What crosses
+  agent/machine boundaries is the pushed branch, never a shared filesystem.
+- **Layer-swapped physics.** `Git.WorkspacesWorktree` (local): one central
+  blobless clone per remote, `git worktree add` per key. A clean-clone-per-key
+  layer when isolation beats speed. A `Cloudflare.Artifacts` layer for
+  containers: per-key forks mounted via artifact-fs, whose deploy-time half
+  contributes its image statements (artifact-fs, fuse3) to the host Container
+  through the binding contract — same seam as every other binding.
+- **Credentials are the helper protocol.** `Git.Credentials` answers "who
+  authenticates this remote?" per host; `GitHub.GitCredentials` answers
+  github.com from the GitHub credential chain. Composition decides which
+  helpers exist — exactly `~/.gitconfig`, as Layers.
+- **Containment composes.** A sandboxed toolbox rooted at the workspaces
+  root contains every tree; `ws.path` (root-relative) is what the prose
+  hands the model, so the tools can reach the run's tree but not escape.
+
 ## 6. Exit, goals, budgets — patterns, not primitives
 
 ```ts
 const EngineerCharter = Effect.gen(function* () {
-  // init: setup only — bindings for tools, Refs. The run (AI.Thread /
-  // AI.Tick) is a RUNTIME fact, visible only to turns and handlers.
+  // init: per-run setup — bindings, Refs, thread-scoped state
+  // (AI.Thread is in scope; AI.Tick is turn-only)
+  const { key } = yield* AI.Thread;
   const open = yield* OpenPullRequest;
   const opened = yield* Ref.make<Pr | undefined>(undefined);
   const openPullRequest = yield* AI.Tool("open_pull_request")`
@@ -352,7 +453,6 @@ const EngineerCharter = Effect.gen(function* () {
   return Effect.gen(function* () {
     const pr = yield* Ref.get(opened);
     if (pr) return pr; // ACHIEVE: exit = a return value
-    const { key } = yield* AI.Thread;
     const { count } = yield* AI.Tick;
     if (count > 40) {  // BUDGET: a fact + a typed error
       return yield* Effect.fail(new AI.Refused({
@@ -607,11 +707,11 @@ return yield* AI.prose`
   (tool-block cache intact) and are rejected on call with a
   model-visible "not in your current stance". A transport decision —
   the SEMANTICS stay §2b's mention-is-presence, unchanged.
-- **Codemode as a kernel wire-mode** (`KernelCodemode`): one byte-stable
-  `execute` tool; the tick's grants become a generated, typed API inside a
-  sandbox, bridged to the same handlers — mention-is-presence unchanged as
-  the semantics, the wire goes cache-stable, loops compose in code, and
-  intermediate results stay out of the thread. The sandbox is a **service,
+- **Codemode: SHIPPED as `WireMode` Layers** (§2c) —
+  `AI.CodeModeEffect()` / `AI.CodeModeAsync()` collapse the tick's
+  grants into one `eval` tool with generated signatures; evaluation is
+  v0 in-process. STILL DEFERRED: the sandbox-as-service extraction
+  below (isolation + the RLM bridge). The sandbox is a **service,
   not a kernel property** — the same seam pattern as `LanguageModel` and
   the Ledger:
 

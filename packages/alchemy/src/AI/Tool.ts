@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as S from "effect/Schema";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Parameter } from "./Parameter.ts";
 import type { Services } from "./Services.ts";
@@ -27,6 +28,15 @@ export interface Tool<
   "~alchemy/Name": Name;
   refs: Refs;
   template: TemplateStringsArray;
+  /**
+   * The RETURN schema (`AI.Tool("readDiff", S.String)` — the optional
+   * second argument). Direct tool-calling barely needs it (the model
+   * sees results as text either way), but CODEMODE does: the generated
+   * signature the model programs against is
+   * `readDiff(input: {…}): Effect<string>`, and that return type comes
+   * from here. Unspecified means `unknown`.
+   */
+  returns?: S.Top;
   params: {
     [p in keyof ToolParameters<Refs[number]>]: ToolParameters<Refs[number]>[p];
   };
@@ -67,6 +77,7 @@ export interface ToolImpl<
 export const Tool: {
   <Name extends string>(
     name: Name,
+    returns?: S.Top,
   ): {
     <Refs extends any[]>(
       template: TemplateStringsArray,
@@ -76,6 +87,7 @@ export const Tool: {
   <Self>(): {
     <Name extends string>(
       name: Name,
+      returns?: S.Top,
     ): {
       <Refs extends any[]>(
         template: TemplateStringsArray,
@@ -96,13 +108,13 @@ export const Tool: {
         >;
     };
   };
-} = ((name?: string) =>
+} = ((name?: string, returns?: any) =>
   name
     ? (template: TemplateStringsArray, ...refs: any[]) =>
-        makeTool(name, template, refs)
-    : (name: string) =>
+        makeTool(name, template, refs, returns)
+    : (name: string, returns2?: any) =>
         (template: TemplateStringsArray, ...refs: any[]) =>
-          makeTool(name, template, refs)) as any;
+          makeTool(name, template, refs, returns2)) as any;
 
 // The Context.Service tag is what gives each Tool a distinct ServiceMap
 // key (`alchemy/AI/Tool/{name}`) — without it every Tool resolves to the
@@ -114,6 +126,7 @@ const makeTool = (
   name: string,
   template: TemplateStringsArray,
   refs: any[],
+  returns?: S.Top,
 ) => {
   const term = function (impl: (props: any) => Effect.Effect<any, any, any>) {
     // an Effect, so init `yield*`s it — the template refs' requirements
@@ -129,6 +142,7 @@ const makeTool = (
     "~alchemy/Name": name,
     refs,
     template,
+    ...(returns !== undefined ? { returns } : {}),
   }) as any;
 };
 

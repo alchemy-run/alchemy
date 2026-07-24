@@ -1,4 +1,5 @@
 import * as AI from "alchemy/AI";
+import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,7 +8,6 @@ import { runProcess } from "../internal/ProcessRunner.ts";
 import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
 import { testAlchemy } from "../repos.ts";
 import { body, issue, title } from "../vocabulary.ts";
-import { Workspace } from "../workspace.ts";
 
 export class OpenPullRequest extends AI.Tool<OpenPullRequest>()(
   "openPullRequest",
@@ -26,26 +26,30 @@ const GIT_IDENTITY = [
 ];
 
 /**
- * LOCAL physics over the workspace checkout: branch → commit → push →
- * `pulls.create`. Every step's failure is MODEL-VISIBLE (a tool result
- * the agent reacts to — "nothing to commit" or "PR already exists" are
- * situations to handle, not defects). The workspace is left back on
- * the default branch so the next run starts clean.
+ * LOCAL physics over the RUN'S OWN worktree: the handler derives the
+ * same `AI.Thread` key the Engineer's turn checked out with, so
+ * `Git.Workspaces.checkout` is a cache hit landing in the exact tree
+ * the agent worked in. Branch → commit → push → `pulls.create`; every
+ * step's failure is MODEL-VISIBLE (a tool result the agent reacts to —
+ * "nothing to commit" or "PR already exists" are situations to handle,
+ * not defects). The worktree keeps its branch afterwards: isolation
+ * means there is no shared `main` checkout to restore.
  */
 export const OpenPullRequestLive = Layer.effect(
   OpenPullRequest,
   Effect.gen(function* () {
-    const { root } = yield* Workspace;
+    const workspaces = yield* Git.Workspaces;
+    const remote = GitHub.remote(testAlchemy);
     const createPullRequest = yield* GitHub.CreatePullRequest(testAlchemy);
     const environment = yield* Effect.context<
       ChildProcessSpawner | ToolOutputStore
     >();
 
-    const git = (args: ReadonlyArray<string>) =>
+    const git = (cwd: string, args: ReadonlyArray<string>) =>
       runProcess({
         command: "git",
         args: [...GIT_IDENTITY, ...args],
-        cwd: root,
+        cwd,
         timeoutSeconds: 60,
         maxLines: 100,
         maxBytes: 10_000,
@@ -66,23 +70,38 @@ export const OpenPullRequestLive = Layer.effect(
       body: string;
     }) =>
       Effect.gen(function* () {
+        // the run's worktree: same key as the Engineer's turn → cache hit
+        const { key } = yield* AI.Thread;
+        const workspace = yield* workspaces
+          .checkout({ key, remote })
+          .pipe(Effect.mapError((error) => error.message));
+
         const branch = `factory/issue-${input.issue.number}`;
 
-        // the workspace's uncommitted work rides checkout -B onto the branch
-        yield* git(["checkout", "-B", branch]);
-        yield* git(["add", "-A"]);
+        // the worktree's uncommitted work rides checkout -B onto the branch
+        yield* git(workspace.root, ["checkout", "-B", branch]);
+        yield* git(workspace.root, ["add", "-A"]);
 
-        const status = yield* git(["status", "--porcelain"]);
+        const status = yield* git(workspace.root, ["status", "--porcelain"]);
         if (status === "") {
-          yield* git(["checkout", "-"]);
           return yield* Effect.fail(
             "nothing to commit — the workspace has no changes; make the fix before opening a pull request",
           );
         }
 
-        yield* git(["commit", "-m", `${input.title} (#${input.issue.number})`]);
+        yield* git(workspace.root, [
+          "commit",
+          "-m",
+          `${input.title} (#${input.issue.number})`,
+        ]);
         // force-with-lease: re-running the same issue updates its branch
-        yield* git(["push", "--force-with-lease", "-u", "origin", branch]);
+        yield* git(workspace.root, [
+          "push",
+          "--force-with-lease",
+          "-u",
+          "origin",
+          branch,
+        ]);
 
         const pull = yield* createPullRequest({
           title: input.title,
@@ -96,9 +115,6 @@ export const OpenPullRequestLive = Layer.effect(
               `${branch} already exists, the push above updated it; cite that one`,
           ),
         );
-
-        // leave the checkout clean for the next run
-        yield* git(["checkout", "main"]);
 
         return {
           opened: pull.html_url,

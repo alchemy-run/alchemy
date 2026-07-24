@@ -96,11 +96,12 @@ export const GrepLocal = Layer.effect(
       Effect.gen(function* () {
         const mode = input.outputMode ?? "content";
         const max = input.limit ?? (mode === "content" ? 100 : 500);
+        const root = yield* workspace.root;
         const target =
           input.path === undefined || input.path === "."
             ? "."
             : path.relative(
-                workspace.root,
+                root,
                 yield* workspace.resolveExisting(input.path),
               );
         const args = [
@@ -129,7 +130,7 @@ export const GrepLocal = Layer.effect(
         const result = yield* runProcess({
           command: "rg",
           args,
-          cwd: workspace.root,
+          cwd: root,
           timeoutSeconds: input.multiline ? 60 : 20,
           maxLines: max,
           maxBytes: 50_000,

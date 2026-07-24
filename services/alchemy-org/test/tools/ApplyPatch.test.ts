@@ -42,7 +42,10 @@ const execute = (root: string, input: ApplyPatchInput) =>
     const fs = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;
     const current = yield* Workspace;
-    return yield* applyPatch(input, fs, pathService, current);
+    return yield* applyPatch(input, fs, pathService, {
+      root: yield* current.root,
+      resolve: current.resolve,
+    });
   }).pipe(Effect.provide(workspace(root)));
 
 test("applies add, update, move, and delete after one preflight", () =>

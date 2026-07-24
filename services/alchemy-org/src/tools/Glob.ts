@@ -43,11 +43,12 @@ export const GlobLocal = Layer.effect(
     return ((input: { pattern: string; path?: string; limit?: number }) =>
       Effect.gen(function* () {
         const max = input.limit ?? 1000;
+        const root = yield* workspace.root;
         const target =
           input.path === undefined || input.path === "."
             ? "."
             : path.relative(
-                workspace.root,
+                root,
                 yield* workspace.resolveExisting(input.path),
               );
         const result = yield* runProcess({
@@ -63,7 +64,7 @@ export const GlobLocal = Layer.effect(
             input.pattern,
             target,
           ],
-          cwd: workspace.root,
+          cwd: root,
           timeoutSeconds: 20,
           maxLines: max,
           maxBytes: 50_000,

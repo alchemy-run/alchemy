@@ -187,29 +187,6 @@ export const Service: Platform<
   createRuntimeContext: createHostRuntimeContext("Server.Service"),
 });
 
-/** Render env values for `process.env`: strings raw, the rest JSON. */
-const renderEnv = (env: Record<string, any>): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(env).map(([key, value]) => [
-      key,
-      typeof value === "string"
-        ? value
-        : Redacted.isRedacted(value)
-          ? String(Redacted.value(value))
-          : JSON.stringify(value ?? null),
-    ]),
-  );
-
-const collectBindingEnv = (
-  bindings?: ReadonlyArray<
-    ResourceBinding<ServiceBinding> & { action?: string }
-  >,
-) =>
-  (bindings ?? [])
-    .filter((binding) => binding.action !== "delete")
-    .map((binding) => binding?.data?.env)
-    .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});
-
 export const ServiceProvider = () =>
   Provider.effect(
     Service,
@@ -507,3 +484,26 @@ export const ServiceProvider = () =>
       };
     }),
   );
+
+/** Render env values for `process.env`: strings raw, the rest JSON. */
+const renderEnv = (env: Record<string, any>): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [
+      key,
+      typeof value === "string"
+        ? value
+        : Redacted.isRedacted(value)
+          ? String(Redacted.value(value))
+          : JSON.stringify(value ?? null),
+    ]),
+  );
+
+const collectBindingEnv = (
+  bindings?: ReadonlyArray<
+    ResourceBinding<ServiceBinding> & { action?: string }
+  >,
+) =>
+  (bindings ?? [])
+    .filter((binding) => binding.action !== "delete")
+    .map((binding) => binding?.data?.env)
+    .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});

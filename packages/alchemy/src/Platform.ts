@@ -169,7 +169,7 @@ export interface Platform<
       Resource["Providers"]
     > &
       Named<Id> & {
-        make<PropsReq = never, InitReq = never>(
+        make<PropsReq = never, LOut = never, LIn = never, InitReq = never>(
           props:
             | InputProps<Resource["Props"]>
             | Effect.Effect<
@@ -178,11 +178,16 @@ export interface Platform<
                 PropsReq
               >,
           impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+          layers?: Layer.Layer<LOut, never, LIn>,
         ): Layer.Layer<
           Self,
           never,
           | Resource["Providers"]
-          | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
+          | Exclude<
+              PropsReq | InitReq,
+              Services | PlatformServices | Resource | LOut
+            >
+          | Exclude<LIn, Services | PlatformServices | Resource>
         >;
         new (
           _: never,
@@ -195,7 +200,9 @@ export interface Platform<
       const Id extends string,
       Shape extends MainShape,
       PropsReq = never,
-      InitReq extends Services | PlatformServices | Resource = never,
+      LOut = never,
+      LIn = never,
+      InitReq extends Services | PlatformServices | Resource | LOut = never,
     >(
       id: Id,
       props:
@@ -206,12 +213,23 @@ export interface Platform<
             PropsReq
           >,
       impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+      /**
+       * Layers the constructor's program depends on, built with INSTANCE
+       * lifetime: the build anchors to the class layer's build scope
+       * (process-long under the runtime bridges, transient at plan), so
+       * layers that OWN machinery — background fibers, pollers, actor
+       * loops — survive init returning. An inline `Effect.provide` of the
+       * same layer reference inside the program dedupes into this build
+       * via the memo map instead of tearing down its own copy.
+       */
+      layers?: Layer.Layer<LOut, never, LIn>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
       never,
       | Resource["Providers"]
       | Exclude<PropsReq, Services | PlatformServices | Resource>
-      | Exclude<InitReq, Services | PlatformServices | Resource>
+      | Exclude<InitReq, Services | PlatformServices | Resource | LOut>
+      | Exclude<LIn, Services | PlatformServices | Resource>
     > &
       Named<Id> & {
         new (
@@ -225,7 +243,9 @@ export interface Platform<
       Named<Id> & {
         make<
           PropsReq = never,
-          InitReq extends Services | PlatformServices | Resource = never,
+          LOut = never,
+          LIn = never,
+          InitReq extends Services | PlatformServices | Resource | LOut = never,
         >(
           props:
             | InputProps<Resource["Props"]>
@@ -235,11 +255,16 @@ export interface Platform<
                 PropsReq
               >,
           impl: Effect.Effect<MainShape, ConfigError.ConfigError, InitReq>,
+          layers?: Layer.Layer<LOut, never, LIn>,
         ): Layer.Layer<
           Self,
           never,
           | Resource["Providers"]
-          | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
+          | Exclude<
+              PropsReq | InitReq,
+              Services | PlatformServices | Resource | LOut
+            >
+          | Exclude<LIn, Services | PlatformServices | Resource>
         >;
         new (_: never): BaseShape & Named<Id> & Tag<Resource["Type"]>;
       };
@@ -260,19 +285,23 @@ export interface Platform<
     const Id extends string,
     Shape extends MainShape,
     PropsReq = never,
-    InitReq extends Services | PlatformServices = never,
+    LOut = never,
+    LIn = never,
+    InitReq extends Services | PlatformServices | LOut = never,
   >(
     id: Id,
     props:
       | InputProps<Resource["Props"]>
       | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
     impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+    layers?: Layer.Layer<LOut, never, LIn>,
   ): Effect.Effect<
     Resource & Rpc<Shape> & Named<Id>,
     never,
     | Resource["Providers"]
     | PropsReq
-    | Exclude<InitReq, Services | PlatformServices>
+    | Exclude<InitReq, Services | PlatformServices | LOut>
+    | Exclude<LIn, Services | PlatformServices>
   > &
     Named<Id>;
 }
@@ -332,6 +361,7 @@ export const Platform = <
     id?: string,
     props?: any,
     impl?: Impl,
+    layers?: Layer.Layer<any, any, any>,
     isTag = false,
   ): any => {
     if (!id) {
@@ -340,8 +370,12 @@ export const Platform = <
       // export class Sandbox extends Cloudflare.Container<Sandbox>()(..) {}
       //
       // export const SandboxLive = Sandbox.make(..)
-      return (id: string, props?: any, impl?: Impl) =>
-        constructor(id, props, impl, true);
+      return (
+        id: string,
+        props?: any,
+        impl?: Impl,
+        layers?: Layer.Layer<any, any, any>,
+      ) => constructor(id, props, impl, layers, true);
     } else if (!impl) {
       const cls = makeClass(id);
       const evaluate = () =>
@@ -396,8 +430,14 @@ export const Platform = <
           ),
         );
       return Object.assign(
-        function (props: Props, impl: Impl) {
-          return cls.Self.pipe(provideClassLayer(cls.make(props, impl)));
+        function (
+          props: Props,
+          impl: Impl,
+          layers?: Layer.Layer<any, any, any>,
+        ) {
+          return cls.Self.pipe(
+            provideClassLayer(cls.make(props, impl, layers)),
+          );
         },
         // we splice in the Effect so this can be yielded to indicate a non-Effect native instance
         // e.g. here, we yield it - in this case we don't want to provide an implementation
@@ -419,7 +459,10 @@ export const Platform = <
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id);
       return Object.assign(
-        cls.Self.pipe(provideClassLayer(cls.make(props, impl)), effectClass),
+        cls.Self.pipe(
+          provideClassLayer(cls.make(props, impl, layers)),
+          effectClass,
+        ),
         // Expose the logical id statically (mirrors `makeClass`) so a class
         // reference identifies its resource without being yielded.
         { LogicalId: id },
@@ -441,7 +484,25 @@ export const Platform = <
         `Platform<${type}<${id}>>`,
       );
       static of = (shape: any) => shape;
-      static make = (props: Props, impl: Impl) => {
+      static make = (
+        props: Props,
+        impl: Impl,
+        layers?: Layer.Layer<any, any, any>,
+      ) => {
+        /**
+         * The memo map anchoring the constructor's declared LAYERS.
+         * Installed once around the whole build effect below —
+         * every interior layer build (`Effect.provide` included)
+         * FORKS the fiber's current map and forks consult their
+         * parent chain, so an inline `Effect.provide` of a declared
+         * layer reference finds the instance-lifetime entry instead
+         * of building a doomed copy. (It cannot live inside the
+         * provided Layer graph: `buildWithMemoMap` stamps the
+         * builder's own map over every built context.) Entries
+         * self-evict when their last observing scope closes, so a
+         * per-class map is safe across deploys in one session.
+         */
+        const memoMap = Layer.makeMemoMapUnsafe();
         // build the Layer once for the root Self
         const SelfLayer = Layer.effect(
           Self,
@@ -481,6 +542,17 @@ export const Platform = <
                 ),
                 runtimeContext,
               );
+
+              // The constructor's declared LAYERS build here, anchored to
+              // the build scope — the home for layers that OWN machinery
+              // (event pollers, kernel loops): their background fibers live
+              // for the instance (`Effect.provide` inside init would tear
+              // them down the moment init returns — its `scopedWith` region
+              // holds the only reference).
+              const layersContext =
+                layers === undefined
+                  ? Context.empty()
+                  : yield* Layer.buildWithMemoMap(layers, memoMap, buildScope);
 
               yield* impl.pipe(
                 Effect.flatMap((impl) => {
@@ -569,6 +641,11 @@ export const Platform = <
                         // wins over any `Scope` captured in `outerServices`
                         // below.
                         Layer.succeed(Scope, buildScope),
+                        // the declared layers' services (their memo map is
+                        // installed around the whole build effect — see
+                        // `memoMap` in `make` — and propagates to init via
+                        // the builder's own CurrentMemoMap stamping)
+                        Layer.succeedContext(layersContext),
                         Layer.succeed(Platform.Platform, runtimeContext),
                         Layer.succeed(PlatformContext, runtimeContext),
                         Layer.succeed(RuntimeContext, runtimeContext),
@@ -620,6 +697,13 @@ export const Platform = <
                 RuntimeContext: runtimeContext,
               }) as R;
             }),
+          ).pipe(
+            // Install the class's memo map for the WHOLE build effect:
+            // interior layer builds (`Effect.provide` in init included)
+            // fork the fiber's current map, and forks consult their
+            // parent chain — so declared-layer entries are found and
+            // reused wherever the same reference is provided again.
+            Effect.provideService(Layer.CurrentMemoMap, memoMap),
           ),
         );
         const self = Self as any; // TODO(sam): why do we need to cast?

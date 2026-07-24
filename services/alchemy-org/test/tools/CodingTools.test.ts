@@ -96,7 +96,7 @@ test("Workspace contains lexical and symlink escapes", () =>
         prefix: "alchemy-outside-",
       });
       yield* fs.writeFileString(path.join(outside, "secret.txt"), "outside");
-      yield* fs.symlink(outside, path.join(ws.root, "escape-link"));
+      yield* fs.symlink(outside, path.join(yield* ws.root, "escape-link"));
       expect(
         yield* ws.resolveExisting("escape-link/secret.txt").pipe(Effect.flip),
       ).toContain("symlink");

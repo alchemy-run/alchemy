@@ -20,6 +20,8 @@ export * from "./GetIssue.ts";
 export * from "./GetIssueHttp.ts";
 export * from "./GetIssueLocal.ts";
 export * from "./GetPullRequest.ts";
+export * from "./GitCredentials.ts";
+export * from "./GitRemote.ts";
 export * from "./GetPullRequestHttp.ts";
 export * from "./GetPullRequestLocal.ts";
 export * from "./ListIssues.ts";

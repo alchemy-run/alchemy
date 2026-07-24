@@ -552,8 +552,13 @@ Record the final ${result}.`((p) =>
       ]);
       return Effect.gen(function* () {
         let inits = 0;
+        const initKeys: string[] = [];
         const charter = Effect.gen(function* () {
           inits++;
+          // init is per-run: the thread EXISTS at admit, so
+          // thread-scoped setup may read its identity here
+          const { key } = yield* AI.Thread;
+          initKeys.push(key);
           const count = yield* Ref.make(0);
           const bump = yield* AI.Tool("bump")`Increment the counter.`(() =>
             Ref.update(count, (n) => n + 1).pipe(Effect.as("bumped")),
@@ -567,6 +572,7 @@ Counter: ${Ref.get(count)}. Use ${bump} when told.`;
         yield* researcher.dispatch("bump once", { key: "a" }); // bumps a's ref
         yield* researcher.dispatch("just answer", { key: "b" });
         expect(inits).toBe(2); // one instance per run
+        expect(initKeys).toEqual(["a", "b"]); // init saw each run's thread
         // run b's SECOND tick would show its own counter still at 0 —
         // check via the prompt each run saw
         expect(Model.promptText(model.calls[1]!)).toContain("Counter: 1"); // a, tick 2
@@ -756,4 +762,105 @@ ${
       }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
     },
   );
+
+  it.effect("codemode(async): grants collapse into one eval tool", () => {
+    const model = Model.make([
+      // the model programs against the granted capability
+      () => [
+        Model.toolCall("eval", {
+          code: `
+            const first = await tools.search({ query: "alchemy" });
+            const second = await tools.search({ query: "effect" });
+            return first + " // " + second;`,
+        }),
+        Model.finish("tool-calls"),
+      ],
+      () => [Model.text("composed"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const answer = yield* researcher.dispatch("What is alchemy?");
+      expect(answer).toBe("composed");
+
+      // ONE eval tool on the wire (spawn stays — intrinsics are direct)
+      const tools = model.calls[0]!.tools.map((tool) => tool.name);
+      expect(tools).toEqual(["eval", "spawn"]);
+      // the eval tool's description carries the generated signature
+      const evalTool = model.calls[0]!.tools[0]!;
+      expect(evalTool.description).toContain(
+        "declare function search(input: { query: string }): Promise<unknown>",
+      );
+
+      // BOTH calls ran in one round trip, in code
+      expect(search.queries).toEqual(["alchemy", "effect"]);
+      // and the composed result came back as the tool result
+      expect(Model.promptText(model.calls[1]!)).toContain(
+        "results for alchemy: alchemy is IaE // results for effect: alchemy is IaE",
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(model, Layer.mergeAll(search.layer, AI.CodeModeAsync())),
+      ),
+    );
+  });
+
+  it.effect("codemode(effect): the program stays on the kernel fiber", () => {
+    const model = Model.make([
+      () => [
+        Model.toolCall("eval", {
+          code: `
+            return Effect.gen(function* () {
+              const result = yield* tools.search({ query: "alchemy" });
+              return "wrapped:" + result;
+            });`,
+        }),
+        Model.finish("tool-calls"),
+      ],
+      () => [Model.text("done"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      yield* researcher.dispatch("go");
+
+      const evalTool = model.calls[0]!.tools[0]!;
+      expect(evalTool.description).toContain(
+        "declare function search(input: { query: string }): Effect<unknown>",
+      );
+      expect(search.queries).toEqual(["alchemy"]);
+      expect(Model.promptText(model.calls[1]!)).toContain(
+        "wrapped:results for alchemy",
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(model, Layer.mergeAll(search.layer, AI.CodeModeEffect())),
+      ),
+    );
+  });
+
+  it.effect("codemode: a broken program fails model-visibly", () => {
+    const model = Model.make([
+      () => [
+        Model.toolCall("eval", { code: `return await tools.nope();` }),
+        Model.finish("tool-calls"),
+      ],
+      () => [Model.text("recovered"), Model.finish()],
+    ]);
+    const search = recordingSearch();
+    return Effect.gen(function* () {
+      const researcher = yield* interpret(Researcher, ResearcherCharter);
+      const answer = yield* researcher.dispatch("go");
+      // the loop survived: the failure came back as a tool result
+      expect(answer).toBe("recovered");
+      expect(Model.promptText(model.calls[1]!)).toContain("program failed");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(model, Layer.mergeAll(search.layer, AI.CodeModeAsync())),
+      ),
+    );
+  });
 });

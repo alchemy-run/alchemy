@@ -11,40 +11,36 @@
  * Phases: the constructor runs at PLAN time too (to collect bindings),
  * so the org's Layer graph is deliberately built inside `host.run` —
  * the host only STORES that program at plan; it executes at runtime,
- * inside the detached process. Deploying needs no API keys; running
- * needs `GITHUB_ACCESS_TOKEN` (or `GITHUB_TOKEN`) and
- * `ANTHROPIC_API_KEY` in the operator's environment (the reconciler
- * passes the shell env through).
+ * inside the detached process. GitHub credentials resolve from the
+ * ALCHEMY PROFILE (the GitHub AuthProvider — `alchemy login`); running
+ * additionally needs `ANTHROPIC_API_KEY` in the operator's environment
+ * (the reconciler passes the shell env through).
  */
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
 import * as AI from "alchemy/AI";
+import * as Auth from "alchemy/Auth";
+import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Server from "alchemy/Server";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Ref from "effect/Ref";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { RuntimeContext } from "alchemy/RuntimeContext";
+import { ApprovalsLive } from "./approvals.ts";
 import { CodingLocal } from "./coding.ts";
 import { EngineerLive } from "./engineer.ts";
-import { Factory, FactoryLive, type FactoryService } from "./factory.ts";
-import { Issues, IssuesLive, type IssuesService } from "./issues.ts";
+import { Factory, FactoryLive } from "./factory.ts";
+import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
+import { Issues, IssuesLive } from "./issues.ts";
 import { SqliteLedger } from "./ledger.ts";
 import { LiveTestingLive } from "./live-testing.ts";
-import {
-  PullRequests,
-  PullRequestsLive,
-  type PullRequestsService,
-} from "./pull-requests.ts";
+import { PullRequests, PullRequestsLive } from "./pull-requests.ts";
 import { ReconcilingLive } from "./reconciling.ts";
 import { ResourceEngineerLive } from "./resource-engineer.ts";
 import { ReviewerLive } from "./reviewer.ts";
-import { TypedErrorsLive } from "./typed-errors.ts";
-import { ApprovalsLive } from "./approvals.ts";
-import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
 import {
   ApproveRecorded,
   CloseIssueLive,
@@ -55,12 +51,32 @@ import {
   ReadDiffLive,
   SearchIssuesLive,
 } from "./tools/index.ts";
-import { workspace } from "./workspace.ts";
+import { TypedErrorsLive } from "./typed-errors.ts";
+import { runWorkspace, workspace } from "./workspace.ts";
 
 // ─── the physics (local) ─────────────────────────────────────────────
 
-/** GitHub REST credentials from the operator's shell env. */
-const Credentials = GitHub.fromEnv();
+/**
+ * GitHub REST credentials from the ALCHEMY PROFILE via the GitHub
+ * AuthProvider — the same chain `GitHub.providers()` and `alchemy
+ * login` use (`ALCHEMY_PROFILE` selects; no shell env token needed).
+ */
+/**
+ * The AuthProviders registry, WITH GitHub registered: the CLI provides
+ * this for commands; a standalone runtime brings its own. `fresh`
+ * matters: the registration layer is memoized by REFERENCE, and at
+ * plan time the CLI's own graph already built it against the CLI's
+ * registry — without `fresh`, ours would stay empty.
+ */
+const AuthRegistry = Layer.fresh(GitHub.Auth.GitHubAuth).pipe(
+  Layer.provideMerge(Layer.succeed(Auth.AuthProviders, {})),
+);
+
+const Credentials = GitHub.fromAuthProvider().pipe(
+  Layer.provide(AuthRegistry),
+  Layer.provide(Auth.ProfileLive),
+  Layer.provide(Auth.CredentialsStoreLive),
+);
 
 /**
  * The GitHub capability bindings, LOCAL flavor: straight Octokit calls
@@ -99,78 +115,48 @@ const Model = AnthropicLanguageModel.layer({
 const Kernel = AI.KernelMemory.pipe(Layer.provide(Model));
 
 /**
- * The checkout the org works in — a CLONE of test-alchemy,
- * self-provisioned at boot (see `ensureWorkspace`). `ORG_WORKSPACE`
- * overrides the location.
+ * The workspaces ROOT — one directory holds the central clones and the
+ * per-run worktrees (`Git.WorkspacesWorktree` populates it), and the
+ * SAME directory is the toolbox's containment root: each run's tree is
+ * a subdirectory the coding tools can reach but not escape.
+ * `ORG_WORKSPACE` overrides the location.
  */
 const workspaceRoot =
-  process.env.ORG_WORKSPACE ??
-  `${process.cwd()}/.alchemy/workspaces/test-alchemy`;
+  process.env.ORG_WORKSPACE ?? `${process.cwd()}/.alchemy/workspaces`;
 
 const OrgWorkspace = workspace(workspaceRoot);
 
 /**
- * Boot step, BEFORE the org's Layer graph builds (the Workspace layer
- * realpaths its root): clone test-alchemy if missing (the clone URL
- * carries the token, so pushes work), and seed `main` if the repo is
- * empty (PRs need a base branch).
+ * Checkouts as a capability, LOCAL physics: central blobless clone +
+ * one worktree per run key. ONE instance — the Engineer's turn and the
+ * OpenPullRequest handler must share the checkout cache (same const,
+ * memoized by reference in the Layer graph).
  */
-const ensureWorkspace = Effect.promise(async () => {
-  const fs = await import("node:fs");
-  const { execFile } = await import("node:child_process");
-  const { promisify } = await import("node:util");
-  const git = async (...args: string[]) =>
-    (await promisify(execFile)("git", args)).stdout.trim();
-
-  if (!fs.existsSync(workspaceRoot)) {
-    const token =
-      process.env.GITHUB_ACCESS_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
-    await git(
-      "clone",
-      `https://x-access-token:${token}@github.com/alchemy-run/test-alchemy.git`,
-      workspaceRoot,
-    );
-  }
-  try {
-    await git("-C", workspaceRoot, "rev-parse", "--verify", "origin/main");
-  } catch {
-    // empty repository: seed main so pull requests have a base
-    await git("-C", workspaceRoot, "checkout", "-B", "main");
-    fs.writeFileSync(
-      `${workspaceRoot}/README.md`,
-      "# test-alchemy\n\nSandbox repository managed by the alchemy-org software factory.\n",
-    );
-    await git("-C", workspaceRoot, "add", "-A");
-    await git(
-      "-C",
-      workspaceRoot,
-      "-c",
-      "user.name=alchemy-org[bot]",
-      "-c",
-      "user.email=bot@alchemy.run",
-      "commit",
-      "-m",
-      "chore: seed main",
-    );
-    await git("-C", workspaceRoot, "push", "-u", "origin", "main");
-  }
-});
+const WorkspacesLive = Git.WorkspacesWorktree({ root: workspaceRoot }).pipe(
+  Layer.provide(GitHub.GitCredentials),
+  Layer.provide(Credentials),
+);
 
 // ─── the org: agents, then processes ────────────────────────────────
 
 /** The Engineer: local toolbox physics + real PR plumbing (branch,
- * commit, push, pulls.create) over the workspace clone. */
+ * commit, push, pulls.create). The toolbox is rooted at THE RUN'S OWN
+ * worktree (`runWorkspace`), so an engineer cannot touch another run's
+ * tree — or anything outside its checkout. */
 const EngineerLayer = EngineerLive.pipe(
   Layer.provide(CodingLocal),
   Layer.provide(OpenPullRequestLive.pipe(Layer.provide(ToolOutputStoreLive))),
   Layer.provide(Kernel),
-  Layer.provide(OrgWorkspace),
+  Layer.provide(runWorkspace()),
+  // one shared instance: init's checkout, the toolbox root, and the
+  // PR tool all read the same cache, so they land in the same worktree
+  Layer.provide(WorkspacesLive),
 );
 
 /** The Reviewer: reads the diff, records its verdict in the approvals
  * ledger (visible as a PR comment) — the merge tool ratifies against it. */
 const ReviewerLayer = ReviewerLive.pipe(
-  Layer.provide(Layer.mergeAll(ApproveRecorded, CommentLive, ReadDiffLive)),
+  Layer.provide([ApproveRecorded, CommentLive, ReadDiffLive]),
   Layer.provide(Kernel),
 );
 
@@ -178,14 +164,17 @@ const ReviewerLayer = ReviewerLive.pipe(
  * The ResourceEngineer: the factory's per-service laborer. The ONE
  * physics bundle is the generic ${Coding} toolbox; the doctrines
  * (typed errors, reconciling, live testing) are PROSE-ONLY skills —
- * knowledge, not tools. NOTE: the factory operates on the checkout
- * at ORG_WORKSPACE — point it at an alchemy repo root (with the
- * distilled submodule), not at services/alchemy-org.
+ * knowledge, not tools. NOTE: the factory works under the workspaces
+ * root at ORG_WORKSPACE — an alchemy checkout (with the distilled
+ * submodule) must live inside it for waves to operate on.
  */
 const ResourceEngineerLayer = ResourceEngineerLive.pipe(
-  Layer.provide(
-    Layer.mergeAll(CodingLocal, TypedErrorsLive, ReconcilingLive, LiveTestingLive),
-  ),
+  Layer.provide([
+    CodingLocal,
+    TypedErrorsLive,
+    ReconcilingLive,
+    LiveTestingLive,
+  ]),
   Layer.provide(Kernel),
   Layer.provide(OrgWorkspace),
 );
@@ -203,33 +192,29 @@ export const OrgLive = Layer.mergeAll(
   PullRequestsLive,
   FactoryLayer,
 ).pipe(
-  Layer.provide(Layer.mergeAll(EngineerLayer, ReviewerLayer)),
-  Layer.provide(
-    Layer.mergeAll(
-      CommentLive,
-      SearchIssuesLive,
-      LinkIssuesLive,
-      CloseIssueLive,
-      MergePullRequestLive,
-    ),
-  ),
+  Layer.provide([EngineerLayer, ReviewerLayer]),
+  Layer.provide([
+    CommentLive,
+    SearchIssuesLive,
+    LinkIssuesLive,
+    CloseIssueLive,
+    MergePullRequestLive,
+  ]),
   Layer.provide(Kernel),
   Layer.provide(SqliteLedger(".alchemy/org-ledger.sqlite")),
-  Layer.provide(GitHub.RepositoryEventSourcePolling({ every: "30 seconds" })),
+  // 5s local poll: the loop crosses GitHub three times (issue → PR →
+  // merge), so poll latency dominates wall time; webhooks on Cloudflare
+  // make this push. 3 registrations × ~720 req/hr fits the 5k/hr budget.
+  Layer.provide(GitHub.RepositoryEventSourcePolling({ every: "5 seconds" })),
   // ONE approvals ledger, shared by the Reviewer's Approve and the
   // PullRequests desk's merge ratification (memoized by reference)
   Layer.provideMerge(ApprovalsLive),
   Layer.provide(GitHubBindings),
   Layer.provide(Credentials),
+  Layer.orDie,
 );
 
 // ─── the service ─────────────────────────────────────────────────────
-
-interface OrgHandles {
-  readonly issues?: IssuesService;
-  readonly pullRequests?: PullRequestsService;
-  readonly factory?: FactoryService;
-}
 
 export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
   "AlchemyOrg",
@@ -240,54 +225,29 @@ export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
     memo: { include: ["src/**"] },
   },
   Effect.gen(function* () {
-    const host = yield* Server.ServerHost;
-    const org = yield* Ref.make<OrgHandles>({});
-
-    // The org IS the background program. `host.run` only registers it:
-    // nothing here executes at plan; the detached process builds the
-    // Layer graph once at startup and holds its scope open forever.
-    yield* host.run(
-      // the workspace clone must exist BEFORE the Layer graph builds
-      // (the Workspace layer realpaths its root)
-      ensureWorkspace.pipe(
-        Effect.andThen(
-          Effect.gen(function* () {
-            const issues = yield* Issues;
-            const pullRequests = yield* PullRequests;
-            const factory = yield* Factory;
-            yield* Ref.set(org, { issues, pullRequests, factory });
-            yield* Effect.log(
-              "alchemy-org is watching test-alchemy (polling every 30s)",
-            );
-            yield* Effect.never; // the processes live in this scope
-          }).pipe(Effect.provide(OrgLive), Effect.scoped),
-        ),
-        Effect.orDie,
-      ),
-    );
+    // the desks are BINDINGS: resolved at init, closed over by fetch
+    const issues = yield* Issues;
+    const pullRequests = yield* PullRequests;
+    const factory = yield* Factory;
 
     return {
       // localhost surface: the desks' sealed Shapes — read-only status,
       // plus the factory's one door (`POST /factory/wave`)
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const handles = yield* Ref.get(org);
-        if (!handles.issues || !handles.pullRequests || !handles.factory) {
-          return yield* HttpServerResponse.json(
-            { phase: "starting" },
-            { status: 503 },
-          );
-        }
 
         // the factory's door: start a wave, respond immediately — the
         // order book is where outcomes land as engineers file reports
-        if (request.method === "POST" && request.url.startsWith("/factory/wave")) {
+        if (
+          request.method === "POST" &&
+          request.url.startsWith("/factory/wave")
+        ) {
           const body = (yield* request.json.pipe(Effect.orDie)) as {
             services: string[];
             concurrency?: number;
           };
           yield* Effect.forkDetach(
-            handles.factory
+            factory
               .wave(body.services, { concurrency: body.concurrency })
               .pipe(Effect.provide(RuntimeContext.phantom)),
           );
@@ -298,9 +258,9 @@ export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
         }
 
         const status = yield* Effect.all({
-          issues: handles.issues.list(),
-          pullRequests: handles.pullRequests.list(),
-          factory: handles.factory.orderBook(),
+          issues: issues.list(),
+          pullRequests: pullRequests.list(),
+          factory: factory.orderBook(),
         }).pipe(
           Effect.map(({ issues, pullRequests, factory }) => ({
             phase: "running",
@@ -325,4 +285,9 @@ export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
       }),
     };
   }),
+  // the org's machinery as the constructor's LAYERS: built with instance
+  // lifetime, so the background fibers (GitHub pollers, kernel actor
+  // loops) live until the process is killed — an `Effect.provide` here
+  // would tear them down the moment init returns its handlers
+  OrgLive,
 ) {}

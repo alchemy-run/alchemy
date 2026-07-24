@@ -94,17 +94,17 @@ export const PullRequestsAgentLive = PullRequestsAgent.make`
   This process drives every pull request in ${testAlchemy} to a
   verdict — the factory's own and human contributors' alike.
 
-  Each ${GitHub.PullRequestOpened} receives a review from ${Reviewer}
-  against its originating issue. A pull request that names no issue
-  gets one chance: ${Comment} asks the author to link or state the
-  intent, and the review proceeds against that statement when it
-  arrives.
+  Each ${GitHub.PullRequestOpened} goes straight to ${Reviewer} — the
+  reviewer reads the pull request itself (body, linkage, diff), so it
+  needs nothing from you but the PR reference. The review is a VERDICT,
+  delivered in one round: never ask the reviewer twice, never wait for
+  answers no one will give.
 
   A review that requests changes is relayed with ${Comment}, exactly —
   the author hears the Reviewer's words, not a summary. A review that
-  approves, with green checks, is followed by ${MergePullRequest}. The
-  merge tool itself refuses without an approved review; a refusal is a
-  fact about the world to fix, never to work around.
+  approves is followed IMMEDIATELY by ${MergePullRequest} in the same
+  turn. The merge tool itself refuses without an approved review; a
+  refusal is a fact about the world to fix, never to work around.
 
   A ${GitHub.PullRequestMerged} or ${GitHub.PullRequestClosed} ends
   this process's involvement — the verdict was delivered, however it

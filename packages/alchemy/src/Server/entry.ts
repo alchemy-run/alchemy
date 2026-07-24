@@ -30,6 +30,14 @@ import { BunHttpServer } from "../Http.ts";
 import { reifyBoundConfigProvider } from "../Runtime.ts";
 import { Stack } from "../Stack.ts";
 
+// The runtime color, folded in by bundlers everywhere else: binding
+// guards no-op, and `provideClassLayer` builds the instance's layers
+// against the AMBIENT scope (the program root below) instead of a
+// transient region — background fibers forked in layer scopes (event
+// pollers, kernel loops) live for the process. Must be set BEFORE the
+// user's module is imported.
+(globalThis as any).__ALCHEMY_RUNTIME__ = true;
+
 const mainPath = process.env.ALCHEMY_SERVICE_MAIN;
 if (!mainPath) {
   throw new Error("Server.Service entry: ALCHEMY_SERVICE_MAIN is not set");

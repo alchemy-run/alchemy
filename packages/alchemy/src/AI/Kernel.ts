@@ -53,10 +53,12 @@ export type Turn<Out = unknown, E = any, R = any> = Effect.Effect<
  * over both) and returns the {@link Turn} the kernel re-evaluates at
  * every sampling boundary of that run.
  *
- * Init never sees the RUN: `AI.Thread` and `AI.Tick` are runtime
- * facts, provided only inside turns and tool handlers. A tool that
- * needs the thread (`thread.compact(…)`) yields `AI.Thread` in its
- * HANDLER, not in init.
+ * Init IS thread-scoped: it runs at admit, when the run's thread
+ * already exists, so `AI.Thread` is in scope — set up state FOR the
+ * thread there (a workspace checkout keyed by `thread.key`, Refs the
+ * turn and tools share). `AI.Tick` is the one runtime fact init never
+ * sees: no sampling is under way, so only turns and tool handlers may
+ * yield it.
  *
  * ```ts
  * const charter = Effect.gen(function* () {
@@ -84,18 +86,19 @@ export type Charter = Effect.Effect<Fragment | Turn, any, any>;
  * requirements because no user Layer could ever provide them.
  *
  * These are RUNTIME facts and affordances: `Thread` (the run's
- * identity and conversation) and `Tick` (this sampling) exist only
- * inside the loop. The INIT effect never sees them — init is setup
- * (allocate `Ref`s, resolve bindings for tools, define inline tools
- * over both); anything that needs the run reads it from inside the
- * turn or a tool handler.
+ * identity and conversation) and `Tick` (this sampling). Init runs
+ * ONCE PER RUN at admit — the thread already exists, so init MAY read
+ * `Thread` for thread-scoped setup (a `Ref` keyed by the run, a
+ * workspace checkout addressed by `thread.key`). `Tick` exists only
+ * inside the loop: no sampling is under way during init, so only
+ * turns and tool handlers see it.
  */
 export type TurnServices = Thread | Tick | RuntimeContext;
 
 /**
  * A charter's requirement union: the init effect's own requirements
- * (which may NOT include `Thread`/`Tick` — the kernel only provides
- * those to turns and tool handlers, so an init that yields them
+ * (`Thread` excluded — init is per-run and the kernel provides the
+ * thread at admit; `Tick` NOT excluded, so an init that yields it
  * surfaces an unprovideable requirement here and fails to compose)
  * plus everything any turn could mention (splices accumulate through
  * `AI.prose`'s requirement channel — including branches that did not
@@ -104,7 +107,7 @@ export type TurnServices = Thread | Tick | RuntimeContext;
 export type CharterServices<C> =
   C extends Effect.Effect<infer A, any, infer RInit>
     ?
-        | Exclude<RInit, RuntimeContext>
+        | Exclude<RInit, Thread | RuntimeContext>
         | (A extends Effect.Effect<any, any, infer RTurn>
             ? Exclude<RTurn, TurnServices>
             : never)

@@ -1,5 +1,6 @@
 export * from "./Actor.ts";
 export * from "./Agent.ts";
+export * from "./CodeMode.ts";
 export * from "./Errors.ts";
 export * from "./Event.ts";
 export * from "./Kernel.ts";
@@ -10,3 +11,4 @@ export * from "./Services.ts";
 export * from "./Skill.ts";
 export * from "./Thread.ts";
 export * from "./Tool.ts";
+export * from "./WireMode.ts";

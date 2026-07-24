@@ -57,6 +57,11 @@ export const ApplyPatchLocal = Layer.effect(
     const pathService = yield* Path.Path;
     const workspace = yield* Workspace;
     return ((input: ApplyPatchInput) =>
-      applyPatch(input, fs, pathService, workspace)) as never;
+      Effect.flatMap(workspace.root, (root) =>
+        applyPatch(input, fs, pathService, {
+          root,
+          resolve: workspace.resolve,
+        }),
+      )) as never;
   }),
 );

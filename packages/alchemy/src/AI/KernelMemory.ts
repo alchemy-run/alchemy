@@ -33,6 +33,7 @@ import {
   type TickService,
 } from "./Thread.ts";
 import { isTool, isToolImpl, type Tool } from "./Tool.ts";
+import { WireMode, type WirePresentation } from "./WireMode.ts";
 
 /**
  * Render a capability term's own tagged template into prose (a tool's
@@ -100,7 +101,9 @@ const compileTool = (term: Tool<any, any[]>) => {
     ...(Object.keys(fields).length > 0
       ? { parameters: S.Struct(fields) as any }
       : {}),
-    success: S.Unknown,
+    // the declared RETURN schema (`AI.Tool("readDiff", S.String)`) —
+    // codemode renders it into the generated signature
+    success: (term.returns as S.Top | undefined) ?? S.Unknown,
     failure: S.Unknown,
     failureMode: "return",
   }).annotate(AiTool.Strict, false);
@@ -423,20 +426,45 @@ export const KernelMemory: Layer.Layer<
 
         /**
          * Provide the INIT evaluation context: the captured interpret
-         * context and the runtime color — deliberately NOT
-         * `AI.Thread`/`AI.Tick`. Init is setup (Refs, bindings, inline
-         * tools); the run is a runtime fact that only turns and tool
-         * handlers may read. `CharterServices` enforces this at the
-         * type level; an init that sneaks a `yield* AI.Thread` past it
-         * dies here with a missing-service defect.
+         * context, the runtime color, and `AI.Thread` — init runs ONCE
+         * PER RUN at admit, when the thread already exists, so
+         * thread-scoped setup (state keyed by `thread.key`, a
+         * workspace checkout) belongs here. Deliberately NOT
+         * `AI.Tick`: no sampling is under way during init.
+         * `CharterServices` enforces the Tick exclusion at the type
+         * level; an init that sneaks a `yield* AI.Tick` past it dies
+         * here with a missing-service defect.
          */
-        const provideInit = <A, E>(
-          effect: Effect.Effect<A, E, any>,
-        ): Effect.Effect<A, E> =>
-          effect.pipe(
-            Effect.provide(RuntimeContext.phantom),
-            Effect.provide(context),
-          ) as Effect.Effect<A, E>;
+        const provideInit =
+          (run: RunState) =>
+          <A, E>(effect: Effect.Effect<A, E, any>): Effect.Effect<A, E> =>
+            effect.pipe(
+              Effect.provideService(Thread, makeThreadService(run)),
+              Effect.provide(RuntimeContext.phantom),
+              Effect.provide(context),
+            ) as Effect.Effect<A, E>;
+
+        /**
+         * Wrap a tool handler so its FAILURES are observable in the
+         * process log: a failing tool result is model-visible (the
+         * agent reacts), but without this the operator sees nothing —
+         * a run burning its budget against a broken tool looks like
+         * silence from the outside.
+         */
+        const observedHandler =
+          (
+            run: RunState,
+            name: string,
+            fn: (params: any) => Effect.Effect<any, any, any>,
+          ) =>
+          (input: any) =>
+            provideRun(run)(fn(input)).pipe(
+              Effect.tapError((error) =>
+                Effect.logWarning(
+                  `Kernel run '${run.key}' of '${termName}': tool '${name}' failed: ${String(error).slice(0, 500)}`,
+                ),
+              ),
+            );
 
         // ── lazy capability resolution (context is fixed; memoized) ─
         const handlerCache = new Map<
@@ -643,6 +671,12 @@ export const KernelMemory: Layer.Layer<
           );
 
         const runs = new Map<string, RunState>();
+        // Minted keys are PROCESS-UNIQUE, not just kernel-unique: run
+        // identity leaks into the world (workspace checkouts key on
+        // `AI.Thread.key`), so a bare counter would collide across
+        // restarts — a fresh process's `run-0` would inherit the
+        // previous process's `run-0` worktree, stale work included.
+        const mintPrefix = crypto.randomUUID().slice(0, 8);
         let minted = 0;
         let lastKey: string | undefined;
 
@@ -733,7 +767,9 @@ export const KernelMemory: Layer.Layer<
         ) =>
           Effect.gen(function* () {
             const stance = spawner.lastStance!;
-            const worker = yield* makeRunState(`spawn-${minted++}`);
+            const worker = yield* makeRunState(
+              `spawn-${mintPrefix}-${minted++}`,
+            );
             const handlers: Record<
               string,
               (params: any) => Effect.Effect<any, any>
@@ -811,9 +847,9 @@ export const KernelMemory: Layer.Layer<
             const stance = yield* renderStance(run, result);
             run.lastStance = stance;
 
-            // this tick's toolkit: mentioned tools + active∩mentioned
-            // skills' tools + intrinsics
-            const handlers: Record<
+            // this tick's CAPABILITIES: mentioned tools + active∩mentioned
+            // skills' tools, with their handlers
+            const capabilityHandlers: Record<
               string,
               (params: any) => Effect.Effect<any, any>
             > = {};
@@ -821,7 +857,7 @@ export const KernelMemory: Layer.Layer<
             for (const [name, compiled] of stance.tools) {
               charterTools.push(compileTool(compiled.term));
               const resolved = yield* resolveHandler(compiled);
-              handlers[name] = (input) => provideRun(run)(resolved(input));
+              capabilityHandlers[name] = observedHandler(run, name, resolved);
             }
             const activeTools: Array<AiTool.Any> = [];
             for (const name of run.active) {
@@ -830,9 +866,44 @@ export const KernelMemory: Layer.Layer<
               const resolved = yield* resolveSkill(skillTerm);
               activeTools.push(...resolved.tools);
               for (const [toolName, fn] of Object.entries(resolved.handlers)) {
-                handlers[toolName] ??= (input) => provideRun(run)(fn(input));
+                capabilityHandlers[toolName] ??= observedHandler(
+                  run,
+                  toolName,
+                  fn,
+                );
               }
             }
+
+            // the WIRE seam: an optional mode transforms how the
+            // capabilities are PRESENTED (e.g. codemode collapses them
+            // into one `eval` tool) — mention-is-presence unchanged;
+            // absent, every grant is its own provider tool
+            const capabilityTools = dedupeByName([
+              ...charterTools,
+              ...activeTools,
+            ]);
+            const wireMode = Context.getOption(context, WireMode);
+            const wire: WirePresentation =
+              Option.isSome(wireMode) && capabilityTools.length > 0
+                ? yield* wireMode.value.present(
+                    capabilityTools.map((tool) => ({
+                      name: tool.name,
+                      description: AiTool.getDescription(tool) ?? "",
+                      parameters: AiTool.getJsonSchema(tool),
+                      returns: AiTool.getJsonSchemaFromSchema(
+                        (tool as any).successSchema,
+                      ),
+                      handler: capabilityHandlers[tool.name]!,
+                    })),
+                  )
+                : { tools: capabilityTools, handlers: capabilityHandlers };
+
+            // intrinsics stay DIRECT tools in every mode — they are
+            // conversation control, not capabilities
+            const handlers: Record<
+              string,
+              (params: any) => Effect.Effect<any, any>
+            > = { ...wire.handlers };
             const delegates = new Map<string, Actor>();
             for (const [name, agent] of stance.delegates) {
               delegates.set(name, yield* resolveDelegate(agent));
@@ -857,7 +928,7 @@ export const KernelMemory: Layer.Layer<
                 : []),
             ];
             const toolkit = yield* buildToolkit(
-              dedupeByName([...charterTools, ...activeTools, ...intrinsics]),
+              dedupeByName([...wire.tools, ...intrinsics]),
               handlers,
             );
 
@@ -1005,12 +1076,13 @@ export const KernelMemory: Layer.Layer<
          */
         const admit = (item: unknown, key?: string) =>
           Effect.gen(function* () {
-            const runKey = key ?? `run-${minted++}`;
+            const runKey = key ?? `run-${mintPrefix}-${minted++}`;
             let run = runs.get(runKey);
             if (run === undefined) {
               run = yield* makeRunState(runKey);
-              // init is setup, not runtime: no Thread/Tick in scope
-              const initResult = yield* provideInit(
+              // per-run init: the thread exists (Thread in scope for
+              // thread-scoped setup); no sampling yet (no Tick)
+              const initResult = yield* provideInit(run)(
                 charter as Effect.Effect<unknown, unknown>,
               ).pipe(Effect.orDie);
               run.turn = isFragment(initResult)

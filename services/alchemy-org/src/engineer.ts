@@ -11,9 +11,12 @@
  * — never here.
  */
 import * as AI from "alchemy/AI";
+import * as Git from "alchemy/Git";
+import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import { Coding } from "./coding.ts";
+import { testAlchemy } from "./repos.ts";
 import { OpenPullRequest } from "./tools/index.ts";
 import { body, issue, title, type PullRequestRef } from "./vocabulary.ts";
 
@@ -43,8 +46,18 @@ type Pr = typeof PullRequestRef.Type;
  */
 export const EngineerLive = Engineer.make(
   Effect.gen(function* () {
-    // init: setup only (Refs, bindings for tools) — the run is not
-    // in scope here; Thread/Tick are turn-time facts
+    // init: thread-scoped setup — runs once per run, with AI.Thread
+    // in scope (Tick is the turn-time fact)
+    const workspaces = yield* Git.Workspaces;
+    const remote = GitHub.remote(testAlchemy);
+
+    // the run's own checkout, keyed by its thread: acquired ONCE here.
+    // The coding toolbox (runWorkspace) and OpenPullRequest derive the
+    // same key at call time, so every tool is physically confined to
+    // this tree — no path discipline rides on prose
+    const { key } = yield* AI.Thread;
+    yield* workspaces.checkout({ key, remote });
+
     const openService = yield* OpenPullRequest;
     const open = Effect.isEffect(openService)
       ? yield* openService
@@ -70,7 +83,6 @@ export const EngineerLive = Engineer.make(
       const pr = yield* Ref.get(opened);
       if (pr !== undefined) return pr;
 
-      const { key } = yield* AI.Thread;
       const { count } = yield* AI.Tick;
       if (count >= 40) {
         return yield* Effect.fail(
@@ -81,11 +93,14 @@ export const EngineerLive = Engineer.make(
           }),
         );
       }
+
       return yield* AI.prose`
         You receive exactly one ${issue} whose acceptance criteria are your
-        entire specification. ${Coding} is your craft; all tests green is
-        the only definition of done you may use. When green,
-        ${openPullRequest} citing the issue.
+        entire specification. Your tools operate inside your own checkout
+        of the repository — paths are repository-relative ("README.md",
+        "docs/x.md"). ${Coding} is your craft; all tests green is the only
+        definition of done you may use. When green, ${openPullRequest}
+        citing the issue.
 
         You do not review your own work, and you do not merge.`;
     });

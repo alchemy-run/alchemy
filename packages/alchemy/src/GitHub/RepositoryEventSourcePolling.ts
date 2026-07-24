@@ -56,9 +56,11 @@
  * ```
  */
 import type { Octokit as OctokitClient } from "@octokit/rest";
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -134,6 +136,10 @@ export const RepositoryEventSourcePolling = (
           // cursor starts at "now": only NEW activity is observed
           const cursor = yield* Ref.make(yield* Clock.currentTimeMillis);
 
+          yield* Effect.logInfo(
+            `GitHub polling [${names.join(", ")}] of ${props.owner}/${props.repository} every ${String(every)}`,
+          );
+
           const pollOnce = Effect.gen(function* () {
             const since = yield* Ref.get(cursor);
             const batches = yield* Effect.forEach(names, (name) =>
@@ -145,6 +151,13 @@ export const RepositoryEventSourcePolling = (
               .sort(
                 (a, b) => a.at - b.at || (a.event.id < b.event.id ? -1 : 1),
               );
+            if (deliveries.length > 0) {
+              yield* Effect.logInfo(
+                `GitHub poll of ${props.owner}/${props.repository}: delivering ${deliveries.length} event(s): ${deliveries
+                  .map((d) => d.event.id)
+                  .join(", ")}`,
+              );
+            }
             for (const delivery of deliveries) {
               yield* process(delivery.event);
             }
@@ -164,7 +177,23 @@ export const RepositoryEventSourcePolling = (
           );
 
           yield* Effect.forkIn(
-            pollOnce.pipe(Effect.repeat(Schedule.spaced(every))),
+            pollOnce.pipe(
+              Effect.repeat(Schedule.spaced(every)),
+              // a dead poll loop must be LOUD: a defect in a delivery
+              // handler would otherwise kill polling silently forever
+              Effect.onExit((exit) =>
+                Exit.isFailure(exit)
+                  ? Cause.hasInterruptsOnly(exit.cause)
+                    ? Effect.logWarning(
+                        `GitHub polling loop of ${props.owner}/${props.repository} interrupted — polling stopped`,
+                      )
+                    : Effect.logError(
+                        `GitHub polling loop of ${props.owner}/${props.repository} DIED — no further events will be delivered`,
+                        exit.cause,
+                      )
+                  : Effect.void,
+              ),
+            ),
             scope,
           );
         })) as RepositoryEventSourceService;

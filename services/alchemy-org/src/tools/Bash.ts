@@ -37,12 +37,13 @@ const DEFAULT_TIMEOUT_SECONDS = 60;
 export const BashLocal = Layer.effect(
   Bash,
   Effect.gen(function* () {
-    const { root } = yield* Workspace;
+    const workspace = yield* Workspace;
     const environment = yield* Effect.context<
       ChildProcessSpawner | ToolOutputStore
     >();
     return ((input: { command: string; timeout?: number }) =>
       Effect.gen(function* () {
+        const root = yield* workspace.root;
         const result = yield* runProcess({
           command: "sh",
           args: ["-c", input.command],

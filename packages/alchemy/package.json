@@ -181,6 +181,12 @@
       "worker": "./src/Discord/index.ts",
       "import": "./lib/Discord/index.js"
     },
+    "./Git": {
+      "types": "./lib/Git/index.d.ts",
+      "bun": "./src/Git/index.ts",
+      "worker": "./src/Git/index.ts",
+      "import": "./lib/Git/index.js"
+    },
     "./GitHub": {
       "types": "./lib/GitHub/index.d.ts",
       "bun": "./src/GitHub/index.ts",
