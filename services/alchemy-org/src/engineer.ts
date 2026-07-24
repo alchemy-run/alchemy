@@ -93,6 +93,14 @@ export const EngineerLive = Engineer.make(
           }),
         );
       }
+      // AI.say — the explicit injection channel: budget pressure as a
+      // one-shot <note> at the moment the threshold is crossed.
+      if (count === 30) {
+        yield* AI.say`
+          30 of your 40 sampling budget is spent. Stop exploring:
+          converge on the smallest change that satisfies the acceptance
+          criteria and open the pull request now.`;
+      }
 
       return yield* AI.prose`
         You receive exactly one ${issue} whose acceptance criteria are your

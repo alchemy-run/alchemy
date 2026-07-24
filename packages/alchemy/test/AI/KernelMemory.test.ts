@@ -643,37 +643,35 @@ Summarize progress as ${summary}; your context restarts from it.`((p) =>
     },
   );
 
-  it.effect("say delivers once per thread and re-says on changed text", () => {
+  it.effect("say is a plain append: the author's guard IS the policy", () => {
     const model = Model.make([
-      () => [Model.toolCall("bump", {}), Model.finish("tool-calls")], // n: 0→1
-      () => [Model.toolCall("bump", {}), Model.finish("tool-calls")], // n: 1→2
-      () => [Model.text("done"), Model.finish()],
+      () => [Model.toolCall("bump", {}), Model.finish("tool-calls")], // tick 1
+      () => [Model.toolCall("bump", {}), Model.finish("tool-calls")], // tick 2
+      () => [Model.text("done"), Model.finish()], // tick 3
     ]);
     return Effect.gen(function* () {
       const charter = Effect.gen(function* () {
-        const attempts = yield* Ref.make(0);
-        const bump = yield* AI.Tool("bump")`Record a failed attempt.`(() =>
-          Ref.update(attempts, (n) => n + 1).pipe(Effect.as("recorded")),
+        const bump = yield* AI.Tool("bump")`Keep working.`(() =>
+          Effect.succeed("ok"),
         );
         return Effect.gen(function* () {
-          const n = yield* Ref.get(attempts);
-          if (n > 0)
-            yield* AI.say`Attempt ${n} of 5 — park, never retry blind.`;
-          return yield* AI.prose`Work the task; ${bump} after each failure.`;
+          const { count } = yield* AI.Tick;
+          // UNGUARDED: delivers every tick — no dedupe, no memory
+          yield* AI.say`Status check.`;
+          // GUARDED: the `===` condition delivers exactly once
+          if (count === 1) yield* AI.say`One sampling done — settle in.`;
+          return yield* AI.prose`Work the task with ${bump}.`;
         });
       });
       const researcher = yield* interpret(Researcher, charter);
       yield* researcher.dispatch("go", { key: "s#1" });
 
-      // tick 1: n=0 → no note delivered
-      expect(Model.promptText(model.calls[0]!)).not.toContain("Attempt");
-      // tick 2: n=1 → note delivered once
-      const second = Model.promptText(model.calls[1]!);
-      expect(second).toContain("Attempt 1 of 5");
-      // tick 3: n=2 → changed text is a NEW note; "Attempt 1" not repeated
+      // the unguarded say accumulated one note PER TICK
       const third = Model.promptText(model.calls[2]!);
-      expect(third).toContain("Attempt 2 of 5");
-      expect(third.match(/Attempt 1 of 5/g)).toHaveLength(1);
+      expect(third.match(/Status check\./g)).toHaveLength(3);
+      // the guarded say fired exactly once (count===1, before tick 2)
+      expect(Model.promptText(model.calls[0]!)).not.toContain("settle in");
+      expect(third.match(/One sampling done — settle in\./g)).toHaveLength(1);
     }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
   });
 

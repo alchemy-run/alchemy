@@ -285,8 +285,6 @@ interface RunState {
   pendingCompaction?: CompactPlan;
   /** Notes collected via `AI.say`, awaiting delivery this tick. */
   readonly pendingNotes: Array<Fragment>;
-  /** Rendered notes DELIVERED into the current thread (say dedupe). */
-  readonly saidLog: Set<string>;
   /** The last rendered stance — what `spawn`/`skill` grant from. */
   lastStance?: Stance;
 }
@@ -663,7 +661,6 @@ export const KernelMemory: Layer.Layer<
               tick: 0,
               prompt: Prompt.empty,
               pendingNotes: [],
-              saidLog: new Set<string>(),
             };
           });
 
@@ -683,9 +680,6 @@ export const KernelMemory: Layer.Layer<
                 `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
               ),
             ]);
-            // the say log is THREAD-scoped: the fresh thread has heard
-            // nothing, so still-true notes re-deliver on the next tick
-            run.saidLog.clear();
             return;
           }
           const messages = run.prompt.content;
@@ -793,7 +787,13 @@ export const KernelMemory: Layer.Layer<
         const actorTick = (run: RunState): Effect.Effect<TickResult> =>
           Effect.gen(function* () {
             const result = yield* provideRun(run)(
-              (run.turn as Turn).pipe(
+              Effect.suspend(() => {
+                // each ATTEMPT starts with a clean say buffer, so a
+                // retried turn delivers only the successful
+                // evaluation's notes — never a failed attempt's
+                run.pendingNotes.length = 0;
+                return run.turn as Turn;
+              }).pipe(
                 // transient turn failures (an observation fetch, a
                 // flaky service) retry; a typed Refused is the run
                 // GIVING UP and propagates immediately
@@ -947,14 +947,15 @@ export const KernelMemory: Layer.Layer<
                 yield* Deferred.succeed(run.settled, tick.outcome.value);
                 break;
               }
-              // deliver collected notes (`AI.say`): dedupe by rendered
-              // text against the CURRENT thread, in emission order
+              // deliver collected notes (`AI.say`): a PLAIN append, in
+              // emission order — no dedupe, no memory. The author's
+              // condition (`if (count === 30) yield* AI.say…`) is the
+              // whole delivery policy.
               for (const note of run.pendingNotes.splice(0)) {
                 const text = render(note.template as TemplateStringsArray, [
                   ...note.refs,
                 ]);
-                if (text.length === 0 || run.saidLog.has(text)) continue;
-                run.saidLog.add(text);
+                if (text.length === 0) continue;
                 run.prompt = Prompt.concat(run.prompt, [noteMessage(text)]);
               }
               const response = yield* step(

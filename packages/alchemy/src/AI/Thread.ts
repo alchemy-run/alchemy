@@ -86,24 +86,25 @@ export class Tick extends Context.Service<Tick, TickService>()(
 ) {}
 
 /**
- * Say something ONCE — the charter's event channel, beside the stance.
- *
- * Where the returned stance is STANDING STATE (diffed, superseding,
- * restored when it reverts), a `say` is an EVENT: delivered the first
- * time its text appears, never revoked, never restated. Delivery is
- * deduped by rendered content against the current thread — so the
- * turn stays re-entrant (re-running it re-collects the same text and
- * delivers nothing), a CHANGED text is a new event, and a compaction
- * reset re-delivers notes that are still being said (the fresh thread
- * hasn't heard them).
+ * Say something — append one message to the thread, delivered before
+ * this tick's sampling. A PLAIN effect: no dedupe, no memory, no
+ * kernel judgment — calling it is delivering it, so the author's
+ * CONDITION is the whole delivery policy. Guard it like any other
+ * side effect:
  *
  * ```ts
  * return Effect.gen(function* () {
- *   const n = yield* Ref.get(attempts);
- *   if (n > 0) yield* AI.say`Attempt ${n} of 5 — a failed run parks.`;
+ *   const { count } = yield* AI.Tick;
+ *   if (count === 30) {
+ *     yield* AI.say`30 of 40 samplings spent — converge now.`;
+ *   }
  *   return yield* AI.prose`…stance…`;
  * });
  * ```
+ *
+ * (An unguarded `say` in a turn delivers EVERY tick — occasionally
+ * what you want, usually not. The kernel clears collected says on a
+ * retried turn attempt, so transient retries never double-deliver.)
  *
  * Notes arrive as `<note>` user messages, in emission order — the ONE
  * explicit injection channel: every message in the thread traces to a

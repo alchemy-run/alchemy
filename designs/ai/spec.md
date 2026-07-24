@@ -350,30 +350,33 @@ and holistic (state every phase's rules; the conversation carries which
 phase is live) and it behaves exactly as anyone would guess; a tool
 handler that flips a phase announces the flip in its own RESULT.
 
-`AI.say` is DECLARATIVE with event semantics — the kernel *collects* says
-during turn evaluation and dedupes by rendered text against the thread's
-delivered log, so the turn stays re-entrant (a re-run collects the same
-text and delivers nothing), a changed text is a new event, and nothing is
-ever revoked or restated:
+`AI.say` is a PLAIN append — no dedupe, no memory, no kernel judgment.
+Calling it is delivering it, so the author's condition IS the delivery
+policy, exactly like any other side effect:
 
 ```ts
 return Effect.gen(function* () {
-  const n = yield* Ref.get(attempts);
-  if (n > 0) yield* AI.say`Attempt ${n} of 5 — a failed run parks, never retries blind.`;
+  const { count } = yield* AI.Tick;
+  if (count === 30) {
+    yield* AI.say`30 of 40 samplings spent — converge now.`;
+  }
   return yield* AI.prose`…stance…`;
 });
-// tick 2 (n=1):  <note>Attempt 1 of 5 …</note>   delivered once
-// tick 3 (n=1):  (same text → silent)
-// tick 4 (n=2):  <note>Attempt 2 of 5 …</note>   changed text = new event
+// tick 30:  <note>30 of 40 samplings spent — converge now.</note>
+// tick 31+: silent — the `===` guard already said it
 ```
 
-Rules: notes **grant nothing** (a `${Tool}` in a say renders as a name; the
-toolkit comes from the stance alone — capability must never be a function
-of the delivered log); notes land in emission order; **the say log is
-thread-scoped** — a compaction `reset` clears it, so still-true notes
-re-deliver into the fresh thread, while stale ones stay gone. A state
-that must re-announce after an A→B→A round trip is authored explicitly:
-a `Ref` tracking what was last said, and an `AI.say` on transition.
+An unguarded `say` delivers every tick — occasionally what you want,
+usually a bug you can see at the call site. (One kernel courtesy: a
+turn attempt that FAILS and retries has its collected says discarded,
+so transient retries never double-deliver.)
+
+Rules: notes **grant nothing** (a `${Tool}` in a say renders as a name;
+the toolkit comes from the stance alone — capability must never be a
+function of the thread); notes land in emission order; a compaction
+`reset` wipes them with the rest of the thread — anything that must
+survive a reset belongs in the summary or gets re-said by authored
+code.
 
 ## 5. Observation: never fetch raw per tick
 
