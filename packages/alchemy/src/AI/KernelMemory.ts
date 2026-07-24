@@ -22,6 +22,7 @@ import {
   type Interpretable,
   type Turn,
 } from "./Kernel.ts";
+import { KernelObserver, type KernelObservation } from "./Observer.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Prose.ts";
 import { isSkill, type Skill, type SkillService } from "./Skill.ts";
@@ -34,6 +35,11 @@ import {
 } from "./Thread.ts";
 import { isTool, isToolImpl, type Tool } from "./Tool.ts";
 import { WireMode, type WirePresentation } from "./WireMode.ts";
+
+/** `Omit` distributed over a union (plain `Omit` collapses it). */
+type DistributiveOmit<T, K extends PropertyKey> = T extends any
+  ? Omit<T, K>
+  : never;
 
 /**
  * Render a capability term's own tagged template into prose (a tool's
@@ -285,6 +291,8 @@ interface RunState {
   pendingCompaction?: CompactPlan;
   /** Notes collected via `AI.say`, awaiting delivery this tick. */
   readonly pendingNotes: Array<Fragment>;
+  /** Next observation sequence number (the observer's cursor). */
+  observed: number;
   /** The last rendered stance — what `spawn`/`skill` grant from. */
   lastStance?: Stance;
 }
@@ -355,6 +363,31 @@ export const KernelMemory: Layer.Layer<
         const scope = yield* Effect.scope;
         const context = yield* Effect.context<never>();
         const termName = term["~alchemy/Name"];
+
+        // the observability seam (same pattern as WireMode): when an
+        // observer is present, run lifecycle facts flow into it —
+        // fire-and-forget, an observer can never fail or slow a run.
+        // Each run's observations carry a monotonic `seq`, the
+        // catch-up cursor consumers dedupe and resume by.
+        const observer = Context.getOption(context, KernelObserver);
+        const observe = (
+          run: RunState,
+          observation: DistributiveOmit<
+            KernelObservation,
+            "term" | "key" | "seq" | "at"
+          >,
+        ): Effect.Effect<void> =>
+          Option.isNone(observer)
+            ? Effect.void
+            : observer.value
+                .emit({
+                  ...observation,
+                  term: termName,
+                  key: run.key,
+                  seq: run.observed++,
+                  at: Date.now(),
+                } as KernelObservation)
+                .pipe(Effect.ignore);
 
         // ── the run-scoped AI.Thread / AI.Tick services ─────────────
         const makeThreadService = (run: RunState): ThreadService => ({
@@ -661,6 +694,7 @@ export const KernelMemory: Layer.Layer<
               tick: 0,
               prompt: Prompt.empty,
               pendingNotes: [],
+              observed: 0,
             };
           });
 
@@ -940,6 +974,11 @@ export const KernelMemory: Layer.Layer<
               applyCompaction(run);
               for (const input of inputs) {
                 run.prompt = Prompt.concat(run.prompt, [asUserMessage(input)]);
+                yield* observe(run, {
+                  type: "input",
+                  text:
+                    typeof input === "string" ? input : JSON.stringify(input),
+                });
               }
               // TICK: re-evaluate the stance before every sampling
               const tick = yield* prepare(run);
@@ -957,6 +996,10 @@ export const KernelMemory: Layer.Layer<
                 ]);
                 if (text.length === 0) continue;
                 run.prompt = Prompt.concat(run.prompt, [noteMessage(text)]);
+                yield* observe(run, {
+                  type: "input",
+                  text: `<note>\n${text}\n</note>`,
+                });
               }
               const startedAt = yield* Effect.sync(() => Date.now());
               const response = yield* step(
@@ -975,6 +1018,26 @@ export const KernelMemory: Layer.Layer<
                     ? ` [${response.toolCalls.map((call) => call.name).join(", ")}]`
                     : " [quiesced]"),
               );
+              yield* observe(run, {
+                type: "assistant",
+                tick: run.tick,
+                ms: Date.now() - startedAt,
+                text: response.text,
+                toolCalls: response.toolCalls.map((call) => ({
+                  id: call.id,
+                  name: call.name,
+                  input: call.params,
+                })),
+              });
+              for (const result of response.toolResults) {
+                yield* observe(run, {
+                  type: "tool-result",
+                  toolCallId: result.id,
+                  toolName: result.name,
+                  output: result.result,
+                  isFailure: result.isFailure,
+                });
+              }
               run.tick++;
               run.prompt = Prompt.concat(
                 run.prompt,
@@ -989,6 +1052,7 @@ export const KernelMemory: Layer.Layer<
             }
             // settled: anyone still waiting gets the outcome
             const outcome = yield* Deferred.await(run.settled);
+            yield* observe(run, { type: "settled" });
             for (const waiter of run.waiters.splice(0)) {
               yield* Deferred.succeed(waiter, outcome);
             }
@@ -1013,6 +1077,10 @@ export const KernelMemory: Layer.Layer<
                         `Kernel run '${run.key}' of '${termName}' crashed`,
                         exit.cause,
                       );
+                      yield* observe(run, {
+                        type: "crashed",
+                        error: String(exit.cause),
+                      });
                       for (const waiter of run.waiters.splice(0)) {
                         yield* Deferred.done(waiter, exit as Exit.Exit<never>);
                       }
@@ -1038,6 +1106,7 @@ export const KernelMemory: Layer.Layer<
             let run = runs.get(runKey);
             if (run === undefined) {
               run = yield* makeRunState(runKey);
+              yield* observe(run, { type: "admitted" });
               // per-run init: the thread exists (Thread in scope for
               // thread-scoped setup); no sampling yet (no Tick)
               const initResult = yield* provideInit(run)(

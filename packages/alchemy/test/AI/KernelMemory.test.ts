@@ -761,6 +761,55 @@ ${
     },
   );
 
+  it.effect(
+    "the observer seam: run lifecycle facts flow out, seq-ordered",
+    () => {
+      const model = Model.make([
+        () => [
+          Model.toolCall("search", { query: "x" }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("answer"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const seen: Array<AI.KernelObservation> = [];
+        const ObserverLive = Layer.succeed(AI.KernelObserver, {
+          emit: (observation) => Effect.sync(() => void seen.push(observation)),
+        });
+        const search = recordingSearch();
+        const researcher = yield* interpret(
+          Researcher,
+          AI.prose`Search with ${Search}, then answer.`,
+        ).pipe(Effect.provide([ObserverLive, search.layer]));
+        yield* researcher.dispatch("find x", { key: "o#1" });
+
+        expect(seen.map((observation) => observation.type)).toEqual([
+          "admitted",
+          "input", // the dispatched task
+          "assistant", // tick 0: calls search
+          "tool-result",
+          "assistant", // tick 1: quiesces with the answer
+        ]);
+        // every observation carries the run identity + a monotonic seq
+        expect(seen.every((observation) => observation.key === "o#1")).toBe(
+          true,
+        );
+        expect(seen.map((observation) => observation.seq)).toEqual([
+          0, 1, 2, 3, 4,
+        ]);
+        const second = seen[2]!;
+        if (second.type === "assistant") {
+          expect(second.toolCalls[0]!.name).toBe("search");
+        }
+        const result = seen[3]!;
+        if (result.type === "tool-result") {
+          expect(result.toolName).toBe("search");
+          expect(result.isFailure).toBe(false);
+        }
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
   it.effect("codemode(async): grants collapse into one eval tool", () => {
     const model = Model.make([
       // the model programs against the granted capability

@@ -26,10 +26,12 @@ import * as Local from "alchemy/Local";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ApprovalsLive } from "./approvals.ts";
+import { Chats, ChatsLive, ChatsObserverLive, makeChunkTranslator } from "./chats.ts";
 import { CodingLocal } from "./coding.ts";
 import { EngineerLive } from "./engineer.ts";
 import { Factory, FactoryLive } from "./factory.ts";
@@ -40,6 +42,7 @@ import { LiveTestingLive } from "./live-testing.ts";
 import { PullRequests, PullRequestsLive } from "./pull-requests.ts";
 import { ReconcilingLive } from "./reconciling.ts";
 import { ResourceEngineerLive } from "./resource-engineer.ts";
+import { testAlchemy } from "./repos.ts";
 import { ReviewerLive } from "./reviewer.ts";
 import {
   ApproveRecorded,
@@ -112,7 +115,16 @@ const Model = AnthropicLanguageModel.layer({
   Layer.provide(FetchHttpClient.layer),
 );
 
-const Kernel = AI.KernelMemory.pipe(Layer.provide(Model));
+/**
+ * The kernel, with the OBSERVABILITY seam attached: every agent layer
+ * that provides this bundle interprets its runs with the org's chat
+ * projection listening (designs/ai/streaming.md). ONE Chats instance —
+ * the same const is provideMerge'd into OrgLive for the HTTP surface.
+ */
+const Kernel = Layer.mergeAll(
+  AI.KernelMemory.pipe(Layer.provide(Model)),
+  ChatsObserverLive.pipe(Layer.provide(ChatsLive)),
+);
 
 /**
  * The workspaces ROOT — one directory holds the central clones and the
@@ -210,7 +222,10 @@ export const OrgLive = Layer.mergeAll(
   // ONE approvals ledger, shared by the Reviewer's Approve and the
   // PullRequests desk's merge ratification (memoized by reference)
   Layer.provideMerge(ApprovalsLive),
-  Layer.provide(GitHubBindings),
+  // the chat projection (same const the Kernel bundle observes into)
+  // and the comment binding surface — both consumed by the HTTP edge
+  Layer.provideMerge(ChatsLive),
+  Layer.provideMerge(GitHubBindings),
   Layer.provide(Credentials),
   Layer.orDie,
 );
@@ -230,12 +245,108 @@ export default class AlchemyOrg extends Local.Service<AlchemyOrg>()(
     const issues = yield* Issues;
     const pullRequests = yield* PullRequests;
     const factory = yield* Factory;
+    const chats = yield* Chats;
+    // sendMessage's honest door: a chat message to a desk becomes a
+    // GitHub comment — the same world event as any other steer
+    const comment = yield* GitHub.CreateIssueComment(testAlchemy);
+
+    const sseHeaders = {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      "x-vercel-ai-ui-message-stream": "v1",
+      "x-accel-buffering": "no",
+    };
+    const encoder = new TextEncoder();
 
     return {
       // localhost surface: the desks' sealed Shapes — read-only status,
-      // plus the factory's one door (`POST /factory/wave`)
+      // the chat projection (AI SDK UIMessage protocol), and the
+      // factory's one door (`POST /factory/wave`)
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+
+        // ── the AI SDK chat surface ─────────────────────────────────
+        if (request.method === "GET" && request.url === "/api/chats") {
+          return yield* HttpServerResponse.json(yield* chats.list());
+        }
+        {
+          const match = request.url.match(/^\/api\/chats\/([^/]+)\/messages$/);
+          if (request.method === "GET" && match) {
+            const id = decodeURIComponent(match[1]!);
+            const messages = yield* chats.messages(id);
+            return messages === undefined
+              ? yield* HttpServerResponse.json(
+                  { error: `unknown chat: ${id}` },
+                  { status: 404 },
+                )
+              : yield* HttpServerResponse.json(messages);
+          }
+        }
+        if (request.method === "POST" && request.url.startsWith("/api/chat")) {
+          const body = (yield* request.json.pipe(Effect.orDie)) as {
+            id?: string;
+            messages?: Array<{
+              role?: string;
+              parts?: Array<{ type?: string; text?: string }>;
+            }>;
+          };
+          const id = body.id ?? "";
+          const [term = "", key = ""] = ((at) =>
+            at < 0 ? [] : [id.slice(0, at), id.slice(at + 1)])(id.indexOf(":"));
+          const last = body.messages?.at(-1);
+          const text =
+            last?.role === "user"
+              ? (last.parts ?? [])
+                  .filter((part) => part.type === "text")
+                  .map((part) => part.text ?? "")
+                  .join("\n")
+                  .trim()
+              : "";
+
+          // deliver the text through the WORLD's door: a GitHub comment
+          // on the desk's issue/PR thread steers the run like any other
+          // event; chats without a world door are watch-only
+          const threadNumber = Number(key.match(/#(\d+)$/)?.[1]);
+          if (
+            text.length > 0 &&
+            (term === "Issues" || term === "PullRequests") &&
+            Number.isFinite(threadNumber)
+          ) {
+            yield* comment({
+              issue_number: threadNumber,
+              body: text,
+            }).pipe(Effect.orDie);
+          }
+
+          // live tail from NOW: the response streams the run's next
+          // burst as ONE assistant message (steps per sampling) —
+          // designs/ai/streaming.md. Subscription lifetime is the
+          // RESPONSE BODY's (Stream.ensuring), never the request scope.
+          const { queue, unsubscribe } = yield* chats.subscribe(
+            id,
+            Number.MAX_SAFE_INTEGER,
+          );
+          const translate = makeChunkTranslator();
+          const DONE = "__done__";
+          const stream = Stream.fromQueue(queue).pipe(
+            Stream.flatMap((observation: AI.KernelObservation) => {
+              const { chunks, done } = translate(observation);
+              const lines = chunks.map(
+                (chunk) => `data: ${JSON.stringify(chunk)}\n\n`,
+              );
+              return Stream.fromArray(done ? [...lines, DONE] : lines);
+            }),
+            Stream.takeWhile((line: string) => line !== DONE),
+            // a silent run should not hold sockets forever
+            Stream.interruptWhen(Effect.sleep("5 minutes")),
+            Stream.concat(Stream.make("data: [DONE]\n\n")),
+            Stream.map((line: string) => encoder.encode(line)),
+            Stream.catch(() => Stream.empty),
+            Stream.ensuring(unsubscribe),
+          ) as Stream.Stream<Uint8Array>;
+          return HttpServerResponse.stream(stream, { headers: sseHeaders });
+        }
 
         // the factory's door: start a wave, respond immediately — the
         // order book is where outcomes land as engineers file reports

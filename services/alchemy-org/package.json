@@ -22,6 +22,7 @@
     "@effect/ai-anthropic": "catalog:",
     "@effect/platform-bun": "catalog:",
     "alchemy": "workspace:*",
+    "ai": "catalog:",
     "effect": "catalog:"
   }
 }

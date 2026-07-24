@@ -5,6 +5,7 @@ export * from "./Errors.ts";
 export * from "./Event.ts";
 export * from "./Kernel.ts";
 export * from "./KernelMemory.ts";
+export * from "./Observer.ts";
 export * from "./Parameter.ts";
 export * from "./Prose.ts";
 export * from "./Services.ts";
