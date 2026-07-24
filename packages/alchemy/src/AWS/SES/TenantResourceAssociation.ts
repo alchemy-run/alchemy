@@ -53,7 +53,7 @@ export interface TenantResourceAssociation extends Resource<
  * });
  * const association = yield* SES.TenantResourceAssociation("SenderLink", {
  *   tenantName: tenant.tenantName,
- *   resourceArn: identity.emailIdentityArn,
+ *   resourceArn: identity.identityArn,
  * });
  * ```
  */
