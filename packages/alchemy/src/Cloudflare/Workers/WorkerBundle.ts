@@ -20,6 +20,18 @@ import {
   type DurableObjectExport,
 } from "./DurableObject.ts";
 
+/**
+ * Bundler options for a Worker: the generic {@link Bundle.BundleExtraOptions}
+ * plus rolldown output overrides merged over Alchemy's defaults.
+ */
+export interface WorkerBuildOptions extends Bundle.BundleExtraOptions {
+  /**
+   * Rolldown output options merged over Alchemy's defaults. Use this to
+   * control chunking (`codeSplitting`), minification, etc.
+   */
+  output?: rolldown.OutputOptions;
+}
+
 export interface WorkerBundleOptions {
   id: string;
   main: string;
@@ -36,7 +48,7 @@ export interface WorkerBundleOptions {
         exports: Record<string, DurableObjectExport | WorkflowExport>;
       };
   stack: { name: string; stage: string };
-  extraOptions: Bundle.BundleExtraOptions | undefined;
+  extraOptions: WorkerBuildOptions | undefined;
 }
 
 export const WorkerBundle = Effect.gen(function* () {
@@ -99,6 +111,7 @@ export const WorkerBundle = Effect.gen(function* () {
       // graph was chunked. See DrizzleSchemaChunks.test.ts.
       strictExecutionOrder: true,
       dir: `.alchemy/bundles/${options.id}`,
+      ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
   });

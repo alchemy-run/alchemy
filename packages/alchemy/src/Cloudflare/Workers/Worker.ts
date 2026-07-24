@@ -7,7 +7,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Bundle from "../../Bundle/Bundle.ts";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
@@ -45,7 +44,7 @@ import type {
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
-import { type ModuleRule } from "./WorkerBundle.ts";
+import { type ModuleRule, type WorkerBuildOptions } from "./WorkerBundle.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
@@ -478,10 +477,13 @@ export interface WorkerProps<
    */
   routes?: WorkerRouteConfig[];
   /**
-   * Extra bundler options applied on top of the standard rolldown input/output
-   * options used to build this Worker. See {@link Bundle.BundleExtraOptions}.
+   * Extra bundler options applied on top of the standard rolldown
+   * input/output options used to build this Worker. Includes the generic
+   * bundle extras (pure-annotation packages, bundle analyzer) plus an
+   * `output` field of rolldown output overrides (e.g. `codeSplitting`
+   * groups) merged over Alchemy's defaults. See {@link WorkerBuildOptions}.
    */
-  build?: Bundle.BundleExtraOptions;
+  build?: WorkerBuildOptions;
   /**
    * Whether to bundle {@link main} with rolldown before upload.
    *

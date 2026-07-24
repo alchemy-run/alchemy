@@ -16,23 +16,20 @@ Mirrors the reporter's monorepo shape:
 - `auth/*` — auth package tables that cross-import the db schema
 - `worker.ts` — Worker entry that imports the full graph
 
-## How the test reproduces it
+## How the test pins the fix
 
 Small graphs stay single-chunk under Alchemy's default Worker bundler, so
-`DrizzleSchemaChunks.test.ts`:
-
-1. Builds with Alchemy's rolldown pipeline (`Bundle.build`, same defaults as
-   `WorkerBundle`) while *forcing* the bad split via `output.codeSplitting`
-   (not yet exposed on `Worker.build`)
-2. Deploys the emitted multi-module graph with
-   `Cloudflare.Worker({ bundle: false })` so Cloudflare's script-startup
-   validation runs on the exact chunks
+`DrizzleSchemaChunks.test.ts` deploys a stack whose `Cloudflare.Worker`
+*forces* the issue's chunk layout via `build.output.codeSplitting` groups —
+schema modules in a standalone `auth-*` chunk, `drizzle-orm` in its own
+chunk. Cloudflare's script-startup validation runs on exactly those chunks
+at upload, so the deploy itself is the regression assertion; the test then
+verifies the chunk layout on disk and fetches the worker.
 
 ## The fix
 
 `WorkerBundle` sets `strictExecutionOrder: true` on its rolldown output
 options, which wraps cross-chunk modules so evaluation follows ESM semantics
-regardless of how the graph was chunked. The test pins this: the identical
-bad split deploys and serves once `strictExecutionOrder` is applied. The
-user-side `advancedChunks` grouping workaround from the issue is also
-covered but no longer necessary.
+regardless of how the graph was chunked. Before that default, this exact
+split failed Cloudflare startup validation. The user-side `advancedChunks`
+grouping workaround from the issue is no longer necessary.

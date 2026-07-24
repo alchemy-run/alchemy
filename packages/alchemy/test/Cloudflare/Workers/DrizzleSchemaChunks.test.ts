@@ -1,277 +1,105 @@
-import * as Bundle from "@/Bundle/Bundle";
 import * as Cloudflare from "@/Cloudflare";
-import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
+import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
-import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as rolldown from "rolldown";
-
-/**
- * Matches schema modules in this fixture (`schema/*`, `auth/*`) — the
- * standalone `auth-*` chunk shape from #749.
- */
-const schemaModuleTest = /(?:^|\/|\\)(?:schema|auth)(?:\/|\\)/;
+import { fileURLToPath } from "node:url";
 
 const fixtureMain = fileURLToPath(
   new URL("./fixtures/drizzle-schema-chunks/worker.ts", import.meta.url),
 );
 
-const { test } = Test.make({
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
+/**
+ * Regression stack for https://github.com/alchemy-run/alchemy/issues/749.
+ *
+ * The `build.output.codeSplitting` groups force the chunk layout from the
+ * issue: top-level Drizzle schema modules (`schema/*`, `auth/*`) in their own
+ * `auth-*` chunk, `drizzle-orm` in a separate `drizzle-*` chunk. Without
+ * WorkerBundle's default `strictExecutionOrder: true`, workerd evaluates the
+ * schema chunk before drizzle's class bindings initialize and Cloudflare
+ * rejects the upload with `ScriptStartupError: Cannot access '<minified>'
+ * before initialization` — so the deploy in `beforeAll` is itself the
+ * regression assertion.
+ */
+const Stack = Alchemy.Stack(
+  "DrizzleSchemaChunksTestStack",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const worker = yield* Cloudflare.Worker("DrizzleSchemaChunks", {
+      main: fixtureMain,
+      compatibility: { date: "2026-06-24", flags: ["nodejs_compat"] },
+      build: {
+        output: {
+          codeSplitting: {
+            groups: [
+              // Claim drizzle-orm first so the schema group can't
+              // recursively capture it into the same chunk. String tests
+              // are regex patterns; RegExp literals wouldn't survive the
+              // engine's props serialization.
+              { name: "drizzle", test: "drizzle-orm" },
+              { name: "auth", test: "drizzle-schema-chunks/(schema|auth)/" },
+            ],
+          },
+        },
+      },
+    });
+    return { url: worker.url.as<string>() };
+  }),
 );
 
-/**
- * Mirror {@link WorkerBundle} defaults — except `strictExecutionOrder`,
- * which each case sets explicitly — then apply `codeSplitting` groups.
- * Alchemy's public `Worker.build` does not forward output chunk controls
- * (#749), so the repro drives {@link Bundle.build} directly and deploys the
- * result as a prebuilt Worker (`bundle: false`).
- */
-const buildWorkerLike = Effect.fn(function* (options: {
-  id: string;
-  codeSplitting: rolldown.OutputOptions["codeSplitting"];
-  strictExecutionOrder?: boolean;
-}) {
-  const fs = yield* FileSystem.FileSystem;
+const bundleDir = Effect.gen(function* () {
   const path = yield* Path.Path;
-  const outDir = path.resolve(".alchemy/bundles", options.id);
-  yield* fs.makeDirectory(outDir, { recursive: true });
-
-  const output = yield* Bundle.build(
-    {
-      input: fixtureMain,
-      cwd: path.dirname(fixtureMain),
-      preserveEntrySignatures: "allow-extension",
-      external: ["lightningcss", "fsevents"],
-      plugins: [
-        cloudflareRolldown({
-          compatibilityDate: "2026-06-24",
-          compatibilityFlags: ["nodejs_compat"],
-        }),
-      ],
-      checks: {
-        unresolvedImport: false,
-        ineffectiveDynamicImport: false,
-      },
-    },
-    {
-      format: "esm",
-      sourcemap: false,
-      minify: true,
-      keepNames: true,
-      dir: outDir,
-      codeSplitting: options.codeSplitting,
-      strictExecutionOrder: options.strictExecutionOrder,
-    },
-  );
-
-  return {
-    outDir,
-    main: path.join(outDir, output.files[0].path),
-    jsFiles: output.files
-      .map((file) => file.path)
-      .filter((name) => name.endsWith(".js")),
-  };
+  return path.resolve(".alchemy/bundles/DrizzleSchemaChunks");
 });
 
-const deployPrebuilt = (logicalId: string, main: string) =>
-  Cloudflare.Worker(logicalId, {
-    main,
-    bundle: false,
-    subdomain: { enabled: true },
-    compatibility: {
-      date: "2026-06-24",
-      flags: ["nodejs_compat"],
-    },
-  });
-
-const errorText = (error: unknown): string => {
-  if (error instanceof Error) {
-    return `${error.name}: ${error.message}\n${error.stack ?? ""}`;
-  }
-  if (error && typeof error === "object") {
-    const tag =
-      "_tag" in error && typeof error._tag === "string" ? error._tag : "";
-    const message =
-      "message" in error && typeof error.message === "string"
-        ? error.message
-        : "";
-    return `${tag} ${message} ${JSON.stringify(error)}`;
-  }
-  return String(error);
-};
-
-/**
- * Repro for https://github.com/alchemy-run/alchemy/issues/749
- *
- * When Rolldown splits top-level Drizzle schema modules into a chunk away
- * from `drizzle-orm` — and no execution-order guard is applied — Cloudflare
- * rejects the Worker at script startup (`ScriptStartupError` / incomplete
- * cross-chunk class bindings). `WorkerBundle` now defaults to
- * `strictExecutionOrder: true`, which the next case shows fixes exactly
- * this split; this case pins the underlying failure by omitting it.
- */
-test.provider(
-  "Cloudflare rejects a Worker when schema chunks are split away from drizzle-orm (#749)",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const built = yield* buildWorkerLike({
-        id: "drizzle-schema-chunks-auth-alone",
-        codeSplitting: {
-          groups: [
-            {
-              name: "auth",
-              test: schemaModuleTest,
-              includeDependenciesRecursively: false,
-            },
-          ],
-        },
-      });
-
-      // Sanity: we actually produced the standalone auth chunk.
-      expect(built.jsFiles.some((name) => name.startsWith("auth-"))).toBe(true);
-
-      const error = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return yield* deployPrebuilt(
-              "DrizzleSchemaChunksAuthAlone",
-              built.main,
-            );
-          }),
-        )
-        .pipe(Effect.flip);
-
-      // Cloudflare surfaces this as ScriptStartupError; the underlying
-      // workerd message is either the classic TDZ form from the issue
-      // (`Cannot access '<minified>' before initialization`) or the closely
-      // related incomplete-binding form (`PgSerialBuilder is not a constructor`).
-      const text = errorText(error);
-      expect(text).toMatch(
-        /ScriptStartupError|not a constructor|before initialization|Class extends value undefined/i,
-      );
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 180_000 },
+const stack = beforeAll(
+  Effect.gen(function* () {
+    // Drop chunks from previous runs so the chunk-layout assertion below
+    // can't pass on stale files.
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.remove(yield* bundleDir, { recursive: true }).pipe(Effect.ignore);
+    return yield* deploy(Stack);
+  }),
 );
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-// Pins the fix: `strictExecutionOrder: true` (now the WorkerBundle default)
-// makes the identical bad split evaluate correctly in workerd.
-test.provider(
-  "strictExecutionOrder makes the same bad split deploy and serve (#749 fix)",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test(
+  "worker with drizzle schema modules split into their own chunk deploys and serves (#749)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
 
-      const built = yield* buildWorkerLike({
-        id: "drizzle-schema-chunks-strict-order",
-        strictExecutionOrder: true,
-        codeSplitting: {
-          groups: [
-            {
-              name: "auth",
-              test: schemaModuleTest,
-              includeDependenciesRecursively: false,
-            },
-          ],
-        },
-      });
+    // The forced split actually happened: a standalone schema chunk exists
+    // separately from the drizzle-orm chunk.
+    const fs = yield* FileSystem.FileSystem;
+    const files = yield* fs.readDirectory(yield* bundleDir);
+    expect(files.some((f) => /^auth-.*\.js$/.test(f))).toBe(true);
+    expect(files.some((f) => /^drizzle-.*\.js$/.test(f))).toBe(true);
 
-      // Same standalone auth chunk as the failing case above.
-      expect(built.jsFiles.some((name) => name.startsWith("auth-"))).toBe(true);
-
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* deployPrebuilt(
-            "DrizzleSchemaChunksStrictOrder",
-            built.main,
-          );
-        }),
-      );
-
-      expect(worker.url).toBeDefined();
-      const client = yield* HttpClient.HttpClient;
-      const body = yield* client.get(worker.url!).pipe(
-        Effect.flatMap((res) => res.text),
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (b) => b.includes('"ok":true'),
-          times: 10,
-        }),
-        Effect.orDie,
-      );
-      expect(body).toContain('"ok":true');
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { timeout: 180_000 },
-);
-
-test.provider(
-  "Cloudflare accepts the same Worker when drizzle-orm is grouped with schema modules (#749 workaround)",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const built = yield* buildWorkerLike({
-        id: "drizzle-schema-chunks-together",
-        codeSplitting: {
-          groups: [
-            {
-              name: "drizzle-auth-schema",
-              test: (id) => /drizzle-orm/.test(id) || schemaModuleTest.test(id),
-              includeDependenciesRecursively: false,
-            },
-          ],
-        },
-      });
-
-      expect(
-        built.jsFiles.some((name) => name.startsWith("drizzle-auth-schema-")),
-      ).toBe(true);
-      expect(built.jsFiles.some((name) => name.startsWith("auth-"))).toBe(
-        false,
-      );
-
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* deployPrebuilt(
-            "DrizzleSchemaChunksTogether",
-            built.main,
-          );
-        }),
-      );
-
-      expect(worker.url).toBeDefined();
-      const client = yield* HttpClient.HttpClient;
-      // Fresh workers.dev URLs can serve placeholder HTML while propagating —
-      // poll until the fixture's JSON marker appears.
-      const body = yield* client.get(worker.url!).pipe(
-        Effect.flatMap((res) => res.text),
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (b) => b.includes('"ok":true'),
-          times: 10,
-        }),
-        Effect.orDie,
-      );
-      expect(body).toContain('"ok":true');
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    // The worker evaluated its cross-chunk schema at startup and serves.
+    const client = yield* HttpClient.HttpClient;
+    const body = yield* client.get(url).pipe(
+      Effect.flatMap((res) => res.text),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 5,
+      }),
+      // Fresh workers.dev URLs can serve placeholder pages while propagating.
+      Effect.repeat({
+        schedule: Schedule.exponential("500 millis"),
+        until: (b) => b.includes('"ok":true'),
+        times: 10,
+      }),
+      Effect.orDie,
+    );
+    expect(body).toContain('"ok":true');
+  }),
   { timeout: 180_000 },
 );
