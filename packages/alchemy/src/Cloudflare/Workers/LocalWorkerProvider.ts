@@ -771,7 +771,10 @@ export const LocalWorkerProvider = () =>
     }),
   );
 
-export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
+export const toRuntimeBinding = Effect.fn(function* (
+  b: WorkerBinding,
+  dev?: { remote?: boolean },
+) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -848,7 +851,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
     case "secrets_store_secret":
       return yield* unsupported();
     case "send_email":
-      return SendEmail.remote({
+      return SendEmail[dev?.remote ? "remote" : "local"]({
         binding: b.name,
         destinationAddress: b.destinationAddress,
         allowedDestinationAddresses: b.allowedDestinationAddresses,
