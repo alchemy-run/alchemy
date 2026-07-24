@@ -10,13 +10,36 @@ export type _ZipFunctionAccepted = Assert<
 >;
 
 export type _ImageFunctionAccepted = Assert<
-  { image: { context: "./lambda" } } extends FunctionProps ? true : false
+  {
+    image: { context: "./lambda"; dockerfile: "Dockerfile" };
+    architecture: "x86_64";
+  } extends FunctionProps
+    ? true
+    : false
+>;
+
+export type _ImageDockerfileRequired = Assert<
+  {
+    image: { context: "./lambda" };
+    architecture: "x86_64";
+  } extends FunctionProps
+    ? false
+    : true
+>;
+
+export type _ImageArchitectureRequired = Assert<
+  {
+    image: { context: "./lambda"; dockerfile: "Dockerfile" };
+  } extends FunctionProps
+    ? false
+    : true
 >;
 
 export type _MixedPackageRejected = Assert<
   {
     main: "./handler.ts";
-    image: { context: "./lambda" };
+    image: { context: "./lambda"; dockerfile: "Dockerfile" };
+    architecture: "x86_64";
   } extends FunctionProps
     ? false
     : true
@@ -24,7 +47,8 @@ export type _MixedPackageRejected = Assert<
 
 export type _ImageRuntimeOptionsRejected = Assert<
   {
-    image: { context: "./lambda" };
+    image: { context: "./lambda"; dockerfile: "Dockerfile" };
+    architecture: "x86_64";
     runtime: "nodejs22.x";
   } extends FunctionProps
     ? false
@@ -36,5 +60,10 @@ export type _PackageTypeIsDerived = Assert<
 >;
 
 export type _DurableFunctionIsZipOnly = Assert<
-  { image: { context: "./lambda" } } extends DurableFunctionProps ? false : true
+  {
+    image: { context: "./lambda"; dockerfile: "Dockerfile" };
+    architecture: "x86_64";
+  } extends DurableFunctionProps
+    ? false
+    : true
 >;

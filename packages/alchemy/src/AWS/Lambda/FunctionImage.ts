@@ -1,9 +1,7 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as crypto from "node:crypto";
+import * as Schema from "effect/Schema";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
@@ -11,6 +9,11 @@ import {
   createTagsList,
   hasAlchemyTags,
 } from "../../Tags.ts";
+import { sha256Object } from "../../Util/sha256.ts";
+import {
+  hashDockerBuildInputs,
+  resolveDockerBuildPaths,
+} from "../ECR/DockerBuild.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
@@ -24,11 +27,8 @@ import { normalizePolicyDocument } from "../IAM/Policy.ts";
 export interface FunctionImageSource {
   /** Docker build context directory. */
   context: string;
-  /**
-   * Dockerfile path, relative to {@link context} unless absolute.
-   * @default "Dockerfile"
-   */
-  dockerfile?: string;
+  /** Dockerfile path, relative to {@link context} unless absolute. */
+  dockerfile: string;
   /**
    * Docker build arguments (`--build-arg`).
    *
@@ -37,6 +37,12 @@ export interface FunctionImageSource {
    */
   buildArgs?: Record<string, string>;
 }
+
+const FunctionImageSourceSchema = Schema.Struct({
+  context: Schema.String,
+  dockerfile: Schema.String,
+  buildArgs: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+}) satisfies Schema.Schema<FunctionImageSource>;
 
 export interface FunctionImageAttributes {
   /** Content hash used as the ECR image tag. */
@@ -61,240 +67,60 @@ export interface ResolveFunctionImageOptions {
   session: { note: (message: string) => Effect.Effect<void> };
 }
 
-interface DockerIgnoreRule {
-  ignored: boolean;
-  expression: RegExp;
-}
-
 /**
  * Increment when the Lambda image build behavior changes in a way that must
  * invalidate already-pushed content-addressed images.
  */
 const functionImageBuilderVersion = 1;
 
-export const functionImagePlatform = (
-  architecture: "x86_64" | "arm64" = "x86_64",
-) => (architecture === "arm64" ? "linux/arm64" : "linux/amd64");
-
-const normalizeRelativePath = (value: string) =>
-  value.replaceAll("\\", "/").replace(/^\.\/+/, "");
-
-const escapeRegExp = (value: string) =>
-  value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
-
-/**
- * Compile Docker's ordered `.dockerignore` pattern form into a path matcher.
- * Docker disregards leading/trailing slashes, supports `**`, and applies the
- * last matching (including negated) rule.
- */
-const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
-  let pattern = raw.trim();
-  if (pattern.length === 0 || pattern === "." || pattern.startsWith("#")) {
-    return undefined;
+export const functionImagePlatform = (architecture: "x86_64" | "arm64") => {
+  if (architecture === "x86_64") {
+    return "linux/amd64";
   }
-
-  let ignored = true;
-  if (pattern.startsWith("\\!") || pattern.startsWith("\\#")) {
-    pattern = pattern.slice(1);
-  } else if (pattern.startsWith("!")) {
-    ignored = false;
-    pattern = pattern.slice(1).trim();
+  if (architecture === "arm64") {
+    return "linux/arm64";
   }
-
-  pattern = normalizeRelativePath(pattern)
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
-  if (pattern.length === 0 || pattern === ".") {
-    return undefined;
-  }
-
-  const hasSlash = pattern.includes("/");
-  let body = "";
-  for (let index = 0; index < pattern.length; index++) {
-    const char = pattern[index];
-    if (char === "*") {
-      if (pattern[index + 1] === "*") {
-        while (pattern[index + 1] === "*") index++;
-        if (pattern[index + 1] === "/") {
-          index++;
-          body += "(?:.*/)?";
-        } else {
-          body += ".*";
-        }
-      } else {
-        body += "[^/]*";
-      }
-      continue;
-    }
-    if (char === "?") {
-      body += "[^/]";
-      continue;
-    }
-    if (char === "[") {
-      const end = pattern.indexOf("]", index + 1);
-      if (end !== -1) {
-        const content = pattern.slice(index + 1, end);
-        const negated = content.startsWith("!") || content.startsWith("^");
-        const members = negated ? content.slice(1) : content;
-        body += `[${negated ? "^" : ""}${members.replaceAll("\\", "\\\\")}]`;
-        index = end;
-        continue;
-      }
-    }
-    body += escapeRegExp(char);
-  }
-
-  return {
-    ignored,
-    expression: new RegExp(`${hasSlash ? "^" : "(?:^|/)"}${body}(?:/.*)?$`),
-  };
+  throw new Error(`Unsupported Lambda image architecture: ${architecture}`);
 };
 
-const isIgnored = (path: string, rules: ReadonlyArray<DockerIgnoreRule>) => {
-  let ignored = false;
-  for (const rule of rules) {
-    if (rule.expression.test(path)) {
-      ignored = rule.ignored;
-    }
-  }
-  return ignored;
-};
-
-const resolveBuildInputs = Effect.fn(function* (source: FunctionImageSource) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const context = path.resolve(source.context);
-  const dockerfile = source.dockerfile
-    ? path.isAbsolute(source.dockerfile)
-      ? source.dockerfile
-      : path.resolve(context, source.dockerfile)
-    : path.join(context, "Dockerfile");
-
-  if (!(yield* fs.exists(context))) {
-    return yield* Effect.die(
-      new Error(`Docker build context does not exist: ${context}`),
-    );
-  }
-  if (!(yield* fs.exists(dockerfile))) {
-    return yield* Effect.die(
-      new Error(`Dockerfile does not exist: ${dockerfile}`),
-    );
-  }
-
-  // A Dockerfile-specific ignore file takes precedence over the context-root
-  // `.dockerignore`, matching Docker's own build-context selection.
-  const dockerfileIgnore = `${dockerfile}.dockerignore`;
-  const rootIgnore = path.join(context, ".dockerignore");
-  const ignoreFile = (yield* fs.exists(dockerfileIgnore))
-    ? dockerfileIgnore
-    : (yield* fs.exists(rootIgnore))
-      ? rootIgnore
-      : undefined;
-  const ignoreContent =
-    ignoreFile === undefined ? undefined : yield* fs.readFileString(ignoreFile);
-  const rules = (ignoreContent ?? "").split(/\r?\n/).flatMap((line) => {
-    const rule = compileDockerIgnoreRule(line);
-    return rule ? [rule] : [];
+const hashDecodedFunctionImageBuild = Effect.fn(function* (
+  source: FunctionImageSource,
+  architecture: "x86_64" | "arm64",
+) {
+  const buildHash = yield* hashDockerBuildInputs({
+    ...source,
+    platform: functionImagePlatform(architecture),
   });
-
-  return {
-    context,
-    dockerfile,
-    dockerfileContent: yield* fs.readFile(dockerfile),
-    ignoreContent,
-    ignoreFile:
-      ignoreFile === undefined ? undefined : path.basename(ignoreFile),
-    rules,
-  };
+  return (yield* sha256Object({
+    builderVersion: functionImageBuilderVersion,
+    buildHash,
+  })).slice(0, 32);
 });
 
 /**
- * Hash the effective Docker build input without absolute paths. Ignored
- * context files do not participate; Dockerfile contents, selected
- * `.dockerignore`, build args, target platform, file modes, symlink targets,
- * and the builder-version salt do.
+ * Hash the Docker build context, Dockerfile, build args, target platform, and
+ * Lambda image-builder version without including absolute paths.
  */
 export const hashFunctionImageBuild = Effect.fn(function* (
   source: FunctionImageSource,
-  architecture: "x86_64" | "arm64" = "x86_64",
+  architecture: "x86_64" | "arm64",
 ) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const inputs = yield* resolveBuildInputs(source);
-  const hasher = yield* Effect.sync(() => crypto.createHash("sha256"));
-
-  yield* Effect.sync(() => {
-    hasher.update(
-      JSON.stringify({
-        builderVersion: functionImageBuilderVersion,
-        platform: functionImagePlatform(architecture),
-        buildArgs: Object.entries(source.buildArgs ?? {}).sort(([a], [b]) =>
-          a.localeCompare(b),
-        ),
-        ignoreFile: inputs.ignoreFile,
-        ignoreContent: inputs.ignoreContent,
-      }),
-    );
-    hasher.update("\0Dockerfile\0");
-    hasher.update(inputs.dockerfileContent);
-  });
-
-  const entries = yield* fs.readDirectory(inputs.context, { recursive: true });
-  for (const entry of entries.map(normalizeRelativePath).sort()) {
-    if (entry === inputs.ignoreFile || isIgnored(entry, inputs.rules)) {
-      continue;
-    }
-    const fullPath = path.join(inputs.context, entry);
-    const linkTarget = yield* fs
-      .readLink(fullPath)
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
-    if (linkTarget !== undefined) {
-      yield* Effect.sync(() => {
-        hasher.update(`\0SymbolicLink\0${entry}\0${linkTarget}`);
-      });
-      continue;
-    }
-
-    const info = yield* fs.stat(fullPath);
-    yield* Effect.sync(() => {
-      hasher.update(`\0${info.type}\0${entry}\0${info.mode & 0o777}`);
-    });
-    if (info.type === "File") {
-      const content = yield* fs.readFile(fullPath);
-      yield* Effect.sync(() => {
-        hasher.update("\0");
-        hasher.update(content);
-      });
-    }
-  }
-
-  return (yield* Effect.sync(() => hasher.digest("hex"))).slice(0, 32);
+  const decoded = yield* Schema.decodeUnknownEffect(FunctionImageSourceSchema)(
+    source,
+  );
+  return yield* hashDecodedFunctionImageBuild(decoded, architecture);
 });
 
-const assertLiteralImageSource = (
-  id: string,
-  source: FunctionImageSource,
-): Effect.Effect<void> => {
-  const invalid =
-    typeof source !== "object" ||
-    source === null ||
-    typeof source.context !== "string" ||
-    (source.dockerfile !== undefined &&
-      typeof source.dockerfile !== "string") ||
-    (source.buildArgs !== undefined &&
-      (typeof source.buildArgs !== "object" ||
-        source.buildArgs === null ||
-        Object.values(source.buildArgs).some(
-          (value) => typeof value !== "string",
-        )));
-  return invalid
-    ? Effect.die(
+const decodeFunctionImageSource = (id: string, source: unknown) =>
+  Schema.decodeUnknownEffect(FunctionImageSourceSchema)(source).pipe(
+    Effect.mapError(
+      (error) =>
         new Error(
           `Function(${id}): image.context, image.dockerfile, and image.buildArgs must be literal values because the image is built during pre-create`,
+          { cause: error },
         ),
-      )
-    : Effect.void;
-};
+    ),
+  );
 
 /**
  * Lambda-specific managed image builder. It deliberately stays separate from
@@ -427,34 +253,33 @@ export const makeFunctionImage = Effect.gen(function* () {
     source: FunctionImageSource,
     architecture: "x86_64" | "arm64",
   ) {
-    yield* assertLiteralImageSource(id, source);
-    return yield* hashFunctionImageBuild(source, architecture);
+    const decoded = yield* decodeFunctionImageSource(id, source);
+    return yield* hashDecodedFunctionImageBuild(decoded, architecture);
   });
 
   const resolve = Effect.fn(function* (options: ResolveFunctionImageOptions) {
-    yield* assertLiteralImageSource(options.id, options.source);
+    const source = yield* decodeFunctionImageSource(options.id, options.source);
+    const imageTag = yield* hashDecodedFunctionImageBuild(
+      source,
+      options.architecture,
+    );
     const repositoryName =
       options.repositoryName ?? (yield* createRepositoryName(options.id));
     // Re-ensure even with persisted metadata: the repository or its Lambda
     // pull policy may have drifted out-of-band.
     const ensured = yield* ensureRepository(options.id, repositoryName);
-    const imageTag = yield* hash(
-      options.id,
-      options.source,
-      options.architecture,
-    );
     const imageUri = `${ensured.repositoryUri}:${imageTag}`;
 
     let detail = yield* describeImage(repositoryName, imageTag);
     if (!detail?.imageDigest) {
-      const build = yield* resolveBuildInputs(options.source);
+      const build = yield* resolveDockerBuildPaths(source);
       yield* options.session.note(`Building Lambda image ${imageUri}...`);
       yield* buildAndPushEcrImage(docker, {
         imageUri,
         context: build.context,
         dockerfile: build.dockerfile,
         platform: functionImagePlatform(options.architecture),
-        buildArgs: options.source.buildArgs,
+        buildArgs: source.buildArgs,
         args: ["--provenance=false"],
       });
       detail = yield* describeImage(repositoryName, imageTag).pipe(

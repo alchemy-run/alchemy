@@ -30,12 +30,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       });
       yield* fs.copy(fixture, context, { overwrite: true });
 
-      const image = (
-        architecture: AWS.Lambda.FunctionArchitecture = "x86_64",
-      ) =>
+      const image = (architecture: AWS.Lambda.FunctionArchitecture) =>
         AWS.Lambda.Function("ContainerFunction", {
           functionName,
-          image: { context },
+          image: { context, dockerfile: "Dockerfile" },
           imageConfig: {
             Command: ["index.handler"],
           },
@@ -46,7 +44,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           url: false,
         });
 
-      const first = yield* stack.deploy(image());
+      const first = yield* stack.deploy(image("x86_64"));
       expect(first.functionName).toBe(functionName);
       expect(first.code.image?.digest).toMatch(/^sha256:/);
       expect(first.code.image?.imageUri).toContain(`:${first.code.hash}`);
@@ -61,14 +59,14 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       });
 
       // Unchanged context: the engine and ECR tag are both a no-op.
-      const unchanged = yield* stack.deploy(image());
+      const unchanged = yield* stack.deploy(image("x86_64"));
       expect(unchanged.code.hash).toBe(first.code.hash);
       expect(unchanged.code.image?.digest).toBe(first.code.image?.digest);
 
       // A context change creates a new content-addressed tag and updates the
       // existing Lambda in place.
       yield* fs.writeFileString(path.join(context, "marker.txt"), "two\n");
-      const updated = yield* stack.deploy(image());
+      const updated = yield* stack.deploy(image("x86_64"));
       expect(updated.functionName).toBe(first.functionName);
       expect(updated.code.hash).not.toBe(first.code.hash);
       expect(updated.code.image?.digest).not.toBe(first.code.image?.digest);
@@ -100,7 +98,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       yield* assertRepositoryDeleted(firstRepository);
 
       // And Zip -> Image uses the same replacement behavior.
-      const replaced = yield* stack.deploy(image());
+      const replaced = yield* stack.deploy(image("x86_64"));
       expect(replaced.functionName).toBe(functionName);
       yield* assertFunctionImage(replaced.functionName, "x86_64");
       expect((yield* invoke(replaced.functionName, "two")).marker).toBe("two");

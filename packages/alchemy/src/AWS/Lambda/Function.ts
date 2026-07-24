@@ -186,11 +186,6 @@ export interface FunctionCommonProps extends PlatformProps {
   functionName?: string;
   /**
    * Instruction set architecture for the Lambda function.
-   *
-   * Container images are built for the corresponding Docker platform:
-   * `x86_64` uses `linux/amd64`; `arm64` uses `linux/arm64`.
-   *
-   * @default "x86_64"
    */
   architecture?: FunctionArchitecture;
   memorySize?: number;
@@ -300,6 +295,11 @@ export interface FunctionZipProps extends FunctionCommonProps {
 export interface FunctionImageProps extends FunctionCommonProps {
   main?: never;
   /**
+   * Instruction set architecture for the Lambda function and its image build.
+   * `x86_64` builds `linux/amd64`; `arm64` builds `linux/arm64`.
+   */
+  architecture: FunctionArchitecture;
+  /**
    * Build a Lambda-compatible container image from a user-authored
    * Dockerfile. Alchemy creates a managed private ECR repository, applies
    * Lambda's pull policy, and pushes a content-addressed image.
@@ -310,8 +310,13 @@ export interface FunctionImageProps extends FunctionCommonProps {
    */
   image: FunctionImageSource;
   /**
-   * Optional Lambda overrides for the image's entrypoint, command, and
-   * working directory.
+   * Optional Lambda overrides for instructions in the built image:
+   *
+   * - `EntryPoint` overrides Dockerfile `ENTRYPOINT`
+   * - `Command` overrides Dockerfile `CMD`
+   * - `WorkingDirectory` overrides Dockerfile `WORKDIR`
+   *
+   * Omit this property to run with the Dockerfile's values.
    */
   imageConfig?: Lambda.ImageConfig;
   handler?: never;
@@ -327,6 +332,23 @@ export type FunctionProps = FunctionZipProps | FunctionImageProps;
 const isFunctionImageProps = (
   props: FunctionProps,
 ): props is FunctionImageProps => props.image !== undefined;
+
+/**
+ * `UpdateFunctionConfiguration` leaves existing image overrides unchanged
+ * when `ImageConfig` is omitted. Empty values explicitly remove those
+ * overrides, allowing the image's Dockerfile instructions to take effect
+ * again when `imageConfig` is removed from the desired props.
+ */
+const imageConfigForUpdate = (
+  props: FunctionProps,
+): Lambda.ImageConfig | undefined =>
+  isFunctionImageProps(props)
+    ? (props.imageConfig ?? {
+        Command: [],
+        EntryPoint: [],
+        WorkingDirectory: "",
+      })
+    : undefined;
 
 /**
  * Normalize a {@link FunctionProps.timeout} to whole seconds.
@@ -1499,6 +1521,112 @@ export default handler;
             hash: string;
           };
 
+      interface PreparedFunctionCode {
+        deployment: FunctionDeploymentCode;
+        attributes: Function["Attributes"]["code"];
+      }
+
+      const prepareImageFunctionCode = Effect.fn(function* ({
+        id,
+        props,
+        repositoryName,
+        session,
+      }: {
+        id: string;
+        props: FunctionImageProps;
+        repositoryName?: string;
+        session: { note: (note: string) => Effect.Effect<void> };
+      }) {
+        const { hash, ...image } = yield* functionImage.resolve({
+          id,
+          source: props.image,
+          architecture: props.architecture,
+          repositoryName,
+          session,
+        });
+        return {
+          deployment: {
+            packageType: "Image",
+            imageUri: image.imageUri,
+            hash,
+          },
+          attributes: { hash, image },
+        } satisfies PreparedFunctionCode;
+      });
+
+      const preparePrecreatedFunctionCode = Effect.fn(function* ({
+        id,
+        props,
+        session,
+      }: {
+        id: string;
+        props: FunctionProps;
+        session: { note: (note: string) => Effect.Effect<void> };
+      }) {
+        if (isFunctionImageProps(props)) {
+          if (props.exports !== undefined) {
+            return yield* Effect.die(
+              new Error(
+                `Function(${id}): image functions use the Dockerfile's handler and cannot have an inline Alchemy implementation`,
+              ),
+            );
+          }
+          return yield* prepareImageFunctionCode({ id, props, session });
+        }
+
+        // Mock code for the pre-created stub. It responds 503 (rather than a
+        // bare 200) so that, during the brief window where the real code/config
+        // update is still `InProgress`, a Function URL hit serves an honest
+        // "not ready" signal. Downstream readiness probes already retry on
+        // non-200, so they wait for the real handler without blocking the
+        // provider.
+        const code = new TextEncoder().encode(
+          `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
+        );
+        const archive = yield* zipCode(code);
+        const hash = yield* hashBundle(code);
+        return {
+          deployment: {
+            packageType: "Zip",
+            archive,
+            hash,
+          },
+          attributes: { hash },
+        } satisfies PreparedFunctionCode;
+      });
+
+      const prepareFunctionCode = Effect.fn(function* ({
+        id,
+        props,
+        repositoryName,
+        session,
+      }: {
+        id: string;
+        props: FunctionProps;
+        repositoryName?: string;
+        session: { note: (note: string) => Effect.Effect<void> };
+      }) {
+        if (isFunctionImageProps(props)) {
+          return yield* prepareImageFunctionCode({
+            id,
+            props,
+            repositoryName,
+            session,
+          });
+        }
+
+        const { identityHash, buildArchive } = yield* bundleCode(id, props);
+        const { archive, archiveHash } = yield* buildArchive;
+        return {
+          deployment: {
+            packageType: "Zip",
+            archive,
+            hash: archiveHash,
+          },
+          attributes: { hash: identityHash },
+        } satisfies PreparedFunctionCode;
+      });
+
       const createOrUpdateFunction: (input: {
         id: string;
         news: FunctionProps;
@@ -1594,24 +1722,26 @@ export default handler;
 
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
-          // Effect-mode functions are wrapped in a generated entry whose ONLY
-          // export is `default` — `handler` names an export of the USER's
-          // module and can only address it when the module is bundled as-is
-          // (isExternal). Honoring it in Effect mode deploys a Lambda that
-          // dies at init with Runtime.HandlerNotFound.
-          Handler: isFunctionImageProps(news)
-            ? undefined
-            : `index.${news.isExternal ? (news.handler ?? "default") : "default"}`,
           Role: roleArn,
           Code: codeLocation,
-          Runtime: isFunctionImageProps(news)
-            ? undefined
-            : (news.runtime ?? "nodejs22.x"),
-          PackageType: code.packageType,
-          ImageConfig: isFunctionImageProps(news)
-            ? news.imageConfig
-            : undefined,
-          Architectures: [news.architecture ?? "x86_64"],
+          ...(isFunctionImageProps(news)
+            ? {
+                PackageType: "Image" as const,
+                ImageConfig: news.imageConfig,
+              }
+            : {
+                // Effect-mode functions are wrapped in a generated entry whose
+                // ONLY export is `default` — `handler` names an export of the
+                // USER's module and can only address it when the module is
+                // bundled as-is (isExternal). Honoring it in Effect mode
+                // deploys a Lambda that dies at init with
+                // Runtime.HandlerNotFound.
+                Handler: `index.${news.isExternal ? (news.handler ?? "default") : "default"}`,
+                Runtime: news.runtime ?? "nodejs22.x",
+                PackageType: "Zip" as const,
+              }),
+          Architectures:
+            news.architecture === undefined ? undefined : [news.architecture],
           MemorySize: news.memorySize,
           Environment: runtimeEnv
             ? {
@@ -1680,16 +1810,7 @@ export default handler;
                 EphemeralStorage: createFunctionRequest.EphemeralStorage,
                 FileSystemConfigs: createFunctionRequest.FileSystemConfigs,
                 Handler: createFunctionRequest.Handler,
-                // Empty values clear overrides and restore the Dockerfile's
-                // image defaults when `imageConfig` is removed.
-                ImageConfig:
-                  code.packageType === "Image"
-                    ? (createFunctionRequest.ImageConfig ?? {
-                        Command: [],
-                        EntryPoint: [],
-                        WorkingDirectory: "",
-                      })
-                    : undefined,
+                ImageConfig: imageConfigForUpdate(news),
                 KMSKeyArn: createFunctionRequest.KMSKeyArn,
                 Layers: createFunctionRequest.Layers,
                 LoggingConfig: createFunctionRequest.LoggingConfig,
@@ -1886,6 +2007,43 @@ export default handler;
               ? `${(code.archive.length / 1024).toFixed(2)}KB`
               : `${code.archive.length}B`;
 
+      const refreshPersistedFunctionCode = ({
+        output,
+        packageType,
+        observed,
+      }: {
+        output: Function["Attributes"] | undefined;
+        packageType: Lambda.PackageType | undefined;
+        observed:
+          | {
+              ImageUri?: string;
+              ResolvedImageUri?: string;
+            }
+          | undefined;
+      }): Function["Attributes"]["code"] | undefined => {
+        if (packageType !== "Image" || output?.code.image === undefined) {
+          return output?.code;
+        }
+
+        // Lambda can refresh the deployed URI and digest, but it cannot
+        // reconstruct Alchemy's source hash or prove repository ownership.
+        // Preserve that metadata from state instead of inferring a managed
+        // repository from an arbitrary image during adoption.
+        const resolvedImageUri = observed?.ResolvedImageUri;
+        const digest = resolvedImageUri?.split("@").at(-1);
+        return {
+          ...output.code,
+          image: {
+            ...output.code.image,
+            ...(observed?.ImageUri === undefined
+              ? {}
+              : { imageUri: observed.ImageUri }),
+            ...(resolvedImageUri === undefined ? {} : { resolvedImageUri }),
+            ...(digest === undefined ? {} : { digest }),
+          },
+        };
+      };
+
       return {
         stables: ["functionArn", "functionName", "roleName"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
@@ -1933,11 +2091,7 @@ export default handler;
             return { action: "update" };
           }
           const codeHash = isFunctionImageProps(news)
-            ? yield* functionImage.hash(
-                id,
-                news.image,
-                news.architecture ?? "x86_64",
-              )
+            ? yield* functionImage.hash(id, news.image, news.architecture)
             : (yield* bundleCode(id, news)).identityHash;
           if (output.code.hash !== codeHash) {
             // code changed
@@ -1948,9 +2102,7 @@ export default handler;
           ) {
             return { action: "update" };
           }
-          if (
-            (olds.architecture ?? "x86_64") !== (news.architecture ?? "x86_64")
-          ) {
+          if (olds.architecture !== news.architecture) {
             return { action: "update" };
           }
           if (
@@ -2007,23 +2159,11 @@ export default handler;
             functionUrl,
             roleArn: fn.Role,
             roleName: output?.roleName ?? fn.Role.split("/").pop()!,
-            code:
-              output?.code?.image && fn.PackageType === "Image"
-                ? {
-                    ...output.code,
-                    image: {
-                      ...output.code.image,
-                      imageUri:
-                        result?.Code?.ImageUri ?? output.code.image.imageUri,
-                      resolvedImageUri:
-                        result?.Code?.ResolvedImageUri ??
-                        output.code.image.resolvedImageUri,
-                      digest:
-                        result?.Code?.ResolvedImageUri?.split("@").at(-1) ??
-                        output.code.image.digest,
-                    },
-                  }
-                : output?.code,
+            code: refreshPersistedFunctionCode({
+              output,
+              packageType: fn.PackageType,
+              observed: result?.Code,
+            }),
             reservedConcurrentExecutions,
           } as any;
           return (yield* hasAlchemyTags(id, tagsResult))
@@ -2095,51 +2235,10 @@ export default handler;
             vpc: news.vpc,
           });
 
-          const prepared = yield* Effect.gen(function* () {
-            if (isFunctionImageProps(news)) {
-              if (news.exports !== undefined) {
-                return yield* Effect.die(
-                  new Error(
-                    `Function(${id}): image functions use the Dockerfile's handler and cannot have an inline Alchemy implementation`,
-                  ),
-                );
-              }
-              const { hash, ...image } = yield* functionImage.resolve({
-                id,
-                source: news.image,
-                architecture: news.architecture ?? "x86_64",
-                session,
-              });
-              return {
-                deployment: {
-                  packageType: "Image",
-                  imageUri: image.imageUri,
-                  hash,
-                } satisfies FunctionDeploymentCode,
-                attributes: { hash, image },
-              };
-            }
-
-            // Mock code for the pre-created stub. It responds 503 (rather than
-            // a bare 200) so that, during the brief window where the real
-            // code/config update is still `InProgress`, a Function URL hit
-            // serves an honest "not ready" signal instead of a
-            // successful-but-empty 200. Downstream readiness probes already
-            // retry on non-200, so they wait for the real handler to go live
-            // without the provider blocking.
-            const code = new TextEncoder().encode(
-              `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
-            );
-            const archive = yield* zipCode(code);
-            const hash = yield* hashBundle(code);
-            return {
-              deployment: {
-                packageType: "Zip",
-                archive,
-                hash,
-              } satisfies FunctionDeploymentCode,
-              attributes: { hash },
-            };
+          const prepared = yield* preparePrecreatedFunctionCode({
+            id,
+            props: news,
+            session,
           });
 
           yield* createOrUpdateFunction({
@@ -2282,35 +2381,11 @@ export default handler;
             });
           }
 
-          const prepared = yield* Effect.gen(function* () {
-            if (isFunctionImageProps(news)) {
-              const { hash, ...image } = yield* functionImage.resolve({
-                id,
-                source: news.image,
-                architecture: news.architecture ?? "x86_64",
-                repositoryName: output?.code?.image?.repositoryName,
-                session,
-              });
-              return {
-                deployment: {
-                  packageType: "Image",
-                  imageUri: image.imageUri,
-                  hash,
-                } satisfies FunctionDeploymentCode,
-                attributes: { hash, image },
-              };
-            }
-
-            const { identityHash, buildArchive } = yield* bundleCode(id, news);
-            const { archive, archiveHash } = yield* buildArchive;
-            return {
-              deployment: {
-                packageType: "Zip",
-                archive,
-                hash: archiveHash,
-              } satisfies FunctionDeploymentCode,
-              attributes: { hash: identityHash },
-            };
+          const prepared = yield* prepareFunctionCode({
+            id,
+            props: news,
+            repositoryName: output?.code?.image?.repositoryName,
+            session,
           });
 
           yield* createOrUpdateFunction({

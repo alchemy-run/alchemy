@@ -4,49 +4,34 @@ import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 
 const describe = layer(NodeServices.layer);
 
 describe("Lambda Function image hashing", (it) => {
-  it.effect("hashes only the effective .dockerignore context", () =>
+  it.effect("hashes every file in the Docker build context", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const context = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-lambda-image-hash-",
       });
-      yield* fs.makeDirectory(path.join(context, "ignored"), {
-        recursive: true,
-      });
       yield* fs.writeFileString(
         path.join(context, "Dockerfile"),
         "FROM scratch\nCOPY . /app\n",
       );
+      yield* fs.writeFileString(path.join(context, "app.txt"), "one");
+
+      const source = { context, dockerfile: "Dockerfile" };
+      const initial = yield* hashFunctionImageBuild(source, "x86_64");
+      yield* fs.writeFileString(path.join(context, "app.txt"), "two");
+      const updated = yield* hashFunctionImageBuild(source, "x86_64");
+      expect(updated).not.toBe(initial);
       yield* fs.writeFileString(
         path.join(context, ".dockerignore"),
-        ["ignored/**", "!ignored/included.txt", ""].join("\n"),
+        "app.txt\n",
       );
-      yield* fs.writeFileString(
-        path.join(context, "ignored", "excluded.txt"),
-        "one",
-      );
-      yield* fs.writeFileString(
-        path.join(context, "ignored", "included.txt"),
-        "one",
-      );
-
-      const initial = yield* hashFunctionImageBuild({ context });
-      yield* fs.writeFileString(
-        path.join(context, "ignored", "excluded.txt"),
-        "two",
-      );
-      expect(yield* hashFunctionImageBuild({ context })).toBe(initial);
-
-      yield* fs.writeFileString(
-        path.join(context, "ignored", "included.txt"),
-        "two",
-      );
-      expect(yield* hashFunctionImageBuild({ context })).not.toBe(initial);
+      expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(updated);
     }),
   );
 
@@ -74,6 +59,7 @@ describe("Lambda Function image hashing", (it) => {
 
         const source = {
           context: first,
+          dockerfile: "Dockerfile",
           buildArgs: { B: "two", A: "one" },
         };
         const initial = yield* hashFunctionImageBuild(source, "x86_64");
@@ -81,6 +67,7 @@ describe("Lambda Function image hashing", (it) => {
           yield* hashFunctionImageBuild(
             {
               context: second,
+              dockerfile: "Dockerfile",
               buildArgs: { A: "one", B: "two" },
             },
             "x86_64",
@@ -109,30 +96,16 @@ describe("Lambda Function image hashing", (it) => {
       }),
   );
 
-  it.effect(
-    "uses Dockerfile-specific ignore rules in preference to the root",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const context = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-lambda-image-ignore-",
-        });
-        yield* fs.writeFileString(
-          path.join(context, "Lambda.Dockerfile"),
-          "FROM scratch\nCOPY . /app\n",
-        );
-        yield* fs.writeFileString(path.join(context, ".dockerignore"), "");
-        yield* fs.writeFileString(
-          path.join(context, "Lambda.Dockerfile.dockerignore"),
-          "ignored.txt\n",
-        );
-        yield* fs.writeFileString(path.join(context, "ignored.txt"), "one");
-
-        const source = { context, dockerfile: "Lambda.Dockerfile" };
-        const initial = yield* hashFunctionImageBuild(source);
-        yield* fs.writeFileString(path.join(context, "ignored.txt"), "two");
-        expect(yield* hashFunctionImageBuild(source)).toBe(initial);
-      }),
+  it.effect("requires an explicit Dockerfile", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const context = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-lambda-image-schema-",
+      });
+      const result = yield* Effect.result(
+        hashFunctionImageBuild({ context } as any, "x86_64"),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+    }),
   );
 });
