@@ -49,7 +49,7 @@
     },
     "cloudflare-tools/packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.13.8",
+      "version": "0.13.10",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "magic-string": "^0.30.21",
@@ -59,6 +59,7 @@
         "@cloudflare/workers-types": "catalog:workers",
         "@distilled.cloud/test-utils": "workspace:*",
         "mysql2": "^3.22.3",
+        "rolldown": "catalog:",
         "vite": "catalog:",
         "vitest": "catalog:",
       },
@@ -73,7 +74,7 @@
     },
     "cloudflare-tools/packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.13.8",
+      "version": "0.13.10",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "workerd": "catalog:workers",
@@ -106,7 +107,7 @@
     },
     "cloudflare-tools/packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
-      "version": "0.13.8",
+      "version": "0.13.10",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },
