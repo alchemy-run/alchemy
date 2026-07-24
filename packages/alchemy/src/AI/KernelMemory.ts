@@ -958,12 +958,22 @@ export const KernelMemory: Layer.Layer<
                 if (text.length === 0) continue;
                 run.prompt = Prompt.concat(run.prompt, [noteMessage(text)]);
               }
+              const startedAt = yield* Effect.sync(() => Date.now());
               const response = yield* step(
                 Prompt.concat(
                   Prompt.make([{ role: "system", content: tick.system }]),
                   run.prompt,
                 ),
                 tick.toolkit,
+              );
+              // where the time goes: one line per sampling (model
+              // round-trip INCLUDING the tool handlers that ran
+              // inside it) — the timing profile of every run
+              yield* Effect.logInfo(
+                `Kernel run '${run.key}' of '${termName}': sampling #${run.tick} took ${Date.now() - startedAt}ms` +
+                  (response.toolCalls.length > 0
+                    ? ` [${response.toolCalls.map((call) => call.name).join(", ")}]`
+                    : " [quiesced]"),
               );
               run.tick++;
               run.prompt = Prompt.concat(
