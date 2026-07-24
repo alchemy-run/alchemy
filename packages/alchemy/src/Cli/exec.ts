@@ -7,7 +7,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
-import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
+import * as RpcProviderProxy from "../Dev/RpcProviderProxy.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { execStack, ExecStackOptions } from "./commands/deploy.ts";
 import { selectCli } from "./selectCli.ts";

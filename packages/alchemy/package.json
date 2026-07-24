@@ -265,11 +265,11 @@
       "worker": "./src/TUI/index.ts",
       "import": "./lib/TUI/index.js"
     },
-    "./Server": {
-      "types": "./lib/Server/index.d.ts",
-      "bun": "./src/Server/index.ts",
-      "worker": "./src/Server/index.ts",
-      "import": "./lib/Server/index.js"
+    "./Local": {
+      "types": "./lib/Local/index.d.ts",
+      "bun": "./src/Local/index.ts",
+      "worker": "./src/Local/index.ts",
+      "import": "./lib/Local/index.js"
     },
     "./Stack": {
       "types": "./lib/Stack.d.ts",

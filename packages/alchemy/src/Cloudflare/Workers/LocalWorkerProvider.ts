@@ -58,7 +58,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved, stripEffects } from "../../Diff.ts";
-import * as RpcProvider from "../../Local/RpcProvider.ts";
+import * as RpcProvider from "../../Dev/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256, unwrapRedacted } from "../../Util/index.ts";

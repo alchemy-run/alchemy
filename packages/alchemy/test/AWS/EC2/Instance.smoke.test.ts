@@ -13,7 +13,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Full end-to-end: bundle the hosted program, launch a real EC2 instance into a
 // public subnet, and prove over HTTP (directly against the instance's public
 // IP) that (a) the `{ fetch }` handler is served by the instance's Bun HTTP
-// server and (b) the `ServerHost.run` background loop is executing on the
+// server and (b) the `Host.run` background loop is executing on the
 // instance (`/ticks` keeps climbing).
 //
 // Heavy (instance boot + bun install + S3 sync + systemd), so skipped under
@@ -79,7 +79,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const body = yield* getJson("/health");
       expect(body).toEqual({ ok: true });
 
-      // Prove the ServerHost.run background loop is executing on the instance:
+      // Prove the Host.run background loop is executing on the instance:
       // the tick counter climbs between two reads.
       const readTicks = getJson("/ticks").pipe(
         Effect.map((value) => (value as { ticks: number }).ticks),

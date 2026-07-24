@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { layerServer, RpcSpawner } from "../../../src/Local/RpcSpawner.ts";
+import { layerServer, RpcSpawner } from "../../../src/Dev/RpcSpawner.ts";
 import { PlatformServices } from "../../../src/Util/PlatformServices.ts";
 
 const childEntry = process.argv[2];

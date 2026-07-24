@@ -6,8 +6,7 @@ import { Resource } from "@/Resource";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
-  ServerHost,
-} from "@/Server/Process.ts";
+} from "@/Local/Process.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState, State } from "@/State";
@@ -27,7 +26,7 @@ interface HostProps extends PlatformProps {
 
 interface Host extends Resource<"Test.Host", HostProps, { ok: boolean }> {}
 
-type HostServices = ServerHost;
+type HostServices = Host;
 type HostShape = Main<HostServices>;
 
 const Host: Platform<Host, HostServices, HostShape, HostRuntimeContext> =
@@ -117,18 +116,18 @@ test(
   }),
 );
 
-// Regression for #706: a hosted Platform program can `yield* ServerHost` and
-// call `host.run(...)` during plan. Before the fix this died with
-// "Service not found: Alchemy::ServerHost". Returning `{ fetch }` additionally
+// Regression for #706: a hosted Platform program can `yield* Local.Host`
+// and call `host.run(...)` during plan. Before the fix this died with
+// "Service not found: Alchemy::Host". Returning `{ fetch }` additionally
 // exercises the host `serve` path (previously "No serve handler").
 test(
-  "Platform provides ServerHost to a hosted program during plan",
+  "Platform provides Local.Host to a hosted program during plan",
   Effect.gen(function* () {
     const plan = yield* Host(
       "MyHost",
       { main: "index.ts" },
       Effect.gen(function* () {
-        const host = yield* ServerHost;
+        const host = yield* Host;
         // The long-running loop — only registered during plan, never run.
         yield* host.run(Effect.void);
         return {

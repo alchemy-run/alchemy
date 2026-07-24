@@ -1,5 +1,5 @@
 /**
- * The org, running on your machine — an Effectful {@link Server.Service}
+ * The org, running on your machine — an Effectful {@link Local.Service}
  * hosting the factory's processes as a detached local process.
  *
  * The COMPOSITION is the whole file: the same charters, tools, skills,
@@ -22,7 +22,7 @@ import * as Auth from "alchemy/Auth";
 import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Server from "alchemy/Server";
+import * as Local from "alchemy/Local";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -217,7 +217,7 @@ export const OrgLive = Layer.mergeAll(
 
 // ─── the service ─────────────────────────────────────────────────────
 
-export default class AlchemyOrg extends Server.Service<AlchemyOrg>()(
+export default class AlchemyOrg extends Local.Service<AlchemyOrg>()(
   "AlchemyOrg",
   {
     // no port pinned: the runtime binds an ephemeral one and reports it

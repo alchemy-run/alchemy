@@ -17,7 +17,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { HostRuntimeContext, ServerHost } from "../../Server/Process.ts";
+import type { HostRuntimeContext, Host } from "../../Local/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { toSeconds, toWireSeconds } from "../../Util/Duration.ts";
@@ -951,11 +951,7 @@ export interface Service extends Resource<
   Providers
 > {}
 
-export type ServiceServices =
-  | Credentials
-  | Region
-  | ServerHost
-  | AWSEnvironment;
+export type ServiceServices = Credentials | Region | Host | AWSEnvironment;
 
 /**
  * The impl shape for an effectful `Service`: a long-running server returning

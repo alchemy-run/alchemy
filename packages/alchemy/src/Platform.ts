@@ -30,7 +30,7 @@ import {
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
-import { ServerHost, type ProcessContext } from "./Server/Process.ts";
+import { Host, type ProcessContext } from "./Local/Process.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
@@ -651,13 +651,13 @@ export const Platform = <
                         Layer.succeed(RuntimeContext, runtimeContext),
                         // Host contexts (EC2 instances, ECS tasks, processes)
                         // carry a `run` for registering long-running loops.
-                        // Expose it as `ServerHost` so an inline program can
-                        // `yield* ServerHost` during plan/deploy without the
+                        // Expose it as `Host` so an inline program can
+                        // `yield* Host` during plan/deploy without the
                         // caller providing the layer itself.
                         "run" in runtimeContext &&
                           typeof (runtimeContext as { run?: unknown }).run ===
                             "function"
-                          ? Layer.succeed(ServerHost, {
+                          ? Layer.succeed(Host, {
                               run: (runtimeContext as ProcessContext).run,
                             })
                           : Layer.empty,

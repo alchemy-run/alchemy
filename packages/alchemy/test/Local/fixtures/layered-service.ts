@@ -6,7 +6,7 @@
  * same layer reference inside init must dedupe into the same build
  * (one instance, one background fiber).
  */
-import * as Server from "@/Server/index.ts";
+import * as Local from "@/Local/index.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -37,7 +37,7 @@ const TickerLive = Layer.effect(
   }),
 );
 
-export default class LayeredApi extends Server.Service<LayeredApi>()(
+export default class LayeredApi extends Local.Service<LayeredApi>()(
   "LayeredApi",
   { main: import.meta.url, memo: false },
   Effect.gen(function* () {

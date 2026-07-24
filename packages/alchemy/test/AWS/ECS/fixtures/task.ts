@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { ServerHost } from "@/Server/Process.ts";
+import { Host } from "@/Local/Process.ts";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -9,7 +9,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 /**
  * End-to-end fixture for `AWS.ECS.Task`: a long-running server.
  *
- * - `yield* ServerHost` + `host.run(...)` registers a background loop that
+ * - `yield* Host` + `host.run(...)` registers a background loop that
  *   increments a counter once a second (this is the pattern from issue #706).
  * - the returned `{ fetch }` handler is served over HTTP by the container's Bun
  *   HTTP server. `/ticks` reports the counter so the test can prove the
@@ -33,7 +33,7 @@ export default class TestTask extends AWS.ECS.Task<TestTask>()(
     image: "oven/bun:1",
   },
   Effect.gen(function* () {
-    const host = yield* ServerHost;
+    const host = yield* Host;
     const ticks = yield* Ref.make(0);
 
     // Long-running background loop (the `host.run` pattern from #706).

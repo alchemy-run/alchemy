@@ -14,7 +14,7 @@ import type { Input } from "../../Input.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { ServerHost } from "../../Server/Process.ts";
+import type { Host } from "../../Local/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -260,11 +260,7 @@ export interface Instance extends Resource<
   Providers
 > {}
 
-export type InstanceServices =
-  | ServerHost
-  | Credentials
-  | Region
-  | AWSEnvironment;
+export type InstanceServices = Host | Credentials | Region | AWSEnvironment;
 
 export type InstanceShape = Main<InstanceServices>;
 

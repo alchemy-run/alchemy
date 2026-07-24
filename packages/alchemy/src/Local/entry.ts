@@ -40,7 +40,7 @@ import { Stack } from "../Stack.ts";
 
 const mainPath = process.env.ALCHEMY_SERVICE_MAIN;
 if (!mainPath) {
-  throw new Error("Server.Service entry: ALCHEMY_SERVICE_MAIN is not set");
+  throw new Error("Local.Service entry: ALCHEMY_SERVICE_MAIN is not set");
 }
 const handlerName = process.env.ALCHEMY_SERVICE_HANDLER ?? "default";
 const readyFile = process.env.ALCHEMY_SERVICE_READY_FILE;
@@ -56,7 +56,7 @@ const handler = module_[handlerName] as Effect.Effect<{
 }>;
 if (handler === undefined) {
   throw new Error(
-    `Server.Service entry: '${mainPath}' has no export named '${handlerName}'`,
+    `Local.Service entry: '${mainPath}' has no export named '${handlerName}'`,
   );
 }
 
@@ -121,8 +121,8 @@ const program = handler.pipe(
   Effect.scoped,
 );
 
-console.log(`Server.Service starting (${mainPath})...`);
+console.log(`Local.Service starting (${mainPath})...`);
 await Effect.runPromise(program as Effect.Effect<void>).catch((error) => {
-  console.error("Server.Service failed:", error);
+  console.error("Local.Service failed:", error);
   process.exit(1);
 });

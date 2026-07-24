@@ -7,7 +7,7 @@ import {
   packEnvValueKeepRedacted,
   unpackEnvValue,
 } from "../../RuntimeContext.ts";
-import * as Server from "../../Server/index.ts";
+import * as Local from "../../Local/index.ts";
 
 export const MicrovmImageTypeId = "AWS.Lambda.MicrovmImage" as const;
 
@@ -16,9 +16,7 @@ export const MicrovmImageTypeId = "AWS.Lambda.MicrovmImage" as const;
  * that exposes the impl's `fetch` handler plus any RPC shape methods. Mirrors
  * the Cloudflare `ContainerPlatform` process context.
  */
-export const makeMicrovmRuntimeContext = (
-  id: string,
-): Server.ProcessContext => {
+export const makeMicrovmRuntimeContext = (id: string): Local.ProcessContext => {
   const runners: Effect.Effect<void, never, any>[] = [];
   const env: Record<string, any> = {};
 
@@ -64,7 +62,7 @@ export const makeMicrovmRuntimeContext = (
     run: ((effect: Effect.Effect<void, never, any>) =>
       Effect.sync(() => {
         runners.push(effect);
-      })) as unknown as Server.ProcessContext["run"],
+      })) as unknown as Local.ProcessContext["run"],
     serve,
     exports: Effect.sync(() => ({
       default: Effect.all(
@@ -79,5 +77,5 @@ export const makeMicrovmRuntimeContext = (
         { concurrency: "unbounded" },
       ),
     })),
-  } as Server.ProcessContext;
+  } as Local.ProcessContext;
 };

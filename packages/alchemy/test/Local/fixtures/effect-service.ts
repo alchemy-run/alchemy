@@ -1,5 +1,5 @@
 /**
- * The Effectful Constructor, locally — the Server.Service analog of a
+ * The Effectful Constructor, locally — the Local.Service analog of a
  * Cloudflare Worker fixture. Imported by the TEST (to declare/deploy)
  * AND by alchemy's Server entry inside the detached process (to run) —
  * the same module, two phases, like `main: import.meta.url` everywhere
@@ -10,12 +10,12 @@
  * reconciler learns it through the startup handshake — the test reads
  * it from the stack's `url` output.
  */
-import * as Server from "alchemy/Server";
+import * as Local from "alchemy/Local";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export default class TestApi extends Server.Service<TestApi>()(
+export default class TestApi extends Local.Service<TestApi>()(
   "TestApi",
   { main: import.meta.url, memo: false },
   Effect.gen(function* () {

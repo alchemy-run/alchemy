@@ -8,7 +8,7 @@ import {
   packEnvValueKeepRedacted,
   unpackEnvValue,
 } from "../../RuntimeContext.ts";
-import * as Server from "../../Server/index.ts";
+import * as Local from "../../Local/index.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
@@ -25,12 +25,12 @@ export const ContainerPlatform: Platform<
   ContainerApplication,
   ContainerServices,
   ContainerShape,
-  Server.ProcessContext,
+  Local.ProcessContext,
   Container
 > = Platform(
   "Cloudflare.Container",
   {
-    createRuntimeContext: (id: string): Server.ProcessContext => {
+    createRuntimeContext: (id: string): Local.ProcessContext => {
       const runners: Effect.Effect<void, never, any>[] = [];
       const env: Record<string, any> = {};
 
@@ -88,7 +88,7 @@ export const ContainerPlatform: Platform<
         run: ((effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
             runners.push(effect);
-          })) as unknown as Server.ProcessContext["run"],
+          })) as unknown as Local.ProcessContext["run"],
         serve,
         exports: Effect.sync(() => ({
           default: Effect.all(
@@ -108,7 +108,7 @@ export const ContainerPlatform: Platform<
             },
           ),
         })),
-      } as Server.ProcessContext;
+      } as Local.ProcessContext;
     },
   },
   {

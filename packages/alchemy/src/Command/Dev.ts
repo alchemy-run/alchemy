@@ -4,8 +4,8 @@ import * as FiberMap from "effect/FiberMap";
 import * as Hash from "effect/Hash";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../Diff.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import * as RpcProvider from "../Local/RpcProvider.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
+import * as RpcProvider from "../Dev/RpcProvider.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {

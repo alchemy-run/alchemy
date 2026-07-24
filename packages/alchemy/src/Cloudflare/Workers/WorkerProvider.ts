@@ -15,7 +15,7 @@ import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { isResolved, stripEffects } from "../../Diff.ts";
-import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";

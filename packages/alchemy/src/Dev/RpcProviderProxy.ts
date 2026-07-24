@@ -22,7 +22,7 @@ export class RpcProviderProxy extends Context.Service<
       providerName: R["Type"],
     ) => Effect.Effect<ProviderService<R>, never, AlchemyContext | Stack>;
   }
->()("alchemy/Local/RpcProviderProxy") {}
+>()("alchemy/Dev/RpcProviderProxy") {}
 
 export const SPAWNER_URL_ENV_KEY = "ALCHEMY_RPC_SPAWNER_URL" as const;
 

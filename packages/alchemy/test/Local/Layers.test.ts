@@ -8,7 +8,7 @@
  * build (`builds === 1`, same service instance).
  */
 import * as Alchemy from "@/index.ts";
-import * as Server from "@/Server/index.ts";
+import * as Local from "@/Local/index.ts";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -18,7 +18,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import LayeredApi from "./fixtures/layered-service.ts";
 
 const { test, deploy, destroy } = Test.make({
-  providers: Server.providers(),
+  providers: Local.providers(),
 });
 
 test(
@@ -26,7 +26,7 @@ test(
   Effect.gen(function* () {
     const Stack = Alchemy.Stack(
       "ServerLayeredServiceTest",
-      { providers: Server.providers(), state: inMemoryState() },
+      { providers: Local.providers(), state: inMemoryState() },
       Effect.gen(function* () {
         const api = yield* LayeredApi;
         return { url: api.url.as<string | undefined>() };

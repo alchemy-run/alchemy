@@ -18,7 +18,7 @@ import {
   unpackEnvValue,
   RuntimeContext,
 } from "../../RuntimeContext.ts";
-import type { HostRuntimeContext } from "../../Server/Process.ts";
+import type { HostRuntimeContext } from "../../Local/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags } from "../../Tags.ts";
 import * as Output from "../../Output.ts";

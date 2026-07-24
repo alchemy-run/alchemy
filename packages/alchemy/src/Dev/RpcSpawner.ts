@@ -26,7 +26,7 @@ export class RpcSpawner extends Context.Service<
   {
     readonly url: string;
   }
->()("alchemy/Local/RpcSpawner") {}
+>()("alchemy/Dev/RpcSpawner") {}
 
 export interface RpcSpawnPayload extends Pick<
   RpcServerEnvironment,

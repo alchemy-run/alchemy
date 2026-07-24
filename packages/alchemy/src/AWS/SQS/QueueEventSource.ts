@@ -74,11 +74,11 @@ export function consumeQueueMessages<Q extends Queue, Req = never>(
 
 /**
  * Event source connecting an SQS {@link Queue} to the hosting compute
- * (Lambda function or ServerHost process).
+ * (Lambda function or Host process).
  *
  * The contract is a `Binding.Service`; the host-specific implementation
  * layers are `Lambda.QueueEventSource` (event-source mapping + runtime
- * dispatch) and `Server.SQSQueueEventSource` (long-poll receive loop).
+ * dispatch) and `Local.SQSQueueEventSource` (long-poll receive loop).
  * Consume it through the {@link consumeQueueMessages} helper.
  * @binding
  * @section Consuming a Queue

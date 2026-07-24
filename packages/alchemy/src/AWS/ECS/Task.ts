@@ -21,8 +21,8 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
-  type ServerHost,
-} from "../../Server/Process.ts";
+  type Host,
+} from "../../Local/Process.ts";
 import { Stack } from "../../Stack.ts";
 import {
   createInternalTags,
@@ -273,7 +273,7 @@ export interface Task extends Resource<
   Providers
 > {}
 
-export type TaskServices = Credentials | Region | ServerHost | AWSEnvironment;
+export type TaskServices = Credentials | Region | Host | AWSEnvironment;
 
 /**
  * The impl shape for an effectful `Task`: a `run` entry that executes to

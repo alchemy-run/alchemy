@@ -33,13 +33,12 @@ export interface ProcessContext extends BaseRuntimeContext {
  *
  * `Platform` wires this automatically for every host runtime context that
  * implements `run` (EC2 instances, ECS tasks, processes), so an inline program
- * can `yield* ServerHost` and call `host.run(...)` during plan/deploy without
+ * can `yield* Host` and call `host.run(...)` during plan/deploy without
  * the caller providing the layer itself.
  */
-export class ServerHost extends Context.Service<
-  ServerHost,
-  Pick<ProcessContext, "run">
->()("Alchemy::ServerHost") {}
+export class Host extends Context.Service<Host, Pick<ProcessContext, "run">>()(
+  "Alchemy::Host",
+) {}
 
 /**
  * Deploy-time / plan-time host context for platforms that bundle a long-lived

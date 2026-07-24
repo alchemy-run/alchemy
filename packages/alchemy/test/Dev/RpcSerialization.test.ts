@@ -2,7 +2,7 @@ import {
   unwrapRpcHandlers,
   wrapRpcHandlers,
   type RpcWrapped,
-} from "@/Local/RpcSerialization.ts";
+} from "@/Dev/RpcSerialization.ts";
 import * as Output from "@/Output.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";

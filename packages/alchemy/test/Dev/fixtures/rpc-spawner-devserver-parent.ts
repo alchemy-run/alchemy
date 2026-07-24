@@ -12,9 +12,9 @@ import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { unwrapRpcHandlers } from "../../../src/Local/RpcSerialization.ts";
-import type { RpcProxyApi } from "../../../src/Local/RpcServer.ts";
-import { layerServer, RpcSpawner } from "../../../src/Local/RpcSpawner.ts";
+import { unwrapRpcHandlers } from "../../../src/Dev/RpcSerialization.ts";
+import type { RpcProxyApi } from "../../../src/Dev/RpcServer.ts";
+import { layerServer, RpcSpawner } from "../../../src/Dev/RpcSpawner.ts";
 import { PlatformServices } from "../../../src/Util/PlatformServices.ts";
 
 const sidecarEntry = process.argv[2];

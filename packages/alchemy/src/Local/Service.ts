@@ -15,7 +15,7 @@ import { Stage } from "../Stage.ts";
 import { sha256 } from "../Util/sha256.ts";
 import {
   createHostRuntimeContext,
-  ServerHost,
+  Host,
   type HostRuntimeContext,
 } from "./Process.ts";
 
@@ -84,10 +84,10 @@ export interface ServiceProps extends PlatformProps {
 }
 
 export interface Service extends Resource<
-  "Server.Service",
+  "Local.Service",
   ServiceProps,
   // (attributes below; the 5th param names the provider required when
-  // yielding the resource — `Server.providers()` supplies it)
+  // yielding the resource — `Local.providers()` supplies it)
   {
     /** OS process id of the running service. */
     pid: number;
@@ -114,7 +114,7 @@ export interface Service extends Resource<
   Provider.Provider<Service>
 > {}
 
-type ServiceServices = ServerHost;
+type ServiceServices = Host;
 type ServiceShape = Main<ServiceServices>;
 
 /**
@@ -136,7 +136,7 @@ type ServiceShape = Main<ServiceServices>;
  * @section Running an Effectful Server
  * @example The Effectful Constructor, locally
  * ```typescript
- * export default class Api extends Server.Service<Api>()(
+ * export default class Api extends Local.Service<Api>()(
  *   "Api",
  *   { main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
@@ -150,10 +150,10 @@ type ServiceShape = Main<ServiceServices>;
  * ```
  *
  * @section Background Work
- * @example A perpetual loop via ServerHost
+ * @example A perpetual loop via Host
  * ```typescript
  * Effect.gen(function* () {
- *   const host = yield* ServerHost;
+ *   const host = yield* Host;
  *   yield* host.run(pollGitHubForever);
  *   return { fetch: healthCheck };
  * })
@@ -162,7 +162,7 @@ type ServiceShape = Main<ServiceServices>;
  * @section External Scripts
  * @example Run a self-contained script
  * ```typescript
- * const org = yield* Server.Service("AlchemyOrg", {
+ * const org = yield* Local.Service("AlchemyOrg", {
  *   main: "./src/local.ts",
  *   port: 7100,
  * });
@@ -172,7 +172,7 @@ type ServiceShape = Main<ServiceServices>;
  * @section Restart on Source Change
  * @example Narrow the watched inputs
  * ```typescript
- * yield* Server.Service("Api", {
+ * yield* Local.Service("Api", {
  *   main: "./src/server.ts",
  *   memo: { include: ["src/**"] },
  * });
@@ -183,8 +183,8 @@ export const Service: Platform<
   ServiceServices,
   ServiceShape,
   HostRuntimeContext
-> = Platform("Server.Service", {
-  createRuntimeContext: createHostRuntimeContext("Server.Service"),
+> = Platform("Local.Service", {
+  createRuntimeContext: createHostRuntimeContext("Local.Service"),
 });
 
 export const ServiceProvider = () =>
@@ -282,13 +282,13 @@ export const ServiceProvider = () =>
               },
             ),
           catch: (cause) =>
-            new Error(`Server.Service failed to spawn '${command}': ${cause}`),
+            new Error(`Local.Service failed to spawn '${command}': ${cause}`),
         }).pipe(Effect.orDie);
         yield* Effect.sync(() => child.unref());
         const pid = child.pid;
         if (pid === undefined) {
           return yield* Effect.die(
-            `Server.Service: spawn of '${command}' returned no pid — see ${options.logFile}`,
+            `Local.Service: spawn of '${command}' returned no pid — see ${options.logFile}`,
           );
         }
         return pid;
@@ -329,7 +329,7 @@ export const ServiceProvider = () =>
           if (!(yield* isAlive(options.pid))) {
             const tail = yield* logTail(options.logFile);
             return yield* Effect.die(
-              `Server.Service process ${options.pid} exited before reporting ready — log tail:\n${tail}`,
+              `Local.Service process ${options.pid} exited before reporting ready — log tail:\n${tail}`,
             );
           }
           return undefined;
@@ -345,7 +345,7 @@ export const ServiceProvider = () =>
         if (ready === undefined) {
           const tail = yield* logTail(options.logFile);
           return yield* Effect.die(
-            `Server.Service process ${options.pid} did not report ready within 60s — log tail:\n${tail}`,
+            `Local.Service process ${options.pid} did not report ready within 60s — log tail:\n${tail}`,
           );
         }
         return ready;
@@ -387,7 +387,7 @@ export const ServiceProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
           if (!news.main) {
             return yield* Effect.die(
-              `Server.Service '${id}' requires 'main' — the entrypoint to run`,
+              `Local.Service '${id}' requires 'main' — the entrypoint to run`,
             );
           }
           const name = (yield* createPhysicalName({

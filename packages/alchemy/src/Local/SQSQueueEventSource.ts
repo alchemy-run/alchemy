@@ -5,12 +5,12 @@ import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../AWS/Environment.ts";
 import * as SQS from "../AWS/SQS/index.ts";
 import { toWireSeconds } from "../Util/Duration.ts";
-import { ServerHost } from "./Process.ts";
+import { Host } from "./Process.ts";
 
 export const SQSQueueEventSource = Layer.effect(
   SQS.QueueEventSource,
   Effect.gen(function* () {
-    const { run } = yield* ServerHost;
+    const { run } = yield* Host;
     const env = yield* AWSEnvironment;
 
     const ReceiveMessage = yield* SQS.ReceiveMessage;

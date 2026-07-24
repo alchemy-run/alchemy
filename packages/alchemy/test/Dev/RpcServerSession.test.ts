@@ -1,7 +1,7 @@
 import {
   makeServerRpcSession,
   type ServerWebSocketLike,
-} from "@/Local/RpcServerSession.ts";
+} from "@/Dev/RpcServerSession.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

@@ -1,12 +1,12 @@
 /**
- * Server.Service lifecycle against a REAL detached process: deploy
+ * Local.Service lifecycle against a REAL detached process: deploy
  * spawns `bun <main>` and records the pid; the Effectful runtime binds
  * an ephemeral port and reports it back through the startup handshake;
  * a second deploy converges (same pid — no needless restart); destroy
  * stops the process, idempotently.
  */
 import * as Alchemy from "@/index.ts";
-import * as Server from "@/Server/index.ts";
+import * as Local from "@/Local/index.ts";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -16,7 +16,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import TestApi from "./fixtures/effect-service.ts";
 
 const { test, deploy, destroy } = Test.make({
-  providers: Server.providers(),
+  providers: Local.providers(),
 });
 
 /** Ask the OS for a free ephemeral port. */
@@ -61,7 +61,7 @@ test(
     // it back through the startup handshake
     const EffectStack = Alchemy.Stack(
       "ServerEffectServiceTest",
-      { providers: Server.providers(), state: inMemoryState() },
+      { providers: Local.providers(), state: inMemoryState() },
       Effect.gen(function* () {
         const api = yield* TestApi;
         return {
@@ -105,9 +105,9 @@ test(
     const port = yield* freePort;
     const TestStack = Alchemy.Stack(
       "ServerServiceTest",
-      { providers: Server.providers(), state: inMemoryState() },
+      { providers: Local.providers(), state: inMemoryState() },
       Effect.gen(function* () {
-        const service = yield* Server.Service("TestService", {
+        const service = yield* Local.Service("TestService", {
           main: new URL("./fixtures/service-main.ts", import.meta.url).pathname,
           port,
           env: { MARKER: "one" },

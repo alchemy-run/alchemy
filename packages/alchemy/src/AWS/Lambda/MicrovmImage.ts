@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import { Platform } from "../../Platform.ts";
 import type { Main } from "../../Platform.ts";
 import type { Resource } from "../../Resource.ts";
-import type * as Server from "../../Server/index.ts";
+import type * as Local from "../../Local/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { Providers } from "../Providers.ts";
@@ -544,7 +544,7 @@ export const MicrovmImage: Platform<
   MicrovmImage,
   MicrovmImageServices,
   MicrovmImageShape,
-  Server.ProcessContext
+  Local.ProcessContext
 > = Platform(MicrovmImageTypeId, {
   createRuntimeContext: makeMicrovmRuntimeContext,
   // When `buildRole` is a Role instance, grant it the build permissions via a

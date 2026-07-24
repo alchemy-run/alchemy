@@ -13,8 +13,8 @@ import { Resource } from "../../Resource.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
-  type ServerHost as ServerHostService,
-} from "../../Server/Process.ts";
+  type Host as ServerHostService,
+} from "../../Local/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags } from "../../Tags.ts";
 import type { Credentials } from "../Credentials.ts";

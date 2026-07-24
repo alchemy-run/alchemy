@@ -1,5 +1,5 @@
-import { unwrapRpcHandlers } from "@/Local/RpcSerialization.ts";
-import type { RpcProxyApi } from "@/Local/RpcServer.ts";
+import { unwrapRpcHandlers } from "@/Dev/RpcSerialization.ts";
+import type { RpcProxyApi } from "@/Dev/RpcServer.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { assert, describe, expect, it } from "alchemy-test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
