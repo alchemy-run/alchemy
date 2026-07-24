@@ -4,43 +4,12 @@ import cloudflare, {
 import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { createRequire } from "node:module";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
-import { viteBuildOutputPlugin } from "../../Bundle/Vite.ts";
-
-/**
- * Route Vite's logger through the ambient Effect `Console` service instead of
- * its default stdout logger. Under the CLI this is the global console
- * (identical output); under environments that override the Console — e.g.
- * alchemy-test's per-test buffering console — the build output is captured
- * with the test instead of leaking to the terminal.
- */
-const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
-  const loggedErrors = new WeakSet<object>();
-  let hasWarned = false;
-  return {
-    info: (msg) => console.log(msg),
-    warn: (msg) => {
-      hasWarned = true;
-      console.warn(msg);
-    },
-    warnOnce: (msg) => {
-      hasWarned = true;
-      console.warn(msg);
-    },
-    error: (msg, options) => {
-      if (options?.error != null) loggedErrors.add(options.error);
-      console.error(msg);
-    },
-    clearScreen: () => {},
-    hasErrorLogged: (error) => loggedErrors.has(error),
-    get hasWarned() {
-      return hasWarned;
-    },
-  };
-};
+import {
+  loadVite,
+  makeViteLogger,
+  viteBuildOutputPlugin,
+} from "../../Bundle/Vite.ts";
 
 /**
  * Signals to the app's own Vite config that Alchemy is injecting its
@@ -155,25 +124,3 @@ const getDefine = (env: Record<string, unknown>) =>
       return [[`import.meta.env.${key}`, JSON.stringify(value)] as const];
     }),
   );
-
-type ViteModule = typeof import("vite");
-
-/**
- * Dynamically load Vite from the project root. Falls back to the bundled
- * copy if the project doesn't have its own Vite installation.
- */
-async function loadVite(
-  projectRoot: string = process.cwd(),
-): Promise<ViteModule> {
-  try {
-    const require = createRequire(path.join(projectRoot, "package.json"));
-    const vitePath = require.resolve("vite");
-    // On Windows, absolute paths must be file:// URLs for ESM import().
-    const viteUrl = pathToFileURL(vitePath);
-    return await import(/* @vite-ignore */ viteUrl.href);
-  } catch {
-    // Fallback: try to import vite from the global node_modules (works for non-linked installs)
-    // The fallback is a bare specifier and works as-is.
-    return await import("vite");
-  }
-}

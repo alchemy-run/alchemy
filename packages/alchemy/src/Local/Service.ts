@@ -13,6 +13,12 @@ import type { Resource, ResourceBinding } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { sha256 } from "../Util/sha256.ts";
+import * as ConsoleService from "effect/Console";
+import {
+  loadVite,
+  makeViteLogger,
+  viteBuildOutputPlugin,
+} from "../Bundle/Vite.ts";
 import {
   createHostRuntimeContext,
   Host,
@@ -65,6 +71,17 @@ export interface ServiceProps extends PlatformProps {
   /** Extra environment variables passed to the process. */
   env?: Record<string, any>;
   /**
+   * @internal The carrier for `Local.Vite` — prefer that public face
+   * (the same split as `Cloudflare.Website.Vite` over `Worker.vite`).
+   * Builds the project at deploy (in-process, the project's own Vite)
+   * and serves its client output from the SAME server as the
+   * program's `fetch` routes.
+   */
+  vite?: {
+    /** The Vite project root, relative to `cwd`. @default "." */
+    root?: string;
+  };
+  /**
    * @internal Whether the constructor registered an HTTP surface
    * (`fetch`/RPC). Recorded from `exports.serves` at plan time by the
    * Platform machinery — not user-settable.
@@ -103,6 +120,8 @@ export interface Service extends Resource<
     port: number | undefined;
     /** `http://localhost:{port}`, when the service serves HTTP. */
     url: string | undefined;
+    /** The built client assets directory (`Local.Vite`), if any. */
+    assets?: string | undefined;
     hash: {
       /** Content hash of the input files (restart detection), if memoized. */
       input: string | undefined;
@@ -213,6 +232,49 @@ export const ServiceProvider = () =>
         ALCHEMY_STAGE: stage,
         ALCHEMY_PHASE: "runtime",
       };
+
+      /**
+       * Build the service's Vite project IN-PROCESS with the project's
+       * own Vite (the `Cloudflare.Workers.Vite` machinery minus the
+       * cloudflare plugin) and return the built CLIENT directory.
+       */
+      const viteBuild = (rootDir: string) =>
+        Effect.gen(function* () {
+          const outputPlugin = yield* viteBuildOutputPlugin({});
+          const console = yield* ConsoleService.Console;
+          // the project's OWN config drives the build (root, aliases,
+          // plugins) — resolve it explicitly so an inline `root` never
+          // shadows a config-file `root` (inline config wins in vite's
+          // merge, which would break configs that relocate their root)
+          const configFile = yield* Effect.findFirst(
+            ["ts", "mts", "js", "mjs"].map((extension) =>
+              path.join(rootDir, `vite.config.${extension}`),
+            ),
+            (candidate) => fs.exists(candidate).pipe(Effect.orDie),
+          );
+          yield* Effect.promise(async () => {
+            const vite = await loadVite(rootDir);
+            const builder = await vite.createBuilder(
+              {
+                ...(configFile._tag === "Some"
+                  ? { configFile: configFile.value }
+                  : { root: rootDir }),
+                plugins: [outputPlugin.plugin],
+                customLogger: makeViteLogger(console),
+                logLevel: "warn",
+              },
+              null,
+            );
+            await builder.buildApp();
+          });
+          const { clientDirectory } = yield* outputPlugin.output;
+          if (clientDirectory === undefined) {
+            return yield* Effect.die(
+              `Local.Vite: the build at '${rootDir}' produced no client output`,
+            );
+          }
+          return clientDirectory;
+        });
 
       /** Observe: is the recorded pid a live process? */
       const isAlive = (pid: number) =>
@@ -411,6 +473,20 @@ export const ServiceProvider = () =>
           // and reports the OBSERVED port through the ready file. No
           // pinned port means PORT=0 — the OS assigns an ephemeral one.
           const serves = effectful && news.exports?.serves === true;
+          // Local.Vite: (re)build when the inputs moved (or nothing is
+          // recorded yet); a converged input hash reuses the recorded
+          // client directory without building. Assets are read per
+          // request, so a UI-only edit lands WITHOUT a restart.
+          const freshInput = yield* inputHash(news);
+          let assetsDir = output?.assets;
+          if (
+            news.vite &&
+            (assetsDir === undefined || output?.hash.input !== freshInput)
+          ) {
+            assetsDir = yield* viteBuild(
+              path.resolve(cwd, news.vite.root ?? "."),
+            );
+          }
           const env = renderEnv({
             ...collectBindingEnv(bindings),
             ...alchemyEnv,
@@ -420,6 +496,9 @@ export const ServiceProvider = () =>
                   ALCHEMY_SERVICE_HANDLER: news.handler ?? "default",
                   ALCHEMY_SERVICE_READY_FILE: readyFile,
                 }
+              : {}),
+            ...(assetsDir !== undefined
+              ? { ALCHEMY_SERVICE_ASSETS: assetsDir }
               : {}),
             ...(serves
               ? { PORT: news.port ?? 0 }
@@ -439,7 +518,8 @@ export const ServiceProvider = () =>
             // input hash may have moved (that's why we were called)
             return {
               ...output,
-              hash: { ...output.hash, input: yield* inputHash(news) },
+              assets: assetsDir,
+              hash: { ...output.hash, input: freshInput },
             };
           }
 
@@ -469,8 +549,9 @@ export const ServiceProvider = () =>
             logFile,
             port,
             url: port !== undefined ? `http://localhost:${port}` : undefined,
+            assets: assetsDir,
             hash: {
-              input: yield* inputHash(news),
+              input: freshInput,
               deploy: deployHash,
             },
           };

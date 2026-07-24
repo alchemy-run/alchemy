@@ -16,13 +16,41 @@
     "local": "bun run src/local.ts",
     "test": "bun test",
     "test:tools": "bun test test/tools test/coding.test.ts",
-    "typecheck": "bun tsc -b tsconfig.json"
+    "typecheck": "bun tsc -b tsconfig.json",
+    "ui": "vite",
+    "ui:build": "vite build"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.0",
     "@effect/ai-anthropic": "catalog:",
     "@effect/platform-bun": "catalog:",
-    "alchemy": "workspace:*",
+    "@streamdown/cjk": "^1.0.3",
+    "@streamdown/code": "^1.1.1",
+    "@streamdown/math": "^1.0.2",
+    "@streamdown/mermaid": "^1.0.2",
     "ai": "catalog:",
-    "effect": "catalog:"
+    "alchemy": "workspace:*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "effect": "catalog:",
+    "lucide-react": "^0.545.0",
+    "nanoid": "^6.0.0",
+    "radix-ui": "^1.6.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "shiki": "^4.3.1",
+    "streamdown": "^2.5.0",
+    "tailwind-merge": "^3.0.0",
+    "use-stick-to-bottom": "^1.1.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.0.0",
+    "tw-animate-css": "^1.4.0",
+    "vite": "^7.0.0"
   }
 }

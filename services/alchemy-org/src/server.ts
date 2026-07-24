@@ -21,8 +21,9 @@ import * as AI from "alchemy/AI";
 import * as Auth from "alchemy/Auth";
 import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
-import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Local from "alchemy/Local";
+import { RuntimeContext } from "alchemy/RuntimeContext";
+import { perRun as runWorkspace, fixed as workspace } from "alchemy/Workspace";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -32,7 +33,12 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ApprovalsLive } from "./approvals.ts";
-import { Chats, ChatsLive, ChatsObserverLive, makeChunkTranslator } from "./chats.ts";
+import {
+  Chats,
+  ChatsLive,
+  ChatsObserverLive,
+  makeChunkTranslator,
+} from "./chats.ts";
 import { CodingLocal } from "./coding.ts";
 import { EngineerLive } from "./engineer.ts";
 import { Factory, FactoryLive } from "./factory.ts";
@@ -42,8 +48,8 @@ import { SqliteLedger } from "./ledger.ts";
 import { LiveTestingLive } from "./live-testing.ts";
 import { PullRequests, PullRequestsLive } from "./pull-requests.ts";
 import { ReconcilingLive } from "./reconciling.ts";
-import { ResourceEngineerLive } from "./resource-engineer.ts";
 import { testAlchemy } from "./repos.ts";
+import { ResourceEngineerLive } from "./resource-engineer.ts";
 import { ReviewerLive } from "./reviewer.ts";
 import {
   ApproveRecorded,
@@ -56,7 +62,6 @@ import {
   SearchIssuesLive,
 } from "./tools/index.ts";
 import { TypedErrorsLive } from "./typed-errors.ts";
-import { fixed as workspace, perRun as runWorkspace } from "alchemy/Workspace";
 
 // ─── the physics (local) ─────────────────────────────────────────────
 
@@ -233,13 +238,15 @@ export const OrgLive = Layer.mergeAll(
 
 // ─── the service ─────────────────────────────────────────────────────
 
-export default class AlchemyOrg extends Local.Service<AlchemyOrg>()(
+export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
   "AlchemyOrg",
   {
     // no port pinned: the runtime binds an ephemeral one and reports it
-    // back through the startup handshake — it lands in the `url` output
+    // back through the startup handshake — it lands in the `url` output.
+    // The UI (ui/, built by Local.Vite at deploy) is served from the
+    // SAME server, so there is no second address to keep in sync.
     main: import.meta.url,
-    memo: { include: ["src/**"] },
+    memo: { include: ["src/**", "ui/**", "vite.config.ts"] },
   },
   Effect.gen(function* () {
     // the desks are BINDINGS: resolved at init, closed over by fetch
@@ -382,14 +389,17 @@ export default class AlchemyOrg extends Local.Service<AlchemyOrg>()(
     );
 
     const status = HttpRouter.add(
-      "*",
-      "/*",
+      "GET",
+      "/api/status",
       Effect.gen(function* () {
-        const snapshot = yield* Effect.all({
-          issues: issues.list(),
-          pullRequests: pullRequests.list(),
-          factory: factory.orderBook(),
-        }).pipe(
+        const snapshot = yield* Effect.all(
+          {
+            issues: issues.list(),
+            pullRequests: pullRequests.list(),
+            factory: factory.orderBook(),
+          },
+          { concurrency: "unbounded" },
+        ).pipe(
           Effect.map(({ issues, pullRequests, factory }) => ({
             phase: "running",
             openIssues: issues.map((issue) => ({
@@ -415,7 +425,13 @@ export default class AlchemyOrg extends Local.Service<AlchemyOrg>()(
 
     return {
       fetch: yield* HttpRouter.toHttpEffect(
-        Layer.mergeAll(listChats, chatMessages, chatStream, factoryWave, status),
+        Layer.mergeAll(
+          listChats,
+          chatMessages,
+          chatStream,
+          factoryWave,
+          status,
+        ),
       ),
     };
   }),

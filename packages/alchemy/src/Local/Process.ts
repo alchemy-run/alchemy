@@ -13,6 +13,7 @@ import {
   unpackEnvValue,
   type BaseRuntimeContext,
 } from "../RuntimeContext.ts";
+import { withStaticAssets } from "./Assets.ts";
 
 export type ProcessServices =
   | ChildProcessSpawner
@@ -101,8 +102,13 @@ export const createHostRuntimeContext =
           // Register the HTTP handler as a runner. At container runtime the
           // ambient `HttpServer` (if provided) serves it; `Http.serve` is a
           // no-op when no server is bound, so this never crashes plan/deploy.
+          // `withStaticAssets` serves a built SPA around the handler when
+          // the host ships one (ALCHEMY_SERVICE_ASSETS) — pass-through
+          // otherwise.
           serves = true;
-          runners.push(Http.serve(handler as HttpEffect<any>));
+          runners.push(
+            Http.serve(withStaticAssets(handler as HttpEffect<any>)),
+          );
         })) as HostRuntimeContext["serve"],
       exports: Effect.sync(() => ({
         program: Effect.all(runners, { concurrency: "unbounded" }),
