@@ -89,6 +89,15 @@ export const WorkerBundle = Effect.gen(function* () {
       sourcemap: "hidden",
       minify: true,
       keepNames: true,
+      // Rolldown's default chunking can split top-level initializer modules
+      // (e.g. Drizzle `pgTable` schemas) away from the classes they read,
+      // and workerd then evaluates a reader before its imported binding is
+      // initialized — the script fails Cloudflare startup validation with
+      // `ScriptStartupError: Cannot access '<minified>' before
+      // initialization` (#749). `strictExecutionOrder` wraps cross-chunk
+      // modules so evaluation follows ESM semantics regardless of how the
+      // graph was chunked. See DrizzleSchemaChunks.test.ts.
+      strictExecutionOrder: true,
       dir: `.alchemy/bundles/${options.id}`,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
