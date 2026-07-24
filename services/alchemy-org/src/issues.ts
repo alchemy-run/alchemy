@@ -15,13 +15,13 @@
  * vs poll) and how redeliveries collapse (the Ledger) are this
  * Layer's decisions; the charter never sees them.
  *
- * The charter is DYNAMIC (init → turn, init once per issue): each
- * issue's run carries a `phase` Ref in its init closure, and the
- * stance the model sees follows it — triage instructions while
- * triaging, wait-on-the-author instructions while parked. The inline
- * tools `await_author`/`resume_triage` are how the run moves its own
- * phase; the kernel re-renders the stance before every sampling and
- * delivers changes as situation messages.
+ * The charter is STATIC — one holistic system prompt stating the
+ * triage rules AND the wait-on-the-author rules; the conversation
+ * carries which applies. Parking is quiescence: the desk asks its
+ * questions and stops calling tools, the kernel parks the run, and
+ * the author's reply (an ${IssueCommented} steer) wakes it. No phase
+ * state, no prompt swapping — the model reads its position from the
+ * thread, the way any transcript reader would.
  */
 import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
@@ -29,7 +29,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
-import * as Ref from "effect/Ref";
 import { Engineer } from "./engineer.ts";
 import { Ledger } from "./ledger.ts";
 import { testAlchemy } from "./repos.ts";
@@ -106,68 +105,41 @@ export const IssuesLive = Layer.effect(
 export class IssuesAgent extends AI.Agent<IssuesAgent>()("Issues") {}
 
 /**
- * The agent's Layer — its CHARTER: INIT runs once PER ISSUE (the
- * closure is the run's instance — the phase `Ref`, the inline tools
- * that move it); the returned TURN runs before every sampling and
- * renders the stance for the current phase.
+ * The agent's Layer — its CHARTER, fully STATIC: one system prompt
+ * stating every phase's rules; the CONVERSATION carries which phase is
+ * live. There is no phase `Ref` and no stance swapping — parking is
+ * QUIESCENCE (ask, then stop calling tools; the kernel parks the run),
+ * and the author's reply is the steer that wakes it. Every message the
+ * model sees traces to a call site: its own comments (tool results)
+ * and the world's events. The prompt is byte-stable — one prefix in
+ * the cache for the run's whole life.
  */
-export const IssuesAgentLive = IssuesAgent.make(
-  Effect.gen(function* () {
-    const phase = yield* Ref.make<"triaging" | "awaiting-author">("triaging");
+export const IssuesAgentLive = IssuesAgent.make`
+  This process manages GitHub issues for ${testAlchemy} from open to
+  close. No code is written here and nothing merges here — the
+  PullRequests process drives every pull request to its verdict.
 
-    // yield*ed so the templates' own splices (${Comment}) are charged
-    // to the init's requirement channel — the tool's dependencies are
-    // a type-level fact of the Layer
-    const awaitAuthor = yield* AI.Tool("await_author")`
-      Park this issue on its author: triage is blocked until they answer.
-      Ask your questions with ${Comment} FIRST — one per gap, no
-      boilerplate — then call this.`(() =>
-      Ref.set(phase, "awaiting-author").pipe(
-        Effect.as("parked; the author's next reply resumes this issue"),
-      ),
-    );
+  Every ${GitHub.IssueOpened} is checked for prior art with
+  ${SearchIssues}. An issue already covered by an open one is a
+  duplicate: ${LinkIssues} to the original, ${Comment} telling the
+  author where the conversation lives, and ${CloseIssue}. An issue
+  that is related but distinct is linked and stays open — an unlinked
+  relation is how the org solves the same problem twice.
 
-    const resumeTriage = yield* AI.Tool("resume_triage")`
-      The author's reply closed the gaps — pick triage back up.`(() =>
-      Ref.set(phase, "triaging").pipe(Effect.as("resumed")),
-    );
+  An issue is READY when its acceptance criteria are precise enough
+  that someone who has read nothing else could start work. Until it
+  is, ${Comment} asks the author for exactly what is missing — one
+  question per gap, no boilerplate — and then this process STOPS and
+  waits: the author's reply arrives as the next message. Judge each
+  reply against what was asked; when it closes the gaps, triage
+  proceeds; when it does not, ask again — never re-ask an answered
+  question.
 
-    // the returned prose IS the turn; the Effect-valued splice is
-    // re-evaluated at every render, so the stance follows the phase
-    return AI.prose`
-      This process manages GitHub issues for ${testAlchemy} from open to
-      close. No code is written here and nothing merges here — the
-      PullRequests process drives every pull request to its verdict.
+  A ready issue is handed to ${Engineer}, whose pull request must
+  cite the issue.
 
-      ${Ref.get(phase).pipe(
-        Effect.flatMap((phase) =>
-          phase === "triaging"
-            ? AI.prose`
-                Every ${GitHub.IssueOpened} is checked for prior art with
-                ${SearchIssues}. An issue already covered by an open one is a
-                duplicate: ${LinkIssues} to the original, ${Comment} telling the
-                author where the conversation lives, and ${CloseIssue}. An issue
-                that is related but distinct is linked and stays open — an
-                unlinked relation is how the org solves the same problem twice.
-
-                An issue is READY when its acceptance criteria are precise enough
-                that someone who has read nothing else could start work. Until it
-                is, ${Comment} asks the author for exactly what is missing and
-                ${awaitAuthor} parks the issue on them.
-
-                A ready issue is handed to ${Engineer}, whose pull request must
-                cite the issue.`
-            : AI.prose`
-                This issue is parked on its author. Judge their latest reply: when
-                it closes the gaps, ${resumeTriage} and proceed; when it does not,
-                ask again with ${Comment} — never re-ask an answered question.`,
-        ),
-      )}
-
-      A merged fix closes its issue with ${CloseIssue}, citing the pull
-      request; an author confirming the problem is gone does the same. An
-      issue is never closed for inactivity alone. This process resumes
-      when the world moves — a ${GitHub.IssueCommented} from the author,
-      the pull request merging, a ${GitHub.IssueClosed} by hand.`;
-  }),
-);
+  A merged fix closes its issue with ${CloseIssue}, citing the pull
+  request; an author confirming the problem is gone does the same. An
+  issue is never closed for inactivity alone. This process resumes
+  when the world moves — a ${GitHub.IssueCommented} from the author,
+  the pull request merging, a ${GitHub.IssueClosed} by hand.`;
