@@ -67,6 +67,21 @@ export default SESTestFunction.make(
         ),
     );
 
+    // A custom verification email template — creating it works on any
+    // account; sending through it needs production access. Its name is
+    // injected into the SendCustomVerificationEmail request below.
+    const cveTemplate = yield* SES.CustomVerificationEmailTemplate(
+      "VerifyTemplate",
+      {
+        fromEmailAddress: "verify@ses-bindings.alchemy-test.example.com",
+        templateSubject: "Confirm your email",
+        templateContent:
+          "<html><body>Please confirm your address to finish signing up.</body></html>",
+        successRedirectionURL: "https://example.com/verify/success",
+        failureRedirectionURL: "https://example.com/verify/failure",
+      },
+    );
+
     const sendEmail = yield* SES.SendEmail(identity, configSet);
     const sendWithoutConfigSet = yield* SES.SendEmail(identity);
     const sendBulkEmail = yield* SES.SendBulkEmail(identity, configSet);
@@ -77,7 +92,13 @@ export default SESTestFunction.make(
     const listSuppressed = yield* SES.ListSuppressedDestinations();
     const unsuppress = yield* SES.DeleteSuppressedDestination();
     const sendBounce = yield* SES.SendBounce();
+    const sendCustomVerification = yield* SES.SendCustomVerificationEmail();
+    const getMessageInsights = yield* SES.GetMessageInsights();
+    const batchGetMetricData = yield* SES.BatchGetMetricData();
+    const getDomainStatisticsReport = yield* SES.GetDomainStatisticsReport();
+    const getBlacklistReports = yield* SES.GetBlacklistReports();
     const TemplateName = yield* template.templateName;
+    const CveTemplateName = yield* cveTemplate.templateName;
 
     return {
       fetch: Effect.gen(function* () {
@@ -259,6 +280,80 @@ export default SESTestFunction.make(
           );
         }
 
+        if (
+          request.method === "POST" &&
+          pathname === "/send-custom-verification"
+        ) {
+          const templateName = yield* CveTemplateName;
+          return yield* respond(
+            sendCustomVerification({
+              EmailAddress: email ?? "verify-target@simulator.amazonses.com",
+              TemplateName: templateName,
+            }),
+            (result) => ({ messageId: result.MessageId }),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/message-insights") {
+          // No real send backs a fabricated message id, so SES rejects it
+          // with a typed error (NotFoundException, or BadRequestException when
+          // VDM is disabled). Set ?messageId= to a real send's id to exercise
+          // the success path.
+          const messageId =
+            url.searchParams.get("messageId") ??
+            "0000000000000000-00000000-0000-0000-0000-000000000000-000000";
+          return yield* respond(
+            getMessageInsights({ MessageId: messageId }),
+            (result) => ({
+              messageId: result.MessageId,
+              insights: result.Insights?.length ?? 0,
+            }),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/metric-data") {
+          const end = new Date();
+          const start = new Date(end.getTime() - 24 * 3600 * 1000);
+          return yield* respond(
+            batchGetMetricData({
+              Queries: [
+                {
+                  Id: "sends",
+                  Namespace: "VDM",
+                  Metric: "SEND",
+                  StartDate: start,
+                  EndDate: end,
+                },
+              ],
+            }),
+            (result) => ({ results: (result.Results ?? []).length }),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/domain-statistics") {
+          const domain =
+            url.searchParams.get("domain") ??
+            "ses-bindings.alchemy-test.example.com";
+          const end = new Date();
+          const start = new Date(end.getTime() - 7 * 24 * 3600 * 1000);
+          return yield* respond(
+            getDomainStatisticsReport({
+              Domain: domain,
+              StartDate: start,
+              EndDate: end,
+            }),
+            (result) => ({ days: result.DailyVolumes.length }),
+          );
+        }
+
+        if (request.method === "GET" && pathname === "/blacklist-reports") {
+          const ip = url.searchParams.get("ip") ?? "192.0.2.1";
+          return yield* respond(
+            getBlacklistReports({ BlacklistItemNames: [ip] }),
+            (result) => ({ ips: Object.keys(result.BlacklistReport) }),
+          );
+        }
+
         if (request.method === "GET" && pathname === "/health") {
           return HttpServerResponse.text("ok");
         }
@@ -282,6 +377,11 @@ export default SESTestFunction.make(
         SES.ListSuppressedDestinationsHttp,
         SES.DeleteSuppressedDestinationHttp,
         SES.SendBounceHttp,
+        SES.SendCustomVerificationEmailHttp,
+        SES.GetMessageInsightsHttp,
+        SES.BatchGetMetricDataHttp,
+        SES.GetDomainStatisticsReportHttp,
+        SES.GetBlacklistReportsHttp,
       ),
     ),
   ),

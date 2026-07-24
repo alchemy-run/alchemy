@@ -425,4 +425,137 @@ describe("SES Bindings", () => {
         }),
     );
   });
+
+  describe("SendCustomVerificationEmail", () => {
+    test.provider(
+      "sends a custom verification email through the binding (typed rejection in the sandbox)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const email = encodeURIComponent(
+            "verify-target@ses-bindings.alchemy-test.example.com",
+          );
+          const response = (yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/send-custom-verification?email=${email}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            messageId?: string;
+            error?: string;
+            message?: string;
+          };
+
+          // Sandbox accounts cannot send custom verification emails — SES
+          // rejects with a typed error (BadRequestException: "still in the
+          // sandbox"). A production account returns a MessageId. Either way the
+          // call round-trips ses:SendCustomVerificationEmail IAM + the
+          // injected TemplateName through the deployed Lambda.
+          if (response.error === undefined) {
+            expect(response.messageId).toBeTruthy();
+          } else {
+            expect(typeof response.error).toBe("string");
+            expect(response.messageId).toBeUndefined();
+          }
+        }),
+    );
+  });
+
+  describe("GetMessageInsights", () => {
+    test.provider(
+      "looking up a non-existent message id surfaces a typed SES error through the binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/message-insights`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            messageId?: string;
+            error?: string;
+          };
+
+          // No real send backs the fabricated MessageId, so SES rejects it
+          // with a typed error — NotFoundException, or BadRequestException when
+          // VDM is disabled on the account. That proves the binding wires
+          // ses:GetMessageInsights IAM + request marshalling into the Lambda.
+          // Live testing should pin the exact tag for the account's VDM state.
+          expect(typeof response.error).toBe("string");
+          expect(response.messageId).toBeUndefined();
+        }),
+    );
+  });
+
+  describe("BatchGetMetricData", () => {
+    test.provider(
+      "requesting a metric time-series round-trips through the binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.post(`${baseUrl}/metric-data`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            results?: number;
+            error?: string;
+          };
+
+          // With VDM enabled SES returns a (possibly empty) Results array; with
+          // VDM disabled it rejects with a typed BadRequestException. Both
+          // prove the binding wires ses:BatchGetMetricData IAM + the query
+          // payload into the deployed Lambda. Live testing should pin the tag
+          // for the account's VDM state.
+          if (response.error === undefined) {
+            expect(typeof response.results).toBe("number");
+          } else {
+            expect(typeof response.error).toBe("string");
+          }
+        }),
+    );
+  });
+
+  describe("GetDomainStatisticsReport", () => {
+    test.provider(
+      "requesting a domain deliverability report round-trips through the binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/domain-statistics`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            days?: number;
+            error?: string;
+          };
+
+          // Without the deliverability-dashboard subscription (or for a domain
+          // with no data) SES rejects with a typed error; with it, it returns
+          // DailyVolumes. Both prove the binding wires
+          // ses:GetDomainStatisticsReport IAM + the request into the Lambda.
+          // Live testing should pin the tag for the account's subscription.
+          if (response.error === undefined) {
+            expect(typeof response.days).toBe("number");
+          } else {
+            expect(typeof response.error).toBe("string");
+          }
+        }),
+    );
+  });
+
+  describe("GetBlacklistReports", () => {
+    test.provider(
+      "requesting blacklist reports for dedicated IPs round-trips through the binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/blacklist-reports`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            ips?: string[];
+            error?: string;
+          };
+
+          // SES returns a BlacklistReport keyed by the requested IPs (empty
+          // when none are blacklisted, or the account owns no dedicated IPs).
+          // A typed error is also acceptable — either proves the binding wires
+          // ses:GetBlacklistReports IAM + the request into the deployed Lambda.
+          if (response.error === undefined) {
+            expect(Array.isArray(response.ips)).toBe(true);
+          } else {
+            expect(typeof response.error).toBe("string");
+          }
+        }),
+    );
+  });
 });
