@@ -216,12 +216,15 @@ export const ImageProvider = () =>
       // do NOT participate, so relocating an identical context (e.g. a temp
       // dir) produces the same tag.
       const hashBuildInputs = (props: ImageProps) =>
-        hashDockerBuildInputs({
-          context: props.context,
-          dockerfile: props.dockerfile ?? "Dockerfile",
-          platform: props.platform ?? "linux/amd64",
-          buildArgs: props.buildArgs,
-        });
+        hashDockerBuildInputs(
+          {
+            context: props.context,
+            dockerfile: props.dockerfile ?? "Dockerfile",
+            platform: props.platform ?? "linux/amd64",
+            buildArgs: props.buildArgs,
+          },
+          "all",
+        );
 
       // Observe the pushed image in ECR. Missing repository or tag → undefined.
       const describeImage = Effect.fn(function* (

@@ -9,7 +9,7 @@ import * as Result from "effect/Result";
 const describe = layer(NodeServices.layer);
 
 describe("Lambda Function image hashing", (it) => {
-  it.effect("hashes every file in the Docker build context", () =>
+  it.effect("does not hash files excluded by .dockerignore", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -20,18 +20,35 @@ describe("Lambda Function image hashing", (it) => {
         path.join(context, "Dockerfile"),
         "FROM scratch\nCOPY . /app\n",
       );
-      yield* fs.writeFileString(path.join(context, "app.txt"), "one");
+      yield* fs.makeDirectory(path.join(context, "ignored"), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(
+        path.join(context, ".dockerignore"),
+        "ignored/**\n!ignored/included.txt\n",
+      );
+      yield* fs.writeFileString(
+        path.join(context, "ignored", "excluded.txt"),
+        "one",
+      );
+      yield* fs.writeFileString(
+        path.join(context, "ignored", "included.txt"),
+        "one",
+      );
 
       const source = { context, dockerfile: "Dockerfile" };
       const initial = yield* hashFunctionImageBuild(source, "x86_64");
-      yield* fs.writeFileString(path.join(context, "app.txt"), "two");
-      const updated = yield* hashFunctionImageBuild(source, "x86_64");
-      expect(updated).not.toBe(initial);
       yield* fs.writeFileString(
-        path.join(context, ".dockerignore"),
-        "app.txt\n",
+        path.join(context, "ignored", "excluded.txt"),
+        "two",
       );
-      expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(updated);
+      expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
+
+      yield* fs.writeFileString(
+        path.join(context, "ignored", "included.txt"),
+        "two",
+      );
+      expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
     }),
   );
 
@@ -90,6 +107,48 @@ describe("Lambda Function image hashing", (it) => {
           path.join(first, "Dockerfile"),
           "FROM scratch\nCOPY app.txt /renamed.txt\n",
         );
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
+          initial,
+        );
+      }),
+  );
+
+  it.effect(
+    "uses a Dockerfile-specific ignore file instead of the context root",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const context = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-lambda-image-ignore-",
+        });
+        yield* fs.writeFileString(
+          path.join(context, "Lambda.Dockerfile"),
+          "FROM scratch\nCOPY . /app\n",
+        );
+        yield* fs.writeFileString(
+          path.join(context, ".dockerignore"),
+          "root-only.txt\n",
+        );
+        yield* fs.writeFileString(
+          path.join(context, "Lambda.Dockerfile.dockerignore"),
+          "specific-only.txt\n",
+        );
+        yield* fs.writeFileString(
+          path.join(context, "specific-only.txt"),
+          "one",
+        );
+        yield* fs.writeFileString(path.join(context, "root-only.txt"), "one");
+
+        const source = { context, dockerfile: "Lambda.Dockerfile" };
+        const initial = yield* hashFunctionImageBuild(source, "x86_64");
+        yield* fs.writeFileString(
+          path.join(context, "specific-only.txt"),
+          "two",
+        );
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
+
+        yield* fs.writeFileString(path.join(context, "root-only.txt"), "two");
         expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
           initial,
         );

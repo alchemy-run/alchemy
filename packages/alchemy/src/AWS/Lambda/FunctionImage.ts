@@ -87,10 +87,13 @@ const hashDecodedFunctionImageBuild = Effect.fn(function* (
   source: FunctionImageSource,
   architecture: "x86_64" | "arm64",
 ) {
-  const buildHash = yield* hashDockerBuildInputs({
-    ...source,
-    platform: functionImagePlatform(architecture),
-  });
+  const buildHash = yield* hashDockerBuildInputs(
+    {
+      ...source,
+      platform: functionImagePlatform(architecture),
+    },
+    "effective",
+  );
   return (yield* sha256Object({
     builderVersion: functionImageBuilderVersion,
     buildHash,
