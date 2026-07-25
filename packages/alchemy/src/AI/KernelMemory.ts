@@ -502,6 +502,8 @@ export const KernelMemory: Layer.Layer<
             string,
             (params: any) => Effect.Effect<any, any, any>
           >;
+          /** Skills the teaching references — exposed on activation. */
+          readonly skills: ReadonlyArray<Skill<string, any>>;
         }
         const skillCache = new Map<string, ResolvedSkill>();
         const resolveSkill = (skill: Skill<string, any>) =>
@@ -535,6 +537,9 @@ export const KernelMemory: Layer.Layer<
               prose: render(impl.template, impl.refs),
               tools: skillTools.map(compileTool),
               handlers,
+              // a teaching may reference DEEPER skills: activating this
+              // one exposes them for activation — the skill GRAPH
+              skills: impl.refs.filter(isSkill),
             };
             skillCache.set(skillName, entry);
             return entry;
@@ -669,9 +674,15 @@ export const KernelMemory: Layer.Layer<
         const step = (
           prompt: Prompt.Prompt,
           toolkit: Toolkit.WithHandler<any> | undefined,
-          onDelta: (
-            channel: "text" | "reasoning",
-            delta: string,
+          onLive: (
+            part:
+              | { kind: "text" | "reasoning"; delta: string }
+              | {
+                  kind: "tool-call";
+                  id: string;
+                  name: string;
+                  params: unknown;
+                },
           ) => Effect.Effect<void> = () => Effect.void,
         ) =>
           Effect.gen(function* () {
@@ -712,7 +723,7 @@ export const KernelMemory: Layer.Layer<
                       block.text += part.delta;
                       Object.assign(block.metadata, part.metadata);
                       if (part.delta.length > 0) {
-                        yield* onDelta(kind, part.delta);
+                        yield* onLive({ kind, delta: part.delta });
                       }
                       return;
                     }
@@ -730,7 +741,18 @@ export const KernelMemory: Layer.Layer<
                       );
                       return;
                     }
-                    case "tool-call":
+                    case "tool-call": {
+                      parts.push(part);
+                      // surface the call NOW — its handler may run for
+                      // minutes before the sampling completes
+                      yield* onLive({
+                        kind: "tool-call",
+                        id: part.id,
+                        name: part.name,
+                        params: part.params,
+                      });
+                      return;
+                    }
                     case "tool-result":
                     case "finish": {
                       parts.push(part);
@@ -934,9 +956,35 @@ export const KernelMemory: Layer.Layer<
               return { outcome: { value: result } };
             }
             const stance = yield* renderStance(run, result);
-            run.lastStance = stance;
 
-            // this tick's CAPABILITIES: mentioned tools + active∩mentioned
+            // the SKILL GRAPH: a stance mention is access at the root;
+            // an ACTIVE skill's teaching exposes the skills it
+            // references (access, one level per activation) — walk the
+            // active frontier to a fixpoint so nested doctrine trees
+            // resolve however deep the activations go
+            const effectiveSkills = new Map(stance.skills);
+            {
+              const frontier = [...run.active];
+              const visited = new Set<string>();
+              while (frontier.length > 0) {
+                const name = frontier.pop()!;
+                if (visited.has(name)) continue;
+                visited.add(name);
+                const term = effectiveSkills.get(name);
+                if (term === undefined) continue; // not reachable now
+                const resolved = yield* resolveSkill(term);
+                for (const sub of resolved.skills) {
+                  const subName = sub["~alchemy/Name"];
+                  if (!effectiveSkills.has(subName)) {
+                    effectiveSkills.set(subName, sub);
+                  }
+                  if (run.active.has(subName)) frontier.push(subName);
+                }
+              }
+            }
+            run.lastStance = { ...stance, skills: effectiveSkills };
+
+            // this tick's CAPABILITIES: mentioned tools + active∩reachable
             // skills' tools, with their handlers
             const capabilityHandlers: Record<
               string,
@@ -950,8 +998,8 @@ export const KernelMemory: Layer.Layer<
             }
             const activeTools: Array<AiTool.Any> = [];
             for (const name of run.active) {
-              const skillTerm = stance.skills.get(name);
-              if (skillTerm === undefined) continue; // not mentioned now
+              const skillTerm = effectiveSkills.get(name);
+              if (skillTerm === undefined) continue; // not reachable now
               const resolved = yield* resolveSkill(skillTerm);
               activeTools.push(...resolved.tools);
               for (const [toolName, fn] of Object.entries(resolved.handlers)) {
@@ -1016,9 +1064,12 @@ export const KernelMemory: Layer.Layer<
               ...(delegates.size > 0
                 ? [compileDispatch([...delegates.keys()])]
                 : []),
-              compileSpawn([...stance.tools.keys()], [...stance.skills.keys()]),
-              ...(stance.skills.size > 0
-                ? [compileSkillTool([...stance.skills.keys()])]
+              compileSpawn(
+                [...stance.tools.keys()],
+                [...effectiveSkills.keys()],
+              ),
+              ...(effectiveSkills.size > 0
+                ? [compileSkillTool([...effectiveSkills.keys()])]
                 : []),
             ];
             const toolkit = yield* buildToolkit(
@@ -1048,6 +1099,7 @@ export const KernelMemory: Layer.Layer<
               let inputs: Array<unknown> = yield* Queue.clear(run.inbox);
               if (inputs.length === 0 && quiescent) {
                 // PARKED: the run's work is done until the world moves
+                yield* observe(run, { type: "parked" });
                 const wake = yield* Effect.raceFirst(
                   Effect.map(Queue.take(run.inbox), (input) => ({
                     settled: false as const,
@@ -1099,13 +1151,21 @@ export const KernelMemory: Layer.Layer<
                   run.prompt,
                 ),
                 tick.toolkit,
-                (channel, delta) =>
-                  observe(run, {
-                    type: "assistant-delta",
-                    tick: run.tick,
-                    channel,
-                    delta,
-                  }),
+                (part) =>
+                  part.kind === "tool-call"
+                    ? observe(run, {
+                        type: "tool-call",
+                        tick: run.tick,
+                        toolCallId: part.id,
+                        toolName: part.name,
+                        input: part.params,
+                      })
+                    : observe(run, {
+                        type: "assistant-delta",
+                        tick: run.tick,
+                        channel: part.kind,
+                        delta: part.delta,
+                      }),
               );
               // where the time goes: one line per sampling (model
               // round-trip INCLUDING the tool handlers that ran

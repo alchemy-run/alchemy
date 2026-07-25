@@ -1,13 +1,25 @@
 /**
- * The Ledger — the factory's dedupe/liveness seam, its own
- * `Context.Service` with per-environment physics (the components
- * doctrine: environments are Layer provide-lists over seams). Process
- * implementations only ever `yield* Ledger`; which physics answers is
- * decided entirely at composition:
+ * The Ledger — the org's BOOK OF RECORD, its own `Context.Service`
+ * with per-environment physics (the components doctrine: environments
+ * are Layer provide-lists over seams). It holds the durable facts the
+ * org itself creates:
+ *
+ * - **deliveries** (`offer`/`settle`) — the dedupe/liveness seam:
+ *   however many times the world re-delivers, exactly one caller sees
+ *   `accepted`;
+ * - **metadata** (`put`/`get`) — a generic keyed store for
+ *   coordination facts born structured in one place and read in
+ *   another (e.g. OpenPullRequest records which issue a PR resolves;
+ *   the event router looks it up). Key conventions belong to the
+ *   CALLERS — the Ledger stays domain-blind.
+ *
+ * Process implementations only ever `yield* Ledger`; which physics
+ * answers is decided entirely at composition:
  *
  * - {@link MemoryLedger} — tests.
  * - {@link SqliteLedger} — the laptop: restart-resume (kill the factory,
- *   restart it, re-polled deliveries collapse against the same file).
+ *   restart it, re-polled deliveries collapse against the same file and
+ *   coordination metadata survives).
  * - {@link D1Ledger} — Cloudflare: any number of concurrent Worker
  *   instances agree through the D1 transaction, never instance memory.
  *
@@ -58,6 +70,13 @@ export class Ledger extends Context.Service<
      * delete-idempotency doctrine, same as resource `delete`.
      */
     settle(queue: string, key: string): Effect.Effect<void>;
+    /**
+     * Stash a coordination fact under `key` (last write wins). JSON
+     * values only — the store is durable and environment-portable.
+     */
+    put(key: string, value: unknown): Effect.Effect<void>;
+    /** The fact under `key`, when the org has one on record. */
+    get(key: string): Effect.Effect<unknown>;
   }
 >()("alchemy-org/Ledger") {}
 
@@ -65,6 +84,7 @@ export class Ledger extends Context.Service<
 
 export const MemoryLedger: Layer.Layer<Ledger> = Layer.sync(Ledger, () => {
   const rows = new Map<string, "open" | "settled">();
+  const meta = new Map<string, unknown>();
   const rowKey = (queue: string, key: string) => `${queue}\u0000${key}`;
   return Ledger.of({
     offer: (queue, key, _task) =>
@@ -79,6 +99,8 @@ export const MemoryLedger: Layer.Layer<Ledger> = Layer.sync(Ledger, () => {
         const id = rowKey(queue, key);
         if (rows.has(id)) rows.set(id, "settled");
       }),
+    put: (key, value) => Effect.sync(() => void meta.set(key, value)),
+    get: (key) => Effect.sync(() => meta.get(key)),
   });
 });
 
@@ -91,6 +113,13 @@ const LEDGER_TABLE = `
     task       TEXT,
     status     TEXT NOT NULL DEFAULT 'open',
     PRIMARY KEY (queue, key)
+  )
+`;
+
+const META_TABLE = `
+  CREATE TABLE IF NOT EXISTS meta (
+    key    TEXT NOT NULL PRIMARY KEY,
+    value  TEXT NOT NULL
   )
 `;
 
@@ -111,6 +140,7 @@ export const SqliteLedger = (path: string): Layer.Layer<Ledger> =>
           try: () => {
             const database = new SqliteDatabase(path, { create: true });
             database.run(LEDGER_TABLE);
+            database.run(META_TABLE);
             return database;
           },
           catch: (cause) =>
@@ -140,6 +170,19 @@ export const SqliteLedger = (path: string): Layer.Layer<Ledger> =>
             db.query(
               "UPDATE ledger SET status = 'settled' WHERE queue = ? AND key = ?",
             ).run(queue, key);
+          }),
+        put: (key, value) =>
+          Effect.sync(() => {
+            db.query(
+              "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+            ).run(key, JSON.stringify(value ?? null));
+          }),
+        get: (key) =>
+          Effect.sync(() => {
+            const row = db
+              .query("SELECT value FROM meta WHERE key = ?")
+              .get(key) as { value: string } | null;
+            return row === null ? undefined : JSON.parse(row.value);
           }),
       });
     }),
@@ -183,7 +226,13 @@ export const D1Ledger = Layer.effect(
 
     const ensured = yield* Effect.cached(
       inWorker(
-        Effect.asVoid(db.exec(LEDGER_TABLE.trim().replaceAll(/\s+/g, " "))),
+        Effect.asVoid(
+          db.exec(LEDGER_TABLE.trim().replaceAll(/\s+/g, " ")),
+        ).pipe(
+          Effect.andThen(
+            Effect.asVoid(db.exec(META_TABLE.trim().replaceAll(/\s+/g, " "))),
+          ),
+        ),
       ),
     );
 
@@ -217,6 +266,28 @@ export const D1Ledger = Layer.effect(
               .bind(queue, key)
               .run(),
           );
+        }),
+      put: (key, value) =>
+        Effect.gen(function* () {
+          yield* ensured;
+          yield* inWorker(
+            db
+              .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)")
+              .bind(key, JSON.stringify(value ?? null))
+              .run(),
+          );
+        }),
+      get: (key) =>
+        Effect.gen(function* () {
+          yield* ensured;
+          const rows = yield* inWorker(
+            db
+              .prepare("SELECT value FROM meta WHERE key = ?")
+              .bind(key)
+              .all<{ value: string }>(),
+          );
+          const row = rows.results[0];
+          return row === undefined ? undefined : JSON.parse(row.value);
         }),
     });
   }),

@@ -15,6 +15,9 @@ import * as AI from "alchemy/AI";
 import * as Layer from "effect/Layer";
 import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
 import { WorkspaceFilesLive } from "alchemy/Workspace";
+import { LiveTesting } from "./live-testing.ts";
+import { Reconciling } from "./reconciling.ts";
+import { TypedErrors } from "./typed-errors.ts";
 import {
   ApplyPatch,
   ApplyPatchLocal,
@@ -56,7 +59,12 @@ export const CodingLive = Coding.make`
   - Verify with the test suite after your edits — the suite, not
     your reading of the diff, is the oracle of done-ness.
   - Write code that reads like the surrounding code — match its
-    idiom, naming, and comment density.`;
+    idiom, naming, and comment density.
+
+  Deeper craft, when the work calls for it: ${Reconciling} for
+  resource providers, ${TypedErrors} for growing distilled's typed
+  error unions, ${LiveTesting} for proving changes against the real
+  cloud.`;
 
 /**
  * Production local/Bun tool composition. The entrypoint still chooses

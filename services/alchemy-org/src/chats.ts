@@ -27,7 +27,8 @@ export interface ChatSummary {
   readonly id: string;
   readonly term: string;
   readonly key: string;
-  readonly status: "running" | "settled" | "crashed";
+  /** `running` = actively sampling; `idle` = parked until the world moves. */
+  readonly status: "running" | "idle" | "settled" | "crashed";
   /** Samplings so far (assistant observations). */
   readonly ticks: number;
   /** When the run was admitted — the story orders by this. */
@@ -42,18 +43,27 @@ export interface ChatSummary {
 interface ChatState {
   readonly term: string;
   readonly key: string;
-  status: "running" | "settled" | "crashed";
+  status: "running" | "idle" | "settled" | "crashed";
   ticks: number;
   readonly createdAt: number;
   updatedAt: number;
   parent: string | undefined;
   firstInput: string | undefined;
   /**
-   * The IN-FLIGHT sampling, accumulated from `assistant-delta`
-   * observations — transient (never logged): the final `assistant`
-   * observation restates the whole sampling and clears this.
+   * The IN-FLIGHT sampling, accumulated from `assistant-delta` and
+   * live `tool-call` observations — transient (never logged): the
+   * final `assistant` observation restates the whole sampling and
+   * clears this. Live tool calls matter most: a dispatch's handler
+   * (a subagent) may run for minutes before the sampling completes.
    */
-  streaming: { tick: number; text: string; reasoning: string } | undefined;
+  streaming:
+    | {
+        tick: number;
+        text: string;
+        reasoning: string;
+        toolCalls: Array<{ id: string; name: string; input: unknown }>;
+      }
+    | undefined;
   /** Ring buffer of observations (last MAX_LOG). */
   log: Array<AI.KernelObservation>;
   readonly subscribers: Set<Queue.Queue<AI.KernelObservation>>;
@@ -124,18 +134,35 @@ export const ChatsLive = Layer.effect(
       ingest: (observation) =>
         Effect.gen(function* () {
           const chat = ensure(observation.term, observation.key);
-          // token slices are the live view, not the record: accumulate
-          // transiently (a rare provider retry may replay a tick's
-          // prefix — the final `assistant` observation supersedes it)
-          if (observation.type === "assistant-delta") {
+          // token slices + live tool calls are the live view, not the
+          // record: accumulate transiently (a rare provider retry may
+          // replay a tick's prefix — the final `assistant` observation
+          // supersedes it)
+          if (
+            observation.type === "assistant-delta" ||
+            observation.type === "tool-call"
+          ) {
             if (chat.streaming?.tick !== observation.tick) {
               chat.streaming = {
                 tick: observation.tick,
                 text: "",
                 reasoning: "",
+                toolCalls: [],
               };
             }
-            chat.streaming[observation.channel] += observation.delta;
+            if (observation.type === "assistant-delta") {
+              chat.streaming[observation.channel] += observation.delta;
+            } else if (
+              !chat.streaming.toolCalls.some(
+                (call) => call.id === observation.toolCallId,
+              )
+            ) {
+              chat.streaming.toolCalls.push({
+                id: observation.toolCallId,
+                name: observation.toolName,
+                input: observation.input,
+              });
+            }
             chat.updatedAt = observation.at;
             return;
           }
@@ -153,6 +180,10 @@ export const ChatsLive = Layer.effect(
             chat.firstInput = observation.text.slice(0, 4000);
           }
           if (observation.type === "assistant") chat.ticks++;
+          // the working/waiting line: parked = idle until the next
+          // input wakes it (settled/crashed runs emit nothing after)
+          if (observation.type === "parked") chat.status = "idle";
+          if (observation.type === "input") chat.status = "running";
           if (observation.type === "settled") chat.status = "settled";
           if (observation.type === "crashed") chat.status = "crashed";
           for (const subscriber of chat.subscribers) {
@@ -185,7 +216,9 @@ export const ChatsLive = Layer.effect(
           const streaming = chat.streaming;
           if (
             streaming !== undefined &&
-            (streaming.text.length > 0 || streaming.reasoning.length > 0)
+            (streaming.text.length > 0 ||
+              streaming.reasoning.length > 0 ||
+              streaming.toolCalls.length > 0)
           ) {
             const parts: Array<UIMessagePart<any, any>> = [];
             if (streaming.reasoning.length > 0) {
@@ -201,6 +234,15 @@ export const ChatsLive = Layer.effect(
                 text: streaming.text,
                 state: "streaming",
               });
+            }
+            for (const call of streaming.toolCalls) {
+              parts.push({
+                type: "dynamic-tool",
+                toolName: call.name,
+                toolCallId: call.id,
+                state: "input-available",
+                input: call.input,
+              } as never);
             }
             messages.push({
               id: `live-${streaming.tick}`,
@@ -246,11 +288,11 @@ export const ChatsObserverLive: Layer.Layer<AI.KernelObserver, never, Chats> =
     }),
   );
 
-// ─── the board: chats grouped under their GitHub issue ───────────────
+// ─── the board: issue channels + the agents they dispatched ─────────
 
-/** One agent thread working an issue. */
+/** One agent thread on the board. */
 export interface BoardThread extends ChatSummary {
-  /** Human label — "Triage", "Engineer", "PR #59", … */
+  /** Human label — "Engineer", "Reviewer", "PR #59", … */
   readonly label: string;
 }
 
@@ -259,14 +301,17 @@ export interface BoardIssue {
   readonly title: string;
   readonly state: "open" | "closed" | "unknown";
   readonly updatedAt: number;
-  /** The issue's whole story, FLAT and chronological — desks and the
-   *  agents they dispatched alike (triage → engineer → PR → review). */
-  readonly threads: Array<BoardThread>;
+  /** The issue's CHANNEL chat — the thread you open when you click
+   *  the issue. Undefined until the channel has been admitted. */
+  readonly channel: string | undefined;
+  /** Agents the channel dispatched (chronological) — the UI links a
+   *  dispatch card in the channel to its worker thread through this. */
+  readonly agents: Array<BoardThread>;
 }
 
 export interface Board {
   readonly issues: Array<BoardIssue>;
-  /** Threads that belong to no issue (factory waves, Discord, …). */
+  /** Threads that belong to no issue (unlinked PRs, factory, …). */
   readonly other: Array<BoardThread>;
 }
 
@@ -283,25 +328,14 @@ const parseEvent = (
   }
 };
 
-/** The issue a PR resolves, from its body's "Closes #N" (or any #N). */
-const linkedIssue = (body: string | undefined): number | undefined => {
-  if (typeof body !== "string") return undefined;
-  const match =
-    body.match(/(?:close[sd]?|fixe?[sd]?|resolve[sd]?)\s+#(\d+)/i) ??
-    body.match(/#(\d+)/);
-  return match ? Number(match[1]) : undefined;
-};
-
 /**
- * Group the flat chat list into the ISSUE BOARD. Desk threads keyed
- * `owner/repo#n` anchor an issue (a PullRequests desk anchors via the
- * issue its PR body cites); kernel parentage (the `admitted`
- * observation's dispatch edge) pulls the agents a desk dispatched
- * into the same issue. The result per issue is deliberately FLAT and
- * chronological — the reader wants the story (triage → engineer → PR
- * → review), not the delegation topology. GitHub's open-issues list
- * (when available) supplies titles/state for issues with no threads
- * yet.
+ * Group the flat chat list into the ISSUE BOARD. A `Channel` run
+ * keyed `owner/repo#n` anchors issue `n`; kernel parentage (the
+ * `admitted` observation's dispatch edge) collects the workers it
+ * dispatched, chronological. Roots that anchor no issue (the
+ * unlinked-PR desk, factory waves, Discord) land in `other`.
+ * GitHub's open-issues list (when available) supplies titles/state
+ * for issues with no channel yet.
  */
 export const buildBoard = (
   chats: ReadonlyArray<ChatSummary>,
@@ -317,14 +351,14 @@ export const buildBoard = (
     byParent.set(chat.parent, siblings);
   }
 
-  /** A root and every descendant it dispatched, flat. */
-  const subtree = (chat: ChatSummary): Array<ChatSummary> => [
-    chat,
-    ...(byParent.get(chat.id) ?? []).flatMap(subtree),
-  ];
+  /** Every descendant a root dispatched (the root excluded), flat. */
+  const descendants = (chat: ChatSummary): Array<ChatSummary> =>
+    (byParent.get(chat.id) ?? []).flatMap((child) => [
+      child,
+      ...descendants(child),
+    ]);
 
   const label = (chat: ChatSummary): string => {
-    if (chat.term === "Issues") return "Triage";
     if (chat.term === "PullRequestReviewer") {
       return `PR #${chat.key.match(/#(\d+)$/)?.[1] ?? "?"}`;
     }
@@ -333,12 +367,24 @@ export const buildBoard = (
 
   const issues = new Map<
     number,
-    { title: string; state: BoardIssue["state"]; threads: Array<ChatSummary> }
+    {
+      title: string;
+      state: BoardIssue["state"];
+      channel: string | undefined;
+      updatedAt: number;
+      agents: Array<ChatSummary>;
+    }
   >();
   const ensureIssue = (number: number) => {
     let issue = issues.get(number);
     if (issue === undefined) {
-      issue = { title: `#${number}`, state: "unknown", threads: [] };
+      issue = {
+        title: `#${number}`,
+        state: "unknown",
+        channel: undefined,
+        updatedAt: 0,
+        agents: [],
+      };
       issues.set(number, issue);
     }
     return issue;
@@ -353,23 +399,22 @@ export const buildBoard = (
   for (const chat of chats) {
     if (chat.parent !== undefined) continue; // reachable via its root
     const threadNumber = Number(chat.key.match(/#(\d+)$/)?.[1]);
-    const event = parseEvent(chat.firstInput);
-    if (chat.term === "Issues" && Number.isFinite(threadNumber)) {
+    if (chat.term === "Channel" && Number.isFinite(threadNumber)) {
       const issue = ensureIssue(threadNumber);
+      const event = parseEvent(chat.firstInput);
       if (event.issue?.title) issue.title = event.issue.title;
       if (issue.state === "unknown" && openIssues !== undefined) {
         issue.state = "closed"; // fetched the open list; not on it
       }
-      issue.threads.push(...subtree(chat));
-    } else if (chat.term === "PullRequestReviewer") {
-      const target = linkedIssue(event.pullRequest?.body);
-      if (target !== undefined) {
-        ensureIssue(target).threads.push(...subtree(chat));
-      } else {
-        other.push(...subtree(chat));
-      }
+      issue.channel = chat.id;
+      const workers = descendants(chat);
+      issue.updatedAt = Math.max(
+        chat.updatedAt,
+        ...workers.map((worker) => worker.updatedAt),
+      );
+      issue.agents.push(...workers);
     } else {
-      other.push(...subtree(chat));
+      other.push(chat, ...descendants(chat));
     }
   }
 
@@ -391,8 +436,9 @@ export const buildBoard = (
       number,
       title: issue.title,
       state: issue.state,
-      updatedAt: Math.max(0, ...issue.threads.map((chat) => chat.updatedAt)),
-      threads: present(issue.threads),
+      updatedAt: issue.updatedAt,
+      channel: issue.channel,
+      agents: present(issue.agents),
     }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
   return {

@@ -42,15 +42,18 @@ import {
 } from "./chats.ts";
 import { CodingLocal } from "./coding.ts";
 import { EngineerLive } from "./engineer.ts";
-import { Factory, FactoryLive } from "./factory.ts";
 import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
 import { Issues, IssuesLive } from "./issues.ts";
 import { SqliteLedger } from "./ledger.ts";
 import { LiveTestingLive } from "./live-testing.ts";
-import { PullRequests, PullRequestsLive } from "./pull-requests.ts";
+import {
+  PullRequestReviewerLive,
+  PullRequests,
+  PullRequestsLive,
+} from "./pull-requests.ts";
 import { ReconcilingLive } from "./reconciling.ts";
 import { testAlchemy } from "./repos.ts";
-import { ResourceEngineerLive } from "./resource-engineer.ts";
+import { ReviewerLive } from "./reviewer.ts";
 import {
   ApproveRecorded,
   CloseIssueLive,
@@ -103,6 +106,7 @@ const GitHubBindings = Layer.mergeAll(
   GitHub.ListPullRequestsLocal,
   GitHub.MergePullRequestLocal,
   GitHub.SearchIssuesLocal,
+  GitHub.UpdateIssueLocal,
 ).pipe(Layer.provide(Credentials));
 
 /**
@@ -149,8 +153,6 @@ const Kernel = Layer.mergeAll(
 const workspaceRoot =
   process.env.ORG_WORKSPACE ?? `${process.cwd()}/.alchemy/workspaces`;
 
-const OrgWorkspace = workspace(workspaceRoot);
-
 /**
  * Checkouts as a capability, LOCAL physics: central blobless clone +
  * one worktree per run key. ONE instance — the Engineer's turn and the
@@ -167,9 +169,17 @@ const WorkspacesLive = Git.WorkspacesWorktree({ root: workspaceRoot }).pipe(
 /** The Engineer: local toolbox physics + real PR plumbing (branch,
  * commit, push, pulls.create). The toolbox is rooted at THE RUN'S OWN
  * worktree (`runWorkspace`), so an engineer cannot touch another run's
- * tree — or anything outside its checkout. */
+ * tree — or anything outside its checkout. The doctrine skills hang
+ * off ${Coding}'s teaching (the skill GRAPH): activating Coding
+ * exposes Reconciling/TypedErrors/LiveTesting for activation. */
 const EngineerLayer = EngineerLive.pipe(
-  Layer.provide(CodingLocal),
+  Layer.provide(
+    CodingLocal.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(TypedErrorsLive, ReconcilingLive, LiveTestingLive),
+      ),
+    ),
+  ),
   Layer.provide(OpenPullRequestLive.pipe(Layer.provide(ToolOutputStoreLive))),
   Layer.provide(Kernel),
   Layer.provide(runWorkspace()),
@@ -178,47 +188,31 @@ const EngineerLayer = EngineerLive.pipe(
   Layer.provide(WorkspacesLive),
 );
 
-/**
- * The ResourceEngineer: the factory's per-service laborer. The ONE
- * physics bundle is the generic ${Coding} toolbox; the doctrines
- * (typed errors, reconciling, live testing) are PROSE-ONLY skills —
- * knowledge, not tools. NOTE: the factory works under the workspaces
- * root at ORG_WORKSPACE — an alchemy checkout (with the distilled
- * submodule) must live inside it for waves to operate on.
- */
-const ResourceEngineerLayer = ResourceEngineerLive.pipe(
-  Layer.provide([
-    CodingLocal,
-    TypedErrorsLive,
-    ReconcilingLive,
-    LiveTestingLive,
-  ]),
+/** The Reviewer worker: reads the diff + the cited issue, records its
+ * verdict in the approvals ledger — the channel's merge ratifies it. */
+const ReviewerLayer = ReviewerLive.pipe(
+  Layer.provide([ApproveRecorded, CommentLive, ReadDiffLive, ReadIssueLive]),
   Layer.provide(Kernel),
-  Layer.provide(OrgWorkspace),
 );
-
-/** The Factory desk: waves of per-service engineers, banked reports. */
-const FactoryLayer = FactoryLive.pipe(Layer.provide(ResourceEngineerLayer));
 
 /**
  * The processes over their world: GitHub events arrive by REST polling
  * (the webhook Layer slots in unchanged on Cloudflare); the Ledger is
  * bun:sqlite so delivery dedupe survives restarts.
  */
-export const OrgLive = Layer.mergeAll(
-  IssuesLive,
-  PullRequestsLive,
-  FactoryLayer,
-).pipe(
-  Layer.provide(EngineerLayer),
+export const OrgLive = Layer.mergeAll(IssuesLive, PullRequestsLive).pipe(
+  // the channel's workers: the Engineer writes the fix in its own
+  // thread; the Reviewer judges the artifact and records its verdict
+  Layer.provide([EngineerLayer, ReviewerLayer]),
+  // the standalone desk: unlinked (foreign) PRs only — the router in
+  // issues.ts addresses it when no issue link exists
+  Layer.provide(Layer.suspend(() => PullRequestReviewerLive)),
   Layer.provide([
     CommentLive,
     SearchIssuesLive,
     LinkIssuesLive,
     CloseIssueLive,
     MergePullRequestLive,
-    // the PR desk reviews the artifact itself: diff + cited issue,
-    // verdict recorded in the approvals ledger the merge ratifies
     ApproveRecorded,
     ReadDiffLive,
     ReadIssueLive,
@@ -257,7 +251,6 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
     // the desks are BINDINGS: resolved at init, closed over by fetch
     const issues = yield* Issues;
     const pullRequests = yield* PullRequests;
-    const factory = yield* Factory;
     const chats = yield* Chats;
     // sendMessage's honest door: a chat message to a desk becomes a
     // GitHub comment — the same world event as any other steer
@@ -273,8 +266,8 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
     const encoder = new TextEncoder();
 
     // ── the localhost surface, as HttpRouter routes ─────────────────
-    // the desks' sealed Shapes (read-only status), the chat projection
-    // (AI SDK UIMessage protocol), and the factory's one door
+    // the desks' sealed Shapes (read-only status) and the chat
+    // projection (AI SDK UIMessage protocol)
 
     const listChats = HttpRouter.add(
       "GET",
@@ -352,12 +345,13 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
             : "";
 
         // deliver the text through the WORLD's door: a GitHub comment
-        // on the desk's issue/PR thread steers the run like any other
-        // event; chats without a world door are watch-only
+        // on the channel's issue (or the desk's PR) steers the run
+        // like any other event; chats without a world door are
+        // watch-only
         const threadNumber = Number(key.match(/#(\d+)$/)?.[1]);
         if (
           text.length > 0 &&
-          (term === "Issues" || term === "PullRequestReviewer") &&
+          (term === "Channel" || term === "PullRequestReviewer") &&
           Number.isFinite(threadNumber)
         ) {
           yield* comment({
@@ -396,29 +390,6 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
       }),
     );
 
-    // the factory's door: start a wave, respond immediately — the
-    // order book is where outcomes land as engineers file reports
-    const factoryWave = HttpRouter.add(
-      "POST",
-      "/factory/wave",
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const body = (yield* request.json.pipe(Effect.orDie)) as {
-          services: string[];
-          concurrency?: number;
-        };
-        yield* Effect.forkDetach(
-          factory
-            .wave(body.services, { concurrency: body.concurrency })
-            .pipe(Effect.provide(RuntimeContext.phantom)),
-        );
-        return yield* HttpServerResponse.json(
-          { started: body.services },
-          { status: 202 },
-        );
-      }),
-    );
-
     const status = HttpRouter.add(
       "GET",
       "/api/status",
@@ -427,11 +398,10 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
           {
             issues: issues.list(),
             pullRequests: pullRequests.list(),
-            factory: factory.orderBook(),
           },
           { concurrency: "unbounded" },
         ).pipe(
-          Effect.map(({ issues, pullRequests, factory }) => ({
+          Effect.map(({ issues, pullRequests }) => ({
             phase: "running",
             openIssues: issues.map((issue) => ({
               number: issue.number,
@@ -441,7 +411,6 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
               number: pull.number,
               title: pull.title,
             })),
-            factory,
           })),
           Effect.catch((error) =>
             Effect.succeed({
@@ -456,14 +425,7 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
 
     return {
       fetch: yield* HttpRouter.toHttpEffect(
-        Layer.mergeAll(
-          listChats,
-          board,
-          chatMessages,
-          chatStream,
-          factoryWave,
-          status,
-        ),
+        Layer.mergeAll(listChats, board, chatMessages, chatStream, status),
       ),
     };
   }),

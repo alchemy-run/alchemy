@@ -24,3 +24,10 @@ export const testAlchemy = GitHub.Repository("test-alchemy", {
   hasIssues: true,
   deleteBranchOnMerge: true,
 });
+
+/**
+ * Ledger metadata key for the org's PR→issue link — born structured
+ * where the PR is created (OpenPullRequest), read by the event router.
+ */
+export const prLinkKey = (repo: string, pr: number) =>
+  `pr-link:${repo}#${pr}`;

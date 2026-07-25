@@ -6,7 +6,8 @@ import * as Layer from "effect/Layer";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { runProcess } from "../internal/ProcessRunner.ts";
 import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
-import { testAlchemy } from "../repos.ts";
+import { Ledger } from "../ledger.ts";
+import { prLinkKey, testAlchemy } from "../repos.ts";
 import { body, issue, title } from "../vocabulary.ts";
 
 export class OpenPullRequest extends AI.Tool<OpenPullRequest>()(
@@ -41,6 +42,7 @@ export const OpenPullRequestLive = Layer.effect(
     const workspaces = yield* Git.Workspaces;
     const remote = GitHub.remote(testAlchemy);
     const createPullRequest = yield* GitHub.CreatePullRequest(testAlchemy);
+    const ledger = yield* Ledger;
     const environment = yield* Effect.context<
       ChildProcessSpawner | ToolOutputStore
     >();
@@ -114,6 +116,16 @@ export const OpenPullRequestLive = Layer.effect(
               `${error.operation} failed: ${error.message} — if a PR for ` +
               `${branch} already exists, the push above updated it; cite that one`,
           ),
+        );
+
+        // the PR→issue link is born HERE, structured — record it so
+        // routing/grouping look it up instead of parsing prose
+        yield* ledger.put(
+          prLinkKey(
+            `${input.issue.owner}/${input.issue.repository}`,
+            pull.number,
+          ),
+          input.issue.number,
         );
 
         return {

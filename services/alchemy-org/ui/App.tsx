@@ -1,6 +1,6 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -27,7 +27,7 @@ interface BoardThread {
   id: string;
   term: string;
   key: string;
-  status: "running" | "settled" | "crashed";
+  status: "running" | "idle" | "settled" | "crashed";
   ticks: number;
   createdAt: number;
   updatedAt: number;
@@ -39,7 +39,10 @@ interface BoardIssue {
   title: string;
   state: "open" | "closed" | "unknown";
   updatedAt: number;
-  threads: BoardThread[];
+  /** The issue's channel chat id — open this when the issue is clicked. */
+  channel: string | undefined;
+  /** Workers the channel dispatched, chronological. */
+  agents: BoardThread[];
 }
 
 interface Board {
@@ -49,7 +52,8 @@ interface Board {
 
 const STATUS_COLOR: Record<BoardThread["status"], string> = {
   running: "bg-emerald-500",
-  settled: "bg-zinc-500",
+  idle: "bg-zinc-400",
+  settled: "bg-zinc-600",
   crashed: "bg-red-500",
 };
 
@@ -91,30 +95,99 @@ export const App = () => {
 
   const empty = board.issues.length === 0 && board.other.length === 0;
 
+  /** The agents of the issue whose CHANNEL is this chat. */
+  const agentsFor = (id: string): BoardThread[] =>
+    board.issues.find((issue) => issue.channel === id)?.agents ?? [];
+
+  /** When `id` is a worker, the issue channel to climb back to. */
+  const breadcrumbFor = (
+    id: string,
+  ): { label: string; to: string } | undefined => {
+    for (const issue of board.issues) {
+      if (
+        issue.channel !== undefined &&
+        issue.agents.some((agent) => agent.id === id)
+      ) {
+        return { label: `#${issue.number} ${issue.title}`, to: issue.channel };
+      }
+    }
+    return undefined;
+  };
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       <aside className="w-80 shrink-0 overflow-y-auto border-r border-border">
         <div className="px-4 py-3 font-mono text-sm font-semibold tracking-tight">
           alchemy-org
         </div>
-        {board.issues.map((issue) => (
-          <IssueSection
-            key={issue.number}
-            issue={issue}
-            selected={selected}
-            onSelect={select}
-          />
-        ))}
+        {board.issues.map((issue) => {
+          const busy =
+            issue.agents.some((agent) => agent.status === "running") ||
+            undefined;
+          return (
+            <button
+              key={issue.number}
+              type="button"
+              disabled={issue.channel === undefined}
+              onClick={() => issue.channel && select(issue.channel)}
+              className={cn(
+                "flex w-full items-center gap-2 border-b border-border/50 px-4 py-3 text-left",
+                issue.channel !== undefined && "hover:bg-accent",
+                selected !== undefined &&
+                  (issue.channel === selected ||
+                    issue.agents.some((agent) => agent.id === selected)) &&
+                  "bg-accent",
+              )}
+            >
+              <span
+                className={cn(
+                  "rounded-full border px-1.5 py-0 font-mono text-[10px] leading-4",
+                  ISSUE_STATE[issue.state],
+                )}
+              >
+                #{issue.number}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {issue.title}
+              </span>
+              {busy && (
+                <span className="size-2 shrink-0 animate-pulse rounded-full bg-emerald-500" />
+              )}
+              {issue.channel === undefined && (
+                <span className="shrink-0 text-[10px] text-muted-foreground">
+                  queued
+                </span>
+              )}
+            </button>
+          );
+        })}
         {board.other.length > 0 && (
           <div className="mt-2">
             <div className="px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Other threads
             </div>
-            <ThreadList
-              threads={board.other}
-              selected={selected}
-              onSelect={select}
-            />
+            {board.other.map((thread) => (
+              <button
+                key={thread.id}
+                type="button"
+                onClick={() => select(thread.id)}
+                className={cn(
+                  "flex w-full items-center gap-2 py-1.5 pr-4 pl-6 text-left text-sm hover:bg-accent",
+                  selected === thread.id && "bg-accent",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    STATUS_COLOR[thread.status],
+                  )}
+                />
+                <span className="min-w-0 flex-1 truncate">{thread.label}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {thread.ticks} ticks
+                </span>
+              </button>
+            ))}
           </div>
         )}
         {empty && (
@@ -132,12 +205,18 @@ export const App = () => {
               id === selected ? "flex" : "hidden",
             )}
           >
-            <ChatView id={id} active={id === selected} />
+            <ChatView
+              id={id}
+              active={id === selected}
+              agents={agentsFor(id)}
+              breadcrumb={breadcrumbFor(id)}
+              onOpenThread={select}
+            />
           </div>
         ))}
         {selected === undefined && (
           <div className="flex flex-1 items-center justify-center text-muted-foreground">
-            Select a thread
+            Select an issue
           </div>
         )}
       </main>
@@ -145,82 +224,22 @@ export const App = () => {
   );
 };
 
-const IssueSection = ({
-  issue,
-  selected,
-  onSelect,
-}: {
-  issue: BoardIssue;
-  selected: string | undefined;
-  onSelect: (id: string) => void;
-}) => (
-  <div className="border-b border-border/50">
-    <div className="flex items-center gap-2 px-4 pt-3 pb-1.5">
-      <span
-        className={cn(
-          "rounded-full border px-1.5 py-0 font-mono text-[10px] leading-4",
-          ISSUE_STATE[issue.state],
-        )}
-      >
-        #{issue.number}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-medium">
-        {issue.title}
-      </span>
-    </div>
-    {issue.threads.length === 0 ? (
-      <div className="px-4 pb-2.5 text-xs text-muted-foreground">
-        No agents on it yet
-      </div>
-    ) : (
-      <ThreadList
-        threads={issue.threads}
-        selected={selected}
-        onSelect={onSelect}
-      />
-    )}
-  </div>
-);
+interface ChatContext {
+  /** The channel's dispatched workers — dispatch cards link to them. */
+  agents: BoardThread[];
+  /** Set when this chat is itself a worker: the way back up. */
+  breadcrumb: { label: string; to: string } | undefined;
+  onOpenThread: (id: string) => void;
+}
 
-const ThreadList = ({
-  threads,
-  selected,
-  onSelect,
-}: {
-  threads: BoardThread[];
-  selected: string | undefined;
-  onSelect: (id: string) => void;
-}) => (
-  <div className="pb-2">
-    {threads.map((thread) => (
-      <button
-        key={thread.id}
-        type="button"
-        onClick={() => onSelect(thread.id)}
-        className={cn(
-          "flex w-full items-center gap-2 py-1.5 pr-4 pl-6 text-left text-sm hover:bg-accent",
-          selected === thread.id && "bg-accent",
-        )}
-      >
-        <span
-          className={cn(
-            "size-2 shrink-0 rounded-full",
-            STATUS_COLOR[thread.status],
-          )}
-        />
-        <span className="min-w-0 flex-1 truncate">{thread.label}</span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {thread.ticks} ticks
-        </span>
-      </button>
-    ))}
-  </div>
-);
-
-const ChatView = ({ id, active }: { id: string; active: boolean }) => {
+const ChatView = ({
+  id,
+  active,
+  ...context
+}: { id: string; active: boolean } & ChatContext) => {
   const [initial, setInitial] = useState<UIMessage[]>();
 
-  // snapshot first, then the live tail rides useChat (streaming.md)
+  // snapshot first, then the live tail rides the poll (streaming.md)
   useEffect(() => {
     fetch(`/api/chats/${encodeURIComponent(id)}/messages`)
       .then(
@@ -238,18 +257,21 @@ const ChatView = ({ id, active }: { id: string; active: boolean }) => {
       </div>
     );
   }
-  return <Chat id={id} initial={initial} active={active} />;
+  return <Chat id={id} initial={initial} active={active} {...context} />;
 };
 
 const Chat = ({
   id,
   initial,
   active,
+  agents,
+  breadcrumb,
+  onOpenThread,
 }: {
   id: string;
   initial: UIMessage[];
   active: boolean;
-}) => {
+} & ChatContext) => {
   const { messages, sendMessage, status, setMessages } = useChat({
     id,
     messages: initial,
@@ -287,7 +309,32 @@ const Chat = ({
   }, [id, status, setMessages, active]);
 
   const watchOnly =
-    !id.startsWith("Issues:") && !id.startsWith("PullRequestReviewer:");
+    !id.startsWith("Channel:") && !id.startsWith("PullRequestReviewer:");
+
+  // dispatch tool-call → worker thread: the channel runs SERIALLY, so
+  // the Nth dispatch of agent X is the Nth child run of term X
+  const workerByCall = useMemo(() => {
+    const counts = new Map<string, number>();
+    const byCall = new Map<string, BoardThread>();
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (
+          part.type === "dynamic-tool" &&
+          part.toolName === "dispatch" &&
+          typeof (part.input as any)?.agent === "string"
+        ) {
+          const agent = (part.input as any).agent as string;
+          const index = counts.get(agent) ?? 0;
+          counts.set(agent, index + 1);
+          const worker = agents.filter((thread) => thread.term === agent)[
+            index
+          ];
+          if (worker !== undefined) byCall.set(part.toolCallId, worker);
+        }
+      }
+    }
+    return byCall;
+  }, [messages, agents]);
 
   // reasoning expansion is USER-owned: collapsed by default, and a
   // trace the user opened stays open. Keyed by the trace's text
@@ -311,8 +358,17 @@ const Chat = ({
 
   return (
     <>
-      <div className="border-b border-border px-4 py-2 font-mono text-xs text-muted-foreground">
-        {id}
+      <div className="flex items-center gap-3 border-b border-border px-4 py-2 font-mono text-xs text-muted-foreground">
+        {breadcrumb && (
+          <button
+            type="button"
+            onClick={() => onOpenThread(breadcrumb.to)}
+            className="shrink-0 rounded border border-border px-2 py-0.5 hover:bg-accent"
+          >
+            ← {breadcrumb.label}
+          </button>
+        )}
+        <span className="truncate">{id}</span>
       </div>
       {/* initial="instant": open AT the end, no scroll animation */}
       <Conversation className="min-h-0 flex-1" initial="instant">
@@ -358,6 +414,52 @@ const Chat = ({
                   }
                   if (part.type === "dynamic-tool") {
                     const tool = part;
+                    if (tool.toolName === "dispatch") {
+                      const worker = workerByCall.get(tool.toolCallId);
+                      const agent =
+                        (tool.input as any)?.agent ?? "subagent";
+                      const running =
+                        worker?.status === "running" ||
+                        (worker === undefined &&
+                          tool.state === "input-available");
+                      return (
+                        <button
+                          key={index}
+                          type="button"
+                          disabled={worker === undefined}
+                          onClick={() => worker && onOpenThread(worker.id)}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5 text-left",
+                            worker !== undefined && "hover:bg-accent",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "size-2.5 shrink-0 rounded-full",
+                              running
+                                ? "animate-pulse bg-emerald-500"
+                                : worker?.status === "crashed"
+                                  ? "bg-red-500"
+                                  : "bg-zinc-500",
+                            )}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-medium">
+                              {agent}
+                              {running ? " — working…" : ""}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {String((tool.input as any)?.task ?? "")}
+                            </span>
+                          </span>
+                          {worker !== undefined && (
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {worker.ticks} ticks · view thread →
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }
                     return (
                       <Tool key={index}>
                         <ToolHeader
@@ -400,7 +502,7 @@ const Chat = ({
               placeholder={
                 watchOnly
                   ? "Watch-only: this run has no world door"
-                  : "Message the desk (lands as a GitHub comment)…"
+                  : "Message the channel (lands as a GitHub comment)…"
               }
               disabled={watchOnly}
             />

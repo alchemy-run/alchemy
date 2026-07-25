@@ -31,6 +31,9 @@ import * as S from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import {
   ArchivesLive,
+  DeepArchives,
+  DeepArchivesLive,
+  PaleographyLive,
   Researcher,
   ResearcherCharter,
   Scholar,
@@ -374,6 +377,69 @@ describe("KernelMemory", () => {
         // what pulls in the tool physics — nominal and encapsulated
         Effect.provide(
           testLayer(model, ArchivesLive.pipe(Layer.provide(search.layer))),
+        ),
+      );
+    },
+  );
+
+  it.effect(
+    "the skill graph: activating a parent exposes its referenced skills",
+    () => {
+      const model = Model.make([
+        // call 0: only the parent is visible — activate it
+        () => [
+          Model.toolCall("skill", {
+            action: "activate",
+            skill: "DeepArchives",
+          }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: the child surfaced in the teaching — descend
+        () => [
+          Model.toolCall("skill", {
+            action: "activate",
+            skill: "Paleography",
+          }),
+          Model.finish("tool-calls"),
+        ],
+        // call 2: both teachings in hand — answer
+        () => [
+          Model.text("Tenth century, by the letterforms."),
+          Model.finish(),
+        ],
+      ]);
+      const search = recordingSearch();
+      return Effect.gen(function* () {
+        const scholar = yield* interpret(
+          Scholar,
+          AI.prose`
+            You date manuscripts. The stacks are ${DeepArchives}.`,
+        );
+        const answer = yield* scholar.dispatch("Date this manuscript.");
+        expect(answer).toBe("Tenth century, by the letterforms.");
+        expect(model.calls).toHaveLength(3);
+
+        const skillTool = (index: number) =>
+          model.calls[index]!.tools.find((tool) => tool.name === "skill")!;
+        // depth-2 skills stay HIDDEN until their parent activates —
+        // the intrinsic's available list is the reachable set
+        expect(skillTool(0).description).toContain("DeepArchives");
+        expect(skillTool(0).description).not.toContain("Paleography");
+        expect(skillTool(1).description).toContain("Paleography");
+        // each activation returned its teaching as the tool result
+        expect(Model.promptText(model.calls[1]!)).toContain(
+          "call numbers first",
+        );
+        expect(Model.promptText(model.calls[2]!)).toContain("letterforms");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          testLayer(
+            model,
+            Layer.mergeAll(DeepArchivesLive, PaleographyLive).pipe(
+              Layer.provide(search.layer),
+            ),
+          ),
         ),
       );
     },
@@ -783,8 +849,8 @@ ${
         ).pipe(Effect.provide([ObserverLive, search.layer]));
         yield* researcher.dispatch("find x", { key: "o#1" });
 
-        // token slices stream while a sampling is in flight — the
-        // canonical record is everything else
+        // token slices + live tool calls stream while a sampling is in
+        // flight — the canonical record is everything else
         const deltas = seen.filter(
           (observation) => observation.type === "assistant-delta",
         );
@@ -793,8 +859,20 @@ ${
             (delta) => delta.type === "assistant-delta" && delta.delta,
           ),
         ).toEqual(["answer"]); // tick 1's streamed text
+        const liveCalls = seen.filter(
+          (observation) => observation.type === "tool-call",
+        );
+        expect(
+          liveCalls.map((call) => call.type === "tool-call" && call.toolName),
+        ).toEqual(["search"]); // tick 0's call, surfaced live
+        // `parked` races the dispatch resolution (the loop emits it
+        // right after quiescence) — exclude the live-view facts and
+        // the park from the canonical-record assertion
         const record = seen.filter(
-          (observation) => observation.type !== "assistant-delta",
+          (observation) =>
+            observation.type !== "assistant-delta" &&
+            observation.type !== "tool-call" &&
+            observation.type !== "parked",
         );
         expect(record.map((observation) => observation.type)).toEqual([
           "admitted",
@@ -807,9 +885,12 @@ ${
         expect(seen.every((observation) => observation.key === "o#1")).toBe(
           true,
         );
-        expect(seen.map((observation) => observation.seq)).toEqual([
-          0, 1, 2, 3, 4, 5,
-        ]);
+        expect(
+          seen.every(
+            (observation, index) =>
+              index === 0 || observation.seq > seen[index - 1]!.seq,
+          ),
+        ).toBe(true);
         const second = record[2]!;
         if (second.type === "assistant") {
           expect(second.toolCalls[0]!.name).toBe("search");

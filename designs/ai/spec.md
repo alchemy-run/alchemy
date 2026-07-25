@@ -105,6 +105,40 @@ Splice semantics at render (every tick):
 | `Effect<string>` etc. | the value, inline | — |
 | plain value | `String(value)` | — |
 
+### 2a. The skill graph: teachings reference deeper skills
+
+A skill's TEACHING may itself splice `Skill` terms — and activating
+the parent EXPOSES them for activation. Access propagates one level
+per activation: the charter's mentions are the roots; each tick the
+kernel walks the ACTIVE frontier to a fixpoint (cycles are fine), and
+the reachable set is what the `skill` intrinsic offers. A depth-2
+skill is invisible — not even named — until its parent activates.
+
+```ts
+export const CodingLive = Coding.make`
+  Writing code in the checkout, with ${Grep}, ${ReadFile}, ${Bash}, …
+
+  Deeper craft, when the work calls for it: ${Reconciling} for
+  resource providers, ${TypedErrors} for growing distilled's error
+  unions, ${LiveTesting} for proving against the real cloud.`;
+// Layer<Coding, never, …tools | Reconciling | TypedErrors | LiveTesting>
+```
+
+This is progressive disclosure at arbitrary depth (the CLAUDE.md
+"tree of files loaded at the right time", but typed): the Engineer's
+charter mentions only `${Coding}`; a run that never touches resource
+providers never spends a token on the Reconciler doctrine, and one
+that does descends exactly as deep as the work demands. The child
+tags ride the parent Layer's requirement channel, so an unprovided
+doctrine is a COMPILE error, not a silent gap in the tree — and the
+whole graph stays auditable the same way charters are (`rg
+'\$\{Reconciling\}'` finds every teaching that exposes it).
+
+Composition note: the child implementations must be OUTPUTS of the
+provided layer stack (`Layer.provideMerge`, not `Layer.provide`) so
+the kernel can resolve them from the interpret context at activation
+time.
+
 ### 2b. Mention is presence — and there is deliberately no silent grant
 
 **Decision (2026-07-23): a capability exists in a tick if and only if its
@@ -660,6 +694,62 @@ Component vs subagent vs skill: component = same thread, an *aspect* of one
 conversation; subagent = fresh window, isolation, parallelism; skill = a
 component the model opts into (dormant, activation returns its prose as a
 tool result — cache-safe).
+
+### 9b. Named agents vs anonymous workers — the role-justification test
+
+**Decision (2026-07-25): keep both delegation primitives; roles are the
+exception, spawn is the default.** This was challenged ("why have strict
+identities like Engineer and Reviewer at all? just Skills, and let the
+process spawn whatever subagents the task needs — identity-less
+processes") and examined; the two primitives turn out to answer
+DIFFERENT authority questions and neither subsumes the other:
+
+- **`spawn` is capability ATTENUATION.** A worker receives a SUBSET of
+  its spawner's stance (tools/skills handed over pre-activated), runs
+  as a leaf, returns prose, disappears. It can never hold a power its
+  spawner lacks — which is exactly what makes it safe to leave to the
+  model's judgment, and exactly why it cannot implement separation of
+  powers. A channel that could spawn its own "reviewer" would need
+  `Approve` in its OWN stance first, at which point the two-key
+  ceremony (one party records approval, another's merge ratifies
+  against the ledger) is theater.
+- **`dispatch` is capability AMPLIFICATION with containment.** A named
+  agent has its own charter Layer — tools, skills, physics, budget the
+  DISPATCHER DOES NOT HOLD. Disjoint authority needs identities to
+  hang the disjoint charters on. And the audit story stays static:
+  `rg '\$\{Approve\}'` enumerates every charter that could ever hold
+  that power; with ad-hoc spawn composition it would degrade to a
+  runtime question about what some process wrote into a task string.
+
+A NAMED agent is warranted iff at least one holds:
+
+1. **Disjoint authority** — it must hold a power its callers must not
+   (Reviewer: `Approve` without `Merge`; the channel: the reverse).
+2. **Fixed doctrine** — its charter is org policy that must not vary
+   per dispatch (the review rubric; not the dispatcher's whim).
+3. **Own physics** — its Layer carries an init closure the caller
+   cannot hand over: workspace acquisition, code-enforced budgets,
+   `Ref`-observed achieve state (Engineer's worktree + 40-tick budget;
+   ResourceEngineer's 150-tick budget).
+4. **Typed result** — callers depend on its dispatch resolving with a
+   typed artifact, not prose (Engineer → `PullRequestRef`;
+   ResourceEngineer → `ServiceReport`).
+
+Everything else is a `spawn` with skills — do NOT mint a role per task
+flavor; task flavor is what SKILLS are for. (Applying the test to the
+org: ResourceEngineer initially smelled like "Engineer with different
+skills", but it passes on 3 AND 4 — different physics, different typed
+exit — so both roles stand. The test is the point: it prunes future
+roles before they accrete.) Note also that `spawn` is a MODEL
+affordance (an intrinsic in the agent loop); deterministic code
+delegates by dispatching actors it holds — code cannot spawn.
+
+Naming note: `AI.Agent` deliberately does NOT rename to `AI.Process`.
+The AGENT is the interpretable charter (the loop); a PROCESS is a
+sealed `Context.Service` whose Layer wires a private agent to the
+world. Erlang/OTP landed the same way: registered names for the
+processes that carry supervision or a service contract, anonymous pids
+for ephemeral workers.
 
 ## 10. Layers, composition, testing
 

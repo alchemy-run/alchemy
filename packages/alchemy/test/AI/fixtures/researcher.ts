@@ -42,3 +42,22 @@ export class Scholar extends AI.Agent<Scholar>()("Scholar") {}
 export const ScholarCharter = AI.prose`
 You answer questions with evidence. For historical questions, use
 ${Archives}.`;
+
+/**
+ * The skill GRAPH fixtures: a teaching may reference DEEPER skills —
+ * activating the parent exposes the child for activation (access one
+ * level per activation, a tree the agent descends as the work
+ * demands). {@link Paleography} is prose-only; {@link DeepArchives}
+ * references it alongside its own tool grant.
+ */
+export class Paleography extends AI.Skill<Paleography>()("Paleography") {}
+
+export const PaleographyLive = Paleography.make`
+Reading ancient hands: date scripts by their letterforms; never
+guess a date you cannot argue from the strokes.`;
+
+export class DeepArchives extends AI.Skill<DeepArchives>()("DeepArchives") {}
+
+export const DeepArchivesLive = DeepArchives.make`
+The deep stacks: ${Search} sparingly — call numbers first. For
+manuscript work, ${Paleography} is the deeper craft.`;

@@ -49,6 +49,20 @@ export type KernelObservation = ObservationEnvelope &
         readonly delta: string;
       }
     | {
+        /**
+         * A tool call the IN-FLIGHT sampling just made, surfaced the
+         * moment it streams — its handler may run for minutes (a
+         * dispatched subagent) before the sampling's final `assistant`
+         * observation restates it. Live-view fact, same caveats as
+         * `assistant-delta`.
+         */
+        readonly type: "tool-call";
+        readonly tick: number;
+        readonly toolCallId: string;
+        readonly toolName: string;
+        readonly input: unknown;
+      }
+    | {
         /** One sampling's response — text and/or tool calls. */
         readonly type: "assistant";
         /** The sampling's ordinal within its run (0-based). */
@@ -71,6 +85,14 @@ export type KernelObservation = ObservationEnvelope &
         readonly toolName: string;
         readonly output: unknown;
         readonly isFailure: boolean;
+      }
+    | {
+        /**
+         * The run QUIESCED with an empty inbox and is parked — its
+         * work is done until the world moves (the next input wakes
+         * it). The line between "working" and "waiting" for any UI.
+         */
+        readonly type: "parked";
       }
     | { readonly type: "settled" }
     | { readonly type: "crashed"; readonly error: string }
