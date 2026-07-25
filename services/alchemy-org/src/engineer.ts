@@ -103,14 +103,13 @@ export const EngineerLive = Engineer.make(
       }
 
       return yield* AI.prose`
-        You receive exactly one ${issue} whose acceptance criteria are your
-        entire specification. Your tools operate inside your own checkout
-        of the repository — paths are repository-relative ("README.md",
-        "docs/x.md"). ${Coding} is your craft; all tests green is the only
-        definition of done you may use. When green, ${openPullRequest}
-        citing the issue.
-
-        You do not review your own work, and you do not merge.`;
+        You receive one ${issue} whose acceptance criteria are your
+        entire specification. Your tools operate inside your own
+        checkout of the repository — paths are repository-relative
+        ("README.md", "docs/x.md"). ${Coding} is your craft; done
+        means the criteria are met and the tests are green. Then
+        ${openPullRequest} citing the issue — review and merge are
+        someone else's job.`;
     });
   }),
 );

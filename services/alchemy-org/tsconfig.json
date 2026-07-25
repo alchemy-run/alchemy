@@ -2,8 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "include": [
     "alchemy.run.ts",
+    "vite.config.ts",
     "src/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "ui/**/*.ts",
+    "ui/**/*.tsx"
   ],
   "compilerOptions": {
     "noEmit": true,

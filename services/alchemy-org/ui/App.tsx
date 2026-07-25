@@ -20,7 +20,6 @@ import {
   ToolHeader,
   ToolInput,
   ToolOutput,
-  type ToolPart,
 } from "@/components/ai-elements/tool";
 import { cn } from "@/lib/utils";
 
@@ -48,8 +47,8 @@ export const App = () => {
     let live = true;
     const tick = () =>
       fetch("/api/chats")
-        .then((response) => response.json())
-        .then((data: ChatSummary[]) => {
+        .then((response) => response.json() as Promise<ChatSummary[]>)
+        .then((data) => {
           if (!live) return;
           setChats(data);
           setSelected((current) => current ?? data[0]?.id);
@@ -121,7 +120,10 @@ const ChatView = ({ id }: { id: string }) => {
   // snapshot first, then the live tail rides useChat (streaming.md)
   useEffect(() => {
     fetch(`/api/chats/${encodeURIComponent(id)}/messages`)
-      .then((response) => (response.ok ? response.json() : []))
+      .then(
+        (response) =>
+          (response.ok ? response.json() : []) as Promise<UIMessage[]>,
+      )
       .then(setInitial)
       .catch(() => setInitial([]));
   }, [id]);
@@ -165,15 +167,13 @@ const Chat = ({ id, initial }: { id: string; initial: UIMessage[] }) => {
                     );
                   }
                   if (part.type === "dynamic-tool") {
-                    const tool = part as ToolPart;
+                    const tool = part;
                     return (
                       <Tool key={index}>
                         <ToolHeader
-                          type={tool.type as never}
+                          type={tool.type}
                           state={tool.state}
-                          toolName={
-                            "toolName" in tool ? tool.toolName : undefined
-                          }
+                          toolName={tool.toolName}
                         />
                         <ToolContent>
                           <ToolInput input={tool.input} />

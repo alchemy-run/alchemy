@@ -256,6 +256,64 @@ sandbox-as-service extraction (§13) replaces the evaluator without
 touching this contract, and exposing `thread`/a sub-model through the
 same bridge is the RLM configuration.
 
+### 2d. Writing prose: the context-engineering doctrine
+
+Frontier-model context engineering converged (Anthropic, "The new rules
+of context engineering", 2026-07) on lessons this design mostly enforces
+structurally; where it doesn't, they are AUTHORING doctrine for
+charters and skills:
+
+- **Situation over rules.** State the situation that motivates a
+  behavior and let the model derive it, instead of legislating the
+  behavior. The Reviewer's charter says *"there is no author to talk
+  to, and your words are relayed once"* — not *"never ask questions;
+  one pass, ALWAYS"*. Rules accrete during debugging as workarounds
+  for a weaker model's judgment; each one is a standing tax (the model
+  reconciles overlapping directives every tick) and a wrong answer for
+  some inputs. Audit charters the way Anthropic audited its system
+  prompt: delete every directive the situation already implies.
+- **Never restate the type system.** Capability-by-omission is a
+  type-level fact — prose like "you do not merge" in a charter with no
+  merge grant restates what the tool surface already makes impossible.
+  Say where the authority lives if it helps orientation ("review and
+  merge are someone else's job"), not what the agent "must not" do.
+- **Tool descriptions own tool usage.** A `Tool`'s template is its
+  single teaching site; parameter schemas (enums, defaults, optional
+  keys) are behavior hints stronger than examples. A skill's teaching
+  carries only the CROSS-tool discipline no single description can
+  (read-before-edit digest chains, verify-after-edit, output paging) —
+  never per-tool narration. Repetition between charter, skill, and
+  tool description is the conflict-generating pattern the audit
+  removes.
+- **Interfaces over examples.** Examples anchor exploration to the
+  example's shape. Prefer expressive parameter design; codemode (§2c)
+  is the strong form — generated signatures ARE the interface, and the
+  model composes them as code.
+- **Progressive disclosure is the architecture, twice.** Model-pulled:
+  a skill mention is ACCESS, its teaching enters context only at
+  ACTIVATION (the `skill` intrinsic). Author-pushed: the turn is code —
+  a fragment can render only in the phase where it earns its tokens.
+  Charters should lean on both instead of front-loading; a teaching
+  needed in every tick belongs in the charter, one needed sometimes
+  belongs in a skill, one needed rarely belongs in a workspace file
+  the agent reads.
+- **Skills encode taste, not process — except where process IS the
+  product.** The best skills carry opinions particular to this org
+  (the Reconciler shape, the Typed Error patch flywheel, the speed
+  doctrine). Load-bearing procedure is legitimate constraint; style
+  preferences dressed as procedure are not.
+- **Rich references beat prose specs.** The strongest context is code
+  the model already reads natively: acceptance criteria as the rubric,
+  a test suite as the spec, a typed artifact (`achieve`, §6) as the
+  outcome. Prefer splicing a reference (issue, diff, file) over
+  summarizing it.
+- **Prose is a per-model dial.** These lessons assume frontier
+  judgment. The charter is a LAYER: a term bound to a small model may
+  legitimately carry tighter rules than the same term bound to a
+  frontier one. Rule density is a property of the binding, not the
+  contract — which is exactly why prose lives on Layers and not on
+  declarations.
+
 ## 3. State is `Ref`
 
 The charter's init closure is the instance; there are no hooks because
@@ -749,5 +807,13 @@ return yield* AI.prose`
   other capability). Mode chosen per term at Layer composition; switch at
   run start or compaction boundaries, not per tick.
 - `spawn` context grants (pass-by-reference thread spans) + model tier.
+- **Auto-memory: a library pattern, NOT a kernel seam.** Both halves are
+  ordinary userland: the write side is a granted tool (or plain
+  `Workspace` file convention), the read side is an effectful splice in
+  the turn (`${memory.recall()}`) — per-tick stance assembly IS the
+  injection mechanism harnesses have to build as a feature. The
+  compaction policy (author-owned, §7) is the natural distill-before-
+  evict write point. Deferred work is only packaging: a reusable
+  `Memory` service with swappable stores (workspace files, DO, R2).
 - `AI.model`/sampling-param annotations + multi-model kernel registry (§12).
 - Whole-program head vs frozen-first-branch (empirical; needs a benchmark).

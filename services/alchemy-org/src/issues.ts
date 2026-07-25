@@ -137,12 +137,10 @@ export const IssuesAgentLive = IssuesAgent.make`
 
   An issue is READY when its acceptance criteria are precise enough
   that someone who has read nothing else could start work. Until it
-  is, ${Comment} asks the author for exactly what is missing — one
-  question per gap, no boilerplate — and then this process STOPS and
-  waits: the author's reply arrives as the next message. Judge each
-  reply against what was asked; when it closes the gaps, triage
-  proceeds; when it does not, ask again — never re-ask an answered
-  question.
+  is, ${Comment} asks the author for exactly what is missing, and
+  this process stops and waits: the author's reply arrives as the
+  next message. When the reply closes the gaps, triage proceeds; when
+  it does not, ask for what is still missing.
 
   A ready issue is handed to ${Engineer}, whose pull request must
   cite the issue.

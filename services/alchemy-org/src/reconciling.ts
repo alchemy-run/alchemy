@@ -26,14 +26,19 @@ export const ReconcilingLive = Reconciling.make`
      tags.
   4. RETURN — the fresh Attributes.
 
-  NEVER branch the body on output === undefined into separate
-  create/update paths — that is rename-and-branch, and it re-introduces
-  every assumption the old split made. Each sync step is independently
-  idempotent: crash mid-reconcile, re-run, converge. output is a CACHE
-  of stable identifiers, never proof of existence. delete is
-  idempotent — already-gone is success. diff receives Input props:
-  narrow with isResolved(news) before property access; never declare
-  Input<T> in Props interfaces. Existence-only resources (permissions,
-  routes, associations) are observe → create-if-missing; there is no
-  sync step. Canonical shapes: AWS/S3/Bucket.ts, AWS/SQS/Queue.ts,
+  The invariants:
+
+  - NEVER branch the body on output === undefined into separate
+    create/update paths — that is rename-and-branch, and it
+    re-introduces every assumption the old split made.
+  - Each sync step is independently idempotent: crash mid-reconcile,
+    re-run, converge.
+  - output is a CACHE of stable identifiers, never proof of existence.
+  - delete is idempotent — already-gone is success.
+  - diff receives Input props: narrow with isResolved(news) before
+    property access; never declare Input<T> in Props interfaces.
+  - Existence-only resources (permissions, routes, associations) are
+    observe → create-if-missing; there is no sync step.
+
+  Canonical shapes: AWS/S3/Bucket.ts, AWS/SQS/Queue.ts,
   AWS/DynamoDB/Table.ts, Cloudflare/Workers/Worker.ts.`;
