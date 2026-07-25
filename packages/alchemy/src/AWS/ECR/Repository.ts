@@ -67,6 +67,8 @@ export interface Repository extends Resource<
     registryId: string;
     /** Whether image tags are `MUTABLE` or `IMMUTABLE`. */
     imageTagMutability: ecr.ImageTagMutability;
+    /** Whether repository images are scanned when they are pushed. */
+    scanOnPush: boolean;
     /** The JSON lifecycle policy applied to the repository, if any. */
     lifecyclePolicyText?: string;
     /** The JSON repository permissions policy, if any. */
@@ -219,6 +221,10 @@ export const RepositoryProvider = () =>
               repository.imageTagMutability ??
               output?.imageTagMutability ??
               "MUTABLE",
+            scanOnPush:
+              repository.imageScanningConfiguration?.scanOnPush ??
+              output?.scanOnPush ??
+              false,
             lifecyclePolicyText: output?.lifecyclePolicyText,
             policy: yield* readPolicy(repositoryName),
             tags: output?.tags ?? {},
@@ -289,6 +295,34 @@ export const RepositoryProvider = () =>
 
           const repositoryArn = repository.repositoryArn as RepositoryArn;
 
+          // Sync mutable repository settings against OBSERVED cloud state.
+          // These must converge for adopted repositories and out-of-band
+          // drift, not only when createRepository happens to run.
+          const desiredImageTagMutability =
+            news.imageTagMutability ?? "MUTABLE";
+          if (
+            (repository.imageTagMutability ?? "MUTABLE") !==
+            desiredImageTagMutability
+          ) {
+            yield* ecr.putImageTagMutability({
+              repositoryName,
+              imageTagMutability: desiredImageTagMutability,
+            });
+          }
+
+          const desiredScanOnPush = news.scanOnPush ?? false;
+          if (
+            (repository.imageScanningConfiguration?.scanOnPush ?? false) !==
+            desiredScanOnPush
+          ) {
+            yield* ecr.putImageScanningConfiguration({
+              repositoryName,
+              imageScanningConfiguration: {
+                scanOnPush: desiredScanOnPush,
+              },
+            });
+          }
+
           // Sync lifecycle policy — observed ↔ desired.
           if (news.lifecyclePolicyText) {
             yield* ecr.putLifecyclePolicy({
@@ -333,10 +367,8 @@ export const RepositoryProvider = () =>
             repositoryArn,
             repositoryUri: repository.repositoryUri as RepositoryUri,
             registryId: repository.registryId!,
-            imageTagMutability:
-              news.imageTagMutability ??
-              repository.imageTagMutability ??
-              "MUTABLE",
+            imageTagMutability: desiredImageTagMutability,
+            scanOnPush: desiredScanOnPush,
             lifecyclePolicyText: news.lifecyclePolicyText,
             policy: desiredPolicy,
             tags: desiredTags,
@@ -398,6 +430,9 @@ export const RepositoryProvider = () =>
                     registryId: repository.registryId!,
                     imageTagMutability:
                       repository.imageTagMutability ?? "MUTABLE",
+                    scanOnPush:
+                      repository.imageScanningConfiguration?.scanOnPush ??
+                      false,
                     lifecyclePolicyText,
                     policy: yield* readPolicy(repository.repositoryName),
                     tags,

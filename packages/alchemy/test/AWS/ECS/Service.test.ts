@@ -208,6 +208,12 @@ test.provider(
       });
       const svc = described.services?.[0];
       expect(svc?.serviceArn).toEqual(created.serviceArn);
+      expect(svc?.taskDefinition).toEqual(taskDefinitionArn);
+      expect(svc?.runningCount).toBe(0);
+      expect(svc?.pendingCount).toBe(0);
+      expect(svc?.deployments).toHaveLength(1);
+      expect(svc?.deployments?.[0]?.status).toBe("PRIMARY");
+      expect(svc?.deployments?.[0]?.rolloutState).toBe("COMPLETED");
       expect(
         svc?.deploymentConfiguration?.deploymentCircuitBreaker?.enable,
       ).toBe(true);

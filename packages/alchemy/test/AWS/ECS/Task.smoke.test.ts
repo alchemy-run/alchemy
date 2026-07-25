@@ -3,6 +3,7 @@ import { SecurityGroup } from "@/AWS/EC2";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
 import * as Test from "@/Test/Alchemy";
+import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -56,7 +57,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       }
       const publicSubnetIds = subnetIds.slice(0, 2);
 
-      const { url, targetGroupArn } = yield* stack.deploy(
+      const {
+        url,
+        targetGroupArn,
+        clusterArn,
+        serviceName,
+        taskDefinitionArn,
+      } = yield* stack.deploy(
         Effect.gen(function* () {
           // The default VPC supplies public routing and subnets; this managed
           // security group remains isolated to the test and is swept exactly.
@@ -115,6 +122,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           return {
             url: service.url,
             targetGroupArn: service.targetGroupArn,
+            clusterArn: service.clusterArn,
+            serviceName: service.serviceName,
+            taskDefinitionArn: service.taskDefinitionArn,
           };
         }),
       );
@@ -122,30 +132,29 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       expect(url).toBeTruthy();
       expect(targetGroupArn).toBeTruthy();
 
-      // Gate on target health via the ELBv2 API (no DNS): wait until the task
-      // is placed, the image pulled, and the ALB health check on `/health`
-      // passes. Polling via the API — rather than HTTP — avoids looking up the
-      // freshly-created ALB hostname before its DNS record exists (a premature
-      // lookup gets NXDOMAIN negatively cached by the resolver for minutes).
-      yield* elbv2
-        .describeTargetHealth({ TargetGroupArn: targetGroupArn! })
-        .pipe(
-          Effect.flatMap((result) => {
-            const states = (result.TargetHealthDescriptions ?? []).map(
-              (t) => t.TargetHealth?.State,
-            );
-            return states.includes("healthy")
-              ? Effect.void
-              : Effect.fail(
-                  new Error(`no healthy target yet: [${states.join(", ")}]`),
-                );
-          }),
-          Effect.tapError((error) => Effect.logError(error)),
-          // ~12 min budget: image pull + container boot + the ALB health check
-          // ramp (default 5 × 30s consecutive successes) can take several
-          // minutes for a cold Fargate task.
-          Effect.retry({ schedule: Schedule.spaced("12 seconds"), times: 60 }),
-        );
+      // Service.deploy now blocks until the exact task definition is the sole
+      // completed deployment, ECS counts have settled, and every registered
+      // target is healthy. Prove that contract immediately out-of-band.
+      const describedService = yield* ecs.describeServices({
+        cluster: clusterArn,
+        services: [serviceName],
+      });
+      const deployedService = describedService.services?.[0];
+      expect(deployedService?.taskDefinition).toBe(taskDefinitionArn);
+      expect(deployedService?.desiredCount).toBe(1);
+      expect(deployedService?.runningCount).toBe(1);
+      expect(deployedService?.pendingCount).toBe(0);
+      expect(deployedService?.deployments).toHaveLength(1);
+      expect(deployedService?.deployments?.[0]?.status).toBe("PRIMARY");
+
+      const targetHealth = yield* elbv2.describeTargetHealth({
+        TargetGroupArn: targetGroupArn!,
+      });
+      expect(
+        (targetHealth.TargetHealthDescriptions ?? []).map(
+          (target) => target.TargetHealth?.State,
+        ),
+      ).toEqual(["healthy"]);
 
       // The ALB has been active for a while now, so its DNS resolves. Probe the
       // public endpoint (still retry through edge/DNS propagation).
