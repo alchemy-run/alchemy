@@ -23,35 +23,62 @@ import {
 } from "@/components/ai-elements/tool";
 import { cn } from "@/lib/utils";
 
-interface ChatSummary {
+interface BoardThread {
   id: string;
   term: string;
   key: string;
   status: "running" | "settled" | "crashed";
   ticks: number;
+  createdAt: number;
   updatedAt: number;
+  label: string;
 }
 
-const STATUS_COLOR: Record<ChatSummary["status"], string> = {
+interface BoardIssue {
+  number: number;
+  title: string;
+  state: "open" | "closed" | "unknown";
+  updatedAt: number;
+  threads: BoardThread[];
+}
+
+interface Board {
+  issues: BoardIssue[];
+  other: BoardThread[];
+}
+
+const STATUS_COLOR: Record<BoardThread["status"], string> = {
   running: "bg-emerald-500",
   settled: "bg-zinc-500",
   crashed: "bg-red-500",
 };
 
-export const App = () => {
-  const [chats, setChats] = useState<ChatSummary[]>([]);
-  const [selected, setSelected] = useState<string>();
+const ISSUE_STATE: Record<BoardIssue["state"], string> = {
+  open: "text-emerald-400 border-emerald-400/40",
+  closed: "text-violet-400 border-violet-400/40",
+  unknown: "text-zinc-400 border-zinc-500/40",
+};
 
-  // the run index — poll it; the org is the source of truth
+export const App = () => {
+  const [board, setBoard] = useState<Board>({ issues: [], other: [] });
+  const [selected, setSelected] = useState<string>();
+  // every thread the user has opened STAYS MOUNTED (hidden, polling
+  // paused) — switching back restores its state and scroll position
+  const [visited, setVisited] = useState<string[]>([]);
+  const select = (id: string) => {
+    setVisited((current) =>
+      current.includes(id) ? current : [...current, id],
+    );
+    setSelected(id);
+  };
+
   useEffect(() => {
     let live = true;
     const tick = () =>
-      fetch("/api/chats")
-        .then((response) => response.json() as Promise<ChatSummary[]>)
+      fetch("/api/board")
+        .then((response) => response.json() as Promise<Board>)
         .then((data) => {
-          if (!live) return;
-          setChats(data);
-          setSelected((current) => current ?? data[0]?.id);
+          if (live) setBoard(data);
         })
         .catch(() => {});
     tick();
@@ -62,51 +89,55 @@ export const App = () => {
     };
   }, []);
 
+  const empty = board.issues.length === 0 && board.other.length === 0;
+
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <aside className="w-72 shrink-0 overflow-y-auto border-r border-border">
+      <aside className="w-80 shrink-0 overflow-y-auto border-r border-border">
         <div className="px-4 py-3 font-mono text-sm font-semibold tracking-tight">
           alchemy-org
         </div>
-        {chats.map((chat) => (
-          <button
-            key={chat.id}
-            type="button"
-            onClick={() => setSelected(chat.id)}
-            className={cn(
-              "flex w-full flex-col gap-0.5 border-b border-border/50 px-4 py-2.5 text-left text-sm hover:bg-accent",
-              selected === chat.id && "bg-accent",
-            )}
-          >
-            <span className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  STATUS_COLOR[chat.status],
-                )}
-              />
-              <span className="font-medium">{chat.term}</span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                {chat.ticks} ticks
-              </span>
-            </span>
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              {chat.key}
-            </span>
-          </button>
+        {board.issues.map((issue) => (
+          <IssueSection
+            key={issue.number}
+            issue={issue}
+            selected={selected}
+            onSelect={select}
+          />
         ))}
-        {chats.length === 0 && (
+        {board.other.length > 0 && (
+          <div className="mt-2">
+            <div className="px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Other threads
+            </div>
+            <ThreadList
+              threads={board.other}
+              selected={selected}
+              onSelect={select}
+            />
+          </div>
+        )}
+        {empty && (
           <div className="px-4 py-8 text-sm text-muted-foreground">
-            No runs yet — file an issue on test-alchemy.
+            No activity yet — file an issue on test-alchemy.
           </div>
         )}
       </aside>
       <main className="flex min-w-0 flex-1 flex-col">
-        {selected ? (
-          <ChatView key={selected} id={selected} />
-        ) : (
+        {visited.map((id) => (
+          <div
+            key={id}
+            className={cn(
+              "min-h-0 flex-1 flex-col",
+              id === selected ? "flex" : "hidden",
+            )}
+          >
+            <ChatView id={id} active={id === selected} />
+          </div>
+        ))}
+        {selected === undefined && (
           <div className="flex flex-1 items-center justify-center text-muted-foreground">
-            Select a run
+            Select a thread
           </div>
         )}
       </main>
@@ -114,7 +145,79 @@ export const App = () => {
   );
 };
 
-const ChatView = ({ id }: { id: string }) => {
+const IssueSection = ({
+  issue,
+  selected,
+  onSelect,
+}: {
+  issue: BoardIssue;
+  selected: string | undefined;
+  onSelect: (id: string) => void;
+}) => (
+  <div className="border-b border-border/50">
+    <div className="flex items-center gap-2 px-4 pt-3 pb-1.5">
+      <span
+        className={cn(
+          "rounded-full border px-1.5 py-0 font-mono text-[10px] leading-4",
+          ISSUE_STATE[issue.state],
+        )}
+      >
+        #{issue.number}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+        {issue.title}
+      </span>
+    </div>
+    {issue.threads.length === 0 ? (
+      <div className="px-4 pb-2.5 text-xs text-muted-foreground">
+        No agents on it yet
+      </div>
+    ) : (
+      <ThreadList
+        threads={issue.threads}
+        selected={selected}
+        onSelect={onSelect}
+      />
+    )}
+  </div>
+);
+
+const ThreadList = ({
+  threads,
+  selected,
+  onSelect,
+}: {
+  threads: BoardThread[];
+  selected: string | undefined;
+  onSelect: (id: string) => void;
+}) => (
+  <div className="pb-2">
+    {threads.map((thread) => (
+      <button
+        key={thread.id}
+        type="button"
+        onClick={() => onSelect(thread.id)}
+        className={cn(
+          "flex w-full items-center gap-2 py-1.5 pr-4 pl-6 text-left text-sm hover:bg-accent",
+          selected === thread.id && "bg-accent",
+        )}
+      >
+        <span
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            STATUS_COLOR[thread.status],
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate">{thread.label}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {thread.ticks} ticks
+        </span>
+      </button>
+    ))}
+  </div>
+);
+
+const ChatView = ({ id, active }: { id: string; active: boolean }) => {
   const [initial, setInitial] = useState<UIMessage[]>();
 
   // snapshot first, then the live tail rides useChat (streaming.md)
@@ -135,17 +238,72 @@ const ChatView = ({ id }: { id: string }) => {
       </div>
     );
   }
-  return <Chat id={id} initial={initial} />;
+  return <Chat id={id} initial={initial} active={active} />;
 };
 
-const Chat = ({ id, initial }: { id: string; initial: UIMessage[] }) => {
-  const { messages, sendMessage, status } = useChat({
+const Chat = ({
+  id,
+  initial,
+  active,
+}: {
+  id: string;
+  initial: UIMessage[];
+  active: boolean;
+}) => {
+  const { messages, sendMessage, status, setMessages } = useChat({
     id,
     messages: initial,
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
 
-  const watchOnly = !id.startsWith("Issues:") && !id.startsWith("PullRequests:");
+  // the LIVE VIEW is snapshot polling: the server accumulates the
+  // in-flight sampling's text/thinking deltas and appends them as a
+  // streaming-state assistant message, so a 1s re-fetch renders
+  // tokens as they arrive. Paused while HIDDEN (the thread stays
+  // mounted; polling resumes on re-selection). The SSE stream only
+  // exists for the send-message round trip — never clobber it
+  // mid-flight.
+  useEffect(() => {
+    if (!active) return;
+    if (status === "streaming" || status === "submitted") return;
+    let live = true;
+    const interval = setInterval(() => {
+      fetch(`/api/chats/${encodeURIComponent(id)}/messages`)
+        .then(
+          (response) =>
+            (response.ok ? response.json() : undefined) as Promise<
+              UIMessage[] | undefined
+            >,
+        )
+        .then((fresh) => {
+          if (live && fresh !== undefined) setMessages(fresh);
+        })
+        .catch(() => {});
+    }, 1000);
+    return () => {
+      live = false;
+      clearInterval(interval);
+    };
+  }, [id, status, setMessages, active]);
+
+  const watchOnly =
+    !id.startsWith("Issues:") && !id.startsWith("PullRequestReviewer:");
+
+  // reasoning expansion is USER-owned: collapsed by default, and a
+  // trace the user opened stays open. Keyed by the trace's text
+  // prefix — stable while it streams AND across the handoff from the
+  // live bubble to the canonical message (the text only appends).
+  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const traceKey = (text: string) => text.slice(0, 48);
+  const toggleTrace = (key: string) =>
+    setExpandedTraces((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const onSubmit = (message: PromptInputMessage) => {
     if (message.text?.trim()) void sendMessage({ text: message.text });
@@ -153,12 +311,44 @@ const Chat = ({ id, initial }: { id: string; initial: UIMessage[] }) => {
 
   return (
     <>
-      <Conversation className="min-h-0 flex-1">
+      <div className="border-b border-border px-4 py-2 font-mono text-xs text-muted-foreground">
+        {id}
+      </div>
+      {/* initial="instant": open AT the end, no scroll animation */}
+      <Conversation className="min-h-0 flex-1" initial="instant">
         <ConversationContent className="mx-auto max-w-3xl">
           {messages.map((message) => (
             <Message from={message.role} key={message.id}>
               <MessageContent>
                 {message.parts.map((part, index) => {
+                  if (part.type === "reasoning") {
+                    const key = traceKey(part.text);
+                    const open = expandedTraces.has(key);
+                    return (
+                      <div
+                        key={index}
+                        className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleTrace(key)}
+                          className="flex w-full cursor-pointer items-center gap-1.5 text-left font-medium"
+                        >
+                          <span className="font-mono">{open ? "▾" : "▸"}</span>
+                          {part.state === "streaming" ? (
+                            <span className="animate-pulse">Thinking…</span>
+                          ) : (
+                            "Thought process"
+                          )}
+                        </button>
+                        {open && (
+                          <div className="mt-2 whitespace-pre-wrap">
+                            {part.text}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
                   if (part.type === "text") {
                     return (
                       <div key={index} className="whitespace-pre-wrap">

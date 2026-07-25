@@ -783,7 +783,20 @@ ${
         ).pipe(Effect.provide([ObserverLive, search.layer]));
         yield* researcher.dispatch("find x", { key: "o#1" });
 
-        expect(seen.map((observation) => observation.type)).toEqual([
+        // token slices stream while a sampling is in flight — the
+        // canonical record is everything else
+        const deltas = seen.filter(
+          (observation) => observation.type === "assistant-delta",
+        );
+        expect(
+          deltas.map(
+            (delta) => delta.type === "assistant-delta" && delta.delta,
+          ),
+        ).toEqual(["answer"]); // tick 1's streamed text
+        const record = seen.filter(
+          (observation) => observation.type !== "assistant-delta",
+        );
+        expect(record.map((observation) => observation.type)).toEqual([
           "admitted",
           "input", // the dispatched task
           "assistant", // tick 0: calls search
@@ -795,13 +808,13 @@ ${
           true,
         );
         expect(seen.map((observation) => observation.seq)).toEqual([
-          0, 1, 2, 3, 4,
+          0, 1, 2, 3, 4, 5,
         ]);
-        const second = seen[2]!;
+        const second = record[2]!;
         if (second.type === "assistant") {
           expect(second.toolCalls[0]!.name).toBe("search");
         }
-        const result = seen[3]!;
+        const result = record[3]!;
         if (result.type === "tool-result") {
           expect(result.toolName).toBe("search");
           expect(result.isFailure).toBe(false);

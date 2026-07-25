@@ -34,6 +34,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ApprovalsLive } from "./approvals.ts";
 import {
+  buildBoard,
   Chats,
   ChatsLive,
   ChatsObserverLive,
@@ -50,7 +51,6 @@ import { PullRequests, PullRequestsLive } from "./pull-requests.ts";
 import { ReconcilingLive } from "./reconciling.ts";
 import { testAlchemy } from "./repos.ts";
 import { ResourceEngineerLive } from "./resource-engineer.ts";
-import { ReviewerLive } from "./reviewer.ts";
 import {
   ApproveRecorded,
   CloseIssueLive,
@@ -59,6 +59,7 @@ import {
   MergePullRequestLive,
   OpenPullRequestLive,
   ReadDiffLive,
+  ReadIssueLive,
   SearchIssuesLive,
 } from "./tools/index.ts";
 import { TypedErrorsLive } from "./typed-errors.ts";
@@ -112,6 +113,12 @@ const GitHubBindings = Layer.mergeAll(
  */
 const Model = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
+  config: {
+    // extended thinking: the traces stream to the UI as reasoning
+    // deltas and land on the transcript as reasoning parts
+    thinking: { type: "enabled", budget_tokens: 4096 },
+    max_tokens: 16384,
+  },
 }).pipe(
   Layer.provide(
     AnthropicClient.layerConfig({
@@ -171,13 +178,6 @@ const EngineerLayer = EngineerLive.pipe(
   Layer.provide(WorkspacesLive),
 );
 
-/** The Reviewer: reads the diff, records its verdict in the approvals
- * ledger (visible as a PR comment) — the merge tool ratifies against it. */
-const ReviewerLayer = ReviewerLive.pipe(
-  Layer.provide([ApproveRecorded, CommentLive, ReadDiffLive]),
-  Layer.provide(Kernel),
-);
-
 /**
  * The ResourceEngineer: the factory's per-service laborer. The ONE
  * physics bundle is the generic ${Coding} toolbox; the doctrines
@@ -210,13 +210,18 @@ export const OrgLive = Layer.mergeAll(
   PullRequestsLive,
   FactoryLayer,
 ).pipe(
-  Layer.provide([EngineerLayer, ReviewerLayer]),
+  Layer.provide(EngineerLayer),
   Layer.provide([
     CommentLive,
     SearchIssuesLive,
     LinkIssuesLive,
     CloseIssueLive,
     MergePullRequestLive,
+    // the PR desk reviews the artifact itself: diff + cited issue,
+    // verdict recorded in the approvals ledger the merge ratifies
+    ApproveRecorded,
+    ReadDiffLive,
+    ReadIssueLive,
   ]),
   Layer.provide(Kernel),
   Layer.provide(SqliteLedger(".alchemy/org-ledger.sqlite")),
@@ -225,8 +230,8 @@ export const OrgLive = Layer.mergeAll(
   // the one architectural latency left (~2×3s per issue→merge loop);
   // webhooks on Cloudflare make delivery push and remove it entirely.
   Layer.provide(GitHub.RepositoryEventSourcePolling({ every: "3 seconds" })),
-  // ONE approvals ledger, shared by the Reviewer's Approve and the
-  // PullRequests desk's merge ratification (memoized by reference)
+  // ONE approvals ledger: the desk's Approve records into it and its
+  // merge ratifies against it (memoized by reference)
   Layer.provideMerge(ApprovalsLive),
   // the chat projection (same const the Kernel bundle observes into)
   // and the comment binding surface — both consumed by the HTTP edge
@@ -279,6 +284,32 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
       }),
     );
 
+    // the ISSUE BOARD: every chat grouped under the GitHub issue it
+    // serves, via desk keys + kernel dispatch parentage (chats.ts)
+    const board = HttpRouter.add(
+      "GET",
+      "/api/board",
+      Effect.gen(function* () {
+        const [chatList, openIssues] = yield* Effect.all(
+          [
+            chats.list(),
+            issues.list().pipe(
+              Effect.map((list) =>
+                list.map((issue) => ({
+                  number: issue.number,
+                  title: issue.title,
+                })),
+              ),
+              // GitHub down ≠ board down: states degrade to "unknown"
+              Effect.catch(() => Effect.succeed(undefined)),
+            ),
+          ] as const,
+          { concurrency: 2 },
+        );
+        return yield* HttpServerResponse.json(buildBoard(chatList, openIssues));
+      }),
+    );
+
     const chatMessages = HttpRouter.add(
       "GET",
       "/api/chats/:id/messages",
@@ -326,7 +357,7 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
         const threadNumber = Number(key.match(/#(\d+)$/)?.[1]);
         if (
           text.length > 0 &&
-          (term === "Issues" || term === "PullRequests") &&
+          (term === "Issues" || term === "PullRequestReviewer") &&
           Number.isFinite(threadNumber)
         ) {
           yield* comment({
@@ -427,6 +458,7 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
       fetch: yield* HttpRouter.toHttpEffect(
         Layer.mergeAll(
           listChats,
+          board,
           chatMessages,
           chatStream,
           factoryWave,

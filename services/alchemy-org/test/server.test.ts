@@ -1,6 +1,6 @@
 /**
  * E2E composition smoke: the WHOLE org Layer graph — processes
- * (Issues, PullRequests), agents (Engineer, Reviewer), skills
+ * (Issues, PullRequests), agents (Engineer), skills
  * (Coding), tools (GitHub bindings, local toolbox), kernel + model,
  * ledger, event polling — builds against real physics, the charters
  * interpret, the pollers register, and the sealed Shapes read the

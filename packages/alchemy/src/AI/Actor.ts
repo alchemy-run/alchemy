@@ -1,6 +1,12 @@
 import type * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 
+/** A reference to a kernel run: which term, which key. */
+export interface RunRef {
+  readonly term: string;
+  readonly key: string;
+}
+
 /**
  * The Actor — what the kernel returns when it interprets any term's
  * charter: a mailbox with a serial run loop, spoken to only in the
@@ -29,7 +35,10 @@ export interface Actor<In = unknown> {
    */
   dispatch(
     item: In,
-    options?: { readonly key?: string },
+    options?: {
+      readonly key?: string;
+      readonly parent?: RunRef;
+    },
   ): Effect.Effect<unknown, never, RuntimeContext>;
   /**
    * Admit one work item, fire-and-forget (the admission half alone).
@@ -38,10 +47,18 @@ export interface Actor<In = unknown> {
    * to correlate by (`owner/repo#7`). Naming the run is what makes
    * `steer(key, …)` and `settle(key, …)` addressable from code that
    * never saw a kernel-minted session.
+   *
+   * `options.parent` records WHICH RUN caused this admission — the
+   * kernel's own `dispatch` intrinsic stamps it automatically, so
+   * observability can reconstruct the delegation tree (issue desk →
+   * engineer → …). Purely observational: it never affects routing.
    */
   send(
     item: In,
-    options?: { readonly key?: string },
+    options?: {
+      readonly key?: string;
+      readonly parent?: RunRef;
+    },
   ): Effect.Effect<void, never, RuntimeContext>;
   /**
    * Run-key–addressed input: deliver a message to a SPECIFIC run,

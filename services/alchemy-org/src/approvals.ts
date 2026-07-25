@@ -2,7 +2,7 @@
  * The org's approval ledger — the in-process record the merge tool
  * ratifies against. WHY not GitHub reviews: the factory runs on ONE
  * token, and GitHub rejects self-approval (the account that opened a
- * PR cannot APPROVE-review it), so the Reviewer's verdict is recorded
+ * PR cannot APPROVE-review it), so the desk's verdict is recorded
  * here and made VISIBLE as a PR comment. A human's real APPROVED
  * review is honored too (the merge tool checks both).
  */
@@ -18,9 +18,9 @@ export interface PullRequestKey {
 }
 
 export interface ApprovalsService {
-  /** Record the Reviewer's approval of a pull request. */
+  /** Record the review approval of a pull request. */
   readonly record: (pr: PullRequestKey) => Effect.Effect<void>;
-  /** Has the Reviewer approved this pull request? */
+  /** Has this pull request been approved? */
   readonly isApproved: (pr: PullRequestKey) => Effect.Effect<boolean>;
 }
 

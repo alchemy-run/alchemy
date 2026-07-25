@@ -411,6 +411,9 @@ const pollPullRequests = (
         pull_request: {
           number: pull.number,
           title: pull.title,
+          // the body carries the ISSUE LINKAGE ("Closes #N") — consumers
+          // correlate a PR to the issue it resolves from it
+          body: pull.body ?? null,
           merged: pull.merged_at !== null,
         },
         repository: repositoryPayload(props),

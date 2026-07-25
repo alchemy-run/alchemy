@@ -17,7 +17,7 @@ never a way to skip review.` {}
  * Merge a pull request — refuses without an approval (the tool's own
  * prose promises this; this layer enforces it over the RAW
  * `GitHub.MergePullRequest` binding). Two approval sources are
- * honored: the Reviewer's recorded verdict (the {@link Approvals}
+ * honored: the recorded review verdict (the {@link Approvals}
  * ledger — the factory's one token cannot APPROVE-review its own PRs)
  * and a real GitHub APPROVED review from a human.
  */
@@ -42,7 +42,7 @@ export const MergePullRequestLive = Layer.effect(
           );
           if (!reviews.some((review) => review.state === "APPROVED")) {
             return yield* Effect.fail(
-              `refusing to merge #${input.pr.number}: no approval — ask the Reviewer first`,
+              `refusing to merge #${input.pr.number}: no approval — review and approve it first`,
             );
           }
         }

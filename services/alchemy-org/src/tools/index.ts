@@ -7,7 +7,7 @@
  *
  * The autonomy dial: `Approve` is an ordinary Tool. Whether the org
  * is human-supervised or autonomous is decided by which Layer
- * implements it for the Reviewer — never by the charter.
+ * implements it for the reviewing desk — never by the charter.
  */
 export * from "./Approve.ts";
 export * from "./ApplyPatch.ts";
@@ -23,6 +23,7 @@ export * from "./MergePullRequest.ts";
 export * from "./OpenIssue.ts";
 export * from "./OpenPullRequest.ts";
 export * from "./ReadDiff.ts";
+export * from "./ReadIssue.ts";
 export * from "./ReadFile.ts";
 export * from "./ReadOutput.ts";
 export * from "./Reply.ts";

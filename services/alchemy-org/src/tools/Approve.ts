@@ -12,7 +12,7 @@ and judged against its issue — your approval is what authorizes the
 merge.` {}
 
 /**
- * The Reviewer's verdict, RECORDED (the merge tool ratifies against
+ * The review verdict, RECORDED (the merge tool ratifies against
  * the {@link Approvals} ledger) and VISIBLE (a PR comment). Recorded
  * in-process rather than as a GitHub review because the factory runs
  * on one token and GitHub rejects self-approval.
@@ -29,7 +29,7 @@ export const ApproveRecorded = Layer.effect(
         yield* approvals.record(input.pr);
         yield* comment({
           issue_number: input.pr.number,
-          body: "✅ **Approved by the Reviewer** — judged against the originating issue's acceptance criteria.",
+          body: "✅ **Approved** — judged against the originating issue's acceptance criteria.",
         }).pipe(
           Effect.mapError(
             (error) => `${error.operation} failed: ${error.message}`,

@@ -7,8 +7,10 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
+import * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import { RuntimeContext } from "../RuntimeContext.ts";
@@ -654,18 +656,102 @@ export const KernelMemory: Layer.Layer<
               }) as Effect.Effect<Toolkit.WithHandler<any> | undefined>);
 
         // one model step: everything the provider + toolkit do for one
-        // sampling — tool handlers execute INSIDE this call. Transient
-        // provider failures retry with capped backoff before dying: a
-        // 429 must never poison a run key.
+        // sampling — tool handlers execute INSIDE this call. The wire is
+        // STREAMED so an observer sees text/thinking tokens as they
+        // arrive (`onDelta`); the parts are consolidated back into the
+        // non-streaming response shape the loop consumes, block metadata
+        // merged across deltas (Anthropic's thinking SIGNATURE arrives
+        // as a late empty delta and must survive onto the consolidated
+        // reasoning part, or the next request fails). Transient provider
+        // failures retry with capped backoff before dying: a 429 must
+        // never poison a run key. A retry may replay deltas — the final
+        // `assistant` observation is the canonical record.
         const step = (
           prompt: Prompt.Prompt,
           toolkit: Toolkit.WithHandler<any> | undefined,
+          onDelta: (
+            channel: "text" | "reasoning",
+            delta: string,
+          ) => Effect.Effect<void> = () => Effect.void,
         ) =>
-          (
-            model.generateText as (
-              options: unknown,
-            ) => Effect.Effect<LanguageModel.GenerateTextResponse<any>, unknown>
-          )({ prompt, toolkit }).pipe(
+          Effect.gen(function* () {
+            const parts: Array<unknown> = [];
+            // open blocks by stream id (providers interleave by index)
+            const open = new Map<
+              string,
+              { type: "text" | "reasoning"; text: string; metadata: any }
+            >();
+            yield* Stream.runForEach(
+              (
+                model.streamText as (
+                  options: unknown,
+                ) => Stream.Stream<any, unknown>
+              )({ prompt, toolkit }),
+              (part: any) =>
+                Effect.gen(function* () {
+                  switch (part.type) {
+                    case "text-start":
+                    case "reasoning-start": {
+                      open.set(part.id, {
+                        type: part.type === "text-start" ? "text" : "reasoning",
+                        text: "",
+                        metadata: { ...part.metadata },
+                      });
+                      return;
+                    }
+                    case "text-delta":
+                    case "reasoning-delta": {
+                      const kind =
+                        part.type === "text-delta" ? "text" : "reasoning";
+                      const block = open.get(part.id) ?? {
+                        type: kind as "text" | "reasoning",
+                        text: "",
+                        metadata: {},
+                      };
+                      open.set(part.id, block);
+                      block.text += part.delta;
+                      Object.assign(block.metadata, part.metadata);
+                      if (part.delta.length > 0) {
+                        yield* onDelta(kind, part.delta);
+                      }
+                      return;
+                    }
+                    case "text-end":
+                    case "reasoning-end": {
+                      const block = open.get(part.id);
+                      if (block === undefined) return;
+                      open.delete(part.id);
+                      Object.assign(block.metadata, part.metadata);
+                      parts.push(
+                        Response.makePart(block.type, {
+                          text: block.text,
+                          metadata: block.metadata,
+                        } as never),
+                      );
+                      return;
+                    }
+                    case "tool-call":
+                    case "tool-result":
+                    case "finish": {
+                      parts.push(part);
+                      return;
+                    }
+                    default:
+                      return;
+                  }
+                }),
+            );
+            // a provider that never closed a block still yields its text
+            for (const block of open.values()) {
+              parts.push(
+                Response.makePart(block.type, {
+                  text: block.text,
+                  metadata: block.metadata,
+                } as never),
+              );
+            }
+            return new LanguageModel.GenerateTextResponse<any>(parts as never);
+          }).pipe(
             Effect.retry({
               schedule: Schedule.exponential("1 second"),
               times: 3,
@@ -912,10 +998,15 @@ export const KernelMemory: Layer.Layer<
               delegates.set(name, yield* resolveDelegate(agent));
             }
             if (delegates.size > 0) {
+              // stamp the DELEGATION EDGE: the child run's `admitted`
+              // observation records who dispatched it, so observers can
+              // reconstruct the tree (issue desk → engineer → …)
               handlers.dispatch = (params: { agent: string; task: string }) =>
                 delegates
                   .get(params.agent)!
-                  .dispatch(params.task)
+                  .dispatch(params.task, {
+                    parent: { term: termName, key: run.key },
+                  })
                   .pipe(Effect.provide(RuntimeContext.phantom));
             }
             handlers.spawn = (params) => spawn(run, params);
@@ -1008,6 +1099,13 @@ export const KernelMemory: Layer.Layer<
                   run.prompt,
                 ),
                 tick.toolkit,
+                (channel, delta) =>
+                  observe(run, {
+                    type: "assistant-delta",
+                    tick: run.tick,
+                    channel,
+                    delta,
+                  }),
               );
               // where the time goes: one line per sampling (model
               // round-trip INCLUDING the tool handlers that ran
@@ -1023,6 +1121,7 @@ export const KernelMemory: Layer.Layer<
                 tick: run.tick,
                 ms: Date.now() - startedAt,
                 text: response.text,
+                reasoning: response.reasoningText,
                 toolCalls: response.toolCalls.map((call) => ({
                   id: call.id,
                   name: call.name,
@@ -1100,13 +1199,17 @@ export const KernelMemory: Layer.Layer<
          * that run (per-run init — the closure is the instance), then
          * start its loop.
          */
-        const admit = (item: unknown, key?: string) =>
+        const admit = (
+          item: unknown,
+          key?: string,
+          parent?: { readonly term: string; readonly key: string },
+        ) =>
           Effect.gen(function* () {
             const runKey = key ?? `run-${mintPrefix}-${minted++}`;
             let run = runs.get(runKey);
             if (run === undefined) {
               run = yield* makeRunState(runKey);
-              yield* observe(run, { type: "admitted" });
+              yield* observe(run, { type: "admitted", parent });
               // per-run init: the thread exists (Thread in scope for
               // thread-scoped setup); no sampling yet (no Tick)
               const initResult = yield* provideInit(run)(
@@ -1130,10 +1233,11 @@ export const KernelMemory: Layer.Layer<
           });
 
         const actor: Actor = {
-          send: (item, options) => Effect.asVoid(admit(item, options?.key)),
+          send: (item, options) =>
+            Effect.asVoid(admit(item, options?.key, options?.parent)),
           dispatch: (item, options) =>
             Effect.gen(function* () {
-              const run = yield* admit(item, options?.key);
+              const run = yield* admit(item, options?.key, options?.parent);
               if (yield* Deferred.isDone(run.settled)) {
                 return yield* Deferred.await(run.settled);
               }

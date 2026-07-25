@@ -25,11 +25,28 @@ export interface ObservationEnvelope {
  */
 export type KernelObservation = ObservationEnvelope &
   (
-    | { readonly type: "admitted" }
+    | {
+        readonly type: "admitted";
+        /** The run whose dispatch/send caused this admission, if any. */
+        readonly parent?: { readonly term: string; readonly key: string };
+      }
     | {
         /** A message appended to the run's thread: work item, steer, or note. */
         readonly type: "input";
         readonly text: string;
+      }
+    | {
+        /**
+         * One TOKEN SLICE of an in-flight sampling — text or thinking as
+         * the provider streams it. Purely a live-view fact: the final
+         * `assistant` observation restates the whole sampling and is the
+         * canonical record (deltas need not be retained, and a transient
+         * provider retry may replay them).
+         */
+        readonly type: "assistant-delta";
+        readonly tick: number;
+        readonly channel: "text" | "reasoning";
+        readonly delta: string;
       }
     | {
         /** One sampling's response — text and/or tool calls. */
@@ -39,6 +56,8 @@ export type KernelObservation = ObservationEnvelope &
         /** Model round-trip INCLUDING the tool handlers that ran inside it. */
         readonly ms: number;
         readonly text: string;
+        /** The sampling's thinking trace, when the model produced one. */
+        readonly reasoning?: string;
         /** Tool calls the model made this sampling; empty = quiesced. */
         readonly toolCalls: ReadonlyArray<{
           readonly id: string;
