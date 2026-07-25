@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@alchemy.run/better-auth": "workspace:*",
+    "@alchemy.run/dashboard": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
