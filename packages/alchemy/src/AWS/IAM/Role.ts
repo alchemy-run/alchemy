@@ -373,6 +373,10 @@ export const RoleProvider = () =>
 
       return {
         stables: ["roleArn", "roleName"],
+        // Other services' cloud-side teardown assumes roles mid-delete
+        // (e.g. SageMaker HyperPod deletes node ENIs via the instance
+        // group's execution role) — nuke deletes roles in its final tier.
+        nuke: { deleteLast: true },
         list: () =>
           Effect.gen(function* () {
             // IAM is global; `listRoles` enumerates every role in the

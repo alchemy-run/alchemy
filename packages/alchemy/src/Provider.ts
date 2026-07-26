@@ -134,6 +134,17 @@ export interface ProviderService<
      * {@link singleton}, these are ordinary multi-instance resources.
      */
     skip?: boolean;
+    /**
+     * Delete this resource type in a final tier, after every other type has
+     * finished deleting. Identity (IAM roles/policies) and core network
+     * primitives (VPCs, subnets, security groups) are consumed by *other*
+     * services' cloud-side teardown — e.g. SageMaker HyperPod deletes node
+     * ENIs by assuming the instance group's execution role — so deleting
+     * them concurrently can wedge those teardowns permanently. A two-tier
+     * order is cycle-proof by construction: nothing's deletion ever
+     * requires a role or VPC to be *gone* first.
+     */
+    deleteLast?: boolean;
   };
   /**
    * Enumerates every existing resource of this type in the ambient scope

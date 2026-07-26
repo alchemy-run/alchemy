@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { Command, Flag } from "effect/unstable/cli";
 import picomatch from "picomatch";
 
@@ -73,6 +74,26 @@ const timeoutFlag = Flag.integer("timeout").pipe(
       "hanging provider can't stall the whole run. Default: 120.",
   ),
   Flag.withDefault(120),
+);
+
+const independentFlag = Flag.boolean("independent").pipe(
+  Flag.withDescription(
+    "Delete every resource independently instead of in coordinated passes. " +
+      "In pass mode a single slow or hanging delete delays the next pass for " +
+      "everything; with --independent each resource retries its own delete " +
+      "with backoff, in parallel, until it succeeds or --retries is " +
+      "exhausted. Dependency violations resolve naturally as the blocking " +
+      "resources are deleted concurrently.",
+  ),
+  Flag.withDefault(false),
+);
+
+const retriesFlag = Flag.integer("retries").pipe(
+  Flag.withDescription(
+    "With --independent: retries per resource after the initial delete " +
+      "attempt (each attempt still bounded by --timeout). Default: 10.",
+  ),
+  Flag.withDefault(10),
 );
 
 interface DiscoveredProvider {
@@ -278,6 +299,8 @@ const nukeCommand = Command.make(
     verbose: verboseFlag,
     concurrency: concurrencyFlag,
     timeout: timeoutFlag,
+    independent: independentFlag,
+    retries: retriesFlag,
     include: includeFlag,
     exclude: excludeFlag,
     filter: filterFlag,
@@ -295,6 +318,8 @@ const nukeCommand = Command.make(
       verbose,
       concurrency,
       timeout,
+      independent,
+      retries,
       include,
       exclude,
       filter,
@@ -476,70 +501,145 @@ const nukeCommand = Command.make(
       const emitDelete = (event: NukeUI.DeleteEvent) =>
         deleteUI ? Effect.sync(() => deleteUI.emit(event)) : Effect.void;
 
-      let remaining = targets;
-      let pass = 0;
-      while (remaining.length > 0) {
-        pass += 1;
-        yield* emitDelete({ kind: "pass", pass });
+      // One delete attempt for a single resource, bounded by --timeout, with
+      // the failure cause logged to the stack's file logger. Failure stays on
+      // the error channel so callers can retry or fold it as they see fit.
+      const attemptDelete = (item: (typeof targets)[number]) =>
+        item.provider
+          .delete({
+            id: displayName(item.attr),
+            // Enumerated straight from the cloud, so there is no
+            // Alchemy namespace — an un-namespaced fqn is just the id.
+            fqn: displayName(item.attr),
+            instanceId: "",
+            olds: item.attr as never,
+            output: item.attr as never,
+            session: nukeSession,
+            bindings: [],
+            // Nuke is an explicit, operator-confirmed account
+            // teardown: allow destructive prerequisites (e.g.
+            // emptying a bucket) that normal destroys gate behind
+            // props such as `forceDestroy` — `olds` here is cloud
+            // Attributes, not the originally-deployed Props.
+            force: true,
+          })
+          .pipe(
+            Effect.timeout(`${timeout} seconds`),
+            Effect.tapCause((cause) =>
+              Effect.logWarning(
+                `nuke: delete failed for ${item.id} ${displayName(item.attr)}`,
+                cause,
+              ),
+            ),
+            Effect.provide(context),
+          );
 
-        const byType = groupBy(remaining, (t) => t.id);
-        const results = yield* Effect.all(
-          [...byType.values()].map((items) =>
-            Effect.all(
-              items.map((item) =>
-                item.provider
-                  .delete({
-                    id: displayName(item.attr),
-                    // Enumerated straight from the cloud, so there is no
-                    // Alchemy namespace — an un-namespaced fqn is just the id.
-                    fqn: displayName(item.attr),
-                    instanceId: "",
-                    olds: item.attr as never,
-                    output: item.attr as never,
-                    session: nukeSession,
-                    bindings: [],
-                    // Nuke is an explicit, operator-confirmed account
-                    // teardown: allow destructive prerequisites (e.g.
-                    // emptying a bucket) that normal destroys gate behind
-                    // props such as `forceDestroy` — `olds` here is cloud
-                    // Attributes, not the originally-deployed Props.
-                    force: true,
-                  })
-                  .pipe(
-                    Effect.timeout(`${timeout} seconds`),
-                    Effect.tapCause((cause) =>
-                      Effect.logWarning(
-                        `nuke: delete failed for ${item.id} ${displayName(item.attr)}`,
-                        cause,
+      const retrySchedule = Schedule.min([
+        Schedule.exponential("1 second"),
+        Schedule.spaced("15 seconds"),
+      ]);
+
+      let pass = 0;
+
+      // Delete one tier of resources to completion, returning the items
+      // that could not be deleted.
+      const runTier = (tier: typeof targets) =>
+        Effect.gen(function* () {
+          if (tier.length === 0) return [] as typeof targets;
+          if (independent) {
+            // Independent mode: no pass barrier. Every resource retries its
+            // own delete with capped exponential backoff, all in parallel
+            // (provider groups bounded by --concurrency, resources within a
+            // provider unbounded, matching pass mode). A dependency
+            // violation resolves on a later attempt once the blocking
+            // resource's concurrent delete lands — a hanging delete only
+            // ever stalls itself.
+            pass += 1;
+            yield* emitDelete({ kind: "pass", pass });
+            const results = yield* Effect.all(
+              [...groupBy(tier, (t) => t.id).values()].map((items) =>
+                Effect.all(
+                  items.map((item) =>
+                    attemptDelete(item).pipe(
+                      Effect.retry({ schedule: retrySchedule, times: retries }),
+                      Effect.matchCause({
+                        onSuccess: () => ({ item, ok: true as const }),
+                        onFailure: () => ({ item, ok: false as const }),
+                      }),
+                      // Only the final outcome is emitted, so the UI's
+                      // failure count reflects exhausted resources, not
+                      // transient attempts.
+                      Effect.tap((r) =>
+                        r.ok
+                          ? emitDelete({ kind: "deleted", id: item.id })
+                          : emitDelete({ kind: "failed", id: item.id }),
                       ),
                     ),
-                    Effect.provide(context),
-                    Effect.matchCause({
-                      onSuccess: () => ({ item, ok: true as const }),
-                      onFailure: () => ({ item, ok: false as const }),
-                    }),
-                    Effect.tap((r) =>
-                      r.ok
-                        ? emitDelete({ kind: "deleted", id: item.id })
-                        : emitDelete({ kind: "failed", id: item.id }),
+                  ),
+                  { concurrency: "unbounded" },
+                ),
+              ),
+              { concurrency },
+            );
+            return results.flat().flatMap((r) => (r.ok ? [] : [r.item]));
+          }
+          let remaining = tier;
+          while (remaining.length > 0) {
+            pass += 1;
+            yield* emitDelete({ kind: "pass", pass });
+
+            const byType = groupBy(remaining, (t) => t.id);
+            const results = yield* Effect.all(
+              [...byType.values()].map((items) =>
+                Effect.all(
+                  items.map((item) =>
+                    attemptDelete(item).pipe(
+                      Effect.matchCause({
+                        onSuccess: () => ({ item, ok: true as const }),
+                        onFailure: () => ({ item, ok: false as const }),
+                      }),
+                      Effect.tap((r) =>
+                        r.ok
+                          ? emitDelete({ kind: "deleted", id: item.id })
+                          : emitDelete({ kind: "failed", id: item.id }),
+                      ),
                     ),
                   ),
+                  { concurrency: "unbounded" },
+                ),
               ),
-              { concurrency: "unbounded" },
-            ),
-          ),
-          { concurrency },
-        );
+              { concurrency },
+            );
 
-        const failed = results.flat().flatMap((r) => (r.ok ? [] : [r.item]));
-        // No resource deleted this pass: dependencies can't resolve further,
-        // so stop instead of looping forever.
-        if (failed.length === remaining.length) {
-          remaining = failed;
-          break;
-        }
-        remaining = failed;
-      }
+            const failed = results
+              .flat()
+              .flatMap((r) => (r.ok ? [] : [r.item]));
+            // No resource deleted this pass: dependencies can't resolve
+            // further, so stop instead of looping forever.
+            if (failed.length === remaining.length) {
+              return failed;
+            }
+            remaining = failed;
+          }
+          return remaining;
+        });
+
+      // Identity and network primitives (`nuke.deleteLast` — IAM roles and
+      // policies, VPCs, subnets, security groups) are consumed by OTHER
+      // services' cloud-side teardown: e.g. SageMaker HyperPod deletes node
+      // ENIs by assuming the instance group's execution role, and deleting
+      // that role mid-teardown wedges the cluster in `Deleting` forever.
+      // Delete them in a final tier, after everything else has fully
+      // resolved. Two tiers cannot form an ordering cycle: nothing's
+      // deletion ever requires a role or VPC to be *gone* first.
+      const firstTier = targets.filter((t) => !t.provider.nuke?.deleteLast);
+      const lastTier = targets.filter(
+        (t) => t.provider.nuke?.deleteLast === true,
+      );
+      const remaining = [
+        ...(yield* runTier(firstTier)),
+        ...(yield* runTier(lastTier)),
+      ];
 
       if (deleteUI) {
         yield* Effect.sleep(10);
@@ -549,7 +649,9 @@ const nukeCommand = Command.make(
       const deleted = targets.length - remaining.length;
       yield* Console.log("");
       yield* Console.log(
-        `Deleted ${deleted} resource(s) over ${pass} pass(es).`,
+        independent
+          ? `Deleted ${deleted} resource(s).`
+          : `Deleted ${deleted} resource(s) over ${pass} pass(es).`,
       );
       if (remaining.length > 0) {
         yield* Console.log(
