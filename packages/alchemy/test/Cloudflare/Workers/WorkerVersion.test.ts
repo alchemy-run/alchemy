@@ -1,0 +1,285 @@
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import * as Test from "@/Test/Alchemy";
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import { expectUrlContains } from "../Utils/Http.ts";
+import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
+
+const { test } = Test.make({ providers: Cloudflare.providers() });
+
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
+
+const script = (marker: string) =>
+  `export default { fetch() { return new Response("${marker}"); } };`;
+
+/**
+ * The most recent deployment of a script — Cloudflare returns deployments
+ * newest-first. Retried briefly: a deployment created moments ago can lag
+ * the list endpoint.
+ */
+const latestDeployment = Effect.fn(function* (scriptName: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const { deployments } = yield* workers.listScriptDeployments({
+    accountId,
+    scriptName,
+  });
+  return deployments[0];
+});
+
+describe.concurrent("Cloudflare.Worker version", () => {
+  test.provider(
+    "preview version of a parent worker, promoted to a canary, then released",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // Deploy a parent worker and a zero-traffic preview version of it
+        // in one stack — `version.parent` takes the parent resource, which
+        // also orders the deploy (parent first) and the destroy (version
+        // released before the parent script is deleted).
+        const v1 = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("VersionParent", {
+              script: script("parent-marker-v1"),
+            });
+            const preview = yield* Cloudflare.Worker("VersionPreview", {
+              script: script("preview-marker-v1"),
+              version: { parent, message: "alchemy preview test" },
+            });
+            return { parent, preview };
+          }),
+        );
+
+        // The preview owns no script — it is a version of the parent's.
+        expect(v1.preview.versionOf).toEqual(v1.parent.workerName);
+        expect(v1.preview.workerName).toEqual(v1.parent.workerName);
+        expect(v1.preview.versionId).toBeDefined();
+        // Zero traffic: no deployment was created.
+        expect(v1.preview.deploymentId).toBeUndefined();
+        // Preview URL: `<version-prefix>-<script>.<subdomain>.workers.dev`.
+        expect(v1.preview.url).toMatch(
+          new RegExp(`^https://[0-9a-f]{8}-${v1.parent.workerName}\\.`),
+        );
+
+        // The parent's live deployment is untouched (100% on its own
+        // version, not the preview's).
+        const liveAfterPreview = yield* latestDeployment(v1.parent.workerName);
+        expect(liveAfterPreview?.versions).toHaveLength(1);
+        expect(liveAfterPreview?.versions[0].percentage).toEqual(100);
+        expect(liveAfterPreview?.versions[0].versionId).not.toEqual(
+          v1.preview.versionId,
+        );
+
+        // Both URLs serve their own code.
+        yield* expectUrlContains(v1.parent.url!, "parent-marker-v1", {
+          label: "parent serves its own code",
+        });
+        yield* expectUrlContains(v1.preview.url!, "preview-marker-v1", {
+          label: "preview URL serves the version's code",
+        });
+
+        // Promote the version to a canary at 25% of the parent's traffic.
+        const v2 = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("VersionParent", {
+              script: script("parent-marker-v1"),
+            });
+            const canary = yield* Cloudflare.Worker("VersionPreview", {
+              script: script("preview-marker-v1"),
+              version: { parent, traffic: 25 },
+            });
+            return { parent, canary };
+          }),
+        );
+
+        expect(v2.canary.versionId).toBeDefined();
+        expect(v2.canary.deploymentId).toBeDefined();
+        const liveWithCanary = yield* latestDeployment(v2.parent.workerName);
+        expect(liveWithCanary?.id).toEqual(v2.canary.deploymentId);
+        expect(
+          liveWithCanary?.versions.map((v) => v.percentage).sort(),
+        ).toEqual([25, 75]);
+        expect(
+          liveWithCanary?.versions.find(
+            (v) => v.versionId === v2.canary.versionId,
+          )?.percentage,
+        ).toEqual(25);
+
+        // Remove the canary from the stack — delete restores 100% of
+        // traffic to the version that held the majority.
+        const v3 = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("VersionParent", {
+              script: script("parent-marker-v1"),
+            });
+            return { parent };
+          }),
+        );
+
+        const liveAfterRelease = yield* latestDeployment(v3.parent.workerName);
+        expect(liveAfterRelease?.versions).toHaveLength(1);
+        expect(liveAfterRelease?.versions[0].percentage).toEqual(100);
+        expect(liveAfterRelease?.versions[0].versionId).not.toEqual(
+          v2.canary.versionId,
+        );
+        yield* expectUrlContains(v3.parent.url!, "parent-marker-v1", {
+          label: "parent still serves its own code after canary release",
+        });
+
+        yield* stack.destroy();
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* waitForWorkerToBeDeleted(v3.parent.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
+  test.provider(
+    "version.parent accepts a literal script name",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const { parent } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("StringParent", {
+              script: script("string-parent-v1"),
+            });
+            return { parent };
+          }),
+        );
+
+        // Reference the parent by its physical script name — the escape
+        // hatch for scripts not managed in any reachable stack state.
+        const parentName = parent.workerName;
+        const { preview } = yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* Cloudflare.Worker("StringParent", {
+              script: script("string-parent-v1"),
+            });
+            const preview = yield* Cloudflare.Worker("StringPreview", {
+              script: script("string-preview-v1"),
+              version: { parent: parentName },
+            });
+            return { preview };
+          }),
+        );
+
+        expect(preview.versionOf).toEqual(parentName);
+        yield* expectUrlContains(preview.url!, "string-preview-v1", {
+          label: "string-parent preview URL serves the version's code",
+        });
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 240_000 },
+  );
+
+  test.provider(
+    "gradual rollout splits traffic between a worker's own versions",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // First deploy: version.traffic is set, but there is no previous
+        // live version to split against — deploys at 100%.
+        const v1 = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("RolloutWorker", {
+              script: script("rollout-v1"),
+              version: { traffic: 50 },
+            });
+          }),
+        );
+        const liveV1 = yield* latestDeployment(v1.workerName);
+        expect(liveV1?.versions).toHaveLength(1);
+        expect(liveV1?.versions[0].percentage).toEqual(100);
+        yield* expectUrlContains(v1.url!, "rollout-v1", {
+          label: "first deploy serves at 100%",
+        });
+
+        // Second deploy with new code at 50%: the new version and the
+        // previously-live version split the traffic.
+        const v2 = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("RolloutWorker", {
+              script: script("rollout-v2"),
+              version: { traffic: 50, message: "canary rollout" },
+            });
+          }),
+        );
+        expect(v2.versionId).toBeDefined();
+        expect(v2.deploymentId).toBeDefined();
+        const liveV2 = yield* latestDeployment(v2.workerName);
+        expect(liveV2?.id).toEqual(v2.deploymentId);
+        expect(liveV2?.versions.map((v) => v.percentage).sort()).toEqual([
+          50, 50,
+        ]);
+        expect(liveV2?.versions.some((v) => v.versionId === v2.versionId)).toBe(
+          true,
+        );
+
+        // Promote: traffic back to the default full cutover.
+        const v3 = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("RolloutWorker", {
+              script: script("rollout-v3"),
+            });
+          }),
+        );
+        const liveV3 = yield* latestDeployment(v3.workerName);
+        expect(liveV3?.versions).toHaveLength(1);
+        expect(liveV3?.versions[0].percentage).toEqual(100);
+        yield* expectUrlContains(v3.url!, "rollout-v3", {
+          label: "full deploy serves the new version everywhere",
+        });
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
+  test.provider(
+    "rejects script-level settings on a version worker",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const { parent } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("InvalidParent", {
+              script: script("invalid-parent-v1"),
+            });
+            return { parent };
+          }),
+        );
+
+        const error = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* Cloudflare.Worker("InvalidParent", {
+                script: script("invalid-parent-v1"),
+              });
+              return yield* Cloudflare.Worker("InvalidPreview", {
+                script: script("invalid-preview-v1"),
+                version: { parent: parent.workerName },
+                crons: ["*/5 * * * *"],
+              });
+            }),
+          )
+          .pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(WorkerVersionConfigError);
+        expect(String(error)).toContain("script-level settings");
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 180_000 },
+  );
+});

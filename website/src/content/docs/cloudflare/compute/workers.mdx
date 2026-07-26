@@ -289,6 +289,90 @@ export default {
 };
 ```
 
+## Versions & gradual deployments
+
+Every deploy of a Worker uploads an immutable
+[version](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/),
+and a deployment routes traffic across up to two versions. By default
+alchemy deploys each new version at 100%. The `version` prop unlocks the
+other shapes: preview versions of another Worker, canaries, and gradual
+rollouts of a Worker's own deploys.
+
+### Preview versions
+
+Set `version.parent` to upload this Worker's code as a version of
+another Worker's script instead of creating a script of its own. The
+parent is usually a Worker deployed in another stage, referenced with
+`Worker.ref`:
+
+```typescript
+const parent = yield* Cloudflare.Worker.ref("Api", { stage: "staging" });
+
+const preview = yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  version: { parent, message: `PR #${process.env.PR_NUMBER}` },
+});
+```
+
+The version receives no traffic. `preview.url` is its static preview URL
+(`<version-prefix>-<name>.<subdomain>.workers.dev`), which serves the
+version's code while the parent's live traffic is untouched — the
+PR-preview workflow. The version carries its own bindings, so a preview
+stage binds its own KV namespaces, D1 databases, and secrets for a fully
+isolated environment. `parent` also accepts a literal script name as an
+escape hatch for scripts alchemy doesn't manage.
+
+### Canary traffic
+
+Give the version `traffic` to route a percentage of the parent's
+traffic to it, with the live version keeping the remainder:
+
+```typescript
+yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  version: { parent, traffic: 10 },
+});
+```
+
+Destroying the canary restores 100% of traffic to the live version.
+Cloudflare deployments split between at most two versions, so one
+canary can be active per script at a time.
+
+### Gradual rollouts
+
+On a Worker that owns its script, `version.traffic` below 100 turns a
+deploy into a gradual rollout — the new version takes that share and
+the previously-live version keeps the rest:
+
+```typescript
+yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  version: { traffic: 25 },
+});
+```
+
+Raise the number and re-deploy to ramp; remove the prop (or set 100) to
+promote fully. `traffic: 0` uploads the version without deploying it.
+The very first deploy of a script always goes to 100% since there is no
+previous version to split with.
+
+### What a version carries
+
+A version snapshots code, bindings, compatibility settings, and cache
+configuration. Script-level settings — routes, custom domains, crons,
+tags, observability, logpush, placement, limits, and the workers.dev
+subdomain — apply immediately to all versions, so they belong to the
+parent and are rejected on a version worker. During a gradual rollout
+of a Worker's own deploy, script-level settings keep their live values
+until the next full deploy.
+
+Two Cloudflare platform limits to know: preview URLs require the
+script's workers.dev subdomain (enabled by default, and Workers that
+implement Durable Objects don't get preview URLs), and a version worker
+cannot host Durable Object or Workflow classes — their migrations would
+apply to the parent's script. Host the classes on the parent and
+reference them cross-script instead.
+
 ## Version metadata
 
 The `version_metadata` binding exposes the deployed Worker version —

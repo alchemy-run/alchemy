@@ -125,6 +125,61 @@ export const resolveNamespaceName = (
   return (namespace as { name?: string }).name;
 };
 
+/**
+ * A Worker's `version` configuration is invalid — a prop that can't be
+ * combined with `version.parent` (script-level settings belong to the
+ * parent), a locally-hosted Durable Object / Workflow class on a version
+ * worker, an out-of-range `traffic`, or a gradual rollout that requires
+ * changes the versions API can't carry (assets, DO migrations).
+ */
+export class WorkerVersionConfigError extends Data.TaggedError(
+  "WorkerVersionConfigError",
+)<{
+  message: string;
+}> {}
+
+/**
+ * Resolve the parent script *name* from a resolved `version.parent` prop or
+ * persisted props. The engine resolves a passed {@link Worker} (or
+ * `Worker.ref(...)`) to its Attributes object — possibly stables-only during
+ * planning, but `workerName` is always a stable — so the value is either the
+ * script name string, that attributes object, or `undefined`.
+ *
+ * @internal
+ */
+export const resolveVersionParentName = (
+  version: WorkerProps["version"],
+): string | undefined => {
+  const parent = version?.parent;
+  if (parent == null) return undefined;
+  if (typeof parent === "string") return parent;
+  const workerName = (parent as { workerName?: unknown }).workerName;
+  return typeof workerName === "string" ? workerName : undefined;
+};
+
+/**
+ * The traffic percentage a *self-owned* Worker's new version should receive,
+ * or `undefined` for the default full cutover. Only a `version` prop without
+ * a `parent` participates — version workers handle traffic separately.
+ *
+ * @internal
+ */
+const getSelfRolloutTraffic = (news: WorkerProps): number | undefined => {
+  if (!news.version || news.version.parent != null) return undefined;
+  const traffic = news.version.traffic;
+  return traffic === undefined || traffic >= 100 ? undefined : traffic;
+};
+
+const validateTraffic = (traffic: number | undefined) =>
+  traffic !== undefined &&
+  (!Number.isFinite(traffic) || traffic < 0 || traffic > 100)
+    ? Effect.fail(
+        new WorkerVersionConfigError({
+          message: `version.traffic must be a percentage between 0 and 100, got ${traffic}`,
+        }),
+      )
+    : Effect.void;
+
 // Workers for Platforms "user workers" live inside a dispatch namespace and
 // use a parallel family of script endpoints (`/workers/dispatch/namespaces/
 // :namespace/scripts/...`). The request/response shapes are identical to the
@@ -181,7 +236,8 @@ const getScriptSettings = (
 const isBindingTargetNotFound = (
   e:
     | Effect.Error<ReturnType<typeof workers.putScript>>
-    | Effect.Error<ReturnType<typeof wfp.putDispatchNamespaceScript>>,
+    | Effect.Error<ReturnType<typeof wfp.putDispatchNamespaceScript>>
+    | Effect.Error<ReturnType<typeof workers.createScriptVersion>>,
 ): boolean =>
   e._tag === "SecretsStoreBindingNotFound" ||
   e._tag === "KVNamespaceNotFound" ||
@@ -428,6 +484,18 @@ const resolveWorkerMetadataHash = ({
     subdomain: props.subdomain,
     tags: props.tags,
     url: props.url,
+    // Reduce `version.parent` to the parent's script name: the resolved
+    // parent is a full attributes object whose *other* fields (hash, url,
+    // ...) change on every parent deploy, which would spuriously re-version
+    // this Worker even though nothing about the version itself changed.
+    version: props.version
+      ? {
+          parent: resolveVersionParentName(props.version),
+          traffic: props.version.traffic,
+          message: props.version.message,
+          tag: props.version.tag,
+        }
+      : undefined,
   }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
 
 export const WorkerProvider = () =>
@@ -1369,6 +1437,347 @@ export const LiveWorkerProvider = () =>
         return { directory, config, hash, skip: hash === output?.hash?.assets };
       };
 
+      /**
+       * Append the standard Alchemy runtime bindings plus the user's `env`
+       * entries (routed by shape: `Redacted` → secret_text, string →
+       * plain_text, everything else → json) to a metadata binding list.
+       * Shared between the full script upload and the version upload.
+       */
+      const appendAlchemyAndEnvBindings = (
+        metadataBindings: WorkerBinding[],
+        news: WorkerProps,
+        accountId: string,
+      ) => {
+        metadataBindings.push(
+          {
+            type: "plain_text",
+            name: "ALCHEMY_PHASE",
+            text: "runtime",
+          },
+          {
+            type: "plain_text",
+            name: "ALCHEMY_STACK_NAME",
+            text: stack.name,
+          },
+          {
+            type: "plain_text",
+            name: "ALCHEMY_STAGE",
+            text: stack.stage,
+          },
+          {
+            type: "plain_text",
+            name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
+            text: accountId,
+          },
+        );
+        // Add environment variables as metadata bindings
+        if (news.env) {
+          for (const [key, value] of Object.entries(news.env)) {
+            if (value === undefined) continue;
+            if (metadataBindings.some((b) => b.name === key)) continue;
+            if (Redacted.isRedacted(value)) {
+              const unredacted = Redacted.value(value);
+              metadataBindings.push({
+                type: "secret_text",
+                name: key,
+                text:
+                  typeof unredacted === "string"
+                    ? unredacted
+                    : JSON.stringify(unredacted),
+              });
+            } else if (typeof value === "string") {
+              metadataBindings.push({
+                type: "plain_text",
+                name: key,
+                text: value,
+              });
+            } else {
+              metadataBindings.push({
+                type: "json",
+                name: key,
+                json: value,
+              });
+            }
+          }
+        }
+      };
+
+      /**
+       * Create a deployment routing `traffic`% to `versionId`, with the
+       * remainder staying on the currently-live version (the
+       * highest-percentage version of the script's latest deployment).
+       * `traffic >= 100` — or a script with no other live version to split
+       * against — deploys the new version at 100%.
+       */
+      const deployVersionTraffic = Effect.fn(function* (params: {
+        accountId: string;
+        scriptName: string;
+        versionId: string;
+        traffic: number;
+        message: string | undefined;
+      }) {
+        const { accountId, scriptName, versionId, traffic } = params;
+        const split = yield* Effect.gen(function* () {
+          if (traffic >= 100) {
+            return [{ versionId, percentage: 100 }];
+          }
+          const { deployments } = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName,
+          });
+          // Deployments are returned newest-first; the live version is the
+          // highest-percentage version of the most recent deployment.
+          const stable = deployments[0]?.versions
+            .filter((v) => v.versionId !== versionId)
+            .sort((a, b) => b.percentage - a.percentage)[0];
+          if (!stable) {
+            // Nothing to split against (first deployment of this script).
+            return [{ versionId, percentage: 100 }];
+          }
+          return [
+            { versionId, percentage: traffic },
+            { versionId: stable.versionId, percentage: 100 - traffic },
+          ];
+        });
+        const deployment = yield* workers.createScriptDeployment({
+          accountId,
+          scriptName,
+          strategy: "percentage",
+          versions: split,
+          annotations: params.message
+            ? { workersMessage: params.message }
+            : undefined,
+        });
+        return deployment.id;
+      });
+
+      /**
+       * The static preview URL for an uploaded version
+       * (`<version-prefix>-<script>.<subdomain>.workers.dev`), or
+       * `undefined` when the script's workers.dev previews are disabled.
+       */
+      const resolveVersionPreviewUrl = Effect.fn(function* (
+        accountId: string,
+        scriptName: string,
+        versionId: string,
+      ) {
+        const subdomain = yield* workers
+          .getScriptSubdomain({ accountId, scriptName })
+          .pipe(
+            Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+              enabled: false,
+              previewsEnabled: false,
+            })),
+          );
+        if (!subdomain.previewsEnabled) {
+          yield* Effect.logInfo(
+            `Cloudflare Worker version: previews are disabled on ${scriptName}; no preview URL for version ${versionId}`,
+          );
+          return undefined;
+        }
+        const accountSubdomain = yield* getAccountSubdomain(accountId);
+        return `https://${versionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`;
+      });
+
+      /**
+       * Reject props that can't ride along on a *version worker*
+       * (`version.parent` set). A version carries only code, bindings, and
+       * compatibility settings; everything script-level belongs to the
+       * parent and must not be mutated from a version resource. Locally
+       * hosted Durable Object / Workflow classes are rejected because their
+       * migrations would apply to the parent script when the version
+       * deploys.
+       */
+      const validateVersionWorkerProps = Effect.fn(function* (
+        news: WorkerProps,
+        bindings: ResourceBinding<Worker["Binding"]>[],
+        parentName: string,
+      ) {
+        const forbidden = (
+          [
+            ["name", news.name],
+            ["assets", news.assets],
+            ["namespace", news.namespace],
+            ["crons", news.crons],
+            ["domain", news.domain],
+            ["routes", news.routes],
+            ["tags", news.tags],
+            ["logpush", news.logpush],
+            ["observability", news.observability],
+            ["placement", news.placement],
+            ["limits", news.limits],
+            ["subdomain", news.subdomain],
+            ["vite", news.vite],
+          ] as const
+        ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
+        if (forbidden.length > 0) {
+          return yield* Effect.fail(
+            new WorkerVersionConfigError({
+              message:
+                `version.parent uploads a version of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
+                `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
+            }),
+          );
+        }
+        yield* validateTraffic(news.version?.traffic);
+        const cronBindings = getCronBindings(bindings);
+        if (cronBindings.length > 0) {
+          return yield* Effect.fail(
+            new WorkerVersionConfigError({
+              message: `Cron Triggers are script-level settings and cannot be registered from a version of '${parentName}'. Configure crons on the parent Worker.`,
+            }),
+          );
+        }
+        // Any locally-hosted DO class (a durable_object_namespace binding
+        // without a foreign scriptName) or DO/Workflow export would require
+        // migrations, which the versions API can't carry — and which would
+        // mutate the parent's namespaces.
+        const hostedClasses = getDurableObjectBindings(bindings, parentName);
+        const exportedClasses = Object.keys(news.exports ?? {});
+        if (hostedClasses.length > 0 || exportedClasses.length > 0) {
+          return yield* Effect.fail(
+            new WorkerVersionConfigError({
+              message: `A version of '${parentName}' cannot host Durable Object or Workflow classes (${[
+                ...new Set([
+                  ...hostedClasses.map((c) => c.className),
+                  ...exportedClasses,
+                ]),
+              ].join(
+                ", ",
+              )}): class migrations apply to the parent script. Host the classes on the parent Worker and reference them cross-script instead.`,
+            }),
+          );
+        }
+      });
+
+      /**
+       * Reconcile a *version worker*: upload this Worker's code + bindings
+       * as an immutable version of the parent's script (no script of its
+       * own), then optionally shift `version.traffic`% of the parent's
+       * traffic to it. Idempotent in the reconciler sense: every run
+       * converges cloud state to "the parent's script has a version with
+       * exactly this content, receiving exactly this traffic" — re-running
+       * with changed content simply uploads the next immutable version.
+       */
+      const putWorkerVersion = Effect.fn(function* (
+        id: string,
+        news: WorkerProps,
+        bindings: ResourceBinding<Worker["Binding"]>[],
+        session: ScopedPlanStatusSession,
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const version = news.version!;
+        const parentName = resolveVersionParentName(version);
+        if (parentName === undefined) {
+          return yield* Effect.fail(
+            new WorkerVersionConfigError({
+              message: `version.parent did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
+            }),
+          );
+        }
+        yield* validateVersionWorkerProps(news, bindings, parentName);
+        const traffic = version.traffic ?? 0;
+        yield* Effect.logInfo(
+          `Cloudflare Worker version: preparing bundle for ${parentName} (from ${id})`,
+        );
+        const { bundle, hash: preparedHash } = yield* prepareAssetsAndBundle(
+          id,
+          news,
+          { skipAssetsRead: true },
+        );
+        const metadataHash = yield* resolveWorkerMetadataHash({
+          props: news,
+          bindings,
+          accountId,
+          stack: { name: stack.name, stage: stack.stage },
+        });
+        const hash = {
+          ...preparedHash,
+          metadata: metadataHash,
+        } satisfies Worker["Attributes"]["hash"];
+        const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
+        appendAlchemyAndEnvBindings(metadataBindings, news, accountId);
+        const compatibility = getCompatibility(news);
+        yield* session.note(`Uploading version of ${parentName} ...`);
+        const created = yield* workers
+          .createScriptVersion({
+            accountId,
+            scriptName: parentName,
+            metadata: {
+              mainModule: bundle.main!,
+              bindings:
+                metadataBindings as unknown as workers.CreateScriptVersionRequest["metadata"]["bindings"],
+              compatibilityDate: compatibility.date,
+              compatibilityFlags: compatibility.flags,
+              cache: news.cache ?? getCacheBinding(bindings),
+              annotations:
+                version.message !== undefined || version.tag !== undefined
+                  ? {
+                      workersMessage: version.message,
+                      workersTag: version.tag,
+                    }
+                  : undefined,
+            },
+            files: bundle.files,
+          })
+          .pipe(
+            Effect.retry({
+              while: isBindingTargetNotFound,
+              schedule: bindingTargetNotFoundRetrySchedule(),
+            }),
+            Effect.catchTag("WorkerNotFound", () =>
+              Effect.fail(
+                new WorkerVersionConfigError({
+                  message: `version.parent script '${parentName}' does not exist. Deploy the parent Worker first (or check the referenced stage/stack).`,
+                }),
+              ),
+            ),
+          );
+        const versionId = created.id ?? undefined;
+        if (versionId === undefined) {
+          return yield* Effect.fail(
+            new WorkerVersionConfigError({
+              message: `Cloudflare did not return a version id for the uploaded version of '${parentName}'.`,
+            }),
+          );
+        }
+        let deploymentId: string | undefined;
+        if (traffic > 0) {
+          yield* session.note(
+            `Deploying version at ${traffic}% of ${parentName}'s traffic ...`,
+          );
+          deploymentId = yield* deployVersionTraffic({
+            accountId,
+            scriptName: parentName,
+            versionId,
+            traffic,
+            message: version.message,
+          });
+        }
+        const previewUrl = yield* resolveVersionPreviewUrl(
+          accountId,
+          parentName,
+          versionId,
+        );
+        return {
+          workerId: parentName,
+          workerName: parentName,
+          namespace: undefined,
+          logpush: undefined,
+          url: previewUrl,
+          tags: undefined,
+          durableObjectNamespaces: {},
+          accountId,
+          domains: previewUrl ? [previewUrl] : [],
+          routes: [],
+          crons: [],
+          versionOf: parentName,
+          versionId,
+          deploymentId,
+          hash,
+        } satisfies Worker["Attributes"];
+      });
+
       const putWorker = Effect.fn(function* (
         id: string,
         news: WorkerProps,
@@ -1388,6 +1797,14 @@ export const LiveWorkerProvider = () =>
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
+        yield* validateTraffic(news.version?.traffic);
+        if (news.version !== undefined && dispatchNamespace) {
+          return yield* Effect.fail(
+            new WorkerVersionConfigError({
+              message: `Workers for Platforms user workers do not support versions or gradual deployments — remove the version prop from '${name}'.`,
+            }),
+          );
+        }
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
@@ -1498,58 +1915,7 @@ export const LiveWorkerProvider = () =>
             name: "ASSETS",
           });
         }
-        metadataBindings.push(
-          {
-            type: "plain_text",
-            name: "ALCHEMY_PHASE",
-            text: "runtime",
-          },
-          {
-            type: "plain_text",
-            name: "ALCHEMY_STACK_NAME",
-            text: stack.name,
-          },
-          {
-            type: "plain_text",
-            name: "ALCHEMY_STAGE",
-            text: stack.stage,
-          },
-          {
-            type: "plain_text",
-            name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
-            text: accountId,
-          },
-        );
-        // Add environment variables as metadata bindings
-        if (news.env) {
-          for (const [key, value] of Object.entries(news.env)) {
-            if (value === undefined) continue;
-            if (metadataBindings.some((b) => b.name === key)) continue;
-            if (Redacted.isRedacted(value)) {
-              const unredacted = Redacted.value(value);
-              metadataBindings.push({
-                type: "secret_text",
-                name: key,
-                text:
-                  typeof unredacted === "string"
-                    ? unredacted
-                    : JSON.stringify(unredacted),
-              });
-            } else if (typeof value === "string") {
-              metadataBindings.push({
-                type: "plain_text",
-                name: key,
-                text: value,
-              });
-            } else {
-              metadataBindings.push({
-                type: "json",
-                name: key,
-                json: value,
-              });
-            }
-          }
-        }
+        appendAlchemyAndEnvBindings(metadataBindings, news, accountId);
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
@@ -1896,47 +2262,153 @@ export const LiveWorkerProvider = () =>
           tailConsumers: undefined,
           usageModel: undefined,
         };
-        const worker = yield* putWorkerScript({
-          accountId,
-          scriptName: name,
-          dispatchNamespace,
-          metadata,
-          files: bundle.files,
-        }).pipe(
-          Effect.catch((err) => {
-            // When adopting a Worker managed by Wrangler (or after a previous
-            // deploy with mismatched migrations), the old_tag precondition
-            // fails. The only way to discover the actual tag is through the
-            // error message — getScriptSettings is meant to return it but
-            // doesn't at runtime.
-            const msg = String(
-              typeof err === "object" && err !== null && "message" in err
-                ? err.message
-                : err,
+        const rolloutTraffic = getSelfRolloutTraffic(news);
+        let versionId: string | undefined;
+        let deploymentId: string | undefined;
+        let worker: { id?: string | null; logpush?: boolean | null };
+        // A gradual rollout (`version.traffic` < 100) deploys through the
+        // versions API instead of the full-cutover script PUT. That's only
+        // possible when the script already has a live deployment to split
+        // traffic against (otherwise the first deploy takes 100%), and only
+        // for changes a version can carry — code, bindings, compatibility
+        // settings, cache. Script-level settings in the upload metadata
+        // (tags, observability, limits, placement, logpush) keep their live
+        // values until the next full deploy, matching
+        // `wrangler versions upload` semantics.
+        if (
+          rolloutTraffic !== undefined &&
+          existingSettings !== undefined &&
+          output?.hash !== undefined &&
+          !dispatchNamespace
+        ) {
+          if (metadataAssets !== undefined) {
+            return yield* Effect.fail(
+              new WorkerVersionConfigError({
+                message: `Worker '${name}' has static assets, which the versions API cannot carry — gradual rollouts (version.traffic) are not supported for Workers with assets.`,
+              }),
             );
-            const expectedTag = msg.match(
-              /when expected tag is ['"]?([^'"]+)['"]?/,
-            )?.[1];
-            if (expectedTag) {
-              return putWorkerScript({
-                accountId,
-                scriptName: name,
-                dispatchNamespace,
-                metadata: {
-                  ...metadata,
-                  migrations: {
-                    ...migrations,
-                    oldTag: expectedTag,
-                    newTag: bumpMigrationTagVersion(expectedTag),
+          }
+          const migratedClasses = [
+            ...migrations.newClasses,
+            ...migrations.newSqliteClasses,
+            ...migrations.deletedClasses,
+            ...migrations.renamedClasses.map((r) => r.to),
+            ...migrations.transferredClasses.map((t) => t.to),
+          ];
+          if (migratedClasses.length > 0) {
+            return yield* Effect.fail(
+              new WorkerVersionConfigError({
+                message: `This deploy of '${name}' changes Durable Object classes (${migratedClasses.join(", ")}), which requires a migration — migrations cannot ride a gradual rollout. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
+              }),
+            );
+          }
+          yield* session.note(
+            `Uploading version of ${name} (${bundleSize}) ...`,
+          );
+          const created = yield* workers
+            .createScriptVersion({
+              accountId,
+              scriptName: name,
+              metadata: {
+                mainModule: metadata.mainModule!,
+                bindings:
+                  metadata.bindings as unknown as workers.CreateScriptVersionRequest["metadata"]["bindings"],
+                compatibilityDate: metadata.compatibilityDate,
+                compatibilityFlags: metadata.compatibilityFlags,
+                cache: metadata.cache,
+                annotations:
+                  news.version?.message !== undefined ||
+                  news.version?.tag !== undefined
+                    ? {
+                        workersMessage: news.version?.message,
+                        workersTag: news.version?.tag,
+                      }
+                    : undefined,
+              },
+              files: bundle.files,
+            })
+            .pipe(
+              Effect.retry({
+                while: isBindingTargetNotFound,
+                schedule: bindingTargetNotFoundRetrySchedule(),
+              }),
+            );
+          versionId = created.id ?? undefined;
+          if (versionId === undefined) {
+            return yield* Effect.fail(
+              new WorkerVersionConfigError({
+                message: `Cloudflare did not return a version id for the uploaded version of '${name}'.`,
+              }),
+            );
+          }
+          if (rolloutTraffic > 0) {
+            yield* session.note(
+              `Deploying version at ${rolloutTraffic}% of traffic ...`,
+            );
+            deploymentId = yield* deployVersionTraffic({
+              accountId,
+              scriptName: name,
+              versionId,
+              traffic: rolloutTraffic,
+              message: news.version?.message,
+            });
+          }
+          worker = { id: name, logpush: existingSettings.logpush };
+        } else {
+          if (rolloutTraffic !== undefined) {
+            // First deploy of this script (or a pre-create placeholder is
+            // the only thing live) — there is no previous version worth
+            // splitting traffic with, so this deploy takes 100%.
+            yield* Effect.logInfo(
+              `Cloudflare Worker ${name}: no previous live version to split traffic with; deploying at 100%`,
+            );
+          }
+          worker = yield* putWorkerScriptWithMigrationRecovery();
+        }
+
+        function putWorkerScriptWithMigrationRecovery() {
+          return putWorkerScript({
+            accountId,
+            scriptName: name,
+            dispatchNamespace,
+            metadata,
+            files: bundle.files,
+          }).pipe(
+            Effect.catch((err) => {
+              // When adopting a Worker managed by Wrangler (or after a previous
+              // deploy with mismatched migrations), the old_tag precondition
+              // fails. The only way to discover the actual tag is through the
+              // error message — getScriptSettings is meant to return it but
+              // doesn't at runtime.
+              const msg = String(
+                typeof err === "object" && err !== null && "message" in err
+                  ? err.message
+                  : err,
+              );
+              const expectedTag = msg.match(
+                /when expected tag is ['"]?([^'"]+)['"]?/,
+              )?.[1];
+              if (expectedTag) {
+                return putWorkerScript({
+                  accountId,
+                  scriptName: name,
+                  dispatchNamespace,
+                  metadata: {
+                    ...metadata,
+                    migrations: {
+                      ...migrations,
+                      oldTag: expectedTag,
+                      newTag: bumpMigrationTagVersion(expectedTag),
+                    },
                   },
-                },
-                files: bundle.files,
-              });
-            }
-            // @effect-diagnostics-next-line anyUnknownInErrorContext:off
-            return Effect.fail(err as any);
-          }),
-        );
+                  files: bundle.files,
+                });
+              }
+              // @effect-diagnostics-next-line anyUnknownInErrorContext:off
+              return Effect.fail(err as any);
+            }),
+          );
+        }
         const { settings, durableObjectNamespaces } =
           yield* getWorkerSettingsWithDurableObjects(
             name,
@@ -2056,6 +2528,9 @@ export const LiveWorkerProvider = () =>
           domains,
           routes,
           crons,
+          versionOf: undefined,
+          versionId,
+          deploymentId,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -2227,6 +2702,27 @@ export const LiveWorkerProvider = () =>
           if (newNamespace !== oldNamespace) {
             return { action: "replace" };
           }
+          // A version worker (version.parent) and a script-owning Worker are
+          // distinct cloud resources, and a version belongs to exactly one
+          // parent script — switching mode or parent is a replacement.
+          const newIsVersion = news.version?.parent != null;
+          const oldIsVersion =
+            output?.versionOf !== undefined || olds?.version?.parent != null;
+          if (newIsVersion !== oldIsVersion) {
+            return { action: "replace" };
+          }
+          if (newIsVersion) {
+            const newParent = resolveVersionParentName(news.version);
+            const oldParent =
+              output?.versionOf ?? resolveVersionParentName(olds?.version);
+            if (
+              newParent !== undefined &&
+              oldParent !== undefined &&
+              newParent !== oldParent
+            ) {
+              return { action: "replace" };
+            }
+          }
           const oldWorkerName =
             output?.workerName ?? (yield* createWorkerName(id, olds?.name));
           // Auto-generated names are engine-owned: the deployed name stays
@@ -2290,7 +2786,10 @@ export const LiveWorkerProvider = () =>
                     u.endsWith(".workers.dev"),
                   )
                 : undefined;
-          const urlStable = newUrl !== undefined && newUrl === output.url;
+          // A version worker's `url` is its version preview URL, which
+          // changes with every uploaded version — never stable.
+          const urlStable =
+            !newIsVersion && newUrl !== undefined && newUrl === output.url;
           // `durableObjectNamespaces` maps each hosted DO class name to the
           // namespace id Cloudflare assigned it. Those ids are permanent for
           // the lifetime of a (worker, class) pair, so the map only changes
@@ -2356,6 +2855,31 @@ export const LiveWorkerProvider = () =>
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createWorkerName(id, news.name);
+          // A version worker uploads to its parent's script during
+          // reconcile; pre-creating a placeholder script under this
+          // resource's own generated name would leave a stray script behind.
+          // Version workers can't host Durable Object / Workflow classes, so
+          // no placeholder is needed for circular bindings either. (`news`
+          // is raw here — `version.parent` may be an unresolved ref, but its
+          // *presence* is statically known.)
+          if (news.version?.parent != null) {
+            yield* Effect.logInfo(
+              `Cloudflare Worker precreate: skipping stub for version worker ${id}`,
+            );
+            return {
+              workerId: name,
+              workerName: name,
+              namespace: undefined,
+              logpush: undefined,
+              url: undefined,
+              tags: undefined,
+              durableObjectNamespaces: {},
+              accountId,
+              domains: [],
+              routes: [],
+              crons: [],
+            } satisfies Worker["Attributes"];
+          }
           // A Workers for Platforms user worker can't be pre-created: precreate
           // runs on raw, *unresolved* props (so resources in a dependency cycle
           // can signal early), meaning a `namespace` that references the
@@ -2576,6 +3100,34 @@ export const LiveWorkerProvider = () =>
         read: Effect.fn(
           function* ({ id, output, olds }) {
             const { accountId } = yield* yield* CloudflareEnvironment;
+            // Version workers don't own a script — their `workerName` is the
+            // *parent's* script, so the normal read below would hydrate (and
+            // potentially brand as adoptable) a resource we don't own. The
+            // version itself is immutable; all we verify is that it still
+            // exists on the parent.
+            if (
+              output?.versionOf !== undefined ||
+              olds?.version?.parent != null
+            ) {
+              if (output?.versionOf === undefined || !output.versionId) {
+                // No recorded version (e.g. state was written before the
+                // upload completed) — nothing to observe; reconcile will
+                // upload a fresh version.
+                return undefined;
+              }
+              return yield* workers
+                .getScriptVersion({
+                  accountId,
+                  scriptName: output.versionOf,
+                  versionId: output.versionId,
+                })
+                .pipe(
+                  Effect.map(() => output),
+                  Effect.catchTag(["WorkerNotFound", "VersionNotFound"], () =>
+                    Effect.succeed(undefined),
+                  ),
+                );
+            }
             const workerName =
               output?.workerName ?? (yield* createWorkerName(id, olds?.name));
             const dispatchNamespace =
@@ -2723,6 +3275,12 @@ export const LiveWorkerProvider = () =>
           output,
           session,
         }) {
+          // A version worker uploads an immutable version to its parent's
+          // script instead of owning a script of its own — none of the
+          // script-level observation below applies.
+          if (news.version?.parent != null) {
+            return yield* putWorkerVersion(id, news, bindings, session);
+          }
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name =
             output?.workerName ?? (yield* createWorkerName(id, news.name));
@@ -2791,6 +3349,59 @@ export const LiveWorkerProvider = () =>
           );
         }),
         delete: Effect.fn(function* ({ output }) {
+          // Version workers own a version, not the script — `workerName` is
+          // the *parent's* script and must never be deleted here. Versions
+          // can't be deleted through the API (they age out of Cloudflare's
+          // retention window); all we clean up is live traffic: if the
+          // current deployment routes traffic to our version, restore 100%
+          // to the other version in the split.
+          if (output.versionOf !== undefined) {
+            if (!output.versionId) return;
+            yield* Effect.logInfo(
+              `Cloudflare Worker delete: releasing version ${output.versionId} of ${output.versionOf}`,
+            );
+            const { deployments } = yield* workers
+              .listScriptDeployments({
+                accountId: output.accountId,
+                scriptName: output.versionOf,
+              })
+              .pipe(
+                Effect.catchTag("WorkerNotFound", () =>
+                  Effect.succeed({
+                    deployments:
+                      [] as workers.ListScriptDeploymentsResponse["deployments"],
+                  }),
+                ),
+              );
+            const latest = deployments[0];
+            if (
+              !latest?.versions.some((v) => v.versionId === output.versionId)
+            ) {
+              // Not part of the live deployment — the version just ages out.
+              return;
+            }
+            const stable = latest.versions
+              .filter((v) => v.versionId !== output.versionId)
+              .sort((a, b) => b.percentage - a.percentage)[0];
+            if (!stable) {
+              // Our version holds 100% of traffic; there is no other version
+              // to restore. Deleting the resource must not take the parent's
+              // script down — leave the deployment in place.
+              yield* Effect.logWarning(
+                `Cloudflare Worker delete: version ${output.versionId} serves 100% of '${output.versionOf}' traffic; leaving the deployment as-is. Re-deploy the parent to move off it.`,
+              );
+              return;
+            }
+            yield* workers
+              .createScriptDeployment({
+                accountId: output.accountId,
+                scriptName: output.versionOf,
+                strategy: "percentage",
+                versions: [{ versionId: stable.versionId, percentage: 100 }],
+              })
+              .pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
+            return;
+          }
           yield* Effect.logInfo(
             `Cloudflare Worker delete: deleting ${output.workerName}`,
           );
