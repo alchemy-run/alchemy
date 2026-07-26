@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { applyPatch } from "../patch/apply.ts";
-import { expectedDigests, patchText } from "../patch/parameters.ts";
-import type { ApplyPatchInput } from "../patch/types.ts";
+import { applyPatch } from "../patch/Apply.ts";
+import { expectedDigests, patchText } from "../patch/Parameters.ts";
+import type { ApplyPatchInput } from "../patch/Types.ts";
 import { Workspace } from "alchemy/Workspace";
 
 /**

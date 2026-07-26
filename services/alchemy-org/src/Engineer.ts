@@ -15,10 +15,10 @@ import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
-import { Coding } from "./coding.ts";
-import { testAlchemy } from "./repos.ts";
+import { Coding } from "./Coding.ts";
+import { testAlchemy } from "./Repos.ts";
 import { OpenPullRequest } from "./tools/index.ts";
-import { body, issue, title, type PullRequestRef } from "./vocabulary.ts";
+import { body, issue, title, type PullRequestRef } from "./Vocabulary.ts";
 
 export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
 
@@ -71,45 +71,54 @@ export const EngineerLive = Engineer.make(
       in the workspace is complete.`((params) =>
       open(params).pipe(
         // the code-observed fact the turn's achieve check reads
-        Effect.tap((created) =>
-          Ref.set(opened, (created as { pr: Pr }).pr),
-        ),
+        Effect.tap((created) => Ref.set(opened, (created as { pr: Pr }).pr)),
       ),
     );
 
     return Effect.gen(function* () {
-      // ACHIEVE: the artifact concludes the run — dispatch waiters
-      // receive the pull request itself, not prose about it
+      // ANSWER: the artifact answers the current round — dispatch
+      // waiters receive the pull request itself, not prose about it —
+      // and the run PARKS, context intact: a follow-up dispatch to the
+      // same session (review feedback) resumes THIS engineer in THIS
+      // worktree. The artifact is CONSUMED on answering so the next
+      // round does real work instead of re-answering a stale PR.
       const pr = yield* Ref.get(opened);
-      if (pr !== undefined) return pr;
+      if (pr !== undefined) {
+        yield* Ref.set(opened, undefined);
+        return pr;
+      }
 
       const { count } = yield* AI.Tick;
-      if (count >= 40) {
+      if (count >= 60) {
         return yield* Effect.fail(
           new AI.Refused({
             loop: `Engineer(${key})`,
-            reason: "40 samplings without reaching green",
+            reason: "60 samplings without reaching green",
             observed: count,
           }),
         );
       }
       // AI.say — the explicit injection channel: budget pressure as a
       // one-shot <note> at the moment the threshold is crossed.
-      if (count === 30) {
+      if (count === 45) {
         yield* AI.say`
-          30 of your 40 sampling budget is spent. Stop exploring:
+          45 of your 60 sampling budget is spent. Stop exploring:
           converge on the smallest change that satisfies the acceptance
           criteria and open the pull request now.`;
       }
 
       return yield* AI.prose`
-        You receive one ${issue} whose acceptance criteria are your
-        entire specification. Your tools operate inside your own
-        checkout of the repository — paths are repository-relative
-        ("README.md", "docs/x.md"). ${Coding} is your craft; done
-        means the criteria are met and the tests are green. Then
-        ${openPullRequest} citing the issue — review and merge are
-        someone else's job.`;
+        You are an engineer on one issue's thread; each task you
+        receive is a round of that work. A first ${issue} carries the
+        acceptance criteria — your entire specification; later rounds
+        carry review feedback on the pull request you opened, to fix
+        in this same checkout on the same branch. Your tools operate
+        inside your own checkout of the repository — paths are
+        repository-relative ("README.md", "docs/x.md"). ${Coding} is
+        your craft; done means the criteria are met and the tests are
+        green. Then ${openPullRequest} citing the issue — pushing to
+        the same branch updates the open pull request. Review and
+        merge are someone else's job.`;
     });
   }),
 );

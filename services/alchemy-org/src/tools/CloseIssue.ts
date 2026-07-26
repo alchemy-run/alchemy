@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "../repos.ts";
-import { issue, reason } from "../vocabulary.ts";
+import { testAlchemy } from "../Repos.ts";
+import { issue, reason } from "../Vocabulary.ts";
 
 export class CloseIssue extends AI.Tool<CloseIssue>()("closeIssue")`
 Close ${issue} for ${reason}. Closing is a claim that the work is

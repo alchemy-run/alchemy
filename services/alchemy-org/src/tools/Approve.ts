@@ -2,9 +2,9 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Approvals } from "../approvals.ts";
-import { testAlchemy } from "../repos.ts";
-import { pr } from "../vocabulary.ts";
+import { Approvals } from "../Approvals.ts";
+import { testAlchemy } from "../Repos.ts";
+import { pr } from "../Vocabulary.ts";
 
 export class Approve extends AI.Tool<Approve>()("approve")`
 Approve ${pr} for merge. Only approve a change you have actually read

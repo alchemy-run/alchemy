@@ -1,4 +1,4 @@
-import type { Hunk, HunkLine, ParsedPatch, PatchOperation } from "./types.ts";
+import type { Hunk, HunkLine, ParsedPatch, PatchOperation } from "./Types.ts";
 
 const fail = (line: number, message: string): never => {
   throw new Error(`invalid patch at line ${line}: ${message}`);

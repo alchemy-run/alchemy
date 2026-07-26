@@ -6,10 +6,10 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { Coding, CodingLocal } from "../src/coding.ts";
-import { LiveTestingLive } from "../src/live-testing.ts";
-import { ReconcilingLive } from "../src/reconciling.ts";
-import { TypedErrorsLive } from "../src/typed-errors.ts";
+import { Coding, CodingLocal } from "../src/Coding.ts";
+import { LiveTestingLive } from "../src/LiveTesting.ts";
+import { ResourceEngineeringLive } from "../src/ResourceEngineering.ts";
+import { TypedErrorsLive } from "../src/TypedErrors.ts";
 import { fixed as workspace } from "alchemy/Workspace";
 import * as Model from "./fixtures/ScriptedModel.ts";
 
@@ -76,7 +76,7 @@ test("Coding skill activates and completes a local grep/read/edit/bash flow", ()
         // the skill GRAPH: Coding's teaching references the doctrine
         // skills, so its Layer carries their tags
         Layer.provideMerge(
-          Layer.mergeAll(TypedErrorsLive, ReconcilingLive, LiveTestingLive),
+          Layer.mergeAll(TypedErrorsLive, ResourceEngineeringLive, LiveTestingLive),
         ),
       );
       const AgentLayer = AI.layer(CodingAgent, CodingAgentCharter).pipe(

@@ -9,7 +9,7 @@
  */
 import * as AI from "alchemy/AI";
 import { Approve, Comment, ReadDiff, ReadIssue } from "./tools/index.ts";
-import { issue, pr } from "./vocabulary.ts";
+import { issue, pr } from "./Vocabulary.ts";
 
 export class Reviewer extends AI.Agent<Reviewer>()("Reviewer") {}
 

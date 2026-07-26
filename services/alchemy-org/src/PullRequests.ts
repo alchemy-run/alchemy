@@ -19,7 +19,7 @@ import * as GitHub from "alchemy/GitHub";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "./repos.ts";
+import { testAlchemy } from "./Repos.ts";
 import {
   Approve,
   Comment,

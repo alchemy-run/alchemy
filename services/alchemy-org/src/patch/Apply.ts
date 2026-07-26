@@ -1,13 +1,13 @@
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
-import { parsePatch } from "./parser.ts";
+import { parsePatch } from "./Parser.ts";
 import type {
   ApplyPatchInput,
   Hunk,
   PatchOperation,
   UpdateFile,
-} from "./types.ts";
+} from "./Types.ts";
 
 interface Document {
   readonly text: string;

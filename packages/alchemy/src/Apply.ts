@@ -6,7 +6,6 @@ import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
 import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
-import { RuntimeContext } from "./RuntimeContext.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -32,6 +31,7 @@ import {
 } from "./Plan.ts";
 import { findProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
+import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import {
@@ -81,56 +81,6 @@ interface ResourceTracker {
   bindings: ResourceBinding[];
   instanceId: string;
 }
-
-const provideLifecycleScope =
-  (fqn: string, instanceId: string) =>
-  <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
-    Effect.serviceOption(ArtifactStore).pipe(
-      Effect.map(Option.getOrElse(createArtifactStore)),
-      Effect.flatMap((store) =>
-        effect.pipe(
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
-        ),
-      ),
-    ) as Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>>;
-
-/**
- * Instruments a single provider lifecycle call with an OTel span
- * (`provider.<op>`), the resource counter / duration histogram, and the
- * scoped artifacts/instance services normally supplied by
- * {@link provideLifecycleScope}.
- *
- * This is the only call site through which provider lifecycle methods
- * are dispatched, so wrapping it here gives us a fully-instrumented
- * toolchain without touching any individual provider implementation.
- */
-const instrumentLifecycle =
-  (
-    op: ResourceOp,
-    fqn: string,
-    resourceType: string,
-    logicalId: string,
-    instanceId: string,
-  ) =>
-  <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
-    effect.pipe(
-      provideLifecycleScope(fqn, instanceId),
-      recordResourceOp(resourceType, op),
-      Effect.withSpan(`provider.${op}`, {
-        attributes: {
-          "alchemy.resource.fqn": fqn,
-          "alchemy.resource.type": resourceType,
-          "alchemy.resource.logical_id": logicalId,
-          "alchemy.resource.instance_id": instanceId,
-          "alchemy.resource.op": op,
-        },
-      }),
-    );
 
 export const apply = <P extends Plan>(
   plan: P,
@@ -1890,3 +1840,53 @@ const excludeDeletedBindings = (
   bindings.flatMap(({ action, sid, data }) =>
     action === "delete" ? [] : [{ sid, data }],
   );
+
+const provideLifecycleScope =
+  (fqn: string, instanceId: string) =>
+  <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
+    Effect.serviceOption(ArtifactStore).pipe(
+      Effect.map(Option.getOrElse(createArtifactStore)),
+      Effect.flatMap((store) =>
+        effect.pipe(
+          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
+          Effect.provideService(InstanceId, instanceId),
+        ),
+      ),
+    ) as Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>>;
+
+/**
+ * Instruments a single provider lifecycle call with an OTel span
+ * (`provider.<op>`), the resource counter / duration histogram, and the
+ * scoped artifacts/instance services normally supplied by
+ * {@link provideLifecycleScope}.
+ *
+ * This is the only call site through which provider lifecycle methods
+ * are dispatched, so wrapping it here gives us a fully-instrumented
+ * toolchain without touching any individual provider implementation.
+ */
+const instrumentLifecycle =
+  (
+    op: ResourceOp,
+    fqn: string,
+    resourceType: string,
+    logicalId: string,
+    instanceId: string,
+  ) =>
+  <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
+    effect.pipe(
+      provideLifecycleScope(fqn, instanceId),
+      recordResourceOp(resourceType, op),
+      Effect.withSpan(`provider.${op}`, {
+        attributes: {
+          "alchemy.resource.fqn": fqn,
+          "alchemy.resource.type": resourceType,
+          "alchemy.resource.logical_id": logicalId,
+          "alchemy.resource.instance_id": instanceId,
+          "alchemy.resource.op": op,
+        },
+      }),
+    );

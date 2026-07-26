@@ -15,9 +15,9 @@ import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import { Issues } from "../src/issues.ts";
-import { PullRequests } from "../src/pull-requests.ts";
-import { OrgLive } from "../src/server.ts";
+import { Issues } from "../src/Issues.ts";
+import { PullRequests } from "../src/PullRequests.ts";
+import { OrgLive } from "../src/Server.ts";
 
 /**
  * The GitHub Providers requirement is PHANTOM on this path: the org

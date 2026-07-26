@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "../repos.ts";
-import { issue } from "../vocabulary.ts";
+import { testAlchemy } from "../Repos.ts";
+import { issue } from "../Vocabulary.ts";
 
 export class ReadIssue extends AI.Tool<ReadIssue>()("readIssue")`
 Read ${issue} in full: its title, state, and body — the acceptance

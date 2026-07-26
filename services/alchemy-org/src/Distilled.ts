@@ -20,10 +20,10 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { Coding } from "./coding.ts";
-import { Engineer } from "./engineer.ts";
-import { Ledger } from "./ledger.ts";
-import { testAlchemy } from "./repos.ts";
+import { Coding } from "./Coding.ts";
+import { Engineer } from "./Engineer.ts";
+import { Ledger } from "./Ledger.ts";
+import { testAlchemy } from "./Repos.ts";
 import { OpenIssue, OpenPullRequest } from "./tools/index.ts";
 
 /** The event: value is the term (spliced into the charter), type is the payload. */

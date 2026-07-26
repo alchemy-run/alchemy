@@ -11,7 +11,7 @@ import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
-import { Ledger, MemoryLedger, SqliteLedger } from "../src/ledger.ts";
+import { Ledger, MemoryLedger, SqliteLedger } from "../src/Ledger.ts";
 
 /** The contract, physics-agnostic: run under any Ledger Layer. */
 const contract = Effect.gen(function* () {

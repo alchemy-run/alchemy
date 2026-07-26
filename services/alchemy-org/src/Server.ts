@@ -22,8 +22,7 @@ import * as Auth from "alchemy/Auth";
 import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import * as Local from "alchemy/Local";
-import { RuntimeContext } from "alchemy/RuntimeContext";
-import { perRun as runWorkspace, fixed as workspace } from "alchemy/Workspace";
+import { perRun as runWorkspace } from "alchemy/Workspace";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -32,28 +31,22 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { ApprovalsLive } from "./approvals.ts";
-import {
-  buildBoard,
-  Chats,
-  ChatsLive,
-  ChatsObserverLive,
-  makeChunkTranslator,
-} from "./chats.ts";
-import { CodingLocal } from "./coding.ts";
-import { EngineerLive } from "./engineer.ts";
+import { ApprovalsLive } from "./Approvals.ts";
+import { buildBoard } from "./Board.ts";
+import { CodingLocal } from "./Coding.ts";
+import { EngineerLive } from "./Engineer.ts";
 import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
-import { Issues, IssuesLive } from "./issues.ts";
-import { SqliteLedger } from "./ledger.ts";
-import { LiveTestingLive } from "./live-testing.ts";
+import { Issues, IssuesLive } from "./Issues.ts";
+import { SqliteLedger } from "./Ledger.ts";
+import { LiveTestingLive } from "./LiveTesting.ts";
 import {
   PullRequestReviewerLive,
   PullRequests,
   PullRequestsLive,
-} from "./pull-requests.ts";
-import { ReconcilingLive } from "./reconciling.ts";
-import { testAlchemy } from "./repos.ts";
-import { ReviewerLive } from "./reviewer.ts";
+} from "./PullRequests.ts";
+import { ResourceEngineeringLive } from "./ResourceEngineering.ts";
+import { testAlchemy } from "./Repos.ts";
+import { ReviewerLive } from "./Reviewer.ts";
 import {
   ApproveRecorded,
   CloseIssueLive,
@@ -65,7 +58,7 @@ import {
   ReadIssueLive,
   SearchIssuesLive,
 } from "./tools/index.ts";
-import { TypedErrorsLive } from "./typed-errors.ts";
+import { TypedErrorsLive } from "./TypedErrors.ts";
 
 // ─── the physics (local) ─────────────────────────────────────────────
 
@@ -138,9 +131,11 @@ const Model = AnthropicLanguageModel.layer({
  * projection listening (designs/ai/streaming.md). ONE Chats instance —
  * the same const is provideMerge'd into OrgLive for the HTTP surface.
  */
+const OrgChats = AI.ChatsMemory();
+
 const Kernel = Layer.mergeAll(
   AI.KernelMemory.pipe(Layer.provide(Model)),
-  ChatsObserverLive.pipe(Layer.provide(ChatsLive)),
+  AI.ChatsObserver.pipe(Layer.provide(OrgChats)),
 );
 
 /**
@@ -171,12 +166,12 @@ const WorkspacesLive = Git.WorkspacesWorktree({ root: workspaceRoot }).pipe(
  * worktree (`runWorkspace`), so an engineer cannot touch another run's
  * tree — or anything outside its checkout. The doctrine skills hang
  * off ${Coding}'s teaching (the skill GRAPH): activating Coding
- * exposes Reconciling/TypedErrors/LiveTesting for activation. */
+ * exposes ResourceEngineering/TypedErrors/LiveTesting for activation. */
 const EngineerLayer = EngineerLive.pipe(
   Layer.provide(
     CodingLocal.pipe(
       Layer.provideMerge(
-        Layer.mergeAll(TypedErrorsLive, ReconcilingLive, LiveTestingLive),
+        Layer.mergeAll(TypedErrorsLive, ResourceEngineeringLive, LiveTestingLive),
       ),
     ),
   ),
@@ -229,7 +224,7 @@ export const OrgLive = Layer.mergeAll(IssuesLive, PullRequestsLive).pipe(
   Layer.provideMerge(ApprovalsLive),
   // the chat projection (same const the Kernel bundle observes into)
   // and the comment binding surface — both consumed by the HTTP edge
-  Layer.provideMerge(ChatsLive),
+  Layer.provideMerge(OrgChats),
   Layer.provideMerge(GitHubBindings),
   Layer.provide(Credentials),
   Layer.orDie,
@@ -251,7 +246,7 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
     // the desks are BINDINGS: resolved at init, closed over by fetch
     const issues = yield* Issues;
     const pullRequests = yield* PullRequests;
-    const chats = yield* Chats;
+    const chats = yield* AI.Chats;
     // sendMessage's honest door: a chat message to a desk becomes a
     // GitHub comment — the same world event as any other steer
     const comment = yield* GitHub.CreateIssueComment(testAlchemy);
@@ -278,7 +273,7 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
     );
 
     // the ISSUE BOARD: every chat grouped under the GitHub issue it
-    // serves, via desk keys + kernel dispatch parentage (chats.ts)
+    // serves, via channel keys + kernel dispatch parentage (board.ts)
     const board = HttpRouter.add(
       "GET",
       "/api/board",
@@ -309,13 +304,17 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
       Effect.gen(function* () {
         const params = yield* HttpRouter.params;
         const id = decodeURIComponent(String(params.id ?? ""));
-        const messages = yield* chats.messages(id);
-        return messages === undefined
+        // snapshot is kernel vocabulary; the AI SDK shaping is the
+        // adapter's (`AI.toUIMessages`)
+        const snapshot = yield* chats.snapshot(id);
+        return snapshot === undefined
           ? yield* HttpServerResponse.json(
               { error: `unknown chat: ${id}` },
               { status: 404 },
             )
-          : yield* HttpServerResponse.json(messages);
+          : yield* HttpServerResponse.json(
+              AI.toUIMessages(snapshot.log, snapshot.streaming),
+            );
       }),
     );
 
@@ -368,7 +367,7 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
           id,
           Number.MAX_SAFE_INTEGER,
         );
-        const translate = makeChunkTranslator();
+        const translate = AI.makeChunkTranslator();
         const DONE = "__done__";
         const stream = Stream.fromQueue(queue).pipe(
           Stream.flatMap((observation: AI.KernelObservation) => {

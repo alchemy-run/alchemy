@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "../repos.ts";
-import { pr } from "../vocabulary.ts";
+import { testAlchemy } from "../Repos.ts";
+import { pr } from "../Vocabulary.ts";
 
 export class ReadDiff extends AI.Tool<ReadDiff>()("readDiff")`
 Read ${pr} in full: its title, body (the "Closes #N" linkage and the

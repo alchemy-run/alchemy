@@ -6,9 +6,9 @@ import * as Layer from "effect/Layer";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { runProcess } from "../internal/ProcessRunner.ts";
 import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
-import { Ledger } from "../ledger.ts";
-import { prLinkKey, testAlchemy } from "../repos.ts";
-import { body, issue, title } from "../vocabulary.ts";
+import { Ledger } from "../Ledger.ts";
+import { prLinkKey, testAlchemy } from "../Repos.ts";
+import { body, issue, title } from "../Vocabulary.ts";
 
 export class OpenPullRequest extends AI.Tool<OpenPullRequest>()(
   "openPullRequest",

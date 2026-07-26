@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "../repos.ts";
-import { issue, reason, related } from "../vocabulary.ts";
+import { testAlchemy } from "../Repos.ts";
+import { issue, reason, related } from "../Vocabulary.ts";
 
 export class LinkIssues extends AI.Tool<LinkIssues>()("linkIssues")`
 Record that ${issue} relates to ${related} (duplicate, blocks, or

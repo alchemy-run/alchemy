@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "../repos.ts";
-import { issue, message } from "../vocabulary.ts";
+import { testAlchemy } from "../Repos.ts";
+import { issue, message } from "../Vocabulary.ts";
 
 export class Comment extends AI.Tool<Comment>()("comment")`
 Comment ${message} on ${issue}.` {}

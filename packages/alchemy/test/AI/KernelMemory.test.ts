@@ -282,6 +282,83 @@ describe("KernelMemory", () => {
     );
   });
 
+  it.live(
+    "parallel fan-out: two dispatches in one sampling run concurrently",
+    () => {
+      const model = Model.make([
+        // call 0: the lead fans out TWO sessions in ONE sampling —
+        // the kernel executes the handlers concurrently
+        () => [
+          Model.toolCall(
+            "dispatch",
+            { agent: "Engineer", task: "build widget A", session: "a" },
+            "call-a",
+          ),
+          Model.toolCall(
+            "dispatch",
+            { agent: "Engineer", task: "build widget B", session: "b" },
+            "call-b",
+          ),
+          Model.finish("tool-calls"),
+        ],
+        // calls 1..2: the two engineer runs (concurrent — order unknown,
+        // so ONE step answers by reading its own task from the prompt;
+        // calls beyond the script replay the last step)
+        (options) => [
+          Model.text(
+            Model.promptText(options).includes("widget A")
+              ? "A built"
+              : "B built",
+          ),
+          Model.finish(),
+        ],
+        // call 3: the lead concludes — REPLAYED step must handle it too
+      ]);
+      const seen: Array<AI.KernelObservation> = [];
+      const ObserverLive = Layer.succeed(AI.KernelObserver, {
+        emit: (observation) => Effect.sync(() => void seen.push(observation)),
+      });
+      const kernel = KernelMemory.pipe(Layer.provide(model.layer));
+      return Effect.gen(function* () {
+        const lead = yield* interpret(Lead, LeadCharter);
+        // the lead's final sampling is the replayed engineer step — its
+        // text quiesces the lead, resolving the dispatch
+        const answer = yield* lead.dispatch("Two widgets please", {
+          key: "job#2",
+        });
+        expect(typeof answer).toBe("string");
+        expect(model.calls).toHaveLength(4);
+
+        // both workers were admitted under deterministic session keys
+        for (const childKey of ["job#2/Engineer/a", "job#2/Engineer/b"]) {
+          expect(
+            seen.filter(
+              (observation) =>
+                observation.key === childKey && observation.type === "admitted",
+            ),
+          ).toHaveLength(1);
+        }
+        // both answers returned to the LEAD's conversation as tool results
+        const leadFinal = Model.promptText(model.calls[3]!);
+        expect(leadFinal).toContain("A built");
+        expect(leadFinal).toContain("B built");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            kernel,
+            Engineer.make(EngineerCharter).pipe(
+              Layer.provide(kernel),
+              Layer.provide(ObserverLive),
+            ),
+            ObserverLive,
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+    },
+  );
+
   it.effect("spawn conjures an anonymous worker with a tool subset", () => {
     const model = Model.make([
       // call 0: the researcher spawns a fact-checker
@@ -574,14 +651,14 @@ You are working ${Effect.map(AI.Thread, (thread) => thread.key)}. Answer briefly
     },
   );
 
-  it.effect("a non-Fragment turn result settles the run from inside", () => {
+  it.effect("a non-Fragment turn result ANSWERS the round and parks", () => {
     const model = Model.make([
       // tick 1: the model marks the work done via the inline tool
       () => [
         Model.toolCall("mark_done", { result: 42 }),
         Model.finish("tool-calls"),
       ],
-      // (tick 2 never samples — the turn returns the outcome first)
+      // (tick 2 never samples — the turn answers first)
     ]);
     return Effect.gen(function* () {
       const charter = Effect.gen(function* () {
@@ -593,19 +670,111 @@ Record the final ${result}.`((p) =>
         );
         return Effect.gen(function* () {
           const value = yield* Ref.get(done);
-          if (value !== undefined) return { answer: value }; // ← exit = return
+          if (value !== undefined) return { answer: value }; // ← reply
           return yield* AI.prose`Compute the answer, then ${markDone}.`;
         });
       });
       const researcher = yield* interpret(Researcher, charter);
-      // dispatch resolves with the OUTCOME, not the model's last text
+      // dispatch resolves with the TYPED answer, not the model's text
       const outcome = yield* researcher.dispatch("go", { key: "job#1" });
       expect(outcome).toEqual({ answer: 42 });
-      expect(model.calls).toHaveLength(1); // outcome tick never sampled
-      // a settled run answers late dispatches with its outcome
+      expect(model.calls).toHaveLength(1); // the answer tick never sampled
+      // ANSWER ≠ SETTLE: the run PARKED — a follow-up dispatch wakes
+      // the same run (context intact); this charter's turn re-answers
+      // from its standing Ref without sampling
       const late = yield* researcher.dispatch("again?", { key: "job#1" });
       expect(late).toEqual({ answer: 42 });
+      expect(model.calls).toHaveLength(1);
+      // ending remains the owner's act
+      yield* researcher.settle("job#1", { closed: true });
+      const settled = yield* researcher.dispatch("hello?", { key: "job#1" });
+      expect(settled).toEqual({ closed: true });
     }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.live("dispatch sessions resume the same worker; settle cascades", () => {
+    const model = Model.make([
+      // call 0: the lead hires the engineer in session "fix"
+      () => [
+        Model.toolCall("dispatch", {
+          agent: "Engineer",
+          task: "build the widget",
+          session: "fix",
+        }),
+        Model.finish("tool-calls"),
+      ],
+      // call 1: the engineer's round 1
+      () => [Model.text("built it"), Model.finish()],
+      // call 2: the lead follows up IN THE SAME SESSION
+      () => [
+        Model.toolCall("dispatch", {
+          agent: "Engineer",
+          task: "now polish it",
+          session: "fix",
+        }),
+        Model.finish("tool-calls"),
+      ],
+      // call 3: the engineer's round 2 — the SAME conversation
+      () => [Model.text("polished"), Model.finish()],
+      // call 4: the lead concludes
+      () => [Model.text("All done."), Model.finish()],
+    ]);
+    const seen: Array<AI.KernelObservation> = [];
+    const ObserverLive = Layer.succeed(AI.KernelObserver, {
+      emit: (observation) => Effect.sync(() => void seen.push(observation)),
+    });
+    const kernel = KernelMemory.pipe(Layer.provide(model.layer));
+    return Effect.gen(function* () {
+      const lead = yield* interpret(Lead, LeadCharter);
+      const answer = yield* lead.dispatch("Widget needed", { key: "job#1" });
+      expect(answer).toBe("All done.");
+      expect(model.calls).toHaveLength(5);
+
+      // round 2 continued round 1's conversation — the worker kept
+      // its context across the call/reply boundary
+      const round2 = Model.promptText(model.calls[3]!);
+      expect(round2).toContain("build the widget");
+      expect(round2).toContain("built it");
+      expect(round2).toContain("now polish it");
+
+      // the session key is DETERMINISTIC, namespaced under the lead's
+      // run — and both dispatches hit ONE run (one admission)
+      const childKey = "job#1/Engineer/fix";
+      expect(
+        seen.filter(
+          (observation) =>
+            observation.key === childKey && observation.type === "admitted",
+        ),
+      ).toHaveLength(1);
+
+      // SUPERVISION: settling the lead settles its session worker
+      yield* lead.settle("job#1", { done: true });
+      yield* Effect.sync(() =>
+        seen.some(
+          (observation) =>
+            observation.key === childKey && observation.type === "settled",
+        ),
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (cascaded) => cascaded,
+          times: 200,
+        }),
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          kernel,
+          Engineer.make(EngineerCharter).pipe(
+            Layer.provide(kernel),
+            Layer.provide(ObserverLive),
+          ),
+          ObserverLive,
+          RuntimeContext.phantom,
+        ),
+      ),
+    );
   });
 
   it.effect(

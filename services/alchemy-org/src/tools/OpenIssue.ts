@@ -1,7 +1,7 @@
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { body, issue, title } from "../vocabulary.ts";
+import { body, issue, title } from "../Vocabulary.ts";
 
 export class OpenIssue extends AI.Tool<OpenIssue>()("openIssue")`
 Open a new issue titled ${title} with ${body}. The body must carry

@@ -1,15 +1,20 @@
 /**
- * The Reconciler doctrine — AGENTS.md's lifecycle discipline, as a
- * prose-only SKILL: no tools of its own (the Coding craft holds the
- * keyboard); activating it puts the observe → ensure → sync shape into
- * context exactly when resource lifecycle code is being written.
+ * The craft of engineering alchemy RESOURCES — AGENTS.md's reconciler
+ * doctrine as a prose-only SKILL: no tools of its own (the Coding
+ * craft holds the keyboard); activating it puts the observe → ensure
+ * → sync shape into context exactly when provider code is being
+ * written. Named for the TASK (the model activates skills by name —
+ * "I am engineering a resource" is the cue), not the technique it
+ * teaches.
  */
 import * as AI from "alchemy/AI";
 
-export class Reconciling extends AI.Skill<Reconciling>()("Reconciling") {}
+export class ResourceEngineering extends AI.Skill<ResourceEngineering>()(
+  "ResourceEngineering",
+) {}
 
 /** The teaching — prose-only: no tool splices, nothing to provide. */
-export const ReconcilingLive = Reconciling.make`
+export const ResourceEngineeringLive = ResourceEngineering.make`
   Writing resource providers. A provider's reconcile is ONE flow that
   converges cloud state to the desired props whether the resource is
   missing (greenfield), engine-owned (update), or freshly adopted

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { WorkspaceFiles } from "alchemy/Workspace";
-import { content, path } from "../vocabulary.ts";
+import { content, path } from "../Vocabulary.ts";
 
 const mode = AI.Parameter("mode", S.Literals(["create", "overwrite"]))`
 "create" requires the path not to exist. "overwrite" requires an

@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "../repos.ts";
-import { pattern } from "../vocabulary.ts";
+import { testAlchemy } from "../Repos.ts";
+import { pattern } from "../Vocabulary.ts";
 
 export class SearchIssues extends AI.Tool<SearchIssues>()("searchIssues")`
 Search issues and pull requests in the repository for ${pattern}.

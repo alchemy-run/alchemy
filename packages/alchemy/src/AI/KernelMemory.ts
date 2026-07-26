@@ -125,6 +125,12 @@ const compileTool = (term: Tool<any, any[]>) => {
  * prose hired. The task must stand alone because the delegate's run is
  * its OWN conversation (fresh key, fresh transcript); the delegate
  * never sees the host's.
+ *
+ * `session` is the CALL/REPLY seam (the gen_server pattern): a
+ * repeated dispatch with the same session continues the SAME worker
+ * run — full context, same worktree — via the kernel's
+ * admit-or-enqueue semantics. Sessions are namespaced under the
+ * dispatching run's key, so two issues' "fix" sessions never collide.
  */
 const compileDispatch = (names: ReadonlyArray<string>) =>
   AiTool.make("dispatch", {
@@ -132,10 +138,15 @@ const compileDispatch = (names: ReadonlyArray<string>) =>
       `Hand one task to another agent and await their answer. ` +
       `Available agents: ${names.join(", ")}. State the task ` +
       `completely — the agent sees only what you write here, never ` +
-      `this conversation.`,
+      `this conversation. Pass a short \`session\` name to make the ` +
+      `worker RESUMABLE: dispatching the same agent + session again ` +
+      `continues that same worker with its full context intact (use ` +
+      `it for follow-ups, fixes, and back-and-forth); omit session ` +
+      `for one-off work.`,
     parameters: S.Struct({
       agent: S.Literals(names as [string, ...string[]]),
       task: S.String,
+      session: S.optionalKey(S.String),
     }) as any,
     success: S.Unknown,
     failure: S.Unknown,
@@ -297,6 +308,12 @@ interface RunState {
   observed: number;
   /** The last rendered stance — what `spawn`/`skill` grant from. */
   lastStance?: Stance;
+  /**
+   * Session workers this run dispatched (child key → the delegate's
+   * actor) — the SUPERVISION edge: when this run settles, its
+   * children settle with it.
+   */
+  readonly children: Map<string, Actor>;
 }
 
 /** What one tick hands the loop. */
@@ -803,6 +820,7 @@ export const KernelMemory: Layer.Layer<
               prompt: Prompt.empty,
               pendingNotes: [],
               observed: 0,
+              children: new Map<string, Actor>(),
             };
           });
 
@@ -1048,14 +1066,31 @@ export const KernelMemory: Layer.Layer<
             if (delegates.size > 0) {
               // stamp the DELEGATION EDGE: the child run's `admitted`
               // observation records who dispatched it, so observers can
-              // reconstruct the tree (issue desk → engineer → …)
-              handlers.dispatch = (params: { agent: string; task: string }) =>
-                delegates
-                  .get(params.agent)!
+              // reconstruct the tree (issue desk → engineer → …). A
+              // `session` derives a DETERMINISTIC child key namespaced
+              // under this run — the call/reply seam: same session,
+              // same worker, same context — and the child is REMEMBERED
+              // for the supervision cascade (settle propagates down).
+              handlers.dispatch = (params: {
+                agent: string;
+                task: string;
+                session?: string;
+              }) => {
+                const actor = delegates.get(params.agent)!;
+                const key =
+                  params.session === undefined
+                    ? undefined
+                    : `${run.key}/${params.agent}/${params.session}`;
+                if (key !== undefined) {
+                  run.children.set(key, actor);
+                }
+                return actor
                   .dispatch(params.task, {
+                    key,
                     parent: { term: termName, key: run.key },
                   })
                   .pipe(Effect.provide(RuntimeContext.phantom));
+              };
             }
             handlers.spawn = (params) => spawn(run, params);
             handlers.skill = skillSwitch(run);
@@ -1126,8 +1161,17 @@ export const KernelMemory: Layer.Layer<
               // TICK: re-evaluate the stance before every sampling
               const tick = yield* prepare(run);
               if ("outcome" in tick) {
-                yield* Deferred.succeed(run.settled, tick.outcome.value);
-                break;
+                // ANSWER ≠ SETTLE (the gen_server reply): a non-Fragment
+                // turn value answers the pending dispatch round — every
+                // waiter resolves with the TYPED value — and the run
+                // PARKS, context intact, resumable by the next dispatch
+                // to its key. Ending a run stays the owner's act
+                // (`settle`), or the supervision cascade's.
+                for (const waiter of run.waiters.splice(0)) {
+                  yield* Deferred.succeed(waiter, tick.outcome.value);
+                }
+                quiescent = true;
+                continue;
               }
               // deliver collected notes (`AI.say`): a PLAIN append, in
               // emission order — no dedupe, no memory. The author's
@@ -1215,7 +1259,25 @@ export const KernelMemory: Layer.Layer<
             for (const waiter of run.waiters.splice(0)) {
               yield* Deferred.succeed(waiter, outcome);
             }
+            yield* settleChildren(run);
           });
+
+        /**
+         * The SUPERVISION cascade: a settled (or crashed) run settles
+         * every session worker it dispatched — parked workers must not
+         * outlive the conversation that owns them.
+         */
+        const settleChildren = (run: RunState): Effect.Effect<void> =>
+          Effect.forEach(
+            [...run.children.entries()],
+            ([key, actor]) =>
+              actor
+                .settle(key, {
+                  supervisor: { term: termName, key: run.key },
+                })
+                .pipe(Effect.provide(RuntimeContext.phantom)),
+            { discard: true },
+          ).pipe(Effect.andThen(Effect.sync(() => run.children.clear())));
 
         /** Fork a run's loop into the interpret Scope. */
         const startLoop = (
@@ -1247,6 +1309,9 @@ export const KernelMemory: Layer.Layer<
                         run.settled,
                         exit as Exit.Exit<never>,
                       );
+                      // a crashed supervisor takes its session workers
+                      // down with it, same as a settled one
+                      yield* settleChildren(run);
                     })
                   : Effect.void,
               ),

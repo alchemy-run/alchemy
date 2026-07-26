@@ -6,7 +6,7 @@ import * as S from "effect/Schema";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { runProcess } from "../internal/ProcessRunner.ts";
 import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
-import { pattern } from "../vocabulary.ts";
+import { pattern } from "../Vocabulary.ts";
 import { Workspace } from "alchemy/Workspace";
 
 const pathParam = AI.Parameter("path", S.optionalKey(S.String))`

@@ -8,8 +8,8 @@
 import type * as Layer from "effect/Layer";
 import type { Kernel } from "alchemy/AI";
 import type * as Git from "alchemy/Git";
-import type { Coding } from "../src/coding.ts";
-import { EngineerLive } from "../src/engineer.ts";
+import type { Coding } from "../src/Coding.ts";
+import { EngineerLive } from "../src/Engineer.ts";
 import type { MergePullRequest, OpenPullRequest } from "../src/tools/index.ts";
 
 type Req = typeof EngineerLive extends Layer.Layer<any, any, infer R>

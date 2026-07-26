@@ -134,7 +134,17 @@ export const RepositoryEventSourcePolling = (
           if (names.length === 0) return;
 
           // cursor starts at "now": only NEW activity is observed
-          const cursor = yield* Ref.make(yield* Clock.currentTimeMillis);
+          const started = yield* Clock.currentTimeMillis;
+          const cursor = yield* Ref.make(started);
+          // GitHub's list endpoints are EVENTUALLY consistent: a poll
+          // one second after a close may not see it yet, and a cursor
+          // that advances past the close timestamp would then drop the
+          // event FOREVER (observed live: an issue the org closed
+          // never settled its channel). Every poll therefore re-reads
+          // a LOOKBACK window behind the cursor (never before process
+          // start) and dedupes by the deterministic delivery id.
+          const LOOKBACK_MS = 120_000;
+          const delivered = new Map<string, number>();
 
           yield* Effect.logInfo(
             `GitHub polling [${names.join(", ")}] of ${props.owner}/${props.repository} every ${String(every)}`,
@@ -142,12 +152,17 @@ export const RepositoryEventSourcePolling = (
 
           const pollOnce = Effect.gen(function* () {
             const since = yield* Ref.get(cursor);
+            const lookback = Math.max(since - LOOKBACK_MS, started);
             const batches = yield* Effect.forEach(names, (name) =>
-              pollEvent(octokit, props, name, since),
+              pollEvent(octokit, props, name, lookback),
             );
+            // prune the dedupe memory once entries fall out of the window
+            for (const [id, at] of delivered) {
+              if (at < lookback - LOOKBACK_MS) delivered.delete(id);
+            }
             const deliveries = batches
               .flat()
-              .filter((d) => d.at > since)
+              .filter((d) => d.at > lookback && !delivered.has(d.event.id))
               .sort(
                 (a, b) => a.at - b.at || (a.event.id < b.event.id ? -1 : 1),
               );
@@ -159,6 +174,7 @@ export const RepositoryEventSourcePolling = (
               );
             }
             for (const delivery of deliveries) {
+              delivered.set(delivery.event.id, delivery.at);
               yield* process(delivery.event);
             }
             if (deliveries.length > 0) {

@@ -27,11 +27,11 @@ import * as GitHub from "alchemy/GitHub";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Engineer } from "./engineer.ts";
-import { Ledger } from "./ledger.ts";
-import { PullRequestReviewer } from "./pull-requests.ts";
-import { prLinkKey, testAlchemy } from "./repos.ts";
-import { Reviewer } from "./reviewer.ts";
+import { Engineer } from "./Engineer.ts";
+import { Ledger } from "./Ledger.ts";
+import { PullRequestReviewer } from "./PullRequests.ts";
+import { prLinkKey, testAlchemy } from "./Repos.ts";
+import { Reviewer } from "./Reviewer.ts";
 import {
   CloseIssue,
   Comment,
@@ -207,17 +207,21 @@ export const IssueChannelLive = IssueChannel.make`
   missing and this channel waits — the reply arrives as the next
   message.
 
-  A ready issue goes to ${Engineer}, who works in its own thread and
-  returns the created pull request's reference — owner, repository,
-  number, url. The Engineer sees only what its task says: the task
-  always carries the issue reference (owner, repository, number) and
-  the acceptance criteria verbatim.
+  A ready issue goes to ${Engineer} — always in session "build", so
+  the whole back-and-forth is ONE engineer with its checkout and
+  context intact across rounds. The Engineer sees only what its task
+  says: the first task carries the issue reference (owner,
+  repository, number) and the acceptance criteria verbatim, and it
+  returns the created pull request's reference. When review feedback
+  needs fixing, dispatch session "build" again with the feedback —
+  the same engineer fixes its own work on the same branch.
 
-  ${Reviewer} judges the pull request against the issue and returns
-  its verdict. The Reviewer sees only what its task says: hand it the
-  pull request reference verbatim (and the issue number) — a reviewer
-  without the reference can only ask for one. An approval is followed
-  by ${MergePullRequest} — an approved-but-unmerged pull request is
+  ${Reviewer} judges the pull request against the issue — always in
+  session "review", so a re-review remembers what it already judged.
+  The Reviewer sees only what its task says: hand it the pull request
+  reference verbatim (and the issue number) — a reviewer without the
+  reference can only ask for one. An approval is followed by
+  ${MergePullRequest} — an approved-but-unmerged pull request is
   unfinished work; the merge tool refuses without a recorded
   approval, and a refusal is a fact about the world to fix, not to
   work around. Requested changes are relayed to the author with

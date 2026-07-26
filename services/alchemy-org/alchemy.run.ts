@@ -5,7 +5,7 @@
  * - the `test-alchemy` sandbox repository (the exported repo const IS
  *   the resource — yielding it resolves the one instance everything
  *   else names; resources are memoized by FQN);
- * - the org server (src/server.ts): an Effectful Local.Service running
+ * - the org server (src/Server.ts): an Effectful Local.Service running
  *   the processes as a detached local process (port from `ORG_PORT`/
  *   `PORT` in the deploying shell), pid tracked in state, restarted
  *   when src/** changes.
@@ -19,8 +19,8 @@ import * as GitHub from "alchemy/GitHub";
 import * as Local from "alchemy/Local";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { testAlchemy } from "./src/repos.ts";
-import AlchemyOrg from "./src/server.ts";
+import { testAlchemy } from "./src/Repos.ts";
+import AlchemyOrg from "./src/Server.ts";
 
 export default Alchemy.Stack(
   "AlchemyOrg",

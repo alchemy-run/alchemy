@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { WorkspaceFiles } from "alchemy/Workspace";
-import { path } from "../vocabulary.ts";
+import { path } from "../Vocabulary.ts";
 
 const offset = AI.Parameter("offset", S.optionalKey(S.Int))`
 1-indexed line to start reading from. Negative values count from the

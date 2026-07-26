@@ -118,10 +118,10 @@ skill is invisible — not even named — until its parent activates.
 export const CodingLive = Coding.make`
   Writing code in the checkout, with ${Grep}, ${ReadFile}, ${Bash}, …
 
-  Deeper craft, when the work calls for it: ${Reconciling} for
+  Deeper craft, when the work calls for it: ${ResourceEngineering} for
   resource providers, ${TypedErrors} for growing distilled's error
   unions, ${LiveTesting} for proving against the real cloud.`;
-// Layer<Coding, never, …tools | Reconciling | TypedErrors | LiveTesting>
+// Layer<Coding, never, …tools | ResourceEngineering | TypedErrors | LiveTesting>
 ```
 
 This is progressive disclosure at arbitrary depth (the CLAUDE.md
@@ -132,7 +132,7 @@ that does descends exactly as deep as the work demands. The child
 tags ride the parent Layer's requirement channel, so an unprovided
 doctrine is a COMPILE error, not a silent gap in the tree — and the
 whole graph stays auditable the same way charters are (`rg
-'\$\{Reconciling\}'` finds every teaching that exposes it).
+'\$\{ResourceEngineering\}'` finds every teaching that exposes it).
 
 Composition note: the child implementations must be OUTPUTS of the
 provided layer stack (`Layer.provideMerge`, not `Layer.provide`) so
@@ -750,6 +750,54 @@ sealed `Context.Service` whose Layer wires a private agent to the
 world. Erlang/OTP landed the same way: registered names for the
 processes that carry supervision or a service contract, anonymous pids
 for ephemeral workers.
+
+### 9c. Call/reply, sessions, and the supervision cascade
+
+**Decision (2026-07-25): answering a dispatch and ending a run are
+DIFFERENT acts.** The original achieve pattern conflated them — a
+non-Fragment turn value resolved the dispatch AND settled the run,
+destroying the worker's context exactly when a follow-up (review
+feedback) needed it. Three kernel rules replace it:
+
+1. **Answer ≠ settle (the gen_server reply).** A non-Fragment turn
+   value resolves every pending dispatch waiter with the TYPED value
+   and the run PARKS — context intact, resumable. Quiescence still
+   answers with the response text. Ending a run remains the owner's
+   act (`settle`), or the cascade's. Runs are perpetual by default;
+   an actor does not die because it answered a call.
+2. **Sessions on `dispatch`.** The intrinsic takes an optional
+   `session` name; the kernel derives a DETERMINISTIC child key
+   namespaced under the dispatching run
+   (`{parent.key}/{agent}/{session}`), so re-dispatching the same
+   agent + session continues the SAME worker run via the existing
+   admit-or-enqueue semantics. Back-and-forth is just calling again:
+   `dispatch(Engineer, task, session: "build")` → typed PR ref;
+   review rejects; `dispatch(Engineer, feedback, session: "build")` →
+   the same engineer, same worktree (checkouts key on the run key),
+   fixes its own work. Omitting `session` mints a fresh run — one-off
+   labor. Namespacing means two issues' "build" sessions can never
+   collide, and the audit story is unchanged: sessions alter memory,
+   never authority.
+3. **The supervision cascade.** The kernel remembers each run's
+   session workers (the dispatch parentage edge, now load-bearing):
+   when a run settles OR crashes, its children settle with it. Parked
+   workers never outlive the conversation that owns them.
+
+**Communication doctrine: workers speak PROSE (or a typed artifact)
+to their supervisor, never to each other.** The supervising agent is
+the message bus — it relays one worker's answer into another's next
+task, with judgment applied at every hop (the channel relays the
+Reviewer's verdict to the Engineer as a fix task, not a raw
+forward). Serial or parallel is the supervisor's choice PER SAMPLING:
+one `dispatch` call is serial; several dispatch calls in ONE sampling
+run their workers CONCURRENTLY (tool-call execution is unbounded),
+and every answer lands in the same message. Fan-out/fan-in is a
+sampling shape, not a primitive.
+
+Budget note: park-on-answer makes `AI.Tick.count` a LIFETIME counter
+across rounds — budgets sized for one round must either grow (the
+org's Engineer went 40 → 60) or gate on a per-round measure when one
+exists.
 
 ## 10. Layers, composition, testing
 

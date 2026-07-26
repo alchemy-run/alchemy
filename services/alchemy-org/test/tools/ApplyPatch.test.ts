@@ -4,9 +4,9 @@ import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { applyPatch } from "../../src/patch/apply.ts";
-import { parsePatch } from "../../src/patch/parser.ts";
-import type { ApplyPatchInput } from "../../src/patch/types.ts";
+import { applyPatch } from "../../src/patch/Apply.ts";
+import { parsePatch } from "../../src/patch/Parser.ts";
+import type { ApplyPatchInput } from "../../src/patch/Types.ts";
 import { Workspace, fixed as workspace } from "alchemy/Workspace";
 
 const digest = (bytes: Uint8Array) =>

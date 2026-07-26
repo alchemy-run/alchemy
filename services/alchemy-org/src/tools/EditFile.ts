@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { WorkspaceFiles } from "alchemy/Workspace";
-import { path } from "../vocabulary.ts";
+import { path } from "../Vocabulary.ts";
 
 const edits = AI.Parameter(
   "edits",

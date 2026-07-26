@@ -1,7 +1,7 @@
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { message } from "../vocabulary.ts";
+import { message } from "../Vocabulary.ts";
 
 export class Reply extends AI.Tool<Reply>()("reply")`
 Reply with ${message} in the Discord thread you were addressed

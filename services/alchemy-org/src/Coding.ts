@@ -15,9 +15,9 @@ import * as AI from "alchemy/AI";
 import * as Layer from "effect/Layer";
 import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
 import { WorkspaceFilesLive } from "alchemy/Workspace";
-import { LiveTesting } from "./live-testing.ts";
-import { Reconciling } from "./reconciling.ts";
-import { TypedErrors } from "./typed-errors.ts";
+import { LiveTesting } from "./LiveTesting.ts";
+import { ResourceEngineering } from "./ResourceEngineering.ts";
+import { TypedErrors } from "./TypedErrors.ts";
 import {
   ApplyPatch,
   ApplyPatchLocal,
@@ -61,7 +61,7 @@ export const CodingLive = Coding.make`
   - Write code that reads like the surrounding code — match its
     idiom, naming, and comment density.
 
-  Deeper craft, when the work calls for it: ${Reconciling} for
+  Deeper craft, when the work calls for it: ${ResourceEngineering} for
   resource providers, ${TypedErrors} for growing distilled's typed
   error unions, ${LiveTesting} for proving changes against the real
   cloud.`;
