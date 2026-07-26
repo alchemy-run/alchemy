@@ -322,6 +322,7 @@
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:",
+    "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@octokit/webhooks": "^14.2.0",
@@ -381,6 +382,7 @@
     "tsx": "^4.20.6",
     "typescript": "catalog:",
     "uuid": "catalog:",
+    "vitest": "catalog:",
     "wrangler": "catalog:",
     "ws": "catalog:"
   },
