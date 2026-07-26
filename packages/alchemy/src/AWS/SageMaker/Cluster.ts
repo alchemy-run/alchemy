@@ -406,6 +406,22 @@ export class ClusterFailed extends Data.TaggedError("ClusterFailed")<{
   readonly message: string | undefined;
 }> {}
 
+/**
+ * The cluster is stuck in `Deleting` because SageMaker's internal teardown
+ * cannot proceed — e.g. the instance group's execution role (which HyperPod
+ * assumes to delete node ENIs) was deleted or lost its
+ * `ec2:DeleteNetworkInterface` / `ec2:DeleteNetworkInterfacePermission`
+ * permissions mid-teardown. Retrying `deleteCluster` can never fix this;
+ * the role and its permissions must be restored out-of-band, after which
+ * SageMaker's own retry completes the deletion within a minute.
+ */
+export class ClusterTeardownBlocked extends Data.TaggedError(
+  "ClusterTeardownBlocked",
+)<{
+  readonly clusterName: string;
+  readonly message: string;
+}> {}
+
 // Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
@@ -446,6 +462,32 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
       const described = yield* describeClusterOrUndefined(name);
       if (target === "Gone") {
         if (described === undefined) return;
+        // SageMaker's internal teardown deletes node ENIs by assuming the
+        // instance group's execution role. If that role (or its EC2
+        // permissions) was deleted mid-teardown, every internal retry
+        // fails and the cluster stays `Deleting` forever — surface the
+        // node's permission failure immediately instead of polling the
+        // full wait budget on a delete that can never finish.
+        const nodes = yield* sagemaker
+          .listClusterNodes({ ClusterName: name })
+          .pipe(
+            Effect.catchTag("ResourceNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        const blocked = (nodes?.ClusterNodeSummaries ?? []).find((node) =>
+          node.InstanceStatus?.Message?.includes(
+            "does not have permission to perform",
+          ),
+        );
+        if (blocked !== undefined) {
+          return yield* Effect.fail(
+            new ClusterTeardownBlocked({
+              clusterName: name,
+              message: blocked.InstanceStatus?.Message ?? "",
+            }),
+          );
+        }
         return yield* Effect.fail(
           new ClusterNotReady({
             clusterName: name,
@@ -688,21 +730,29 @@ export const ClusterProvider = () =>
           return attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
+          const described = yield* describeClusterOrUndefined(
+            output.clusterName,
+          );
+          if (described === undefined) return;
           // A cluster mid-create/update rejects deletion with a Conflict —
           // wait for it to settle first, then delete. A cluster stuck in
-          // `Failed` (or one that never converges) is still deletable.
-          yield* waitForCluster(output.clusterName, "InService").pipe(
-            Effect.catchTag(
-              ["ClusterFailed", "ClusterNotReady"],
-              () => Effect.void,
-            ),
-          );
-          yield* sagemaker
-            .deleteCluster({ ClusterName: output.clusterName })
-            .pipe(
-              Effect.catchTag("ResourceNotFound", () => Effect.void),
-              Effect.catchTag("ConflictException", () => Effect.void),
+          // `Failed` (or one that never converges) is still deletable. One
+          // already `Deleting` (a previous attempt) skips straight to the
+          // Gone wait instead of burning the full InService wait budget.
+          if (described.ClusterStatus !== "Deleting") {
+            yield* waitForCluster(output.clusterName, "InService").pipe(
+              Effect.catchTag(
+                ["ClusterFailed", "ClusterNotReady"],
+                () => Effect.void,
+              ),
             );
+            yield* sagemaker
+              .deleteCluster({ ClusterName: output.clusterName })
+              .pipe(
+                Effect.catchTag("ResourceNotFound", () => Effect.void),
+                Effect.catchTag("ConflictException", () => Effect.void),
+              );
+          }
           yield* waitForCluster(output.clusterName, "Gone");
         }),
       };
