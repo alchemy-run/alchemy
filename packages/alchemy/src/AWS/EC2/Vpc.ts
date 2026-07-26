@@ -371,10 +371,6 @@ export const VpcProvider = () =>
 
       return {
         stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
-        // Workload teardown (ENI cleanup, node draining) happens inside
-        // this network — nuke deletes core network primitives in its
-        // final tier.
-        nuke: { deleteLast: true },
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           if (

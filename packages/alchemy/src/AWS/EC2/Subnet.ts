@@ -358,10 +358,6 @@ export const SubnetProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["subnetId", "subnetArn", "ownerId", "vpcId"],
-        // Workload teardown (ENI cleanup, node draining) happens inside
-        // this network — nuke deletes core network primitives in its
-        // final tier.
-        nuke: { deleteLast: true },
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           if (

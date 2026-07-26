@@ -274,10 +274,6 @@ export const PolicyProvider = () =>
 
       return {
         stables: ["policyArn", "policyName", "policyId"],
-        // Policies grant the permissions that in-flight cloud-side
-        // teardowns (running under IAM roles) depend on — nuke deletes
-        // them in its final tier, alongside roles.
-        nuke: { deleteLast: true },
         list: () =>
           Effect.gen(function* () {
             // IAM is global; enumerate only customer-managed ("Local")

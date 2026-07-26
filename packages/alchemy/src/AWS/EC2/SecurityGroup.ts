@@ -466,10 +466,6 @@ export const SecurityGroupProvider = () =>
 
       return {
         stables: ["groupId", "groupArn", "ownerId"],
-        // Workload teardown (ENI cleanup, node draining) happens inside
-        // this network — nuke deletes core network primitives in its
-        // final tier.
-        nuke: { deleteLast: true },
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;

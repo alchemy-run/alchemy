@@ -135,16 +135,25 @@ export interface ProviderService<
      */
     skip?: boolean;
     /**
-     * Delete this resource type in a final tier, after every other type has
-     * finished deleting. Identity (IAM roles/policies) and core network
-     * primitives (VPCs, subnets, security groups) are consumed by *other*
-     * services' cloud-side teardown — e.g. SageMaker HyperPod deletes node
-     * ENIs by assuming the instance group's execution role — so deleting
-     * them concurrently can wedge those teardowns permanently. A two-tier
-     * order is cycle-proof by construction: nothing's deletion ever
-     * requires a role or VPC to be *gone* first.
+     * Provider IDs (picomatch globs, e.g. `"AWS.IAM.Role"` or `"AWS.EC2.*"`)
+     * whose resources this type's **cloud-side teardown** consumes — they
+     * must still exist while this type is deleting. `alchemy unsafe nuke`
+     * topologically orders deletion so every resource of this type is fully
+     * gone before any matching type starts deleting; if this type's deletes
+     * fail, the matching types are held back rather than deleted out from
+     * under an in-flight teardown.
+     *
+     * Example: SageMaker HyperPod deletes node ENIs by assuming the
+     * instance group's execution role — deleting the role (or the VPC)
+     * mid-teardown wedges the cluster in `Deleting` permanently, so
+     * `AWS.SageMaker.Cluster` declares `dependsOn: ["AWS.IAM.Role", ...]`.
+     *
+     * The constraint only takes effect when resources of this type are
+     * actually present in the nuke target set; declaration cycles collapse
+     * into a single concurrent wave (with a logged warning) instead of
+     * failing.
      */
-    deleteLast?: boolean;
+    dependsOn?: readonly string[];
   };
   /**
    * Enumerates every existing resource of this type in the ambient scope

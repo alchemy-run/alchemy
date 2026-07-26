@@ -546,6 +546,21 @@ export const ClusterProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["clusterName", "clusterArn"],
+        // HyperPod's internal teardown deletes node ENIs by assuming the
+        // instance group's execution role inside the cluster's VPC —
+        // deleting the role or network mid-teardown wedges the cluster in
+        // `Deleting` permanently, so nuke must fully delete clusters
+        // before touching these types.
+        nuke: {
+          dependsOn: [
+            "AWS.IAM.Role",
+            "AWS.IAM.Policy",
+            "AWS.IAM.InstanceProfile",
+            "AWS.EC2.Vpc",
+            "AWS.EC2.Subnet",
+            "AWS.EC2.SecurityGroup",
+          ],
+        },
         list: () =>
           Effect.gen(function* () {
             const summaries = yield* sagemaker.listClusters.pages({}).pipe(

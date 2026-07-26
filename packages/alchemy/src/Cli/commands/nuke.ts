@@ -283,6 +283,59 @@ const groupBy = <T>(items: T[], key: (item: T) => string): Map<string, T[]> => {
   return out;
 };
 
+const addEdge = (map: Map<string, Set<string>>, from: string, to: string) => {
+  const set = map.get(from) ?? new Set<string>();
+  set.add(to);
+  map.set(from, set);
+};
+
+/**
+ * Strongly-connected components of the type-level teardown-dependency graph
+ * (Tarjan). Components are emitted in reverse topological order of the
+ * condensation — every component's successors are emitted before it — so
+ * callers can compute layers by iterating the result backwards.
+ */
+const stronglyConnectedComponents = (
+  nodes: readonly string[],
+  successors: Map<string, Set<string>>,
+): string[][] => {
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const components: string[][] = [];
+  let counter = 0;
+  const strongConnect = (v: string): void => {
+    index.set(v, counter);
+    low.set(v, counter);
+    counter += 1;
+    stack.push(v);
+    onStack.add(v);
+    for (const w of successors.get(v) ?? []) {
+      if (!index.has(w)) {
+        strongConnect(w);
+        low.set(v, Math.min(low.get(v)!, low.get(w)!));
+      } else if (onStack.has(w)) {
+        low.set(v, Math.min(low.get(v)!, index.get(w)!));
+      }
+    }
+    if (low.get(v) === index.get(v)) {
+      const component: string[] = [];
+      for (;;) {
+        const w = stack.pop()!;
+        onStack.delete(w);
+        component.push(w);
+        if (w === v) break;
+      }
+      components.push(component);
+    }
+  };
+  for (const v of nodes) {
+    if (!index.has(v)) strongConnect(v);
+  }
+  return components;
+};
+
 const nukeSession: ScopedPlanStatusSession = {
   emit: () => Effect.void,
   done: () => Effect.void,
@@ -624,22 +677,101 @@ const nukeCommand = Command.make(
           return remaining;
         });
 
-      // Identity and network primitives (`nuke.deleteLast` — IAM roles and
-      // policies, VPCs, subnets, security groups) are consumed by OTHER
-      // services' cloud-side teardown: e.g. SageMaker HyperPod deletes node
-      // ENIs by assuming the instance group's execution role, and deleting
-      // that role mid-teardown wedges the cluster in `Deleting` forever.
-      // Delete them in a final tier, after everything else has fully
-      // resolved. Two tiers cannot form an ordering cycle: nothing's
-      // deletion ever requires a role or VPC to be *gone* first.
-      const firstTier = targets.filter((t) => !t.provider.nuke?.deleteLast);
-      const lastTier = targets.filter(
-        (t) => t.provider.nuke?.deleteLast === true,
+      // ---- Teardown-dependency ordering ---------------------------------
+      // Providers declare `nuke.dependsOn: [globs]` when their cloud-side
+      // teardown CONSUMES another type (e.g. SageMaker HyperPod deletes
+      // node ENIs by assuming the instance group's execution role inside
+      // the cluster's VPC — deleting the role or network mid-teardown
+      // wedges the cluster in `Deleting` forever). Edge A→B means every A
+      // must be fully GONE before any B is deleted. Only types present in
+      // the target set participate, so the constraint costs nothing when no
+      // dependent resources exist; declaration cycles collapse into one
+      // concurrent wave (handled by the intra-wave retry machinery) with a
+      // logged warning instead of failing.
+      const typeIds = [...new Set(targets.map((t) => t.id))];
+      const providerOfType = new Map(targets.map((t) => [t.id, t.provider]));
+      const successors = new Map<string, Set<string>>();
+      const predecessors = new Map<string, Set<string>>();
+      for (const id of typeIds) {
+        const globs = providerOfType.get(id)?.nuke?.dependsOn;
+        if (!globs || globs.length === 0) continue;
+        const matches = picomatch([...globs]);
+        for (const other of typeIds) {
+          if (other === id || !matches(other)) continue;
+          addEdge(successors, id, other);
+          addEdge(predecessors, other, id);
+        }
+      }
+
+      const components = stronglyConnectedComponents(typeIds, successors);
+      for (const component of components) {
+        if (component.length > 1) {
+          yield* Effect.logWarning(
+            `nuke: teardown-dependency cycle between ${component.join(", ")} — deleting them concurrently`,
+          ).pipe(Effect.provide(context));
+        }
+      }
+      const compOf = new Map<string, number>();
+      components.forEach((component, i) => {
+        for (const node of component) compOf.set(node, i);
+      });
+      // Layer each component: 0 for sources, else 1 + max predecessor
+      // layer. Tarjan emits components in reverse topological order, so
+      // iterating backwards visits predecessors before dependents.
+      const layerOfComp: number[] = new Array(components.length).fill(0);
+      for (let i = components.length - 1; i >= 0; i--) {
+        let layer = 0;
+        for (const node of components[i]!) {
+          for (const pred of predecessors.get(node) ?? []) {
+            const predComp = compOf.get(pred)!;
+            if (predComp !== i) {
+              layer = Math.max(layer, layerOfComp[predComp]! + 1);
+            }
+          }
+        }
+        layerOfComp[i] = layer;
+      }
+      const waves: string[][] = [];
+      components.forEach((component, i) => {
+        (waves[layerOfComp[i]!] ??= []).push(...component);
+      });
+
+      // ---- Execute waves -------------------------------------------------
+      const targetsOfType = groupBy(targets, (t) => t.id);
+      const remainingCount = new Map(
+        [...targetsOfType.entries()].map(([id, items]) => [id, items.length]),
       );
-      const remaining = [
-        ...(yield* runTier(firstTier)),
-        ...(yield* runTier(lastTier)),
-      ];
+      const remaining: typeof targets = [];
+      const held: string[] = [];
+      for (const wave of waves) {
+        const runnable: typeof targets = [];
+        for (const typeId of wave) {
+          const items = targetsOfType.get(typeId) ?? [];
+          // A dependent type still has undeleted resources — deleting this
+          // type now could wedge their in-flight teardown, which is exactly
+          // what the ordering exists to prevent. Hold it back and report.
+          const blockers = [...(predecessors.get(typeId) ?? [])].filter(
+            (pred) =>
+              compOf.get(pred) !== compOf.get(typeId) &&
+              (remainingCount.get(pred) ?? 0) > 0,
+          );
+          if (blockers.length > 0) {
+            held.push(`${typeId} (blocked by ${blockers.join(", ")})`);
+            remaining.push(...items);
+            for (const item of items) {
+              yield* emitDelete({ kind: "failed", id: item.id });
+            }
+            continue;
+          }
+          runnable.push(...items);
+        }
+        const failed = yield* runTier(runnable);
+        remaining.push(...failed);
+        const failedOfType = groupBy(failed, (t) => t.id);
+        for (const typeId of new Set(runnable.map((t) => t.id))) {
+          remainingCount.set(typeId, failedOfType.get(typeId)?.length ?? 0);
+        }
+      }
 
       if (deleteUI) {
         yield* Effect.sleep(10);
@@ -653,6 +785,11 @@ const nukeCommand = Command.make(
           ? `Deleted ${deleted} resource(s).`
           : `Deleted ${deleted} resource(s) over ${pass} pass(es).`,
       );
+      if (held.length > 0) {
+        yield* Console.log(
+          `Held back (their dependent types could not be fully deleted): ${held.join("; ")}`,
+        );
+      }
       if (remaining.length > 0) {
         yield* Console.log(
           `${remaining.length} resource(s) could not be deleted.`,
