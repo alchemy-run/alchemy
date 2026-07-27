@@ -235,6 +235,12 @@
       "worker": "./src/SQL/index.ts",
       "import": "./lib/SQL/index.js"
     },
+    "./SQL/*": {
+      "types": "./lib/SQL/*.d.ts",
+      "bun": "./src/SQL/*.ts",
+      "worker": "./src/SQL/*.ts",
+      "import": "./lib/SQL/*.js"
+    },
     "./SQLite": {
       "types": "./lib/SQLite/index.d.ts",
       "bun": "./src/SQLite/index.ts",

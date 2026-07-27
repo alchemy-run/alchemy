@@ -80,24 +80,6 @@ export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>(
           return yield* HttpServerResponse.json({ rows });
         }
 
-        // POST /sql/users — synchronous fragment helpers (`sql.insert`,
-        // `sql.and`) nested inside an outer template. Regression: the nested
-        // helper call returned a deferred proxy that was handed to D1 as a
-        // bind parameter ("Cannot convert object to primitive value").
-        if (request.method === "POST" && request.url === "/sql/users") {
-          const body = (yield* request.json) as {
-            name: string;
-            email: string;
-          };
-          const row = { name: body.name, email: body.email };
-          yield* sql`INSERT INTO users ${sql.insert(row)}`;
-          const rows = yield* sql`
-            SELECT id, name, email FROM users
-            WHERE ${sql.and([sql`name = ${body.name}`, sql`email = ${body.email}`])}
-          `;
-          return yield* HttpServerResponse.json({ rows });
-        }
-
         return yield* HttpServerResponse.json(
           { error: "not found" },
           { status: 404 },

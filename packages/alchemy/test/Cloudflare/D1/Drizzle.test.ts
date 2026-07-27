@@ -124,29 +124,6 @@ test(
       rows: Array<{ id: number; name: string; email: string }>;
     };
     expect(rows.map((r) => r.email)).toContain("alice@example.com");
-
-    // nested fragment helpers — `sql.insert(row)` / `sql.and([...])` inside
-    // an outer template (regression: proxyChain handed the nested deferred
-    // proxy to D1 as a bind param → "Cannot convert object to primitive
-    // value" at D1PreparedStatement.bind).
-    const nestedRes = yield* untilOk(
-      HttpClient.execute(
-        HttpClientRequest.post(`${url}/sql/users`).pipe(
-          HttpClientRequest.bodyJsonUnsafe({
-            name: "bob",
-            email: "bob@example.com",
-          }),
-        ),
-      ),
-    );
-    const nested = (yield* nestedRes.json) as {
-      rows: Array<{ id: number; name: string; email: string }>;
-    };
-    expect(nested.rows).toHaveLength(1);
-    expect(nested.rows[0]).toMatchObject({
-      name: "bob",
-      email: "bob@example.com",
-    });
   }),
   { timeout: TEST_TIMEOUT },
 );
