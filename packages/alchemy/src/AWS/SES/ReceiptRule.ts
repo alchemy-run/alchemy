@@ -124,6 +124,8 @@ export interface ReceiptRule extends Resource<
  * @section Ordering Rules
  * @example Place a Rule After Another
  * ```typescript
+ * // A BounceAction's Sender must be a verified SES identity — SES rejects the
+ * // rule with IdentityNotVerified at create/update time otherwise.
  * const first = yield* SES.ReceiptRule("First", {
  *   ruleSetName: ruleSet.ruleSetName,
  *   actions: [{ StopAction: { Scope: "RuleSet" } }],

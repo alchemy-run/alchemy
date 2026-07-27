@@ -397,12 +397,13 @@ describe("SES Bindings", () => {
             error?: string;
           };
 
-          // No real received message backs the fabricated OriginalMessageId, so
-          // SES rejects it with a typed error. That proves the binding wires
+          // No real received message backs the fabricated OriginalMessageId
+          // (and the bounce sender is unverified in the sandbox), so SES
+          // rejects the bounce with the typed MessageRejected tag — verified
+          // live: "Failed to generate a bounce for <id>. The following
+          // identities are not verified: ...". That proves the binding wires
           // ses:SendBounce IAM + request marshalling into the deployed Lambda.
-          // Live testing should pin the exact tag (MessageRejected vs a
-          // CommonErrors InvalidParameterValue).
-          expect(typeof response.error).toBe("string");
+          expect(response.error).toBe("MessageRejected");
           expect(response.messageId).toBeUndefined();
         }),
     );
