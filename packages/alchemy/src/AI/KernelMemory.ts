@@ -327,11 +327,17 @@ interface RunState {
   /** The last rendered stance — what `spawn`/`skill` grant from. */
   lastStance?: Stance;
   /**
-   * Session workers this run dispatched (child key → the delegate's
-   * actor) — the SUPERVISION edge: when this run settles, its
-   * children settle with it.
+   * Session workers this run dispatched — the SUPERVISION edge: when
+   * this run settles, its children settle with it. Keyed by
+   * `{agent}:{childKey}` because two DIFFERENT agents may share one
+   * child key (a shared-workspace topology: the engineer and the
+   * reviewer both keyed by the issue); the value carries the run key
+   * the cascade settles.
    */
-  readonly children: Map<string, Actor>;
+  readonly children: Map<
+    string,
+    { readonly key: string; readonly actor: Actor }
+  >;
 }
 
 /** What one tick hands the loop. */
@@ -877,7 +883,7 @@ export const KernelMemory: Layer.Layer<
               prompt: Prompt.empty,
               pendingNotes: [],
               observed: 0,
-              children: new Map<string, Actor>(),
+              children: new Map(),
             };
           });
 
@@ -1112,14 +1118,18 @@ export const KernelMemory: Layer.Layer<
                     key: run.key,
                   });
                   const actor = yield* resolveDelegate(door.agent);
+                  const agentName = door.agent["~alchemy/Name"];
                   if (derived.key !== undefined) {
-                    run.children.set(derived.key, actor);
+                    run.children.set(`${agentName}:${derived.key}`, {
+                      key: derived.key,
+                      actor,
+                    });
                   }
                   yield* observe(run, {
                     type: "dispatched",
                     tick: run.tick,
                     toolName: name,
-                    agent: door.agent["~alchemy/Name"],
+                    agent: agentName,
                     child: derived.key,
                   });
                   return yield* actor
@@ -1191,7 +1201,7 @@ export const KernelMemory: Layer.Layer<
                       ? undefined
                       : `${run.key}/${params.agent}/${params.session}`;
                   if (key !== undefined) {
-                    run.children.set(key, actor);
+                    run.children.set(`${params.agent}:${key}`, { key, actor });
                   }
                   yield* observe(run, {
                     type: "dispatched",
@@ -1387,8 +1397,8 @@ export const KernelMemory: Layer.Layer<
          */
         const settleChildren = (run: RunState): Effect.Effect<void> =>
           Effect.forEach(
-            [...run.children.entries()],
-            ([key, actor]) =>
+            [...run.children.values()],
+            ({ key, actor }) =>
               actor
                 .settle(key, {
                   supervisor: { term: termName, key: run.key },

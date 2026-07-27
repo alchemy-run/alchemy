@@ -17,9 +17,9 @@
  */
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
-import { Coding } from "./Coding.ts";
-import { OpenPullRequest } from "./tools/index.ts";
-import { body, issue, title, type PullRequestRef } from "./Vocabulary.ts";
+import { Coding } from "../skills/Coding.ts";
+import { OpenPullRequest } from "../tools/index.ts";
+import { body, issue, title, type PullRequestRef } from "../Vocabulary.ts";
 
 export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
 
@@ -33,16 +33,13 @@ type Pr = typeof PullRequestRef.Type;
  * answers its tools (local toolbox vs DevBox container) is the
  * entrypoint's `Layer.provide`.
  *
- * A round ends on EVIDENCE, never on the model's claim:
- *
- * - **reply** — the {@link OpenPullRequest} wrapper calls `AI.reply`
- *   the moment the pull request provably exists: the caller resolves
- *   with the TYPED artifact, and the run PARKS, context intact — the
- *   next dispatch to the same key (review feedback) resumes THIS
- *   engineer in THIS worktree.
- * - **refuse** — the budget is a LAW in the turn's guard (the model
- *   cannot be its own circuit breaker): a run that exhausts it fails
- *   typed (`AI.Refused`) instead of burning tokens forever.
+ * A round ends on EVIDENCE, never on the model's claim: the
+ * {@link OpenPullRequest} wrapper calls `AI.reply` the moment the
+ * pull request provably exists — the caller resolves with the TYPED
+ * artifact, and the run PARKS, context intact, so the next dispatch
+ * to the same key (review feedback) resumes THIS engineer in THIS
+ * worktree. (A budget would be the guard tier — a function turn over
+ * `AI.TickEvent` — should one ever be warranted.)
  */
 export const EngineerLive = Engineer.make(
   Effect.gen(function* () {
@@ -66,38 +63,30 @@ export const EngineerLive = Engineer.make(
       }),
     );
 
-    const stance = AI.prose`
-      You are an engineer on one issue's thread; each task you
-      receive is a round of that work. A first ${issue} carries the
-      acceptance criteria — your entire specification; later rounds
-      carry review feedback on the pull request you opened, to fix
-      in this same checkout on the same branch. Your tools operate
-      inside your own checkout of the repository — paths are
-      repository-relative ("README.md", "docs/x.md"). ${Coding} is
-      your craft; done means the criteria are met and the tests are
-      green. Then ${openPullRequest} citing the issue. Review and
-      merge are someone else's job.`;
+    // the stance is CONSTANT — an `Effect<Fragment>` is a valid turn,
+    // so returning the prose directly is the whole loop
+    return AI.prose`
+      You are an engineer on one issue's thread; each task you receive
+      is a round of that work.
 
-    // the GUARD tier: deterministic law over every tick — the budget
-    // and its pressure note; the stance itself is constant (the
-    // system prompt stays byte-stable; the cache never busts)
-    return Effect.fn(function* (tick: AI.TickEvent) {
-      if (tick.count >= 60) {
-        return yield* Effect.fail(
-          new AI.Refused({
-            loop: "Engineer",
-            reason: "60 samplings without reaching green",
-            observed: tick.count,
-          }),
-        );
-      }
-      if (tick.count === 45) {
-        yield* AI.say`
-          45 of your 60 sampling budget is spent. Stop exploring:
-          converge on the smallest change that satisfies the acceptance
-          criteria and open the pull request now.`;
-      }
-      return yield* stance;
-    });
+      ## Rounds
+
+      - A first ${issue} carries the acceptance criteria — your entire
+        specification.
+      - Later rounds carry review feedback on the pull request you
+        opened.
+
+      ## Workspace
+
+      Your tools operate inside the issue's checkout of the repository
+      — paths are repository-relative. The reviewer reads and tests in
+      this same checkout; leave it as you would a shared desk.
+
+      ## Craft
+
+      ${Coding} is your craft; done means the criteria are met and the
+      tests are green. Then ${openPullRequest}.
+
+      Review and merge are someone else's job.`;
   }),
 );

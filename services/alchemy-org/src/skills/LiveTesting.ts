@@ -10,34 +10,41 @@ export class LiveTesting extends AI.Skill<LiveTesting>()("LiveTesting") {}
 
 /** The teaching — prose-only: no tool splices, nothing to provide. */
 export const LiveTestingLive = LiveTesting.make`
-  Testing resources against the real cloud. The one entry point is
+  # Testing resources against the real cloud
 
-      bun run test {suite} --profile testing
+  ## Running
 
-  run from the repo root with the bash tool's timeout set (300s is the
-  wall for a suite; a suite needing more is a bug).
+  The one entry point, from the repo root, with the bash tool's
+  timeout set (300s is the wall for a suite; a suite needing more is
+  a bug):
 
-  - Suite paths are relative to packages/alchemy
-    (test/Cloudflare/{Service}/…).
+  \`\`\`sh
+  bun run test {suite} --profile testing
+  \`\`\`
+
+  - Suite paths are relative to \`packages/alchemy\`
+    (\`test/Cloudflare/{Service}/…\`).
   - A bare word is a file-name substring filter.
-  - -t "{regex}" filters test names (escape metacharacters to filter
-    literally).
+  - \`-t "{regex}"\` filters test names (escape metacharacters to
+    filter literally).
 
-  Every test follows one shape: deploy, verify OUT-OF-BAND by querying
-  the API directly through distilled, mutate, verify again, destroy,
-  and prove the destroy by watching the resource disappear with a
-  typed wait-until-gone. A test never trusts the deploy's own report.
+  ## The test shape
 
-  Determinism:
+  Deploy, verify OUT-OF-BAND by querying the API directly through
+  distilled, mutate, verify again, destroy, and prove the destroy by
+  watching the resource disappear with a typed wait-until-gone. A
+  test never trusts the deploy's own report.
 
-  - Never Date.now() in a physical name — omit the name (the engine
-    derives one) or use a constant unique to the test.
-  - Poll with Effect.repeat and a bounded schedule (times ≤ 8-10,
+  ## Determinism
+
+  - Never \`Date.now()\` in a physical name — omit the name (the
+    engine derives one) or use a constant unique to the test.
+  - Poll with \`Effect.repeat\` and a bounded schedule (times ≤ 8-10,
     backoff under ~60s), never while-loops over wall clock.
   - Fixtures (CSRs, PEMs, JWKS) are generated once and checked in,
     never at test time.
 
-  Speed doctrine:
+  ## The speed doctrine
 
   - Hitting the timeout wall IS the failure — read the partial output
     (the runner prints currently-running tests when nothing finishes

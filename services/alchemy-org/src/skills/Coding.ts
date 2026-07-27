@@ -13,7 +13,7 @@
  */
 import * as AI from "alchemy/AI";
 import * as Layer from "effect/Layer";
-import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
+import { ToolOutputStoreLive } from "../lib/ToolOutputStore.ts";
 import { WorkspaceFilesLive } from "alchemy/Workspace";
 import { ResourceEngineering } from "./ResourceEngineering.ts";
 import {
@@ -35,7 +35,7 @@ import {
   ReadOutputLocal,
   WriteFile,
   WriteFileLocal,
-} from "./tools/index.ts";
+} from "../tools/index.ts";
 
 export class Coding extends AI.Skill<Coding>()("Coding") {}
 
@@ -47,22 +47,27 @@ export class Coding extends AI.Skill<Coding>()("Coding") {}
  * EditFile | ApplyPatch | WriteFile | Bash | ReadOutput>`.
  */
 export const CodingLive = Coding.make`
-  Writing code in the repository checkout, with ${Grep}, ${Glob},
-  ${ListDirectory}, ${ReadFile}, ${EditFile}, ${ApplyPatch},
-  ${WriteFile}, ${Bash}, and ${ReadOutput}. The discipline the tools
-  cannot carry alone:
+  # Writing code in the repository checkout
 
-  - Read before you edit — the digest chain exists so you never
+  Your tools: ${Grep}, ${Glob}, ${ListDirectory}, ${ReadFile},
+  ${EditFile}, ${ApplyPatch}, ${WriteFile}, ${Bash}, and
+  ${ReadOutput}.
+
+  ## The discipline the tools cannot carry alone
+
+  - **Read before you edit** — the digest chain exists so you never
     change a version you have not seen.
-  - Verify with the test suite after your edits — the suite, not
+  - **Verify with the test suite after your edits** — the suite, not
     your reading of the diff, is the oracle of done-ness.
-  - Write code that reads like the surrounding code — match its
+  - **Write code that reads like the surrounding code** — match its
     idiom, naming, and comment density.
 
-  Deeper craft, when the work calls for it: ${ResourceEngineering}
-  covers everything about building alchemy resources — the contract,
-  the reconciler, and the disciplines that make providers reliable
-  (its own deeper skills included).`;
+  ## Deeper craft
+
+  When the work calls for it: ${ResourceEngineering} covers
+  everything about building alchemy resources — the contract, the
+  reconciler, and the disciplines that make providers reliable (its
+  own deeper skills included).`;
 
 /**
  * Production local/Bun tool composition. The entrypoint still chooses

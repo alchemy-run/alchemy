@@ -24,9 +24,9 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Ledger } from "./Ledger.ts";
-import { testAlchemy } from "./Repos.ts";
-import { OpenIssue, Reply, SearchIssues } from "./tools/index.ts";
+import { Ledger } from "../Ledger.ts";
+import { testAlchemy } from "../Repos.ts";
+import { OpenIssue, Reply, SearchIssues } from "../tools/index.ts";
 
 /**
  * What the org may ask of the FrontDesk from code. `mention` is a
