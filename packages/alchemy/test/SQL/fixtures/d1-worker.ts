@@ -3,8 +3,7 @@ import * as SQL from "@/SQL/D1.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as Sql from "effect/unstable/sql/SqlClient";
-import { handleSqlRoutes } from "./routes.ts";
+import { makeLayerUsers, makeSqlRoutes } from "./routes.ts";
 
 export const Database = Cloudflare.D1.Database("SqlD1Database");
 
@@ -15,6 +14,21 @@ const DDL = `CREATE TABLE IF NOT EXISTS ${TABLE} (
   name TEXT NOT NULL,
   email TEXT NOT NULL
 )`;
+
+/**
+ * Init effect for the whole route surface: binds the D1 database, builds the
+ * `SQL.D1` client and the `SQL.D1Layer`-backed users service, and returns
+ * the handler interface. Resources/bindings yielded here dedupe with any
+ * other usage in the Worker, so nothing needs to be threaded through `fetch`.
+ */
+const D1Routes = Effect.gen(function* () {
+  const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
+  const sql = yield* SQL.D1(d1);
+  const layerUsers = yield* makeLayerUsers(TABLE).pipe(
+    Effect.provide(SQL.D1Layer(d1)),
+  );
+  return makeSqlRoutes({ sql, layerUsers, ddl: DDL, table: TABLE });
+});
 
 /**
  * Effect-native Worker driving `SQL.D1` (the raw `@effect/sql-d1` client)
@@ -28,21 +42,12 @@ export default class SqlD1Worker extends Cloudflare.Worker<SqlD1Worker>()(
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
-    const sql = yield* SQL.D1(d1);
-    // The same database through `SQL.D1Layer` — resolved as the generic
-    // `SqlClient` service, proving the Layer wiring end-to-end.
-    const layerSql = yield* Effect.gen(function* () {
-      return yield* Sql.SqlClient;
-    }).pipe(Effect.provide(SQL.D1Layer(d1)));
+    const routes = yield* D1Routes;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const response = yield* handleSqlRoutes(
-          { sql, layerSql, ddl: DDL, table: TABLE },
-          request,
-        );
+        const response = yield* routes.handle(request);
         if (response !== undefined) {
           return response;
         }
