@@ -8,7 +8,7 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectDirectStatus, expectUrlContains } from "../Utils/Http.ts";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
@@ -31,10 +31,12 @@ const wakuProps = (rootDir: string) => ({
   rootDir,
   url: true as const,
   subdomain: { enabled: true, previewsEnabled: true },
-  // Waku's server runtime needs AsyncLocalStorage.
+  // Deliberately NO `flags`: Waku's server runtime needs
+  // AsyncLocalStorage, and the resource must default to `nodejs_als`
+  // when the user provides no compatibility flags (a zero-config deploy
+  // would otherwise fail at first request).
   compatibility: {
     date: "2026-03-10",
-    flags: ["nodejs_als"],
   },
   memo: {
     include: ["src/**", "public/**", "package.json", "tsconfig.json"],
@@ -115,6 +117,13 @@ test.provider(
           label: "waku SSG page",
         },
       );
+
+      // The SSG page serves 200 directly at the extensionless URL — the
+      // default `drop-trailing-slash` asset handling must not 307-redirect
+      // `/about` to `/about/`.
+      yield* expectDirectStatus(`${site1.url!}/about`, 200, {
+        label: "waku SSG page serves without a redirect",
+      });
 
       // ── deploy 2: no changes ⇒ the rebuild-free input hash matches and
       // the deploy short-circuits without rebuilding ───────────────────────

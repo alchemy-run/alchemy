@@ -1,11 +1,15 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
+import * as kv from "@distilled.cloud/cloudflare/kv";
 import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -28,6 +32,51 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/astro-app");
 // fixture's `astro` dependency resolves by walking up to
 // `packages/alchemy/node_modules`.
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
+
+class SessionFetchFailed extends Data.TaggedError("SessionFetchFailed")<{
+  url: string;
+  message: string;
+}> {}
+
+/**
+ * Cookie-aware fetch for the session round-trip: returns the body plus
+ * the `astro-session` cookie pair from `set-cookie` (if any).
+ */
+const fetchSession = (url: string, cookie?: string) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const u = new URL(url);
+      u.searchParams.set("__alchemy_cb", String(Date.now()));
+      const res = await fetch(u, {
+        signal,
+        cache: "no-store",
+        headers: {
+          "cache-control": "no-cache",
+          accept: "*/*",
+          ...(cookie ? { cookie } : {}),
+        },
+      });
+      const body = await res.text();
+      const sessionCookie = res.headers
+        .get("set-cookie")
+        ?.match(/astro-session=[^;,\s]+/)?.[0];
+      return { status: res.status, body, sessionCookie };
+    },
+    catch: (e) =>
+      new SessionFetchFailed({
+        url,
+        message: e instanceof Error ? e.message : String(e),
+      }),
+  });
+
+/** Titles of KV namespaces auto-provisioned for the given logical id. */
+const listSessionNamespaces = (accountId: string, idFragment: string) =>
+  kv.listNamespaces.items({ accountId }).pipe(
+    Stream.filter((ns) => ns.title.includes(idFragment)),
+    Stream.map((ns) => ns.title),
+    Stream.runCollect,
+    Effect.map((chunk) => [...chunk]),
+  );
 
 test.provider(
   "Astro: SSR + env binding + prerender + static assets deploy; unchanged sources memo-skip the rebuild",
@@ -101,6 +150,46 @@ test.provider(
         },
       );
 
+      // ── sessions: the SESSION KV namespace is auto-provisioned and
+      // `Astro.session` round-trips through it ───────────────────────────
+      const sessionNamespaces = yield* listSessionNamespaces(
+        accountId,
+        "AstroSiteSession",
+      );
+      expect(sessionNamespaces.length).toBe(1);
+
+      // Wait for the route to serve before the cookie round-trip.
+      yield* expectUrlContains(`${site1.url!}/session`, "session-count=", {
+        timeout: "60 seconds",
+        label: "session page",
+      });
+
+      const first = yield* fetchSession(`${site1.url!}/session`);
+      expect(first.status).toBe(200);
+      expect(first.body).toContain("session-count=1");
+      expect(first.sessionCookie).toBeDefined();
+
+      // Replaying the session cookie must observe the previous request's
+      // KV write. Retry through KV's (brief, same-colo) read lag.
+      const second = yield* fetchSession(
+        `${site1.url!}/session`,
+        first.sessionCookie,
+      ).pipe(
+        Effect.filterOrFail(
+          (res) => res.body.includes("session-count=2"),
+          (res) =>
+            new SessionFetchFailed({
+              url: `${site1.url!}/session`,
+              message: `expected session-count=2, got: ${res.body.slice(0, 240)}`,
+            }),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential("1 second", 1.5),
+          times: 8,
+        }),
+      );
+      expect(second.body).toContain("session-count=2");
+
       // ── deploy 2: nothing changed ⇒ memo hit (no rebuild) ──────────────
       const site2 = yield* deploy();
       expect(site2.hash?.input).toEqual(site1.hash?.input);
@@ -125,6 +214,22 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+
+      // Destroy must also clean up the auto-provisioned session namespace.
+      yield* listSessionNamespaces(accountId, "AstroSiteSession").pipe(
+        Effect.filterOrFail(
+          (titles) => titles.length === 0,
+          (titles) =>
+            new SessionFetchFailed({
+              url: "kv.listNamespaces",
+              message: `session namespace(s) survived destroy: ${titles.join(", ")}`,
+            }),
+        ),
+        Effect.retry({
+          schedule: Schedule.spaced("3 seconds"),
+          times: 10,
+        }),
+      );
     }).pipe(logLevel),
   { timeout: 360_000 },
 );

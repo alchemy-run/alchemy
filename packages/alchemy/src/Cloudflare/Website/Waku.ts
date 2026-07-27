@@ -60,6 +60,13 @@ export interface WakuProps<
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+   *
+   * Waku links SSG pages without trailing slashes (`/about`), so
+   * `htmlHandling` defaults to `"drop-trailing-slash"` — the prerendered
+   * `about/index.html` serves directly at `/about` instead of 307-redirecting
+   * to `/about/`. Set `htmlHandling` explicitly to override.
+   *
+   * @default { htmlHandling: "drop-trailing-slash" }
    */
   assets?: AssetsConfig;
 }
@@ -77,8 +84,11 @@ export interface WakuProps<
  * (respecting `.gitignore` by default) so unchanged projects skip the
  * build and deploy entirely.
  *
- * Waku's server runtime uses `AsyncLocalStorage`, so enable the
- * `nodejs_als` (or `nodejs_compat`) compatibility flag.
+ * Waku's server runtime uses `AsyncLocalStorage`, so the `nodejs_als`
+ * compatibility flag is enabled automatically when your compatibility
+ * flags include neither `nodejs_als` nor `nodejs_compat`. SSG pages are
+ * served at their extensionless URLs (`/about`) via the default
+ * `drop-trailing-slash` asset handling.
  *
  * @resource
  * @product Website
@@ -86,24 +96,17 @@ export interface WakuProps<
  *
  * @section Deploying a Waku Site
  * A single call builds the project and deploys the RSC server bundle plus
- * the client assets.
+ * the client assets — no configuration required.
  *
  * @example Waku site
  * ```typescript
- * const site = yield* Cloudflare.Website.Waku("Site", {
- *   compatibility: {
- *     flags: ["nodejs_als"],
- *   },
- * });
+ * const site = yield* Cloudflare.Website.Waku("Site");
  * ```
  *
  * @example Waku project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site", {
  *   rootDir: "apps/web",
- *   compatibility: {
- *     flags: ["nodejs_als"],
- *   },
  * });
  * ```
  *
@@ -119,9 +122,6 @@ export interface WakuProps<
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  *
  * const site = yield* Cloudflare.Website.Waku("Site", {
- *   compatibility: {
- *     flags: ["nodejs_als"],
- *   },
  *   env: {
  *     UPLOADS: bucket,
  *   },
@@ -136,9 +136,6 @@ export interface WakuProps<
  * @example Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site", {
- *   compatibility: {
- *     flags: ["nodejs_als"],
- *   },
  *   memo: {
  *     include: ["src/**", "public/**", "package.json"],
  *   },
@@ -153,9 +150,7 @@ export interface WakuProps<
  *
  * @example Declaring a Waku Worker class
  * ```typescript
- * class Site extends Cloudflare.Website.Waku<Site>()("Site", {
- *   compatibility: { flags: ["nodejs_als"] },
- * }) {}
+ * class Site extends Cloudflare.Website.Waku<Site>()("Site") {}
  *
  * const site = yield* Site;
  * ```
@@ -200,6 +195,23 @@ export const Waku: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
+            compatibility: {
+              ...props?.compatibility,
+              // Waku's server runtime needs AsyncLocalStorage — default to
+              // nodejs_als when the user hasn't enabled it (or the broader
+              // nodejs_compat) themselves.
+              flags:
+                props?.compatibility?.flags?.includes("nodejs_als") ||
+                props?.compatibility?.flags?.includes("nodejs_compat")
+                  ? props.compatibility!.flags
+                  : [...(props?.compatibility?.flags ?? []), "nodejs_als"],
+            },
+            // Waku links SSG pages without trailing slashes; serve
+            // `about/index.html` at `/about` directly instead of redirecting.
+            assets: {
+              htmlHandling: "drop-trailing-slash" as const,
+              ...props?.assets,
+            },
             main: undefined!,
             source: {
               provider: WAKU_SOURCE_PROVIDER,

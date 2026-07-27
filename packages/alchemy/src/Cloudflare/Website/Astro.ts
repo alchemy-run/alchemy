@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
+import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -39,12 +40,16 @@ export interface AstroProps<
     workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
   };
   /**
-   * The name of the KV binding injected into Astro's session config when
-   * present on the Worker env. Bind a KV namespace under this name to
-   * enable Astro sessions.
+   * The name of the KV binding backing Astro's session API.
+   *
+   * A KV namespace is auto-provisioned and bound under this name on
+   * deploy, so `Astro.session` works with zero configuration. Bind your
+   * own KV namespace under this name in `env` to use it instead of the
+   * auto-provisioned one, or set this to `false` to disable session
+   * provisioning entirely.
    * @default "SESSION"
    */
-  sessionKVBindingName?: string;
+  sessionKVBindingName?: string | false;
   /**
    * Serializable Astro config merged into the in-memory configuration.
    * The project's `astro.config.*` file is NOT read — the integration is
@@ -139,11 +144,13 @@ export interface AstroProps<
  * ```
  *
  * @section Sessions
- * Astro's session API is backed by a KV namespace. Bind one under the
- * session binding name (`SESSION` by default) and Astro sessions work
- * out of the box.
+ * Astro's session API is backed by a KV namespace. One is provisioned
+ * and bound under the session binding name (`SESSION` by default)
+ * automatically, so `Astro.session` works with zero configuration.
+ * Bind your own namespace under that name to use it instead, or set
+ * `sessionKVBindingName: false` to opt out of session provisioning.
  *
- * @example Enabling Astro sessions
+ * @example Bringing your own session namespace
  * ```typescript
  * const sessions = yield* Cloudflare.KV.Namespace("Sessions");
  *
@@ -154,6 +161,13 @@ export interface AstroProps<
  *   env: {
  *     SESSION: sessions,
  *   },
+ * });
+ * ```
+ *
+ * @example Opting out of session provisioning
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Astro("Website", {
+ *   sessionKVBindingName: false,
  * });
  * ```
  *
@@ -236,20 +250,38 @@ export const Astro: {
     ? (id: string, propsEff: any) => effectClass(Astro(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
+        Effect.gen(function* () {
+          const props: any =
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          const session = props.sessionKVBindingName;
+          const sessionBindingName =
+            typeof session === "string" ? session : "SESSION";
+          let env = props.env;
+          // Auto-provision the KV namespace backing Astro's session API
+          // unless the user opted out (`sessionKVBindingName: false`) or
+          // already bound their own namespace under the session name.
+          // Resource creation is deduped by logical id, so re-evaluating
+          // this props effect is safe.
+          if (session !== false && env?.[sessionBindingName] === undefined) {
+            const sessions = yield* Namespace(`${id}Session`);
+            env = { ...env, [sessionBindingName]: sessions };
+          }
+          return {
             ...props,
+            env,
             main: undefined!,
             source: {
               provider: "@distilled.cloud/astro/source",
               options: {
-                rootDir: props?.rootDir,
-                memo: props?.memo,
-                sessionKVBindingName: props?.sessionKVBindingName,
-                astro: props?.astro,
+                rootDir: props.rootDir,
+                memo: props.memo,
+                // Passed through verbatim (including `false`) so the
+                // source provider can skip its session-driver wiring on
+                // opt-out.
+                sessionKVBindingName: props.sessionKVBindingName,
+                astro: props.astro,
               },
             },
-          }),
-        ),
+          };
+        }),
       )) as any;

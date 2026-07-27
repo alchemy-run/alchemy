@@ -147,6 +147,93 @@ export const expectUrlContains = (
   );
 };
 
+export class HttpStatusMismatch extends Data.TaggedError("HttpStatusMismatch")<{
+  url: string;
+  expected: number;
+  actual: number;
+  bodyExcerpt: string;
+}> {}
+
+const fetchOnceStatus = (url: string, expected: number) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const u = new URL(url);
+      u.searchParams.set("__alchemy_cb", String(Date.now()));
+      // `redirect: "manual"` so a 3xx is observed as-is instead of being
+      // transparently followed — this helper exists to assert that a URL
+      // serves (or redirects) *directly*.
+      const res = await fetch(u, {
+        signal,
+        cache: "no-store",
+        redirect: "manual",
+        headers: {
+          "cache-control": "no-cache",
+          pragma: "no-cache",
+          accept: "*/*",
+        },
+      });
+      const body = await res.text();
+      if (res.status !== expected || looksLikeCloudflarePlaceholder(body)) {
+        throw new HttpStatusMismatch({
+          url,
+          expected,
+          actual: res.status,
+          bodyExcerpt: body.slice(0, 240),
+        });
+      }
+      return res.status;
+    },
+    catch: (e) =>
+      e instanceof HttpStatusMismatch
+        ? e
+        : new HttpFetchFailed({
+            url,
+            message: e instanceof Error ? e.message : String(e),
+          }),
+  });
+
+/**
+ * Fetch `url` WITHOUT following redirects and assert the immediate
+ * response status equals `expected`. Retries through deploy propagation
+ * like `expectUrlContains`. Use it to prove a URL serves directly (200)
+ * rather than bouncing through a 3xx first.
+ */
+export const expectDirectStatus = (
+  url: string,
+  expected: number,
+  options: ExpectUrlContainsOptions = {},
+) => {
+  const totalTimeout = Duration.fromInputUnsafe(
+    options.timeout ?? "90 seconds",
+  );
+  const initial = options.initialBackoff ?? "750 millis";
+  const label = options.label ?? "url";
+
+  return fetchOnceStatus(url, expected).pipe(
+    Effect.retry({
+      schedule: Schedule.min([
+        Schedule.exponential(initial, 1.5),
+        Schedule.spaced("8 seconds"),
+      ]),
+    }),
+    Effect.timeoutOrElse({
+      duration: totalTimeout,
+      orElse: () =>
+        Effect.fail(
+          new HttpStatusMismatch({
+            url,
+            expected,
+            actual: 0,
+            bodyExcerpt: `[timed out after ${Duration.toMillis(totalTimeout)}ms waiting for a direct ${expected}]`,
+          }),
+        ),
+    }),
+    Effect.tapError((error) =>
+      Effect.logError(`expectDirectStatus(${label}) failed`, error),
+    ),
+  );
+};
+
 const fetchOnceAbsent = (url: string, marker: string) =>
   Effect.tryPromise({
     try: async (signal) => {
