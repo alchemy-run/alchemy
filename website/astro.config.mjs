@@ -436,6 +436,10 @@ export default defineConfig({
                   label: "Custom Provider",
                   link: "/infrastructure-as-code/custom-provider",
                 },
+                {
+                  label: "Local Providers",
+                  link: "/infrastructure-as-code/local-provider",
+                },
               ],
             },
             {

@@ -717,6 +717,30 @@ Effect.catchTag(["WidgetNotFound", "Gone"], () => Effect.succeed(undefined))
 
 If `Effect.catchTag("SomeTag", ...)` fails to typecheck, that is the signal that distilled's union is missing the error — patch distilled (step 2 above); do not loosen the alchemy-side types.
 
+# Provider Modes & Local Providers (doctrine)
+
+Some resource types have TWO implementations: a **live** provider (converges real cloud state, `alchemy deploy`) and a **local** provider (emulates the resource on the developer's machine, `alchemy dev`). Provider mode is a first-class engine concept — see [ProviderMode.ts](./packages/alchemy/src/ProviderMode.ts), [Local/ProviderLayer.ts](./packages/alchemy/src/Local/ProviderLayer.ts), [Local/LocalProvider.ts](./packages/alchemy/src/Local/LocalProvider.ts), and the user-facing guide at [website/src/content/docs/infrastructure-as-code/local-provider.mdx](./website/src/content/docs/infrastructure-as-code/local-provider.mdx).
+
+Engine semantics (never re-implement these per provider):
+
+- **Register both variants with `ProviderLayer.dual(cls, { live: () => ..., local: () => ... })`** — never select one at layer build. The run-default variant builds eagerly; the other is lazy and memoized, so mode-specific dependency layers (workerd, Docker) MUST compose *inside* the `local` thunk (e.g. `LocalWorkerProvider().pipe(Layer.provide(localRuntimeServices()))`), never globally — a plain deploy must not construct local machinery unless a local-mode row needs deleting. Dep layers shared across several local providers must be **module-memoized layer references** so the build MemoMap dedupes them to one instance.
+- **Every state commit stamps `providerMode`.** A persisted mode that differs from the resolved mode plans a REPLACEMENT (the provider diff is not consulted), and every delete — replacement old generations, GC chain draining, orphans, `destroy`, `sync`/`tail`/`logs` — resolves the provider variant of the row's *stamped* mode via `findProviderByType(type, mode)`. Legacy rows without a stamp are assumed to be the current run's mode (no churn; re-stamped on next write).
+- **`ProviderMode.local()` / `.live()`** pin a resource or scope, captured at registration like `adopt()`. Conflicting decorations on one FQN die with `ConflictingProviderModeError`. Single-implementation providers are **mode-agnostic**: they satisfy any requested mode, never stamp, never replace on a switch — this is what makes a blanket `local()` safe over constructs mixing emulatable and live-only resources (R2 stays live in dev).
+
+## `LocalProvider.make` — long-running local providers
+
+A local provider whose physical resource is a **running process** (dev server, workerd instance) MUST be built with `LocalProvider.make(cls, serverEntryUrl, spec)` — do not hand-roll FiberMap/instance-registry/hash machinery in the provider:
+
+- **`resolveConfig(ctx)`** — the restart surface. Plain, canonically-hashable data only (no closures or runtime objects: derive plain *descriptors* here and materialize `BindingHook`s etc. inside `start` — see the descriptor/hook split in [LocalWorkerProvider.ts](./packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts)). Must be cheap and side-effect-free — it runs inside `diff` on every plan. Its canonical hash decides noop-vs-restart AND the same value is handed to `start`, so "what changed?" and "what starts?" can never drift. Deliberately EXCLUDE runtime wiring observed at start time (e.g. queue consumers read from `LocalRuntimeState`) — sibling reconciles drive those via restart hooks, not config.
+- **`start(ctx)`** — boot ONE instance in the ambient `Scope` and return Attributes at *readiness*; the process keeps running until the runner closes the scope on restart/delete. For processes that can die on their own, fork `ctx.invalidate` after the exit so the next plan reports `update`.
+- **`stop(ctx)`** — delete-only cleanup for state that intentionally survives restarts (URL proxies kept for address stability, restart hooks). NOT called on restarts.
+- Generated for you: instance registry, per-id lock (restarts never interleave), config-hash noop/restart, instanceId-guarded delete (a create-first replacement's old-generation delete cannot kill its successor), `list`. The provider is wrapped in `RpcProvider`, so during `alchemy dev` the registry lives in the sidecar and survives user-code hot reloads.
+- **Never use `Hash.structure` to compare configs** — it XOR-folds sibling fields, so a value mirrored into two subtrees (env ↔ bindings) cancels out. The helper's canonical hash (sorted-key JSON + sha256, Redacted/bytes/cycle-aware) is the law.
+
+Registry-style local providers (the "instance" is an in-memory row, e.g. Cloudflare's local Queue mutating `LocalRuntimeState`) do NOT use `LocalProvider.make` — write a plain provider and register it via `dual`.
+
+Reference implementations: [Command/Dev.ts](./packages/alchemy/src/Command/Dev.ts) (minimal: spawn + URL readiness), [Cloudflare Workers LocalWorkerProvider.ts](./packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts) (full-size: bundler watch loop, cross-restart proxy in `stop`), [Cloudflare Queues Queue.ts](./packages/alchemy/src/Cloudflare/Queues/Queue.ts) (registry-style, no runner). Engine coverage lives in [test/provider-mode.test.ts](./packages/alchemy/test/provider-mode.test.ts) and the "provider modes" describes in [plan.test.ts](./packages/alchemy/test/plan.test.ts) / [apply.test.ts](./packages/alchemy/test/apply.test.ts).
+
 # Test Fixtures for Effect-Native Workers / Functions
 
 To test runtime behavior of an Effect-native Worker, Workflow, Lambda, etc., write a **fixture** that defines the Worker/Function with the bindings under test and exposes one HTTP route per behavior, then write a **test** that deploys the fixture once via `beforeAll` and drives it over HTTP.
