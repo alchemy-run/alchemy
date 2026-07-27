@@ -28,7 +28,7 @@ export type PostgresConfig<E, R> = Omit<PgClient.PgPoolConfig, "url"> & {
  * handler:
  *
  * ```typescript
- * import * as SQL from "alchemy/SQL";
+ * import * as SQL from "alchemy/SQL/Postgres";
  *
  * const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
  * const sql = yield* SQL.Postgres({ url: hd.connectionString });

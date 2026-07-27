@@ -195,6 +195,20 @@ unwrapping, what happens to non-prefixed keys, redeploys on
 env-only changes — see the
 [Vite resource's environment section](/cloudflare/frontend/vite#environment).
 
+To inject the site's *own* URL — for canonical links, OG tags, or
+OAuth redirect URIs — use `Cloudflare.Worker.URL`. A site can't
+reference its own `url` Output, so Alchemy resolves the URL before
+the build and inlines it the same way:
+
+```diff lang="typescript"
+const web = yield* Cloudflare.Website.Vite("Website", {
+  env: {
+    VITE_API_URL: worker.url.as<string>(),
++    VITE_PUBLIC_URL: Cloudflare.Worker.URL,
+  },
+});
+```
+
 ## Use the create-vite template
 
 If you'd rather start from a real framework scaffold (React + TS

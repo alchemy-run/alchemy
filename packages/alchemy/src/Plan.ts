@@ -229,6 +229,13 @@ export type Plan<Output = any> = {
    * publish a fresh attr (the common, linear case).
    */
   cycleMembers: ReadonlySet<string>;
+  /**
+   * Marks a plan built by {@link destroy}. `apply` finishes a destroy plan
+   * by deleting the stage's remaining persisted state — notably the stack
+   * output record written by the last deploy — instead of persisting a new
+   * (empty) output.
+   */
+  destroy?: boolean;
 };
 
 export interface MakePlanOptions {
@@ -1390,6 +1397,31 @@ export const make = <A>(
       },
     }),
   );
+
+/**
+ * Build the plan that destroys every resource of `(stack.name, stack.stage)`.
+ *
+ * The spec is emptied out so every persisted resource becomes an orphan
+ * deletion, and `output` is left undefined so `apply` does not overwrite the
+ * last deploy's persisted stack output with an empty husk. `apply` recognizes
+ * the `destroy` marker and deletes the stage's remaining persisted state (the
+ * stack output record) once the destroy has converged, so `state.getOutput`
+ * and `state.listStages` agree the stage is gone.
+ *
+ * @see https://github.com/alchemy-run/alchemy/issues/961
+ */
+export const destroy = (stack: {
+  name: string;
+  stage: string;
+}): Effect.Effect<Plan<undefined>, never, State> =>
+  make({
+    name: stack.name,
+    stage: stack.stage,
+    resources: {},
+    bindings: {},
+    actions: {},
+    output: undefined,
+  }).pipe(Effect.map((plan) => ({ ...plan, destroy: true })));
 
 const providePlanScope =
   (fqn: string, instanceId: string) =>

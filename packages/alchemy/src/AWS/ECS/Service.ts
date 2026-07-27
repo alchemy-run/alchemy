@@ -2792,6 +2792,24 @@ export const ServiceProvider = () =>
         const taskRoleArn =
           output?.taskRoleArn ??
           (yield* createTaskRoleIfNotExists({ id, roleName: taskRoleName }));
+
+        // `taskRoleManagedPolicyArns` is part of the inherited
+        // `TaskDefinitionConfig` surface — attach it like the standalone
+        // Task provider does (its sibling `executionRoleManagedPolicyArns`
+        // is already honored below). `attachRolePolicy` is idempotent for
+        // already-attached ARNs; a `LimitExceededException` means the
+        // policy was NOT attached, so it propagates and fails the deploy
+        // rather than silently shipping a role with missing permissions.
+        yield* Effect.all(
+          (news.taskRoleManagedPolicyArns ?? []).map((policyArn) =>
+            iam.attachRolePolicy({
+              RoleName: taskRoleName,
+              PolicyArn: policyArn,
+            }),
+          ),
+          { concurrency: "unbounded" },
+        );
+
         const executionRoleArn =
           output?.executionRoleArn ??
           (yield* ensureTaskExecutionRole({

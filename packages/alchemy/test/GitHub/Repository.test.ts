@@ -120,8 +120,12 @@ test.provider.skipIf(!owner)(
       expect(wasRenamed.fullName).toEqual(`${owner}/${renamed}`);
       const afterRename = yield* getRepo(renamed);
       expect(afterRename?.id).toEqual(created.repoId);
+      // GitHub keeps a permanent redirect from a renamed repository's old
+      // name, and Octokit follows the 301 — so fetching the old name returns
+      // the SAME repository under its new name rather than a 404.
       const oldName = yield* getRepo(name);
-      expect(oldName).toBeUndefined();
+      expect(oldName?.id).toEqual(created.repoId);
+      expect(oldName?.full_name).toEqual(`${owner}/${renamed}`);
 
       // Delete
       yield* stack.destroy();

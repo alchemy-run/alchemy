@@ -116,8 +116,18 @@ const createIgnoreMatcher = (patterns: string[]) => {
  * contents must be sent to Cloudflare in the script metadata's asset
  * config (`config._headers` / `config._redirects`) for the rules to
  * apply.
+ *
+ * The directory is optional: a config-only assets object (e.g. Vite's
+ * `assets: { runWorkerFirst: true }`, whose directory is supplied by the
+ * build) has no directory to read, and in `dev` there is no build output at
+ * all. That yields no rules rather than an error.
  */
-export const readAssetsConfigFiles = Effect.fn(function* (directory: string) {
+export const readAssetsConfigFiles = Effect.fn(function* (
+  directory: string | undefined,
+) {
+  if (directory === undefined) {
+    return { _headers: undefined, _redirects: undefined };
+  }
   const path = yield* Path.Path;
   const resolvedDirectory = path.resolve(directory);
   const [_headers, _redirects] = yield* Effect.all([

@@ -21,14 +21,16 @@ everything else.
 
 ## Clients
 
-`alchemy/SQL` is the low-level home: tagged-template queries with
-typed errors, no ORM. `alchemy/Drizzle` is the ORM sibling: a typed
-schema and relational queries. Both wrap the same
+`alchemy/SQL/*` is the low-level home: tagged-template queries with
+typed errors, no ORM — one subpath per backend (`alchemy/SQL/D1`,
+`alchemy/SQL/Postgres`), so you only load the driver you use.
+`alchemy/Drizzle` is the ORM sibling: a typed schema and relational
+queries. Both wrap the same
 [`@effect/sql`](https://effect.website) drivers and share one
 lifecycle.
 
 ```typescript
-import * as SQL from "alchemy/SQL";
+import * as SQL from "alchemy/SQL/D1";
 import * as Drizzle from "alchemy/Drizzle";
 
 // Raw effect-sql — tagged-template queries, typed errors

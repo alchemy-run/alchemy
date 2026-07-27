@@ -8,6 +8,7 @@ import {
   type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
+  type Workflow as RuntimeWorkflow,
   type RuntimeServices,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
@@ -68,7 +69,7 @@ import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
-import { Worker } from "./Worker.ts";
+import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
@@ -77,6 +78,14 @@ import { createWorkerName } from "./WorkerName.ts";
 type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
   dev: Extract<WorkerProps["dev"], { mode?: "worker" }>;
 };
+
+/**
+ * The normalized dev-server options a proxy is started with (`props.dev`
+ * with the default port applied). Named independently of `WorkerConfig` so
+ * `maybeStartProxy` — which `buildConfig` now calls to resolve `Worker.URL`
+ * — doesn't form a type cycle through `WorkerConfig["dev"]`.
+ */
+type DevServerOptions = WorkerPropsWithDev["dev"] & { port: number };
 
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
   "WorkerValidationError",
@@ -101,7 +110,7 @@ export const LocalWorkerProvider = () =>
       const proxyInstances = new Map<
         string,
         {
-          serverOptions: WorkerConfig["dev"];
+          serverOptions: DevServerOptions;
           instance: WorkerProxy.WorkerProxyInstance;
           scope: Scope.Closeable;
         }
@@ -133,7 +142,7 @@ export const LocalWorkerProvider = () =>
 
       const startProxy = Effect.fn(function* (
         id: string,
-        serverOptions: WorkerConfig["dev"],
+        serverOptions: DevServerOptions,
       ) {
         const scope = yield* Scope.fork(rootScope);
         const instance = yield* workerProxy
@@ -153,7 +162,7 @@ export const LocalWorkerProvider = () =>
 
       const maybeStartProxy = Effect.fn(function* (
         id: string,
-        serverOptions: WorkerConfig["dev"],
+        serverOptions: DevServerOptions,
       ) {
         const existing = proxyInstances.get(id);
         if (existing) {
@@ -294,6 +303,7 @@ export const LocalWorkerProvider = () =>
                   bindings: worker.workerBindings as never,
                   hyperdrives: worker.hyperdrives,
                   durableObjectNamespaces: worker.durableObjectNamespaces,
+                  workflows: worker.workflows,
                   queueConsumers,
                   modules: yield* toRuntimeModules(bundle),
                   assets: yield* toRuntimeAssets(worker.assets),
@@ -390,12 +400,31 @@ export const LocalWorkerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
+        const dev: DevServerOptions = {
+          ...props.dev,
+          // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
+          port: props.dev?.port ?? 1337,
+        };
+        // `Worker.URL` locally resolves to the worker's dev-proxy URL — the
+        // proxy is stable per worker id (the same instance `runWorker` /
+        // `runVite` attach to below), so the URL is known before workerd
+        // starts. Trailing slash stripped to match the cloud value's shape.
+        const needsSelfUrl =
+          bindings.some((b) =>
+            (b.data.bindings ?? []).some((item) => item.type === "self_url"),
+          ) || Object.values(props.env ?? {}).some(isSelfUrl);
+        const selfUrl = needsSelfUrl
+          ? (yield* maybeStartProxy(id, dev)).url.toString().replace(/\/$/, "")
+          : undefined;
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
           Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
           ...Object.entries(props.env ?? {}).map(([key, value]) => {
+            if (isSelfUrl(value)) {
+              return Text.local(key, selfUrl!);
+            }
             const unredacted = Redacted.isRedacted(value)
               ? Redacted.value(value)
               : value;
@@ -409,10 +438,17 @@ export const LocalWorkerProvider = () =>
           string,
           RuntimeDurableObject & { uniqueKey: string }
         > = {};
+        const workflows: Record<string, RuntimeWorkflow> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
         const containers: Record<string, ContainerImage> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
+            if (binding.type === "self_url") {
+              // Lowered here rather than in `toRuntimeBinding` — only this
+              // scope knows the worker's own dev-proxy URL.
+              workerBindings.push(Text.local(binding.name, selfUrl!));
+              continue;
+            }
             if (
               binding.type === "durable_object_namespace" &&
               // The `durableObjectNamespaces` property is only used to declare DOs in this worker.
@@ -436,6 +472,18 @@ export const LocalWorkerProvider = () =>
                 }),
               );
             } else {
+              if (
+                binding.type === "workflow" &&
+                // Same ownership rule as DOs: only declare workflows hosted by
+                // this worker. Cross-script workflow bindings are routed via
+                // the registry proxy.
+                (!binding.scriptName || binding.scriptName === name)
+              ) {
+                workflows[binding.workflowName] = {
+                  workflowName: binding.workflowName,
+                  className: binding.className,
+                };
+              }
               workerBindings.push(yield* toRuntimeBinding(binding));
             }
           }
@@ -480,10 +528,21 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          workflows: Object.values(workflows),
           viteMain: props.vite?.main,
           viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
-          env: props.env,
+          // Substitute `Worker.URL` sentinels so the Vite dev server inlines
+          // the local URL into VITE_*-prefixed define entries.
+          env:
+            props.env && selfUrl !== undefined
+              ? Object.fromEntries(
+                  Object.entries(props.env).map(([key, value]) => [
+                    key,
+                    isSelfUrl(value) ? selfUrl : value,
+                  ]),
+                )
+              : props.env,
           bundleOptions: {
             id,
             main: props.main!,
@@ -495,11 +554,7 @@ export const LocalWorkerProvider = () =>
             extraOptions: props.build,
           } satisfies WorkerBundleOptions,
           assets: props.assets,
-          dev: {
-            ...props.dev,
-            // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
-            port: props.dev?.port ?? 1337,
-          },
+          dev,
         };
       });
 
@@ -587,6 +642,7 @@ export const LocalWorkerProvider = () =>
               name: worker.name,
               bindings: worker.workerBindings,
               durableObjectNamespaces: worker.durableObjectNamespaces,
+              workflows: worker.workflows,
               hyperdrives: worker.hyperdrives,
               queueConsumers: yield* getQueueConsumers(worker.name),
               assets: yield* toRuntimeAssets(worker.assets),
@@ -958,7 +1014,13 @@ const toRuntimeAssets = Effect.fn(function* (
   // in the assets directory carry the rules unless overridden by
   // explicit `headers` / `redirects` props. The local runtime parses
   // the raw string contents just like Cloudflare does.
-  const directory = typeof assets === "string" ? assets : assets.directory;
+  //
+  // A Vite website's `assets` is config-only (`{ runWorkerFirst: true }`) —
+  // the client output directory is the build's business, and in `dev` the
+  // vite plugin serves assets from the dev server, so there is no directory
+  // to read here.
+  const directory: string | undefined =
+    typeof assets === "string" ? assets : assets.directory;
   // An unreadable file just means no rules here — the assets plugin
   // reports directory problems itself.
   const files = yield* readAssetsConfigFiles(directory).pipe(
