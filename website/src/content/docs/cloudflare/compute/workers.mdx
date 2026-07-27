@@ -248,6 +248,56 @@ export default Cloudflare.Worker(
 For zone setup, DNS records, and route patterns, see the
 [custom domains guide](/cloudflare/networking/custom-domains).
 
+## The Worker's own URL
+
+A Worker often needs to know the URL it is served at — to build
+absolute links, register webhooks, or hand a frontend its API
+origin. That URL only exists at deploy time, and a Worker can't
+reference its own `url` Output, so `Worker.URL` injects it as a
+binding on the Worker itself. Yield it in the init phase; the
+accessor it returns is yielded again inside a handler:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const url = yield* Cloudflare.Worker.URL;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const publicUrl = yield* url;
+        return yield* HttpServerResponse.json({ url: publicUrl });
+      }),
+    };
+  }),
+);
+```
+
+The value is resolved before the upload — the first custom
+`domain` if one is configured, otherwise the Worker's `workers.dev`
+URL — and always equals the resource's `url` attribute. Under
+`alchemy dev` it resolves to the local dev server's URL instead.
+
+Async Workers declare it on `env`, where `InferEnv` types the
+entry as `string`:
+
+```typescript
+export const Worker = Cloudflare.Worker("Worker", {
+  main: "./src/worker.ts",
+  env: { PUBLIC_URL: Cloudflare.Worker.URL },
+});
+```
+
+Because the URL exists before the build, a `VITE_`-prefixed entry
+(`VITE_PUBLIC_URL: Cloudflare.Worker.URL`) is also inlined into a
+Vite site's client bundle — see
+[the site's own URL](/cloudflare/frontend/vite#the-sites-own-url).
+
 ## Typed env for async Workers
 
 A Worker doesn't have to be an Effect program. When `main` points at

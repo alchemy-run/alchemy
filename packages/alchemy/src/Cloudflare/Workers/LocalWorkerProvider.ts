@@ -68,7 +68,7 @@ import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
-import { Worker } from "./Worker.ts";
+import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
@@ -399,6 +399,7 @@ export const LocalWorkerProvider = () =>
        */
       const materializeWorkerBindings = Effect.fn(function* (
         config: WorkerConfig,
+        selfUrl: string | undefined,
       ) {
         const { accountId } = yield* cloudflareEnv;
         const workerBindings: BindingHook<BindingServices>[] = [
@@ -407,6 +408,9 @@ export const LocalWorkerProvider = () =>
           Text.local("ALCHEMY_STAGE", stack.stage),
           Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
           ...Object.entries(config.env ?? {}).map(([key, value]) => {
+            if (isSelfUrl(value)) {
+              return Text.local(key, selfUrl!);
+            }
             const unredacted = Redacted.isRedacted(value)
               ? Redacted.value(value)
               : value;
@@ -417,6 +421,12 @@ export const LocalWorkerProvider = () =>
           ...(config.hasAssets ? [Assets.local("ASSETS")] : []),
         ];
         for (const descriptor of config.bindingDescriptors) {
+          if (descriptor.type === "self_url") {
+            // Lowered here rather than in `toRuntimeBinding` — only this
+            // scope knows the worker's own dev-proxy URL.
+            workerBindings.push(Text.local(descriptor.name, selfUrl!));
+            continue;
+          }
           workerBindings.push(yield* toRuntimeBinding(descriptor));
         }
         return workerBindings;
@@ -746,9 +756,35 @@ export const LocalWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
 
-          const workerBindings = yield* materializeWorkerBindings(config);
+          // `Worker.URL` locally resolves to the worker's dev-proxy URL —
+          // the proxy is stable per worker id (the same instance `runWorker`
+          // / `runVite` attach to below), so the URL is known before workerd
+          // starts. Trailing slash stripped to match the cloud value's shape.
+          const needsSelfUrl =
+            config.bindingDescriptors.some((b) => b.type === "self_url") ||
+            Object.values(config.env ?? {}).some(isSelfUrl);
+          const selfUrl = needsSelfUrl
+            ? (yield* maybeStartProxy(id, config.dev)).url
+                .toString()
+                .replace(/\/$/, "")
+            : undefined;
+          const workerBindings = yield* materializeWorkerBindings(
+            config,
+            selfUrl,
+          );
           const worker: RunnableWorkerConfig = {
             ...config,
+            // Substitute `Worker.URL` sentinels so the Vite dev server
+            // inlines the local URL into VITE_*-prefixed define entries.
+            env:
+              config.env && selfUrl !== undefined
+                ? Object.fromEntries(
+                    Object.entries(config.env).map(([key, value]) => [
+                      key,
+                      isSelfUrl(value) ? selfUrl : value,
+                    ]),
+                  )
+                : config.env,
             dev: config.dev,
             workerBindings,
           };
