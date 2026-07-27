@@ -4,11 +4,10 @@ import {
   type BindingServices,
   type HyperdriveOrigin,
   type Module,
-  type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
-  type Workflow as RuntimeWorkflow,
   type RuntimeServices,
+  type Workflow as RuntimeWorkflow,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
@@ -59,7 +58,6 @@ import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import * as LocalProvider from "../../Local/LocalProvider.ts";
-import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
