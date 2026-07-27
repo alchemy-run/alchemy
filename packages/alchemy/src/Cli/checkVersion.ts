@@ -18,7 +18,6 @@ const CACHE_TTL_MILLIS = Duration.toMillis(Duration.days(1));
 // npm's dist-tags endpoint is CDN-backed and typically answers in ~100ms;
 // the sync budget only needs to absorb a slow handshake, not a dead network.
 const SYNC_WAIT = Duration.seconds(3);
-const FETCH_TIMEOUT = Duration.seconds(15);
 
 interface VersionCheckCache {
   checkedAt: number;
@@ -75,37 +74,28 @@ const fetchDistTags = Effect.gen(function* () {
     return yield* Effect.fail(new Error("malformed dist-tags response"));
   }
   return distTags;
-}).pipe(Effect.timeout(FETCH_TIMEOUT));
+});
 
 /**
  * Refresh the dist-tags cache with a single request. The fetch is forked so
  * it outlives the sync wait: we give it {@link SYNC_WAIT} to land inline,
  * and if it's still in flight the same request keeps going in the
- * background, writing fresh dist-tags to the cache when it completes. The
- * background path never logs, so it can't interleave with prompts.
+ * background, writing the cache when it completes. The background path
+ * never logs, so it can't interleave with prompts.
  */
-const refreshDistTags = Effect.fn(function* (
-  cachePath: string,
-  lastKnown?: Record<string, string>,
-) {
+const refreshDistTags = Effect.fn(function* (cachePath: string) {
   const fetch = yield* fetchDistTags.pipe(
-    // Fresh dist-tags land in the cache whenever the request completes —
-    // even after the sync wait below has given up on it.
+    // The fiber owns all cache writes, whenever it completes — even after
+    // the sync wait below has given up on it. A failed attempt is cached
+    // too (a bare checkedAt), so a dead network costs at most one blocking
+    // wait per TTL window, not one per run.
     Effect.tap((distTags) => writeCache(cachePath, distTags)),
+    Effect.tapError(() => writeCache(cachePath)),
     Effect.forkScoped,
   );
   return yield* Fiber.join(fetch).pipe(
     Effect.timeout(SYNC_WAIT),
-    // Still in flight (or failed): stamp checkedAt now — a cheap local file
-    // write — so runs in the next TTL window skip the blocking wait
-    // entirely; a dead network costs one wait per day, not one per run.
-    // Carrying the last-known dist-tags forward keeps the upgrade warning
-    // alive off yesterday's data instead of losing it for a day. If the
-    // in-flight request lands later, it overwrites all of this with fresh
-    // data.
-    Effect.catch(() =>
-      writeCache(cachePath, lastKnown).pipe(Effect.as(lastKnown)),
-    ),
+    Effect.catch(() => Effect.succeed(undefined)),
   );
 });
 
@@ -128,7 +118,7 @@ export const checkLatestVersion = Effect.gen(function* () {
   const distTags =
     cached !== undefined && now - cached.checkedAt <= CACHE_TTL_MILLIS
       ? cached.distTags
-      : yield* refreshDistTags(cachePath, cached?.distTags);
+      : yield* refreshDistTags(cachePath);
   if (distTags === undefined) return;
 
   const current = packageJson.version;
