@@ -62,10 +62,11 @@ export interface PurePluginOptions {
    * too. This makes the user's own source tree-shakeable without any
    * configuration.
    *
-   * The package's `sideEffects` field is NOT consulted for this gate —
-   * if your entry's package has init-time side effects you wish to
-   * preserve, declare them in `package.json` (`"sideEffects": ["./foo.ts"]`)
-   * or set this option to `false`.
+   * Only calls whose result is used (variable initializers, exports) are
+   * annotated in the auto-detected package. Top-level calls whose result
+   * is discarded (e.g. Hono/Express-style `app.get("/", handler)` route
+   * registrations) are preserved unless the package explicitly declares
+   * `"sideEffects": false` (or `[]`) in its `package.json`.
    *
    * @default true
    */
@@ -139,19 +140,32 @@ export const purePlugin = (
         if (name === null || !isMatch(name)) return null;
 
         // Only override `moduleSideEffects` when the owning package
-        // explicitly opts in via `sideEffects: false` / `[]`. Pure
-        // annotations themselves are always safe to add (they only mean
-        // "if the result is unused, the call may be dropped"), but
-        // marking arbitrary modules side-effect-free could erase
-        // intentional registrations / mutations the author made at the
-        // top level of files in packages that did not declare so.
+        // explicitly opts in via `sideEffects: false` / `[]`. Marking
+        // arbitrary modules side-effect-free could erase intentional
+        // registrations / mutations the author made at the top level of
+        // files in packages that did not declare so.
+        const isEntry = entryPaths.has(cleanId);
+        const sideEffectFreePkg = isSideEffectFree(info?.sideEffects);
         const markSideEffectFree =
-          markSideEffectFreeOpt &&
-          !entryPaths.has(cleanId) &&
-          isSideEffectFree(info?.sideEffects);
+          markSideEffectFreeOpt && !isEntry && sideEffectFreePkg;
 
         const anchors = collectPureAnchorsCached(code, cleanId);
-        if (anchors === null) {
+        // Annotating a call whose result is BOUND (variable initializer,
+        // export) only lets the minifier drop it when the binding itself
+        // is unused — safe everywhere. Annotating a call whose result is
+        // DISCARDED (a bare expression statement like `app.get("/", h)`)
+        // is an instruction to delete the call under minification, so it
+        // is only applied when the owning package explicitly declared
+        // itself side-effect free, and never to entry modules, whose side
+        // effects we always preserve (#949).
+        const annotateDiscarded = !isEntry && sideEffectFreePkg;
+        const positions =
+          anchors === null
+            ? []
+            : annotateDiscarded
+              ? [...anchors.bound, ...anchors.discarded]
+              : anchors.bound;
+        if (positions.length === 0) {
           // Metadata-only result: omitting `code` tells rolldown the
           // source was NOT transformed, so no sourcemap is expected and
           // no SOURCEMAP_BROKEN warning is emitted.
@@ -162,7 +176,7 @@ export const purePlugin = (
         // rolldown's native side (computed on a background thread). The
         // fallback covers direct hook invocations (unit tests).
         const s = meta.magicString ?? new RolldownMagicString(code);
-        for (const anchor of anchors) s.appendLeft(anchor, PURE_COMMENT);
+        for (const anchor of positions) s.appendLeft(anchor, PURE_COMMENT);
         return {
           code: s,
           moduleSideEffects: markSideEffectFree ? false : null,
@@ -324,14 +338,14 @@ export function packageNameFromId(id: string): string | null {
  */
 const anchorsCache = new Map<
   string,
-  { readonly code: string; readonly anchors: number[] | null }
+  { readonly code: string; readonly anchors: PureAnchors | null }
 >();
 const ANCHORS_CACHE_MAX = 10_000;
 
 const collectPureAnchorsCached = (
   code: string,
   filename: string,
-): number[] | null => {
+): PureAnchors | null => {
   const cached = anchorsCache.get(filename);
   if (cached !== undefined && cached.code === code) {
     return cached.anchors;
@@ -345,15 +359,37 @@ const collectPureAnchorsCached = (
 };
 
 /**
+ * Offsets at which `/*#__PURE__*\/` may be inserted, split by whether the
+ * call's result is consumed.
+ */
+export interface PureAnchors {
+  /**
+   * Calls whose result is bound — variable initializers, exports,
+   * assignment right-hand sides. Annotating these only lets the minifier
+   * drop the call when the binding itself is unused, so it is safe for
+   * any module.
+   */
+  readonly bound: number[];
+  /**
+   * Top-level calls whose result is discarded (bare expression
+   * statements such as `app.get("/", handler)`). Annotating these tells
+   * the minifier the whole statement is deletable, so they are only safe
+   * in packages that explicitly declare `sideEffects: false` / `[]`.
+   */
+  readonly discarded: number[];
+}
+
+/**
  * Parses `code` and returns the offsets at which `/*#__PURE__*\/` must be
  * inserted — before every top-level `CallExpression` callee / `new`
- * keyword. Returns `null` if the file does not need to be modified
- * (parse failure or no annotations needed).
+ * keyword — classified by whether the call result is bound or discarded.
+ * Returns `null` if the file does not need to be modified (parse failure
+ * or no annotations needed).
  */
 export function collectPureAnchors(
   code: string,
   filename: string,
-): number[] | null {
+): PureAnchors | null {
   let program: Program;
   try {
     // Use TS lang so the parser tolerates TS syntax (`as`, `satisfies`,
@@ -364,51 +400,66 @@ export function collectPureAnchors(
     return null;
   }
 
-  const anchors: number[] = [];
+  const bound: number[] = [];
+  const discarded: number[] = [];
 
-  const visitCall = (call: CallExpression | NewExpression) => {
+  const visitCall = (
+    call: CallExpression | NewExpression,
+    isDiscarded: boolean,
+  ) => {
     if (isIIFE(call)) return;
     // For `new X()`, anchor BEFORE the `new` keyword so we get
     // `/*#__PURE__*/ new X()` (matches babel-plugin-annotate-pure-calls).
     const anchor =
       call.type === "NewExpression" ? call.start : call.callee.start;
     if (alreadyAnnotated(code, anchor)) return;
-    anchors.push(anchor);
+    (isDiscarded ? discarded : bound).push(anchor);
   };
 
-  const visitExpression = (expr: Expression | null | undefined) => {
+  const visitExpression = (
+    expr: Expression | null | undefined,
+    isDiscarded: boolean,
+  ) => {
     if (!expr) return;
     switch (expr.type) {
       case "CallExpression":
       case "NewExpression":
-        visitCall(expr);
+        visitCall(expr, isDiscarded);
         return;
-      case "SequenceExpression":
-        for (const inner of expr.expressions) visitExpression(inner);
+      case "SequenceExpression": {
+        // All but the last expression's results are always discarded;
+        // the last one takes the surrounding context.
+        const exprs = expr.expressions;
+        for (let i = 0; i < exprs.length; i++) {
+          visitExpression(exprs[i], i < exprs.length - 1 ? true : isDiscarded);
+        }
         return;
+      }
       case "ParenthesizedExpression":
-        visitExpression(expr.expression);
+        visitExpression(expr.expression, isDiscarded);
         return;
       case "LogicalExpression":
-        visitExpression(expr.left);
-        visitExpression(expr.right);
+        visitExpression(expr.left, isDiscarded);
+        visitExpression(expr.right, isDiscarded);
         return;
       case "ConditionalExpression":
-        visitExpression(expr.consequent);
-        visitExpression(expr.alternate);
+        visitExpression(expr.consequent, isDiscarded);
+        visitExpression(expr.alternate, isDiscarded);
         return;
       case "AssignmentExpression":
-        visitExpression(expr.right);
+        // The right-hand side's result is stored in the target, so it is
+        // bound even when the assignment appears in statement position.
+        visitExpression(expr.right, false);
         return;
       case "TSAsExpression":
       case "TSSatisfiesExpression":
       case "TSNonNullExpression":
       case "TSTypeAssertion":
-        visitExpression(expr.expression);
+        visitExpression(expr.expression, isDiscarded);
         return;
       case "ChainExpression": {
         const inner = expr.expression;
-        if (inner.type === "CallExpression") visitCall(inner);
+        if (inner.type === "CallExpression") visitCall(inner, isDiscarded);
         return;
       }
       default:
@@ -419,11 +470,11 @@ export function collectPureAnchors(
   const visitTopLevel = (node: Statement) => {
     switch (node.type) {
       case "ExpressionStatement":
-        visitExpression((node as ExpressionStatement).expression);
+        visitExpression((node as ExpressionStatement).expression, true);
         return;
       case "VariableDeclaration":
         for (const decl of (node as VariableDeclaration).declarations) {
-          visitExpression(decl.init);
+          visitExpression(decl.init, false);
         }
         return;
       case "ExportNamedDeclaration": {
@@ -439,7 +490,7 @@ export function collectPureAnchors(
           decl.type !== "ClassDeclaration" &&
           decl.type !== "TSInterfaceDeclaration"
         ) {
-          visitExpression(decl as Expression);
+          visitExpression(decl as Expression, false);
         }
         return;
       }
@@ -455,7 +506,9 @@ export function collectPureAnchors(
     visitTopLevel(node as Statement);
   }
 
-  return anchors.length === 0 ? null : anchors;
+  return bound.length === 0 && discarded.length === 0
+    ? null
+    : { bound, discarded };
 }
 
 function isIIFE(node: CallExpression | NewExpression): boolean {

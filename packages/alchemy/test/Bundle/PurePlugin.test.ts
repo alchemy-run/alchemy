@@ -149,9 +149,13 @@ describe("collectPureAnchors", () => {
     }
     return out;
   };
+  // Applies BOTH bound and discarded anchors — the full-annotation view a
+  // sideEffects-free package receives.
   const annotate = (code: string): string | null => {
     const anchors = collectPureAnchors(code, "/n/effect/dist/x.js");
-    return anchors === null ? null : apply(code, anchors);
+    return anchors === null
+      ? null
+      : apply(code, [...anchors.bound, ...anchors.discarded]);
   };
 
   it("annotates calls in TypeScript source (worker/bun condition path)", () => {
@@ -161,7 +165,40 @@ describe("collectPureAnchors", () => {
       "/proj/packages/alchemy/src/Util.ts",
     );
     expect(anchors).not.toBeNull();
-    expect(apply(code, anchors!)).toContain("/*#__PURE__*/ make()");
+    expect(apply(code, anchors!.bound)).toContain("/*#__PURE__*/ make()");
+  });
+
+  it("classifies variable-initializer calls as bound", () => {
+    const anchors = collectPureAnchors(`const x = create();`, "/n/x.js");
+    expect(anchors!.bound.length).toBe(1);
+    expect(anchors!.discarded.length).toBe(0);
+  });
+
+  it("classifies bare expression-statement calls as discarded", () => {
+    const anchors = collectPureAnchors(`app.get("/", handler);`, "/n/x.js");
+    expect(anchors!.bound.length).toBe(0);
+    expect(anchors!.discarded.length).toBe(1);
+  });
+
+  it("classifies assignment right-hand sides as bound, even in statement position", () => {
+    const anchors = collectPureAnchors(`exports.x = make();`, "/n/x.js");
+    expect(anchors!.bound.length).toBe(1);
+    expect(anchors!.discarded.length).toBe(0);
+  });
+
+  it("classifies non-final sequence expressions as discarded even in initializers", () => {
+    const anchors = collectPureAnchors(
+      `const x = (register(), make());`,
+      "/n/x.js",
+    );
+    expect(anchors!.bound.length).toBe(1);
+    expect(anchors!.discarded.length).toBe(1);
+  });
+
+  it("classifies optional-chained statement calls as discarded", () => {
+    const anchors = collectPureAnchors(`app?.get("/", h);`, "/n/x.js");
+    expect(anchors!.bound.length).toBe(0);
+    expect(anchors!.discarded.length).toBe(1);
   });
 
   it("annotates top-level call expressions", () => {
@@ -556,6 +593,184 @@ describe("auto-detect entry package", () => {
         if (entryResult !== null && typeof entryResult === "object") {
           expect(entryResult.moduleSideEffects).not.toBe(false);
         }
+
+        yield* fs.remove(root, { recursive: true });
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("discarded-result calls (issue #949)", () => {
+  it("does NOT annotate entry-module expression-statement calls (route registrations)", async () => {
+    const root = nodeFs.mkdtempSync(
+      nodePath.join(os.tmpdir(), "alchemy-pure-949-entry-"),
+    );
+    try {
+      nodeFs.writeFileSync(
+        nodePath.join(root, "package.json"),
+        JSON.stringify({ name: "my-app", type: "module" }),
+      );
+      const entryPath = nodePath.join(root, "entry.ts");
+      const plugin = purePlugin();
+      await callOptions(plugin, { input: entryPath, cwd: root });
+
+      const code = [
+        `const app = new Hono();`,
+        `app.get("/", (c) => c.json({ code: "OK" }));`,
+        `export default { fetch: app.fetch };`,
+      ].join("\n");
+      const result = await callTransform(plugin, code, entryPath);
+      // `new Hono()` (bound to `app`) may be annotated; the discarded
+      // `app.get(...)` registration must NOT be.
+      if (result !== null) {
+        expect(codeOf(result)).not.toContain("/*#__PURE__*/ app.get");
+      }
+    } finally {
+      nodeFs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT annotate expression-statement calls in packages without an explicit sideEffects opt-in", async () => {
+    const root = nodeFs.mkdtempSync(
+      nodePath.join(os.tmpdir(), "alchemy-pure-949-noopt-"),
+    );
+    try {
+      // No `sideEffects` field — the author never claimed purity.
+      nodeFs.writeFileSync(
+        nodePath.join(root, "package.json"),
+        JSON.stringify({ name: "my-app", type: "module" }),
+      );
+      const plugin = purePlugin();
+      await callOptions(plugin, {
+        input: nodePath.join(root, "entry.ts"),
+        cwd: root,
+      });
+
+      // A NON-entry module of the user's package, imported for its side
+      // effects (`import "./routes.ts"`).
+      const code = [
+        `import { app } from "./app.ts";`,
+        `app.get("/r", () => "ok");`,
+        `export const x = makeX();`,
+      ].join("\n");
+      const result = await callTransform(
+        plugin,
+        code,
+        nodePath.join(root, "routes.ts"),
+      );
+      expect(result).not.toBeNull();
+      const out = codeOf(result);
+      // Bound calls stay tree-shakeable...
+      expect(out).toContain("/*#__PURE__*/ makeX()");
+      // ...but the discarded-result registration is preserved.
+      expect(out).not.toContain("/*#__PURE__*/ app.get");
+    } finally {
+      nodeFs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("STILL annotates expression-statement calls in packages that declare sideEffects: false", async () => {
+    // effect ships `sideEffects: []` on purpose — full annotation there is
+    // intentional and must be preserved. Use a fake on-disk package to
+    // avoid depending on the real effect layout.
+    const root = nodeFs.mkdtempSync(
+      nodePath.join(os.tmpdir(), "alchemy-pure-949-optin-"),
+    );
+    try {
+      const pkgDir = nodePath.join(root, "node_modules", "fake-effect");
+      nodeFs.mkdirSync(pkgDir, { recursive: true });
+      nodeFs.writeFileSync(
+        nodePath.join(pkgDir, "package.json"),
+        JSON.stringify({ name: "fake-effect", sideEffects: false }),
+      );
+      const optIn = purePlugin({
+        packages: ["fake-effect"],
+        replaceDefaults: true,
+      });
+      const result = await callTransform(
+        optIn,
+        `registerGlobal();`,
+        nodePath.join(pkgDir, "dist", "index.js"),
+      );
+      expect(result).not.toBeNull();
+      expect(codeOf(result)).toContain("/*#__PURE__*/ registerGlobal()");
+    } finally {
+      nodeFs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.effect(
+    "route registrations in the entry survive minify: true (end-to-end)",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-pure-949-e2e-",
+        });
+
+        // A user app package with NO sideEffects declaration — the exact
+        // shape from the issue (Hono-style discarded-return registration).
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ name: "my-app", type: "module" }),
+        );
+        const entry = path.join(root, "entry.ts");
+        yield* fs.writeFileString(
+          entry,
+          [
+            `import { app } from "./app.ts";`,
+            `import "./routes.ts";`,
+            `app.get("/", () => "ENTRY_ROUTE_MARKER");`,
+            `export default { fetch: (p: string) => app.handle(p) };`,
+          ].join("\n"),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "app.ts"),
+          [
+            `type Handler = () => string;`,
+            `class Router {`,
+            `  routes: Record<string, Handler> = {};`,
+            `  get(p: string, h: Handler) { this.routes[p] = h; }`,
+            `  handle(p: string) { return this.routes[p]?.() ?? "404"; }`,
+            `}`,
+            `export const app = new Router();`,
+          ].join("\n"),
+        );
+        // Side-effect-imported module registering more routes — the same
+        // failure class beyond the entry file itself.
+        yield* fs.writeFileString(
+          path.join(root, "routes.ts"),
+          [
+            `import { app } from "./app.ts";`,
+            `app.get("/side", () => "SIDE_EFFECT_ROUTE_MARKER");`,
+          ].join("\n"),
+        );
+
+        const bundle = yield* Effect.tryPromise({
+          try: () =>
+            rolldown({
+              input: entry,
+              cwd: root,
+              plugins: [purePlugin()],
+              treeshake: true,
+            }),
+          catch: (cause) => cause,
+        });
+        const { output } = yield* Effect.tryPromise({
+          try: () => bundle.generate({ format: "esm", minify: true }),
+          catch: (cause) => cause,
+        });
+        yield* Effect.tryPromise({
+          try: () => bundle.close(),
+          catch: (cause) => cause,
+        });
+
+        const code = output
+          .filter((c) => c.type === "chunk")
+          .map((c) => c.code)
+          .join("\n");
+        expect(code).toContain("ENTRY_ROUTE_MARKER");
+        expect(code).toContain("SIDE_EFFECT_ROUTE_MARKER");
 
         yield* fs.remove(root, { recursive: true });
       }).pipe(Effect.provide(NodeServices.layer)),
