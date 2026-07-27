@@ -2,7 +2,7 @@ import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as planetscale from "@distilled.cloud/planetscale/Operations";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../../Diff.ts";
+import { havePropsChanged, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -178,6 +178,25 @@ export const MySQLDatabaseProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
+      // Database names are rename-mutable (reconcile folds `new_name`
+      // into the settings sync), so `name` cannot live in the
+      // provider-level stables. Almost no update is a rename though —
+      // for those, advertise `name` as stable on the update so
+      // downstream consumers (branches, passwords) still resolve
+      // `database.name` at plan time instead of seeing `undefined` and
+      // falsely planning a replacement. The name only changes when the
+      // `name` prop itself changes: an explicit name renames iff it
+      // differs from the observed name, and an omitted name is
+      // engine-generated deterministically (stable across updates).
+      const nameIsStable =
+        output?.name !== undefined &&
+        (news.name !== undefined
+          ? news.name === output.name
+          : olds?.name === undefined);
+      const stables = nameIsStable
+        ? ["id", "organization", "region", "name"]
+        : undefined;
+
       if (
         news.region?.slug !== undefined &&
         output?.region?.slug !== undefined &&
@@ -192,27 +211,36 @@ export const MySQLDatabaseProvider = () =>
         news.replicas !== undefined &&
         news.replicas !== (output?.replicas ?? olds.replicas)
       ) {
-        return { action: "update" } as const;
+        return { action: "update", stables } as const;
       }
       if (news.migrationsDir) {
         const newHashes = yield* hashMigrations(news.migrationsDir);
         if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
         if (
           (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
           (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
         ) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
         if (!recordsEqual(newHashes, output?.importHashes ?? {})) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
       }
-      // Otherwise allow the engine to apply the default update logic.
+      // Remaining prop changes (rename, settings, clusterSize, …) are
+      // in-place updates. Decide them here instead of falling back to
+      // the engine's default deep-compare so the conditional `name`
+      // stable above is attached — the default path uses the
+      // provider-level stables, which strip `name` from downstream plan
+      // resolution.
+      if (havePropsChanged(olds, news)) {
+        return { action: "update", stables } as const;
+      }
+
       return undefined;
     }),
 
