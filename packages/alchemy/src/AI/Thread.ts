@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { Fragment } from "./Prose.ts";
@@ -58,6 +59,27 @@ export interface ThreadService {
   readonly entries: Effect.Effect<ReadonlyArray<Prompt.Message>>;
   /** Request compaction; applied at the next sampling boundary. */
   readonly compact: (plan: CompactPlan) => Effect.Effect<void>;
+  /**
+   * ANSWER the current round: resolve every pending dispatch waiter
+   * with `value`, from wherever the answer is actually produced (a
+   * tool handler, usually — the moment the artifact exists). Replying
+   * does NOT park or end the run: the model may keep working; parking
+   * stays quiescence, ending stays `settle`. A round that never
+   * replies answers with its quiescent text (the fallback). Waiters
+   * are a batch: every caller currently awaiting this run receives
+   * the same value.
+   */
+  readonly reply: (value: unknown) => Effect.Effect<void>;
+  /**
+   * Schedule a note to THIS run's future self. Returns immediately —
+   * the note is DATA `(fireAt, text)`, delivered as an ordinary inbox
+   * message at fireAt: a wake if the run is parked by then, a queued
+   * message if busy, dropped if settled. The clock is the KERNEL's
+   * and lives exactly as long as the run does: a fiber on the
+   * in-memory kernel (runs are process-lifetime there), a Durable
+   * Object alarm on a durable kernel.
+   */
+  readonly remind: (delay: Duration.Input, note: string) => Effect.Effect<void>;
 }
 
 export class Thread extends Context.Service<Thread, ThreadService>()(
@@ -123,3 +145,25 @@ export const say = <const Refs extends any[]>(
       refs,
     }),
   );
+
+/**
+ * Answer the current round from wherever the answer is produced —
+ * usually the tool handler that just created the artifact:
+ *
+ * ```ts
+ * const openPullRequest = yield* AI.Tool("open_pull_request")`…`(
+ *   Effect.fn(function* (params) {
+ *     const pull = yield* open(params);
+ *     yield* AI.reply(pull.ref);   // ← the caller has its answer NOW
+ *     return `opened ${pull.url} — wrap up or keep working`;
+ *   }),
+ * );
+ * ```
+ *
+ * Replying neither parks nor ends the run — the model may continue
+ * (clean up, comment, start CI); parking stays quiescence, ending
+ * stays `settle`. A round that never replies answers with its
+ * quiescent text.
+ */
+export const reply = (value: unknown): Effect.Effect<void, never, Thread> =>
+  Effect.flatMap(Thread, (thread) => thread.reply(value));

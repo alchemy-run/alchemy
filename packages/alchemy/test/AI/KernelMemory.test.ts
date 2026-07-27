@@ -651,46 +651,61 @@ You are working ${Effect.map(AI.Thread, (thread) => thread.key)}. Answer briefly
     },
   );
 
-  it.effect("a non-Fragment turn result ANSWERS the round and parks", () => {
-    const model = Model.make([
-      // tick 1: the model marks the work done via the inline tool
-      () => [
-        Model.toolCall("mark_done", { result: 42 }),
-        Model.finish("tool-calls"),
-      ],
-      // (tick 2 never samples — the turn answers first)
-    ]);
-    return Effect.gen(function* () {
-      const charter = Effect.gen(function* () {
-        const result = AI.Parameter("result", S.Number)`The final result.`;
-        const done = yield* Ref.make<number | undefined>(undefined);
-        const markDone = yield* AI.Tool("mark_done")`
+  it.live(
+    "AI.reply answers the round from a tool handler; the run parks",
+    () => {
+      const model = Model.make([
+        // tick 1: the model produces the answer via the inline tool —
+        // AI.reply answers the caller FROM THE HANDLER, then the model
+        // may keep working (here: it wraps up with text and quiesces)
+        () => [
+          Model.toolCall("mark_done", { result: 42 }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("all wrapped up"), Model.finish()],
+        // a later round: the run parked, a new dispatch wakes it
+        () => [
+          Model.toolCall("mark_done", { result: 43 }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("done again"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const result = AI.Parameter("result", S.Number)`The final result.`;
+          const markDone = yield* AI.Tool("mark_done")`
 Record the final ${result}.`((p) =>
-          Ref.set(done, p.result).pipe(Effect.as("recorded")),
-        );
-        return Effect.gen(function* () {
-          const value = yield* Ref.get(done);
-          if (value !== undefined) return { answer: value }; // ← reply
-          return yield* AI.prose`Compute the answer, then ${markDone}.`;
+            AI.reply({ answer: p.result }).pipe(Effect.as("recorded")),
+          );
+          return AI.prose`Compute the answer, then ${markDone}.`;
         });
-      });
-      const researcher = yield* interpret(Researcher, charter);
-      // dispatch resolves with the TYPED answer, not the model's text
-      const outcome = yield* researcher.dispatch("go", { key: "job#1" });
-      expect(outcome).toEqual({ answer: 42 });
-      expect(model.calls).toHaveLength(1); // the answer tick never sampled
-      // ANSWER ≠ SETTLE: the run PARKED — a follow-up dispatch wakes
-      // the same run (context intact); this charter's turn re-answers
-      // from its standing Ref without sampling
-      const late = yield* researcher.dispatch("again?", { key: "job#1" });
-      expect(late).toEqual({ answer: 42 });
-      expect(model.calls).toHaveLength(1);
-      // ending remains the owner's act
-      yield* researcher.settle("job#1", { closed: true });
-      const settled = yield* researcher.dispatch("hello?", { key: "job#1" });
-      expect(settled).toEqual({ closed: true });
-    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
-  });
+        const researcher = yield* interpret(Researcher, charter);
+        // dispatch resolves with the TYPED reply, not the model's text —
+        // and the reply lands BEFORE the run finishes its epilogue
+        const outcome = yield* researcher.dispatch("go", { key: "job#1" });
+        expect(outcome).toEqual({ answer: 42 });
+        // let round 1's epilogue finish (the reply resolved mid-round)
+        yield* Effect.repeat(
+          Effect.sync(() => model.calls.length),
+          {
+            until: (calls) => calls >= 2,
+            schedule: Schedule.spaced("10 millis"),
+            times: 200,
+          },
+        );
+        // ANSWER ≠ SETTLE: the run parked — a follow-up dispatch wakes
+        // the SAME run (context intact)
+        const late = yield* researcher.dispatch("again", { key: "job#1" });
+        expect(late).toEqual({ answer: 43 });
+        // round 2 saw round 1's whole conversation
+        expect(Model.promptText(model.calls[2]!)).toContain("all wrapped up");
+        // ending remains the owner's act
+        yield* researcher.settle("job#1", { closed: true });
+        const settled = yield* researcher.dispatch("hello?", { key: "job#1" });
+        expect(settled).toEqual({ closed: true });
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
 
   it.live("dispatch sessions resume the same worker; settle cascades", () => {
     const model = Model.make([
@@ -775,6 +790,168 @@ Record the final ${result}.`((p) =>
         ),
       ),
     );
+  });
+
+  it.live("AI.Dispatch doors: the policy derives the session key", () => {
+    const model = Model.make([
+      // call 0: the lead goes through the DOOR — no session parameter
+      // exists at the wire; the policy derives the child key in code
+      () => [
+        Model.toolCall("hand_to_engineer", { task: "build the widget" }),
+        Model.finish("tool-calls"),
+      ],
+      // call 1: the engineer's round 1
+      () => [Model.text("built it"), Model.finish()],
+      // call 2: the lead goes through the door AGAIN — same worker
+      () => [
+        Model.toolCall("hand_to_engineer", { task: "now polish it" }),
+        Model.finish("tool-calls"),
+      ],
+      // call 3: the engineer's round 2 — the SAME conversation
+      () => [Model.text("polished"), Model.finish()],
+      // call 4: the lead concludes
+      () => [Model.text("All done."), Model.finish()],
+    ]);
+    const seen: Array<AI.KernelObservation> = [];
+    const ObserverLive = Layer.succeed(AI.KernelObserver, {
+      emit: (observation) => Effect.sync(() => void seen.push(observation)),
+    });
+    const kernel = KernelMemory.pipe(Layer.provide(model.layer));
+    const doorCharter = Effect.gen(function* () {
+      const task = AI.Parameter("task", S.String)`The work, standing alone.`;
+      const handToEngineer = yield* AI.Dispatch(Engineer, "hand_to_engineer")`
+Hand one round of work to the engineer with ${task}.`((p, thread) => ({
+        task: p.task,
+        key: `${thread.key}/Engineer/build`,
+      }));
+      return AI.prose`
+Route every request through ${handToEngineer}; report when done.`;
+    });
+    return Effect.gen(function* () {
+      const lead = yield* interpret(Lead, doorCharter);
+      const answer = yield* lead.dispatch("Widget needed", { key: "job#1" });
+      expect(answer).toBe("All done.");
+
+      // the door is the org's OWN tool; the generic dispatch intrinsic
+      // is absent (the charter mentions no bare agent)
+      const toolNames = model.calls[0]!.tools.map((tool) => tool.name);
+      expect(toolNames).toContain("hand_to_engineer");
+      expect(toolNames).not.toContain("dispatch");
+
+      // both rounds hit ONE worker run under the policy's key
+      const childKey = "job#1/Engineer/build";
+      expect(
+        seen.filter(
+          (observation) =>
+            observation.key === childKey && observation.type === "admitted",
+        ),
+      ).toHaveLength(1);
+      const round2 = Model.promptText(model.calls[3]!);
+      expect(round2).toContain("built it");
+      expect(round2).toContain("now polish it");
+
+      // the delegation is observable with its identity: tool, agent,
+      // child key — the UI's worker card needs no heuristics
+      const dispatched = seen.filter(
+        (observation) => observation.type === "dispatched",
+      );
+      expect(dispatched).toHaveLength(2);
+      expect(dispatched[0]).toMatchObject({
+        toolName: "hand_to_engineer",
+        agent: "Engineer",
+        child: childKey,
+      });
+
+      // SUPERVISION: the door registered the child — settling the
+      // lead settles the session worker
+      yield* lead.settle("job#1", { done: true });
+      yield* Effect.sync(() =>
+        seen.some(
+          (observation) =>
+            observation.key === childKey && observation.type === "settled",
+        ),
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (cascaded) => cascaded,
+          times: 200,
+        }),
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          kernel,
+          Engineer.make(EngineerCharter).pipe(
+            Layer.provide(kernel),
+            Layer.provide(ObserverLive),
+          ),
+          ObserverLive,
+          RuntimeContext.phantom,
+        ),
+      ),
+    );
+  });
+
+  it.live("Thread.remind wakes a parked run", () => {
+    const model = Model.make([
+      // tick 1: set the reminder, then quiesce (the run parks)
+      () => [Model.toolCall("remind_me", {}), Model.finish("tool-calls")],
+      () => [Model.text("waiting for the oven"), Model.finish()],
+      // tick 3: the reminder arrived as an ordinary message
+      () => [Model.text("woke up and checked"), Model.finish()],
+    ]);
+    return Effect.gen(function* () {
+      const charter = Effect.gen(function* () {
+        const remindMe = yield* AI.Tool("remind_me")`
+Note something to your future self.`(() =>
+          Effect.flatMap(AI.Thread, (thread) =>
+            thread.remind("50 millis", "check the oven"),
+          ).pipe(Effect.as("noted")),
+        );
+        return AI.prose`Use ${remindMe} when asked to wait, then park.`;
+      });
+      const researcher = yield* interpret(Researcher, charter);
+      const answer = yield* researcher.dispatch("wait for the oven", {
+        key: "kitchen",
+      });
+      expect(answer).toBe("waiting for the oven");
+      // the reminder fires while the run is PARKED — delivery is an
+      // ordinary inbox message, so it wakes the run like any input
+      yield* Effect.sync(() => model.calls.length).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 millis"),
+          until: (calls) => calls >= 3,
+          times: 300,
+        }),
+      );
+      expect(Model.promptText(model.calls[2]!)).toContain(
+        "[reminder] check the oven",
+      );
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+  });
+
+  it.effect("function turns receive the tick event (count + inputs)", () => {
+    const model = Model.make([() => [Model.text("one"), Model.finish()]]);
+    const events: Array<AI.TickEvent> = [];
+    return Effect.gen(function* () {
+      const charter = Effect.gen(function* () {
+        // the GUARD tier: a reducer from what-just-happened to
+        // how-to-stand — the stance itself stays constant
+        const stance = AI.prose`Answer briefly.`;
+        return (tick: AI.TickEvent) =>
+          Effect.gen(function* () {
+            events.push(tick);
+            return yield* stance;
+          });
+      });
+      const researcher = yield* interpret(Researcher, charter);
+      const answer = yield* researcher.dispatch("what gives?", { key: "t" });
+      expect(answer).toBe("one");
+      expect(events).toHaveLength(1);
+      expect(events[0]!.count).toBe(0);
+      expect(events[0]!.inputs).toEqual(["what gives?"]);
+    }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
   });
 
   it.effect(

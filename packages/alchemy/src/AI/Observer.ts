@@ -88,6 +88,22 @@ export type KernelObservation = ObservationEnvelope &
       }
     | {
         /**
+         * A DELEGATION left this run: the intrinsic `dispatch` or a
+         * policy door (`AI.Dispatch`) handed a task to another agent.
+         * Emitted when the handler runs, so observers can pair the
+         * tool call with the worker thread it created (`key` is the
+         * child run's key; undefined when the child was minted
+         * anonymously).
+         */
+        readonly type: "dispatched";
+        readonly tick: number;
+        readonly toolName: string;
+        readonly agent: string;
+        /** The child run's key; undefined when minted anonymously. */
+        readonly child: string | undefined;
+      }
+    | {
+        /**
          * The run QUIESCED with an empty inbox and is parked — its
          * work is done until the world moves (the next input wakes
          * it). The line between "working" and "waiting" for any UI.

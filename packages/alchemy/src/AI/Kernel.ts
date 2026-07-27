@@ -31,20 +31,42 @@ export type Interpretable = Agent<any, any>;
  * - a {@link Fragment} — the stance: what the persona knows, which
  *   tools it holds, which delegates it may call, this tick. Mention is
  *   presence: a tool a branch does not render is not in the toolkit.
- * - any OTHER value — the run concludes from inside: it settles with
- *   that value (dispatch waiters resolve with it). The world can
- *   always settle first; it outranks.
+ *   The turn returns the stance and NOTHING ELSE — answering a caller
+ *   is the explicit {@link reply} act (from a tool handler or turn
+ *   code), never a return value.
  * - a failure — retried by the kernel with capped backoff; a typed
  *   `AI.Refused` is the run giving up, riding the error channel.
  *
  * Returning an un-yielded Effect (a forgotten `yield*` on `AI.prose`)
- * is a loud defect, never a silent outcome.
+ * or any non-Fragment value is a loud defect, never a silent outcome.
  */
-export type Turn<Out = unknown, E = any, R = any> = Effect.Effect<
-  Fragment | Out,
-  E,
-  R
->;
+export type Turn<E = any, R = any> = Effect.Effect<Fragment, E, R>;
+
+/**
+ * The EVENT one tick is about — passed to a function-form turn (the
+ * guard tier), so deterministic per-tick policy sees what it is
+ * deciding over without reaching for ambient services.
+ */
+export interface TickEvent<In = unknown> {
+  /** Samplings performed so far in this run (the budget clock). */
+  readonly count: number;
+  /**
+   * The messages drained at this boundary — work items, steers,
+   * reminder notes. Empty when a turn re-evaluates without new input.
+   * Typed by the charter's declared event alphabet where annotated.
+   */
+  readonly inputs: ReadonlyArray<In>;
+}
+
+/**
+ * The FUNCTION form of a turn: `(TickEvent) => Effect<Fragment>` — a
+ * reducer from what-just-happened to how-to-stand, with laws checked
+ * on the way (budgets, refusals, scheduled pressure notes). Prefer
+ * this over the bare-Effect turn when the guard needs the tick.
+ */
+export type TurnFn<In = unknown, E = any, R = any> = (
+  tick: TickEvent<In>,
+) => Effect.Effect<Fragment, E, R>;
 
 /**
  * A charter is the BEHAVIOR of an Agent or Process: an INIT effect
@@ -60,25 +82,38 @@ export type Turn<Out = unknown, E = any, R = any> = Effect.Effect<
  * sees: no sampling is under way, so only turns and tool handlers may
  * yield it.
  *
+ * The three tiers, static-first:
+ *
  * ```ts
- * const charter = Effect.gen(function* () {
- *   const phase = yield* Ref.make<"triaging" | "parked">("triaging"); // INIT
- *   const park = yield* AI.Tool("park")`Park this issue.`(() =>
- *     Ref.set(phase, "parked").pipe(Effect.as("parked")));
- *   return Effect.gen(function* () {                                 // TURN
- *     return yield* (yield* Ref.get(phase)) === "parked"
- *       ? AI.prose`You are waiting on the author.`
- *       : AI.prose`Triage the issue; ${park} when blocked.`;
+ * // 1. static prose — most agents
+ * Reviewer.make`You review each ${pr} against …`;
+ *
+ * // 2. a closure (tools, refs, bindings) returning a STATIC stance
+ * Engineer.make(Effect.gen(function* () {
+ *   const openPullRequest = yield* AI.Tool("open_pull_request")`…`(…);
+ *   return AI.prose`…${openPullRequest}…`;      // Fragment → constant turn
+ * }));
+ *
+ * // 3. the GUARD tier — a function of the tick event, for laws the
+ * //    model cannot be trusted to enforce on itself
+ * Engineer.make(Effect.gen(function* () {
+ *   const stance = AI.prose`…`;
+ *   return Effect.fn(function* (tick: AI.TickEvent) {
+ *     if (tick.count >= 60) return yield* Effect.fail(new AI.Refused({ … }));
+ *     if (tick.count === 45) yield* AI.say`45 of 60 spent — converge.`;
+ *     return yield* stance;
  *   });
- * });
+ * }));
  * ```
  *
- * A STATIC charter is the degenerate case: `AI.prose` is already an
- * `Effect<Fragment>`, so passing it directly lifts to a constant turn
- * — and the tagged-template shorthand ``Engineer.make`…` `` is the
- * whole spelling for a persona that never changes stance.
+ * A static stance is byte-identical every tick — the prompt cache
+ * never busts; the guard tier costs nothing extra when the stance it
+ * returns is constant. Re-rendering a DIFFERENT stance mid-run is
+ * possible and occasionally right, but it replaces the system prompt
+ * (cache-busting) — skills (model-pulled) and messages are the cheap
+ * dynamism channels.
  */
-export type Charter = Effect.Effect<Fragment | Turn, any, any>;
+export type Charter = Effect.Effect<Fragment | Turn | TurnFn, any, any>;
 
 /**
  * The services the kernel itself provides while evaluating a run's
@@ -110,7 +145,9 @@ export type CharterServices<C> =
         | Exclude<RInit, Thread | RuntimeContext>
         | (A extends Effect.Effect<any, any, infer RTurn>
             ? Exclude<RTurn, TurnServices>
-            : never)
+            : A extends (tick: any) => Effect.Effect<any, any, infer RTurn>
+              ? Exclude<RTurn, TurnServices>
+              : never)
     : never;
 
 /**

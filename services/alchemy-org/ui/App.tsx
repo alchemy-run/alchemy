@@ -311,26 +311,43 @@ const Chat = ({
   const watchOnly =
     !id.startsWith("Channel:") && !id.startsWith("PullRequestReviewer:");
 
-  // dispatch tool-call → worker thread: the channel runs SERIALLY, so
-  // the Nth dispatch of agent X is the Nth child run of term X
+  // delegation tool-call → worker thread. Door calls (`AI.Dispatch`)
+  // carry their identity on the part (`part.dispatch.child` is the
+  // worker's run key) — a DIRECT link. The generic `dispatch`
+  // intrinsic without a session falls back to the serial heuristic:
+  // the Nth dispatch of agent X is the Nth child run of term X.
   const workerByCall = useMemo(() => {
     const counts = new Map<string, number>();
     const byCall = new Map<string, BoardThread>();
     for (const message of messages) {
       for (const part of message.parts) {
-        if (
-          part.type === "dynamic-tool" &&
-          part.toolName === "dispatch" &&
-          typeof (part.input as any)?.agent === "string"
-        ) {
-          const agent = (part.input as any).agent as string;
-          const index = counts.get(agent) ?? 0;
-          counts.set(agent, index + 1);
-          const worker = agents.filter((thread) => thread.term === agent)[
-            index
-          ];
-          if (worker !== undefined) byCall.set(part.toolCallId, worker);
+        if (part.type !== "dynamic-tool") continue;
+        const dispatch = (part as any).dispatch as
+          | { agent: string; child: string | undefined }
+          | undefined;
+        if (dispatch !== undefined) {
+          const worker =
+            dispatch.child !== undefined
+              ? agents.find(
+                  (thread) => thread.id === `${dispatch.agent}:${dispatch.child}`,
+                )
+              : undefined;
+          if (worker !== undefined) {
+            byCall.set(part.toolCallId, worker);
+            continue;
+          }
         }
+        const agent =
+          dispatch?.agent ??
+          (part.toolName === "dispatch" &&
+          typeof (part.input as any)?.agent === "string"
+            ? ((part.input as any).agent as string)
+            : undefined);
+        if (agent === undefined) continue;
+        const index = counts.get(agent) ?? 0;
+        counts.set(agent, index + 1);
+        const worker = agents.filter((thread) => thread.term === agent)[index];
+        if (worker !== undefined) byCall.set(part.toolCallId, worker);
       }
     }
     return byCall;
@@ -414,10 +431,18 @@ const Chat = ({
                   }
                   if (part.type === "dynamic-tool") {
                     const tool = part;
-                    if (tool.toolName === "dispatch") {
+                    const dispatchInfo = (tool as any).dispatch as
+                      | { agent: string; child: string | undefined }
+                      | undefined;
+                    if (
+                      dispatchInfo !== undefined ||
+                      tool.toolName === "dispatch"
+                    ) {
                       const worker = workerByCall.get(tool.toolCallId);
                       const agent =
-                        (tool.input as any)?.agent ?? "subagent";
+                        dispatchInfo?.agent ??
+                        (tool.input as any)?.agent ??
+                        "subagent";
                       const running =
                         worker?.status === "running" ||
                         (worker === undefined &&

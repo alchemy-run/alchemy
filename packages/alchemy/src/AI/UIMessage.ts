@@ -36,9 +36,25 @@ export const toUIMessages = (
     | { message: UIMessage; parts: Array<UIMessagePart<any, any>> }
     | undefined;
   const toolParts = new Map<string, any>();
+  // delegations observed mid-sampling ("dispatched" precedes its
+  // burst's consolidated `assistant`) — matched to tool parts by
+  // name, in order, when the burst lands
+  const pendingDispatches: Array<{
+    toolName: string;
+    agent: string;
+    child: string | undefined;
+  }> = [];
 
   for (const observation of log) {
     switch (observation.type) {
+      case "dispatched": {
+        pendingDispatches.push({
+          toolName: observation.toolName,
+          agent: observation.agent,
+          child: observation.child,
+        });
+        break;
+      }
       case "input": {
         assistant = undefined;
         messages.push({
@@ -74,13 +90,22 @@ export const toUIMessages = (
           assistant.parts.push({ type: "text", text: observation.text });
         }
         for (const call of observation.toolCalls) {
-          const part = {
+          const part: any = {
             type: "dynamic-tool" as const,
             toolName: call.name,
             toolCallId: call.id,
             state: "input-available" as const,
             input: call.input,
           };
+          // a delegation call carries its identity — the client links
+          // the card straight to the worker thread, no heuristics
+          const dispatched = pendingDispatches.findIndex(
+            (candidate) => candidate.toolName === call.name,
+          );
+          if (dispatched >= 0) {
+            const [match] = pendingDispatches.splice(dispatched, 1);
+            part.dispatch = { agent: match!.agent, child: match!.child };
+          }
           toolParts.set(call.id, part);
           assistant.parts.push(part);
         }

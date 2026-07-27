@@ -21,12 +21,14 @@ import { isEvent } from "./Event.ts";
 import {
   Kernel,
   type Charter,
+  type TurnFn,
   type Interpretable,
   type Turn,
 } from "./Kernel.ts";
 import { KernelObserver, type KernelObservation } from "./Observer.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Prose.ts";
+import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
 import { isSkill, type Skill, type SkillService } from "./Skill.ts";
 import {
   Thread,
@@ -282,11 +284,26 @@ interface Stance {
   readonly tools: Map<string, CompiledToolRef>;
   readonly skills: Map<string, Skill<string, any>>;
   readonly delegates: Map<string, Agent<any, any>>;
+  /** Policy-constrained dispatches (`AI.Dispatch`) mentioned this tick. */
+  readonly doors: Map<string, DispatchTool<string, any[]>>;
+}
+
+/**
+ * One mailbox delivery: the input plus, for a `dispatch`, the waiter
+ * that rides it. Pairing them is what makes replies HONEST: a waiter
+ * only becomes answerable once its input has been drained into a
+ * round — a dispatch that arrives while an earlier round's epilogue
+ * is still sampling can never be resolved by that round's quiescence.
+ */
+interface InboxItem {
+  readonly input: unknown;
+  readonly waiter?: Deferred.Deferred<unknown>;
 }
 
 interface RunState {
-  readonly inbox: Queue.Queue<unknown>;
-  /** Dispatch waiters — each resolves at the run's next quiescence. */
+  readonly inbox: Queue.Queue<InboxItem>;
+  /** The CURRENT round's waiters — resolved by `AI.reply` or, for
+   *  rounds that never reply, by quiescence with the response text. */
   readonly waiters: Array<Deferred.Deferred<unknown>>;
   /** The run's ending: `settle` from outside, or a turn Outcome. */
   readonly settled: Deferred.Deferred<unknown>;
@@ -298,8 +315,9 @@ interface RunState {
   tick: number;
   /** The thread — everything after the (separate) frozen head. */
   prompt: Prompt.Prompt;
-  /** The run's TURN, produced by its own charter init. */
-  turn?: Turn;
+  /** The run's TURN, produced by its own charter init — a constant
+   *  fragment lifted to an Effect, or a function of the tick event. */
+  turn?: Turn | TurnFn;
   /** Requested compaction; applied at the next tick's start. */
   pendingCompaction?: CompactPlan;
   /** Notes collected via `AI.say`, awaiting delivery this tick. */
@@ -317,12 +335,10 @@ interface RunState {
 }
 
 /** What one tick hands the loop. */
-type TickResult =
-  | { readonly outcome: { readonly value: unknown } }
-  | {
-      readonly system: string;
-      readonly toolkit: Toolkit.WithHandler<any> | undefined;
-    };
+interface TickResult {
+  readonly system: string;
+  readonly toolkit: Toolkit.WithHandler<any> | undefined;
+}
 
 /**
  * The in-memory Kernel: the smallest interpreter that makes a charter
@@ -343,19 +359,22 @@ type TickResult =
  *   byte-stable for prompt caching; change it and the system prompt
  *   simply changes. Its mentions are the tick's toolkit. Everything
  *   dynamic reaches the thread through EXPLICIT channels: `AI.say`
- *   notes, tool results, and steers. Any OTHER value settles the run
- *   from inside; a `Refused` failure is the run giving up.
+ *   notes, tool results, and steers. Answering a caller is the
+ *   explicit `AI.reply` act (a tool handler, usually); a `Refused`
+ *   failure is the run giving up.
  * - `AI.Run` is provided to init, turn, and tool handlers: kernel
  *   facts (key, tick, tokens) plus read-only thread access and the one
  *   thread mutation — `compact`, applied at tick boundaries only.
  *
  * ```
  * loop: drain mailbox → apply pending compaction → user messages
- *       TICK: evaluate turn → outcome? settle : render stance → diff → toolkit
- *       generateText(head + thread, toolkit)   (tools run inside)
+ *       TICK: evaluate turn (fn turns receive {count, inputs}) →
+ *             render stance → toolkit
+ *       streamText(head + thread, toolkit)     (tools run inside;
+ *                                               AI.reply answers waiters)
  *       append response parts
  *       tool calls?  → loop                    (the agentic loop)
- *       quiescent    → resolve dispatch waiters with the text,
+ *       quiescent    → resolve REMAINING waiters with the text,
  *                      PARK: wait for steer/send (wake) or settle (end)
  * ```
  *
@@ -419,6 +438,35 @@ export const KernelMemory: Layer.Layer<
             Effect.sync(() => {
               run.pendingCompaction = plan;
             }),
+          // ANSWER the current round, from wherever the answer is
+          // produced (usually a tool handler) — the caller resolves
+          // now; the run neither parks nor ends
+          reply: (value) =>
+            Effect.gen(function* () {
+              for (const waiter of run.waiters.splice(0)) {
+                yield* Deferred.succeed(waiter, value);
+              }
+            }),
+          // the kernel's CLOCK, fused to the run's lifetime: on this
+          // in-memory kernel runs live as long as the process, so a
+          // kernel-scoped fiber is exactly as durable as the run —
+          // a DO-backed kernel implements the same contract with an
+          // alarm. Delivery is an ordinary inbox message: a wake if
+          // parked, queued if busy, dropped if settled.
+          remind: (delay, note) =>
+            Effect.forkIn(
+              Effect.sleep(delay).pipe(
+                Effect.andThen(
+                  Effect.gen(function* () {
+                    if (yield* Deferred.isDone(run.settled)) return;
+                    yield* Queue.offer(run.inbox, {
+                      input: `[reminder] ${note}`,
+                    });
+                  }),
+                ),
+              ),
+              scope,
+            ).pipe(Effect.asVoid),
         });
 
         const makeTickService = (run: RunState): TickService => ({
@@ -589,6 +637,7 @@ export const KernelMemory: Layer.Layer<
             const tools = new Map<string, CompiledToolRef>();
             const skills = new Map<string, Skill<string, any>>();
             const delegates = new Map<string, Agent<any, any>>();
+            const doors = new Map<string, DispatchTool<string, any[]>>();
             let buffer = "";
             const flush = () => {
               const text = buffer.trim();
@@ -603,7 +652,12 @@ export const KernelMemory: Layer.Layer<
                   const ref = fragment.refs[index];
                   // term guards FIRST: tags are themselves yieldable
                   // (Effect.isEffect is true for every Service class)
-                  if (isToolImpl(ref)) {
+                  if (isDispatchTool(ref)) {
+                    // a DOOR: policy-constrained dispatch — renders as
+                    // its tool name; the kernel builds its handler
+                    doors.set(ref["~alchemy/Name"], ref);
+                    buffer += `\`${ref["~alchemy/Name"]}\``;
+                  } else if (isToolImpl(ref)) {
                     const name = ref.tool["~alchemy/Name"];
                     tools.set(name, { term: ref.tool, impl: ref.impl });
                     buffer += `\`${name}\``;
@@ -639,6 +693,9 @@ export const KernelMemory: Layer.Layer<
                       const name = value.tool["~alchemy/Name"];
                       tools.set(name, { term: value.tool, impl: value.impl });
                       buffer += `\`${name}\``;
+                    } else if (isDispatchTool(value)) {
+                      doors.set(value["~alchemy/Name"], value);
+                      buffer += `\`${value["~alchemy/Name"]}\``;
                     } else {
                       buffer += String(value);
                     }
@@ -650,7 +707,7 @@ export const KernelMemory: Layer.Layer<
               });
             yield* walk(root);
             flush();
-            return { blocks, tools, skills, delegates };
+            return { blocks, tools, skills, delegates, doors };
           });
 
         /**
@@ -811,7 +868,7 @@ export const KernelMemory: Layer.Layer<
         const makeRunState = (key: string): Effect.Effect<RunState> =>
           Effect.gen(function* () {
             return {
-              inbox: yield* Queue.unbounded<unknown>(),
+              inbox: yield* Queue.unbounded<InboxItem>(),
               waiters: [],
               settled: yield* Deferred.make<unknown>(),
               key,
@@ -933,18 +990,24 @@ export const KernelMemory: Layer.Layer<
             yield* startLoop(worker, () =>
               Effect.succeed({ system, toolkit } as TickResult),
             );
-            yield* Queue.offer(worker.inbox, params.task);
+            yield* Queue.offer(worker.inbox, { input: params.task });
             const waiter = yield* Deferred.make<unknown>();
             worker.waiters.push(waiter);
             return yield* Deferred.await(waiter);
           });
 
         /**
-         * One ACTOR tick: evaluate the run's turn. An Outcome settles
-         * the run; a Fragment renders into this tick's SYSTEM PROMPT
-         * (verbatim) and toolkit.
+         * One ACTOR tick: evaluate the run's turn — a function turn
+         * receives the tick event ({count, inputs}) — and render the
+         * resulting Fragment into this tick's SYSTEM PROMPT (verbatim)
+         * and toolkit. The turn returns the STANCE and nothing else:
+         * answering a caller is `AI.reply` (from a tool handler or
+         * turn code), never a return value.
          */
-        const actorTick = (run: RunState): Effect.Effect<TickResult> =>
+        const actorTick = (
+          run: RunState,
+          inputs: ReadonlyArray<unknown>,
+        ): Effect.Effect<TickResult> =>
           Effect.gen(function* () {
             const result = yield* provideRun(run)(
               Effect.suspend(() => {
@@ -952,7 +1015,10 @@ export const KernelMemory: Layer.Layer<
                 // retried turn delivers only the successful
                 // evaluation's notes — never a failed attempt's
                 run.pendingNotes.length = 0;
-                return run.turn as Turn;
+                const turn = run.turn!;
+                return typeof turn === "function"
+                  ? turn({ count: run.tick, inputs })
+                  : turn;
               }).pipe(
                 // transient turn failures (an observation fetch, a
                 // flaky service) retry; a typed Refused is the run
@@ -970,8 +1036,9 @@ export const KernelMemory: Layer.Layer<
               );
             }
             if (!isFragment(result)) {
-              // any non-Fragment value concludes the run from inside
-              return { outcome: { value: result } };
+              return yield* Effect.die(
+                `KernelMemory: the turn of '${termName}' (run '${run.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
+              );
             }
             const stance = yield* renderStance(run, result);
 
@@ -1029,6 +1096,46 @@ export const KernelMemory: Layer.Layer<
               }
             }
 
+            // DOORS: policy-constrained dispatches (`AI.Dispatch`) —
+            // presented as the org's own tools, EXECUTED by the kernel:
+            // the policy derives {task, key}, the child registers for
+            // the supervision cascade, the parentage edge is stamped,
+            // and the observation carries the delegation identity.
+            // Deliberately NOT in stance.tools: spawn must never hand a
+            // door to a worker (workers are leaves).
+            const doorTools: Array<AiTool.Any> = [];
+            for (const [name, door] of stance.doors) {
+              doorTools.push(compileTool(door as never));
+              const doorHandler = (params: any) =>
+                Effect.gen(function* () {
+                  const derived = yield* door.policy(params, {
+                    key: run.key,
+                  });
+                  const actor = yield* resolveDelegate(door.agent);
+                  if (derived.key !== undefined) {
+                    run.children.set(derived.key, actor);
+                  }
+                  yield* observe(run, {
+                    type: "dispatched",
+                    tick: run.tick,
+                    toolName: name,
+                    agent: door.agent["~alchemy/Name"],
+                    child: derived.key,
+                  });
+                  return yield* actor
+                    .dispatch(derived.task, {
+                      key: derived.key,
+                      parent: { term: termName, key: run.key },
+                    })
+                    .pipe(Effect.provide(RuntimeContext.phantom));
+                });
+              capabilityHandlers[name] = observedHandler(
+                run,
+                name,
+                doorHandler,
+              );
+            }
+
             // the WIRE seam: an optional mode transforms how the
             // capabilities are PRESENTED (e.g. codemode collapses them
             // into one `eval` tool) — mention-is-presence unchanged;
@@ -1036,6 +1143,7 @@ export const KernelMemory: Layer.Layer<
             const capabilityTools = dedupeByName([
               ...charterTools,
               ...activeTools,
+              ...doorTools,
             ]);
             const wireMode = Context.getOption(context, WireMode);
             const wire: WirePresentation =
@@ -1075,22 +1183,30 @@ export const KernelMemory: Layer.Layer<
                 agent: string;
                 task: string;
                 session?: string;
-              }) => {
-                const actor = delegates.get(params.agent)!;
-                const key =
-                  params.session === undefined
-                    ? undefined
-                    : `${run.key}/${params.agent}/${params.session}`;
-                if (key !== undefined) {
-                  run.children.set(key, actor);
-                }
-                return actor
-                  .dispatch(params.task, {
-                    key,
-                    parent: { term: termName, key: run.key },
-                  })
-                  .pipe(Effect.provide(RuntimeContext.phantom));
-              };
+              }) =>
+                Effect.gen(function* () {
+                  const actor = delegates.get(params.agent)!;
+                  const key =
+                    params.session === undefined
+                      ? undefined
+                      : `${run.key}/${params.agent}/${params.session}`;
+                  if (key !== undefined) {
+                    run.children.set(key, actor);
+                  }
+                  yield* observe(run, {
+                    type: "dispatched",
+                    tick: run.tick,
+                    toolName: "dispatch",
+                    agent: params.agent,
+                    child: key,
+                  });
+                  return yield* actor
+                    .dispatch(params.task, {
+                      key,
+                      parent: { term: termName, key: run.key },
+                    })
+                    .pipe(Effect.provide(RuntimeContext.phantom));
+                });
             }
             handlers.spawn = (params) => spawn(run, params);
             handlers.skill = skillSwitch(run);
@@ -1125,31 +1241,41 @@ export const KernelMemory: Layer.Layer<
 
         const loop = (
           run: RunState,
-          prepare: (run: RunState) => Effect.Effect<TickResult>,
+          prepare: (
+            run: RunState,
+            inputs: ReadonlyArray<unknown>,
+          ) => Effect.Effect<TickResult>,
         ) =>
           Effect.gen(function* () {
             let quiescent = false;
             while (true) {
               if (yield* Deferred.isDone(run.settled)) break;
-              let inputs: Array<unknown> = yield* Queue.clear(run.inbox);
-              if (inputs.length === 0 && quiescent) {
+              let items: Array<InboxItem> = yield* Queue.clear(run.inbox);
+              if (items.length === 0 && quiescent) {
                 // PARKED: the run's work is done until the world moves
                 yield* observe(run, { type: "parked" });
                 const wake = yield* Effect.raceFirst(
-                  Effect.map(Queue.take(run.inbox), (input) => ({
+                  Effect.map(Queue.take(run.inbox), (item) => ({
                     settled: false as const,
-                    input,
+                    item,
                   })),
                   Effect.map(Deferred.await(run.settled), () => ({
                     settled: true as const,
                   })),
                 );
                 if (wake.settled) break;
-                inputs = [wake.input, ...(yield* Queue.clear(run.inbox))];
+                items = [wake.item, ...(yield* Queue.clear(run.inbox))];
               }
               // boundary work: requested compaction applies BEFORE the
               // new inputs join the thread, so nothing fresh is lost
               applyCompaction(run);
+              // drained waiters JOIN THE ROUND: only now are they
+              // answerable — by AI.reply, or by quiescence as fallback
+              const inputs: Array<unknown> = [];
+              for (const item of items) {
+                inputs.push(item.input);
+                if (item.waiter !== undefined) run.waiters.push(item.waiter);
+              }
               for (const input of inputs) {
                 run.prompt = Prompt.concat(run.prompt, [asUserMessage(input)]);
                 yield* observe(run, {
@@ -1158,21 +1284,9 @@ export const KernelMemory: Layer.Layer<
                     typeof input === "string" ? input : JSON.stringify(input),
                 });
               }
-              // TICK: re-evaluate the stance before every sampling
-              const tick = yield* prepare(run);
-              if ("outcome" in tick) {
-                // ANSWER ≠ SETTLE (the gen_server reply): a non-Fragment
-                // turn value answers the pending dispatch round — every
-                // waiter resolves with the TYPED value — and the run
-                // PARKS, context intact, resumable by the next dispatch
-                // to its key. Ending a run stays the owner's act
-                // (`settle`), or the supervision cascade's.
-                for (const waiter of run.waiters.splice(0)) {
-                  yield* Deferred.succeed(waiter, tick.outcome.value);
-                }
-                quiescent = true;
-                continue;
-              }
+              // TICK: re-evaluate the stance before every sampling —
+              // function turns receive the tick event ({count, inputs})
+              const tick = yield* prepare(run, inputs);
               // deliver collected notes (`AI.say`): a PLAIN append, in
               // emission order — no dedupe, no memory. The author's
               // condition (`if (count === 30) yield* AI.say…`) is the
@@ -1253,9 +1367,13 @@ export const KernelMemory: Layer.Layer<
                 }
               }
             }
-            // settled: anyone still waiting gets the outcome
+            // settled: anyone still waiting gets the outcome — the
+            // current round's waiters AND undrained arrivals alike
             const outcome = yield* Deferred.await(run.settled);
             yield* observe(run, { type: "settled" });
+            for (const item of yield* Queue.clear(run.inbox)) {
+              if (item.waiter !== undefined) run.waiters.push(item.waiter);
+            }
             for (const waiter of run.waiters.splice(0)) {
               yield* Deferred.succeed(waiter, outcome);
             }
@@ -1282,7 +1400,10 @@ export const KernelMemory: Layer.Layer<
         /** Fork a run's loop into the interpret Scope. */
         const startLoop = (
           run: RunState,
-          prepare: (run: RunState) => Effect.Effect<TickResult>,
+          prepare: (
+            run: RunState,
+            inputs: ReadonlyArray<unknown>,
+          ) => Effect.Effect<TickResult>,
         ) =>
           Effect.forkIn(
             loop(run, prepare).pipe(
@@ -1325,7 +1446,7 @@ export const KernelMemory: Layer.Layer<
          * start its loop.
          */
         const admit = (
-          item: unknown,
+          item: InboxItem,
           key?: string,
           parent?: { readonly term: string; readonly key: string },
         ) =>
@@ -1344,9 +1465,11 @@ export const KernelMemory: Layer.Layer<
                 ? Effect.succeed(initResult)
                 : Effect.isEffect(initResult)
                   ? (initResult as Turn)
-                  : yield* Effect.die(
-                      `KernelMemory: the charter for '${termName}' returned neither prose nor a turn effect`,
-                    );
+                  : typeof initResult === "function"
+                    ? (initResult as TurnFn)
+                    : yield* Effect.die(
+                        `KernelMemory: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
+                      );
               yield* startLoop(run, actorTick);
               runs.set(runKey, run);
             }
@@ -1359,15 +1482,23 @@ export const KernelMemory: Layer.Layer<
 
         const actor: Actor = {
           send: (item, options) =>
-            Effect.asVoid(admit(item, options?.key, options?.parent)),
+            Effect.asVoid(
+              admit({ input: item }, options?.key, options?.parent),
+            ),
           dispatch: (item, options) =>
             Effect.gen(function* () {
-              const run = yield* admit(item, options?.key, options?.parent);
+              // the waiter RIDES the input: it joins the answerable
+              // round only when its own message is drained, so an
+              // in-flight earlier round can never answer it
+              const waiter = yield* Deferred.make<unknown>();
+              const run = yield* admit(
+                { input: item, waiter },
+                options?.key,
+                options?.parent,
+              );
               if (yield* Deferred.isDone(run.settled)) {
                 return yield* Deferred.await(run.settled);
               }
-              const waiter = yield* Deferred.make<unknown>();
-              run.waiters.push(waiter);
               return yield* Deferred.await(waiter);
             }),
           steer: ((first: unknown, second?: unknown) =>
@@ -1383,12 +1514,12 @@ export const KernelMemory: Layer.Layer<
                 // dropped — the run's state died with the isolate but
                 // the world's event is real; admit a fresh run
                 if (second !== undefined) {
-                  yield* Effect.asVoid(admit(input, key));
+                  yield* Effect.asVoid(admit({ input }, key));
                 }
                 return;
               }
               if (yield* Deferred.isDone(run.settled)) return;
-              yield* Queue.offer(run.inbox, input);
+              yield* Queue.offer(run.inbox, { input });
             })) as Actor["steer"],
           settle: (runKey, event) =>
             Effect.gen(function* () {

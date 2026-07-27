@@ -1,5 +1,6 @@
 export * from "./Actor.ts";
 export * from "./Agent.ts";
+export * from "./Dispatch.ts";
 export * from "./CodeMode.ts";
 export * from "./Errors.ts";
 export * from "./Event.ts";

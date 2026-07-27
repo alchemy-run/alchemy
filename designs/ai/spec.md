@@ -11,11 +11,12 @@ loop-facing surface is:
 ```ts
 AI.prose`...`                                 // Fragment — the render output
 yield* AI.Tool("name")`desc ${param}`(impl)   // inline tool (init) — closure over your refs
+yield* AI.Dispatch(Agent, "name")`…`(derive)  // door (init) — policy-constrained delegation
 yield* AI.say`...`                            // one-shot note (the event channel)
-const thread = yield* AI.Thread               // the run: key, entries, tokens, compact
-const tick = yield* AI.Tick                   // this sampling: count
-return fragment                               // stance: keep working
-return value                                  // any non-Fragment: run settles from inside
+yield* AI.reply(value)                        // answer the current dispatch round (typed)
+const thread = yield* AI.Thread               // the run: key, entries, tokens, compact, remind
+(tick: AI.TickEvent) => Effect<Fragment>      // guard-tier turn: {count, inputs} as argument
+return fragment                               // stance: keep working (turns return ONLY prose)
 yield* Effect.fail(new AI.Refused({ ... }))   // typed give-up (error channel)
 ```
 
@@ -31,10 +32,21 @@ decorators, and compaction policies are userland functions.
 // CHARTER — runs once per RUN (the component instance / the "mount").
 // Allocate state, define inline tools, resolve services. May fail (EInit
 // is a defect — deploy-time error, not a runtime condition).
-type Charter = Effect<Turn | Fragment, EInit, RInit>;
+type Charter = Effect<Fragment | Turn | TurnFn, EInit, RInit>;
 
 // TURN — re-entrant: evaluated before EVERY sampling and on every wake.
-type Turn<Out = unknown, E = any, R = any> = Effect<Fragment | Out, E, R>;
+// Returns the STANCE and nothing else; answering a caller is the
+// explicit AI.reply act (§9c), never a return value.
+type Turn<E = any, R = any> = Effect<Fragment, E, R>;
+
+// The GUARD tier: a function of the tick event — deterministic law
+// over what-just-happened (budgets, refusals, pressure notes).
+interface TickEvent<In = unknown> {
+  readonly count: number;                 // samplings so far (the budget clock)
+  readonly inputs: ReadonlyArray<In>;     // messages drained at this boundary
+}
+type TurnFn<In = unknown, E = any, R = any> =
+  (tick: TickEvent<In>) => Effect<Fragment, E, R>;
 ```
 
 The kernel's behaviors are interpretations of the turn's result — charters
@@ -43,19 +55,41 @@ never name them:
 | turn result | kernel behavior |
 |---|---|
 | `Fragment` | the render IS the system prompt, verbatim → build toolkit → sample |
-| any other value | the run **settles from inside** with that value (waiters resolve with it) |
 | an `Effect` | **loud defect** — you forgot `yield*` on an `AI.prose` |
+| any other value | **loud defect** — turns return prose; answer callers with `AI.reply` |
 | failure (`E`) | retried with backoff; persistent failure fails the run |
 | `AI.Refused` failure | typed give-up, rides the error channel to waiters |
 
-A static charter is the degenerate case — `AI.prose` **is** a valid charter
-(a constant turn):
+Three tiers, static-first — climb only when the lower tier can't say it:
 
 ```ts
+// 1. static prose — most agents (byte-stable system prompt, cache never busts)
 export const ReviewerLive = Reviewer.make`
   You review each ${pr} against its originating ${issue} — the diff and
   the spec, nothing else. Verdict via ${Approve} or changes via ${Comment}.`;
+
+// 2. a closure — inline tools, refs, bindings — returning a STATIC stance
+export const EngineerLive = Engineer.make(Effect.gen(function* () {
+  const openPullRequest = yield* AI.Tool("open_pull_request")`…`(…);
+  return AI.prose`…${openPullRequest}…`;        // Fragment → constant turn
+}));
+
+// 3. the GUARD tier — a function of the tick event, for laws the model
+//    cannot be trusted to enforce on itself
+export const EngineerLive = Engineer.make(Effect.gen(function* () {
+  const stance = AI.prose`…`;
+  return Effect.fn(function* (tick: AI.TickEvent) {
+    if (tick.count >= 60) return yield* Effect.fail(new AI.Refused({ … }));
+    if (tick.count === 45) yield* AI.say`45 of 60 spent — converge.`;
+    return yield* stance;                        // constant: cache intact
+  });
+}));
 ```
+
+The guard sees the tick as an ARGUMENT (`count`, `inputs`) rather than an
+ambient service — per-tick policy is a typed reducer from
+what-just-happened to how-to-stand, testable as a plain function.
+(`AI.Tick` remains available inside turns and tool handlers for `AI.say`.)
 
 **Terms**: `AI.Agent` (bare Context tag, the ONE interpretable term),
 `AI.Tool` / `AI.Parameter` (capability terms), `AI.Skill` (bare tag; a
@@ -405,6 +439,10 @@ interface ThreadService {
   /** Request compaction — applied by the kernel at the next sampling
    *  boundary, never mid-assembly. Recorded; never silent. */
   readonly compact: (plan: CompactPlan) => Effect<void>;
+  /** Answer the current dispatch round (behind AI.reply, §9c). */
+  readonly reply: (value: unknown) => Effect<void>;
+  /** Schedule a note to this run's future self (the kernel clock, §9e). */
+  readonly remind: (delay: Duration.Input, note: string) => Effect<void>;
 }
 
 interface TickService {
@@ -435,6 +473,7 @@ can point to in code:
 | **note** | events — happen once, never revoked | charter, `yield* AI.say` | on first appearance per thread, `<note>` |
 | **tool result** | the outcome of an action, incl. transitions the handler caused | tool handlers | with the call |
 | **steer** | the world's voice | Layer / tools / humans | immediately, as inputs |
+| **reminder** | the run's own past voice | `Thread.remind` (§9e) | at fireAt, as an input (`[reminder] …`) |
 
 A CHANGED render simply replaces the system prompt (cache bust, on the
 author's head) — no diff, no derived message. Keep the prompt static
@@ -543,39 +582,41 @@ The laws:
 
 ```ts
 const EngineerCharter = Effect.gen(function* () {
-  // init: per-run setup — bindings, Refs, thread-scoped state
-  // (AI.Thread is in scope; AI.Tick is turn-only)
-  const { key } = yield* AI.Thread;
+  // init: per-run setup — bindings, inline tools
   const open = yield* OpenPullRequest;
-  const opened = yield* Ref.make<Pr | undefined>(undefined);
   const openPullRequest = yield* AI.Tool("open_pull_request")`
-    Open the pull request citing ${issue}.`((params) =>
-    open(params).pipe(Effect.tap((pr) => Ref.set(opened, pr))));
+    Open the pull request citing ${issue}.`(
+    Effect.fn(function* (params) {
+      const created = yield* open(params);
+      yield* AI.reply(created.pr);   // ACHIEVE: the caller gets the artifact
+      return `opened ${created.url}`;
+    }));
 
-  return Effect.gen(function* () {
-    const pr = yield* Ref.get(opened);
-    if (pr) return pr; // ACHIEVE: exit = a return value
-    const { count } = yield* AI.Tick;
-    if (count > 40) {  // BUDGET: a fact + a typed error
+  const stance = AI.prose`
+    You receive exactly one ${issue}. ${Coding} is your craft; when
+    green, ${openPullRequest} citing the issue. You do not review or
+    merge.`;
+
+  // GUARD tier: the budget is a law, not a request
+  return Effect.fn(function* (tick: AI.TickEvent) {
+    if (tick.count > 40) {
       return yield* Effect.fail(new AI.Refused({
-        loop: key, reason: "no green PR after 40 samplings",
+        loop: "Engineer", reason: "no green PR after 40 samplings",
       }));
     }
-    return yield* AI.prose`
-      You receive exactly one ${issue}. ${Coding} is your craft; when
-      green, ${openPullRequest} citing the issue. You do not review or
-      merge.`;
+    return yield* stance;
   });
 });
 ```
 
-- **achieve** = `if (done) return value` — success is observed (a ref the
-  tool wrote, a cached world read), never the model's claim.
-- **maintain** = a turn that never returns a non-Fragment (perpetual).
+- **achieve** = `AI.reply(artifact)` at the site that observed success (a
+  tool handler that just created the thing), never the model's claim.
+- **maintain** = a run that simply never replies with an artifact —
+  quiescent text answers each round; the run is perpetual either way.
 - **refuse** = `Effect.fail(new AI.Refused(...))` — the evidence bar
   (repeat-observed blocker) is a counter ref, userland.
-- A settled-from-inside run resolves its `dispatch` waiters with the
-  returned value; the world can still `settle` first — it outranks.
+- The world can still `settle` first — it outranks; waiters then resolve
+  with the settle outcome.
 
 ## 7. Compaction: kernel mechanism, userland policy
 
@@ -727,9 +768,9 @@ A NAMED agent is warranted iff at least one holds:
    (Reviewer: `Approve` without `Merge`; the channel: the reverse).
 2. **Fixed doctrine** — its charter is org policy that must not vary
    per dispatch (the review rubric; not the dispatcher's whim).
-3. **Own physics** — its Layer carries an init closure the caller
-   cannot hand over: workspace acquisition, code-enforced budgets,
-   `Ref`-observed achieve state (Engineer's worktree + 40-tick budget;
+3. **Own physics** — its Layer carries a closure the caller cannot
+   hand over: guard-tier budgets, reply-on-evidence tools (Engineer's
+   `open_pull_request` replying with the PR the moment it exists;
    ResourceEngineer's 150-tick budget).
 4. **Typed result** — callers depend on its dispatch resolving with a
    typed artifact, not prose (Engineer → `PullRequestRef`;
@@ -753,32 +794,48 @@ for ephemeral workers.
 
 ### 9c. Call/reply, sessions, and the supervision cascade
 
-**Decision (2026-07-25): answering a dispatch and ending a run are
-DIFFERENT acts.** The original achieve pattern conflated them — a
-non-Fragment turn value resolved the dispatch AND settled the run,
-destroying the worker's context exactly when a follow-up (review
-feedback) needed it. Three kernel rules replace it:
+**Decision (2026-07-25, refined 2026-07-26): answering a dispatch and
+ending a run are DIFFERENT acts — and the answer is an explicit
+`AI.reply`, from wherever the answer is actually produced.** The
+original achieve pattern conflated answer with settle; the first
+refinement kept the turn-return as the reply channel, which still
+forced the artifact through a `Ref` dance (tool stores → next turn
+returns → consume). The kernel rules now:
 
-1. **Answer ≠ settle (the gen_server reply).** A non-Fragment turn
-   value resolves every pending dispatch waiter with the TYPED value
-   and the run PARKS — context intact, resumable. Quiescence still
-   answers with the response text. Ending a run remains the owner's
-   act (`settle`), or the cascade's. Runs are perpetual by default;
-   an actor does not die because it answered a call.
-2. **Sessions on `dispatch`.** The intrinsic takes an optional
+1. **`AI.reply(value)` answers the round.** Callable from a tool
+   handler (the natural site — the moment the artifact provably
+   exists) or from turn code. Every pending dispatch waiter resolves
+   with the value; the run neither parks nor ends — the model may
+   keep working (wrap up, comment, start CI). A round that never
+   replies answers with its quiescent text, the fallback. Turns
+   RETURN ONLY PROSE; a non-Fragment return is a loud defect.
+
+   ```ts
+   const openPullRequest = yield* AI.Tool("open_pull_request")`…`(
+     Effect.fn(function* (params) {
+       const created = yield* open(params);
+       yield* AI.reply(created.pr);   // ← the caller has its answer NOW
+       return `opened ${created.url}`;
+     }),
+   );
+   ```
+
+2. **Waiters ride their inputs.** A dispatch's waiter joins the
+   answerable round only when its own message is DRAINED into a tick
+   — a dispatch that arrives while an earlier round's epilogue is
+   still sampling can never be resolved by that round's reply or
+   quiescent text. (Without this pairing, `reply` re-introduces the
+   race the achieve pattern had.)
+3. **Sessions on `dispatch`.** The intrinsic takes an optional
    `session` name; the kernel derives a DETERMINISTIC child key
    namespaced under the dispatching run
    (`{parent.key}/{agent}/{session}`), so re-dispatching the same
    agent + session continues the SAME worker run via the existing
-   admit-or-enqueue semantics. Back-and-forth is just calling again:
-   `dispatch(Engineer, task, session: "build")` → typed PR ref;
-   review rejects; `dispatch(Engineer, feedback, session: "build")` →
-   the same engineer, same worktree (checkouts key on the run key),
-   fixes its own work. Omitting `session` mints a fresh run — one-off
-   labor. Namespacing means two issues' "build" sessions can never
-   collide, and the audit story is unchanged: sessions alter memory,
-   never authority.
-3. **The supervision cascade.** The kernel remembers each run's
+   admit-or-enqueue semantics. Back-and-forth is just calling again.
+   Omitting `session` mints a fresh run — one-off labor. Namespacing
+   means two issues' "build" sessions can never collide, and the
+   audit story is unchanged: sessions alter memory, never authority.
+4. **The supervision cascade.** The kernel remembers each run's
    session workers (the dispatch parentage edge, now load-bearing):
    when a run settles OR crashes, its children settle with it. Parked
    workers never outlive the conversation that owns them.
@@ -794,10 +851,67 @@ run their workers CONCURRENTLY (tool-call execution is unbounded),
 and every answer lands in the same message. Fan-out/fan-in is a
 sampling shape, not a primitive.
 
-Budget note: park-on-answer makes `AI.Tick.count` a LIFETIME counter
+Budget note: park-on-answer makes the tick count a LIFETIME counter
 across rounds — budgets sized for one round must either grow (the
 org's Engineer went 40 → 60) or gate on a per-round measure when one
 exists.
+
+### 9d. Doors: `AI.Dispatch` — policy-constrained delegation
+
+A bare `${Engineer}` mention grants the GENERIC dispatch intrinsic:
+the model chooses the task AND the session — full composition
+authority, right for supervisors trusted with it. When the org has an
+INVARIANT (one engineer per issue; reviews always resume the same
+reviewer), the session choice must not be the model's to make.
+`AI.Dispatch` builds a **door**: the delegation presented as the
+org's own tool, its policy in code:
+
+```ts
+const HandToEngineer = AI.Dispatch(Engineer, "hand_to_engineer")`
+  Hand one round of issue work to the engineer, with ${task} standing
+  alone: issue reference and acceptance criteria verbatim.`(
+  (p, thread) => ({ task: p.task, key: `${thread.key}/Engineer/build` }),
+);
+
+// in a charter's init:  const handToEngineer = yield* HandToEngineer;
+// in its prose:         …a ready issue goes through ${handToEngineer}…
+```
+
+The split: **userland owns the presentation and the policy** (name,
+prose, parameter schema, the `derive` deriving `{task, key}` — the
+session invariant is enforced by ABSENCE: no session parameter exists
+at the wire for the model to misuse); **the kernel owns the
+mechanism** (executes the dispatch, stamps parentage, registers the
+child for the supervision cascade, emits the `dispatched` observation
+carrying tool + agent + child key, so the UI links worker cards with
+no heuristics). The policy may be an `Effect` returning the function,
+so a module-scope door can pull its own dependencies (a `Ledger`,
+config) — their tags ride the charter's R channel like any splice. A
+policy failure is a model-visible tool result, never a loop crash.
+
+Doors are deliberately NOT in the stance's tool set that `spawn`
+grants from — workers are leaves; a spawn can never hand delegation
+onward.
+
+### 9e. `Thread.remind` — the kernel clock
+
+Time-based self-nudges (`"if the author hasn't replied in a day,
+ping"`) previously required a Layer-level scheduler steering from
+outside. Now the run can set them itself: `AI.Thread.remind(delay,
+note)` schedules a note to the run's FUTURE SELF and returns
+immediately — the note is data `(fireAt, text)`, delivered as an
+ordinary inbox message when due: a wake if the run is parked by then,
+a queued message if busy, dropped if settled. The kernel owns the
+clock, fused to the run's lifetime — a fiber on `KernelMemory` (runs
+are process-lifetime there), a Durable Object alarm on a durable
+kernel — which is exactly why it is a kernel method and not userland
+`Effect.sleep`: a sleeping fiber inside a tool handler dies with the
+isolate; the reminder must not.
+
+Userland wraps it in an org-voiced tool (`remind_me`) and the charter
+teaches WHEN (the org's patience policy is prose); scheduled events
+arrive prefixed `[reminder] …` and are judged fresh — the situation
+may have moved by the time one fires.
 
 ## 10. Layers, composition, testing
 

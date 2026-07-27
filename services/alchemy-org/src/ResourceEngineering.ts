@@ -40,7 +40,7 @@ export const ResourceEngineeringLive = ResourceEngineering.make`
   export interface Stream extends Resource<
     "AWS.Kinesis.Stream",
     StreamProps,
-    {
+    { 
       streamName: string;
       streamArn: string;
       streamStatus: StreamStatus;

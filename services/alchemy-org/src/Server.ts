@@ -182,7 +182,7 @@ const EngineerLayer = EngineerLive.pipe(
   ),
   Layer.provide(OpenPullRequestLive.pipe(Layer.provide(ToolOutputStoreLive))),
   Layer.provide(Kernel),
-  Layer.provide(runWorkspace()),
+  Layer.provide(runWorkspace({ remote: GitHub.remote(testAlchemy) })),
   // one shared instance: init's checkout, the toolbox root, and the
   // PR tool all read the same cache, so they land in the same worktree
   Layer.provide(WorkspacesLive),

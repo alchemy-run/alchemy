@@ -163,7 +163,17 @@ export const fixed = (
  * worktree — "which directory am I in" is not a fact the model can
  * get wrong.
  */
-export const perRun = (): Layer.Layer<
+export const perRun = (options?: {
+  /**
+   * Check the run's worktree out LAZILY on first use, from this
+   * remote — making this layer the ONE place that binds run key →
+   * worktree (`Git.Workspaces.checkout` is memoized by key, so any
+   * other holder of the same key — a PR tool committing the work —
+   * lands in the same tree). Without a remote, the charter's init
+   * must have acquired the checkout itself.
+   */
+  readonly remote?: Git.Remote;
+}): Layer.Layer<
   Workspace,
   never,
   Path.Path | FileSystem.FileSystem | Git.Workspaces
@@ -181,12 +191,16 @@ export const perRun = (): Layer.Layer<
       const root = Effect.gen(function* () {
         const { key } = yield* Thread;
         const found = yield* workspaces.get(key);
-        if (Option.isNone(found)) {
-          return yield* Effect.fail(
-            `no checkout for run '${key}' — the charter acquires one in init`,
-          );
+        if (Option.isSome(found)) return found.value.root;
+        if (options?.remote !== undefined) {
+          const checkout = yield* workspaces
+            .checkout({ key, remote: options.remote })
+            .pipe(Effect.mapError((error) => error.message));
+          return checkout.root;
         }
-        return found.value.root;
+        return yield* Effect.fail(
+          `no checkout for run '${key}' — the charter acquires one in init`,
+        );
       }) as unknown as Effect.Effect<string, string>;
 
       const within = <A>(
