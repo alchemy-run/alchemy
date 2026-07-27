@@ -229,12 +229,6 @@
       "worker": "./src/Process/index.ts",
       "import": "./lib/Process/index.js"
     },
-    "./SQL": {
-      "types": "./lib/SQL/index.d.ts",
-      "bun": "./src/SQL/index.ts",
-      "worker": "./src/SQL/index.ts",
-      "import": "./lib/SQL/index.js"
-    },
     "./SQL/*": {
       "types": "./lib/SQL/*.d.ts",
       "bun": "./src/SQL/*.ts",

@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Neon from "@/Neon/index.ts";
-import * as SQL from "@/SQL/index.ts";
+import * as SQL from "@/SQL/Postgres.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";

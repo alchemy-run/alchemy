@@ -29,7 +29,7 @@ export const Database = Cloudflare.D1.Database("Database");
 ```typescript
 // src/api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as SQL from "alchemy/SQL";
+import * as SQL from "alchemy/SQL/D1";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Database } from "./db.ts";
