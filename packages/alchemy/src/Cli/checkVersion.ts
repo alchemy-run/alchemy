@@ -45,23 +45,27 @@ const pickDistTag = (
   return distTags.latest;
 };
 
-const readCache = (cachePath: string) =>
-  Effect.gen(function* () {
+const readCache = Effect.fn(
+  function* (cachePath: string) {
     const fs = yield* FileSystem.FileSystem;
     const raw = yield* fs.readFileString(cachePath);
     const parsed = yield* Effect.try(
       () => JSON.parse(raw) as VersionCheckCache | null | undefined,
     );
     return typeof parsed?.checkedAt === "number" ? parsed : undefined;
-  }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  },
+  Effect.catch(() => Effect.succeed(undefined)),
+);
 
-const writeCache = (cachePath: string, distTags?: Record<string, string>) =>
-  Effect.gen(function* () {
+const writeCache = Effect.fn(
+  function* (cachePath: string, distTags?: Record<string, string>) {
     const fs = yield* FileSystem.FileSystem;
     const checkedAt = yield* Clock.currentTimeMillis;
     const cache: VersionCheckCache = { checkedAt, distTags };
     yield* fs.writeFileString(cachePath, JSON.stringify(cache));
-  }).pipe(Effect.catch(() => Effect.void));
+  },
+  Effect.catch(() => Effect.void),
+);
 
 const fetchDistTags = Effect.gen(function* () {
   const http = yield* HttpClient.HttpClient;
@@ -82,17 +86,19 @@ const fetchDistTags = Effect.gen(function* () {
  * completes. The background path never logs, so it can't interleave with
  * interactive prompts.
  */
-const refreshDistTags = (cachePath: string, stale?: Record<string, string>) =>
-  Effect.gen(function* () {
-    const fetch = yield* fetchDistTags.pipe(
-      Effect.tap((distTags) => writeCache(cachePath, distTags)),
-      Effect.forkScoped,
-    );
-    return yield* Fiber.join(fetch).pipe(
-      Effect.timeout(SYNC_WAIT),
-      Effect.catch(() => writeCache(cachePath, stale).pipe(Effect.as(stale))),
-    );
-  });
+const refreshDistTags = Effect.fn(function* (
+  cachePath: string,
+  stale?: Record<string, string>,
+) {
+  const fetch = yield* fetchDistTags.pipe(
+    Effect.tap((distTags) => writeCache(cachePath, distTags)),
+    Effect.forkScoped,
+  );
+  return yield* Fiber.join(fetch).pipe(
+    Effect.timeout(SYNC_WAIT),
+    Effect.catch(() => writeCache(cachePath, stale).pipe(Effect.as(stale))),
+  );
+});
 
 /**
  * Warn if a newer `alchemy` version is published on the dist-tag matching
