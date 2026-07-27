@@ -1149,8 +1149,16 @@ const toBehavior = (
   CachePolicyId: behavior.cachePolicyId,
   OriginRequestPolicyId: behavior.originRequestPolicyId,
   ResponseHeadersPolicyId: behavior.responseHeadersPolicyId,
-  ForwardedValues: behavior.forwardedValues,
-  MinTTL: toWireSeconds(behavior.minTtl),
+  // Without a cache policy, CloudFront is in legacy mode and rejects the
+  // request unless both ForwardedValues and MinTTL are present.
+  ForwardedValues:
+    behavior.forwardedValues ??
+    (behavior.cachePolicyId === undefined
+      ? { QueryString: false, Cookies: { Forward: "none" } }
+      : undefined),
+  MinTTL:
+    toWireSeconds(behavior.minTtl) ??
+    (behavior.cachePolicyId === undefined ? 0 : undefined),
   DefaultTTL: toWireSeconds(behavior.defaultTtl),
   MaxTTL: toWireSeconds(behavior.maxTtl),
   TrustedKeyGroups: behavior.trustedKeyGroups
@@ -1300,9 +1308,22 @@ const fillUndefined = <T>(desired: T, observed: T): T => {
   const out: Record<string, unknown> = {
     ...(desired as Record<string, unknown>),
   };
+  const desiredObj = desired as Record<string, unknown>;
   for (const key of Object.keys(observed as Record<string, unknown>)) {
+    // CloudFront list shapes pair `Quantity` with `Items`. A desired node
+    // that declares a `Quantity` but no `Items` (e.g. a geo restriction of
+    // `{ RestrictionType: "none", Quantity: 0 }`) is fully specified —
+    // filling `Items` from the observed config would desynchronize the two
+    // and CloudFront rejects the update with `InconsistentQuantities`.
+    if (
+      key === "Items" &&
+      typeof desiredObj.Quantity === "number" &&
+      desiredObj.Items === undefined
+    ) {
+      continue;
+    }
     out[key] = fillUndefined(
-      (desired as Record<string, unknown>)[key],
+      desiredObj[key],
       (observed as Record<string, unknown>)[key],
     );
   }
