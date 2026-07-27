@@ -8,6 +8,9 @@
     },
     {
       "include": "#prose-call-template"
+    },
+    {
+      "include": "#prose-multiline-call-template"
     }
   ],
   "repository": {
@@ -52,6 +55,77 @@
               "include": "source.ts"
             }
           ]
+        },
+        "2": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#prose-body"
+        }
+      ]
+    },
+    "prose-multiline-call-template": {
+      "comment": "The same call tag with its arguments spread over several lines — AI.Event(\"Wake\", {…})`…`, AI.Parameter(\"timeout\", S.optionalKey(…))`…`, AI.Tool<T>()(\"name\")`…`. Anchoring on the closing paren is not an option (see #prose-call-template), so this claims the call from its opening paren and holds it across the argument list, handing the arguments to source.ts#expression. Claiming a call before there is a template to prove it is prose is why the callee is a fixed list rather than a shape: the host grammar colors a call by its context, and a rule that takes the call over has to reproduce that coloring, which is only safe for names whose context is known. Everything the AI module tags is here; a new prose constructor goes in the list. Three ways out, in the order they are reached: the prose closed (zero-width, right after its backtick); the call closed with no template behind it; or a line began at the margin with something that cannot be an argument, meaning the arguments were never going to close and the claim was wrong.",
+      "begin": "(?<![_$[:alnum:]])((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)*)(Agent|Dispatch|Event|Kernel|Parameter|Prose|Skill|Thread|Tool)(?![_$[:alnum:]])((?:\\s*<(?:[^<>`]|<[^<>`]*>)*>)?)((?:\\s*\\((?:[^()`'\"]|'[^']*'|\"[^\"]*\")*\\))*)\\s*(\\()(?=(?:[^()`'\"]|'[^']*'|\"[^\"]*\"|\\((?:[^()`'\"]|'[^']*'|\"[^\"]*\")*\\)){0,400}$)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "entity.name.function.tagged-template.alchemy"
+        },
+        "3": {
+          "patterns": [
+            {
+              "include": "source.ts#type-arguments"
+            }
+          ]
+        },
+        "4": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "5": {
+          "name": "meta.brace.round.ts"
+        }
+      },
+      "end": "(?<=`)|[\\}\\]]*\\)(?!\\s*`)|^(?=[^\\s\\}\\]\\)])",
+      "endCaptures": {
+        "0": {
+          "name": "meta.brace.round.ts"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#prose-after-args"
+        },
+        {
+          "include": "source.ts#expression"
+        }
+      ]
+    },
+    "prose-after-args": {
+      "comment": "The closing paren of a multi-line call, with the template opening on the same line. Consuming the paren here is safe precisely because #prose-multiline-call-template took the opening one — the host grammar has no argument list waiting on it. Nothing anchors to the start of the line: a multi-line argument (the object literal in AI.Event(\"Wake\", {…})) is closed by the host's own rule, which hands control back mid-line, past any ^ this could have used.",
+      "begin": "([\\}\\]]*\\))\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "name": "meta.brace.round.ts"
         },
         "2": {
           "name": "punctuation.definition.string.template.begin.alchemy"

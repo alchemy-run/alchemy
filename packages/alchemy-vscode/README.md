@@ -43,8 +43,23 @@ it occurs here, so the call itself is the whole heuristic — no name list to
 keep current. A plain call like `Redacted.make(value)`, with no backtick after
 it, is untouched.
 
-The call has to fit on one line. Arguments split across lines leave the body an
-ordinary string, and deliberately so: see [Known edges](#known-edges).
+Arguments may span lines, which is how a payload schema is usually written:
+
+```ts
+export class Wake extends AI.Event("Wake", {
+  /** The cron fire time. */
+  stamp: S.String,
+})`
+A scheduled wake — one sync pass against upstream.` {}
+```
+
+Here the backtick is too far away to be the proof, so the callee is checked
+against the prose constructors instead — `Agent`, `Dispatch`, `Event`,
+`Kernel`, `Parameter`, `Prose`, `Skill`, `Thread`, `Tool`, with any receiver.
+A new prose constructor goes in that list, in `#prose-multiline-call-template`.
+A call that matches the list but has no template behind it — an SSM
+`Parameter("id", {…})` resource, say — is released with its arguments
+untouched.
 
 Inside the body:
 
@@ -126,6 +141,13 @@ prize is a call rule that never closes and swallows the rest of the file as
 call targets. Beginning at the callee sidesteps it: the host never opens a call
 rule at all.
 
+This is also why a call with multi-line arguments is *held open* from its
+opening paren rather than picked up at its closing one. Holding it open means
+owning the exit: the rule ends when the prose closes, when the call closes with
+no template behind it, or when a line starts at the margin with something that
+cannot be an argument — the third being what keeps a malformed file from
+turning into one long claim.
+
 **The injection switches itself off inside a prose body.** Injections are
 consulted at every position, prose bodies included, and a paragraph is free to
 contain something call-shaped — `run(now)` on its own line, ending the
@@ -163,19 +185,10 @@ file.
   definitions are not supported at all.
 - Inline markup does not span a splice or a line break: `**bold ${x}**` loses
   its bold after the splice.
-- A call tag whose arguments span lines stays an ordinary string:
-
-  ```ts
-  const timeout = AI.Parameter(
-    "timeout",
-    S.optionalKey(S.Int),
-  )`Timeout in seconds.`; // ← not prose
-  ```
-
-  A `begin` pattern never sees more than one line, and the alternative —
-  anchoring on the closing paren — is the trap described above. Collapsing the
+- A multi-line call is claimed on its opening line, before there is a template
+  to prove it is prose, so its callee must be one of the names listed above.
+  Any other multi-line call is left to the host grammar, and collapsing the
   call onto one line is the fix where it fits.
-
 - A bare tag with no receiver (``make`…` ``) is not matched, and neither is an
   indexed one (``handlers[0]`…` ``).
 - Changing the grammar requires a window reload; scope inspection lives under

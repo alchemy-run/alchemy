@@ -194,12 +194,19 @@ const results = [
   // below are what prove the rest of the file survived it
   expect("Increment the counter (once)", "meta.embedded.block.alchemy-prose"),
   expect("run(now)", "meta.embedded.block.alchemy-prose"),
-  // …but a call split over lines is left alone, deliberately
-  expect("  Prose the grammar declines to claim.", "string.template"),
-  refute(
-    "  Prose the grammar declines to claim.",
+  // a call whose arguments span lines is a tag too
+  expect(
+    "  Prose reached past the argument list.",
     "meta.embedded.block.alchemy-prose",
   ),
+  expect("scheduled", "markup.bold"),
+  // holding the call open must not cost the arguments their own colors
+  expect(" The cron fire time. ", "comment.block"),
+  expect("stamp", "meta.object-literal.key"),
+  // a lookalike call is released with its arguments intact
+  expect(" No template follows this one. ", "comment.block"),
+  expect("value", "meta.object-literal.key"),
+  refute("not-a-tag", "meta.embedded.block.alchemy-prose"),
   // the template terminates: code after it is code again, and a plain call is
   // never mistaken for prose
   expect("make", "entity.name.function.tagged-template.alchemy"),

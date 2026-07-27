@@ -15,7 +15,12 @@ declare const AI: {
     target: unknown,
     name: string,
   ) => (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
+  Event: (
+    name: string,
+    payload: Record<string, unknown>,
+  ) => (t: TemplateStringsArray) => new () => unknown;
 };
+declare const Parameter: (name: string, props: unknown) => unknown;
 declare const Coding: {
   make: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
 };
@@ -92,16 +97,24 @@ export const bump = AI.Tool("bump")`Increment the counter (once)`;
 export const risky = AI.Tool("risky")`
 run(now)`;
 
-/**
- * Known limitation: a call whose arguments are split over several lines
- * stays an ordinary string, because a begin pattern only ever sees one
- * line — and anchoring on the closing paren instead would preempt the
- * host grammar's own end-of-call match and corrupt the file below it.
- */
+/** A call whose arguments are spread over several lines is prose too. */
 export const spread = AI.Parameter(
   "spread",
   Schema.optionalKey(Schema.check(Schema.Int, 1, 3600, "seconds")),
 )`
-  Prose the grammar declines to claim.`;
+  Prose reached past the argument list.`;
+
+/** The arguments keep their own colors, comments included. */
+export class Wake extends AI.Event("Wake", {
+  /** The cron fire time. */
+  stamp: Schema.Int,
+})`
+A **scheduled** wake, described where the payload is declared.` {}
+
+/** A call that only looks like a tag is handed back, arguments and all. */
+export const notATag = Parameter("not-a-tag", {
+  /** No template follows this one. */
+  value: Redacted.make("not-prose"),
+});
 
 export const token = Redacted.make("not-prose");
