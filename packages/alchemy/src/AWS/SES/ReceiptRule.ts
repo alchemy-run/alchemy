@@ -189,11 +189,14 @@ export const ReceiptRuleProvider = () =>
         props: ReceiptRuleProps,
       ): ses.ReceiptRule => ({
         Name: ruleName,
-        Enabled: props.enabled,
+        // The classic API defaults an omitted Enabled/ScanEnabled to FALSE —
+        // apply the documented defaults explicitly so an undeclared rule is
+        // enabled (a silently disabled rule bounces all inbound mail).
+        Enabled: props.enabled ?? true,
         TlsPolicy: props.tlsPolicy,
         Recipients: props.recipients,
         Actions: props.actions,
-        ScanEnabled: props.scanEnabled,
+        ScanEnabled: props.scanEnabled ?? true,
       });
 
       return ReceiptRule.Provider.of({
