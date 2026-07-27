@@ -16,7 +16,6 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
 import type { Container } from "../Containers/Container.ts";
-import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
 import {
   DurableObjectState,
   fromDurableObjectState,
@@ -75,26 +74,9 @@ export interface DurableObjectLike<Shape = any> {
   scriptName?: Input<string>;
   /** @internal phantom */
   transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[];
-  /**
-   * Container backing this class — see {@link DurableObjectProps.container}.
-   * Consumed by the async `env` binding path (`bindWorkerAsyncBindings`).
-   */
-  container?: DurableObjectContainerSource;
   /** @internal phantom */
   Shape?: Shape;
 }
-
-/**
- * A container declaration accepted by {@link DurableObjectProps.container}:
- *
- * - a `Cloudflare.Container` class (`Cloudflare.Container("Sandbox", { image })`)
- * - the underlying {@link ContainerApplication} resource (already yielded)
- * - an Effect that yields the {@link ContainerApplication} resource
- */
-export type DurableObjectContainerSource =
-  | Container.Decl.Any
-  | ContainerApplication<any>
-  | Effect.Effect<ContainerApplication<any>, never, any>;
 
 export interface DurableObject<
   Shape = unknown,
@@ -271,22 +253,6 @@ export interface DurableObjectProps {
     | DurableObjectTransferSource
     | DurableObjectTransferSource[]
     | undefined;
-  /**
-   * Attach a Cloudflare Container to this Durable Object class. Each instance
-   * of the class gets its own container (`ctx.container`), and the Worker's
-   * script metadata marks the class as container-backed.
-   *
-   * Pass the `Cloudflare.Container` class (or its underlying
-   * `ContainerApplication` resource). This is how a plain async Worker hosts a
-   * container-backed class whose implementation comes from a library — e.g.
-   * `@cloudflare/sandbox`'s `Sandbox` or `@cloudflare/containers`' `Container`
-   * — where the Effect-native `Cloudflare.Containers.layer` is unreachable.
-   *
-   * Only valid on a locally-hosted class: a cross-script reference
-   * (`scriptName`) cannot declare a container, since container metadata
-   * belongs to the Worker that hosts the class.
-   */
-  container?: DurableObjectContainerSource;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -987,49 +953,23 @@ export class DurableObjectScope extends Context.Service<
  * ```
  *
  * @section Container-Backed Durable Objects in an Async Worker
- * A Durable Object class declared on an async Worker can be backed by a
- * Cloudflare Container. Declare the container on the binding's props and
- * Alchemy provisions the `ContainerApplication`, attaches it to the class's
- * namespace, and uploads the `containers` script metadata that marks the
- * class as container-backed. This is how an async Worker hosts a
- * container-backed class whose implementation ships in an npm package —
- * e.g. `@cloudflare/sandbox`'s `Sandbox` or a class extending
- * `@cloudflare/containers`' `Container`.
+ * A container-backed class is declared by binding a `Cloudflare.Container`
+ * directly in the async Worker's `env` — the Container *is* the Durable
+ * Object binding plus its ContainerApplication. See the Async Workers
+ * section on {@link Container} for the full walkthrough.
  *
- * @example Declaring a container-backed DO binding in the stack
+ * @example A Container binding declares the container-backed class
  * ```typescript
- * // alchemy.run.ts
  * import type { Sandbox } from "./src/worker.ts";
- *
- * const SandboxContainer = Cloudflare.Container("SandboxContainer", {
- *   image: "docker.io/cloudflare/sandbox:0.1.3",
- * });
  *
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
  *   env: {
- *     Sandbox: Cloudflare.DurableObject<Sandbox>("Sandbox", {
- *       container: SandboxContainer,
+ *     Sandbox: Cloudflare.Container<Sandbox>("Sandbox", {
+ *       image: "docker.io/cloudflare/sandbox:0.1.3",
  *     }),
  *   },
  * });
- * ```
- *
- * @example The async worker re-exports the container-backed class
- * ```typescript
- * // src/worker.ts
- * import { Container } from "@cloudflare/containers";
- * import type { WorkerEnv } from "../alchemy.run.ts";
- *
- * export class Sandbox extends Container {
- *   defaultPort = 8080;
- * }
- *
- * export default {
- *   async fetch(request: Request, env: WorkerEnv) {
- *     return env.Sandbox.getByName("default").fetch(request);
- *   },
- * };
  * ```
  *
  * @section Moving a Class Between Workers
@@ -1323,7 +1263,6 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         className: (args[1] as DurableObjectProps)?.className || namespace,
         scriptName: (args[1] as DurableObjectProps)?.scriptName,
         transferredFrom: (args[1] as DurableObjectProps)?.transferredFrom,
-        container: (args[1] as DurableObjectProps)?.container,
       };
     } else if (Effect.isEffect(propsOrImpl)) {
       // inline Effect DO

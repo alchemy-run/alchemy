@@ -189,6 +189,54 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  *
+ * @section Async Workers
+ * On a plain async Worker, bind a Container directly in `env` — the
+ * Container **is** the Durable Object binding and its ContainerApplication
+ * together. Alchemy emits the `durable_object_namespace` binding, marks the
+ * class as container-backed in the script metadata, provisions the
+ * ContainerApplication, and attaches it to the class's namespace. This is
+ * how an async Worker hosts a container-backed class whose implementation
+ * ships in an npm package — e.g. `@cloudflare/sandbox`'s `Sandbox` or a
+ * class extending `@cloudflare/containers`' `Container`.
+ *
+ * The Durable Object class name defaults to the binding name (the `env`
+ * key); set `className` when the exported class is named differently. The
+ * phantom type parameter (`Container<Sandbox>`) types `env.NAME` as
+ * `DurableObjectNamespace<Sandbox>` via `Cloudflare.InferEnv`.
+ *
+ * @example Binding a container-backed DO class in an async Worker
+ * ```typescript
+ * // alchemy.run.ts
+ * import type { Sandbox } from "./src/worker.ts";
+ *
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     Sandbox: Cloudflare.Container<Sandbox>("Sandbox", {
+ *       image: "docker.io/cloudflare/sandbox:0.1.3",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * @example The async worker exports the container-backed class
+ * ```typescript
+ * // src/worker.ts
+ * import { Container, getContainer } from "@cloudflare/containers";
+ * import type * as Cloudflare from "alchemy/Cloudflare";
+ * import type { Worker } from "../alchemy.run.ts";
+ *
+ * export class Sandbox extends Container {
+ *   defaultPort = 8080;
+ * }
+ *
+ * export default {
+ *   async fetch(request: Request, env: Cloudflare.InferEnv<typeof Worker>) {
+ *     return getContainer(env.Sandbox, "default").fetch(request);
+ *   },
+ * };
+ * ```
+ *
  * @section Image Sources
  * A container's image comes from one of three sources, picked by which
  * prop you set:
@@ -370,12 +418,12 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```
  */
 export const Container: ResourceClassLike<ContainerApplication> & {
-  <const Id extends string>(
+  <DOShape = unknown, const Id extends string = string>(
     id: Id,
     props:
       | InputProps<ExternalContainerProps>
       | InputProps<RemoteContainerProps>,
-  ): Container.Decl<Container<Id>, {}, Id>;
+  ): Container.Decl<Container<Id>, {}, Id, never, DOShape>;
   <Self>(): {
     <
       const Id extends string,
@@ -404,6 +452,11 @@ export const Container: ResourceClassLike<ContainerApplication> & {
           // registers the DO + Worker bindings and produces the runtime
           // handle) is stashed so `startContainer` can run it from inside that
           // layer — see ContainerPlatform.bind / StartContainer.ts.
+          // NOTE: no `~alchemy/Container/ClassName` marker here — an
+          // effectful (`main`) container is not bindable on an async
+          // Worker's `env` (its application is created by the `.make()`
+          // Layer inside an Effect-native Durable Object host), so it must
+          // not be picked up by bindWorkerAsyncBindings' container branch.
           return Object.assign(effectClass(ContainerTag(id)), {
             "~alchemy/Id": id,
             "~alchemy/Container/Binding": ContainerPlatform.bind(tag),
@@ -422,6 +475,11 @@ export const Container: ResourceClassLike<ContainerApplication> & {
       return Object.assign(effectClass(ContainerTag(id)), {
         "~alchemy/Id": id,
         "~alchemy/Container/Binding": ContainerPlatform.bind(resource),
+        // The Durable Object class name this container backs when bound on
+        // an async Worker's `env` (see bindWorkerAsyncBindings). Defaults to
+        // the binding name at bind time when no explicit `className` is set.
+        "~alchemy/Container/ClassName": (props as { className?: string })
+          ?.className,
         // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
         Application: resource,
         of: (shape: any) => shape,
@@ -439,9 +497,23 @@ export declare namespace Container {
     Shape = any,
     Id extends string = string,
     Req = never,
+    DOShape = unknown,
   >
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
+    /**
+     * @internal phantom — the Durable Object class type backing this
+     * container when it is bound on an async Worker's `env`. Drives
+     * `InferEnv` (`env.NAME` becomes `DurableObjectNamespace<DOShape>`).
+     */
+    readonly "~alchemy/Container/Shape": DOShape;
+    /**
+     * @internal — the explicit `className` from props (`undefined` defaults
+     * to the binding name at bind time). Doubles as the runtime marker that
+     * identifies an async-bindable Container declaration in a Worker's `env`
+     * (see `bindWorkerAsyncBindings`).
+     */
+    readonly "~alchemy/Container/ClassName": string | undefined;
     /**
      * The underlying {@link ContainerApplication} resource declaration —
      * `yield*` it to get the application's Output attributes.
@@ -464,7 +536,7 @@ export declare namespace Container {
     of(shape: Shape & WorkerShape): Shape;
   }
   export namespace Decl {
-    export type Any = Decl<any, any, string, any>;
+    export type Any = Decl<any, any, string, any, any>;
   }
 
   export interface Application<Self> {

@@ -70,6 +70,26 @@ type ImageBuild =
 const isTargetRegistryRef = (image: string, registryId: string) =>
   image.startsWith(`${registryId}/`);
 
+/**
+ * Insert the account namespace into a Cloudflare-registry reference that
+ * omits it (`registry.cloudflare.com/app:tag` →
+ * `registry.cloudflare.com/<accountId>/app:tag`), mirroring wrangler's
+ * `resolveImageName`. Custom registries are left untouched — the account
+ * namespace rule is specific to Cloudflare's managed registry.
+ */
+const normalizePrepushedRef = (
+  image: string,
+  registryId: string,
+  accountId: string,
+) => {
+  if (registryId !== "registry.cloudflare.com") return image;
+  const rest = image.slice(registryId.length + 1);
+  const first = rest.split("/")[0];
+  return first !== undefined && /^[a-f0-9]{32}$/.test(first)
+    ? image
+    : `${registryId}/${accountId}/${rest}`;
+};
+
 export const LiveContainerProvider = () =>
   Provider.effect(
     ContainerPlatform,
@@ -251,14 +271,19 @@ export const LiveContainerProvider = () =>
           // reference) — deploy the reference as-is and skip the docker
           // pull/tag/push round-trip entirely.
           if (isTargetRegistryRef(props.image, registryId)) {
+            const prepushedRef = normalizePrepushedRef(
+              props.image,
+              registryId,
+              accountId,
+            );
             return {
-              build: { kind: "prepushed" as const, image: props.image },
-              imageRef: props.image,
+              build: { kind: "prepushed" as const, image: prepushedRef },
+              imageRef: prepushedRef,
               imageHash,
               // The local runtime pulls this image directly (no build
               // context); pulling from the Cloudflare registry requires a
               // local `docker login`.
-              dev: { imageUri: props.image, env },
+              dev: { imageUri: prepushedRef, env },
             };
           }
           return {

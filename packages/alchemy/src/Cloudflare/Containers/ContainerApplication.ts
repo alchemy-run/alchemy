@@ -79,6 +79,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   name?: string;
   /**
+   * Name of the exported Durable Object class this container backs when the
+   * Container is bound on an **async** Worker's `env`. Defaults to the
+   * binding name (the `env` key). Ignored by the Effect-native path, where
+   * the class name comes from the hosting Durable Object.
+   */
+  className?: string;
+  /**
    * Initial number of instances to maintain. Matches wrangler, which forces
    * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
    * @default 0

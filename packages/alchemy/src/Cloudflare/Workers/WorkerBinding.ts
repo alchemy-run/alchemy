@@ -10,6 +10,7 @@ import type { SearchInstance } from "../AI/SearchInstance.ts";
 import type { SearchNamespace } from "../AI/SearchNamespace.ts";
 import { Dataset } from "../AnalyticsEngine/Dataset.ts";
 import type { Namespace as ArtifactsNamespace } from "../Artifacts/Namespace.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Database as D1Database } from "../D1/Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
@@ -91,7 +92,10 @@ export type WorkerBindingResource =
   | VersionMetadataBinding
   | DispatchNamespace
   | DurableObjectLike<any>
-  | WorkflowLike<any>;
+  | WorkflowLike<any>
+  // A Container bound directly in `env` declares a container-backed Durable
+  // Object class (DO namespace binding + ContainerApplication in one).
+  | Container.Decl.Any;
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;
