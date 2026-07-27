@@ -36,11 +36,6 @@ provider deletes the old instance. This holds everywhere a delete can
 happen — replacements, orphans, `alchemy destroy` — so deploying right
 after a dev session tears the local instances down with the local provider.
 
-### Legacy rows
-
-A row without a `providerMode` stamp is assumed to be the current run's
-mode, so upgrading doesn't churn; it's stamped on its next write.
-
 ## Pinning a mode
 
 The run default comes from the command: `alchemy dev` resolves `"local"`,
