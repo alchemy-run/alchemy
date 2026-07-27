@@ -1,10 +1,10 @@
 /**
  * The pull-requests surface — a SEALED process: {@link PullRequests}
  * is a plain `Context.Service` resolving to
- * {@link PullRequestsService} and nothing else. The standalone review
- * desk itself is the {@link PullRequestReviewer} agent
- * (agents/Reviewer.ts), addressed only by the router in processes/Issues.ts —
- * work enters through GitHub or not at all.
+ * {@link PullRequestsService} and nothing else. Unlinked (foreign)
+ * pull requests are reviewed by the org's ONE Reviewer, dispatched by
+ * the router in processes/Issues.ts with a deterministic merge
+ * ratifier — work enters through GitHub or not at all.
  */
 import * as GitHub from "alchemy/GitHub";
 import * as Context from "effect/Context";

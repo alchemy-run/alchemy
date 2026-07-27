@@ -95,16 +95,13 @@ export const Tool: {
       ): Tool<Name, Refs> &
         Context.Service<
           Self,
-          | ((
-              input: ToolParameters<Refs[number]>,
-            ) => Effect.Effect<any, never, RuntimeContext>)
-          | Effect.Effect<
-              (
-                input: ToolParameters<Refs[number]>,
-              ) => Effect.Effect<any, never, RuntimeContext>,
-              never,
-              RuntimeContext
-            >
+          // the service IS the callable — a Layer whose construction
+          // needs runtime context (a binding client) unwraps it inside
+          // its own Layer.effect, so `yield* SomeTool` is always the
+          // function, never an Effect to normalize
+          (
+            input: ToolParameters<Refs[number]>,
+          ) => Effect.Effect<any, never, RuntimeContext>
         >;
     };
   };

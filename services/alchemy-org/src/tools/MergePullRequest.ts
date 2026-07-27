@@ -42,7 +42,11 @@ export const MergePullRequestLive = Layer.effect(
           );
           if (!reviews.some((review) => review.state === "APPROVED")) {
             return yield* Effect.fail(
-              `refusing to merge #${input.pr.number}: no approval — review and approve it first`,
+              `refusing to merge #${input.pr.number}: no approval on record ` +
+                `and no APPROVED GitHub review. Have it reviewed first; if a ` +
+                `reviewer already recommended approval, a HUMAN review is ` +
+                `still pending — note it, set a reminder, and retry after ` +
+                `it lands`,
             );
           }
         }

@@ -46,19 +46,21 @@ Bare `AI.Agent` tags; behavior lives on the `make` Layer as a charter
   share one checkout. It merges (ratified against the approvals
   ledger), closes with citation, and covers author silence with a
   `remind_me` tool over the kernel clock.
-- `Engineer.ts` — one round of issue work in, one pull request out.
-  The `open_pull_request` wrapper calls `AI.reply(pr)` the moment the
-  artifact exists, so the owner's dispatch resolves with the TYPED
-  reference and the run parks — review feedback resumes the same
-  engineer in the same worktree.
+- `Engineer.ts` — the ROLE: coding tools in, a pull request reply out
+  (`open_pull_request` calls `AI.reply(pr)` the moment the artifact
+  exists, so a dispatch resolves with the TYPED reference and the run
+  parks — the next round resumes the same engineer in the same
+  worktree). Missions are BINDINGS of the role, defined with the desk
+  that staffs them: `IssueEngineer` (processes/Issues.ts) and
+  `DistilledEngineer` (processes/Distilled.ts) — one role, two
+  missions, one runtime.
 - `Reviewer.ts` — judges the artifact against the issue's acceptance
   criteria in the same checkout the change was built in; holds
   `Approve` but no merge. Also home to `PullRequestReviewer`, the
   standalone desk that reviews AND merges unlinked contributor PRs.
 - `FrontDesk.ts` — the Discord desk's loop: mentions become
   answers, links to prior art, or well-formed issues — never work.
-- `DistilledMaintainer.ts` — the scheduled submodule sync: regenerate,
-  test, and PR through the same review door as everyone else.
+-   test, and PR through the same review door as everyone else.
 
 Authority lives in reference topology, not configuration: only the
 IssueOwner and the standalone desk name `MergePullRequest`, the

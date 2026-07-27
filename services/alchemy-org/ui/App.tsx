@@ -309,7 +309,7 @@ const Chat = ({
   }, [id, status, setMessages, active]);
 
   const watchOnly =
-    !id.startsWith("IssueOwner:") && !id.startsWith("PullRequestReviewer:");
+    !id.startsWith("IssueOwner:");
 
   // delegation tool-call → worker thread. Door calls (`AI.Dispatch`)
   // carry their identity on the part (`part.dispatch.child` is the

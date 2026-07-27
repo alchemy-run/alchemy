@@ -792,6 +792,50 @@ world. Erlang/OTP landed the same way: registered names for the
 processes that carry supervision or a service contract, anonymous pids
 for ephemeral workers.
 
+### 9b-ii. Missions are BINDINGS of a role — one tag, many charters
+
+**Decision (2026-07-27).** A difference can live in three places, and
+each answers a different question:
+
+- **The contract (the tag)** — the ROLE: the verbs, the authority
+  envelope (Engineer holds `${OpenPullRequest}`, never merge or
+  approve), and the reply shape callers depend on (a PR reference).
+  This is what the audit greps and what the role-justification test
+  (§9b) gates.
+- **The binding (a `Layer<Role>`)** — the MISSION: what a round of
+  work is, what done means, the standing situation. "You work one
+  issue's thread" and "you keep ./distilled tracking upstream" are
+  different missions for the same role.
+- **A skill** — the CRAFT: how to do something, pulled in when the
+  work demands it. Skills cannot honestly redefine what a persona's
+  rounds ARE — mission prose is the frame the skills hang off, not a
+  teaching to activate.
+
+The org's case: `DistilledMaintainer` failed the §9b role test (same
+authority shape and typed result as Engineer — "Engineer with
+different prose"), but its difference wasn't craft either. It was a
+second MISSION, so it became a second binding:
+
+```ts
+export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
+
+export const IssueEngineer     = Engineer.make(/* one issue's thread */);
+export const DistilledEngineer = Engineer.make(/* track upstream specs */);
+```
+
+Composition staffs each desk: the IssueOwner's subtree provides
+`IssueEngineer`, the Distilled process's provides `DistilledEngineer`
+— the kernel resolves a charter's `${Engineer}` mention (and a door's
+target) from THAT charter's own Layer graph, so both missions coexist
+in one runtime. This is §2d's "prose is a property of the binding"
+extended from model-dial to mission.
+
+The guardrail the convention needs stated: **bindings may vary
+mission, skills, and model — never the authority envelope.** A
+`Layer<Engineer>` that splices `${Approve}` betrays the role; nothing
+type-level prevents it, but the audit still works because it greps
+charters per binding — the rule just has to be law.
+
 ### 9c. Call/reply, sessions, and the supervision cascade
 
 **Decision (2026-07-25, refined 2026-07-26): answering a dispatch and
@@ -1015,6 +1059,61 @@ return yield* AI.prose`
   already load-bearing elsewhere.
 
 ## 13. Deferred (designed, not yet implemented)
+
+- **`AI.Workflow` — deterministic orchestration as a first-class run
+  (designed 2026-07-27).** The taxonomy question every orchestration
+  answers is *who owns the control flow*:
+
+  | construct | control flow | durability | lifetime |
+  |---|---|---|---|
+  | router | none (event → key) | ledger dedupe | a subscription in a Layer — no term |
+  | `AI.Agent` | the model's | the thread | a CONVERSATION: owned, cascaded |
+  | `AI.Workflow` | code's | the journal | a JOB: autonomous, explicitly cancelled |
+
+  A workflow is a run whose "turn" is a typed function instead of a
+  sampling — same keyed runs, verbs, waiters-ride-inputs, `remind`,
+  observations, and board presence; different brain. The declaration
+  carries the signature as a TYPE PARAMETER (no schemas, no prose —
+  a workflow is never model-visible; a tool or door bridges that gap
+  and carries the prose):
+
+  ```ts
+  export class ResourceWave extends AI.Workflow<
+    ResourceWave,
+    (wave: WaveSpec) => Effect.Effect<WaveReport, WaveRefused>
+  >()("ResourceWave") {}
+
+  // make: the function, or an init Effect returning it (init once
+  // per run key — re-dispatch to the same key hits the same closure)
+  export const ResourceWaveLive = ResourceWave.make(
+    Effect.gen(function* () {
+      const engineer = yield* Engineer;                 // INIT
+      return Effect.fn(function* (wave) {               // BODY, per round
+        const reports = yield* Effect.forEach(
+          wave.services,
+          (svc) => engineer.dispatch(taskFor(svc), { key: `${wave.id}/${svc}` }),
+          { concurrency: 4 },
+        );
+        return { completed: reports.length };           // the typed reply
+      });
+    }),
+  );
+  ```
+
+  Supervision semantics differ from agents ON PURPOSE (link vs
+  monitor): a dispatched workflow is NOT registered in `run.children`
+  — no cascade, no lifetime coupling. A half-done deterministic plot
+  should finish or fail on its own terms, never die because the
+  conversation that started it went quiet; subordination, where
+  wanted, is an explicit `settle` by key in code. Attribution stays:
+  the `dispatched` observation carries the child key for the UI card.
+
+  Build when the first real deterministic plot lands (the factory
+  wave over distilled services); durability semantics (journal +
+  replay on a DO kernel) get decided against that use, not
+  speculatively. Note `AI.Process` (a `{main, charter}` bundle) was
+  CONSIDERED AND REJECTED here — it packaged a router with an agent,
+  and bundles aren't semantics; routers stay plain Layers.
 
 - Kernel options: supervision (`restart`/`intensity`/`onGiveUp`), resync
   schedules, lanes + sampling token bucket, per-tool cooldowns, self-event

@@ -31,22 +31,22 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { ApprovalsLive } from "./Approvals.ts";
+import { Approvals, ApprovalsLive } from "./Approvals.ts";
 import { buildBoard } from "./Board.ts";
-import { CodingLocal } from "./skills/Coding.ts";
-import { EngineerLive } from "./agents/Engineer.ts";
-import { ToolOutputStoreLive } from "./lib/ToolOutputStore.ts";
-import { Issues, IssuesLive } from "./processes/Issues.ts";
 import { SqliteLedger } from "./Ledger.ts";
-import { PullRequestReviewerLive } from "./agents/Reviewer.ts";
-import { LiveTestingLive } from "./skills/LiveTesting.ts";
-import { PullRequests, PullRequestsLive } from "./processes/PullRequests.ts";
-import { QualityAssuranceLocal } from "./skills/QualityAssurance.ts";
-import { ResourceEngineeringLive } from "./skills/ResourceEngineering.ts";
 import { testAlchemy } from "./Repos.ts";
 import { ReviewerLive } from "./agents/Reviewer.ts";
+import { ToolOutputStoreLive } from "./lib/ToolOutputStore.ts";
+import { IssueEngineer, Issues, IssuesLive } from "./processes/Issues.ts";
+import { PullRequests, PullRequestsLive } from "./processes/PullRequests.ts";
+import { CodingLocal } from "./skills/Coding.ts";
+import { LiveTestingLive } from "./skills/LiveTesting.ts";
+import { QualityAssuranceLocal } from "./skills/QualityAssurance.ts";
+import { ResourceEngineeringLive } from "./skills/ResourceEngineering.ts";
+import { TypedErrorsLive } from "./skills/TypedErrors.ts";
 import {
   ApproveRecorded,
+  ApproveRequested,
   CloseIssueLive,
   CommentLive,
   LinkIssuesLive,
@@ -56,7 +56,6 @@ import {
   ReadIssueLive,
   SearchIssuesLive,
 } from "./tools/index.ts";
-import { TypedErrorsLive } from "./skills/TypedErrors.ts";
 
 // ─── the physics (local) ─────────────────────────────────────────────
 
@@ -166,14 +165,12 @@ const WorkspacesLive = Git.WorkspacesWorktree({ root: workspaceRoot }).pipe(
  * TREE (the skill graph): Coding exposes ResourceEngineering, whose
  * teaching exposes TypedErrors and LiveTesting — each level provided
  * as OUTPUTS (provideMerge) so the kernel resolves them at activation. */
-const EngineerLayer = EngineerLive.pipe(
+const EngineerLayer = IssueEngineer.pipe(
   Layer.provide(
     CodingLocal.pipe(
       Layer.provideMerge(
         ResourceEngineeringLive.pipe(
-          Layer.provideMerge(
-            Layer.mergeAll(TypedErrorsLive, LiveTestingLive),
-          ),
+          Layer.provideMerge([TypedErrorsLive, LiveTestingLive]),
         ),
       ),
     ),
@@ -186,13 +183,27 @@ const EngineerLayer = EngineerLive.pipe(
   Layer.provide(WorkspacesLive),
 );
 
+/**
+ * The AUTONOMY DIAL — which physics answers the Reviewer's `Approve`:
+ *
+ * - autonomous (default): {@link ApproveRecorded} writes the approvals
+ *   ledger; the owner's merge ratifies against it — the factory runs
+ *   the whole loop itself.
+ * - supervised (`ORG_SUPERVISED=1`): {@link ApproveRequested} posts the
+ *   verdict as a RECOMMENDATION and records nothing — the merge tool
+ *   then only succeeds on a real APPROVED GitHub review from a human.
+ *   Same charters, same tools; the second key of the two-key ceremony
+ *   moves to a person purely by composition.
+ */
+const Approval =
+  process.env.ORG_SUPERVISED === "1" ? ApproveRequested : ApproveRecorded;
+
 /** The Reviewer worker: reads the diff + the cited issue, verifies in
  * the ISSUE'S OWN checkout (the doors key both workers by the issue,
  * so this is the exact tree the engineer built in — read and run, no
- * editor), records its verdict in the approvals ledger — the
- * channel's merge ratifies it. */
+ * editor), records its verdict — the channel's merge ratifies it. */
 const ReviewerLayer = ReviewerLive.pipe(
-  Layer.provide([ApproveRecorded, CommentLive, ReadDiffLive, ReadIssueLive]),
+  Layer.provide([Approval, CommentLive, ReadDiffLive, ReadIssueLive]),
   Layer.provide(QualityAssuranceLocal),
   Layer.provide(Kernel),
   Layer.provide(runWorkspace({ remote: GitHub.remote(testAlchemy) })),
@@ -209,17 +220,16 @@ const ReviewerLayer = ReviewerLive.pipe(
 export const OrgLive = Layer.mergeAll(IssuesLive, PullRequestsLive).pipe(
   // the owner's workers: the Engineer writes the fix in its own
   // thread; the Reviewer judges the artifact and records its verdict
+  // (the SAME reviewer also judges unlinked foreign PRs — the router
+  // dispatches it directly and ratifies the merge deterministically)
   Layer.provide([EngineerLayer, ReviewerLayer]),
-  // the standalone desk: unlinked (foreign) PRs only — the router in
-  // issues.ts addresses it when no issue link exists
-  Layer.provide(Layer.suspend(() => PullRequestReviewerLive)),
   Layer.provide([
     CommentLive,
     SearchIssuesLive,
     LinkIssuesLive,
     CloseIssueLive,
     MergePullRequestLive,
-    ApproveRecorded,
+    Approval,
     ReadDiffLive,
     ReadIssueLive,
   ]),
@@ -258,6 +268,7 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
     const issues = yield* Issues;
     const pullRequests = yield* PullRequests;
     const chats = yield* AI.Chats;
+    const approvals = yield* Approvals;
     // sendMessage's honest door: a chat message to a desk becomes a
     // GitHub comment — the same world event as any other steer
     const comment = yield* GitHub.CreateIssueComment(testAlchemy);
@@ -361,7 +372,7 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
         const threadNumber = Number(key.match(/#(\d+)$/)?.[1]);
         if (
           text.length > 0 &&
-          (term === "IssueOwner" || term === "PullRequestReviewer") &&
+          term === "IssueOwner" &&
           Number.isFinite(threadNumber)
         ) {
           yield* comment({
@@ -400,6 +411,48 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
       }),
     );
 
+    // ── the HUMAN's key (supervised mode): approve a PR ──────────────
+    // Records into the SAME approvals ledger the merge tool ratifies
+    // against — the org-console equivalent of a GitHub APPROVED review
+    // (which the sandbox's single token cannot submit on its own PRs).
+    // The wake rides the world door: the confirmation comment routes
+    // to the PR's owner like any other event, and its next merge
+    // attempt observes the approval.
+    const approvePullRequest = HttpRouter.add(
+      "POST",
+      "/api/prs/:number/approve",
+      Effect.gen(function* () {
+        const params = yield* HttpRouter.params;
+        const number = Number(params.number);
+        if (!Number.isFinite(number)) {
+          return yield* HttpServerResponse.json(
+            { error: "bad pull request number" },
+            { status: 400 },
+          );
+        }
+        const identity = yield* GitHub.resolveRepository(testAlchemy);
+        const key = {
+          owner: identity.owner,
+          repository: identity.repository,
+          number,
+        };
+        // IDEMPOTENT: a retried POST (an interrupted curl, a double
+        // click) must not spam the PR with duplicate comments
+        if (yield* approvals.isApproved(key)) {
+          return yield* HttpServerResponse.json({
+            approved: number,
+            already: true,
+          });
+        }
+        yield* approvals.record(key);
+        yield* comment({
+          issue_number: number,
+          body: "✅ **Approved by the operator** (org console) — the merge is authorized.",
+        }).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ approved: number });
+      }),
+    );
+
     const status = HttpRouter.add(
       "GET",
       "/api/status",
@@ -435,7 +488,14 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
 
     return {
       fetch: yield* HttpRouter.toHttpEffect(
-        Layer.mergeAll(listChats, board, chatMessages, chatStream, status),
+        Layer.mergeAll(
+          listChats,
+          board,
+          chatMessages,
+          chatStream,
+          approvePullRequest,
+          status,
+        ),
       ),
     };
   }),

@@ -135,7 +135,9 @@ export const IssueOwnerLive = IssueOwner.make(
       ${MergePullRequest} — an approved-but-unmerged pull request is
       unfinished work; the merge tool refuses without a recorded
       approval, and a refusal is a fact about the world to fix, not to
-      work around.
+      work around. When the refusal says a HUMAN review is pending,
+      the wait is the work: ${remindMe} (a few hours is right) and
+      retry the merge when you hear back.
 
       A merged fix closes your issue with ${CloseIssue}, citing the
       pull request; an author confirming the problem is gone does the

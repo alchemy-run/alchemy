@@ -3,20 +3,27 @@ import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as S from "effect/Schema";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { runProcess } from "../lib/ProcessRunner.ts";
 import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
 import { Ledger } from "../Ledger.ts";
 import { prLinkKey, testAlchemy } from "../Repos.ts";
-import { body, issue, title } from "../Vocabulary.ts";
+import { body, IssueRef, title } from "../Vocabulary.ts";
+
+const resolves = AI.Parameter("issue", S.optionalKey(IssueRef))`
+The issue this pull request resolves, when there is one — the branch
+name, commit message, and the recorded PR→issue link derive from it.
+Omit for pull requests that resolve no issue (a scheduled maintenance
+pass).`;
 
 export class OpenPullRequest extends AI.Tool<OpenPullRequest>()(
   "openPullRequest",
 )`
-Open a pull request resolving ${issue}: commits everything in the
-workspace to a branch, pushes it, and opens the PR with ${title} and
-${body}. The body must cite the issue ("Closes #N") and the evidence
-that its criteria are met. Returns the created pull request reference.` {}
+Open a pull request from the work in the workspace: commits
+everything to a branch, pushes it, and opens the PR with ${title} and
+${body}, optionally resolving ${resolves}. Returns the created pull
+request reference.` {}
 
 /** The bot's commit identity — visible in the sandbox repo's history. */
 const GIT_IDENTITY = [
@@ -67,7 +74,7 @@ export const OpenPullRequestLive = Layer.effect(
       );
 
     return ((input: {
-      issue: { owner: string; repository: string; number: number };
+      issue?: { owner: string; repository: string; number: number };
       title: string;
       body: string;
     }) =>
@@ -78,7 +85,11 @@ export const OpenPullRequestLive = Layer.effect(
           .checkout({ key, remote })
           .pipe(Effect.mapError((error) => error.message));
 
-        const branch = `factory/issue-${input.issue.number}`;
+        // issue-less runs (a scheduled pass) branch by their run key
+        const branch =
+          input.issue !== undefined
+            ? `factory/issue-${input.issue.number}`
+            : `factory/${key.replaceAll(/[^a-zA-Z0-9._-]+/g, "-")}`;
 
         // the worktree's uncommitted work rides checkout -B onto the branch
         yield* git(workspace.root, ["checkout", "-B", branch]);
@@ -94,9 +105,11 @@ export const OpenPullRequestLive = Layer.effect(
         yield* git(workspace.root, [
           "commit",
           "-m",
-          `${input.title} (#${input.issue.number})`,
+          input.issue !== undefined
+            ? `${input.title} (#${input.issue.number})`
+            : input.title,
         ]);
-        // force-with-lease: re-running the same issue updates its branch
+        // force-with-lease: re-running the same key updates its branch
         yield* git(workspace.root, [
           "push",
           "--force-with-lease",
@@ -120,19 +133,22 @@ export const OpenPullRequestLive = Layer.effect(
 
         // the PR→issue link is born HERE, structured — record it so
         // routing/grouping look it up instead of parsing prose
-        yield* ledger.put(
-          prLinkKey(
-            `${input.issue.owner}/${input.issue.repository}`,
-            pull.number,
-          ),
-          input.issue.number,
-        );
+        if (input.issue !== undefined) {
+          yield* ledger.put(
+            prLinkKey(
+              `${input.issue.owner}/${input.issue.repository}`,
+              pull.number,
+            ),
+            input.issue.number,
+          );
+        }
 
+        const identity = yield* GitHub.resolveRepository(testAlchemy);
         return {
           opened: pull.html_url,
           pr: {
-            owner: input.issue.owner,
-            repository: input.issue.repository,
+            owner: identity.owner,
+            repository: identity.repository,
             number: pull.number,
             url: pull.html_url,
           },

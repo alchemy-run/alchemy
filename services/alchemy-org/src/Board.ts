@@ -69,7 +69,9 @@ export const buildBoard = (
     ]);
 
   const label = (chat: AI.ChatSummary): string => {
-    if (chat.term === "PullRequestReviewer") {
+    // a PARENTLESS Reviewer run is a standalone (unlinked) PR review
+    // — dispatched by the router, not by an owner's door
+    if (chat.term === "Reviewer" && chat.parent === undefined) {
       return `PR #${chat.key.match(/#(\d+)$/)?.[1] ?? "?"}`;
     }
     return chat.term;

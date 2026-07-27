@@ -2,16 +2,16 @@
  * Type-level audit: `Agent.make(charter)` must union the TURN effect's
  * requirements into the Layer — a capability mentioned in the turn's
  * prose (`${Coding}`, `${OpenPullRequest}`) is a type-level requirement
- * of `EngineerLive`, and an unmentioned one is not. Compiled by
+ * of `IssueEngineer`, and an unmentioned one is not. Compiled by
  * `bun tsc -b`; never executed.
  */
 import type * as Layer from "effect/Layer";
 import type { Kernel } from "alchemy/AI";
 import type { Coding } from "../src/skills/Coding.ts";
-import { EngineerLive } from "../src/agents/Engineer.ts";
+import { IssueEngineer } from "../src/processes/Issues.ts";
 import type { MergePullRequest, OpenPullRequest } from "../src/tools/index.ts";
 
-type Req = typeof EngineerLive extends Layer.Layer<any, any, infer R>
+type Req = typeof IssueEngineer extends Layer.Layer<any, any, infer R>
   ? R
   : never;
 

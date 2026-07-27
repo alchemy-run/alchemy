@@ -41,15 +41,43 @@ export const ApproveRecorded = Layer.effect(
 );
 
 /**
- * The autonomy dial's LOUD position: log and auto-approve without
- * recording — merges stay blocked. Useful when a human drives merges.
+ * The HUMAN-IN-THE-LOOP position of the autonomy dial: the reviewer's
+ * verdict becomes a RECOMMENDATION — posted on the PR, never recorded
+ * in the {@link Approvals} ledger — so the merge tool only ever
+ * succeeds on a real APPROVED GitHub review from a human (the second
+ * source it already honors). Same contract, same charters; the second
+ * key of the two-key ceremony moves from the machine to a person,
+ * purely by Layer composition.
+ *
+ * The human is, structurally, a slow tool implementation: the owner's
+ * merge refusal is model-visible ("a human review is pending"), it
+ * parks on `remind_me`, and the approval arrives as world state the
+ * next attempt observes.
  */
-export const ApproveConsole = Layer.succeed(Approve, ((input: {
-  pr: { owner: string; repository: string; number: number; url: string };
-}) =>
+export const ApproveRequested = Layer.effect(
+  Approve,
   Effect.gen(function* () {
-    yield* Effect.logWarning(
-      `ApproveConsole AUTO-APPROVING ${input.pr.owner}/${input.pr.repository}#${input.pr.number} — no human gate is wired (TODO: HumanGate)`,
-    );
-    return `approved (WARNING: auto-approved by ApproveConsole — no human reviewed this)`;
-  })) as never);
+    const comment = yield* GitHub.CreateIssueComment(testAlchemy);
+    return ((input: {
+      pr: { owner: string; repository: string; number: number; url: string };
+    }) =>
+      Effect.gen(function* () {
+        yield* comment({
+          issue_number: input.pr.number,
+          body:
+            "✅ **Reviewer recommends approval** — judged against the " +
+            "originating issue's acceptance criteria.\n\n" +
+            "_Supervised mode: this verdict is advisory. A maintainer's " +
+            "APPROVED review on this pull request authorizes the merge._",
+        }).pipe(
+          Effect.mapError(
+            (error) => `${error.operation} failed: ${error.message}`,
+          ),
+        );
+        return (
+          `recommendation posted on #${input.pr.number} — the merge stays ` +
+          `blocked until a human submits an APPROVED review on GitHub`
+        );
+      })) as never;
+  }),
+);

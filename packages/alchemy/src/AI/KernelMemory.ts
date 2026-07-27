@@ -559,11 +559,13 @@ export const KernelMemory: Layer.Layer<
                 `KernelMemory: no implementation provided for tool '${name}' of '${termName}' — provide the tool's Layer or splice an inline impl`,
               );
             }
-            const resolved = Effect.isEffect(service.value)
-              ? yield* service.value as Effect.Effect<any>
-              : service.value;
+            // the tool contract: the service IS the callable (a Layer
+            // needing runtime setup unwraps inside its own build)
+            const resolved = service.value as (
+              params: any,
+            ) => Effect.Effect<any, any, any>;
             handlerCache.set(name, resolved);
-            return resolved as (params: any) => Effect.Effect<any, any, any>;
+            return resolved;
           });
 
         interface ResolvedSkill {
