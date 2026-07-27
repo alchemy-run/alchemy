@@ -75,9 +75,22 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           : bindingEff
       ) as WorkerBindingResource;
 
-      const bindingMeta = toBinding(bindingName, binding);
+      const bindingMeta:
+        | BindingSpec
+        | Output.Output<WorkerBinding>
+        | undefined = toBinding(bindingName, binding);
 
       if (Output.isOutput(bindingMeta)) {
+        // A whole-resource Output resolves to the resource's raw attributes;
+        // uploading those as a plaintext json env var is never intended.
+        // This cannot be rejected at compile time (`Input<T>` admits any
+        // Output whose A is structurally Json), so this guard is the
+        // enforcement point.
+        if (Output.isResourceExpr(binding) || Output.isRefExpr(binding)) {
+          return yield* Effect.die(
+            `Cannot bind whole-resource Output "${bindingName}": pass the resource (or a typed ref) directly, or bind one of its attribute Outputs`,
+          );
+        }
         // Deferred classification (see `toBinding`'s Output arm): the engine
         // resolves the Output inside the binding data before the Worker
         // provider reads it.
@@ -117,14 +130,10 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             : undefined,
         });
       } else {
-        // A whole-resource Output resolves to the resource's raw attributes;
-        // uploading those as a plaintext json env var is never intended.
-        // This cannot be rejected at compile time (`Input<T>` admits any
-        // Output whose A is structurally Json), so this guard is the
-        // enforcement point.
-        return yield* Effect.die(
-          `Cannot bind whole-resource Output "${bindingName}": pass the resource (or a typed ref) directly, or bind one of its attribute Outputs`,
-        );
+        // Defensive catch-all: `toBinding` currently always classifies
+        // (its final arm is the `json` fallback), but keep the branch so a
+        // future gap fails loudly instead of silently skipping the binding.
+        return yield* Effect.die(`Unknown binding type: ${bindingName}`);
       }
     }
   }
@@ -252,13 +261,14 @@ const toValueBinding = (
  * `json` fallback and deploy e.g. a resolved `Redacted` secret as an
  * unencrypted json binding. Resource refs never land in the Output arm:
  * they surface their target's `Type` statically, so a native classifier
- * (kv_namespace, r2_bucket, ...) already matched above. Returns `undefined`
- * for a whole-resource Output, which the caller rejects.
+ * (kv_namespace, r2_bucket, ...) already matched above. Whole-resource
+ * Outputs also land here (lazily, nothing is resolved); the caller rejects
+ * them before the returned Output is ever bound.
  */
 const toBinding = (
   bindingName: string,
   binding: WorkerBindingResource,
-): BindingSpec | Output.Output<WorkerBinding, unknown> | undefined => {
+): BindingSpec | Output.Output<WorkerBinding, unknown> => {
   if (typeof binding === "string" || Redacted.isRedacted(binding)) {
     return toValueBinding(bindingName, binding);
   } else if (isAssets(binding)) {
@@ -431,9 +441,6 @@ const toBinding = (
       name: bindingName,
     };
   } else if (Output.isOutput(binding)) {
-    if (Output.isResourceExpr(binding) || Output.isRefExpr(binding)) {
-      return undefined;
-    }
     return Output.map(binding, (value: Json | Redacted.Redacted<Json>) =>
       toValueBinding(bindingName, value),
     );
