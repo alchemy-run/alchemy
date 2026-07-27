@@ -29,6 +29,8 @@ const AsyncWorker = Effect.gen(function* () {
       MY_SECRET: Config.redacted("MY_SECRET").pipe(
         Config.withDefault(Redacted.make("my-secret-abc123")),
       ),
+      // The worker's own URL, injected as a plain-text binding (`self_url`).
+      PUBLIC_URL: Cloudflare.Worker.URL,
     },
   });
   yield* Cloudflare.Queues.Consumer("Consumer", {

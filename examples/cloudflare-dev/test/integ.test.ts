@@ -108,6 +108,40 @@ test(
   }),
 );
 
+/**
+ * `env: { PUBLIC_URL: Cloudflare.Worker.URL }` lowers the `self_url`
+ * sentinel to a plain-text binding holding the worker's own URL. Under the
+ * local provider (this suite runs with `dev: true`) that URL is the dev
+ * proxy's address, resolved before workerd starts. The binding value has no
+ * trailing slash; the stack's URL output does — normalize before comparing.
+ */
+test(
+  "AsyncWorker receives its own URL via env: { PUBLIC_URL: Worker.URL }",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/env", asyncWorker));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { PUBLIC_URL: string };
+    expect(body.PUBLIC_URL).toBe(asyncWorker.replace(/\/$/, ""));
+  }),
+);
+
+/**
+ * The Effect-native form: `yield* Cloudflare.Worker.URL` at init attaches
+ * the `self_url` binding and returns a deferred accessor the handler reads
+ * at request time.
+ */
+test(
+  "EffectWorker reads its own URL via yield* Worker.URL",
+  Effect.gen(function* () {
+    const { effectWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/url", effectWorker));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { url: string };
+    expect(body.url).toBe(effectWorker.replace(/\/$/, ""));
+  }),
+);
+
 test(
   "AsyncWorker sends and receives messages on the queue",
   Effect.gen(function* () {
