@@ -5,6 +5,7 @@ import * as ses from "@distilled.cloud/aws/ses";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -21,7 +22,10 @@ const assertRuleDeleted = (ruleSetName: string, ruleName: string) =>
       Effect.flatMap(() =>
         Effect.fail(new RuleStillExists({ ruleSetName, ruleName })),
       ),
-      Effect.catchTag("RuleDoesNotExistException", () => Effect.void),
+      Effect.catchTag(
+        ["RuleDoesNotExistException", "RuleSetDoesNotExistException"],
+        () => Effect.void,
+      ),
       Effect.retry({
         while: (e) => e._tag === "RuleStillExists",
         schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
@@ -72,7 +76,10 @@ test.provider(
         "support@ses-bindings.alchemy-test.example.com",
       ]);
 
-      // update in place: swap the action set, disable scanning, require TLS
+      // update in place: swap the action set, disable scanning, require TLS.
+      // (A BounceAction is not usable here — SES validates its Sender against
+      // the account's verified identities at update time; see the probe test
+      // below.)
       yield* stack.deploy(
         Effect.gen(function* () {
           const ruleSet = yield* ReceiptRuleSet("RuleLifecycleSet", {});
@@ -83,10 +90,9 @@ test.provider(
             tlsPolicy: "Require",
             actions: [
               {
-                BounceAction: {
-                  SmtpReplyCode: "550",
-                  Message: "Mailbox does not exist",
-                  Sender: "mailer-daemon@ses-bindings.alchemy-test.example.com",
+                AddHeaderAction: {
+                  HeaderName: "X-Alchemy-Test",
+                  HeaderValue: "updated",
                 },
               },
             ],
@@ -100,8 +106,9 @@ test.provider(
       expect(updated.Rule?.Enabled).toBe(false);
       expect(updated.Rule?.ScanEnabled).toBe(false);
       expect(updated.Rule?.TlsPolicy).toBe("Require");
-      expect(updated.Rule?.Actions?.[0]?.BounceAction?.SmtpReplyCode).toBe(
-        "550",
+      expect(updated.Rule?.Actions).toHaveLength(1);
+      expect(updated.Rule?.Actions?.[0]?.AddHeaderAction?.HeaderValue).toBe(
+        "updated",
       );
 
       yield* stack.destroy();
@@ -188,4 +195,51 @@ test.provider(
       yield* assertRuleDeleted(ruleSetName, "alchemy-test-order-first");
     }),
   { timeout: 120_000 },
+);
+
+// Ungated probe: SES validates a BounceAction's Sender against the account's
+// verified identities at create/update time. In the sandbox (no verified
+// identities) that rejection surfaces as the typed IdentityNotVerified tag —
+// carved out of the classic API's untyped InvalidParameterValue by the
+// distilled ses patch. This pins the patch forever at near-zero cost; on an
+// account where the identity IS verified the create simply succeeds.
+test.provider(
+  "a BounceAction with an unverified Sender fails with the typed IdentityNotVerified tag",
+  () =>
+    Effect.gen(function* () {
+      const ruleSetName = "alchemy-test-bounce-sender-probe";
+      yield* ses
+        .createReceiptRuleSet({ RuleSetName: ruleSetName })
+        .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
+
+      const created = yield* Effect.result(
+        ses.createReceiptRule({
+          RuleSetName: ruleSetName,
+          Rule: {
+            Name: "probe",
+            Actions: [
+              {
+                BounceAction: {
+                  SmtpReplyCode: "550",
+                  Message: "Mailbox does not exist",
+                  Sender: "mailer-daemon@ses-bindings.alchemy-test.example.com",
+                },
+              },
+            ],
+          },
+        }),
+      );
+      if (Result.isFailure(created)) {
+        expect(created.failure._tag).toBe("IdentityNotVerified");
+      }
+    }).pipe(
+      Effect.ensuring(
+        ses
+          .deleteReceiptRuleSet({
+            RuleSetName: "alchemy-test-bounce-sender-probe",
+          })
+          .pipe(Effect.ignore),
+      ),
+    ),
+  { timeout: 60_000 },
 );
