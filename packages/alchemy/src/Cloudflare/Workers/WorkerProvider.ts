@@ -39,7 +39,12 @@ import {
   type WorkerRouteConfig,
 } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
-import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
+import { isSelfUrl } from "./URL.ts";
+import type {
+  WireWorkerBinding,
+  WorkerBinding,
+  WorkerSettingsBinding,
+} from "./WorkerBinding.ts";
 import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
@@ -379,6 +384,13 @@ interface WorkerMetadataHashInput {
   readonly bindings: readonly ResourceBinding<Worker["Binding"]>[];
   readonly accountId: string;
   readonly stack: { readonly name: string; readonly stage: string };
+  /**
+   * The resolved URL a `Worker.URL` (`self_url`) binding lowers into.
+   * Included in the hash so external URL changes (an account-subdomain
+   * rename, a custom-domain reorder) redeploy the Worker with the fresh
+   * value even though props and binding data are unchanged.
+   */
+  readonly selfUrl?: string;
 }
 
 // The asset router config the resource declares (htmlHandling,
@@ -409,9 +421,11 @@ const resolveWorkerMetadataHash = ({
   bindings,
   accountId,
   stack,
+  selfUrl,
 }: WorkerMetadataHashInput): Effect.Effect<string> =>
   resolveMetadataHashValue({
     accountId,
+    selfUrl,
     stack: { name: stack.name, stage: stack.stage },
     compatibility: getCompatibility(props),
     env: props.env,
@@ -509,6 +523,35 @@ export const LiveWorkerProvider = () =>
 
       const normalizeCrons = (crons: string[] | undefined): string[] =>
         Array.from(new Set(crons ?? []));
+
+      const hasSelfUrlBinding = (
+        bindings: readonly ResourceBinding<Worker["Binding"]>[],
+      ) =>
+        bindings.some((b) =>
+          (b.data.bindings ?? []).some((item) => item.type === "self_url"),
+        );
+
+      // Resolve the URL this Worker will be served at — the same formula that
+      // produces the `url` attribute (first custom domain in user order, else
+      // the workers.dev URL) — usable BEFORE the script upload, so `Worker.URL`
+      // bindings can be lowered into plain_text bindings and VITE_*-prefixed
+      // env entries can be inlined into the client bundle at build time.
+      const resolveSelfUrl = Effect.fn(function* (
+        name: string,
+        props: WorkerProps,
+        accountId: string,
+      ) {
+        const customDomains = normalizeDomains(props.domain);
+        if (customDomains.length > 0) {
+          return `https://${customDomains[0]}`;
+        }
+        if (props.url === false) {
+          return yield* Effect.die(
+            `Worker "${name}" binds its own URL (Worker.URL) but has none: workers.dev is disabled (url: false) and no custom domain is configured.`,
+          );
+        }
+        return `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`;
+      });
 
       const getWorkerCrons = Effect.fn(function* (scriptName: string) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1175,7 +1218,10 @@ export const LiveWorkerProvider = () =>
           crypto.createHash("sha256").update(script).digest("hex"),
         );
 
-      const viteBuild = Effect.fn(function* (props: WorkerProps) {
+      const viteBuild = Effect.fn(function* (
+        props: WorkerProps,
+        selfUrl?: string,
+      ) {
         const compatibility = getCompatibility(props);
         // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
         // (~0.5s), which is only needed for vite-based workers at build time —
@@ -1195,15 +1241,20 @@ export const LiveWorkerProvider = () =>
                         : Redacted.isRedacted(value) &&
                             typeof Redacted.value(value) === "string"
                           ? Redacted.value(value)
-                          : // A `WorkerLoader` is a real Effect that also carries
-                            // the `~alchemy/Kind` marker — it is a binding, not a
-                            // runnable env value. Check it before `Effect.isEffect`
-                            // so we don't execute it as an inlined env entry.
-                            isWorkerLoader(value)
-                            ? undefined
-                            : Effect.isEffect(value)
-                              ? yield* value as any as Effect.Effect<any>
-                              : undefined,
+                          : // `Worker.URL` (bare tag or called) — resolved to
+                            // this Worker's own URL. The bare tag is
+                            // Effect-shaped, so check before `Effect.isEffect`.
+                            isSelfUrl(value)
+                            ? selfUrl
+                            : // A `WorkerLoader` is a real Effect that also carries
+                              // the `~alchemy/Kind` marker — it is a binding, not a
+                              // runnable env value. Check it before `Effect.isEffect`
+                              // so we don't execute it as an inlined env entry.
+                              isWorkerLoader(value)
+                              ? undefined
+                              : Effect.isEffect(value)
+                                ? yield* value as any as Effect.Effect<any>
+                                : undefined,
                     ];
                   }),
                 ),
@@ -1298,7 +1349,7 @@ export const LiveWorkerProvider = () =>
       const prepareAssetsAndBundle = (
         id: string,
         props: WorkerProps,
-        opts: { skipAssetsRead?: boolean } = {},
+        opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
           if (props.script !== undefined) {
@@ -1322,7 +1373,7 @@ export const LiveWorkerProvider = () =>
             };
           }
           if (props.vite) {
-            return yield* viteBuild(props);
+            return yield* viteBuild(props, opts.selfUrl);
           }
           const [assets, bundle] = yield* Effect.all(
             [
@@ -1388,6 +1439,18 @@ export const LiveWorkerProvider = () =>
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
+        // Resolve the Worker's own URL up front when a `Worker.URL` binding
+        // is present: the value must exist before the bundle is built (Vite
+        // inlines VITE_*-prefixed env into the client bundle) and before the
+        // metadata bindings are assembled (the `self_url` sentinel lowers
+        // into a plain_text binding below).
+        const selfUrl = hasSelfUrlBinding(bindings)
+          ? dispatchNamespace
+            ? yield* Effect.die(
+                `Worker "${name}" binds its own URL (Worker.URL), but a dispatch-namespace user worker is invoked via dynamic dispatch and has no URL of its own.`,
+              )
+            : yield* resolveSelfUrl(name, news, accountId)
+          : undefined;
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
@@ -1403,6 +1466,7 @@ export const LiveWorkerProvider = () =>
           hash: preparedHash,
         } = yield* prepareAssetsAndBundle(id, news, {
           skipAssetsRead: prebuiltAssets?.skip,
+          selfUrl,
         });
         // When the caller supplied a precomputed hash (e.g. via
         // `Command.Build`), store *that* hash in output state so the
@@ -1415,6 +1479,7 @@ export const LiveWorkerProvider = () =>
           bindings,
           accountId,
           stack: { name: stack.name, stage: stack.stage },
+          selfUrl,
         });
         const hash = {
           ...preparedHash,
@@ -1426,7 +1491,12 @@ export const LiveWorkerProvider = () =>
         // `transferred_classes` migration below and must be stripped from the
         // wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>
-          (b.data.bindings ?? []).map((item): WorkerBinding => {
+          (b.data.bindings ?? []).map((item): WireWorkerBinding => {
+            // Lower the `Worker.URL` sentinel into the resolved URL —
+            // Cloudflare has no native binding for it.
+            if (item.type === "self_url") {
+              return { type: "plain_text", name: item.name, text: selfUrl! };
+            }
             if (
               item.type === "durable_object_namespace" &&
               item.transferredFrom !== undefined
@@ -2079,6 +2149,9 @@ export const LiveWorkerProvider = () =>
             bindings,
             accountId,
             stack: { name: stack.name, stage: stack.stage },
+            selfUrl: hasSelfUrlBinding(bindings)
+              ? yield* resolveSelfUrl(output.workerName, props, accountId)
+              : undefined,
           });
           if (metadataHash !== output.hash?.metadata) {
             return true;

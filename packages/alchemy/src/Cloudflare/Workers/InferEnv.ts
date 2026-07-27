@@ -32,6 +32,7 @@ import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import type { RpcErrorEnvelope, RpcStreamEnvelope } from "./Rpc.ts";
+import type { URLBinding } from "./URLBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import type { Worker } from "./Worker.ts";
 import type { WorkerLoader as WorkerLoaderResource } from "./WorkerLoader.ts";
@@ -51,66 +52,73 @@ export type GetBindingType<T> =
   // generic Effect unwrap: a Container declaration is itself an Effect.
   T extends Container.Decl<any, any, any, any, infer DOShape>
     ? DurableObjectNamespace<DOShape & Rpc.DurableObjectBranded>
-    : T extends Effect.Effect<infer A, infer _E, infer _R>
-      ? GetBindingType<A>
-      : T extends FlagshipNs.App
-        ? Flagship
-        : T extends Assets
-          ? Service
-          : T extends AlchemyRpc<infer Shape extends object>
-            ? RpcWireShape<Shape> & Service
-            : T extends D1.Database
-              ? D1Database
-              : T extends R2.Bucket
-                ? R2Bucket
-                : T extends KV.Namespace
-                  ? KVNamespace
-                  : T extends DispatchNamespaceResource
-                    ? DispatchNamespace
-                    : T extends Queues.Queue
-                      ? Queue<unknown>
-                      : T extends AI.Gateway
-                        ? Ai
-                        : T extends AIBinding
-                          ? Ai
-                          : T extends AI.Search
-                            ? AiSearchInstance
-                            : T extends AI.SearchNamespace
-                              ? AiSearchNamespace
-                              : T extends Email.SendEmail
-                                ? SendEmail
-                                : T extends AnalyticsEngine.Dataset
-                                  ? AnalyticsEngineDataset
-                                  : T extends ArtifactsNs.Namespace
-                                    ? Artifacts
-                                    : T extends RateLimitBinding
-                                      ? RateLimit
-                                      : T extends ImagesNs.ImagesBinding
-                                        ? ImagesBinding
-                                        : T extends BrowserBinding
-                                          ? BrowserRun
-                                          : T extends HyperdriveNs.Connection
-                                            ? Hyperdrive
-                                            : T extends VersionMetadataBinding
-                                              ? WorkerVersionMetadata
-                                              : T extends WorkerLoaderResource
-                                                ? WorkerLoader
-                                                : T extends WorkflowLike<
-                                                      infer Params
-                                                    >
-                                                  ? Workflow<Params>
-                                                  : T extends DurableObjectLike
-                                                    ? DurableObjectNamespace<
-                                                        Exclude<
-                                                          T["Shape"],
-                                                          undefined
+    : // The bare `Worker.URL` tag — must be tested BEFORE the generic Effect
+      // unwrap (the tag is itself Effect-shaped). Resolves to the Worker's own
+      // public URL, injected as a plain-text binding.
+      T extends { readonly key: "Cloudflare.Workers.URL" }
+      ? string
+      : T extends URLBinding
+        ? string
+        : T extends Effect.Effect<infer A, infer _E, infer _R>
+          ? GetBindingType<A>
+          : T extends FlagshipNs.App
+            ? Flagship
+            : T extends Assets
+              ? Service
+              : T extends AlchemyRpc<infer Shape extends object>
+                ? RpcWireShape<Shape> & Service
+                : T extends D1.Database
+                  ? D1Database
+                  : T extends R2.Bucket
+                    ? R2Bucket
+                    : T extends KV.Namespace
+                      ? KVNamespace
+                      : T extends DispatchNamespaceResource
+                        ? DispatchNamespace
+                        : T extends Queues.Queue
+                          ? Queue<unknown>
+                          : T extends AI.Gateway
+                            ? Ai
+                            : T extends AIBinding
+                              ? Ai
+                              : T extends AI.Search
+                                ? AiSearchInstance
+                                : T extends AI.SearchNamespace
+                                  ? AiSearchNamespace
+                                  : T extends Email.SendEmail
+                                    ? SendEmail
+                                    : T extends AnalyticsEngine.Dataset
+                                      ? AnalyticsEngineDataset
+                                      : T extends ArtifactsNs.Namespace
+                                        ? Artifacts
+                                        : T extends RateLimitBinding
+                                          ? RateLimit
+                                          : T extends ImagesNs.ImagesBinding
+                                            ? ImagesBinding
+                                            : T extends BrowserBinding
+                                              ? BrowserRun
+                                              : T extends HyperdriveNs.Connection
+                                                ? Hyperdrive
+                                                : T extends VersionMetadataBinding
+                                                  ? WorkerVersionMetadata
+                                                  : T extends WorkerLoaderResource
+                                                    ? WorkerLoader
+                                                    : T extends WorkflowLike<
+                                                          infer Params
                                                         >
-                                                      >
-                                                    : T extends Redacted<any>
-                                                      ? // redacteds are always stored as secret_text, so are always string
-                                                        // we JSON.stringify when not a Redacted<string>
-                                                        string
-                                                      : T;
+                                                      ? Workflow<Params>
+                                                      : T extends DurableObjectLike
+                                                        ? DurableObjectNamespace<
+                                                            Exclude<
+                                                              T["Shape"],
+                                                              undefined
+                                                            >
+                                                          >
+                                                        : T extends Redacted<any>
+                                                          ? // redacteds are always stored as secret_text, so are always string
+                                                            // we JSON.stringify when not a Redacted<string>
+                                                            string
+                                                          : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

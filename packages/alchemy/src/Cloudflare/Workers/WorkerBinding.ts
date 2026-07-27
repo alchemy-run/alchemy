@@ -25,6 +25,8 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
+import type { URL as WorkersURL } from "./URL.ts";
+import type { URLBinding } from "./URLBinding.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
@@ -53,9 +55,27 @@ export type DurableObjectNamespaceWorkerBinding = Extract<
   transferredFrom?: string | string[];
 };
 
+/**
+ * Alchemy-only binding: the host Worker's own public URL (`Worker.URL`). The
+ * provider resolves the URL the Worker will be served at (first custom domain,
+ * else its `workers.dev` URL) and lowers this into a `plain_text` binding
+ * before the script upload — Cloudflare never sees this type.
+ */
+export interface SelfUrlWorkerBinding {
+  type: "self_url";
+  name: string;
+}
+
+/**
+ * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
+ * minus the alchemy-only members that must be lowered before upload.
+ */
+export type WireWorkerBinding = Exclude<WorkerBinding, SelfUrlWorkerBinding>;
+
 export type WorkerBinding =
   | Exclude<DistilledWorkerBinding, { type: "durable_object_namespace" }>
-  | DurableObjectNamespaceWorkerBinding;
+  | DurableObjectNamespaceWorkerBinding
+  | SelfUrlWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<
   workers.GetScriptScriptAndVersionSettingResponse["bindings"],
@@ -90,6 +110,10 @@ export type WorkerBindingResource =
   | Worker
   | WorkerLoader
   | VersionMetadataBinding
+  // The Worker's own URL — the bare `Worker.URL` tag or a constructed
+  // `Worker.URL("NAME")` binding value.
+  | WorkersURL
+  | URLBinding
   | DispatchNamespace
   | DurableObjectLike<any>
   | WorkflowLike<any>

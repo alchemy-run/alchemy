@@ -69,6 +69,7 @@ import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
+import { isSelfUrl } from "./URL.ts";
 import { Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
@@ -78,6 +79,14 @@ import { createWorkerName } from "./WorkerName.ts";
 type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
   dev: Extract<WorkerProps["dev"], { mode?: "worker" }>;
 };
+
+/**
+ * The normalized dev-server options a proxy is started with (`props.dev`
+ * with the default port applied). Named independently of `WorkerConfig` so
+ * `maybeStartProxy` — which `buildConfig` now calls to resolve `Worker.URL`
+ * — doesn't form a type cycle through `WorkerConfig["dev"]`.
+ */
+type DevServerOptions = WorkerPropsWithDev["dev"] & { port: number };
 
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
   "WorkerValidationError",
@@ -102,7 +111,7 @@ export const LocalWorkerProvider = () =>
       const proxyInstances = new Map<
         string,
         {
-          serverOptions: WorkerConfig["dev"];
+          serverOptions: DevServerOptions;
           instance: WorkerProxy.WorkerProxyInstance;
           scope: Scope.Closeable;
         }
@@ -134,7 +143,7 @@ export const LocalWorkerProvider = () =>
 
       const startProxy = Effect.fn(function* (
         id: string,
-        serverOptions: WorkerConfig["dev"],
+        serverOptions: DevServerOptions,
       ) {
         const scope = yield* Scope.fork(rootScope);
         const instance = yield* workerProxy
@@ -154,7 +163,7 @@ export const LocalWorkerProvider = () =>
 
       const maybeStartProxy = Effect.fn(function* (
         id: string,
-        serverOptions: WorkerConfig["dev"],
+        serverOptions: DevServerOptions,
       ) {
         const existing = proxyInstances.get(id);
         if (existing) {
@@ -392,12 +401,31 @@ export const LocalWorkerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
+        const dev: DevServerOptions = {
+          ...props.dev,
+          // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
+          port: props.dev?.port ?? 1337,
+        };
+        // `Worker.URL` locally resolves to the worker's dev-proxy URL — the
+        // proxy is stable per worker id (the same instance `runWorker` /
+        // `runVite` attach to below), so the URL is known before workerd
+        // starts. Trailing slash stripped to match the cloud value's shape.
+        const needsSelfUrl =
+          bindings.some((b) =>
+            (b.data.bindings ?? []).some((item) => item.type === "self_url"),
+          ) || Object.values(props.env ?? {}).some(isSelfUrl);
+        const selfUrl = needsSelfUrl
+          ? (yield* maybeStartProxy(id, dev)).url.toString().replace(/\/$/, "")
+          : undefined;
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
           Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
           ...Object.entries(props.env ?? {}).map(([key, value]) => {
+            if (isSelfUrl(value)) {
+              return Text.local(key, selfUrl!);
+            }
             const unredacted = Redacted.isRedacted(value)
               ? Redacted.value(value)
               : value;
@@ -416,6 +444,12 @@ export const LocalWorkerProvider = () =>
         const containers: Record<string, ContainerImage> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
+            if (binding.type === "self_url") {
+              // Lowered here rather than in `toRuntimeBinding` — only this
+              // scope knows the worker's own dev-proxy URL.
+              workerBindings.push(Text.local(binding.name, selfUrl!));
+              continue;
+            }
             if (
               binding.type === "durable_object_namespace" &&
               // The `durableObjectNamespaces` property is only used to declare DOs in this worker.
@@ -499,7 +533,17 @@ export const LocalWorkerProvider = () =>
           viteMain: props.vite?.main,
           viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
-          env: props.env,
+          // Substitute `Worker.URL` sentinels so the Vite dev server inlines
+          // the local URL into VITE_*-prefixed define entries.
+          env:
+            props.env && selfUrl !== undefined
+              ? Object.fromEntries(
+                  Object.entries(props.env).map(([key, value]) => [
+                    key,
+                    isSelfUrl(value) ? selfUrl : value,
+                  ]),
+                )
+              : props.env,
           bundleOptions: {
             id,
             main: props.main!,
@@ -511,11 +555,7 @@ export const LocalWorkerProvider = () =>
             extraOptions: props.build,
           } satisfies WorkerBundleOptions,
           assets: props.assets,
-          dev: {
-            ...props.dev,
-            // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
-            port: props.dev?.port ?? 1337,
-          },
+          dev,
         };
       });
 

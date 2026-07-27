@@ -38,6 +38,7 @@ import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
+import { URL as WorkersURL } from "./URL.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type {
   WorkerBinding,
@@ -947,6 +948,45 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * }
  * ```
  *
+ * @section The Worker's own URL
+ * `Worker.URL` injects the URL a Worker is served at as a binding on that
+ * same Worker — the first custom `domain` if one is configured, otherwise
+ * its `workers.dev` URL, always equal to the resource's `url` attribute.
+ * Under `alchemy dev` it resolves to the local dev server's URL.
+ *
+ * @example Read the Worker's own URL inside a handler
+ * ```typescript
+ * Cloudflare.Worker(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     // Attaches the binding and returns a deferred accessor.
+ *     const url = yield* Cloudflare.Worker.URL;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const publicUrl = yield* url;
+ *         return Response.json({ url: publicUrl });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.Workers.URLBinding)),
+ * );
+ * ```
+ *
+ * @example Inject the URL into an async Worker's env
+ * `InferEnv` types the entry as `string`. A `VITE_`-prefixed key on a
+ * vite-built Worker is additionally inlined into the client bundle as
+ * `import.meta.env.VITE_PUBLIC_URL` at build time.
+ * ```typescript
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { PUBLIC_URL: Cloudflare.Worker.URL },
+ * });
+ *
+ * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+ * //   { PUBLIC_URL: string }
+ * ```
+ *
  * @section Observability
  * Cloudflare Workers Observability is on by default — `logs.enabled` and
  * `logs.invocationLogs` are turned on if you don't pass an `observability`
@@ -1324,15 +1364,26 @@ export const Worker: ResourceClassLike<Worker> &
       Extract<Req, Container.Application<any>> | Providers
     > &
       Named<Id>;
-  } = Platform(WorkerTypeId, {
-  // Both hooks are wrapped in arrows so the imported references are resolved
-  // at call time rather than at module-load time. Worker.ts forms import
-  // cycles with both WorkerAsyncBindings.ts (which imports `isWorker` here)
-  // and WorkerRuntimeContext.ts (which imports `WorkerTypeId`/`WorkerEnvironment`
-  // here). Reading either binding eagerly here hits TDZ when Bun loads the
-  // package from node_modules in a different module-init order than the local
-  // workspace.
-  onCreate: (resource, props) =>
-    bindWorkerAsyncBindings(resource as Worker, props),
-  createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-});
+    /**
+     * The Worker's own public URL, injected as a binding on that same Worker.
+     * Declare it on `env` (`env: { VITE_PUBLIC_URL: Worker.URL }`) or
+     * `yield*` it inside an Effect-native Worker to obtain a deferred
+     * accessor. See {@link WorkersURL}.
+     */
+    readonly URL: typeof WorkersURL;
+  } = Platform(
+  WorkerTypeId,
+  {
+    // Both hooks are wrapped in arrows so the imported references are resolved
+    // at call time rather than at module-load time. Worker.ts forms import
+    // cycles with both WorkerAsyncBindings.ts (which imports `isWorker` here)
+    // and WorkerRuntimeContext.ts (which imports `WorkerTypeId`/`WorkerEnvironment`
+    // here). Reading either binding eagerly here hits TDZ when Bun loads the
+    // package from node_modules in a different module-init order than the local
+    // workspace.
+    onCreate: (resource, props) =>
+      bindWorkerAsyncBindings(resource as Worker, props),
+    createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+  },
+  { URL: WorkersURL },
+);

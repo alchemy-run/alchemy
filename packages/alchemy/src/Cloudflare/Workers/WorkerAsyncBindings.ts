@@ -33,6 +33,7 @@ import {
   normalizeTransferredFrom,
 } from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
+import { isSelfUrl } from "./URL.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
@@ -56,6 +57,18 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       // *started instance* tag, which only exists inside a Durable Object.
       if (isContainerDecl(bindingEff)) {
         yield* bindContainerClass(resource, bindingName, bindingEff);
+        continue;
+      }
+      // The Worker's own URL (`Worker.URL`, bare or called). The bare tag is
+      // Effect-shaped, so it must be intercepted before the generic Effect
+      // resolution below — yielding it would try to resolve the URL binding
+      // service, which doesn't exist at plan time. The provider lowers the
+      // `self_url` sentinel into a `plain_text` binding holding the Worker's
+      // resolved URL just before upload.
+      if (isSelfUrl(bindingEff)) {
+        yield* resource.bind`${bindingName}`({
+          bindings: [{ type: "self_url", name: bindingName }],
+        });
         continue;
       }
       // Bindings can be passed as a plain resource value, an Effect that
