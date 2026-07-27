@@ -1,10 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "scopeName": "inline.alchemy-prose",
-  "injectionSelector": "L:source.ts -comment -string, L:source.tsx -comment -string, L:source.js -comment -string, L:source.jsx -comment -string, L:source.js.jsx -comment -string",
+  "injectionSelector": "L:source.ts -comment -string -meta.embedded.block.alchemy-prose, L:source.tsx -comment -string -meta.embedded.block.alchemy-prose, L:source.js -comment -string -meta.embedded.block.alchemy-prose, L:source.jsx -comment -string -meta.embedded.block.alchemy-prose, L:source.js.jsx -comment -string -meta.embedded.block.alchemy-prose",
   "patterns": [
     {
       "include": "#prose-template"
+    },
+    {
+      "include": "#prose-call-template"
     }
   ],
   "repository": {
@@ -33,6 +36,41 @@
         }
       },
       "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#prose-body"
+        }
+      ]
+    },
+    "prose-call-template": {
+      "comment": "A tagged template whose tag is a call — AI.Tool(\"bash\")`…`, AI.Dispatch(Engineer, \"hand_to_engineer\")`…`, Event(\"IssueOpened\", {…})`…`. In this codebase a call in tag position is always prose, so the call itself is the whole heuristic; the arguments are handed back to the host grammar to color. Like #prose-template it must begin at the callee rather than at the backtick, and for a second reason: the host closes its own function-call rule with a zero-width match on the far side of the paren, exactly where a backtick-anchored injection would start. Winning that race leaves the call rule open for the rest of the file. Beginning at the callee means the host never opens one. The price is that the call has to fit on one line — a begin pattern never sees more.",
+      "begin": "(?<![_$[:alnum:]])(?!(?:if|for|while|switch|catch|return|typeof|await|yield|void|delete|new)\\s*\\()((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)*[_$[:alpha:]][_$[:alnum:]]*(?:\\s*<(?:[^<>`]|<[^<>`]*>)*>)?(?:\\s*\\((?:[^()`'\"]|'[^']*'|\"[^\"]*\"|\\((?:[^()`]|\\([^()`]*\\))*\\))*\\))+)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#prose-body"
+        }
+      ]
+    },
+    "prose-body": {
       "patterns": [
         {
           "include": "#splice"
@@ -85,7 +123,7 @@
       ]
     },
     "splice": {
-      "comment": "${…} — a term spliced into the prose; highlighted as TypeScript.",
+      "comment": "${…} — a term spliced into the prose; highlighted as TypeScript. Prose nested in a splice is matched here rather than by the injection, which the selector switches off for everything under a prose body — otherwise a paragraph ending in a parenthesis would see its own closing backtick as the start of a call-tagged template.",
       "name": "meta.template.expression.alchemy",
       "contentName": "meta.embedded.line.alchemy-splice",
       "begin": "\\$\\{",
@@ -101,6 +139,12 @@
         }
       },
       "patterns": [
+        {
+          "include": "#prose-template"
+        },
+        {
+          "include": "#prose-call-template"
+        },
         {
           "include": "source.ts#expression"
         }

@@ -181,6 +181,25 @@ const results = [
   expect("---", "punctuation.separator.table.markdown"),
   // splices stay TypeScript
   expect("Grep", "meta.embedded.line.alchemy-splice"),
+  // a call is a tag too, and its arguments keep their own colors
+  expect("pull request", "markup.bold"),
+  expect("task", "meta.embedded.line.alchemy-splice"),
+  expect(
+    "  The work itself, standing alone — the issue reference and the",
+    "meta.embedded.block.alchemy-prose",
+  ),
+  expect("hand_to_engineer", "string.quoted"),
+  expect("Dispatch", "entity.name.function"),
+  // a body ending in a parenthesis closes there — the `not-prose` checks
+  // below are what prove the rest of the file survived it
+  expect("Increment the counter (once)", "meta.embedded.block.alchemy-prose"),
+  expect("run(now)", "meta.embedded.block.alchemy-prose"),
+  // …but a call split over lines is left alone, deliberately
+  expect("  Prose the grammar declines to claim.", "string.template"),
+  refute(
+    "  Prose the grammar declines to claim.",
+    "meta.embedded.block.alchemy-prose",
+  ),
   // the template terminates: code after it is code again, and a plain call is
   // never mistaken for prose
   expect("make", "entity.name.function.tagged-template.alchemy"),

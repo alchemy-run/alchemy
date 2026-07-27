@@ -6,11 +6,25 @@
 declare const AI: {
   prose: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
   say: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
+  Tool: (name: string) => (t: TemplateStringsArray) => unknown;
+  Parameter: (
+    name: string,
+    schema: unknown,
+  ) => (t: TemplateStringsArray) => unknown;
+  Dispatch: (
+    target: unknown,
+    name: string,
+  ) => (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
 };
 declare const Coding: {
   make: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
 };
 declare const Redacted: { make: (value: string) => string };
+declare const Schema: {
+  Int: unknown;
+  optionalKey: (schema: unknown) => unknown;
+  check: (schema: unknown, min: number, max: number, unit: string) => unknown;
+};
 declare const Grep: unknown;
 
 export const CodingLive = Coding.make`
@@ -61,5 +75,33 @@ export const charter = () => {
     `;
   };
 };
+
+/** Call-tagged prose: the tag is a call rather than a member access. */
+const task = AI.Parameter("task", String)`
+  The work itself, standing alone — the issue reference and the
+  acceptance criteria verbatim.`;
+
+export const HandToEngineer = AI.Dispatch(Grep, "hand_to_engineer")`
+  Hand one round of issue work to the engineer, with ${task} standing
+  alone. It answers with the **pull request** reference.`;
+
+/** A body ending in a parenthesis must still close, not reopen. */
+export const bump = AI.Tool("bump")`Increment the counter (once)`;
+
+/** …even when the line itself opens with something shaped like a call. */
+export const risky = AI.Tool("risky")`
+run(now)`;
+
+/**
+ * Known limitation: a call whose arguments are split over several lines
+ * stays an ordinary string, because a begin pattern only ever sees one
+ * line — and anchoring on the closing paren instead would preempt the
+ * host grammar's own end-of-call match and corrupt the file below it.
+ */
+export const spread = AI.Parameter(
+  "spread",
+  Schema.optionalKey(Schema.check(Schema.Int, 1, 3600, "seconds")),
+)`
+  Prose the grammar declines to claim.`;
 
 export const token = Redacted.make("not-prose");

@@ -21,8 +21,7 @@ export const ResourceEngineeringLive = ResourceEngineering.make`
 
 ## What it matches
 
-Any tagged template whose tag is a member access ending in `make`, `prose`, or
-`say`:
+Two tag shapes. A member access ending in `make`, `prose`, or `say`:
 
 | Matches             | Does not match        |
 | ------------------- | --------------------- |
@@ -30,9 +29,22 @@ Any tagged template whose tag is a member access ending in `make`, `prose`, or
 | ``AI.prose`…` ``    | ``make`…` ``          |
 | ``AI.say`…` ``      | ``foo.makeThing`…` `` |
 
-A receiver is required, and the backtick must follow the tag directly — a plain
-call like `Redacted.make(value)` or `RpcClient.make(...)` is untouched, since
-the heuristic is the tagged-template form, not the name.
+…and a **call** in tag position, whatever the callee is named:
+
+```ts
+AI.Tool("bash")`Run ${command} and return its exit code.`;
+AI.Parameter("task", S.String)`The work itself, standing alone.`;
+AI.Dispatch(Engineer, "hand_to_engineer")`Hand one round of work over.`;
+class IssueOpened extends Event("IssueOpened", { issue })`An issue was opened.` {}
+```
+
+A call whose result is immediately used as a template tag is prose every time
+it occurs here, so the call itself is the whole heuristic — no name list to
+keep current. A plain call like `Redacted.make(value)`, with no backtick after
+it, is untouched.
+
+The call has to fit on one line. Arguments split across lines leave the body an
+ordinary string, and deliberately so: see [Known edges](#known-edges).
 
 Inside the body:
 
@@ -97,13 +109,30 @@ bun scripts/inspect.ts ../../services/alchemy-org/src/Coding.ts
 ## How it works
 
 `syntaxes/alchemy-prose.injection.json` is a TextMate injection grammar
-(`injectTo: source.ts | source.tsx | source.js | source.js.jsx`). Three things
+(`injectTo: source.ts | source.tsx | source.js | source.js.jsx`). Five things
 about it are load-bearing, and each one is a trap worth knowing before editing:
 
-**The `begin` pattern swallows the whole receiver chain.** The
-`injectionSelector` carries the `L:` prefix, which only wins a *tie* — the
-host's own tagged-template rule starts at `Coding` in ``Coding.make`…` ``, so a
-pattern that started at the dot would lose the race and never fire.
+**The `begin` pattern swallows the whole tag** — the receiver chain, or the
+entire call with its arguments. The `injectionSelector` carries the `L:`
+prefix, which only wins a *tie* — the host's own tagged-template rule starts at
+`Coding` in ``Coding.make`…` ``, so a pattern that started at the dot would
+lose the race and never fire. The swallowed tag is handed back to `source.ts`
+through a capture, so a call's arguments keep the colors they always had.
+
+**Nothing may start at the far side of a closing paren.** The host closes its
+function-call rule with a zero-width match immediately after the `)` — exactly
+where a backtick-anchored pattern would begin. `L:` wins that tie too, and the
+prize is a call rule that never closes and swallows the rest of the file as
+call targets. Beginning at the callee sidesteps it: the host never opens a call
+rule at all.
+
+**The injection switches itself off inside a prose body.** Injections are
+consulted at every position, prose bodies included, and a paragraph is free to
+contain something call-shaped — `run(now)` on its own line, ending the
+paragraph. Left on, the call rule would read that as a tag and reopen the
+template on its own closing backtick. Hence `-meta.embedded.block.alchemy-prose`
+in the selector; prose nested in a `${…}` is matched by the splice rule
+directly instead.
 
 **Markdown is reached through a capture.** A TextMate rule only ever checks the
 innermost rule's `end`, so a Markdown block rule pushed inside the template
@@ -134,7 +163,20 @@ file.
   definitions are not supported at all.
 - Inline markup does not span a splice or a line break: `**bold ${x}**` loses
   its bold after the splice.
-- Tags with a computed or call receiver (``makeThing().say`…` ``) are not
-  matched; neither is a bare tag with no receiver.
+- A call tag whose arguments span lines stays an ordinary string:
+
+  ```ts
+  const timeout = AI.Parameter(
+    "timeout",
+    S.optionalKey(S.Int),
+  )`Timeout in seconds.`; // ← not prose
+  ```
+
+  A `begin` pattern never sees more than one line, and the alternative —
+  anchoring on the closing paren — is the trap described above. Collapsing the
+  call onto one line is the fix where it fits.
+
+- A bare tag with no receiver (``make`…` ``) is not matched, and neither is an
+  indexed one (``handlers[0]`…` ``).
 - Changing the grammar requires a window reload; scope inspection lives under
   **Developer: Inspect Editor Tokens and Scopes**.
