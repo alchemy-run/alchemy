@@ -79,24 +79,33 @@ const fetchDistTags = Effect.gen(function* () {
 
 /**
  * Refresh the dist-tags cache with a single request. The fetch is forked so
- * it outlives the sync wait: we give it {@link SYNC_WAIT} to land inline;
- * if it's still in flight (or already failed) we record the attempt — so a
- * dead network costs at most one blocking wait per TTL window — and the
- * same request keeps going in the background, overwriting the cache when it
- * completes. The background path never logs, so it can't interleave with
- * interactive prompts.
+ * it outlives the sync wait: we give it {@link SYNC_WAIT} to land inline,
+ * and if it's still in flight the same request keeps going in the
+ * background, writing fresh dist-tags to the cache when it completes. The
+ * background path never logs, so it can't interleave with prompts.
  */
 const refreshDistTags = Effect.fn(function* (
   cachePath: string,
-  stale?: Record<string, string>,
+  lastKnown?: Record<string, string>,
 ) {
   const fetch = yield* fetchDistTags.pipe(
+    // Fresh dist-tags land in the cache whenever the request completes —
+    // even after the sync wait below has given up on it.
     Effect.tap((distTags) => writeCache(cachePath, distTags)),
     Effect.forkScoped,
   );
   return yield* Fiber.join(fetch).pipe(
     Effect.timeout(SYNC_WAIT),
-    Effect.catch(() => writeCache(cachePath, stale).pipe(Effect.as(stale))),
+    // Still in flight (or failed): stamp checkedAt now — a cheap local file
+    // write — so runs in the next TTL window skip the blocking wait
+    // entirely; a dead network costs one wait per day, not one per run.
+    // Carrying the last-known dist-tags forward keeps the upgrade warning
+    // alive off yesterday's data instead of losing it for a day. If the
+    // in-flight request lands later, it overwrites all of this with fresh
+    // data.
+    Effect.catch(() =>
+      writeCache(cachePath, lastKnown).pipe(Effect.as(lastKnown)),
+    ),
   );
 });
 
