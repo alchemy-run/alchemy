@@ -681,7 +681,13 @@ const executeNode = (
           resourceType: node.resource.Type,
           props: news,
           attr,
-          bindings: excludeDeletedBindings(node.bindings),
+          // Persist the RESOLVED binding data (what `reconcile` received),
+          // not the raw plan bindings: raw data still carries Output proxies
+          // (e.g. a same-deploy-created namespace's id), which JSON state
+          // stores silently drop — the next plan would then diff its resolved
+          // values against the truncated persisted shape and report a
+          // spurious binding update on every deploy after a create.
+          bindings: bindingOutputs,
           providerVersion: node.provider.version ?? 0,
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
@@ -803,6 +809,8 @@ const executeNode = (
             ...node.state,
             attr,
             props: news,
+            // Resolved binding data — see the create-path commit note.
+            bindings: bindingOutputs,
           });
         } else {
           yield* commit<UpdatedResourceState>({
@@ -813,7 +821,10 @@ const executeNode = (
             resourceType: node.resource.Type,
             props: news,
             attr,
-            bindings: excludeDeletedBindings(node.bindings),
+            // Resolved binding data, matching what `reconcile` received —
+            // see the create-path commit for why raw plan bindings must not
+            // be persisted.
+            bindings: bindingOutputs,
             providerVersion: node.provider.version ?? 0,
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
@@ -1040,7 +1051,8 @@ const executeNode = (
             props: news,
             attr,
             providerVersion: node.provider.version ?? 0,
-            bindings: excludeDeletedBindings(node.bindings),
+            // Resolved binding data — see the create-path commit note.
+            bindings: bindingOutputs,
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
           });
@@ -1056,7 +1068,8 @@ const executeNode = (
             props: news,
             attr,
             providerVersion: node.provider.version ?? 0,
-            bindings: excludeDeletedBindings(node.bindings),
+            // Resolved binding data — see the create-path commit note.
+            bindings: bindingOutputs,
             downstream: node.downstream,
             // Preserve the remaining backlog exactly as-is. GC is responsible for
             // popping one generation at a time until the chain is exhausted.
