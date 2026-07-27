@@ -13,29 +13,23 @@
  */
 import * as AI from "alchemy/AI";
 import * as Layer from "effect/Layer";
-import { ToolOutputStoreLive } from "../lib/ToolOutputStore.ts";
-import { WorkspaceFilesLive } from "alchemy/Workspace";
-import { ResourceEngineering } from "./ResourceEngineering.ts";
 import {
   ApplyPatch,
-  ApplyPatchLocal,
   Bash,
-  BashLocal,
   EditFile,
-  EditFileLocal,
   Glob,
-  GlobLocal,
   Grep,
-  GrepLocal,
   ListDirectory,
-  ListDirectoryLocal,
   ReadFile,
-  ReadFileLocal,
   ReadOutput,
-  ReadOutputLocal,
   WriteFile,
-  WriteFileLocal,
 } from "../tools/index.ts";
+import {
+  ReadToolsLocal,
+  RunToolsLocal,
+  WriteToolsLocal,
+} from "../tools/LocalToolbox.ts";
+import { ResourceEngineering } from "./ResourceEngineering.ts";
 
 export class Coding extends AI.Skill<Coding>()("Coding") {}
 
@@ -70,22 +64,11 @@ export const CodingLive = Coding.make`
   own deeper skills included).`;
 
 /**
- * Production local/Bun tool composition. The entrypoint still chooses
- * the {@link Workspace} root and provides platform services; this
- * Layer owns one shared file service and one scoped output store.
+ * Production local/Bun composition — the FULL keyboard: read + run +
+ * write (tools/LocalToolbox.ts groups the physics by access level).
+ * The entrypoint still chooses the {@link Workspace} root and provides
+ * platform services.
  */
-const LocalSupport = Layer.mergeAll(WorkspaceFilesLive, ToolOutputStoreLive);
-
-const LocalTools = Layer.mergeAll(
-  GrepLocal,
-  GlobLocal,
-  ListDirectoryLocal,
-  ReadFileLocal,
-  EditFileLocal,
-  ApplyPatchLocal,
-  WriteFileLocal,
-  BashLocal,
-  ReadOutputLocal,
-).pipe(Layer.provide(LocalSupport));
-
-export const CodingLocal = CodingLive.pipe(Layer.provide(LocalTools));
+export const CodingLocal = CodingLive.pipe(
+  Layer.provide([ReadToolsLocal, RunToolsLocal, WriteToolsLocal]),
+);

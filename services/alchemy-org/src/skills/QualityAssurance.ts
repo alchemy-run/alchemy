@@ -8,22 +8,15 @@
  */
 import * as AI from "alchemy/AI";
 import * as Layer from "effect/Layer";
-import { WorkspaceFilesLive } from "alchemy/Workspace";
-import { ToolOutputStoreLive } from "../lib/ToolOutputStore.ts";
 import {
   Bash,
-  BashLocal,
   Glob,
-  GlobLocal,
   Grep,
-  GrepLocal,
   ListDirectory,
-  ListDirectoryLocal,
   ReadFile,
-  ReadFileLocal,
   ReadOutput,
-  ReadOutputLocal,
 } from "../tools/index.ts";
+import { ReadToolsLocal, RunToolsLocal } from "../tools/LocalToolbox.ts";
 
 export class QualityAssurance extends AI.Skill<QualityAssurance>()(
   "QualityAssurance",
@@ -47,17 +40,11 @@ export const QualityAssuranceLive = QualityAssurance.make`
   - Claims are checked by RUNNING: the test suite through ${Bash} is
     evidence; the diff's say-so is not.`;
 
-const LocalSupport = Layer.mergeAll(WorkspaceFilesLive, ToolOutputStoreLive);
-
-const LocalTools = Layer.mergeAll(
-  GrepLocal,
-  GlobLocal,
-  ListDirectoryLocal,
-  ReadFileLocal,
-  BashLocal,
-  ReadOutputLocal,
-).pipe(Layer.provide(LocalSupport));
-
+/**
+ * Local composition — READ + RUN only (tools/LocalToolbox.ts): the
+ * write group is simply never provided, so judge-not-author is the
+ * composition, not a promise.
+ */
 export const QualityAssuranceLocal = QualityAssuranceLive.pipe(
-  Layer.provide(LocalTools),
+  Layer.provide([ReadToolsLocal, RunToolsLocal]),
 );
