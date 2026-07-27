@@ -1,84 +1,29 @@
 ---
 title: Local Providers
-description: Emulate resources on the developer's machine during `alchemy dev` — provider modes, dual registration, and the LocalProvider runner for long-running processes.
+description: Build the local implementation of a resource — dual registration with ProviderLayer.dual and the LocalProvider runner for long-running processes.
 ---
 
 During `alchemy dev`, some resources shouldn't touch the cloud at all: a
 Worker runs in a local `workerd`, a dev server is a child process on your
 machine. A **local provider** is the implementation that serves a resource
-type in that mode, alongside the **live provider** used by `alchemy deploy`.
+type in dev, alongside the **live provider** used by `alchemy deploy`.
 
-If you haven't built a provider before, start with
+This guide is about *building* one. For the user-facing dev model — and
+opting a resource out of local emulation with `live()` — see
+[Local development](/environments/local-development). If you haven't built
+a provider before, start with
 [Custom Provider](/infrastructure-as-code/custom-provider) — a local
 provider is just a second implementation of the same lifecycle contract.
 
-## Provider modes
+## What the engine does for you
 
-Every resource reconciles in one of two modes — `"live"` (real cloud) or
-`"local"` (emulated) — and the mode that last reconciled it is persisted on
-its state row as `providerMode`.
+The engine remembers which implementation reconciled each resource. Moving
+a resource between local and live is planned as a **replacement**, and
+every instance is deleted by the provider that created it — so a deploy
+right after a dev session tears the local instances down with *your* local
+provider. You implement the lifecycle; the engine owns the switching.
 
-### Switching modes is a replacement
-
-```text
-Plan: 1 to replace
-[Api] ± replace   (providerMode: local → live)
-```
-
-A local `workerd` instance and a deployed Worker are different physical
-things, so when a row's persisted mode differs from the current run's mode,
-the plan is a `replace` — the provider `diff` isn't even consulted.
-
-### Deletes use the mode that created the row
-
-The new mode's provider creates the replacement; the **old** mode's
-provider deletes the old instance. This holds everywhere a delete can
-happen — replacements, orphans, `alchemy destroy` — so deploying right
-after a dev session tears the local instances down with the local provider.
-
-## Opting out of local emulation
-
-The mode comes from the command — `alchemy dev` resolves `"local"`,
-`alchemy deploy` resolves `"live"` — and the one knob is `live()`: *"run
-this live even in dev"*.
-
-### Opt out one resource
-
-```typescript
-import * as Alchemy from "alchemy";
-
-const queue = yield* Queue("Jobs", {}).pipe(Alchemy.live());
-```
-
-Even during `alchemy dev`, this queue talks to the real cloud. During
-`alchemy deploy` the pin is a no-op — everything is live anyway.
-
-### Opt out a whole scope
-
-```typescript
-yield* Effect.gen(function* () {
-  const queue = yield* Queue("Jobs", {});
-  const consumer = yield* Consumer("JobsConsumer", { queue });
-}).pipe(Alchemy.live());
-```
-
-The policy is ambient and captured at registration (like `adopt()`), so
-everything registered inside the scope runs live.
-
-### Mode-agnostic resources
-
-A provider with a single implementation (an R2 bucket, a DNS record)
-already runs live in dev — `live()` on it is a no-op. Mixed constructs
-just work: the Worker goes local, the bucket stays live.
-
-### Conflicts fail loudly
-
-Applying `live()` to a resource that was already registered without it
-dies with `ConflictingProviderModeError` — context-based decoration can't
-silently pick a winner. A bare re-registration *after* `live()` inherits
-the pin, so referencing a resource from another file keeps working.
-
-## Register both modes: `ProviderLayer.dual`
+## Register both: `ProviderLayer.dual`
 
 ```typescript
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -93,7 +38,8 @@ export const WorkerProvider = () =>
 ```
 
 `dual` registers the run's default mode eagerly and builds the other
-**lazily** — e.g. only when a live deploy needs to delete a local-mode row.
+**lazily** — e.g. the local provider is only constructed during a deploy
+if it has an instance to tear down.
 
 ### Compose local deps inside the thunk
 
@@ -112,9 +58,9 @@ instance per stack build.
 
 A process-shaped local provider has a problem ordinary providers don't:
 the "physical resource" is a running process that **state can't see** — a
-row can say `created` while the process died with the last dev session.
-`LocalProvider.make` owns that machinery; you write how to boot one
-instance.
+resource can be marked `created` while its process died with the last dev
+session. `LocalProvider.make` owns that machinery; you write how to boot
+one instance.
 
 ### Declare the provider with `start`
 
@@ -209,7 +155,7 @@ the address stays stable across rebuilds.
 
 - **`diff`** — running instance + equal config hash → `noop`; anything
   else → `update`. A fresh dev session has an empty registry, so processes
-  restart even though state says `created`.
+  restart even though they were previously `created`.
 - **`reconcile`** — reuses the running instance on a hash match; otherwise
   tears it down and forks `start` in a scope that outlives the deploy.
 - **`delete`** — tears down only the matching `instanceId` (a replacement's
@@ -226,9 +172,9 @@ in-process and no sidecar is spawned.
 ## Not everything is a process
 
 If the local "instance" is just an entry in a shared registry — Cloudflare's
-local Queue is a row in `LocalRuntimeState`, reconciled with three
+local Queue is an entry in `LocalRuntimeState`, reconciled with three
 idempotent map operations — skip `LocalProvider.make` and write a plain
-provider registered via `dual`. Mode tracking applies either way.
+provider registered via `dual`.
 
 ## Testing
 
@@ -264,9 +210,10 @@ test.provider("promotes a dev worker to a live worker", (stack) =>
 
 ## Where next
 
+- [Local development](/environments/local-development) — the user-facing
+  dev loop, and opting resources out of local emulation with `live()`.
 - [Custom Provider](/infrastructure-as-code/custom-provider) — the
-  lifecycle contract both variants implement.
-- [Providers](/infrastructure-as-code/provider) — the operation contract.
+  lifecycle contract both implementations share.
 - [Resource lifecycle](/infrastructure-as-code/resource-lifecycle) —
   when each lifecycle method fires, including replacements.
 - [Testing Providers](/testing/testing-providers) — the `test.provider`
