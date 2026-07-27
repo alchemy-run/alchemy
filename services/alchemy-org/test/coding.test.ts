@@ -73,10 +73,15 @@ test("Coding skill activates and completes a local grep/read/edit/bash flow", ()
       const LocalCoding = CodingLocal.pipe(
         Layer.provide(Workspace),
         Layer.provide(BunServices.layer),
-        // the skill GRAPH: Coding's teaching references the doctrine
-        // skills, so its Layer carries their tags
+        // the skill TREE: Coding exposes ResourceEngineering, whose
+        // teaching exposes TypedErrors and LiveTesting — every level
+        // an OUTPUT so activation can resolve it
         Layer.provideMerge(
-          Layer.mergeAll(TypedErrorsLive, ResourceEngineeringLive, LiveTestingLive),
+          ResourceEngineeringLive.pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(TypedErrorsLive, LiveTestingLive),
+            ),
+          ),
         ),
       );
       const AgentLayer = AI.layer(CodingAgent, CodingAgentCharter).pipe(

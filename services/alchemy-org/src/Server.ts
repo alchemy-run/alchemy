@@ -164,14 +164,19 @@ const WorkspacesLive = Git.WorkspacesWorktree({ root: workspaceRoot }).pipe(
 /** The Engineer: local toolbox physics + real PR plumbing (branch,
  * commit, push, pulls.create). The toolbox is rooted at THE RUN'S OWN
  * worktree (`runWorkspace`), so an engineer cannot touch another run's
- * tree — or anything outside its checkout. The doctrine skills hang
- * off ${Coding}'s teaching (the skill GRAPH): activating Coding
- * exposes ResourceEngineering/TypedErrors/LiveTesting for activation. */
+ * tree — or anything outside its checkout. The doctrine skills form a
+ * TREE (the skill graph): Coding exposes ResourceEngineering, whose
+ * teaching exposes TypedErrors and LiveTesting — each level provided
+ * as OUTPUTS (provideMerge) so the kernel resolves them at activation. */
 const EngineerLayer = EngineerLive.pipe(
   Layer.provide(
     CodingLocal.pipe(
       Layer.provideMerge(
-        Layer.mergeAll(TypedErrorsLive, ResourceEngineeringLive, LiveTestingLive),
+        ResourceEngineeringLive.pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(TypedErrorsLive, LiveTestingLive),
+          ),
+        ),
       ),
     ),
   ),
