@@ -44,17 +44,17 @@ const readCache = (cachePath: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const raw = yield* fs.readFileString(cachePath);
-    const parsed = yield* Effect.try(() => JSON.parse(raw) as unknown);
+    const parsed = yield* Effect.try(
+      () => JSON.parse(raw) as VersionCheckCache | null | undefined,
+    );
     if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      typeof (parsed as VersionCheckCache).checkedAt !== "number" ||
-      typeof (parsed as VersionCheckCache).distTags !== "object" ||
-      (parsed as VersionCheckCache).distTags === null
+      typeof parsed?.checkedAt !== "number" ||
+      typeof parsed.distTags !== "object" ||
+      parsed.distTags === null
     ) {
       return undefined;
     }
-    return parsed as VersionCheckCache;
+    return parsed;
   }).pipe(Effect.catch(() => Effect.succeed(undefined)));
 
 const fetchDistTags = Effect.gen(function* () {
