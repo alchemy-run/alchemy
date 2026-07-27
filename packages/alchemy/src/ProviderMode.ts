@@ -7,10 +7,10 @@ import { AlchemyContext } from "./AlchemyContext.ts";
 /**
  * The mode a resource's provider operates in.
  *
- * - `"live"`  — the provider converges real cloud state (deploy).
+ * - `"live"`  — the provider converges real cloud state.
  * - `"local"` — the provider emulates the resource on the developer's
- *   machine (dev), typically as a long-running process managed by the
- *   dev sidecar.
+ *   machine (`alchemy dev`), typically as a long-running process managed
+ *   by the dev sidecar.
  *
  * The mode a resource was last reconciled with is persisted on its state
  * row (`providerMode`). Switching a resource between modes is planned as a
@@ -21,43 +21,26 @@ import { AlchemyContext } from "./AlchemyContext.ts";
 export type ProviderMode = "live" | "local";
 
 /**
- * ProviderModePolicy pins the provider mode for every resource registered
- * while it is in context, overriding the run-level default derived from
- * `AlchemyContext.dev`.
+ * ProviderModePolicy opts resources OUT of local emulation: when `true`,
+ * resources registered while it is in context resolve the **live**
+ * provider even during `alchemy dev`.
  *
- * Apply it with the {@link local} / {@link live} combinators — most commonly
- * at the resource or namespace scope:
- *
- * ```ts
- * // Pin one resource to the local provider even during `alchemy deploy`
- * const worker = yield* Worker("Api", { ... }).pipe(local());
- *
- * // Pin everything inside a scope to live providers even during `alchemy dev`
- * yield* Effect.gen(function* () {
- *   const queue = yield* Queue("Jobs", {});
- *   const consumer = yield* Consumer("JobsConsumer", { queue });
- * }).pipe(live());
- * ```
- *
- * The captured mode only takes effect for providers that actually
- * distinguish modes (registered via `ProviderLayer.dual`). Mode-agnostic
- * providers (e.g. an R2 bucket, which is always live) satisfy any requested
- * mode with their single implementation — this is what allows a blanket
- * `local()` over a construct that mixes emulatable and live-only resources.
+ * Apply it with the {@link live} combinator. During `alchemy deploy`
+ * everything is live anyway, so the policy only has an effect in dev.
  */
 export class ProviderModePolicy extends Context.Service<
   ProviderModePolicy,
-  ProviderMode
+  boolean
 >()("ProviderModePolicy") {}
 
 /**
  * The same resource (identified by FQN) was registered (`yield*`ed) from two
  * places whose ambient {@link ProviderModePolicy} disagree — e.g. once inside
- * `local()` and once inside `live()`. Context-based decoration cannot decide
- * which one wins, so the engine fails loudly instead of silently picking one.
+ * `live()` and once without it. Context-based decoration cannot decide which
+ * one wins, so the engine fails loudly instead of silently picking one.
  *
  * Fix: register the resource once and close over the returned value, or make
- * both registration sites agree on the mode.
+ * both registration sites agree.
  */
 export class ConflictingProviderModeError extends Data.TaggedError(
   "ConflictingProviderModeError",
@@ -67,48 +50,33 @@ export class ConflictingProviderModeError extends Data.TaggedError(
   /** The mode captured at the first registration site (undefined = default). */
   existingMode: ProviderMode | undefined;
   /** The explicit mode at the conflicting registration site. */
-  conflictingMode: ProviderMode;
+  conflictingMode: ProviderMode | undefined;
 }> {}
 
 /**
- * Pin resources registered within the wrapped effect to the **local**
- * provider, regardless of whether the run is `alchemy dev` or
- * `alchemy deploy`.
+ * Run the wrapped resources **live even during `alchemy dev`** — the
+ * opt-out from local emulation. During `alchemy deploy` this is a no-op
+ * (everything is live).
  *
- * `local(false)` pins to live instead; an `Effect<boolean>` may be passed to
- * decide dynamically (mirroring `adopt` / `retain`).
- */
-export const local: {
-  (
-    enabled?: boolean,
-  ): <A, E, R = never>(
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E, R>;
-  <R1 = never>(
-    enabled: Effect.Effect<boolean, never, R1>,
-  ): <A, E, R2 = never>(
-    effect: Effect.Effect<A, E, R2>,
-  ) => Effect.Effect<A, E, R1 | R2>;
-} = ((enabled: boolean | Effect.Effect<boolean, never, any> = true) =>
-  (eff: Effect.Effect<any, any, any>) =>
-    eff.pipe(
-      typeof enabled === "boolean"
-        ? Effect.provideService(ProviderModePolicy, enabled ? "local" : "live")
-        : Effect.provideServiceEffect(
-            ProviderModePolicy,
-            enabled.pipe(
-              Effect.map((a): ProviderMode => (a ? "local" : "live")),
-            ),
-          ),
-    )) as any;
-
-/**
- * Pin resources registered within the wrapped effect to the **live**
- * provider, regardless of whether the run is `alchemy dev` or
- * `alchemy deploy`.
+ * Captured at registration time like `adopt()` / `retain()`, so it can be
+ * applied to a single resource or a whole scope:
  *
- * `live(false)` pins to local instead; an `Effect<boolean>` may be passed to
- * decide dynamically (mirroring `adopt` / `retain`).
+ * ```ts
+ * // This queue talks to real Cloudflare even in dev
+ * const queue = yield* Queue("Jobs", {}).pipe(Alchemy.live());
+ *
+ * // Everything in this scope runs live in dev
+ * yield* Effect.gen(function* () {
+ *   const queue = yield* Queue("Jobs", {});
+ *   const consumer = yield* Consumer("JobsConsumer", { queue });
+ * }).pipe(Alchemy.live());
+ * ```
+ *
+ * `live(false)` (or an `Effect<boolean>` resolving to false) removes the
+ * pin — the resource follows the run default again.
+ *
+ * Providers with a single implementation are mode-agnostic and already run
+ * live in dev; `live()` on them is a no-op.
  */
 export const live: {
   (
@@ -125,27 +93,22 @@ export const live: {
   (eff: Effect.Effect<any, any, any>) =>
     eff.pipe(
       typeof enabled === "boolean"
-        ? Effect.provideService(ProviderModePolicy, enabled ? "live" : "local")
-        : Effect.provideServiceEffect(
-            ProviderModePolicy,
-            enabled.pipe(
-              Effect.map((a): ProviderMode => (a ? "live" : "local")),
-            ),
-          ),
+        ? Effect.provideService(ProviderModePolicy, enabled)
+        : Effect.provideServiceEffect(ProviderModePolicy, enabled),
     )) as any;
 
 /**
  * Resolve the run-level default provider mode:
  *
- * 1. An ambient {@link ProviderModePolicy} (e.g. `local()` wrapped around a
- *    whole deploy) takes precedence.
+ * 1. An ambient {@link ProviderModePolicy} of `true` (e.g. `live()` wrapped
+ *    around a whole program) forces `"live"`.
  * 2. Otherwise `AlchemyContext.dev` decides: `dev: true` → `"local"`.
  * 3. Without an AlchemyContext (bare engine tests), default to `"live"`.
  */
 export const defaultProviderMode: Effect.Effect<ProviderMode> = Effect.gen(
   function* () {
-    const fromService = yield* Effect.serviceOption(ProviderModePolicy);
-    if (Option.isSome(fromService)) return fromService.value;
+    const forceLive = yield* Effect.serviceOption(ProviderModePolicy);
+    if (Option.isSome(forceLive) && forceLive.value) return "live" as const;
     const ctx = yield* Effect.serviceOption(AlchemyContext);
     return Option.match(ctx, {
       onNone: () => "live" as const,

@@ -3,11 +3,11 @@
  *
  * Covers the engine behavior added by ProviderMode / ProviderLayer.dual:
  *   - the resolved mode is stamped on state (`providerMode`) on every commit
- *   - `local()` / `live()` pin a resource's mode; mode-agnostic providers
- *     satisfy any requested mode (blanket `local()` over mixed constructs)
+ *   - dev runs resolve local providers; `live()` opts a resource out of
+ *     local emulation; mode-agnostic providers satisfy any requested mode
  *   - switching modes plans a REPLACEMENT; the old generation / orphan row
  *     is deleted with the provider variant of the mode that created it
- *   - unstamped (legacy) rows are assumed to be the current run's mode
+ *   - unstamped rows are assumed to be the current run's mode
  *   - conflicting mode decorations on the same FQN die loudly
  *   - the non-default variant is only constructed when demanded (laziness)
  *
@@ -17,7 +17,7 @@
  */
 import * as LocalProvider from "@/Local/LocalProvider.ts";
 import * as Provider from "@/Provider.ts";
-import { live, local, type ProviderMode } from "@/ProviderMode.ts";
+import { live } from "@/ProviderMode.ts";
 import { Resource } from "@/Resource";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
@@ -28,6 +28,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import {
   Bucket,
+  inDev,
   ModalResource,
   modalBuilds,
   modalCalls,
@@ -88,45 +89,68 @@ describe("provider modes", () => {
       }),
   );
 
-  test.provider("local() pins a resource to the local provider", (stack) =>
-    Effect.gen(function* () {
-      const output = yield* modal("A", "v1").pipe(local(), stack.deploy);
-      expect(output.runtime).toEqual("local");
-      expect((yield* getState("A"))?.providerMode).toEqual("local");
+  test.provider(
+    "a dev run resolves the local provider; live-only resources stay live",
+    (stack) =>
+      Effect.gen(function* () {
+        const output = yield* inDev(modal("A", "v1").pipe(stack.deploy));
+        expect(output.runtime).toEqual("local");
+        expect((yield* getState("A"))?.providerMode).toEqual("local");
 
-      // A mode-agnostic resource under the same blanket `local()` deploys
-      // with its single implementation and stays unstamped — this is what
-      // makes `local()` usable over constructs that mix emulatable and
-      // live-only resources.
-      yield* Effect.gen(function* () {
-        yield* ModalResource("A", { value: "v1" });
-        yield* Bucket("B", {});
-        return {};
-      }).pipe(local(), stack.deploy);
-      expect((yield* getState("B"))?.providerMode).toBeUndefined();
+        // A mode-agnostic resource in the same dev run deploys with its
+        // single implementation and stays unstamped — constructs mixing
+        // emulatable and live-only resources just work.
+        yield* inDev(
+          Effect.gen(function* () {
+            yield* ModalResource("A", { value: "v1" });
+            yield* Bucket("B", {});
+            return {};
+          }).pipe(stack.deploy),
+        );
+        expect((yield* getState("B"))?.providerMode).toBeUndefined();
 
-      yield* stack.destroy();
-    }),
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "live() opts a resource out of local emulation during dev",
+    (stack) =>
+      Effect.gen(function* () {
+        const output = yield* inDev(
+          modal("A", "v1").pipe(live(), stack.deploy),
+        );
+        expect(output.runtime).toEqual("live");
+        expect((yield* getState("A"))?.providerMode).toEqual("live");
+
+        // Dropping live() in a later dev run switches it back to local —
+        // a replacement like any other mode switch.
+        const back = yield* inDev(modal("A", "v1").pipe(stack.deploy));
+        expect(back.runtime).toEqual("local");
+        expect((yield* getState("A"))?.providerMode).toEqual("local");
+
+        yield* stack.destroy();
+      }),
   );
 
   test.provider(
     "switching modes replaces: new mode creates, old mode deletes",
     (stack) =>
       Effect.gen(function* () {
-        // 1. dev-style deploy: local instance.
-        yield* modal("A", "v1").pipe(local(), stack.deploy);
+        // 1. dev run: local instance.
+        yield* inDev(modal("A", "v1").pipe(stack.deploy));
         expect((yield* getState("A"))?.providerMode).toEqual("local");
         const localInstanceId = (yield* getState("A"))?.instanceId;
 
-        // 2. same props, live mode → the plan must be a replacement even
-        //    though nothing about the props changed.
-        const plan = yield* modal("A", "v1").pipe(live(), stack.plan);
+        // 2. same props, deploy (live) run → the plan must be a
+        //    replacement even though nothing about the props changed.
+        const plan = yield* modal("A", "v1").pipe(stack.plan);
         expect(plan.resources["A"].action).toEqual("replace");
 
         // 3. apply: the live variant reconciles the new generation, the
         //    LOCAL variant (the mode that created it) deletes the old one.
         const before = callsFor(stack.name).length;
-        const output = yield* modal("A", "v1").pipe(live(), stack.deploy);
+        const output = yield* modal("A", "v1").pipe(stack.deploy);
         expect(output.runtime).toEqual("live");
 
         const state = yield* getState("A");
@@ -150,7 +174,7 @@ describe("provider modes", () => {
 
         // 4. switch back: live → local replaces again, deleted by LIVE.
         const beforeBack = callsFor(stack.name).length;
-        const back = yield* modal("A", "v1").pipe(local(), stack.deploy);
+        const back = yield* inDev(modal("A", "v1").pipe(stack.deploy));
         expect(back.runtime).toEqual("local");
         expect((yield* getState("A"))?.providerMode).toEqual("local");
         expect(callsFor(stack.name).slice(beforeBack)).toContainEqual({
@@ -168,7 +192,7 @@ describe("provider modes", () => {
     "an orphaned local row is deleted by the local provider during a live run",
     (stack) =>
       Effect.gen(function* () {
-        yield* modal("A", "v1").pipe(local(), stack.deploy);
+        yield* inDev(modal("A", "v1").pipe(stack.deploy));
 
         // Remove the resource from the program and deploy in (default)
         // live mode — the orphan delete must still route to the LOCAL
@@ -213,10 +237,10 @@ describe("provider modes", () => {
           yield* Bucket("B", {});
           return {};
         });
-        yield* program.pipe(local(), stack.deploy);
+        yield* inDev(program.pipe(stack.deploy));
         expect((yield* getState("B"))?.providerMode).toBeUndefined();
 
-        const plan = yield* program.pipe(live(), stack.plan);
+        const plan = yield* program.pipe(stack.plan);
         expect(plan.resources["B"].action).toEqual("noop");
 
         yield* stack.destroy();
@@ -228,7 +252,7 @@ describe("provider modes", () => {
     (stack) =>
       Effect.gen(function* () {
         const exit = yield* Effect.gen(function* () {
-          yield* ModalResource("A", { value: "v1" }).pipe(local());
+          yield* ModalResource("A", { value: "v1" });
           yield* ModalResource("A", { value: "v1" }).pipe(live());
           return {};
         }).pipe(stack.deploy, Effect.exit);
@@ -246,12 +270,14 @@ describe("provider modes", () => {
         // Re-registering WITHOUT an explicit ambient mode inherits the
         // original registration — the common "reference it from elsewhere"
         // pattern must keep working.
-        const output = yield* Effect.gen(function* () {
-          yield* ModalResource("A", { value: "v1" }).pipe(local());
-          const again = yield* ModalResource("A", { value: "v1" });
-          return { runtime: again.runtime };
-        }).pipe(stack.deploy);
-        expect(output.runtime).toEqual("local");
+        const output = yield* inDev(
+          Effect.gen(function* () {
+            yield* ModalResource("A", { value: "v1" }).pipe(live());
+            const again = yield* ModalResource("A", { value: "v1" });
+            return { runtime: again.runtime };
+          }).pipe(stack.deploy),
+        );
+        expect(output.runtime).toEqual("live");
 
         yield* stack.destroy();
       }),

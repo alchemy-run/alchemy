@@ -3,7 +3,6 @@ import { Cli } from "@/Cli/Cli";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
-import { live, local } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
 import {
@@ -33,6 +32,7 @@ import {
   DurationResource,
   FqnProbe,
   Function,
+  inDev,
   KindStablesResource,
   ModalResource,
   modalCalls,
@@ -5393,10 +5393,9 @@ describe("provider modes (local ⇄ live)", () => {
     "providerMode is stamped through create → update → mode-switch replace → same-mode replace",
     (stack) =>
       Effect.gen(function* () {
-        // ── create (local) ──
-        const created = yield* modal("A", { value: "v1" }).pipe(
-          local(),
-          stack.deploy,
+        // ── create (dev run → local) ──
+        const created = yield* inDev(
+          modal("A", { value: "v1" }).pipe(stack.deploy),
         );
         expect(created.runtime).toEqual("local");
         const afterCreate = yield* getState("A");
@@ -5404,8 +5403,8 @@ describe("provider modes (local ⇄ live)", () => {
         expect(afterCreate?.providerMode).toEqual("local");
         const localInstanceId = afterCreate?.instanceId;
 
-        // ── update (still local) ──
-        yield* modal("A", { value: "v2" }).pipe(local(), stack.deploy);
+        // ── update (still a dev run → local) ──
+        yield* inDev(modal("A", { value: "v2" }).pipe(stack.deploy));
         const afterUpdate = yield* getState("A");
         expect(afterUpdate?.status).toEqual("updated");
         expect(afterUpdate?.providerMode).toEqual("local");
@@ -5414,10 +5413,7 @@ describe("provider modes (local ⇄ live)", () => {
         // ── mode switch (local → live): replacement; the LOCAL provider
         //    deletes the old generation, the LIVE provider creates the new ──
         const before = callsFor(stack.name).length;
-        const switched = yield* modal("A", { value: "v2" }).pipe(
-          live(),
-          stack.deploy,
-        );
+        const switched = yield* modal("A", { value: "v2" }).pipe(stack.deploy);
         expect(switched.runtime).toEqual("live");
         const afterSwitch = yield* getState("A");
         expect(afterSwitch?.status).toEqual("created");
@@ -5442,7 +5438,6 @@ describe("provider modes (local ⇄ live)", () => {
         //    its own (live) mode ──
         const beforeReplace = callsFor(stack.name).length;
         yield* modal("A", { value: "v2", replaceValue: "r2" }).pipe(
-          live(),
           stack.deploy,
         );
         const afterReplace = yield* getState("A");
@@ -5525,7 +5520,7 @@ describe("provider modes (local ⇄ live)", () => {
     "stack.destroy tears down a local row with the local provider during a live-default run",
     (stack) =>
       Effect.gen(function* () {
-        yield* modal("A", { value: "v1" }).pipe(local(), stack.deploy);
+        yield* inDev(modal("A", { value: "v1" }).pipe(stack.deploy));
         expect((yield* getState("A"))?.providerMode).toEqual("local");
 
         // `stack.destroy()` runs without any mode policy — the run default
@@ -5646,7 +5641,7 @@ describe("provider modes (local ⇄ live)", () => {
     "a failed mode-switch create leaves the old runtime's instance intact, then converges on retry",
     (stack) =>
       Effect.gen(function* () {
-        yield* modal("A", { value: "v1" }).pipe(local(), stack.deploy);
+        yield* inDev(modal("A", { value: "v1" }).pipe(stack.deploy));
         const localRow = yield* getState("A");
         expect(localRow?.providerMode).toEqual("local");
 
@@ -5659,7 +5654,6 @@ describe("provider modes (local ⇄ live)", () => {
           create: () => Effect.fail(new ResourceFailure()),
         });
         const exit = yield* modal("A", { value: "v1" }).pipe(
-          live(),
           stack.deploy,
           Effect.provide(failCreate),
           Effect.exit,
@@ -5681,10 +5675,7 @@ describe("provider modes (local ⇄ live)", () => {
         // live create succeeds, and GC finally reclaims the local instance
         // with the LOCAL provider.
         const beforeRetry = callsFor(stack.name).length;
-        const retried = yield* modal("A", { value: "v1" }).pipe(
-          live(),
-          stack.deploy,
-        );
+        const retried = yield* modal("A", { value: "v1" }).pipe(stack.deploy);
         expect(retried.runtime).toEqual("live");
         expect(callsFor(stack.name).slice(beforeRetry)).toContainEqual({
           stack: stack.name,
@@ -5785,14 +5776,14 @@ describe("provider modes (local ⇄ live)", () => {
           return { runtime: a.runtime, string: b.string };
         });
 
-        const dev = yield* program.pipe(local(), stack.deploy);
+        const dev = yield* inDev(program.pipe(stack.deploy));
         expect(dev.runtime).toEqual("local");
         expect(dev.string).toEqual("v1");
 
         // Switching A to live replaces it; B (mode-agnostic) re-reconciles
         // against the replacement's fresh attrs instead of nooping on stale
         // ones, and both settle in a terminal state.
-        const promoted = yield* program.pipe(live(), stack.deploy);
+        const promoted = yield* program.pipe(stack.deploy);
         expect(promoted.runtime).toEqual("live");
         expect(promoted.string).toEqual("v1");
 

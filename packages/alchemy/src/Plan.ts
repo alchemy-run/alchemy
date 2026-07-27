@@ -276,8 +276,8 @@ export const make = <A>(
     });
 
     // The run-level default provider mode (`alchemy dev` → "local",
-    // `alchemy deploy` → "live"). A resource-scoped `local()`/`live()`
-    // (captured on the resource at registration as `Mode`) overrides it.
+    // `alchemy deploy` → "live"). A resource-scoped `live()` (captured on
+    // the resource at registration as `Mode`) opts out of local emulation.
     const runDefaultMode = yield* defaultProviderMode;
 
     /**
@@ -286,9 +286,9 @@ export const make = <A>(
      *
      * The mode only "sticks" when the provider actually distinguishes
      * modes (registered via `ProviderLayer.dual`). Mode-agnostic providers
-     * satisfy any requested mode with their single implementation — this
-     * is what lets a blanket `local()` cover a construct that mixes
-     * emulatable resources with live-only ones (e.g. R2 buckets).
+     * satisfy any requested mode with their single implementation — in a
+     * dev run, a construct that mixes emulatable resources with live-only
+     * ones (e.g. R2 buckets) just works.
      */
     const resolveProviderAndMode = Effect.fn(function* (resource: {
       Type: string;

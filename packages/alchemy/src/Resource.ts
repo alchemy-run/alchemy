@@ -137,10 +137,9 @@ export interface ResourceLike<
   Adopt: boolean | undefined;
   /**
    * Per-resource provider mode captured from the ambient
-   * {@link ProviderModePolicy} at registration time (e.g. via
-   * `.pipe(local())` / `.pipe(live())`). `undefined` means no
-   * resource-scoped override — the planner falls back to the run default
-   * (`AlchemyContext.dev`).
+   * {@link ProviderModePolicy} at registration time. `"live"` when the
+   * resource was pinned via `.pipe(live())` (opting out of local emulation
+   * during dev); `undefined` means the run default (`AlchemyContext.dev`).
    */
   Mode: ProviderMode | undefined;
   /** @internal phantom */
@@ -278,9 +277,13 @@ export function Resource<R extends ResourceLike>(
       const namespace = yield* CurrentNamespace;
       const fqn = toFqn(namespace, id);
 
-      const ambientMode = yield* Effect.serviceOption(ProviderModePolicy).pipe(
-        Effect.map(Option.getOrUndefined),
-      );
+      // `live()` opts resources out of local emulation during dev. The
+      // captured Mode is either "live" (pinned) or undefined (run default).
+      const ambientPolicy = yield* Effect.serviceOption(ProviderModePolicy);
+      const ambientMode: ProviderMode | undefined =
+        Option.isSome(ambientPolicy) && ambientPolicy.value
+          ? "live"
+          : undefined;
 
       const existing = stack.resources[fqn];
       if (existing) {
@@ -291,17 +294,17 @@ export function Resource<R extends ResourceLike>(
         // instead of silently picking one. A later site with NO ambient
         // policy simply inherits the registered resource (the common
         // "reference it from elsewhere" pattern).
-        if (ambientMode !== undefined && existing.Mode !== ambientMode) {
+        if (Option.isSome(ambientPolicy) && existing.Mode !== ambientMode) {
           return yield* Effect.die(
             new ConflictingProviderModeError({
               message:
                 `Resource '${fqn}' was registered with provider mode ` +
                 `'${existing.Mode ?? "default"}' but is now being registered ` +
-                `with conflicting mode '${ambientMode}'. A resource must ` +
-                "resolve to a single provider mode: register it once and " +
-                "close over the returned value, or make both registration " +
-                "sites agree (e.g. wrap both in the same `local()`/`live()` " +
-                "scope).",
+                `with conflicting mode '${ambientMode ?? "default"}'. A ` +
+                "resource must resolve to a single provider mode: register " +
+                "it once and close over the returned value, or make both " +
+                "registration sites agree (e.g. wrap both in the same " +
+                "`live()` scope).",
               fqn,
               existingMode: existing.Mode,
               conflictingMode: ambientMode,

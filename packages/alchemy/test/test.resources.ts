@@ -1,4 +1,5 @@
 import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext.ts";
 import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
 import * as ProviderLayer from "@/Local/ProviderLayer.ts";
@@ -1125,6 +1126,20 @@ export const fqnProbeProvider = () =>
     }),
     delete: Effect.fn(function* () {}),
   });
+
+/**
+ * Run `eff` as if under `alchemy dev`: overrides `AlchemyContext.dev` so
+ * plans and applies inside resolve the LOCAL provider mode by default —
+ * exactly what the `alchemy dev` command does for a whole run.
+ */
+export const inDev = <A, E, R>(
+  eff: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R | AlchemyContext> =>
+  AlchemyContext.pipe(
+    Effect.flatMap((ctx) =>
+      eff.pipe(Effect.provideService(AlchemyContext, { ...ctx, dev: true })),
+    ),
+  );
 
 // ModalResource — a resource registered via `ProviderLayer.dual` with
 // distinct live and local implementations. Used by provider-mode tests to

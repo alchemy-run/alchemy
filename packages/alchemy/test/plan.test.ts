@@ -6,7 +6,7 @@ import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
-import { live, local } from "@/ProviderMode.ts";
+import { live } from "@/ProviderMode.ts";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -33,6 +33,7 @@ import {
   BindingTarget,
   Bucket,
   Function,
+  inDev,
   KindStablesResource,
   ModalResource,
   NoPrecreateBindingTarget,
@@ -3551,11 +3552,9 @@ describe("provider modes (local ⇄ live)", () => {
   );
 
   test(
-    "local() pins the node's mode",
+    "a dev run resolves the local mode onto the node",
     Effect.gen(function* () {
-      const plan = yield* makePlan(
-        ModalResource("A", { value: "v1" }).pipe(local()),
-      );
+      const plan = yield* inDev(makePlan(ModalResource("A", { value: "v1" })));
       expect(plan.resources.A).toMatchObject({
         action: "create",
         mode: "local",
@@ -3564,16 +3563,31 @@ describe("provider modes (local ⇄ live)", () => {
   );
 
   test(
-    "mode-agnostic resources plan with mode undefined even under a blanket local()",
+    "live() opts a resource out of local emulation during dev",
+    Effect.gen(function* () {
+      const plan = yield* inDev(
+        makePlan(ModalResource("A", { value: "v1" }).pipe(live())),
+      );
+      expect(plan.resources.A).toMatchObject({
+        action: "create",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "mode-agnostic resources plan with mode undefined even in a dev run",
     Effect.gen(function* () {
       // A single-implementation provider (no dual registration) satisfies
-      // any requested mode — this is what makes `local()` usable over a
-      // construct that mixes emulatable and live-only resources.
-      const plan = yield* makePlan(
-        Effect.gen(function* () {
-          yield* ModalResource("A", { value: "v1" });
-          yield* TestResource("T", { string: "x" });
-        }).pipe(local()),
+      // any requested mode — constructs that mix emulatable and live-only
+      // resources just work in dev.
+      const plan = yield* inDev(
+        makePlan(
+          Effect.gen(function* () {
+            yield* ModalResource("A", { value: "v1" });
+            yield* TestResource("T", { string: "x" });
+          }),
+        ),
       );
       expect(plan.resources.A!.mode).toBe("local");
       expect(plan.resources.T!.mode).toBeUndefined();
@@ -3601,9 +3615,7 @@ describe("provider modes (local ⇄ live)", () => {
     "the same mode plans normally (noop on identical props)",
     Effect.gen(function* () {
       yield* seed({ A: modalState("A") }); // providerMode: "local"
-      const plan = yield* makePlan(
-        ModalResource("A", { value: "v1" }).pipe(local()),
-      );
+      const plan = yield* inDev(makePlan(ModalResource("A", { value: "v1" })));
       expect(plan.resources.A).toMatchObject({ action: "noop" });
     }),
   );
@@ -3612,9 +3624,7 @@ describe("provider modes (local ⇄ live)", () => {
     "switching live → local replaces too",
     Effect.gen(function* () {
       yield* seed({ A: modalState("A", { providerMode: "live" }) });
-      const plan = yield* makePlan(
-        ModalResource("A", { value: "v1" }).pipe(local()),
-      );
+      const plan = yield* inDev(makePlan(ModalResource("A", { value: "v1" })));
       expect(plan.resources.A).toMatchObject({
         action: "replace",
         mode: "local",
@@ -3641,17 +3651,17 @@ describe("provider modes (local ⇄ live)", () => {
     Effect.gen(function* () {
       yield* seed({ A: modalState("A", { providerMode: undefined }) });
 
-      // Default (live) run: assumed live → noop. Explicit local(): the row
-      // is ALSO assumed local (assume-current applies to whatever mode this
-      // plan resolves) → still no replacement churn; the row is stamped on
-      // its next write.
+      // Deploy (live) run: assumed live → noop. Dev run: the row is ALSO
+      // assumed local (assume-current applies to whatever mode this plan
+      // resolves) → still no replacement churn; the row is stamped on its
+      // next write.
       const liveDefault = yield* makePlan(ModalResource("A", { value: "v1" }));
       expect(liveDefault.resources.A).toMatchObject({ action: "noop" });
 
-      const pinnedLocal = yield* makePlan(
-        ModalResource("A", { value: "v1" }).pipe(local()),
+      const devRun = yield* inDev(
+        makePlan(ModalResource("A", { value: "v1" })),
       );
-      expect(pinnedLocal.resources.A).toMatchObject({ action: "noop" });
+      expect(devRun.resources.A).toMatchObject({ action: "noop" });
     }),
   );
 
@@ -3680,9 +3690,7 @@ describe("provider modes (local ⇄ live)", () => {
           providerMode: undefined,
         },
       });
-      const plan = yield* makePlan(
-        TestResource("T", { string: "x" }).pipe(local()),
-      );
+      const plan = yield* inDev(makePlan(TestResource("T", { string: "x" })));
       expect(plan.resources.T).toMatchObject({ action: "noop" });
     }),
   );
@@ -3839,21 +3847,21 @@ describe("provider modes (local ⇄ live)", () => {
         },
       });
 
-      const program = (mode: "switch" | "same") =>
-        Effect.gen(function* () {
-          const a = yield* ModalResource("A", { value: "v1" });
-          yield* TestResource("B", { string: a.value });
-        }).pipe(mode === "same" ? local() : live());
+      const program = Effect.gen(function* () {
+        const a = yield* ModalResource("A", { value: "v1" });
+        yield* TestResource("B", { string: a.value });
+      });
 
-      // Mode switch (local row, live plan): A is being replaced, so its
+      // Mode switch (local row, deploy plan): A is being replaced, so its
       // attrs are NOT stable — B must observe an unresolved upstream and
       // plan an update rather than nooping against stale values.
-      const switched = yield* makePlan(program("switch"));
+      const switched = yield* makePlan(program);
       expect(switched.resources.A).toMatchObject({ action: "replace" });
       expect(switched.resources.B).toMatchObject({ action: "update" });
 
-      // Control — same mode: A noops, its persisted attrs resolve, B noops.
-      const same = yield* makePlan(program("same"));
+      // Control — same mode (dev run): A noops, its persisted attrs
+      // resolve, B noops.
+      const same = yield* inDev(makePlan(program));
       expect(same.resources.A).toMatchObject({ action: "noop" });
       expect(same.resources.B).toMatchObject({ action: "noop" });
     }),

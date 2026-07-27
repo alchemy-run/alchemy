@@ -26,6 +26,7 @@ export * from "./PhysicalName.ts";
 export * as Plan from "./Plan.ts";
 export { Provider, ProviderCollection } from "./Provider.ts";
 export * as ProviderMode from "./ProviderMode.ts";
+export { live } from "./ProviderMode.ts";
 export * from "./Random.ts";
 export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";

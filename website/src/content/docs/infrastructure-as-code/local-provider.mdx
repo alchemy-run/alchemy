@@ -36,48 +36,47 @@ provider deletes the old instance. This holds everywhere a delete can
 happen — replacements, orphans, `alchemy destroy` — so deploying right
 after a dev session tears the local instances down with the local provider.
 
-## Pinning a mode
+## Opting out of local emulation
 
-The run default comes from the command: `alchemy dev` resolves `"local"`,
-`alchemy deploy` resolves `"live"`.
+The mode comes from the command — `alchemy dev` resolves `"local"`,
+`alchemy deploy` resolves `"live"` — and the one knob is `live()`: *"run
+this live even in dev"*.
 
-### Pin one resource
+### Opt out one resource
 
 ```typescript
 import * as Alchemy from "alchemy";
 
-const worker = yield* Worker("Api", { ... }).pipe(
-  Alchemy.ProviderMode.local(),
-);
+const queue = yield* Queue("Jobs", {}).pipe(Alchemy.live());
 ```
 
-`local()` (and its inverse `live()`) is captured at registration like
-`adopt()` — this Worker stays local even during `alchemy deploy`.
+Even during `alchemy dev`, this queue talks to the real cloud. During
+`alchemy deploy` the pin is a no-op — everything is live anyway.
 
-### Pin a whole scope
+### Opt out a whole scope
 
 ```typescript
 yield* Effect.gen(function* () {
   const queue = yield* Queue("Jobs", {});
   const consumer = yield* Consumer("JobsConsumer", { queue });
-}).pipe(Alchemy.ProviderMode.live());
+}).pipe(Alchemy.live());
 ```
 
-The policy is ambient, so everything registered inside the scope is pinned.
+The policy is ambient and captured at registration (like `adopt()`), so
+everything registered inside the scope runs live.
 
 ### Mode-agnostic resources
 
 A provider with a single implementation (an R2 bucket, a DNS record)
-satisfies *any* requested mode — it never stamps and never replaces on a
-switch. That makes a blanket `local()` safe over mixed constructs: the
-Worker goes local, the bucket stays live.
+already runs live in dev — `live()` on it is a no-op. Mixed constructs
+just work: the Worker goes local, the bucket stays live.
 
 ### Conflicts fail loudly
 
-Registering the same resource under `local()` in one place and `live()` in
-another dies with `ConflictingProviderModeError`. Re-registering with *no*
-ambient policy inherits the original mode, so referencing a resource from
-another file keeps working.
+Applying `live()` to a resource that was already registered without it
+dies with `ConflictingProviderModeError` — context-based decoration can't
+silently pick a winner. A bare re-registration *after* `live()` inherits
+the pin, so referencing a resource from another file keeps working.
 
 ## Register both modes: `ProviderLayer.dual`
 
@@ -234,19 +233,22 @@ provider registered via `dual`. Mode tracking applies either way.
 ## Testing
 
 ```typescript
+const { test } = Test.make({ providers, dev: true }); // dev-mode default
+
 test.provider("promotes a dev worker to a live worker", (stack) =>
   Effect.gen(function* () {
-    yield* program.pipe(Alchemy.ProviderMode.local(), stack.deploy);
-    // Same props, live mode: planned as a REPLACEMENT — the live provider
-    // creates the deployed worker, the local provider kills workerd.
-    yield* program.pipe(Alchemy.ProviderMode.live(), stack.deploy);
+    yield* program.pipe(stack.deploy); // local (dev default)
+    // Same props, pinned live: planned as a REPLACEMENT — the live
+    // provider creates the deployed worker, the local provider kills
+    // workerd.
+    yield* program.pipe(Alchemy.live(), stack.deploy);
     yield* stack.destroy();
   }),
 );
 ```
 
-The mode combinators work in tests exactly like in programs; alternatively,
-`Test.make({ providers, dev: true })` defaults a whole test file to local.
+`Test.make({ dev: true })` gives the file `alchemy dev` semantics, and
+`live()` works in tests exactly like in programs.
 
 ## Reference implementations
 
