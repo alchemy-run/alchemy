@@ -4,19 +4,9 @@ description: Emulate resources on the developer's machine during `alchemy dev` �
 ---
 
 During `alchemy dev`, some resources shouldn't touch the cloud at all: a
-Worker runs in a local `workerd`, a queue is an in-memory registry, a dev
-server is a child process on your machine. A **local provider** is the
-implementation that serves a resource type in that mode, alongside the
-**live provider** that serves it during `alchemy deploy`.
-
-This guide covers the three pieces:
-
-1. **Provider modes** — how the engine tracks which mode reconciled each
-   resource and what happens when you switch.
-2. **`ProviderLayer.dual`** — registering a live and a local implementation
-   for one resource type.
-3. **`LocalProvider.make`** — the standard runner for local providers that
-   manage a long-running process.
+Worker runs in a local `workerd`, a dev server is a child process on your
+machine. A **local provider** is the implementation that serves a resource
+type in that mode, alongside the **live provider** used by `alchemy deploy`.
 
 If you haven't built a provider before, start with
 [Custom Provider](/infrastructure-as-code/custom-provider) — a local
@@ -24,69 +14,77 @@ provider is just a second implementation of the same lifecycle contract.
 
 ## Provider modes
 
-Every resource reconciles in one of two modes:
+Every resource reconciles in one of two modes — `"live"` (real cloud) or
+`"local"` (emulated) — and the mode that last reconciled it is persisted on
+its state row as `providerMode`.
 
-- **`"live"`** — the provider converges real cloud state (`alchemy deploy`)
-- **`"local"`** — the provider emulates the resource locally (`alchemy dev`)
+### Switching modes is a replacement
 
-The mode that last reconciled a resource is persisted on its state row as
-`providerMode`, and the engine enforces three rules around it:
+```text
+Plan: 1 to replace
+[Api] ± replace   (providerMode: local → live)
+```
 
-- **Switching modes is a replacement.** A local `workerd` instance and a
-  deployed Worker are different physical things — when a row's persisted
-  mode differs from the mode the current run resolves, the plan is a
-  `replace` (the provider `diff` is not even consulted; diffing props
-  across runtimes is meaningless).
-- **Deletes use the mode that created the row.** The new mode's provider
-  creates the replacement; the *old* mode's provider deletes the old
-  instance. This holds everywhere a delete can happen — replacement
-  cleanup, orphan deletion, `alchemy destroy` — even when the run's
-  default mode is different. Deploying right after a dev session cleanly
-  tears the local instances down with the local provider.
-- **Rows without a stamp are assumed to be the current run's mode.** State
-  written before modes existed doesn't churn; it's stamped on its next
-  write.
+A local `workerd` instance and a deployed Worker are different physical
+things, so when a row's persisted mode differs from the current run's mode,
+the plan is a `replace` — the provider `diff` isn't even consulted.
 
-### Pinning a mode: `local()` and `live()`
+### Deletes use the mode that created the row
 
-The run default comes from the command (`alchemy dev` → local,
-`alchemy deploy` → live). The `ProviderMode.local()` / `ProviderMode.live()`
-combinators override it for a resource — or everything in a scope —
-captured at registration time like `adopt()` and `retain()`:
+The new mode's provider creates the replacement; the **old** mode's
+provider deletes the old instance. This holds everywhere a delete can
+happen — replacements, orphans, `alchemy destroy` — so deploying right
+after a dev session tears the local instances down with the local provider.
+
+### Legacy rows
+
+A row without a `providerMode` stamp is assumed to be the current run's
+mode, so upgrading doesn't churn; it's stamped on its next write.
+
+## Pinning a mode
+
+The run default comes from the command: `alchemy dev` resolves `"local"`,
+`alchemy deploy` resolves `"live"`.
+
+### Pin one resource
 
 ```typescript
 import * as Alchemy from "alchemy";
 
-// Pin one resource to the local provider even during `alchemy deploy`
 const worker = yield* Worker("Api", { ... }).pipe(
   Alchemy.ProviderMode.local(),
 );
+```
 
-// Pin everything inside a scope to live providers even during `alchemy dev`
+`local()` (and its inverse `live()`) is captured at registration like
+`adopt()` — this Worker stays local even during `alchemy deploy`.
+
+### Pin a whole scope
+
+```typescript
 yield* Effect.gen(function* () {
   const queue = yield* Queue("Jobs", {});
   const consumer = yield* Consumer("JobsConsumer", { queue });
 }).pipe(Alchemy.ProviderMode.live());
 ```
 
-Two properties make this safe to use broadly:
+The policy is ambient, so everything registered inside the scope is pinned.
 
-- **Mode-agnostic providers satisfy any requested mode.** A provider with a
-  single implementation (most providers — an R2 bucket, a DNS record) never
-  stamps a mode and never replaces on a switch. A blanket `local()` over a
-  construct that mixes emulatable and live-only resources does the right
-  thing: the Worker goes local, the bucket stays live.
-- **Conflicts fail loudly.** Registering the same resource from two places
-  whose ambient policies disagree (once under `local()`, once under
-  `live()`) dies with `ConflictingProviderModeError` — context-based
-  decoration can't silently pick a winner. Re-registering with *no* ambient
-  policy inherits the original mode, so the common "reference it from
-  another file" pattern keeps working.
+### Mode-agnostic resources
+
+A provider with a single implementation (an R2 bucket, a DNS record)
+satisfies *any* requested mode — it never stamps and never replaces on a
+switch. That makes a blanket `local()` safe over mixed constructs: the
+Worker goes local, the bucket stays live.
+
+### Conflicts fail loudly
+
+Registering the same resource under `local()` in one place and `live()` in
+another dies with `ConflictingProviderModeError`. Re-registering with *no*
+ambient policy inherits the original mode, so referencing a resource from
+another file keeps working.
 
 ## Register both modes: `ProviderLayer.dual`
-
-A resource type with distinct live and local implementations registers them
-together:
 
 ```typescript
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -100,35 +98,31 @@ export const WorkerProvider = () =>
   });
 ```
 
-`dual` registers the run's default mode eagerly and exposes the other as a
-**lazy, memoized** variant. The engine resolves the concrete variant per
-resource — including building the non-default one on demand when a row from
-the other mode needs deleting. That laziness is why mode-specific dependency
-layers (the `workerd` runtime, Docker) compose *inside* the `local` thunk
-rather than being provided globally: a plain `alchemy deploy` never
-constructs them unless a local-mode row actually needs cleanup.
+`dual` registers the run's default mode eagerly and builds the other
+**lazily** — e.g. only when a live deploy needs to delete a local-mode row.
+
+### Compose local deps inside the thunk
+
+Mode-specific dependency layers (`workerd`, Docker) go inside the `local`
+thunk, never globally — that's what keeps a plain `alchemy deploy` from
+constructing local machinery it doesn't need.
 
 :::note[Share dependency layers by reference]
-Variant builds are memoized by layer identity against the stack build's
-memo map. If several local providers share a dependency layer (Cloudflare's
-`localRuntimeServices()` is shared by the Worker, Queue, Consumer, and
-Container providers), the factory must return a **module-memoized layer
-reference** so they all get one instance per stack build.
+Variant builds are memoized by layer identity. If several local providers
+share a dependency layer (Cloudflare's `localRuntimeServices()`), the
+factory must return a module-memoized reference so they all get one
+instance per stack build.
 :::
 
 ## Long-running processes: `LocalProvider.make`
 
-Most local providers manage a process with a lifetime — a spawned dev
-server, a `workerd` instance. That shape has a problem ordinary providers
-don't: the "physical resource" is a running process that **state can't see**.
-A state row can say `created` while the process is dead (the previous dev
-session ended), and a redundant reconcile can arrive while it's healthy. So
-every process-shaped local provider needs the same machinery: an instance
-registry ("is something running right now?"), a config comparison ("was it
-started with what I'm being asked for?"), and restart/teardown choreography.
+A process-shaped local provider has a problem ordinary providers don't:
+the "physical resource" is a running process that **state can't see** — a
+row can say `created` while the process died with the last dev session.
+`LocalProvider.make` owns that machinery; you write how to boot one
+instance.
 
-`LocalProvider.make` generates all of it. You write how to **boot one
-instance**; the runner owns when instances start, restart, and die:
+### Declare the provider with `start`
 
 ```typescript
 import * as LocalProvider from "alchemy/Local/LocalProvider";
@@ -142,23 +136,9 @@ export const DevProviderLocal = () =>
       const { spawn } = yield* CommandExecutor;
 
       return {
-        start: Effect.fn(function* ({ news, invalidate }) {
-          // Acquire the process in the ambient Scope — it keeps running
-          // after `start` returns and is killed when the runner closes
-          // the scope on restart/delete.
+        start: Effect.fn(function* ({ news }) {
           const child = yield* spawn(news);
-
-          // Wait for readiness (a URL on stdout, a port bound, ...).
           const url = yield* waitForUrl(child);
-
-          // If the process dies on its own, drop it from the running
-          // registry so the next plan restarts it.
-          yield* child.exitCode.pipe(
-            Effect.exit,
-            Effect.flatMap(() => invalidate),
-            Effect.forkScoped,
-          );
-
           return { url };
         }),
       } satisfies LocalProvider.LocalProviderSpec<Dev>;
@@ -166,109 +146,124 @@ export const DevProviderLocal = () =>
   );
 ```
 
-### The spec
+`start` boots one instance in the ambient `Scope` and returns Attributes at
+*readiness* — the process keeps running after `start` returns, until the
+runner closes the scope on restart or delete.
 
-```typescript
-interface LocalProviderSpec<R, Config> {
-  /** Derive the restart-relevant desired config from resolved inputs.
-   *  Plain, canonically-hashable data only. Runs in `diff` on every plan.
-   *  Default: { news, bindings }. */
-  resolveConfig?: (ctx) => Effect<Config>;
+### Handle processes that die on their own
 
-  /** Boot one instance in the ambient Scope; return Attributes once READY.
-   *  The scope outlives the reconcile — it closes on restart or delete. */
-  start: (ctx: { config: Config; invalidate: Effect<void>; ... }) =>
-    Effect<R["Attributes"], any, Scope>;
-
-  /** Delete-only cleanup for state that intentionally survives restarts
-   *  (a URL proxy, restart hooks). NOT called on restarts. */
-  stop?: (ctx: { id: string; instanceId: string }) => Effect<void>;
-
-  // optional passthroughs: precreate, stables, tail, logs, list
-}
+```diff lang="typescript"
+ start: Effect.fn(function* ({ news, invalidate }) {
+   const child = yield* spawn(news);
+   const url = yield* waitForUrl(child);
++  yield* child.exitCode.pipe(
++    Effect.exit,
++    Effect.flatMap(() => invalidate),
++    Effect.forkScoped,
++  );
+   return { url };
+ }),
 ```
 
-The generated lifecycle:
+`invalidate` drops the instance from the running registry, so the next plan
+reports `update` and reconcile boots a fresh one.
 
-- **`diff`** — resolve the config and compare its canonical hash against
-  the running instance: running + equal → `noop`; anything else →
-  `update`. This is what encodes "the process may or may not be running" —
-  a fresh dev session has an empty registry, so resources restart even
-  though state says `created`.
-- **`reconcile`** — same hash + running → join the existing instance's
-  Attributes (redundant reconciles are free). Otherwise tear down the old
-  instance and fork `start` in a scope that outlives the deploy (it dies
-  with the dev session, not with the apply).
-- **`delete`** — tears down only if the registered instance belongs to the
-  deleted `instanceId`, so a create-first replacement's old-generation
-  delete can never kill its successor. Then runs `stop`. Idempotent.
-- **`list`** — joins every registered instance to its Attributes.
+### Narrow the restart surface with `resolveConfig`
 
-:::tip[`resolveConfig` is the restart surface]
-Whatever `resolveConfig` returns is canonically hashed to decide
-noop-vs-restart, and the same value is handed to `start` — so "what
-changed?" and "what starts?" can never drift. Keep it to **plain data**
-(no closures, no live objects): derive descriptors in `resolveConfig`,
-materialize runtime-rich structures from them inside `start`. Changes that
-normalize away (a prop the local runtime doesn't care about) then stop
-causing restarts for free.
+```diff lang="typescript"
+ return {
++  // Only these fields decide whether a running instance must restart.
++  resolveConfig: ({ news }) =>
++    Effect.succeed({ command: news.command, env: news.env }),
+   start: Effect.fn(function* ({ config, invalidate }) {
+-    const child = yield* spawn(news);
++    const child = yield* spawn(config);
+     // ...
+   }),
+ };
+```
+
+The runner canonically hashes `resolveConfig`'s result to decide
+noop-vs-restart, and hands the same value to `start` — so "what changed?"
+and "what starts?" can never drift.
+
+:::tip[Config must be plain data]
+`resolveConfig` runs inside `diff` on every plan: keep it cheap,
+side-effect-free, and free of closures or live objects. Derive plain
+*descriptors* here and materialize runtime-rich structures from them inside
+`start`.
 :::
 
+### Clean up cross-restart state with `stop`
+
+```diff lang="typescript"
+ return {
+   resolveConfig: ({ news }) => ...,
+   start: Effect.fn(function* ({ config, invalidate }) { ... }),
++  // Delete-only: NOT called on restarts.
++  stop: Effect.fn(function* ({ id }) {
++    yield* stopProxy(id);
++  }),
+ };
+```
+
+Anything acquired by `start` dies with the instance scope; `stop` is only
+for state that intentionally *survives* restarts — like a URL proxy kept so
+the address stays stable across rebuilds.
+
+### What the runner generates
+
+- **`diff`** — running instance + equal config hash → `noop`; anything
+  else → `update`. A fresh dev session has an empty registry, so processes
+  restart even though state says `created`.
+- **`reconcile`** — reuses the running instance on a hash match; otherwise
+  tears it down and forks `start` in a scope that outlives the deploy.
+- **`delete`** — tears down only the matching `instanceId` (a replacement's
+  old-generation delete can't kill its successor), then runs `stop`.
+- **`list`** — every running instance's Attributes.
+
 :::note[The dev sidecar]
-The second argument (`serverEntryUrl`) points at a module that serves the
-provider over RPC. During `alchemy dev`, the provider — and its registry of
-running processes — lives in a **sidecar process** that survives user-code
-hot reloads: your program restarts, the dev servers keep running. Outside
-dev (tests, a live deploy deleting a local row) the provider is constructed
-in-process and the sidecar is never spawned.
+The second argument (`serverEntryUrl`) serves the provider over RPC: during
+`alchemy dev` the registry of running processes lives in a sidecar that
+survives user-code hot reloads. Outside dev, the provider is constructed
+in-process and no sidecar is spawned.
 :::
 
 ## Not everything is a process
 
-A local provider whose "instance" is just an entry in a shared registry —
-Cloudflare's local Queue is a row in `LocalRuntimeState`, reconciled with
-three idempotent map operations — doesn't need `LocalProvider.make` at all.
-Write it as a plain provider and register it with `ProviderLayer.dual`; the
-engine's mode tracking (stamping, replace-on-switch, mode-correct deletes)
-applies either way.
+If the local "instance" is just an entry in a shared registry — Cloudflare's
+local Queue is a row in `LocalRuntimeState`, reconciled with three
+idempotent map operations — skip `LocalProvider.make` and write a plain
+provider registered via `dual`. Mode tracking applies either way.
 
 ## Testing
-
-The mode combinators work in tests exactly like in programs, so a single
-test can exercise the local implementation, the live implementation, and
-the switch between them:
 
 ```typescript
 test.provider("promotes a dev worker to a live worker", (stack) =>
   Effect.gen(function* () {
-    // dev-style deploy: local instance
     yield* program.pipe(Alchemy.ProviderMode.local(), stack.deploy);
-
-    // same props, live mode: planned as a REPLACEMENT — the live provider
-    // creates the deployed worker, the local provider kills workerd
+    // Same props, live mode: planned as a REPLACEMENT — the live provider
+    // creates the deployed worker, the local provider kills workerd.
     yield* program.pipe(Alchemy.ProviderMode.live(), stack.deploy);
-
     yield* stack.destroy();
   }),
 );
 ```
 
-Alternatively, `Test.make({ providers, dev: true })` sets the run default
-to local for a whole test file.
+The mode combinators work in tests exactly like in programs; alternatively,
+`Test.make({ providers, dev: true })` defaults a whole test file to local.
 
 ## Reference implementations
 
 - [`Command/Dev.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Command/Dev.ts)
-  — the smallest `LocalProvider.make` provider: spawn a shell command,
-  extract its URL, restart on prop changes.
+  — the smallest `LocalProvider.make` provider: spawn a command, extract
+  its URL, restart on prop changes.
 - [`Cloudflare/Workers/LocalWorkerProvider.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts)
   — the full-size one: bundler watch loop, `workerd` instances, a URL
-  proxy that survives restarts (torn down in `stop`), and a
-  `resolveConfig` that derives plain binding descriptors which `start`
-  materializes into runtime bindings.
+  proxy torn down in `stop`.
 - [`Cloudflare/Queues/Queue.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/Queues/Queue.ts)
-  — the registry-style counter-example: a plain local provider registered
-  via `ProviderLayer.dual`.
+  — the registry-style counter-example: a plain local provider under
+  `dual`.
 
 ## Where next
 
