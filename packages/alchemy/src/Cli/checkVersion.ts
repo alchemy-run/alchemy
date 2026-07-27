@@ -2,9 +2,9 @@ import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 
 import { AlchemyContext } from "alchemy/AlchemyContext";
@@ -17,8 +17,8 @@ const CACHE_FILE = "version-check.json";
 const CACHE_TTL_MILLIS = Duration.toMillis(Duration.days(1));
 // npm's dist-tags endpoint is CDN-backed and typically answers in ~100ms;
 // the sync budget only needs to absorb a slow handshake, not a dead network.
-const SYNC_FETCH_TIMEOUT = Duration.seconds(3);
-const BACKGROUND_FETCH_TIMEOUT = Duration.seconds(15);
+const SYNC_WAIT = Duration.seconds(3);
+const FETCH_TIMEOUT = Duration.seconds(15);
 
 interface VersionCheckCache {
   checkedAt: number;
@@ -52,11 +52,7 @@ const readCache = (cachePath: string) =>
     const parsed = yield* Effect.try(
       () => JSON.parse(raw) as VersionCheckCache | null | undefined,
     );
-    if (typeof parsed?.checkedAt !== "number") return undefined;
-    if (parsed.distTags !== undefined && typeof parsed.distTags !== "object") {
-      return undefined;
-    }
-    return parsed;
+    return typeof parsed?.checkedAt === "number" ? parsed : undefined;
   }).pipe(Effect.catch(() => Effect.succeed(undefined)));
 
 const writeCache = (cachePath: string, distTags?: Record<string, string>) =>
@@ -67,31 +63,45 @@ const writeCache = (cachePath: string, distTags?: Record<string, string>) =>
     yield* fs.writeFileString(cachePath, JSON.stringify(cache));
   }).pipe(Effect.catch(() => Effect.void));
 
-const fetchDistTags = (timeout: Duration.Duration) =>
+const fetchDistTags = Effect.gen(function* () {
+  const http = yield* HttpClient.HttpClient;
+  const response = yield* http.get(NPM_DIST_TAGS_URL);
+  const distTags = (yield* response.json) as Record<string, string> | null;
+  if (typeof distTags !== "object" || distTags === null) {
+    return yield* Effect.fail(new Error("malformed dist-tags response"));
+  }
+  return distTags;
+}).pipe(Effect.timeout(FETCH_TIMEOUT));
+
+/**
+ * Refresh the dist-tags cache with a single request. The fetch is forked so
+ * it outlives the sync wait: we give it {@link SYNC_WAIT} to land inline;
+ * if it's still in flight (or already failed) we record the attempt — so a
+ * dead network costs at most one blocking wait per TTL window — and the
+ * same request keeps going in the background, overwriting the cache when it
+ * completes. The background path never logs, so it can't interleave with
+ * interactive prompts.
+ */
+const refreshDistTags = (cachePath: string, stale?: Record<string, string>) =>
   Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient;
-    const response = yield* http.get(NPM_DIST_TAGS_URL);
-    const distTags = (yield* response.json) as Record<string, string>;
-    if (typeof distTags !== "object" || distTags === null) {
-      return yield* Effect.fail(new Error("malformed dist-tags response"));
-    }
-    return distTags;
-  }).pipe(Effect.timeout(timeout));
+    const fetch = yield* fetchDistTags.pipe(
+      Effect.tap((distTags) => writeCache(cachePath, distTags)),
+      Effect.forkScoped,
+    );
+    return yield* Fiber.join(fetch).pipe(
+      Effect.timeout(SYNC_WAIT),
+      Effect.catch(() => writeCache(cachePath, stale).pipe(Effect.as(stale))),
+    );
+  });
 
 /**
  * Warn if a newer `alchemy` version is published on the dist-tag matching
  * the current channel. Runs to completion before any interactive prompts so
  * the warning never interleaves with prompt rendering, and is bounded so it
- * can never stall the CLI for long:
- *
- * - the registry's dist-tags are cached in `.alchemy/version-check.json`
- *   for a day, so at most one run per day touches the network at all
- * - the blocking fetch times out after a few seconds; on failure the
- *   attempt itself is cached (so a dead network costs at most one timeout
- *   per day, not one per run) and a longer-budget background fetch is
- *   forked that silently refreshes the cache for subsequent runs — it
- *   never logs, so it cannot interleave with prompts
- * - every failure (offline, registry hiccup, corrupt cache) is swallowed
+ * can never stall the CLI: dist-tags are cached in
+ * `.alchemy/version-check.json` for a day (failed attempts included), so at
+ * most one run per day waits on the network, and only up to
+ * {@link SYNC_WAIT}. Best-effort: every failure is swallowed silently.
  */
 export const checkLatestVersion = Effect.gen(function* () {
   const path = yield* Path.Path;
@@ -100,32 +110,16 @@ export const checkLatestVersion = Effect.gen(function* () {
   const now = yield* Clock.currentTimeMillis;
 
   const cached = yield* readCache(cachePath);
-  let distTags = cached?.distTags;
-  if (cached === undefined || now - cached.checkedAt > CACHE_TTL_MILLIS) {
-    const fetched = yield* Effect.result(fetchDistTags(SYNC_FETCH_TIMEOUT));
-    if (Result.isSuccess(fetched)) {
-      distTags = fetched.success;
-      yield* writeCache(cachePath, distTags);
-    } else {
-      // Record the failed attempt so the next runs skip the blocking fetch
-      // for a full TTL window, then retry in the background with a longer
-      // budget: if it lands before the CLI exits, subsequent runs get the
-      // fresh dist-tags for free. It never logs, so it can't interleave
-      // with interactive prompts.
-      yield* writeCache(cachePath, distTags);
-      yield* fetchDistTags(BACKGROUND_FETCH_TIMEOUT).pipe(
-        Effect.flatMap((distTags) => writeCache(cachePath, distTags)),
-        Effect.catch(() => Effect.void),
-        Effect.forkScoped,
-      );
-      if (distTags === undefined) return;
-    }
-  }
+  const distTags =
+    cached !== undefined && now - cached.checkedAt <= CACHE_TTL_MILLIS
+      ? cached.distTags
+      : yield* refreshDistTags(cachePath, cached?.distTags);
   if (distTags === undefined) return;
 
   const current = packageJson.version;
   const latest = pickDistTag(current, distTags);
-  if (typeof latest !== "string" || latest === current) return;
+  if (latest === undefined || latest === current) return;
+
   const installCmd =
     typeof process !== "undefined" && (process as any).versions?.bun
       ? `bun add alchemy@${latest}`
