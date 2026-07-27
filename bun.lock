@@ -178,6 +178,7 @@
       "version": "0.13.7",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
+        "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/framework-core": "workspace:*",
         "fast-glob": "^3.3.2",
         "rolldown": "catalog:",
