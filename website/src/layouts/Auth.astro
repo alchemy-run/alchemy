@@ -41,6 +41,8 @@ const {
 
       <p class="alc-auth__message" set:html={message} />
 
+      <slot />
+
       {(primaryAction || secondaryAction) && (
         <div class="alc-auth__actions">
           {primaryAction && (
