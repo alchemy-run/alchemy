@@ -11,19 +11,40 @@ export type Step = (
 
 export const make = (steps: ReadonlyArray<Step>) => {
   const calls: LanguageModel.ProviderOptions[] = [];
+  const nextStep = (options: LanguageModel.ProviderOptions) => {
+    const index = calls.length;
+    calls.push(options);
+    return [...steps[Math.min(index, steps.length - 1)]!(options, index)];
+  };
   const layer = Layer.effect(
     LanguageModel.LanguageModel,
     LanguageModel.make({
-      generateText: (options) =>
-        Effect.sync(() => {
-          const index = calls.length;
-          calls.push(options);
-          return [...steps[Math.min(index, steps.length - 1)]!(options, index)];
-        }),
-      streamText: () => Stream.empty,
+      generateText: (options) => Effect.sync(() => nextStep(options)),
+      // the kernel samples over the STREAMING wire: serve the same
+      // script, whole parts re-cut as start/delta/end triples the way
+      // a real provider streams them
+      streamText: (options) =>
+        Stream.fromIterable(nextStep(options).flatMap(streamed)),
     }),
   );
   return { calls, layer };
+};
+
+/** Re-cut one whole response part as its streaming part sequence. */
+const streamed = (
+  part: Response.PartEncoded,
+  index: number,
+): Array<Response.StreamPartEncoded> => {
+  if (part.type === "text" || part.type === "reasoning") {
+    const id = `part-${index}`;
+    const prefix = part.type === "text" ? "text" : "reasoning";
+    return [
+      { type: `${prefix}-start`, id },
+      { type: `${prefix}-delta`, id, delta: part.text },
+      { type: `${prefix}-end`, id },
+    ] as Array<Response.StreamPartEncoded>;
+  }
+  return [part as Response.StreamPartEncoded];
 };
 
 export const text = (value: string): Response.PartEncoded =>
