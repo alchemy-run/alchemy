@@ -233,9 +233,48 @@
         "effect": "catalog:",
       },
     },
+    "distilled/packages/axiom": {
+      "name": "@distilled.cloud/axiom",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/azure": {
+      "name": "@distilled.cloud/azure",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
     "distilled/packages/cloudflare": {
       "name": "@distilled.cloud/cloudflare",
       "version": "0.0.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/coinbase": {
+      "name": "@distilled.cloud/coinbase",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -257,6 +296,188 @@
       },
       "peerDependencies": {
         "effect": "catalog:",
+      },
+    },
+    "distilled/packages/expo-eas": {
+      "name": "@distilled.cloud/expo-eas",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/fly-io": {
+      "name": "@distilled.cloud/fly-io",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/gcp": {
+      "name": "@distilled.cloud/gcp",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/kubernetes": {
+      "name": "@distilled.cloud/kubernetes",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/mongodb-atlas": {
+      "name": "@distilled.cloud/mongodb-atlas",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/neon": {
+      "name": "@distilled.cloud/neon",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/planetscale": {
+      "name": "@distilled.cloud/planetscale",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/posthog": {
+      "name": "@distilled.cloud/posthog",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/prisma-postgres": {
+      "name": "@distilled.cloud/prisma-postgres",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/stripe": {
+      "name": "@distilled.cloud/stripe",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/supabase": {
+      "name": "@distilled.cloud/supabase",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/turso": {
+      "name": "@distilled.cloud/turso",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/typesense": {
+      "name": "@distilled.cloud/typesense",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+    },
+    "distilled/packages/workos": {
+      "name": "@distilled.cloud/workos",
+      "version": "0.31.0",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
       },
     },
     "examples/aws-ec2": {
@@ -908,14 +1129,14 @@
     "@cloudflare/vite-plugin": "^1.13.12",
     "@cloudflare/workers-types": "^4.20250805.0",
     "@distilled.cloud/aws": "workspace:*",
-    "@distilled.cloud/axiom": "0.30.1",
+    "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
     "@distilled.cloud/cloudflare-runtime": "workspace:*",
     "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/neon": "0.30.1",
-    "@distilled.cloud/planetscale": "0.30.1",
+    "@distilled.cloud/neon": "workspace:*",
+    "@distilled.cloud/planetscale": "workspace:*",
     "@effect/atom-react": ">=4.0.0-beta.100 || >=4.0.0",
     "@effect/language-service": ">=4.0.0-beta.84|| >=4.0.0",
     "@effect/platform-bun": ">=4.0.0-beta.100 || >=4.0.0",
@@ -1247,7 +1468,9 @@
 
     "@distilled.cloud/aws": ["@distilled.cloud/aws@workspace:distilled/packages/aws"],
 
-    "@distilled.cloud/axiom": ["@distilled.cloud/axiom@0.30.1", "", { "dependencies": { "@distilled.cloud/core": "0.30.1" }, "peerDependencies": { "effect": ">=4.0.0-beta.97 || >=4.0.0" } }, "sha512-xvPr3QvLjW6Z1/2YbXnNDCmvqeTk/2fxzB/avFyBhWyLRQftmY5GM8JbtU6FefTkxquAb1bPx8V2W+8g3V/l6w=="],
+    "@distilled.cloud/axiom": ["@distilled.cloud/axiom@workspace:distilled/packages/axiom"],
+
+    "@distilled.cloud/azure": ["@distilled.cloud/azure@workspace:distilled/packages/azure"],
 
     "@distilled.cloud/build-utils": ["@distilled.cloud/build-utils@workspace:cloudflare-tools/packages/tools/build"],
 
@@ -1259,19 +1482,45 @@
 
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@workspace:cloudflare-tools/packages/cloudflare-vite-plugin"],
 
+    "@distilled.cloud/coinbase": ["@distilled.cloud/coinbase@workspace:distilled/packages/coinbase"],
+
     "@distilled.cloud/core": ["@distilled.cloud/core@workspace:distilled/packages/core"],
 
     "@distilled.cloud/e2e": ["@distilled.cloud/e2e@workspace:cloudflare-tools/packages/tools/e2e"],
 
-    "@distilled.cloud/neon": ["@distilled.cloud/neon@0.30.1", "", { "dependencies": { "@distilled.cloud/core": "0.30.1" }, "peerDependencies": { "effect": ">=4.0.0-beta.97 || >=4.0.0" } }, "sha512-yiCeLNb/SqBgdwtjl2y0/gNcFTZEy9rOae13Myh+bojjHkBkVO+EUH+PqRJZtfelyf1b4XGG8tJH7ViVoa2ePg=="],
+    "@distilled.cloud/expo-eas": ["@distilled.cloud/expo-eas@workspace:distilled/packages/expo-eas"],
 
-    "@distilled.cloud/planetscale": ["@distilled.cloud/planetscale@0.30.1", "", { "dependencies": { "@distilled.cloud/core": "0.30.1" }, "peerDependencies": { "effect": ">=4.0.0-beta.97 || >=4.0.0" } }, "sha512-JvfcHtNBpb3UhLBxMg3Krb6gHbAYSCXBQKMLRMDXUfm608XtQQ97MTLOdjotWbF/Y4gRLZZKeBEcacAUR16Y+Q=="],
+    "@distilled.cloud/fly-io": ["@distilled.cloud/fly-io@workspace:distilled/packages/fly-io"],
+
+    "@distilled.cloud/gcp": ["@distilled.cloud/gcp@workspace:distilled/packages/gcp"],
+
+    "@distilled.cloud/kubernetes": ["@distilled.cloud/kubernetes@workspace:distilled/packages/kubernetes"],
+
+    "@distilled.cloud/mongodb-atlas": ["@distilled.cloud/mongodb-atlas@workspace:distilled/packages/mongodb-atlas"],
+
+    "@distilled.cloud/neon": ["@distilled.cloud/neon@workspace:distilled/packages/neon"],
+
+    "@distilled.cloud/planetscale": ["@distilled.cloud/planetscale@workspace:distilled/packages/planetscale"],
+
+    "@distilled.cloud/posthog": ["@distilled.cloud/posthog@workspace:distilled/packages/posthog"],
+
+    "@distilled.cloud/prisma-postgres": ["@distilled.cloud/prisma-postgres@workspace:distilled/packages/prisma-postgres"],
+
+    "@distilled.cloud/stripe": ["@distilled.cloud/stripe@workspace:distilled/packages/stripe"],
+
+    "@distilled.cloud/supabase": ["@distilled.cloud/supabase@workspace:distilled/packages/supabase"],
 
     "@distilled.cloud/test-utils": ["@distilled.cloud/test-utils@workspace:cloudflare-tools/packages/tools/test"],
+
+    "@distilled.cloud/turso": ["@distilled.cloud/turso@workspace:distilled/packages/turso"],
+
+    "@distilled.cloud/typesense": ["@distilled.cloud/typesense@workspace:distilled/packages/typesense"],
 
     "@distilled.cloud/vendor-workers-shared": ["@distilled.cloud/vendor-workers-shared@workspace:cloudflare-tools/packages/vendor/workers-shared"],
 
     "@distilled.cloud/vendor-workflows-shared": ["@distilled.cloud/vendor-workflows-shared@workspace:cloudflare-tools/packages/vendor/workflows-shared"],
+
+    "@distilled.cloud/workos": ["@distilled.cloud/workos@workspace:distilled/packages/workos"],
 
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.12.0", "", {}, "sha512-mlUE+rZ8CatQekLhnaiN91Iemdd+e2gFKooGlnRB3oPTL3VghLfX24dx7HrzMNeC1JrIB/0kpsfyty3f5HNfxQ=="],
 
@@ -4161,17 +4410,11 @@
 
     "@distilled.cloud/aws/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
 
-    "@distilled.cloud/axiom/@distilled.cloud/core": ["@distilled.cloud/core@0.30.1", "", { "peerDependencies": { "effect": ">=4.0.0-beta.97 || >=4.0.0" } }, "sha512-MVVMwN3gk/KvCR/Vq/IdZDa06np0aoQGvtSv3HiYEv9f+GrqIPvqzOJC64CZL5Qk7rqbgssqnIGtGDguMk7+Ow=="],
-
     "@distilled.cloud/cloudflare-rolldown-plugin/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
 
     "@distilled.cloud/cloudflare-runtime/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
 
     "@distilled.cloud/cloudflare-vite-plugin/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
-
-    "@distilled.cloud/neon/@distilled.cloud/core": ["@distilled.cloud/core@0.30.1", "", { "peerDependencies": { "effect": ">=4.0.0-beta.97 || >=4.0.0" } }, "sha512-MVVMwN3gk/KvCR/Vq/IdZDa06np0aoQGvtSv3HiYEv9f+GrqIPvqzOJC64CZL5Qk7rqbgssqnIGtGDguMk7+Ow=="],
-
-    "@distilled.cloud/planetscale/@distilled.cloud/core": ["@distilled.cloud/core@0.30.1", "", { "peerDependencies": { "effect": ">=4.0.0-beta.97 || >=4.0.0" } }, "sha512-MVVMwN3gk/KvCR/Vq/IdZDa06np0aoQGvtSv3HiYEv9f+GrqIPvqzOJC64CZL5Qk7rqbgssqnIGtGDguMk7+Ow=="],
 
     "@distilled.cloud/vendor-workers-shared/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
 
