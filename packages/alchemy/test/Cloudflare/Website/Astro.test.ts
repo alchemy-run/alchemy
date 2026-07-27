@@ -9,7 +9,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -69,14 +68,23 @@ const fetchSession = (url: string, cookie?: string) =>
       }),
   });
 
-/** Titles of KV namespaces auto-provisioned for the given logical id. */
-const listSessionNamespaces = (accountId: string, idFragment: string) =>
-  kv.listNamespaces.items({ accountId }).pipe(
-    Stream.filter((ns) => ns.title.includes(idFragment)),
-    Stream.map((ns) => ns.title),
-    Stream.runCollect,
-    Effect.map((chunk) => [...chunk]),
+class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
+
+const waitForNamespaceToBeDeleted = Effect.fn(function* (
+  namespaceId: string,
+  accountId: string,
+) {
+  yield* kv.getNamespace({ accountId, namespaceId }).pipe(
+    Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
+    Effect.retry({
+      while: (e): e is NamespaceStillExists =>
+        e instanceof NamespaceStillExists,
+      schedule: Schedule.exponential(250),
+      times: 10,
+    }),
+    Effect.catchTag("NamespaceNotFound", () => Effect.void),
   );
+});
 
 test.provider(
   "Astro: SSR + env binding + prerender + static assets deploy; unchanged sources memo-skip the rebuild",
@@ -106,7 +114,7 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.Astro("AstroSite", {
+            const site = yield* Cloudflare.Website.Astro("AstroSite", {
               rootDir,
               url: true,
               subdomain: { enabled: true, previewsEnabled: true },
@@ -121,11 +129,16 @@ test.provider(
                 notFoundHandling: "none",
               },
             });
+            // Resource creation dedupes by logical id, so this returns the
+            // session namespace the Astro resource auto-provisioned — a
+            // handle for the out-of-band lifecycle assertions below.
+            const sessions = yield* Cloudflare.KV.Namespace("AstroSiteSession");
+            return { site, sessions };
           }),
         );
 
       // ── deploy 1: build + serve ────────────────────────────────────────
-      const site1 = yield* deploy();
+      const { site: site1, sessions } = yield* deploy();
       expect(site1.url).toBeDefined();
       expect(site1.hash?.input).toBeDefined();
       yield* expectWorkerExists(site1.workerName, accountId);
@@ -152,11 +165,12 @@ test.provider(
 
       // ── sessions: the SESSION KV namespace is auto-provisioned and
       // `Astro.session` round-trips through it ───────────────────────────
-      const sessionNamespaces = yield* listSessionNamespaces(
+      expect(sessions.namespaceId).toBeDefined();
+      const actualSessions = yield* kv.getNamespace({
         accountId,
-        "AstroSiteSession",
-      );
-      expect(sessionNamespaces.length).toBe(1);
+        namespaceId: sessions.namespaceId,
+      });
+      expect(actualSessions.id).toEqual(sessions.namespaceId);
 
       // Wait for the route to serve before the cookie round-trip.
       yield* expectUrlContains(`${site1.url!}/session`, "session-count=", {
@@ -191,7 +205,7 @@ test.provider(
       expect(second.body).toContain("session-count=2");
 
       // ── deploy 2: nothing changed ⇒ memo hit (no rebuild) ──────────────
-      const site2 = yield* deploy();
+      const { site: site2 } = yield* deploy();
       expect(site2.hash?.input).toEqual(site1.hash?.input);
       expect(site2.hash?.bundle).toEqual(site1.hash?.bundle);
       expect(site2.hash?.assets).toEqual(site1.hash?.assets);
@@ -204,7 +218,7 @@ test.provider(
         source.replace("Astro Fixture", "Astro Fixture Edited"),
       );
 
-      const site3 = yield* deploy();
+      const { site: site3 } = yield* deploy();
       expect(site3.hash?.input).toBeDefined();
       expect(site3.hash?.input).not.toEqual(site1.hash?.input);
       yield* expectUrlContains(`${site3.url!}/`, "Astro Fixture Edited", {
@@ -216,20 +230,7 @@ test.provider(
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
 
       // Destroy must also clean up the auto-provisioned session namespace.
-      yield* listSessionNamespaces(accountId, "AstroSiteSession").pipe(
-        Effect.filterOrFail(
-          (titles) => titles.length === 0,
-          (titles) =>
-            new SessionFetchFailed({
-              url: "kv.listNamespaces",
-              message: `session namespace(s) survived destroy: ${titles.join(", ")}`,
-            }),
-        ),
-        Effect.retry({
-          schedule: Schedule.spaced("3 seconds"),
-          times: 10,
-        }),
-      );
+      yield* waitForNamespaceToBeDeleted(sessions.namespaceId, accountId);
     }).pipe(logLevel),
   { timeout: 360_000 },
 );
