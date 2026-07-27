@@ -1,0 +1,491 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "inline.alchemy-prose",
+  "injectionSelector": "L:source.ts -comment -string, L:source.tsx -comment -string, L:source.js -comment -string, L:source.jsx -comment -string, L:source.js.jsx -comment -string",
+  "patterns": [
+    {
+      "include": "#prose-template"
+    }
+  ],
+  "repository": {
+    "prose-template": {
+      "comment": "A tagged template whose tag is a member access ending in .make / .prose / .say — the body is prose, so it is highlighted as Markdown rather than as a string. The begin pattern swallows the whole receiver chain because an injection only outranks the host grammar's own tagged-template rule when both start at the same offset; beginning at the dot would let the host match first and win.",
+      "begin": "((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)+)(make|prose|say)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "entity.name.function.tagged-template.alchemy"
+        },
+        "3": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#fenced-code-block-ts"
+        },
+        {
+          "include": "#fenced-code-block-js"
+        },
+        {
+          "include": "#fenced-code-block-json"
+        },
+        {
+          "include": "#fenced-code-block-shell"
+        },
+        {
+          "include": "#fenced-code-block"
+        },
+        {
+          "include": "#code-span"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#heading"
+        },
+        {
+          "include": "#separator"
+        },
+        {
+          "include": "#blockquote"
+        },
+        {
+          "include": "#list-unnumbered"
+        },
+        {
+          "include": "#list-numbered"
+        },
+        {
+          "include": "#table-row"
+        },
+        {
+          "include": "#inline-run"
+        },
+        {
+          "include": "#grammar-dependencies"
+        }
+      ]
+    },
+    "splice": {
+      "comment": "${…} — a term spliced into the prose; highlighted as TypeScript.",
+      "name": "meta.template.expression.alchemy",
+      "contentName": "meta.embedded.line.alchemy-splice",
+      "begin": "\\$\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.alchemy"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.alchemy"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.ts#expression"
+        }
+      ]
+    },
+    "fenced-code-block-ts": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*(?i:(typescript|tsx|ts|mts|cts))([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.typescript",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-ts"
+        }
+      ]
+    },
+    "fenced-code-block-js": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*(?i:(javascript|jsx|js|mjs|cjs))([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.javascript",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-js"
+        }
+      ]
+    },
+    "fenced-code-block-json": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*(?i:(jsonc|json5|json))([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.json",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-json"
+        }
+      ]
+    },
+    "fenced-code-block-shell": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*(?i:(shell|bash|zsh|console|sh))([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.shellscript",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-shell"
+        }
+      ]
+    },
+    "fenced-code-block": {
+      "comment": "A fence with no language, or one this grammar does not embed. Listed after the language-specific fences, which it would otherwise shadow.",
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^[ \\t]*((?:\\\\`){3,}|~{3,})[ \\t]*([^`\\n]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        },
+        "2": {
+          "name": "fenced_code.block.language.markdown"
+        }
+      },
+      "end": "^[ \\t]*((?:\\\\`){3,}|~{3,})|(?=`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        }
+      ]
+    },
+    "code-line-ts": {
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        }
+      }
+    },
+    "code-line-js": {
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "source.js"
+            }
+          ]
+        }
+      }
+    },
+    "code-line-json": {
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "source.json"
+            }
+          ]
+        }
+      }
+    },
+    "code-line-shell": {
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "source.shell"
+            }
+          ]
+        }
+      }
+    },
+    "table-row": {
+      "comment": "A pipe table row. Markdown's own table rule needs to see the header and its delimiter row together, which line-bounded tokenization cannot.",
+      "name": "markup.table.markdown",
+      "begin": "^[ \\t]*(?=\\|)",
+      "end": "$",
+      "patterns": [
+        {
+          "match": "\\|",
+          "name": "punctuation.definition.table.markdown"
+        },
+        {
+          "match": "(?<=\\|)[ \\t]*(:?-+:?)[ \\t]*(?=\\|)",
+          "captures": {
+            "1": {
+              "name": "punctuation.separator.table.markdown"
+            }
+          }
+        },
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#code-span"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#table-cell"
+        }
+      ]
+    },
+    "table-cell": {
+      "comment": "Cell text. Unlike #inline-run this stops at a pipe, which would otherwise be swallowed by the run that starts earlier in the row.",
+      "match": "(?:[^`$\\\\|\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "code-span": {
+      "comment": "An inline code span written with escaped backticks — the only way to spell one inside a template literal.",
+      "name": "markup.inline.raw.string.markdown",
+      "match": "(\\\\`)((?:[^\\\\`\\n])*)(\\\\`)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.raw.markdown"
+        },
+        "3": {
+          "name": "punctuation.definition.raw.markdown"
+        }
+      }
+    },
+    "escape": {
+      "name": "constant.character.escape.alchemy",
+      "match": "\\\\."
+    },
+    "heading": {
+      "name": "markup.heading.markdown",
+      "match": "^[ \\t]*(#{1,6})[ \\t]+((?:[^`$\\\\\\n]|\\$(?!\\{))*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.heading.markdown"
+        },
+        "2": {
+          "name": "entity.name.section.markdown",
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "separator": {
+      "name": "meta.separator.markdown",
+      "match": "^[ \\t]*([-*_])(?:[ ]{0,2}\\1){2,}[ \\t]*$"
+    },
+    "blockquote": {
+      "name": "markup.quote.markdown",
+      "match": "^[ \\t]*(>)[ \\t]?((?:[^`$\\\\\\n]|\\$(?!\\{))*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.quote.begin.markdown"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "list-unnumbered": {
+      "name": "markup.list.unnumbered.markdown",
+      "match": "^[ \\t]*([-*+])[ \\t]+((?:[^`$\\\\\\n]|\\$(?!\\{))*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.list.begin.markdown"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "list-numbered": {
+      "name": "markup.list.numbered.markdown",
+      "match": "^[ \\t]*([0-9]+[.)])[ \\t]+((?:[^`$\\\\\\n]|\\$(?!\\{))*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.list.begin.markdown"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "inline-run": {
+      "comment": "Prose that is not part of a block construct — paragraph text, and the tail of any block line.",
+      "match": "(?:[^`$\\\\\\n]|\\$(?!\\{))+",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "include": "#inline"
+            }
+          ]
+        }
+      }
+    },
+    "inline": {
+      "comment": "Markdown's own inline markup — bold, italic, strikethrough, links, images. Only the inline rules are borrowed: every block rule in that grammar is anchored to `^` with at most three spaces of indent, so a charter written inside an Effect.gen (indented four or more) would match none of them, and Markdown would read the whole body as an indented code block. The block constructs above are re-implemented indentation-tolerantly instead, mirroring the margin the runtime's dedentTemplate strips.",
+      "patterns": [
+        {
+          "include": "text.html.markdown#inline"
+        }
+      ]
+    },
+    "grammar-dependencies": {
+      "comment": "Never matches. The registry only pre-loads external grammars it finds under `patterns`, and every reference above sits inside a capture — which the dependency walker does not visit. Without this declaration those includes silently resolve to nothing: prose falls back to plain text and fenced code to unstyled text.",
+      "begin": "(?!x)x",
+      "end": "(?!x)x",
+      "patterns": [
+        {
+          "include": "text.html.markdown"
+        },
+        {
+          "include": "source.ts"
+        },
+        {
+          "include": "source.js"
+        },
+        {
+          "include": "source.json"
+        },
+        {
+          "include": "source.shell"
+        }
+      ]
+    }
+  }
+}

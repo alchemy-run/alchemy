@@ -1,0 +1,140 @@
+# alchemy-vscode
+
+Highlights the body of alchemy prose templates as **Markdown** instead of as one
+undifferentiated string.
+
+A charter, skill, or note is written as a tagged template — the body is prose,
+not code, and it reads like prose only if headings, emphasis, lists, and code
+spans are colored like prose:
+
+```ts
+export const ResourceEngineeringLive = ResourceEngineering.make`
+  # Writing resource providers
+
+  A provider's reconcile is **ONE** flow that converges cloud state to the
+  desired props:
+
+  1. **OBSERVE** — derive the physical identifier; read live cloud state.
+  2. **ENSURE** — if missing, create; catch \`AlreadyExists\` as a race.
+`;
+```
+
+## What it matches
+
+Any tagged template whose tag is a member access ending in `make`, `prose`, or
+`say`:
+
+| Matches             | Does not match        |
+| ------------------- | --------------------- |
+| ``Coding.make`…` `` | `Redacted.make(x)`    |
+| ``AI.prose`…` ``    | ``make`…` ``          |
+| ``AI.say`…` ``      | ``foo.makeThing`…` `` |
+
+A receiver is required, and the backtick must follow the tag directly — a plain
+call like `Redacted.make(value)` or `RpcClient.make(...)` is untouched, since
+the heuristic is the tagged-template form, not the name.
+
+Inside the body:
+
+- headings, list bullets, blockquotes, table rows, and thematic breaks are
+  recognized **at any indentation**, and inline markup (bold, italic,
+  strikethrough, links, images) comes from VS Code's own Markdown grammar;
+- fenced code blocks are highlighted in their own language — TypeScript,
+  JavaScript, JSON, and shell are embedded, and anything else falls back to
+  plain fence styling;
+- `${Splice}` is highlighted as TypeScript, so term references still read as
+  identifiers;
+- `` \`code\` `` — the only way to spell an inline code span inside a template
+  literal — is highlighted as a code span rather than as two escapes.
+
+## Fences: prefer tildes
+
+A template literal cannot contain a raw backtick, so a backtick fence has to be
+escaped three times. Both forms work, and CommonMark treats them identically,
+so the model reads the same document either way — but the tilde form is far
+easier to write and to read in source:
+
+```ts
+AI.prose`
+  ~~~ts
+  const bucket = yield* Bucket("assets", {});
+  ~~~
+
+  \`\`\`ts
+  const bucket = yield* Bucket("assets", {});
+  \`\`\`
+`;
+```
+
+Escapes inside a fence are still escapes: a code sample containing a template
+literal writes `` \` ``, and those two characters are colored as an escape
+rather than as part of the sample's string. A `${…}` inside a fence really is
+interpolated at runtime, so it is highlighted as a splice, not as code.
+
+## Install
+
+```sh
+bun run --filter alchemy-vscode link   # symlink into ~/.cursor|.vscode/extensions
+```
+
+Then run **Developer: Reload Window**. To produce a `.vsix` instead:
+
+```sh
+bun run --filter alchemy-vscode package
+```
+
+## Checking the highlighting
+
+`scripts/inspect.ts` tokenizes a file with the real VS Code grammars plus this
+injection, so scopes can be checked without launching an editor:
+
+```sh
+bun run --filter alchemy-vscode inspect                 # scopes for fixtures/sample.ts
+bun run --filter alchemy-vscode check                   # assert the scopes that matter
+bun scripts/inspect.ts ../../services/alchemy-org/src/Coding.ts
+```
+
+## How it works
+
+`syntaxes/alchemy-prose.injection.json` is a TextMate injection grammar
+(`injectTo: source.ts | source.tsx | source.js | source.js.jsx`). Three things
+about it are load-bearing, and each one is a trap worth knowing before editing:
+
+**The `begin` pattern swallows the whole receiver chain.** The
+`injectionSelector` carries the `L:` prefix, which only wins a *tie* — the
+host's own tagged-template rule starts at `Coding` in ``Coding.make`…` ``, so a
+pattern that started at the dot would lose the race and never fire.
+
+**Markdown is reached through a capture.** A TextMate rule only ever checks the
+innermost rule's `end`, so a Markdown block rule pushed inside the template
+would happily consume the closing backtick and everything after it — the rest
+of the file becomes prose. Capture-scoped sub-tokenization is the only bounded
+way to run another grammar, and every pattern handed to it stops at a backtick.
+
+**Block constructs are re-implemented rather than borrowed.** Markdown's own
+heading/list/quote rules are anchored to `^` with at most three spaces of
+indent, and four spaces means an indented code block. A charter written inside
+an `Effect.gen` is indented six — so borrowing them would render every nested
+charter as raw text. The hand-rolled rules ignore the margin, mirroring what
+the runtime's `dedentTemplate` strips. Only Markdown's *inline* rules, which
+are position-independent, are borrowed as-is.
+
+The same bounding applies inside a fence: each line of code goes to `source.ts`
+(or `source.shell`, …) through a capture. Letting the language grammar run
+unbounded is what breaks first — one escaped backtick in a sample opens a
+TypeScript template literal that never closes, and it eats the rest of the
+file.
+
+## Known edges
+
+- Because every line is tokenized independently, a construct that spans lines
+  is not carried across them: a block comment or multi-line string inside a
+  fence highlights per line, and a table's alignment row is styled without
+  checking that a header precedes it. Setext headings and reference link
+  definitions are not supported at all.
+- Inline markup does not span a splice or a line break: `**bold ${x}**` loses
+  its bold after the splice.
+- Tags with a computed or call receiver (``makeThing().say`…` ``) are not
+  matched; neither is a bare tag with no receiver.
+- Changing the grammar requires a window reload; scope inspection lives under
+  **Developer: Inspect Editor Tokens and Scopes**.
