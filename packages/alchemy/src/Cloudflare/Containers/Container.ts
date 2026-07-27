@@ -190,21 +190,32 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```
  *
  * @section Async Workers
- * On a plain async Worker, bind a Container directly in `env` — the
- * Container **is** the Durable Object binding and its ContainerApplication
- * together. Alchemy emits the `durable_object_namespace` binding, marks the
- * class as container-backed in the script metadata, provisions the
- * ContainerApplication, and attaches it to the class's namespace. This is
- * how an async Worker hosts a container-backed class whose implementation
- * ships in an npm package — e.g. `@cloudflare/sandbox`'s `Sandbox` or a
- * class extending `@cloudflare/containers`' `Container`.
+ * An async Worker can host a container-backed Durable Object class that
+ * ships as plain JavaScript — `@cloudflare/sandbox`'s `Sandbox`, or your
+ * own class extending `@cloudflare/containers`' `Container`. The class
+ * lives in the worker script; `Container` (the npm one) handles the
+ * lifecycle and forwards `fetch` to the port inside the container.
  *
- * The Durable Object class name defaults to the binding name (the `env`
- * key); set `className` when the exported class is named differently. The
- * phantom type parameter (`Container<Sandbox>`) types `env.NAME` as
- * `DurableObjectNamespace<Sandbox>` via `Cloudflare.InferEnv`.
+ * @example The worker script exports the container-backed class
+ * ```typescript
+ * // src/worker.ts
+ * import { Container } from "@cloudflare/containers";
  *
- * @example Binding a container-backed DO class in an async Worker
+ * export class Sandbox extends Container {
+ *   defaultPort = 8080;
+ * }
+ * ```
+ *
+ * Declare it in the stack by binding a `Cloudflare.Container` in the
+ * Worker's `env` — the Container **is** the Durable Object binding and its
+ * ContainerApplication together. Alchemy emits the
+ * `durable_object_namespace` binding, marks the class as container-backed
+ * in the script metadata, provisions the ContainerApplication, and attaches
+ * it to the class's namespace. The Durable Object class name defaults to
+ * the binding name (the `env` key); set `className` when the exported class
+ * is named differently.
+ *
+ * @example Binding the container-backed class in the stack
  * ```typescript
  * // alchemy.run.ts
  * import type { Sandbox } from "./src/worker.ts";
@@ -219,16 +230,17 @@ export type Container<Id extends string = string> = Named<Id> & {
  * });
  * ```
  *
- * @example The async worker exports the container-backed class
+ * The type parameter (`Container<Sandbox>`) is the class from `worker.ts` —
+ * it types `env.Sandbox` as `DurableObjectNamespace<Sandbox>` via
+ * `Cloudflare.InferEnv`, so the handler reaches the container with full
+ * types.
+ *
+ * @example Reaching the container from the async handler
  * ```typescript
  * // src/worker.ts
- * import { Container, getContainer } from "@cloudflare/containers";
+ * import { getContainer } from "@cloudflare/containers";
  * import type * as Cloudflare from "alchemy/Cloudflare";
  * import type { Worker } from "../alchemy.run.ts";
- *
- * export class Sandbox extends Container {
- *   defaultPort = 8080;
- * }
  *
  * export default {
  *   async fetch(request: Request, env: Cloudflare.InferEnv<typeof Worker>) {

@@ -960,6 +960,8 @@ export class DurableObjectScope extends Context.Service<
  *
  * @example A Container binding declares the container-backed class
  * ```typescript
+ * // `Sandbox` is the container-backed DO class exported by the worker
+ * // script (extends `@cloudflare/containers`' `Container`).
  * import type { Sandbox } from "./src/worker.ts";
  *
  * export const Worker = Cloudflare.Worker("Worker", {
