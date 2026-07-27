@@ -227,6 +227,35 @@ describe("mergeWithObservedConfig", () => {
     expect(withoutOrigins.Origins).toEqual({ Quantity: 0, Items: [] });
   });
 
+  test("a Quantity-only desired list never resurrects observed Items", () => {
+    // Dropping a geo whitelist produces `{ RestrictionType: "none",
+    // Quantity: 0 }` with no `Items`; filling `Items` from the observed
+    // whitelist would desynchronize Quantity/Items and CloudFront rejects
+    // the update with `InconsistentQuantities`.
+    const withWhitelist = {
+      ...observed,
+      Restrictions: {
+        GeoRestriction: {
+          RestrictionType: "whitelist",
+          Quantity: 2,
+          Items: ["US", "GB"],
+        },
+      },
+    } as cloudfront.DistributionConfig;
+    const dropped = mergeWithObservedConfig(
+      {
+        ...desired,
+        Restrictions: {
+          GeoRestriction: { RestrictionType: "none", Quantity: 0 },
+        },
+      } as cloudfront.DistributionConfig,
+      withWhitelist,
+    );
+    expect(dropped.Restrictions).toEqual({
+      GeoRestriction: { RestrictionType: "none", Quantity: 0 },
+    });
+  });
+
   test("an origin absent from observed is passed through unchanged", () => {
     const withNewOrigin = mergeWithObservedConfig(
       {
