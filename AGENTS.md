@@ -934,7 +934,8 @@ Additional flags beyond vitest:
 
 Output behavior (plain mode, the default):
 
-- One line per test as it finishes; a **failing test prints its error and captured output inline** immediately.
+- The collection phase (importing every test file, ~45s for the full suite) reports `collecting N/TOTAL test files (elapsed) <current file>` — repainted in place on a TTY, printed every 5s otherwise. A run that appears stuck before any test starts is almost always just collecting; if it really is stuck, the line names the file whose import hangs.
+- One line per test as it finishes, prefixed with a `[done/total]` progress counter so the remaining count is visible; a **failing test prints its error and captured output inline** immediately.
 - Passing tests' output is swallowed on the console — but **every** test's output (passes included) is streamed to a per-run log at **`.alchemy/log/test/{timestamp}-pid{pid}.log`** (relative to the cwd), so concurrent runs in different terminals never trample each other. The absolute path (with line/KB counts) is printed at the end of every run (`Full log: …`) — read that file when you need the complete record, e.g. a passing test's deploy output or a hang's partial log. The file is appended live, so it's readable mid-run; logs older than a week are pruned automatically (by stat mtime).
 - If nothing finishes for 10s, the runner prints the list of currently-running tests with elapsed times — the first place to look when a run seems hung.
 - Exit code is non-zero if any test failed.

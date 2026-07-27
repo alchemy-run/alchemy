@@ -22,7 +22,7 @@ import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
-import { listAllZones, resolveZoneId } from "../Zone/lookup.ts";
+import { resolveZoneId } from "../Zone/lookup.ts";
 import {
   mergeAssetsConfigFiles,
   readAssets,
@@ -289,6 +289,14 @@ export const normalizeStateDomains = (
     const hostname = (u as { hostname?: unknown } | null)?.hostname;
     return typeof hostname === "string" ? [`https://${hostname}`] : [];
   });
+
+/**
+ * Max concurrent `GET /zones/{id}/workers/routes` calls when observing the
+ * routes attached to a Worker. Route listing is per-zone, so this fans out
+ * with the number of zones the Worker has routes in; unbounded fan-out here
+ * is what trips Cloudflare account-level 429 / code 971 throttling (#926).
+ */
+const WORKER_ROUTE_LIST_CONCURRENCY = 8;
 
 type MetadataHashValue =
   | string
@@ -810,28 +818,39 @@ export const LiveWorkerProvider = () =>
               Effect.catch(() => Effect.succeed([])),
             ),
           ),
-          { concurrency: "unbounded" },
+          // Bounded: this issues one request per zone, so a Worker with routes
+          // spread across many zones would otherwise burst the account's whole
+          // API budget in a single tick (#926).
+          { concurrency: WORKER_ROUTE_LIST_CONCURRENCY },
         );
 
         return Effect.map(routesByZone, (routes) => routes.flat());
       };
 
-      // Observe every route attached to `scriptName` account-wide. Routes
-      // are zone-scoped with no account-level enumeration API, so fan out
-      // over all of the account's zones. Any failure to enumerate zones
-      // (e.g. a token without zone read scope) degrades to "no routes"
-      // rather than failing the read.
-      const readWorkerRoutes = (scriptName: string) =>
-        Effect.gen(function* () {
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const accountZones = yield* listAllZones(accountId).pipe(
-            Effect.catch(() => Effect.succeed([])),
-          );
-          return yield* listWorkerRoutesInZones(
-            scriptName,
-            accountZones.map((zone) => zone.id),
-          );
-        });
+      // Observe the routes attached to `scriptName` in the zones Alchemy
+      // already associates with this Worker.
+      //
+      // This used to enumerate every zone on the account and then list routes
+      // in each one. Routes are zone-scoped with no account-level enumeration
+      // API, so that costs O(zones) requests on *every* Worker read — on an
+      // account with a few hundred zones a couple of plan/deploy cycles
+      // exhausts Cloudflare's per-user API budget and unrelated calls start
+      // coming back 429 / code 971 (#926).
+      //
+      // `reconcileRoutes` already scopes itself to the zones implied by
+      // `desired ∪ previous` rather than sweeping the account, so `read` now
+      // uses the same bounded zone set: the zones of the routes already
+      // recorded in state. The blind spot this introduces — a route added out
+      // of band in a zone this Worker has never had a route in — is the one
+      // `reconcileRoutes` already has.
+      const readWorkerRoutes = (
+        scriptName: string,
+        knownRoutes: Worker["Attributes"]["routes"] | undefined,
+      ) =>
+        listWorkerRoutesInZones(
+          scriptName,
+          (knownRoutes ?? []).map((route) => route.zoneId),
+        );
 
       // Converge the zone routes attached to `scriptName` to `desired`.
       // Observed cloud state (not `previous`) is the diff baseline —
@@ -2639,7 +2658,7 @@ export const LiveWorkerProvider = () =>
                       service: workerName,
                     })
                     .pipe(Effect.map((r) => r.result ?? [])),
-                  readWorkerRoutes(workerName),
+                  readWorkerRoutes(workerName, output?.routes),
                 ],
                 { concurrency: "unbounded" },
               );

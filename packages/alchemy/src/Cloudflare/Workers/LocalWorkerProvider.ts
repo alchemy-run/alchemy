@@ -975,7 +975,13 @@ const toRuntimeAssets = Effect.fn(function* (
   // in the assets directory carry the rules unless overridden by
   // explicit `headers` / `redirects` props. The local runtime parses
   // the raw string contents just like Cloudflare does.
-  const directory = typeof assets === "string" ? assets : assets.directory;
+  //
+  // A Vite website's `assets` is config-only (`{ runWorkerFirst: true }`) —
+  // the client output directory is the build's business, and in `dev` the
+  // vite plugin serves assets from the dev server, so there is no directory
+  // to read here.
+  const directory: string | undefined =
+    typeof assets === "string" ? assets : assets.directory;
   // An unreadable file just means no rules here — the assets plugin
   // reports directory problems itself.
   const files = yield* readAssetsConfigFiles(directory).pipe(

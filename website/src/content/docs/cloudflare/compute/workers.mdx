@@ -272,7 +272,9 @@ export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
 `InferEnv` maps each `env` entry to its native `workers-types`
 client — an R2 bucket becomes `R2Bucket`, a D1 database becomes
-`D1Database`, a Durable Object becomes a typed
+`D1Database`, a Durable Object (or a
+[Container](/cloudflare/compute/containers#bind-on-an-async-worker),
+which declares a container-backed DO class) becomes a typed
 `DurableObjectNamespace`, and `Config`/`Redacted` values become
 `string`. The handler stays plain JavaScript but the env can never
 drift from the infrastructure that produced it:
