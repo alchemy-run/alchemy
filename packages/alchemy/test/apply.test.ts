@@ -3,6 +3,7 @@ import { Cli } from "@/Cli/Cli";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
+import { live, local } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
 import {
@@ -33,6 +34,9 @@ import {
   FqnProbe,
   Function,
   KindStablesResource,
+  ModalResource,
+  modalCalls,
+  type ModalResourceProps,
   PhasedTarget,
   StaticStablesResource,
   TestLayers,
@@ -5356,6 +5360,450 @@ describe("interrupted create persists no unresolved Output exprs", () => {
 
         yield* stack.destroy();
         expect(yield* getState("B")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
+describe("provider modes (local ⇄ live)", () => {
+  // ModalResource registers via `ProviderLayer.dual` with distinct live and
+  // local implementations that record lifecycle calls per variant into
+  // `modalCalls` (tagged with the scratch stack name so concurrent tests can
+  // filter to their own activity). These tests cover the APPLY-level
+  // semantics: `providerMode` stamping across every lifecycle commit,
+  // mode-correct deletes of old generations and orphans, replaced-chain
+  // draining, destroy, and legacy-row re-stamping.
+
+  const callsFor = (stackName: string) =>
+    modalCalls.filter((c) => c.stack === stackName);
+
+  const setState = Effect.fn(function* (fqn: string, value: ResourceState) {
+    const state = yield* yield* State;
+    const stk = yield* Stack;
+    yield* state.set({ stack: stk.name, stage: stk.stage, fqn, value });
+  });
+
+  const modal = (id: string, props: ModalResourceProps) =>
+    Effect.gen(function* () {
+      const a = yield* ModalResource(id, props);
+      return { runtime: a.runtime };
+    });
+
+  test.provider(
+    "providerMode is stamped through create → update → mode-switch replace → same-mode replace",
+    (stack) =>
+      Effect.gen(function* () {
+        // ── create (local) ──
+        const created = yield* modal("A", { value: "v1" }).pipe(
+          local(),
+          stack.deploy,
+        );
+        expect(created.runtime).toEqual("local");
+        const afterCreate = yield* getState("A");
+        expect(afterCreate?.status).toEqual("created");
+        expect(afterCreate?.providerMode).toEqual("local");
+        const localInstanceId = afterCreate?.instanceId;
+
+        // ── update (still local) ──
+        yield* modal("A", { value: "v2" }).pipe(local(), stack.deploy);
+        const afterUpdate = yield* getState("A");
+        expect(afterUpdate?.status).toEqual("updated");
+        expect(afterUpdate?.providerMode).toEqual("local");
+        expect(afterUpdate?.instanceId).toEqual(localInstanceId);
+
+        // ── mode switch (local → live): replacement; the LOCAL provider
+        //    deletes the old generation, the LIVE provider creates the new ──
+        const before = callsFor(stack.name).length;
+        const switched = yield* modal("A", { value: "v2" }).pipe(
+          live(),
+          stack.deploy,
+        );
+        expect(switched.runtime).toEqual("live");
+        const afterSwitch = yield* getState("A");
+        expect(afterSwitch?.status).toEqual("created");
+        expect(afterSwitch?.providerMode).toEqual("live");
+        expect(afterSwitch?.instanceId).not.toEqual(localInstanceId);
+        const switchCalls = callsFor(stack.name).slice(before);
+        expect(switchCalls).toContainEqual({
+          stack: stack.name,
+          mode: "live",
+          op: "reconcile",
+          id: "A",
+        });
+        expect(switchCalls).toContainEqual({
+          stack: stack.name,
+          mode: "local",
+          op: "delete",
+          id: "A",
+        });
+
+        // ── ordinary (same-mode) replacement via the provider diff:
+        //    providerMode survives, and the old generation is deleted with
+        //    its own (live) mode ──
+        const beforeReplace = callsFor(stack.name).length;
+        yield* modal("A", { value: "v2", replaceValue: "r2" }).pipe(
+          live(),
+          stack.deploy,
+        );
+        const afterReplace = yield* getState("A");
+        expect(afterReplace?.status).toEqual("created");
+        expect(afterReplace?.providerMode).toEqual("live");
+        expect(afterReplace?.instanceId).not.toEqual(afterSwitch?.instanceId);
+        expect(callsFor(stack.name).slice(beforeReplace)).toContainEqual({
+          stack: stack.name,
+          mode: "live",
+          op: "delete",
+          id: "A",
+        });
+
+        yield* stack.destroy();
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "a replaced chain drains each old generation with ITS stamped mode",
+    (stack) =>
+      Effect.gen(function* () {
+        // Simulate an interrupted mode-switch deploy: the live replacement
+        // was created and committed as `replaced`, but the apply died before
+        // GC drained the old (local) generation. The recovery deploy's GC
+        // must delete that generation with the LOCAL provider.
+        const oldInstanceId = "11111111111111111111111111111111";
+        const newInstanceId = "22222222222222222222222222222222";
+        yield* setState("A", {
+          status: "replaced",
+          fqn: "A",
+          logicalId: "A",
+          namespace: undefined,
+          instanceId: newInstanceId,
+          resourceType: "Test.ModalResource",
+          providerVersion: 0,
+          props: { value: "v1" },
+          attr: { value: "v1", runtime: "live" },
+          bindings: [],
+          downstream: [],
+          deleteFirst: false,
+          providerMode: "live",
+          old: {
+            status: "created",
+            fqn: "A",
+            logicalId: "A",
+            namespace: undefined,
+            instanceId: oldInstanceId,
+            resourceType: "Test.ModalResource",
+            providerVersion: 0,
+            props: { value: "v1" },
+            attr: { value: "v1", runtime: "local" },
+            bindings: [],
+            downstream: [],
+            providerMode: "local",
+          },
+        } as ResourceState);
+
+        const before = callsFor(stack.name).length;
+        // Identical props, live-default run: the top generation noops and
+        // GC drains the pending old chain.
+        yield* modal("A", { value: "v1" }).pipe(stack.deploy);
+
+        expect(callsFor(stack.name).slice(before)).toContainEqual({
+          stack: stack.name,
+          mode: "local",
+          op: "delete",
+          id: "A",
+        });
+        const settled = yield* getState("A");
+        expect(settled?.status).toEqual("created");
+        expect(settled?.providerMode).toEqual("live");
+        expect(settled?.instanceId).toEqual(newInstanceId);
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "stack.destroy tears down a local row with the local provider during a live-default run",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* modal("A", { value: "v1" }).pipe(local(), stack.deploy);
+        expect((yield* getState("A"))?.providerMode).toEqual("local");
+
+        // `stack.destroy()` runs without any mode policy — the run default
+        // is live — but the orphaned row must still be deleted by the
+        // provider that created it.
+        const before = callsFor(stack.name).length;
+        yield* stack.destroy();
+
+        expect(yield* getState("A")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+        expect(callsFor(stack.name).slice(before)).toContainEqual({
+          stack: stack.name,
+          mode: "local",
+          op: "delete",
+          id: "A",
+        });
+      }),
+  );
+
+  test.provider(
+    "legacy rows (no persisted mode) are re-stamped on their next write",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* modal("A", { value: "v1" }).pipe(stack.deploy);
+        const row = yield* getState("A");
+        expect(row?.providerMode).toEqual("live");
+
+        // Simulate a row written before providerMode existed.
+        yield* setState("A", { ...row!, providerMode: undefined });
+
+        // Same-mode update: no replacement churn (assumed current mode) and
+        // the row comes out stamped.
+        yield* modal("A", { value: "v2" }).pipe(stack.deploy);
+        const restamped = yield* getState("A");
+        expect(restamped?.status).toEqual("updated");
+        expect(restamped?.providerMode).toEqual("live");
+        // Same instance — the legacy row was updated, not replaced.
+        expect(restamped?.instanceId).toEqual(row?.instanceId);
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "a deleteFirst replacement tears down a mixed-mode old chain, each generation with its own provider",
+    (stack) =>
+      Effect.gen(function* () {
+        // An interrupted local → live switch left a `replaced` row: live top
+        // generation, undrained local old generation. A deleteFirst
+        // replacement (deleteFirstValue change) now restarts a new outer
+        // generation and must tear the WHOLE chain down before creating —
+        // the live generation with the LIVE provider, the local generation
+        // with the LOCAL provider (`deleteOldGenerations`).
+        const oldInstanceId = "11111111111111111111111111111111";
+        const newInstanceId = "22222222222222222222222222222222";
+        yield* setState("A", {
+          status: "replaced",
+          fqn: "A",
+          logicalId: "A",
+          namespace: undefined,
+          instanceId: newInstanceId,
+          resourceType: "Test.ModalResource",
+          providerVersion: 0,
+          props: { value: "v1" },
+          attr: { value: "v1", runtime: "live" },
+          bindings: [],
+          downstream: [],
+          deleteFirst: false,
+          providerMode: "live",
+          old: {
+            status: "created",
+            fqn: "A",
+            logicalId: "A",
+            namespace: undefined,
+            instanceId: oldInstanceId,
+            resourceType: "Test.ModalResource",
+            providerVersion: 0,
+            props: { value: "v1" },
+            attr: { value: "v1", runtime: "local" },
+            bindings: [],
+            downstream: [],
+            providerMode: "local",
+          },
+        } as ResourceState);
+
+        const before = callsFor(stack.name).length;
+        yield* modal("A", { value: "v1", deleteFirstValue: "df" }).pipe(
+          stack.deploy,
+        );
+
+        const calls = callsFor(stack.name).slice(before);
+        const liveDelete = calls.findIndex(
+          (c) => c.op === "delete" && c.mode === "live",
+        );
+        const localDelete = calls.findIndex(
+          (c) => c.op === "delete" && c.mode === "local",
+        );
+        const create = calls.findIndex(
+          (c) => c.op === "reconcile" && c.mode === "live",
+        );
+        expect(liveDelete).toBeGreaterThanOrEqual(0);
+        expect(localDelete).toBeGreaterThanOrEqual(0);
+        // deleteFirst: the whole old chain is reclaimed BEFORE the new
+        // generation is created.
+        expect(create).toBeGreaterThan(liveDelete);
+        expect(create).toBeGreaterThan(localDelete);
+
+        const settled = yield* getState("A");
+        expect(settled?.status).toEqual("created");
+        expect(settled?.providerMode).toEqual("live");
+        expect(settled?.instanceId).not.toEqual(newInstanceId);
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "a failed mode-switch create leaves the old runtime's instance intact, then converges on retry",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* modal("A", { value: "v1" }).pipe(local(), stack.deploy);
+        const localRow = yield* getState("A");
+        expect(localRow?.providerMode).toEqual("local");
+
+        // The live replacement's create fails. Replacements are
+        // create-first, so the local generation must survive (it is only
+        // reclaimed by GC after a successful create — which never runs on a
+        // failed apply).
+        const before = callsFor(stack.name).length;
+        const failCreate = Layer.succeed(TestResourceHooks, {
+          create: () => Effect.fail(new ResourceFailure()),
+        });
+        const exit = yield* modal("A", { value: "v1" }).pipe(
+          live(),
+          stack.deploy,
+          Effect.provide(failCreate),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+
+        const failedCalls = callsFor(stack.name).slice(before);
+        expect(
+          failedCalls.some((c) => c.op === "delete" && c.mode === "local"),
+        ).toBe(false);
+        const interrupted = yield* getState("A");
+        expect(interrupted?.status).toEqual("replacing");
+        expect(interrupted?.providerMode).toEqual("live");
+        expect(
+          (interrupted as ReplacingResourceState).old.providerMode,
+        ).toEqual("local");
+
+        // Retry (same live mode): the interrupted replacement resumes, the
+        // live create succeeds, and GC finally reclaims the local instance
+        // with the LOCAL provider.
+        const beforeRetry = callsFor(stack.name).length;
+        const retried = yield* modal("A", { value: "v1" }).pipe(
+          live(),
+          stack.deploy,
+        );
+        expect(retried.runtime).toEqual("live");
+        expect(callsFor(stack.name).slice(beforeRetry)).toContainEqual({
+          stack: stack.name,
+          mode: "local",
+          op: "delete",
+          id: "A",
+        });
+        const settled = yield* getState("A");
+        expect(settled?.status).toEqual("created");
+        expect(settled?.providerMode).toEqual("live");
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "GC drains a multi-generation chain with per-generation modes",
+    (stack) =>
+      Effect.gen(function* () {
+        // Two undrained generations with DIFFERENT modes: the outer old is a
+        // replaced local generation whose own old is a live generation
+        // (live → local → live churn interrupted twice). GC pops one
+        // generation per pass — each must be deleted by its own provider.
+        const inner = "00000000000000000000000000000000";
+        const middle = "11111111111111111111111111111111";
+        const top = "22222222222222222222222222222222";
+        yield* setState("A", {
+          status: "replaced",
+          fqn: "A",
+          logicalId: "A",
+          namespace: undefined,
+          instanceId: top,
+          resourceType: "Test.ModalResource",
+          providerVersion: 0,
+          props: { value: "v1" },
+          attr: { value: "v1", runtime: "live" },
+          bindings: [],
+          downstream: [],
+          deleteFirst: false,
+          providerMode: "live",
+          old: {
+            status: "replaced",
+            fqn: "A",
+            logicalId: "A",
+            namespace: undefined,
+            instanceId: middle,
+            resourceType: "Test.ModalResource",
+            providerVersion: 0,
+            props: { value: "v1" },
+            attr: { value: "v1", runtime: "local" },
+            bindings: [],
+            downstream: [],
+            deleteFirst: false,
+            providerMode: "local",
+            old: {
+              status: "created",
+              fqn: "A",
+              logicalId: "A",
+              namespace: undefined,
+              instanceId: inner,
+              resourceType: "Test.ModalResource",
+              providerVersion: 0,
+              props: { value: "v1" },
+              attr: { value: "v1", runtime: "live" },
+              bindings: [],
+              downstream: [],
+              providerMode: "live",
+            },
+          },
+        } as ResourceState);
+
+        const before = callsFor(stack.name).length;
+        yield* modal("A", { value: "v1" }).pipe(stack.deploy);
+
+        const deletes = callsFor(stack.name)
+          .slice(before)
+          .filter((c) => c.op === "delete");
+        // Outer-in: the middle (local) generation pops first, then the
+        // inner (live) one — each with its own stamped mode.
+        expect(deletes.map((c) => c.mode)).toEqual(["local", "live"]);
+
+        const settled = yield* getState("A");
+        expect(settled?.status).toEqual("created");
+        expect(settled?.providerMode).toEqual("live");
+        expect(settled?.instanceId).toEqual(top);
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "a mode switch flows through downstream dependents end-to-end",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const a = yield* ModalResource("A", { value: "v1" });
+          const b = yield* TestResource("B", { string: a.value });
+          return { runtime: a.runtime, string: b.string };
+        });
+
+        const dev = yield* program.pipe(local(), stack.deploy);
+        expect(dev.runtime).toEqual("local");
+        expect(dev.string).toEqual("v1");
+
+        // Switching A to live replaces it; B (mode-agnostic) re-reconciles
+        // against the replacement's fresh attrs instead of nooping on stale
+        // ones, and both settle in a terminal state.
+        const promoted = yield* program.pipe(live(), stack.deploy);
+        expect(promoted.runtime).toEqual("live");
+        expect(promoted.string).toEqual("v1");
+
+        const a = yield* getState("A");
+        expect(a?.status).toEqual("created");
+        expect(a?.providerMode).toEqual("live");
+        const b = yield* getState("B");
+        expect(["created", "updated"]).toContain(b?.status);
+        expect(b?.providerMode).toBeUndefined();
+
+        yield* stack.destroy();
         expect(yield* listState()).toEqual([]);
       }),
   );

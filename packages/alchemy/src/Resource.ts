@@ -9,6 +9,11 @@ import type { Input, InputProps } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider } from "./Provider.ts";
+import {
+  ConflictingProviderModeError,
+  ProviderModePolicy,
+  type ProviderMode,
+} from "./ProviderMode.ts";
 import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Self } from "./Self.ts";
@@ -130,6 +135,14 @@ export interface ResourceLike<
    * resource-scoped override — the planner falls back to the stack/CLI default.
    */
   Adopt: boolean | undefined;
+  /**
+   * Per-resource provider mode captured from the ambient
+   * {@link ProviderModePolicy} at registration time (e.g. via
+   * `.pipe(local())` / `.pipe(live())`). `undefined` means no
+   * resource-scoped override — the planner falls back to the run default
+   * (`AlchemyContext.dev`).
+   */
+  Mode: ProviderMode | undefined;
   /** @internal phantom */
   Attributes: Attributes;
   /** @internal phantom */
@@ -265,8 +278,36 @@ export function Resource<R extends ResourceLike>(
       const namespace = yield* CurrentNamespace;
       const fqn = toFqn(namespace, id);
 
+      const ambientMode = yield* Effect.serviceOption(ProviderModePolicy).pipe(
+        Effect.map(Option.getOrUndefined),
+      );
+
       const existing = stack.resources[fqn];
       if (existing) {
+        // A resource may be `yield*`ed from several places (idempotent
+        // registration). If a later site carries an *explicit* ambient
+        // ProviderModePolicy that disagrees with what the resource was
+        // registered with, the decorations are conflicting — fail loudly
+        // instead of silently picking one. A later site with NO ambient
+        // policy simply inherits the registered resource (the common
+        // "reference it from elsewhere" pattern).
+        if (ambientMode !== undefined && existing.Mode !== ambientMode) {
+          return yield* Effect.die(
+            new ConflictingProviderModeError({
+              message:
+                `Resource '${fqn}' was registered with provider mode ` +
+                `'${existing.Mode ?? "default"}' but is now being registered ` +
+                `with conflicting mode '${ambientMode}'. A resource must ` +
+                "resolve to a single provider mode: register it once and " +
+                "close over the returned value, or make both registration " +
+                "sites agree (e.g. wrap both in the same `local()`/`live()` " +
+                "scope).",
+              fqn,
+              existingMode: existing.Mode,
+              conflictingMode: ambientMode,
+            }),
+          );
+        }
         // // TODO(sam): check if props are different and die
         return existing;
       }
@@ -341,6 +382,7 @@ export function Resource<R extends ResourceLike>(
         Adopt: yield* Effect.serviceOption(AdoptPolicy).pipe(
           Effect.map(Option.getOrUndefined),
         ),
+        Mode: ambientMode,
         bind,
         toString(this: typeof target) {
           return `Resource<${this.Type}>(${this.LogicalId})`;

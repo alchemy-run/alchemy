@@ -6,6 +6,7 @@ import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
+import { live, local } from "@/ProviderMode.ts";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -33,6 +34,7 @@ import {
   Bucket,
   Function,
   KindStablesResource,
+  ModalResource,
   NoPrecreateBindingTarget,
   OverrideStablesResource,
   Queue,
@@ -3501,6 +3503,359 @@ describe("read is never handed unresolved persisted props", () => {
       ).pipe(Effect.provide(layer));
       expect(reads).toContain("Half");
       expect(plan.resources.Half!.action).toBe("create");
+    }),
+  );
+});
+
+describe("provider modes (local ⇄ live)", () => {
+  // ModalResource registers via `ProviderLayer.dual` with distinct live and
+  // local implementations. These tests cover the PLAN-level semantics:
+  //   - the resolved mode lands on the plan node (`node.mode`)
+  //   - a persisted mode different from the resolved mode forces a
+  //     REPLACEMENT, overriding whatever the provider diff would say
+  //   - legacy rows (no persisted mode) are assumed to be the current run's
+  //     mode — no replacement churn
+  //   - deletions carry the persisted mode so orphans are torn down by the
+  //     provider that created them
+  //   - a mode-switching upstream invalidates its attrs for downstream diffs
+
+  const modalState = (
+    fqn: string,
+    overrides?: Partial<ResourceState>,
+  ): ResourceState =>
+    ({
+      instanceId,
+      providerVersion: 0,
+      logicalId: fqn,
+      fqn,
+      namespace: undefined,
+      resourceType: "Test.ModalResource",
+      status: "created",
+      props: { value: "v1" },
+      attr: { value: "v1", runtime: "local" },
+      downstream: [],
+      bindings: [],
+      providerMode: "local",
+      ...overrides,
+    }) as ResourceState;
+
+  test(
+    "a fresh create resolves the run default (live) onto the node",
+    Effect.gen(function* () {
+      const plan = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "create",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "local() pins the node's mode",
+    Effect.gen(function* () {
+      const plan = yield* makePlan(
+        ModalResource("A", { value: "v1" }).pipe(local()),
+      );
+      expect(plan.resources.A).toMatchObject({
+        action: "create",
+        mode: "local",
+      });
+    }),
+  );
+
+  test(
+    "mode-agnostic resources plan with mode undefined even under a blanket local()",
+    Effect.gen(function* () {
+      // A single-implementation provider (no dual registration) satisfies
+      // any requested mode — this is what makes `local()` usable over a
+      // construct that mixes emulatable and live-only resources.
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* ModalResource("A", { value: "v1" });
+          yield* TestResource("T", { string: "x" });
+        }).pipe(local()),
+      );
+      expect(plan.resources.A!.mode).toBe("local");
+      expect(plan.resources.T!.mode).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a persisted mode different from the resolved mode forces a replacement",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A") }); // providerMode: "local"
+
+      // Identical props — the provider diff would report `noop` — but the
+      // row was reconciled by the LOCAL provider and this run resolves to
+      // LIVE, so the plan must replace (create-first).
+      const plan = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        deleteFirst: false,
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "the same mode plans normally (noop on identical props)",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A") }); // providerMode: "local"
+      const plan = yield* makePlan(
+        ModalResource("A", { value: "v1" }).pipe(local()),
+      );
+      expect(plan.resources.A).toMatchObject({ action: "noop" });
+    }),
+  );
+
+  test(
+    "switching live → local replaces too",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A", { providerMode: "live" }) });
+      const plan = yield* makePlan(
+        ModalResource("A", { value: "v1" }).pipe(local()),
+      );
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        mode: "local",
+      });
+    }),
+  );
+
+  test(
+    "a mode switch overrides the provider diff (update would have sufficed)",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A") }); // providerMode: "local"
+      // Changed value — same-mode planning would produce `update` — but the
+      // mode switch escalates to `replace` without consulting the diff.
+      const plan = yield* makePlan(ModalResource("A", { value: "v2" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "legacy rows without a persisted mode are assumed to be the current run's mode",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A", { providerMode: undefined }) });
+
+      // Default (live) run: assumed live → noop. Explicit local(): the row
+      // is ALSO assumed local (assume-current applies to whatever mode this
+      // plan resolves) → still no replacement churn; the row is stamped on
+      // its next write.
+      const liveDefault = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(liveDefault.resources.A).toMatchObject({ action: "noop" });
+
+      const pinnedLocal = yield* makePlan(
+        ModalResource("A", { value: "v1" }).pipe(local()),
+      );
+      expect(pinnedLocal.resources.A).toMatchObject({ action: "noop" });
+    }),
+  );
+
+  test(
+    "a mode-agnostic resource never replaces across dev/deploy runs",
+    Effect.gen(function* () {
+      yield* seed({
+        T: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "T",
+          fqn: "T",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: { string: "x" },
+          attr: {
+            string: "x",
+            stringArray: [],
+            stableString: "T",
+            stableArray: ["T"],
+          },
+          downstream: [],
+          bindings: [],
+          // Mode-agnostic providers never stamp a mode.
+          providerMode: undefined,
+        },
+      });
+      const plan = yield* makePlan(
+        TestResource("T", { string: "x" }).pipe(local()),
+      );
+      expect(plan.resources.T).toMatchObject({ action: "noop" });
+    }),
+  );
+
+  test(
+    "an interrupted create still replaces on a mode switch",
+    Effect.gen(function* () {
+      // A `creating` row (attr-less, interrupted) normally re-drives its
+      // create via the read-recovery branch. When the mode switched, that
+      // branch is skipped — the other runtime's half-created instance must
+      // be replaced, not resumed.
+      yield* seed({
+        A: modalState("A", {
+          status: "creating",
+          attr: undefined,
+        } as Partial<ResourceState>),
+      });
+      const plan = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "an interrupted update still replaces on a mode switch",
+    Effect.gen(function* () {
+      yield* seed({
+        A: modalState("A", {
+          status: "updating",
+          props: { value: "v2" },
+          old: {
+            props: { value: "v1" },
+            bindings: [],
+            attr: { value: "v1", runtime: "local" },
+          },
+        } as Partial<ResourceState>),
+      });
+      // Same-mode planning would resume the interrupted update; a mode
+      // switch must escalate to a replacement of the other runtime's
+      // instance instead.
+      const plan = yield* makePlan(ModalResource("A", { value: "v2" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "an in-flight replacement generation hit by a mode switch restarts a new generation",
+    Effect.gen(function* () {
+      // `replacing`: the (local) replacement candidate is still being
+      // created. A mode switch makes that candidate itself obsolete — the
+      // plan must mint a NEW outer generation (`restart: true`) rather than
+      // resuming the local candidate under the live provider.
+      yield* seed({
+        A: modalState("A", {
+          status: "replacing",
+          attr: undefined,
+          deleteFirst: false,
+          old: modalState("A", {
+            instanceId: "00000000000000000000000000000000",
+          }),
+        } as Partial<ResourceState>),
+      });
+      const plan = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        restart: true,
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "a completed-but-undrained replacement hit by a mode switch restarts; same mode just drains",
+    Effect.gen(function* () {
+      const replaced = (providerMode: "local" | "live") =>
+        modalState("A", {
+          status: "replaced",
+          deleteFirst: false,
+          providerMode,
+          old: modalState("A", {
+            instanceId: "00000000000000000000000000000000",
+          }),
+        } as Partial<ResourceState>);
+
+      // The live replacement of a LOCAL row completed but its old chain
+      // hasn't drained. Re-planning in the same (live) mode continues the
+      // existing generation (no restart — GC just finishes).
+      yield* seed({ A: replaced("live") });
+      const sameMode = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(sameMode.resources.A).toMatchObject({ action: "replace" });
+      expect((sameMode.resources.A as any).restart).toBeUndefined();
+
+      // But if the completed replacement was LOCAL and this run resolves
+      // live, the current "new" generation is itself obsolete — restart.
+      yield* seed({ A: replaced("local") });
+      const switched = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(switched.resources.A).toMatchObject({
+        action: "replace",
+        restart: true,
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "orphan deletions carry the persisted mode",
+    Effect.gen(function* () {
+      yield* seed({
+        LocalOrphan: modalState("LocalOrphan"), // providerMode: "local"
+        LegacyOrphan: modalState("LegacyOrphan", {
+          providerMode: undefined,
+        }),
+      });
+      const plan = yield* makePlan(Effect.void);
+      // The Delete node records the mode its provider was resolved for —
+      // Apply deletes the local orphan with the LOCAL provider even though
+      // this is a live-default run.
+      expect(plan.deletions.LocalOrphan).toMatchObject({
+        action: "delete",
+        mode: "local",
+      });
+      expect(plan.deletions.LegacyOrphan).toMatchObject({ action: "delete" });
+      expect(plan.deletions.LegacyOrphan!.mode).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a mode-switching upstream invalidates its attrs for downstream diffs",
+    Effect.gen(function* () {
+      yield* seed({
+        A: modalState("A", { downstream: ["B"] }), // providerMode: "local"
+        B: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "B",
+          fqn: "B",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: { string: "v1" },
+          attr: {
+            string: "v1",
+            stringArray: [],
+            stableString: "B",
+            stableArray: ["B"],
+          },
+          downstream: [],
+          bindings: [],
+        },
+      });
+
+      const program = (mode: "switch" | "same") =>
+        Effect.gen(function* () {
+          const a = yield* ModalResource("A", { value: "v1" });
+          yield* TestResource("B", { string: a.value });
+        }).pipe(mode === "same" ? local() : live());
+
+      // Mode switch (local row, live plan): A is being replaced, so its
+      // attrs are NOT stable — B must observe an unresolved upstream and
+      // plan an update rather than nooping against stale values.
+      const switched = yield* makePlan(program("switch"));
+      expect(switched.resources.A).toMatchObject({ action: "replace" });
+      expect(switched.resources.B).toMatchObject({ action: "update" });
+
+      // Control — same mode: A noops, its persisted attrs resolve, B noops.
+      const same = yield* makePlan(program("same"));
+      expect(same.resources.A).toMatchObject({ action: "noop" });
+      expect(same.resources.B).toMatchObject({ action: "noop" });
     }),
   );
 });

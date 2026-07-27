@@ -1,5 +1,6 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -14,6 +15,7 @@ import {
   isLiveId,
   LOCAL_ENTRY_URL,
   LocalRuntimeState,
+  localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -674,7 +676,8 @@ export const ConsumerProviderLocal = () =>
   );
 
 export const ConsumerProvider = () =>
-  ProviderLayer.select({
-    local: () => ConsumerProviderLocal(),
+  ProviderLayer.dual(Consumer, {
+    local: () =>
+      ConsumerProviderLocal().pipe(Layer.provide(localRuntimeServices())),
     live: () => ConsumerProviderLive(),
   });

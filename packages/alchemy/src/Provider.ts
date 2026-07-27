@@ -10,6 +10,7 @@ import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
 import type { Platform } from "./Platform.ts";
+import type { ProviderMode } from "./ProviderMode.ts";
 import type {
   ResourceBinding,
   ResourceClass,
@@ -111,6 +112,27 @@ export interface ProviderService<
    * provider via {@link tryFindProviderByType}.
    */
   aliases?: readonly string[];
+  /**
+   * The {@link ProviderMode} this service operates in.
+   *
+   * Set by `ProviderLayer.dual` registrations: the delegating service
+   * registered in context carries the run's default mode, and each built
+   * variant carries its concrete mode. Mode-agnostic providers (plain
+   * {@link succeed}/{@link effect} registrations) leave it `undefined` —
+   * their resources never persist a mode and never replace on a mode
+   * switch.
+   */
+  mode?: ProviderMode;
+  /**
+   * Lazily-built mode variants, present only for `ProviderLayer.dual`
+   * registrations. Each effect builds (once, memoized, into the stack's
+   * layer scope) the provider service for that mode — including any
+   * mode-specific dependency layers — and returns it. The engine resolves
+   * a concrete variant via {@link findProviderByType} with a mode so that
+   * e.g. a local-mode state row is always deleted by the local provider,
+   * even during a live deploy (and vice versa).
+   */
+  modes?: { readonly [M in ProviderMode]: Effect.Effect<ProviderService<Res>> };
   /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
@@ -495,12 +517,33 @@ const isProviderService = (value: unknown): value is ProviderService =>
   "delete" in value &&
   typeof (value as ProviderService).delete === "function";
 
+/**
+ * Resolve the concrete service for `mode` from a provider found in context.
+ *
+ * - `mode === undefined` → the service as registered (for dual
+ *   registrations that is the delegating service for the run's default
+ *   mode).
+ * - `mode` given and the provider carries {@link ProviderService.modes} →
+ *   the (lazily built, memoized) variant for that mode.
+ * - `mode` given but the provider is mode-agnostic → the service itself:
+ *   a single implementation satisfies every mode (hybrid), which is what
+ *   lets live-only resources (e.g. R2 buckets) participate in dev runs.
+ */
+export const providerForMode = <R extends ResourceLike>(
+  service: ProviderService<R>,
+  mode: ProviderMode | undefined,
+): Effect.Effect<ProviderService<R>> =>
+  mode !== undefined && service.modes !== undefined
+    ? service.modes[mode]
+    : Effect.succeed(service);
+
 export const findProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
+    mode?: ProviderMode,
   ): Effect.Effect<ProviderService<R>>;
-} = ((type: string) =>
-  tryFindProviderByType(type).pipe(
+} = ((type: string, mode?: ProviderMode) =>
+  tryFindProviderByType(type, mode).pipe(
     Effect.flatMap(
       Option.match({
         onNone: () => Effect.die(`Provider not found for ${type}`),
@@ -518,9 +561,10 @@ export const findProviderByType: {
 export const findProvider: {
   <R extends ResourceLike>(
     resource: ResourceClassLike<R> | Platform<R, any, any, any, any>,
+    mode?: ProviderMode,
   ): Effect.Effect<ProviderService<R>>;
-} = (resource: { Type?: string; key?: string }) =>
-  findProviderByType((resource.Type ?? resource.key) as string) as any;
+} = (resource: { Type?: string; key?: string }, mode?: ProviderMode) =>
+  findProviderByType((resource.Type ?? resource.key) as string, mode) as any;
 
 /**
  * A persisted state row references a resource type with no registered
@@ -561,44 +605,58 @@ export const missingProviderError = (
 export const tryFindProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
+    mode?: ProviderMode,
   ): Effect.Effect<Option.Option<ProviderService<R>>>;
-} = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
-  const Tag = Provider<R>(resourceType) as unknown as Context.Service<
-    Provider<R>,
-    any
-  >;
-  const direct = yield* Effect.serviceOption(Tag);
-  if (Option.isSome(direct)) {
-    return direct;
-  }
-
-  const context = yield* Effect.context<never>();
-  for (const value of context.mapUnsafe.values()) {
-    if (isProviderCollectionService(value)) {
-      const provider = value.get(resourceType);
-      if (provider) {
-        return Option.some(provider);
-      }
+} = Effect.fn(function* <R extends ResourceLike>(
+  resourceType: R["Type"],
+  mode?: ProviderMode,
+) {
+  // When a mode is requested, resolve the found service to that mode's
+  // variant (building it lazily if needed) before returning.
+  const found = yield* Effect.gen(function* () {
+    const Tag = Provider<R>(resourceType) as unknown as Context.Service<
+      Provider<R>,
+      any
+    >;
+    const direct = yield* Effect.serviceOption(Tag);
+    if (Option.isSome(direct)) {
+      return direct;
     }
-  }
 
-  // State persisted before a type rename carries the legacy name, so no
-  // provider is keyed under it. Fall back to a provider that declares the
-  // name in its `aliases` — scanning both bare Provider layers and the
-  // members of every ProviderCollection.
-  for (const value of context.mapUnsafe.values()) {
-    if (isProviderCollectionService(value)) {
-      for (const provider of Object.values(value.providers)) {
-        if (provider.aliases?.includes(resourceType)) {
+    const context = yield* Effect.context<never>();
+    for (const value of context.mapUnsafe.values()) {
+      if (isProviderCollectionService(value)) {
+        const provider = value.get(resourceType);
+        if (provider) {
           return Option.some(provider);
         }
       }
-    } else if (
-      isProviderService(value) &&
-      value.aliases?.includes(resourceType)
-    ) {
-      return Option.some(value);
     }
+
+    // State persisted before a type rename carries the legacy name, so no
+    // provider is keyed under it. Fall back to a provider that declares the
+    // name in its `aliases` — scanning both bare Provider layers and the
+    // members of every ProviderCollection.
+    for (const value of context.mapUnsafe.values()) {
+      if (isProviderCollectionService(value)) {
+        for (const provider of Object.values(value.providers)) {
+          if (provider.aliases?.includes(resourceType)) {
+            return Option.some(provider);
+          }
+        }
+      } else if (
+        isProviderService(value) &&
+        value.aliases?.includes(resourceType)
+      ) {
+        return Option.some(value);
+      }
+    }
+    return Option.none();
+  });
+  if (Option.isNone(found)) {
+    return found;
   }
-  return Option.none();
+  return Option.some(
+    yield* providerForMode(found.value as ProviderService<R>, mode),
+  );
 }) as any;

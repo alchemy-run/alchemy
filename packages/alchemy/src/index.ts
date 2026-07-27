@@ -25,6 +25,7 @@ export { ALCHEMY_DEV, ALCHEMY_PHASE, type AlchemyPhase } from "./Phase.ts";
 export * from "./PhysicalName.ts";
 export * as Plan from "./Plan.ts";
 export { Provider, ProviderCollection } from "./Provider.ts";
+export * as ProviderMode from "./ProviderMode.ts";
 export * from "./Random.ts";
 export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
