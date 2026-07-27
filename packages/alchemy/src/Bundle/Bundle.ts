@@ -6,14 +6,16 @@ import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import type * as rolldown from "rolldown";
 import { sha256, sha256Object } from "../Util/sha256.ts";
-import type { BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
-import type { PurePluginOptions } from "./PurePlugin.ts";
+import {
+  bundleAnalyzerPlugin,
+  type BundleAnalyzerPluginOptions,
+} from "./BundleAnalyzerPlugin.ts";
+import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 
 /**
- * Rolldown (and the local plugins that import its native binding) are
- * loaded lazily on first {@link build}/{@link watch} so that merely
- * importing alchemy — the CLI command tree, the Cloudflare provider
+ * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
+ * merely importing alchemy — the CLI command tree, the Cloudflare provider
  * barrel — never loads `@rolldown/binding-*`. A stack that bundles
  * nothing must not require the native bundler to be loadable (#562).
  */
@@ -361,13 +363,11 @@ async function builtInPlugins(
 ): Promise<rolldown.RolldownPluginOption> {
   return [
     extra?.bundleAnalyzer
-      ? (await import("./BundleAnalyzerPlugin.ts")).bundleAnalyzerPlugin(
+      ? await bundleAnalyzerPlugin(
           extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer,
         )
       : undefined,
-    extra?.pure !== false
-      ? (await import("./PurePlugin.ts")).purePlugin(extra?.pure ?? {})
-      : undefined,
+    extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),
   ];
 }

@@ -151,16 +151,16 @@ describe("collectPureAnchors", () => {
   };
   // Applies BOTH bound and discarded anchors — the full-annotation view a
   // sideEffects-free package receives.
-  const annotate = (code: string): string | null => {
-    const anchors = collectPureAnchors(code, "/n/effect/dist/x.js");
+  const annotate = async (code: string): Promise<string | null> => {
+    const anchors = await collectPureAnchors(code, "/n/effect/dist/x.js");
     return anchors === null
       ? null
       : apply(code, [...anchors.bound, ...anchors.discarded]);
   };
 
-  it("annotates calls in TypeScript source (worker/bun condition path)", () => {
+  it("annotates calls in TypeScript source (worker/bun condition path)", async () => {
     const code = `import { make } from "./util";\nexport const x: number = make();\n`;
-    const anchors = collectPureAnchors(
+    const anchors = await collectPureAnchors(
       code,
       "/proj/packages/alchemy/src/Util.ts",
     );
@@ -168,26 +168,29 @@ describe("collectPureAnchors", () => {
     expect(apply(code, anchors!.bound)).toContain("/*#__PURE__*/ make()");
   });
 
-  it("classifies variable-initializer calls as bound", () => {
-    const anchors = collectPureAnchors(`const x = create();`, "/n/x.js");
+  it("classifies variable-initializer calls as bound", async () => {
+    const anchors = await collectPureAnchors(`const x = create();`, "/n/x.js");
     expect(anchors!.bound.length).toBe(1);
     expect(anchors!.discarded.length).toBe(0);
   });
 
-  it("classifies bare expression-statement calls as discarded", () => {
-    const anchors = collectPureAnchors(`app.get("/", handler);`, "/n/x.js");
+  it("classifies bare expression-statement calls as discarded", async () => {
+    const anchors = await collectPureAnchors(
+      `app.get("/", handler);`,
+      "/n/x.js",
+    );
     expect(anchors!.bound.length).toBe(0);
     expect(anchors!.discarded.length).toBe(1);
   });
 
-  it("classifies assignment right-hand sides as bound, even in statement position", () => {
-    const anchors = collectPureAnchors(`exports.x = make();`, "/n/x.js");
+  it("classifies assignment right-hand sides as bound, even in statement position", async () => {
+    const anchors = await collectPureAnchors(`exports.x = make();`, "/n/x.js");
     expect(anchors!.bound.length).toBe(1);
     expect(anchors!.discarded.length).toBe(0);
   });
 
-  it("classifies non-final sequence expressions as discarded even in initializers", () => {
-    const anchors = collectPureAnchors(
+  it("classifies non-final sequence expressions as discarded even in initializers", async () => {
+    const anchors = await collectPureAnchors(
       `const x = (register(), make());`,
       "/n/x.js",
     );
@@ -195,72 +198,72 @@ describe("collectPureAnchors", () => {
     expect(anchors!.discarded.length).toBe(1);
   });
 
-  it("classifies optional-chained statement calls as discarded", () => {
-    const anchors = collectPureAnchors(`app?.get("/", h);`, "/n/x.js");
+  it("classifies optional-chained statement calls as discarded", async () => {
+    const anchors = await collectPureAnchors(`app?.get("/", h);`, "/n/x.js");
     expect(anchors!.bound.length).toBe(0);
     expect(anchors!.discarded.length).toBe(1);
   });
 
-  it("annotates top-level call expressions", () => {
-    expect(annotate(`const x = create();`)).toBe(
+  it("annotates top-level call expressions", async () => {
+    expect(await annotate(`const x = create();`)).toBe(
       `const x = /*#__PURE__*/ create();`,
     );
   });
 
-  it("annotates top-level new expressions", () => {
-    expect(annotate(`const x = new Klass();`)).toBe(
+  it("annotates top-level new expressions", async () => {
+    expect(await annotate(`const x = new Klass();`)).toBe(
       `const x = /*#__PURE__*/ new Klass();`,
     );
   });
 
-  it("annotates calls inside named exports", () => {
-    expect(annotate(`export const x = make();`)).toBe(
+  it("annotates calls inside named exports", async () => {
+    expect(await annotate(`export const x = make();`)).toBe(
       `export const x = /*#__PURE__*/ make();`,
     );
   });
 
-  it("annotates calls inside default exports", () => {
-    expect(annotate(`export default make();`)).toBe(
+  it("annotates calls inside default exports", async () => {
+    expect(await annotate(`export default make();`)).toBe(
       `export default /*#__PURE__*/ make();`,
     );
   });
 
-  it("does NOT annotate calls inside function bodies", () => {
-    expect(annotate(`function f() { return inner(); }`)).toBeNull();
+  it("does NOT annotate calls inside function bodies", async () => {
+    expect(await annotate(`function f() { return inner(); }`)).toBeNull();
   });
 
-  it("does NOT annotate IIFEs", () => {
-    expect(annotate(`(function () { sideEffect(); })();`)).toBeNull();
+  it("does NOT annotate IIFEs", async () => {
+    expect(await annotate(`(function () { sideEffect(); })();`)).toBeNull();
   });
 
-  it("does NOT annotate arrow IIFEs", () => {
-    expect(annotate(`(() => sideEffect())();`)).toBeNull();
+  it("does NOT annotate arrow IIFEs", async () => {
+    expect(await annotate(`(() => sideEffect())();`)).toBeNull();
   });
 
-  it("skips already-annotated calls", () => {
-    expect(annotate(`const x = /*#__PURE__*/ create();`)).toBeNull();
+  it("skips already-annotated calls", async () => {
+    expect(await annotate(`const x = /*#__PURE__*/ create();`)).toBeNull();
   });
 
-  it("annotates calls through ts-as expressions", () => {
-    expect(annotate(`const x = make() as Foo;`)).toContain(
+  it("annotates calls through ts-as expressions", async () => {
+    expect(await annotate(`const x = make() as Foo;`)).toContain(
       "/*#__PURE__*/ make()",
     );
   });
 
-  it("annotates both branches of ternary initializers", () => {
-    const result = annotate(`const x = cond ? a() : b();`);
+  it("annotates both branches of ternary initializers", async () => {
+    const result = await annotate(`const x = cond ? a() : b();`);
     expect(result).toContain("/*#__PURE__*/ a()");
     expect(result).toContain("/*#__PURE__*/ b()");
   });
 
-  it("preserves line numbers", () => {
+  it("preserves line numbers", async () => {
     const input = `const a = first();\nconst b = second();\n`;
-    const result = annotate(input);
+    const result = await annotate(input);
     expect(result!.split("\n").length).toBe(input.split("\n").length);
   });
 
-  it("returns null on unparseable input", () => {
-    expect(collectPureAnchors(`const x = {;`, "/n/x.js")).toBeNull();
+  it("returns null on unparseable input", async () => {
+    expect(await collectPureAnchors(`const x = {;`, "/n/x.js")).toBeNull();
   });
 });
 

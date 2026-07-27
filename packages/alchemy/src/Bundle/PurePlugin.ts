@@ -13,8 +13,15 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import picomatch from "picomatch";
 import type * as rolldown from "rolldown";
-import { RolldownMagicString } from "rolldown";
-import { parseAst } from "rolldown/parseAst";
+
+/**
+ * `rolldown` and `rolldown/parseAst` load `@rolldown/binding-*` at module
+ * scope, so they are imported lazily on first use — importing this module
+ * (e.g. via the `alchemy/Bundle` barrel) must never load the native
+ * binding (#562).
+ */
+const loadRolldown = () => import("rolldown");
+const loadParseAst = () => import("rolldown/parseAst");
 
 /**
  * Default packages whose modules will receive `/*#__PURE__*\/` annotations.
@@ -149,7 +156,7 @@ export const purePlugin = (
         const markSideEffectFree =
           markSideEffectFreeOpt && !isEntry && sideEffectFreePkg;
 
-        const anchors = collectPureAnchorsCached(code, cleanId);
+        const anchors = await collectPureAnchorsCached(code, cleanId);
         // Annotating a call whose result is BOUND (variable initializer,
         // export) only lets the minifier drop it when the binding itself
         // is unused — safe everywhere. Annotating a call whose result is
@@ -175,7 +182,9 @@ export const purePlugin = (
         // `code`. Returning it as `code` hands sourcemap generation to
         // rolldown's native side (computed on a background thread). The
         // fallback covers direct hook invocations (unit tests).
-        const s = meta.magicString ?? new RolldownMagicString(code);
+        const s =
+          meta.magicString ??
+          new (await loadRolldown()).RolldownMagicString(code);
         for (const anchor of positions) s.appendLeft(anchor, PURE_COMMENT);
         return {
           code: s,
@@ -342,15 +351,15 @@ const anchorsCache = new Map<
 >();
 const ANCHORS_CACHE_MAX = 10_000;
 
-const collectPureAnchorsCached = (
+const collectPureAnchorsCached = async (
   code: string,
   filename: string,
-): PureAnchors | null => {
+): Promise<PureAnchors | null> => {
   const cached = anchorsCache.get(filename);
   if (cached !== undefined && cached.code === code) {
     return cached.anchors;
   }
-  const anchors = collectPureAnchors(code, filename);
+  const anchors = await collectPureAnchors(code, filename);
   if (anchorsCache.size >= ANCHORS_CACHE_MAX) {
     anchorsCache.clear();
   }
@@ -386,10 +395,11 @@ export interface PureAnchors {
  * Returns `null` if the file does not need to be modified (parse failure
  * or no annotations needed).
  */
-export function collectPureAnchors(
+export async function collectPureAnchors(
   code: string,
   filename: string,
-): PureAnchors | null {
+): Promise<PureAnchors | null> {
+  const { parseAst } = await loadParseAst();
   let program: Program;
   try {
     // Use TS lang so the parser tolerates TS syntax (`as`, `satisfies`,
