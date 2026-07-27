@@ -68,6 +68,10 @@ test.provider(
         RuleName: rule.ruleName,
       });
       expect(observed.Rule?.Name).toBe(rule.ruleName);
+      // `enabled` was omitted: the provider must apply the documented default
+      // (the wire API defaults an omitted Enabled to false, which would
+      // silently bounce all inbound mail).
+      expect(observed.Rule?.Enabled).toBe(true);
       expect(observed.Rule?.ScanEnabled).toBe(true);
       expect(observed.Rule?.Actions?.[0]?.AddHeaderAction?.HeaderValue).toBe(
         "inbound",
