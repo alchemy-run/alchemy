@@ -1245,10 +1245,20 @@ test.provider(
         `${v3.a.url}/get`,
       );
       expect(aAfter.value).toBe(aBefore);
-      // worker-b was untouched in v3 (noop), so no version staleness here:
-      // its twin namespace must still exist and still be empty.
+      // worker-b was a noop in v3, but its v2 upload was only moments ago —
+      // an edge metal can still serve the v1 (cross-script) version, whose
+      // /get reads worker-a's non-zero counter. Poll until the twin's own
+      // empty namespace answers: a genuinely stolen/deleted namespace never
+      // reads 0, so the bounded retry still fails in the regression case.
       const twinAfter = yield* fetchJsonReady<{ value: number }>(
         `${v3.b.url}/get`,
+      ).pipe(
+        Effect.flatMap((r) =>
+          r.value === 0
+            ? Effect.succeed(r)
+            : Effect.fail(new Error(`stale: twin sees ${r.value}`)),
+        ),
+        Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
       );
       expect(twinAfter.value).toBe(0);
 

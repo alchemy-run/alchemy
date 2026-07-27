@@ -9,6 +9,8 @@ import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
 import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
+import type { Container } from "../Containers/Container.ts";
+import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -47,6 +49,15 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       const bindingEff = props.env?.[bindingName] as
         | WorkerBindingResource
         | Effect.Effect<WorkerBindingResource>;
+      // A Container bound directly in `env` declares a container-backed
+      // Durable Object class: the Container IS the DO namespace binding plus
+      // its ContainerApplication. Handled before the generic Effect
+      // resolution below — yielding the Container class would resolve its
+      // *started instance* tag, which only exists inside a Durable Object.
+      if (isContainerDecl(bindingEff)) {
+        yield* bindContainerClass(resource, bindingName, bindingEff);
+        continue;
+      }
       // Bindings can be passed as a plain resource value, an Effect that
       // yields a resource, or an effect-class (e.g. a `Cloudflare.Worker`
       // class). Resolve the yieldable forms before deriving binding metadata.
@@ -99,6 +110,85 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       }
     }
   }
+});
+
+/**
+ * Structural check for a `Cloudflare.Container` class declaration. Keyed on
+ * the `~alchemy/Container/ClassName` marker (rather than importing from
+ * `Containers/Container.ts`) to avoid a value-level import cycle through
+ * `ContainerPlatform` → `Worker.ts` → this module.
+ */
+const isContainerDecl = (value: unknown): value is Container.Decl.Any =>
+  (typeof value === "function" || typeof value === "object") &&
+  value !== null &&
+  "~alchemy/Container/ClassName" in value;
+
+/**
+ * Structural check for a yielded {@link ContainerApplication} resource
+ * instance (same import-cycle note as above).
+ */
+const isContainerApplicationResource = (
+  value: unknown,
+): value is ContainerApplication =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { Type?: unknown }).Type === "Cloudflare.Container";
+
+/**
+ * Wire a Container bound directly on an async Worker's `env`
+ * (`env: { Sandbox: Cloudflare.Container("Sandbox", { image }) }`). Mirrors
+ * v1 alchemy, where a Container binding is a Durable Object namespace plus
+ * its ContainerApplication in one declaration:
+ *
+ * 1. emit the `durable_object_namespace` binding for the class,
+ * 2. attach the class's namespace id to the ContainerApplication, and
+ * 3. contribute `containers: [{ className }]` binding data so the Worker's
+ *    script metadata marks the class as container-backed.
+ *
+ * The namespace id only exists once the Worker uploads, while the Worker's
+ * metadata needs the container class — the same circularity as the
+ * Effect-native path (`ContainerPlatform.bind`), resolved through bindings +
+ * precreate.
+ */
+const bindContainerClass = Effect.fn(function* (
+  resource: Worker,
+  bindingName: string,
+  decl: Container.Decl.Any,
+) {
+  const className = decl["~alchemy/Container/ClassName"] ?? bindingName;
+  // Resolve the ContainerApplication resource declaration carried on the
+  // class. An effectful (`main`) container has no application declaration of
+  // its own here (it is created by its `.make()` Layer inside a Durable
+  // Object host), so it cannot back an async class.
+  const declaration = (decl as { Application?: unknown }).Application;
+  const application =
+    isYieldableEffectLike(declaration) && !Output.isOutput(declaration)
+      ? yield* declaration as Effect.Effect<unknown>
+      : undefined;
+  if (!isContainerApplicationResource(application)) {
+    return yield* Effect.die(
+      `Worker binding '${bindingName}' is a Container without a deployable image. Declare the container with props (image, or context/dockerfile) to bind it on an async Worker — effectful (main) containers require an Effect-native Durable Object host.`,
+    );
+  }
+  yield* resource.bind`${bindingName}`({
+    bindings: [
+      {
+        type: "durable_object_namespace",
+        name: bindingName,
+        className,
+      },
+    ],
+  });
+  yield* application.bind`${bindingName}`({
+    durableObjects: {
+      namespaceId: resource.durableObjectNamespaces.pipe(
+        Output.map((namespaces) => namespaces?.[className]),
+      ),
+    },
+  });
+  yield* resource.bind`${application.LogicalId}`({
+    containers: [{ className, dev: application.dev }],
+  });
 });
 
 type BindingSpec = InputProps<WorkerBinding>;

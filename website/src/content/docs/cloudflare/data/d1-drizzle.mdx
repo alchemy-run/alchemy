@@ -211,7 +211,7 @@ applies the new file; an unchanged schema is a no-op.
 ## Prefer tagged-template SQL?
 
 Drizzle is one consumer of the binding, not a requirement. The same
-`QueryDatabase` client also powers `SQL.D1` (from `alchemy/SQL`) —
+`QueryDatabase` client also powers `SQL.D1` (from `alchemy/SQL/D1`) —
 the raw `@effect/sql-d1` client with tagged-template SQL and
 Effect's generic `SqlClient` interface, no ORM involved. That path
 is covered in

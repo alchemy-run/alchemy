@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.64",
+  "version": "2.0.0-beta.65",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -229,11 +229,11 @@
       "worker": "./src/Process/index.ts",
       "import": "./lib/Process/index.js"
     },
-    "./SQL": {
-      "types": "./lib/SQL/index.d.ts",
-      "bun": "./src/SQL/index.ts",
-      "worker": "./src/SQL/index.ts",
-      "import": "./lib/SQL/index.js"
+    "./SQL/*": {
+      "types": "./lib/SQL/*.d.ts",
+      "bun": "./src/SQL/*.ts",
+      "worker": "./src/SQL/*.ts",
+      "import": "./lib/SQL/*.js"
     },
     "./SQLite": {
       "types": "./lib/SQLite/index.d.ts",
@@ -283,6 +283,12 @@
       "worker": "./src/Test/Http.ts",
       "import": "./lib/Test/Http.js"
     },
+    "./Test/Vitest": {
+      "types": "./lib/Test/Vitest.d.ts",
+      "bun": "./src/Test/Vitest.ts",
+      "worker": "./src/Test/Vitest.ts",
+      "import": "./lib/Test/Vitest.js"
+    },
     "./Util": {
       "types": "./lib/Util/index.d.ts",
       "bun": "./src/Util/index.ts",
@@ -322,6 +328,7 @@
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:",
+    "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@octokit/webhooks": "^14.2.0",
@@ -381,6 +388,7 @@
     "tsx": "^4.20.6",
     "typescript": "catalog:",
     "uuid": "catalog:",
+    "vitest": "catalog:",
     "wrangler": "catalog:",
     "ws": "catalog:"
   },
