@@ -103,8 +103,16 @@ test.provider(
       });
 
       // Restrict the input memo to fixture sources so the test isn't
-      // re-hashing the whole monorepo on every deploy.
-      const memoInclude = ["src/**", "public/**", "package.json"];
+      // re-hashing the whole monorepo on every deploy. `workspaces: []`
+      // pins the hash to the fixture alone: auto-detection would fold in
+      // workspace-linked integration packages, whose trees can change
+      // between deploys (concurrent development in this repo), breaking
+      // the unchanged-rebuild memo assertion below. Workspace-aware
+      // memoization has its own dedicated test in Vite.test.ts.
+      const memo = {
+        include: ["src/**", "public/**", "package.json"],
+        workspaces: [],
+      };
 
       // A random value is fine here — it is binding data, not a resource
       // name — and it stays constant across this test's deploys so the
@@ -122,7 +130,7 @@ test.provider(
                 date: "2026-03-10",
                 flags: ["nodejs_compat"],
               },
-              memo: { include: memoInclude },
+              memo,
               env: { TEST_MARKER: marker },
               assets: {
                 htmlHandling: "auto-trailing-slash",
