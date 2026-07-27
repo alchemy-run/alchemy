@@ -884,6 +884,15 @@ export default defineConfig({
               ],
             },
             {
+              label: "Email",
+              items: [
+                {
+                  label: "Receiving inbound email",
+                  link: "/aws/email/receiving",
+                },
+              ],
+            },
+            {
               label: "Security & secrets",
               items: [
                 { label: "Secrets & env", link: "/aws/security/secrets-env" },
