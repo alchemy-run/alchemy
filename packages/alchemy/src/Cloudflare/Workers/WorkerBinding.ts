@@ -3,6 +3,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
+import type * as Output from "../../Output.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import type { Gateway as AiGateway } from "../AI/Gateway.ts";
@@ -86,6 +87,14 @@ export type WorkerBindingResource =
   | Json
   | Redacted.Redacted<Json>
   | Config.Config<Json>
+  // Outputs that resolve to a plain env value (e.g. `Alchemy.makeRandom`,
+  // `Output.literal`), classified by their resolved value at deploy time.
+  // Whole-resource Outputs (`Output.of(bucket)`) cannot be excluded here:
+  // `Input<T>` wraps this whole union in `Output<T>`, so any Output whose
+  // A is structurally Json (most resource attribute shapes) is admitted
+  // upstream regardless of this arm. `bindWorkerAsyncBindings` rejects
+  // them at deploy time instead.
+  | Output.Output<Json | Redacted.Redacted<Json>, unknown>
   // CF resources
   | Assets
   | Bucket

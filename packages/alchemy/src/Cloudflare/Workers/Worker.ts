@@ -11,6 +11,7 @@ import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named, Tag } from "../../Named.ts";
+import type * as Output from "../../Output.ts";
 import {
   Platform,
   type Main,
@@ -278,6 +279,13 @@ export type WorkerBindingProps = {
     | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
+type Unwrap<T> = T extends Output.Output<infer A, infer _Req> ? A : T;
+
+// NOTE: `Worker<NormalizedBindings<...>>` must provably satisfy the
+// `WorkerBindings` constraint for *generic* `Bindings`, which restricts the
+// shapes usable here: conditional checks on the naked parameter `T` and an
+// outermost `Extract<..., WorkerBindingResource>` are provable; e.g.
+// `Unwrap<T> extends ...` as a check type is not.
 export type NormalizedBindings<
   Bindings extends WorkerBindingProps = {},
   AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
@@ -287,10 +295,10 @@ export type NormalizedBindings<
     any,
     any
   >
-    ? T extends Redacted.Redacted<infer T> | Config.Config<infer T>
-      ? T
-      : T
-    : Extract<Bindings[B], WorkerBindingResource>;
+    ? T extends Redacted.Redacted<infer V> | Config.Config<infer V>
+      ? V
+      : Unwrap<T>
+    : Extract<Unwrap<Bindings[B]>, WorkerBindingResource>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
@@ -444,6 +452,11 @@ export interface WorkerProps<
    *   [Secrets & env](/cloudflare/security/secrets-env).
    * - Literal values — routed by shape: `Redacted<string>` →
    *   `secret_text`, `string` → `plain_text`, anything else → `json`.
+   * - `Output` values that resolve to a plain env value (e.g.
+   *   `Alchemy.makeRandom`) — classified at deploy time by their
+   *   resolved value using the literal rules above. Whole-resource
+   *   Outputs (`Output.of(bucket)`) are rejected at deploy time; bind
+   *   the resource itself instead.
    *
    * In Effect-native Workers you can alternatively `yield*` a
    * `Config` in the Init phase to register the binding implicitly;

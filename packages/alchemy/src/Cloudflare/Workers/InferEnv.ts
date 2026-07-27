@@ -3,6 +3,7 @@
 import type * as Effect from "effect/Effect";
 import type { Redacted } from "effect/Redacted";
 import type * as Stream from "effect/Stream";
+import type { Output } from "../../Output.ts";
 // Aliased so the ambient Cloudflare `Rpc` namespace (from
 // @cloudflare/workers-types, referenced above) stays reachable for
 // `Rpc.DurableObjectBranded`.
@@ -54,7 +55,9 @@ export type GetBindingType<T> =
     : // `Worker.URL` (an Effect resolving to a deferred string accessor) needs
       // no case of its own: the generic Effect unwrap below reduces it to
       // `string` via the fallthrough.
-      T extends Effect.Effect<infer A, infer _E, infer _R>
+      T extends
+          | Output<infer A, infer _Req>
+          | Effect.Effect<infer A, infer _E, infer _R>
       ? GetBindingType<A>
       : T extends FlagshipNs.App
         ? Flagship
