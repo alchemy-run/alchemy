@@ -254,9 +254,8 @@ A Worker often needs to know the URL it is served at — to build
 absolute links, register webhooks, or hand a frontend its API
 origin. That URL only exists at deploy time, and a Worker can't
 reference its own `url` Output, so `Worker.URL` injects it as a
-binding on the Worker itself. Yield it in the init phase and
-provide its layer; the accessor it returns is yielded again inside
-a handler:
+binding on the Worker itself. Yield it in the init phase; the
+accessor it returns is yielded again inside a handler:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -275,7 +274,7 @@ export default Cloudflare.Worker(
         return yield* HttpServerResponse.json({ url: publicUrl });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.Workers.URLBinding)),
+  }),
 );
 ```
 

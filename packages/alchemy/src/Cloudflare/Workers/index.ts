@@ -27,8 +27,6 @@ export * from "./RpcDurableObject.ts";
 export * from "./RpcWorker.ts";
 export * from "./ScheduledEvents.ts";
 export * from "./Subdomain.ts";
-export * from "./URL.ts";
-export * from "./URLBinding.ts";
 export * from "./VersionMetadata.ts";
 export * from "./VersionMetadataBinding.ts";
 export * from "./WebSocket.ts";

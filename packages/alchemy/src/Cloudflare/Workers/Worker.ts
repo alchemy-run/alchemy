@@ -38,7 +38,6 @@ import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
-import { URL as WorkersURL } from "./URL.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type {
   WorkerBinding,
@@ -681,6 +680,86 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   },
   Providers
 >;
+
+/** The env key the resolved URL is injected under when `yield*`-ed. */
+const SELF_URL_BINDING_NAME = "WORKER_URL";
+
+/**
+ * Effect-native accessor for the Worker's own URL. The value is injected as an
+ * env binding that only exists at the *exec* phase on the deployed Worker, so
+ * reading it is deferred behind an Effect that requires {@link RuntimeContext}.
+ * Yield it inside a handler to obtain the URL string.
+ */
+export type URLAccessor = Effect.Effect<string, never, RuntimeContext>;
+
+/**
+ * The type of {@link URL} (`Worker.URL`).
+ *
+ * It is a real `Effect` — `yield* Worker.URL` inside a Worker init attaches
+ * the binding and resolves the deferred {@link URLAccessor} — but it also
+ * carries the `~alchemy/Kind` marker statically, so when it is declared on a
+ * Worker's `env` the binding machinery recognises it as a `self_url` binding
+ * (`isSelfUrl`) instead of running it.
+ *
+ * Defined in this module (not its own file): the effect closes over the
+ * `Worker` tag and `WorkerEnvironment`, and a separate module would form a
+ * value cycle with Worker.ts that the deploy bundler's scope hoisting turns
+ * into a startup crash.
+ */
+export interface URLEffect extends Effect.Effect<
+  URLAccessor,
+  never,
+  WorkerEnvironment | Worker
+> {
+  "~alchemy/Kind": "Cloudflare.Workers.URL";
+}
+
+/**
+ * A Worker's own public URL, injected as a binding on that same Worker. At
+ * deploy time Alchemy resolves the URL the Worker will be served at (its first
+ * custom domain if any, otherwise its `workers.dev` URL) and injects it as a
+ * plain-text env binding, so the running Worker knows its own public address.
+ *
+ * Declare it on a Worker's `env` (it flows through `InferEnv` → `string`) or
+ * `yield*` it inside an Effect-native Worker to attach the binding and obtain
+ * a deferred {@link URLAccessor}. It is also exposed as
+ * `Cloudflare.Worker.URL`.
+ *
+ * Because the URL is resolved *before* the bundle is built, a `VITE_`-prefixed
+ * env key holding `Worker.URL` is inlined into the client bundle as
+ * `import.meta.env.VITE_*` — the canonical way to give a Vite frontend its own
+ * public URL.
+ */
+export const URL: URLEffect = Object.assign(
+  Effect.gen(function* () {
+    // Deploy-time only: register the binding on the host Worker. The provider
+    // lowers the `self_url` sentinel into a plain-text binding holding the
+    // resolved URL just before upload.
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* (yield* Worker).bind`${SELF_URL_BINDING_NAME}`({
+        bindings: [{ type: "self_url", name: SELF_URL_BINDING_NAME }],
+      });
+    }
+    // Captured at init; the deferred read only runs at exec phase (the
+    // accessor is colored with RuntimeContext), where env is populated.
+    const env = yield* WorkerEnvironment;
+    return Effect.sync(
+      () => (env as Record<string, string>)[SELF_URL_BINDING_NAME]!,
+    ) as URLAccessor;
+  }),
+  { "~alchemy/Kind": "Cloudflare.Workers.URL" as const },
+);
+
+/**
+ * Returns true when the value is the `Worker.URL` binding (keyed on the
+ * static `~alchemy/Kind` marker — the value is a real Effect, so every
+ * env-resolution site must check this before `Effect.isEffect`).
+ */
+export const isSelfUrl = (value: unknown): value is URLEffect =>
+  typeof value === "object" &&
+  value !== null &&
+  "~alchemy/Kind" in value &&
+  (value as URLEffect)["~alchemy/Kind"] === "Cloudflare.Workers.URL";
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
@@ -1368,9 +1447,9 @@ export const Worker: ResourceClassLike<Worker> &
      * The Worker's own public URL, injected as a binding on that same Worker.
      * Declare it on `env` (`env: { VITE_PUBLIC_URL: Worker.URL }`) or
      * `yield*` it inside an Effect-native Worker to obtain a deferred
-     * accessor. See {@link WorkersURL}.
+     * accessor. See {@link URLEffect}.
      */
-    readonly URL: typeof WorkersURL;
+    readonly URL: URLEffect;
   } = Platform(
   WorkerTypeId,
   {
@@ -1385,5 +1464,5 @@ export const Worker: ResourceClassLike<Worker> &
       bindWorkerAsyncBindings(resource as Worker, props),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
   },
-  { URL: WorkersURL },
+  { URL },
 );

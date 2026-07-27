@@ -25,7 +25,7 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
-import type { URLBinding } from "./URLBinding.ts";
+import type { URLEffect } from "./Worker.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
@@ -110,7 +110,7 @@ export type WorkerBindingResource =
   | WorkerLoader
   | VersionMetadataBinding
   // The Worker's own URL (`Worker.URL`).
-  | URLBinding
+  | URLEffect
   | DispatchNamespace
   | DurableObjectLike<any>
   | WorkflowLike<any>

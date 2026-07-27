@@ -33,10 +33,14 @@ import {
   normalizeTransferredFrom,
 } from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
-import { isSelfUrl } from "./URL.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
-import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
+import {
+  isSelfUrl,
+  isWorker,
+  type Worker,
+  type WorkerProps,
+} from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 

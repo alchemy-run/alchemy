@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
- * Effect-native Worker fixture for the `Worker.URL` binding: yielding the bare
- * tag attaches the binding and returns a deferred accessor; the handler reads
+ * Effect-native Worker fixture for the `Worker.URL` binding: yielding it
+ * attaches the binding and returns a deferred accessor; the handler reads
  * the URL string and echoes it back.
  */
 export default class UrlEffectWorker extends Cloudflare.Worker<UrlEffectWorker>()(
@@ -20,5 +20,5 @@ export default class UrlEffectWorker extends Cloudflare.Worker<UrlEffectWorker>(
         return yield* HttpServerResponse.json({ url: publicUrl });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.Workers.URLBinding)),
+  }),
 ) {}

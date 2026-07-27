@@ -33,13 +33,13 @@ import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import {
+  isSelfUrl,
   Worker,
   type ViteOptions,
   type WorkerProps,
   type WorkerRouteConfig,
 } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
-import { isSelfUrl } from "./URL.ts";
 import type {
   WireWorkerBinding,
   WorkerBinding,
