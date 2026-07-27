@@ -59,18 +59,6 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         yield* bindContainerClass(resource, bindingName, bindingEff);
         continue;
       }
-      // The Worker's own URL (`Worker.URL`, bare or called). The bare tag is
-      // Effect-shaped, so it must be intercepted before the generic Effect
-      // resolution below — yielding it would try to resolve the URL binding
-      // service, which doesn't exist at plan time. The provider lowers the
-      // `self_url` sentinel into a `plain_text` binding holding the Worker's
-      // resolved URL just before upload.
-      if (isSelfUrl(bindingEff)) {
-        yield* resource.bind`${bindingName}`({
-          bindings: [{ type: "self_url", name: bindingName }],
-        });
-        continue;
-      }
       // Bindings can be passed as a plain resource value, an Effect that
       // yields a resource, or an effect-class (e.g. a `Cloudflare.Worker`
       // class). Resolve the yieldable forms before deriving binding metadata.
@@ -386,6 +374,13 @@ const toBinding = (
   } else if (isVersionMetadata(binding)) {
     return {
       type: "version_metadata",
+      name: bindingName,
+    };
+  } else if (isSelfUrl(binding)) {
+    // The Worker's own URL. The provider lowers this sentinel into a
+    // `plain_text` binding holding the resolved URL just before upload.
+    return {
+      type: "self_url",
       name: bindingName,
     };
   } else if (isWorkerLoader(binding)) {

@@ -15,17 +15,38 @@ type TypeId = typeof TypeId;
 export type URLAccessor = Effect.Effect<string, never, RuntimeContext>;
 
 /**
+ * The `Binding.Service` tag behind {@link URL}. Provide
+ * {@link URLBinding} on the Worker effect to satisfy it; user code
+ * interacts with the {@link URL} binding value instead.
+ */
+export interface URLService extends Binding.Service<
+  URLService,
+  TypeId,
+  URLAccessor
+> {
+  (name?: string): URLBinding;
+}
+
+export const URLService = Binding.Service<URLService>({
+  id: TypeId,
+  defaultName: "WORKER_URL",
+  toWorkerBinding: (binding) => ({
+    type: "self_url",
+    name: binding.name,
+  }),
+});
+
+/**
  * A Worker's own public URL, injected as a binding on that same Worker — a
  * Worker-only binding with no backing cloud resource. At deploy time Alchemy
  * resolves the URL the Worker will be served at (its first custom domain if
  * any, otherwise its `workers.dev` URL) and injects it as a plain-text env
  * binding, so the running Worker knows its own public address.
  *
- * `URL` is a single value that is at once the `Binding.Service` tag, the
- * callable that produces a {@link URLBinding}, and the type. Declare it on a
- * Worker's `env` (it flows through `InferEnv` → `string`) or `yield*` it
- * inside an Effect-native Worker to attach the binding and obtain a deferred
- * {@link URLAccessor}. It is also exposed as `Cloudflare.Worker.URL`.
+ * Declare it on a Worker's `env` (it flows through `InferEnv` → `string`) or
+ * `yield*` it inside an Effect-native Worker to attach the binding and obtain
+ * a deferred {@link URLAccessor}. It is also exposed as
+ * `Cloudflare.Worker.URL`.
  *
  * Because the URL is resolved *before* the bundle is built, a `VITE_`-prefixed
  * env key holding `Worker.URL` is inlined into the client bundle as
@@ -73,41 +94,15 @@ export type URLAccessor = Effect.Effect<string, never, RuntimeContext>;
  * //   { VITE_PUBLIC_URL: string }
  * ```
  */
-export interface URL extends Binding.Service<URL, TypeId, URLAccessor> {
-  /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
-   * @default "WORKER_URL"
-   */
-  (name?: string): URLBinding;
-}
-
-export const URL: URL & {
-  // Bare-`yield*` support: `yield* Worker.URL` ≡ `yield* Worker.URL()`.
-  [Symbol.iterator](): Generator<
-    Effect.Effect<URLAccessor, never, URL>,
-    URLAccessor
-  >;
-} = (() => {
-  const service = Binding.Service<URL>({
-    id: TypeId,
-    defaultName: "WORKER_URL",
-    toWorkerBinding: (binding) => ({
-      type: "self_url",
-      name: binding.name,
-    }),
-  });
-  // Forward the bare tag's Effect protocol to a default-named binding value so
-  // `yield* Worker.URL` attaches the binding without the explicit call.
-  (service as { asEffect?: unknown }).asEffect = () => service().asEffect();
-  (service as unknown as Record<PropertyKey, unknown>)[Symbol.iterator] = () =>
-    service()[Symbol.iterator]();
-  return service as never;
-})();
+export const URL: URLBinding = URLService();
 
 /**
- * Returns true when the value is the `Worker.URL` sentinel — either the bare
- * tag (`env: { VITE_PUBLIC_URL: Worker.URL }`) or a constructed binding value
- * (`Worker.URL("PUBLIC_URL")`).
+ * Returns true when the value is a `Worker.URL` binding value. Structural
+ * (keyed on `kind` alone): the engine deep-resolves props before handing them
+ * to providers, which strips the binding value's methods — inside `reconcile`
+ * only the plain `{ kind, name }` data survives.
  */
-export const isSelfUrl = (value: unknown): value is URL | URLBinding =>
-  value === URL || (Binding.isBinding(value) && value.kind === TypeId);
+export const isSelfUrl = (value: unknown): value is URLBinding =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { kind?: unknown }).kind === TypeId;

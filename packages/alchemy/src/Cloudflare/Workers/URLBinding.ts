@@ -1,9 +1,13 @@
 import type * as Binding from "./Binding.ts";
 import { makeBindingLayer } from "./BindingLayer.ts";
-import { URL, type URLAccessor } from "./URL.ts";
+import { URLService, type URLAccessor } from "./URL.ts";
 
-/** The binding value produced by calling {@link URL} (declared on `env` or `yield*`-ed). */
-export type URLBinding = Binding.Binding<URL["key"], URLAccessor, URL>;
+/** The binding value type of {@link URL} (declared on `env` or `yield*`-ed). */
+export type URLBinding = Binding.Binding<
+  URLService["key"],
+  URLAccessor,
+  URLService
+>;
 
 /**
  * The layer that provides the Effect-native interface for the Worker's own-URL
@@ -15,7 +19,7 @@ export type URLBinding = Binding.Binding<URL["key"], URLAccessor, URL>;
  * public URL and injects it as a plain-text env binding — and, at runtime,
  * resolves to a deferred {@link URLAccessor} (yield it to read the URL string).
  */
-export const URLBinding = makeBindingLayer<URL, string, URLAccessor>(
-  URL,
+export const URLBinding = makeBindingLayer<URLService, string, URLAccessor>(
+  URLService,
   (raw) => raw,
 );
