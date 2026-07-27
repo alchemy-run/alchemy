@@ -33,20 +33,18 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ApprovalsLive } from "./Approvals.ts";
 import { buildBoard } from "./Board.ts";
-import { CodingLocal } from "./Coding.ts";
-import { EngineerLive } from "./Engineer.ts";
-import { ToolOutputStoreLive } from "./internal/ToolOutputStore.ts";
-import { Issues, IssuesLive } from "./Issues.ts";
+import { CodingLocal } from "./skills/Coding.ts";
+import { EngineerLive } from "./agents/Engineer.ts";
+import { ToolOutputStoreLive } from "./lib/ToolOutputStore.ts";
+import { Issues, IssuesLive } from "./processes/Issues.ts";
 import { SqliteLedger } from "./Ledger.ts";
-import { LiveTestingLive } from "./LiveTesting.ts";
-import {
-  PullRequestReviewerLive,
-  PullRequests,
-  PullRequestsLive,
-} from "./PullRequests.ts";
-import { ResourceEngineeringLive } from "./ResourceEngineering.ts";
+import { PullRequestReviewerLive } from "./agents/Reviewer.ts";
+import { LiveTestingLive } from "./skills/LiveTesting.ts";
+import { PullRequests, PullRequestsLive } from "./processes/PullRequests.ts";
+import { QualityAssuranceLocal } from "./skills/QualityAssurance.ts";
+import { ResourceEngineeringLive } from "./skills/ResourceEngineering.ts";
 import { testAlchemy } from "./Repos.ts";
-import { ReviewerLive } from "./Reviewer.ts";
+import { ReviewerLive } from "./agents/Reviewer.ts";
 import {
   ApproveRecorded,
   CloseIssueLive,
@@ -58,7 +56,7 @@ import {
   ReadIssueLive,
   SearchIssuesLive,
 } from "./tools/index.ts";
-import { TypedErrorsLive } from "./TypedErrors.ts";
+import { TypedErrorsLive } from "./skills/TypedErrors.ts";
 
 // ─── the physics (local) ─────────────────────────────────────────────
 
@@ -188,11 +186,19 @@ const EngineerLayer = EngineerLive.pipe(
   Layer.provide(WorkspacesLive),
 );
 
-/** The Reviewer worker: reads the diff + the cited issue, records its
- * verdict in the approvals ledger — the channel's merge ratifies it. */
+/** The Reviewer worker: reads the diff + the cited issue, verifies in
+ * the ISSUE'S OWN checkout (the doors key both workers by the issue,
+ * so this is the exact tree the engineer built in — read and run, no
+ * editor), records its verdict in the approvals ledger — the
+ * channel's merge ratifies it. */
 const ReviewerLayer = ReviewerLive.pipe(
   Layer.provide([ApproveRecorded, CommentLive, ReadDiffLive, ReadIssueLive]),
+  Layer.provide(QualityAssuranceLocal),
   Layer.provide(Kernel),
+  Layer.provide(runWorkspace({ remote: GitHub.remote(testAlchemy) })),
+  // the SAME instance the Engineer's layer uses — one checkout cache,
+  // so the issue key resolves to one shared worktree
+  Layer.provide(WorkspacesLive),
 );
 
 /**
@@ -201,7 +207,7 @@ const ReviewerLayer = ReviewerLive.pipe(
  * bun:sqlite so delivery dedupe survives restarts.
  */
 export const OrgLive = Layer.mergeAll(IssuesLive, PullRequestsLive).pipe(
-  // the channel's workers: the Engineer writes the fix in its own
+  // the owner's workers: the Engineer writes the fix in its own
   // thread; the Reviewer judges the artifact and records its verdict
   Layer.provide([EngineerLayer, ReviewerLayer]),
   // the standalone desk: unlinked (foreign) PRs only — the router in
@@ -349,13 +355,13 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
             : "";
 
         // deliver the text through the WORLD's door: a GitHub comment
-        // on the channel's issue (or the desk's PR) steers the run
+        // on the owner's issue (or the desk's PR) steers the run
         // like any other event; chats without a world door are
         // watch-only
         const threadNumber = Number(key.match(/#(\d+)$/)?.[1]);
         if (
           text.length > 0 &&
-          (term === "Channel" || term === "PullRequestReviewer") &&
+          (term === "IssueOwner" || term === "PullRequestReviewer") &&
           Number.isFinite(threadNumber)
         ) {
           yield* comment({

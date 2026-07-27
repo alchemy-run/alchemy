@@ -1,91 +1,114 @@
 # alchemy-org
 
 A software factory that manages a GitHub repository end to end,
-expressed almost entirely as prose: agents, the tools they hire, and
-the typed parameters those tools speak. Code appears only at the
-edges — tool physics and the seams (ledger, kernel, entrypoints) that
-decide where the prose runs.
+expressed almost entirely as prose: agents whose charters splice the
+tools they hire, the skills that teach craft, and the doors that
+delegate work. Code appears only at the edges — routing, tool physics,
+and the entrypoint composition that decides where the prose runs.
 
-## The org
+The folder structure is the architecture:
 
-One file, one purpose:
+```
+src/
+  processes/   deterministic world-wiring (routers, sealed surfaces)
+  agents/      who — the charters
+  skills/      crafts — teachings + the tools they grant
+  tools/       verbs — contract co-located with implementation Layers
+  lib/         plumbing — patch engine, process runner, output store
+  Server.ts    entrypoint — physics + composition + the web UI
+```
 
-- `src/repos.ts` — the managed repository; the resource IS the export
-  (an un-yielded `GitHub.Repository` const; the Stack yields the same
-  const to provision it).
-- `src/vocabulary.ts` — the typed Parameters everything interpolates.
-- `src/tools/` — one file per tool: the contract co-located with its
-  implementation Layer(s) (GitHub-binding physics, local Workspace
-  physics, model-visible TODO stubs), same convention as alchemy's
-  resources.
-- `src/workspace.ts` — the Workspace service: WHICH checkout the
-  local tool physics work in (the entrypoint's choice), with
-  canonical path/symlink containment. Bash is trusted-host execution,
-  not an OS sandbox.
-- `src/coding.ts` — the **Coding** skill: the checkout craft
-  (Grep/Glob/ListDirectory/ReadFile/EditFile/ApplyPatch/WriteFile/
-  Bash/ReadOutput + the discipline for using them),
-  referenced by Engineer and Distilled. Skills grant ACCESS at the
-  type level but stay dormant until activated — or arrive
-  pre-activated when a spawner hands them to a worker.
-  Authority-bearing tools (merge, close, approve) are never bundled
-  into skills: they stay direct splices, so the capability lines
-  stay visible in prose.
+## Processes (`src/processes/`)
 
-The processes (`AI.Process<Self, Shape>`) — bare tags whose CHARTERS
-(prose describing how work moves, referencing the agents that do it)
-live with their implementation Layers and are passed to
-`AI.actor(term, charter)`. A charter is init → turn: the init
-effect runs once (allocate `AI.local` state, define inline tools);
-the turn effect re-renders the stance before every sampling, so
-prose, tools, and delegates can follow the run's state. A process's
-tag resolves to its declared deterministic interface ONLY; the actor
-verbs stay private to its implementation Layer, which interprets the
-charter and wires the world (events, schedules, substrate callbacks)
-to it:
+Plain `Context.Service`s whose Layers consume the world and address
+agents by key — routing is code, not charter:
 
-- `src/issues.ts` — **Issues**: open → triage/dedupe/link → ready →
-  hand to Engineer → close on merged evidence.
-- `src/pull-requests.ts` — **PullRequests**: the org's ONE merge
-  authority; every PR (factory's or human's) gets a Reviewer verdict,
-  then merge or relayed changes.
-- `src/discord.ts` — **FrontDesk**: the org's Discord front desk;
-  mentions become answers, links to prior art, or well-formed issues
-  — never work. Driven by the `Discord.ServerEventSource` seam (REST
-  polling locally; gateway/webhook Layers slot in unchanged).
-- `src/distilled.ts` — **Distilled**: the scheduled submodule
-  maintainer; regenerate, test, PR through the same review door.
+- `Issues.ts` — the router: every repository event is addressed to
+  the owner of the issue it concerns (`send(event, { key })`; the
+  world closing the issue is `settle`). PR events reach the owner
+  through the Ledger's recorded "Closes #N" link; unlinked PRs go to
+  the standalone review desk.
+- `PullRequests.ts` — the sealed read surface (list open PRs).
+- `Discord.ts` — the Discord front desk; mentions become answers,
+  links to prior art, or well-formed issues — never work.
+- `Distilled.ts` — the scheduled submodule maintainer.
 
-The agents (`AI.Agent<Self>`) — callable personas the processes
-delegate to; every agent's tag is the same generic actor interface,
-and `AI.layer(agent, charter)` is the kernel-default implementation:
+## Agents (`src/agents/`)
 
-- `src/engineer.ts` — **Engineer**: one ready issue in, one PR out.
-- `src/reviewer.ts` — **Reviewer**: diff against spec, approve or
-  request changes; never saw the reasoning, on purpose.
+Bare `AI.Agent` tags; behavior lives on the `make` Layer as a charter
+(init → stance). One run per world entity, keyed by it:
 
-Authority lives in reference topology, not configuration: only
-PullRequests names `MergePullRequest`, only FrontDesk names `Reply`,
-the Engineer never reviews and the Reviewer never edits. A capability
+- `IssueOwner.ts` — owns one issue from open to close; its run is the
+  issue's whole thread. It does no craft work: **doors**
+  (`AI.Dispatch`) hand rounds to the Engineer and Reviewer with the
+  task derived in policy code — and the child key IS the topology:
+  both doors key their worker by the issue, so Engineer and Reviewer
+  share one checkout. It merges (ratified against the approvals
+  ledger), closes with citation, and covers author silence with a
+  `remind_me` tool over the kernel clock.
+- `Engineer.ts` — one round of issue work in, one pull request out.
+  The `open_pull_request` wrapper calls `AI.reply(pr)` the moment the
+  artifact exists, so the owner's dispatch resolves with the TYPED
+  reference and the run parks — review feedback resumes the same
+  engineer in the same worktree.
+- `Reviewer.ts` — judges the artifact against the issue's acceptance
+  criteria in the same checkout the change was built in; holds
+  `Approve` but no merge. Also home to `PullRequestReviewer`, the
+  standalone desk that reviews AND merges unlinked contributor PRs.
+- `FrontDesk.ts` — the Discord desk's loop: mentions become
+  answers, links to prior art, or well-formed issues — never work.
+- `DistilledMaintainer.ts` — the scheduled submodule sync: regenerate,
+  test, and PR through the same review door as everyone else.
+
+Authority lives in reference topology, not configuration: only the
+IssueOwner and the standalone desk name `MergePullRequest`, the
+Engineer never reviews, and the Reviewer holds no editor. A capability
 no charter mentions cannot be granted by any Layer.
+
+## Skills (`src/skills/`)
+
+Bare `AI.Skill` tags; the TEACHING (markdown prose + tool grants)
+lives on the Layer. A skill is access at the type level, dormant until
+the agent activates it; teachings reference deeper skills, forming a
+graph the agent descends as the work demands:
+
+- `Coding.ts` — the checkout craft (search/read/edit/patch/run + the
+  discipline). References `ResourceEngineering` as the deeper craft.
+- `ResourceEngineering.ts` — alchemy's resource doctrine (contract,
+  reconciler, lifecycle edges); exposes `TypedErrors` and
+  `LiveTesting`.
+- `QualityAssurance.ts` — the Reviewer's craft: read and RUN, no
+  editor — verification without authorship.
 
 ## Physics and seams (code)
 
 - `src/tools/*.ts` — each tool's implementation Layer(s) live with
   its contract: GitHub-binding physics (business rules like
-  merge-needs-approval), local Workspace physics (FileSystem /
-  shell), and model-visible TODO stubs where plumbing is
-  pending.
-- `src/internal/` — shared safe file operations, true-byte output
-  truncation, scoped output artifacts, and process execution.
-- `src/patch/` — strict Codex-style patch parser, matcher, virtual
-  preflight planner, staged commit, and best-effort rollback.
-- `src/ledger.ts` — the dedupe/liveness seam (Memory | Sqlite | D1).
-- `alchemy.run.ts` — the Stack: provisions the repository.
+  merge-needs-approval), local Workspace physics (FileSystem/shell).
+- `src/lib/` — `Patch.ts` (the apply-patch grammar: types, pure
+  parser, guarded apply), `ProcessRunner.ts`, `ToolOutputStore.ts`,
+  `Output.ts`.
+- `src/Ledger.ts` — the dedupe/liveness + metadata seam
+  (Memory | Sqlite | D1); PR→issue links live here.
+- `src/Approvals.ts` — the two-key ceremony's ledger: the Reviewer
+  records, the owner's merge ratifies.
+- `src/Board.ts` — the domain projection over `AI.Chats` summaries
+  that the UI renders (issues → owner thread → worker threads).
+- `src/Server.ts` — the entrypoint: kernel + model, GitHub polling,
+  `Git.WorkspacesWorktree` (one blobless clone, one worktree per run
+  key) under `Workspace.perRun`, the skill graph composition per
+  agent, and the HTTP surface (AI SDK UI protocol + the Vite-built
+  SPA in `ui/`).
+- `alchemy.run.ts` — the Stack: provisions the sandbox repository and
+  runs the org server as a `Local.Service`.
 
-## What's next
+## Running
 
-The entrypoints that compose processes + physics per environment
-(laptop polling / Cloudflare Worker webhook), the kernel
-implementation that interprets the charters, and the Reply tool's
-Discord physics. Git history holds the previous iteration.
+```sh
+doppler run -c dev --project alchemy-v2 -- bun alchemy deploy --yes
+```
+
+The deploy output prints the server URL; the UI lists open issues with
+their owner threads, streams transcripts live (thinking traces, tool
+calls, worker cards that link into dispatched threads), and accepts
+messages that land as GitHub comments.

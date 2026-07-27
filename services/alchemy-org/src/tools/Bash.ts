@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { runProcess } from "../internal/ProcessRunner.ts";
-import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
+import { runProcess } from "../lib/ProcessRunner.ts";
+import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
 import { command } from "../Vocabulary.ts";
 import { Workspace } from "alchemy/Workspace";
 

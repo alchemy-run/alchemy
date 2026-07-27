@@ -4,8 +4,8 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as S from "effect/Schema";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { runProcess } from "../internal/ProcessRunner.ts";
-import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
+import { runProcess } from "../lib/ProcessRunner.ts";
+import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
 import { pattern } from "../Vocabulary.ts";
 import { Workspace } from "alchemy/Workspace";
 

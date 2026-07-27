@@ -41,7 +41,7 @@ interface BoardIssue {
   updatedAt: number;
   /** The issue's channel chat id — open this when the issue is clicked. */
   channel: string | undefined;
-  /** Workers the channel dispatched, chronological. */
+  /** Workers the owner dispatched, chronological. */
   agents: BoardThread[];
 }
 
@@ -99,7 +99,7 @@ export const App = () => {
   const agentsFor = (id: string): BoardThread[] =>
     board.issues.find((issue) => issue.channel === id)?.agents ?? [];
 
-  /** When `id` is a worker, the issue channel to climb back to. */
+  /** When `id` is a worker, the issue-owner thread to climb back to. */
   const breadcrumbFor = (
     id: string,
   ): { label: string; to: string } | undefined => {
@@ -309,7 +309,7 @@ const Chat = ({
   }, [id, status, setMessages, active]);
 
   const watchOnly =
-    !id.startsWith("Channel:") && !id.startsWith("PullRequestReviewer:");
+    !id.startsWith("IssueOwner:") && !id.startsWith("PullRequestReviewer:");
 
   // delegation tool-call → worker thread. Door calls (`AI.Dispatch`)
   // carry their identity on the part (`part.dispatch.child` is the
@@ -527,7 +527,7 @@ const Chat = ({
               placeholder={
                 watchOnly
                   ? "Watch-only: this run has no world door"
-                  : "Message the channel (lands as a GitHub comment)…"
+                  : "Message the issue owner (lands as a GitHub comment)…"
               }
               disabled={watchOnly}
             />

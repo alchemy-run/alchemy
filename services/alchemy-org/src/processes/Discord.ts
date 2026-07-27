@@ -1,5 +1,5 @@
 /**
- * The FrontDesk process — the org's front desk on Discord. A mention
+ * The DiscordDesk process — the org's front desk on Discord. A mention
  * is a request in natural language; this process turns it into the
  * org's durable artifacts (an issue, a link to prior art) and answers
  * in the thread it was asked in.
@@ -9,8 +9,8 @@
  * chat message shortcut-ed the process. Note it never references
  * ${Issues} either: the handoff artifact is the issue itself.
  *
- * SEALED by construction: {@link FrontDesk} is a plain
- * `Context.Service` resolving to {@link FrontDeskService}, and the
+ * SEALED by construction: {@link DiscordDesk} is a plain
+ * `Context.Service` resolving to {@link DiscordDeskService}, and the
  * world drives the loop through the Discord event source — how
  * mentions arrive (gateway websocket, REST polling locally,
  * interactions webhook on Cloudflare) is decided entirely by which
@@ -18,31 +18,32 @@
  * run per thread — a thread is a conversation, and follow-up
  * mentions steer it.
  */
-import * as AI from "alchemy/AI";
 import * as Discord from "alchemy/Discord";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import {
+  FrontDesk,
+  FrontDeskLive,
+} from "../agents/FrontDesk.ts";
 import { Ledger } from "../Ledger.ts";
-import { testAlchemy } from "../Repos.ts";
-import { OpenIssue, Reply, SearchIssues } from "../tools/index.ts";
 
 /**
- * What the org may ask of the FrontDesk from code. `mention` is a
+ * What the org may ask of the DiscordDesk from code. `mention` is a
  * manual injection door (tests, a bespoke substrate); the normal
- * path is the event source wired inside {@link FrontDeskLive}.
+ * path is the event source wired inside {@link DiscordDeskLive}.
  * Colored `RuntimeContext` — deliveries only happen inside the
  * running host.
  */
-export interface FrontDeskService {
+export interface DiscordDeskService {
   readonly mention: (
     mention: Discord.Mentioned,
   ) => Effect.Effect<void, never, RuntimeContext>;
 }
 
-export class FrontDesk extends Context.Service<FrontDesk, {}>()(
-  "alchemy-org/FrontDesk",
+export class DiscordDesk extends Context.Service<DiscordDesk, {}>()(
+  "alchemy-org/DiscordDesk",
 ) {}
 
 /**
@@ -52,11 +53,11 @@ export class FrontDesk extends Context.Service<FrontDesk, {}>()(
  * one (the conversation moving); the Ledger dedupes DELIVERIES by
  * content, collapsing gateway redeliveries and poll re-observations.
  */
-export const FrontDeskLive = Layer.effect(
-  FrontDesk,
+export const DiscordDeskLive = Layer.effect(
+  DiscordDesk,
   Effect.gen(function* () {
     const ledger = yield* Ledger;
-    const frontDesk = yield* FrontDeskAgent;
+    const frontDesk = yield* FrontDesk;
 
     const mention = (mention: Discord.Mentioned) =>
       Effect.gen(function* () {
@@ -78,31 +79,4 @@ export const FrontDeskLive = Layer.effect(
 
     return { mention: mention };
   }),
-).pipe(Layer.provide(Layer.suspend(() => FrontDeskAgentLive)));
-
-/** The loop behind the desk — {@link FrontDeskLive} wires the world to it. */
-export class FrontDeskAgent extends AI.Agent<FrontDeskAgent>()("FrontDesk") {}
-
-export const FrontDeskAgentLive = FrontDeskAgent.make`
-  This process is the front desk of ${testAlchemy}'s Discord. A
-  ${Discord.Mentioned} message is a request in natural language — a
-  bug report, a feature request, a question, written the way people
-  write in chat.
-
-  Every request starts with ${SearchIssues}. A request already tracked
-  is answered with ${Reply} pointing at the issue and its current
-  state — most requests end here, and that answer is valuable.
-
-  A request that is genuinely new and actionable is distilled into an
-  issue with ${OpenIssue}: a title the author would recognize,
-  acceptance criteria a stranger could work from, and credit to the
-  thread. ${Reply} then hands the author the issue to follow. The
-  issue is the handoff — the Issues process takes it from there; no
-  timelines are promised and no work starts here.
-
-  A question is answered in ${Reply} when the thread and the searched
-  issues contain the answer; otherwise the honest answer is a plain
-  "don't know", with an offer to open an issue if the asker thinks
-  it's a gap.
-
-  Nothing is written anywhere except issues and replies.`;
+).pipe(Layer.provide(Layer.suspend(() => FrontDeskLive)));

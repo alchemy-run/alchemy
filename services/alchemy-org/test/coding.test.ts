@@ -6,10 +6,10 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { Coding, CodingLocal } from "../src/Coding.ts";
-import { LiveTestingLive } from "../src/LiveTesting.ts";
-import { ResourceEngineeringLive } from "../src/ResourceEngineering.ts";
-import { TypedErrorsLive } from "../src/TypedErrors.ts";
+import { Coding, CodingLocal } from "../src/skills/Coding.ts";
+import { LiveTestingLive } from "../src/skills/LiveTesting.ts";
+import { ResourceEngineeringLive } from "../src/skills/ResourceEngineering.ts";
+import { TypedErrorsLive } from "../src/skills/TypedErrors.ts";
 import { fixed as workspace } from "alchemy/Workspace";
 import * as Model from "./fixtures/ScriptedModel.ts";
 

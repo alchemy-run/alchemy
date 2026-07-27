@@ -1,6 +1,6 @@
 /**
  * The ISSUE BOARD — the org's DOMAIN projection over the generic
- * chat summaries (`AI.Chats`): a `Channel` run keyed `owner/repo#n`
+ * chat summaries (`AI.Chats`): an `IssueOwner` run keyed `owner/repo#n`
  * anchors issue `n`; kernel parentage (the `admitted` observation's
  * dispatch edge) collects the workers it dispatched, chronological.
  * Roots that anchor no issue (the unlinked-PR desk, Discord) land in
@@ -21,10 +21,10 @@ export interface BoardIssue {
   readonly state: "open" | "closed" | "unknown";
   readonly updatedAt: number;
   /** The issue's CHANNEL chat — the thread you open when you click
-   *  the issue. Undefined until the channel has been admitted. */
+   *  the issue. Undefined until the owner has been admitted. */
   readonly channel: string | undefined;
-  /** Agents the channel dispatched (chronological) — the UI links a
-   *  dispatch card in the channel to its worker thread through this. */
+  /** Agents the owner dispatched (chronological) — the UI links a
+   *  dispatch card in the owner thread to its worker thread through this. */
   readonly agents: Array<BoardThread>;
 }
 
@@ -109,7 +109,7 @@ export const buildBoard = (
   for (const chat of chats) {
     if (chat.parent !== undefined) continue; // reachable via its root
     const threadNumber = Number(chat.key.match(/#(\d+)$/)?.[1]);
-    if (chat.term === "Channel" && Number.isFinite(threadNumber)) {
+    if (chat.term === "IssueOwner" && Number.isFinite(threadNumber)) {
       const issue = ensureIssue(threadNumber);
       const event = parseEvent(chat.firstInput);
       if (event.issue?.title) issue.title = event.issue.title;

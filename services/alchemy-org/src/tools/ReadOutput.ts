@@ -2,8 +2,8 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { ToolOutputStore } from "../internal/ToolOutputStore.ts";
-import { truncateHead } from "../internal/Output.ts";
+import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
+import { truncateHead } from "../lib/Output.ts";
 
 const outputId = AI.Parameter("outputId", S.String)`
 Opaque output ID returned by grep, glob, or bash when inline output

@@ -6,7 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { WorkspaceFilesLive } from "alchemy/Workspace";
-import { ToolOutputStoreLive } from "../../src/internal/ToolOutputStore.ts";
+import { ToolOutputStoreLive } from "../../src/lib/ToolOutputStore.ts";
 import {
   Bash,
   BashLocal,

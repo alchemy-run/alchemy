@@ -15,8 +15,8 @@ import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import { Issues } from "../src/Issues.ts";
-import { PullRequests } from "../src/PullRequests.ts";
+import { Issues } from "../src/processes/Issues.ts";
+import { PullRequests } from "../src/processes/PullRequests.ts";
 import { OrgLive } from "../src/Server.ts";
 
 /**
