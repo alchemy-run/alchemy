@@ -66,11 +66,10 @@ function appleTouchSvg(): string {
 /**
  * Standalone logo marks, hotlinked by external surfaces (the v1 site served
  * these as `alchemy-logo-{light,dark}.svg`; try-alchemy's auth pages and
- * alchemy-async's AuthLayout still embed those URLs). We now ship the yantra
- * as transparent PNGs and 301 the legacy `.svg` paths to them (see
- * `src/worker.ts`). "light"/"dark" name the page theme the mark sits on:
- * light = dark strokes on a light page, dark = parchment strokes + terracotta
- * bindu, matching the site's dark-mode rendering.
+ * alchemy-async's AuthLayout still embed those URLs). The yantra replaced the
+ * v1 wordmark at the same paths. "light"/"dark" name the page theme the mark
+ * sits on: light = dark strokes on a light page, dark = parchment strokes +
+ * terracotta bindu, matching the site's dark-mode rendering.
  */
 function logoSvg(theme: "light" | "dark"): string {
   return theme === "light"
@@ -161,15 +160,14 @@ async function main() {
   //    some cached nav code) pointing to the 32px raster.
   await writeFile(path.join(publicDir, "favicon.png"), rasterize(favSvg, 32));
 
-  // 6. Standalone logo marks (transparent, 512×512) — the targets of the
-  //    legacy /alchemy-logo-{light,dark}.svg redirects in src/worker.ts.
+  // 6. Standalone logo marks (transparent vectors) at the legacy v1 paths.
   await writeFile(
-    path.join(publicDir, "alchemy-logo-light.png"),
-    rasterize(logoSvg("light"), 512),
+    path.join(publicDir, "alchemy-logo-light.svg"),
+    logoSvg("light"),
   );
   await writeFile(
-    path.join(publicDir, "alchemy-logo-dark.png"),
-    rasterize(logoSvg("dark"), 512),
+    path.join(publicDir, "alchemy-logo-dark.svg"),
+    logoSvg("dark"),
   );
 
   // 7. OG fallback (1200×630). Per-page OG images come from the static
@@ -183,7 +181,7 @@ async function main() {
 
   // eslint-disable-next-line no-console
   console.log(
-    "[brand] wrote favicon.{svg,png}, favicon-{16,32}.png, apple-touch-icon.png, icon-512.png, alchemy-logo-{light,dark}.png, og-default.{svg,png}",
+    "[brand] wrote favicon.{svg,png}, favicon-{16,32}.png, apple-touch-icon.png, icon-512.png, alchemy-logo-{light,dark}.svg, og-default.{svg,png}",
   );
 }
 

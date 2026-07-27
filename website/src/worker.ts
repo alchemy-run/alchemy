@@ -30,18 +30,12 @@ interface HTMLRewriterElement {
 const CANONICAL_HOST = "alchemy.run";
 
 /**
- * 301s for legacy asset paths and the docs restructure (guides/tutorials
- * moved into per-cloud hubs). Doc keys and targets are extensionless; `.md`
- * requests (agents fetching raw markdown) are redirected to the target's
- * `.md` form with any fragment dropped.
+ * 301s for the docs restructure (guides/tutorials moved into per-cloud hubs).
+ * Keys and targets are extensionless; `.md` requests (agents fetching raw
+ * markdown) are redirected to the target's `.md` form with any fragment
+ * dropped.
  */
 const REDIRECTS: Record<string, string> = {
-  // The v1 site served the brand mark at these `.svg` paths; try-alchemy's
-  // auth pages and alchemy-async's AuthLayout still hotlink them. The mark is
-  // now the yantra, shipped as transparent PNGs by
-  // `scripts/generate-brand-assets.ts`.
-  "/alchemy-logo-light.svg": "/alchemy-logo-light.png",
-  "/alchemy-logo-dark.svg": "/alchemy-logo-dark.png",
   "/tutorial/part-1": "/cloudflare/tutorial/part-1",
   "/tutorial/part-2": "/cloudflare/tutorial/part-2",
   "/tutorial/part-3": "/cloudflare/tutorial/part-3",
