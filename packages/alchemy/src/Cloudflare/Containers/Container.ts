@@ -442,6 +442,11 @@ export declare namespace Container {
   >
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
+    /**
+     * The underlying {@link ContainerApplication} resource declaration —
+     * `yield*` it to get the application's Output attributes.
+     */
+    Application: Effect.Effect<ContainerApplication<Self>, never, Providers>;
     make: <InitReq = never, WorkerReq = never, PropsReq = never>(
       props:
         | InputProps<EffectfulContainerProps>

@@ -9,6 +9,7 @@ import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
 import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
+import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -29,6 +30,8 @@ import { isBrowser } from "./Browser.ts";
 import {
   isDurableObjectLike,
   normalizeTransferredFrom,
+  type DurableObjectContainerSource,
+  type DurableObjectLike,
 } from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
@@ -94,11 +97,93 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             ? getHyperdriveDevOrigin(binding)
             : undefined,
         });
+
+        if (isDurableObjectLike(binding) && binding.container !== undefined) {
+          yield* bindDurableObjectContainer(resource, bindingName, binding);
+        }
       } else {
         return yield* Effect.die(`Unknown binding type: ${bindingName}`);
       }
     }
   }
+});
+
+/**
+ * Structural check for a yielded {@link ContainerApplication} resource
+ * instance. Inlined (rather than importing `isContainer` from
+ * `Containers/Container.ts`) to avoid a value-level import cycle through
+ * `ContainerPlatform` → `Worker.ts` → this module.
+ */
+const isContainerApplicationResource = (
+  value: unknown,
+): value is ContainerApplication =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { Type?: unknown }).Type === "Cloudflare.Container";
+
+const resolveContainerApplication = Effect.fn(function* (
+  bindingName: string,
+  source: DurableObjectContainerSource,
+) {
+  // Already a yielded resource instance. Checked first: property access on a
+  // resource proxy does not return `undefined` for unknown keys, so the
+  // `.Application` probe below cannot be trusted on one.
+  if (isContainerApplicationResource(source)) {
+    return source;
+  }
+  // A `Cloudflare.Container` class carries its ContainerApplication
+  // declaration on `.Application`; a raw declaration Effect is used as-is.
+  const declaration =
+    (source as { Application?: unknown }).Application ?? source;
+  if (isYieldableEffectLike(declaration) && !Output.isOutput(declaration)) {
+    const application = yield* declaration as Effect.Effect<unknown>;
+    if (isContainerApplicationResource(application)) {
+      return application;
+    }
+  }
+  return yield* Effect.die(
+    `Durable Object binding '${bindingName}' has an invalid container declaration: pass a Cloudflare.Container class or its ContainerApplication resource.`,
+  );
+});
+
+/**
+ * Wire a container-backed Durable Object declared on an async Worker
+ * (`Cloudflare.DurableObject("Sandbox", { container })`). Mirrors the
+ * deploy-time half of `ContainerPlatform.bind`:
+ *
+ * 1. attach the class's namespace id to the ContainerApplication, and
+ * 2. contribute `containers: [{ className }]` binding data so the Worker's
+ *    script metadata marks the class as container-backed.
+ *
+ * The namespace id only exists once the Worker uploads, while the Worker's
+ * metadata needs the container class — the same circularity as the
+ * Effect-native path, resolved through bindings + precreate.
+ */
+const bindDurableObjectContainer = Effect.fn(function* (
+  resource: Worker,
+  bindingName: string,
+  binding: DurableObjectLike,
+) {
+  if (binding.scriptName !== undefined) {
+    return yield* Effect.die(
+      `Durable Object binding '${bindingName}' declares both a container and a scriptName. Container metadata belongs to the Worker hosting the class — declare the container on the host Worker's binding and drop it from cross-script references.`,
+    );
+  }
+  const className = binding.className ?? binding.name;
+  const application = yield* resolveContainerApplication(
+    bindingName,
+    binding.container!,
+  );
+  yield* application.bind`${bindingName}`({
+    durableObjects: {
+      namespaceId: resource.durableObjectNamespaces.pipe(
+        Output.map((namespaces) => namespaces?.[className]),
+      ),
+    },
+  });
+  yield* resource.bind`${application.LogicalId}`({
+    containers: [{ className, dev: application.dev }],
+  });
 });
 
 type BindingSpec = InputProps<WorkerBinding>;

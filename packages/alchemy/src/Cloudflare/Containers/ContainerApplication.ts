@@ -286,6 +286,12 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * The pre-built image to pull and re-push.
    *
    * E.g. `ghcr.io/alpine/alpine:latest`
+   *
+   * When the reference already points at the target registry (the
+   * {@link ContainerApplicationPropsBase.registryId | registryId} host,
+   * `registry.cloudflare.com` by default) — e.g. a digest reference pushed
+   * by CI like `registry.cloudflare.com/<accountId>/app@sha256:...` — it is
+   * deployed as-is and the docker pull/push round-trip is skipped entirely.
    */
   image: string;
 }
