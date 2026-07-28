@@ -14,11 +14,7 @@ import { isResourceOfType, Resource } from "../../Resource.ts";
 import { listSqlFiles, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import {
-  generateLocalId,
-  isLiveId,
-  localRuntimeServices,
-} from "../LocalRuntime.ts";
+import { generateLocalId, localRuntimeServices } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { applyMigrations, applyMigrationsWith } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
@@ -264,13 +260,6 @@ export const ProviderLive = () =>
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
-      // A `dev:` id means the live database doesn't exist yet — update
-      // (create) rather than replace, even if name/account changed. The dev
-      // id is about to be replaced by a real one, so it must not be
-      // advertised as stable for this update.
-      if (output?.databaseId && !isLiveId(output.databaseId)) {
-        return { action: "update", stables: ["accountId"] } as const;
-      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -358,7 +347,7 @@ export const ProviderLive = () =>
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (output?.databaseId && isLiveId(output.databaseId)) {
+      if (output?.databaseId) {
         return yield* d1
           .getDatabase({
             accountId: output.accountId,
@@ -423,9 +412,7 @@ export const ProviderLive = () =>
             readReplication?: { mode: string } | null;
           }
         | undefined;
-      // A `dev:` id never exists on Cloudflare — skip straight to the
-      // name lookup (promotion from dev to live).
-      if (output?.databaseId && isLiveId(output.databaseId)) {
+      if (output?.databaseId) {
         observed = yield* d1
           .getDatabase({
             accountId: acct,
@@ -562,8 +549,6 @@ export const ProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      // A `dev:` id only ever existed locally — nothing to delete upstream.
-      if (!isLiveId(output.databaseId)) return;
       yield* d1
         .deleteDatabase({
           accountId: output.accountId,

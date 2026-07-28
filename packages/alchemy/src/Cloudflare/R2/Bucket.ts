@@ -9,7 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 
@@ -945,12 +945,6 @@ export const ProviderLive = () =>
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
           const { accountId } = yield* yield* CloudflareEnvironment;
-          // A `dev:` bucket name means the live bucket doesn't exist yet —
-          // update (create) rather than replace. The dev name is about to be
-          // replaced by a real one, so it must not be advertised as stable.
-          if (output?.bucketName && !isLiveId(output.bucketName)) {
-            return { action: "update", stables: ["accountId"] } as const;
-          }
           const oldName =
             output?.bucketName ?? (yield* createBucketName(id, olds.name));
           // Auto-generated names are engine-owned: the deployed name stays
@@ -993,13 +987,9 @@ export const ProviderLive = () =>
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Prefer the deployed name: regenerating would target a different
-          // bucket if the generator's output for this id ever drifts. A
-          // `dev:` name only ever existed locally — generate the real one
-          // (promotion from dev to live).
+          // bucket if the generator's output for this id ever drifts.
           const name =
-            output?.bucketName && isLiveId(output.bucketName)
-              ? output.bucketName
-              : yield* createBucketName(id, news.name);
+            output?.bucketName ?? (yield* createBucketName(id, news.name));
           const acct = output?.accountId ?? accountId;
           const jurisdiction =
             output?.jurisdiction ?? news.jurisdiction ?? "default";
@@ -1111,8 +1101,6 @@ export const ProviderLive = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // A `dev:` name only ever existed locally — nothing upstream.
-          if (!isLiveId(output.bucketName)) return;
           yield* Effect.all(
             (output.domains ?? []).map((domain) =>
               r2
@@ -1143,12 +1131,8 @@ export const ProviderLive = () =>
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          // A `dev:` name never exists on Cloudflare — look up by the
-          // generated live name instead (promotion from dev to live).
           const name =
-            output?.bucketName && isLiveId(output.bucketName)
-              ? output.bucketName
-              : yield* createBucketName(id, olds?.name);
+            output?.bucketName ?? (yield* createBucketName(id, olds?.name));
           const acct = output?.accountId ?? accountId;
           return yield* r2
             .getBucket({

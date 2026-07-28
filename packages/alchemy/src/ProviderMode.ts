@@ -27,11 +27,17 @@ export type ProviderMode = "live" | "local";
  *
  * Apply it with the {@link live} combinator. During `alchemy deploy`
  * everything is live anyway, so the policy only has an effect in dev.
+ *
+ * Tri-state `Context.Reference`: `undefined` (the default — no explicit
+ * decoration, inherit/run default), `true` (`live()`), `false`
+ * (`live(false)` — explicitly follow the run default again). The unset vs
+ * explicit distinction is load-bearing for conflict detection at
+ * registration (see `Resource.ts`).
  */
-export class ProviderModePolicy extends Context.Service<
-  ProviderModePolicy,
-  boolean
->()("ProviderModePolicy") {}
+export const ProviderModePolicy = Context.Reference<boolean | undefined>(
+  "ProviderModePolicy",
+  { defaultValue: () => undefined },
+);
 
 /**
  * The same resource (identified by FQN) was registered (`yield*`ed) from two
@@ -107,8 +113,7 @@ export const live: {
  */
 export const defaultProviderMode: Effect.Effect<ProviderMode> = Effect.gen(
   function* () {
-    const forceLive = yield* Effect.serviceOption(ProviderModePolicy);
-    if (Option.isSome(forceLive) && forceLive.value) return "live" as const;
+    if (yield* ProviderModePolicy) return "live" as const;
     const ctx = yield* Effect.serviceOption(AlchemyContext);
     return Option.match(ctx, {
       onNone: () => "live" as const,

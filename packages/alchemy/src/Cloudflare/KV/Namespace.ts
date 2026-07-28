@@ -8,7 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 export const isNamespace = (value: unknown): value is Namespace =>
@@ -79,13 +79,6 @@ export const ProviderLive = () =>
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
-      // A `dev:` id means the live namespace doesn't exist yet — update
-      // (create) rather than replace, even if name/account changed. The dev
-      // id is about to be replaced by a real one, so it must not be
-      // advertised as stable for this update.
-      if (output?.namespaceId && !isLiveId(output.namespaceId)) {
-        return { action: "update", stables: ["accountId"] } as const;
-      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -113,9 +106,7 @@ export const ProviderLive = () =>
             supportsUrlEncoding?: boolean | null | undefined;
           }
         | undefined;
-      // A `dev:` id never exists on Cloudflare — skip straight to the
-      // title scan (promotion from dev to live).
-      if (output?.namespaceId && isLiveId(output.namespaceId)) {
+      if (output?.namespaceId) {
         observed = yield* kv
           .getNamespace({
             accountId: acct,
@@ -177,8 +168,6 @@ export const ProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      // A `dev:` id only ever existed locally — nothing to delete upstream.
-      if (!isLiveId(output.namespaceId)) return;
       yield* kv
         .deleteNamespace({
           accountId: output.accountId,
@@ -204,7 +193,7 @@ export const ProviderLive = () =>
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (output?.namespaceId && isLiveId(output.namespaceId)) {
+      if (output?.namespaceId) {
         return yield* kv
           .getNamespace({
             accountId: output.accountId,

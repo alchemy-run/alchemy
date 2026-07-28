@@ -14,7 +14,6 @@ import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   generateLocalId,
-  isLiveId,
   LOCAL_ENTRY_URL,
   LocalRuntimeState,
   localRuntimeServices,
@@ -111,16 +110,10 @@ export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
 
 export const ProviderLive = () =>
   Provider.succeed(Queue, {
-    // The `queueId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
-    stables: ["accountId"],
+    stables: ["queueId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
-      // If the queueId is a `dev:` ID, we need to update to a live one.
-      // The live resource doesn't exist yet, so there's no need to replace even if the name or accountId changed.
-      if (!isLiveId(output?.queueId)) {
-        return { action: "update" };
-      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -145,9 +138,7 @@ export const ProviderLive = () =>
       let observed:
         | { queueId?: string | null; queueName?: string | null }
         | undefined;
-      // A `dev:` id never exists on Cloudflare — skip straight to the
-      // name scan (promotion from dev to live).
-      if (output?.queueId && isLiveId(output.queueId)) {
+      if (output?.queueId) {
         observed = yield* queues
           .getQueue({
             accountId: acct,
@@ -198,8 +189,6 @@ export const ProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      // If the queueId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
-      if (!isLiveId(output.queueId)) return;
       // Dependents (e.g. R2 event notification configs targeting this
       // queue) may still be tearing down concurrently — ride out the
       // dependency violation briefly, then fail loudly instead of
@@ -242,7 +231,7 @@ export const ProviderLive = () =>
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (output?.queueId && isLiveId(output.queueId)) {
+      if (output?.queueId) {
         return yield* queues
           .getQueue({
             accountId: output.accountId,

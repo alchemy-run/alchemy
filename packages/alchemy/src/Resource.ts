@@ -279,11 +279,12 @@ export function Resource<R extends ResourceLike>(
 
       // `live()` opts resources out of local emulation during dev. The
       // captured Mode is either "live" (pinned) or undefined (run default).
-      const ambientPolicy = yield* Effect.serviceOption(ProviderModePolicy);
-      const ambientMode: ProviderMode | undefined =
-        Option.isSome(ambientPolicy) && ambientPolicy.value
-          ? "live"
-          : undefined;
+      // The Reference default is `undefined` — "no explicit decoration" —
+      // which is distinct from an explicit `live(false)`.
+      const ambientPolicy = yield* ProviderModePolicy;
+      const ambientMode: ProviderMode | undefined = ambientPolicy
+        ? "live"
+        : undefined;
 
       const existing = stack.resources[fqn];
       if (existing) {
@@ -294,7 +295,7 @@ export function Resource<R extends ResourceLike>(
         // instead of silently picking one. A later site with NO ambient
         // policy simply inherits the registered resource (the common
         // "reference it from elsewhere" pattern).
-        if (Option.isSome(ambientPolicy) && existing.Mode !== ambientMode) {
+        if (ambientPolicy !== undefined && existing.Mode !== ambientMode) {
           return yield* Effect.die(
             new ConflictingProviderModeError({
               message:
