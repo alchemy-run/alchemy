@@ -7,6 +7,7 @@ import { Image, ImageProvider } from "./Image.ts";
 import { Network, NetworkProvider } from "./Network.ts";
 import { RemoteImage, RemoteImageProvider } from "./RemoteImage.ts";
 import { Service, ServiceProvider } from "./Service.ts";
+import { Swarm, SwarmProvider } from "./Swarm.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -32,6 +33,7 @@ export const providers = () =>
       Volume,
       Context,
       Service,
+      Swarm,
     ]),
   ).pipe(
     Layer.provide(
@@ -43,6 +45,7 @@ export const providers = () =>
         VolumeProvider(),
         ContextProvider(),
         ServiceProvider(),
+        SwarmProvider(),
       ),
     ),
     Layer.provideMerge(DockerLive),

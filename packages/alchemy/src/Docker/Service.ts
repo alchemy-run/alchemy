@@ -15,7 +15,11 @@ import {
 } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
-import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerEngineContextName,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import { makeServiceImage } from "./ServiceImage.ts";
 
@@ -26,8 +30,12 @@ export interface ServicePropsBase extends PlatformProps {
    * @default Generated from stack, stage, logical id, and instance id.
    */
   name?: string;
-  /** Docker context name or context resource the service is deployed to. */
-  context?: Docker.ContextRef;
+  /**
+   * The engine the service is deployed to: a Docker context name, a
+   * `Docker.Context` resource, or a `Docker.Swarm` — passing the swarm also
+   * orders the service after the swarm is initialized.
+   */
+  context?: Docker.EngineRef;
   /** Entrypoint command passed after the image. */
   command?: string[];
   /** Additional args appended after `command`. */
@@ -314,9 +322,10 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * deployed through the active (or a named) Docker context.
  *
  * The target engine must be a swarm manager — `Service` wraps
- * `docker service`, swarm mode's orchestration API. `docker swarm init`
- * turns a local engine into a single-node swarm; for a plain single
- * container on a non-swarm daemon use `Docker.Container` instead.
+ * `docker service`, swarm mode's orchestration API. Declare the swarm with
+ * `Docker.Swarm` and pass it as `context` so the service deploys after the
+ * swarm exists; for a plain single container on a non-swarm daemon use
+ * `Docker.Container` instead.
  *
  * The service's image comes from one of two sources:
  *
@@ -556,7 +565,7 @@ export const ServiceProvider = () =>
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const name = yield* servicePhysicalName(id, olds, instanceId);
-          const context = dockerContextName(olds?.context);
+          const context = dockerEngineContextName(olds?.context);
           const live = yield* inspect(name, context);
           if (!live) return undefined;
           ensureReplicatedMode(live);
@@ -823,7 +832,7 @@ const normalizeDesired = (
   servicePhysicalName(id, props, instanceId).pipe(
     Effect.map((name) => ({
       name,
-      context: dockerContextName(props.context),
+      context: dockerEngineContextName(props.context),
       // The bundled form's image identity is its content hash (compared
       // separately in diff) — the `image` prop is only the environment base
       // there, and it participates in the hash.

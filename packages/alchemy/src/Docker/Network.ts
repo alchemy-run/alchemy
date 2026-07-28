@@ -9,7 +9,11 @@ import {
   hasAlchemyTags,
   stripInternalTags,
 } from "../Tags.ts";
-import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerEngineContextName,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface NetworkProps {
@@ -25,8 +29,13 @@ export interface NetworkProps {
   enableIPv6?: boolean;
   /** Network labels. */
   labels?: Record<string, string>;
-  /** Docker context name or context resource. */
-  context?: Docker.ContextRef;
+  /**
+   * The engine the network is created on: a Docker context name, a
+   * `Docker.Context` resource, or a `Docker.Swarm` — overlay networks
+   * require a swarm manager, and passing the swarm orders the network after
+   * the swarm is initialized.
+   */
+  context?: Docker.EngineRef;
 }
 
 export interface Network extends Resource<
@@ -85,7 +94,7 @@ export const NetworkProvider = () =>
       return Network.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-          const context = dockerContextName(olds?.context);
+          const context = dockerEngineContextName(olds?.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* docker.network
             .inspect(name, context)
@@ -107,8 +116,8 @@ export const NetworkProvider = () =>
         diff: Effect.fn(function* ({ id, output, instanceId, news, olds }) {
           if (!isResolved(news) || !output) return undefined;
           if (
-            dockerContextName(olds?.context) !==
-            dockerContextName(news?.context)
+            dockerEngineContextName(olds?.context) !==
+            dockerEngineContextName(news?.context)
           ) {
             return { action: "replace", deleteFirst: true };
           }
@@ -129,7 +138,7 @@ export const NetworkProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {
-          const context = dockerContextName(news?.context);
+          const context = dockerEngineContextName(news?.context);
           if (output) {
             const refreshed = yield* docker.network
               .inspect(output.id, context)
@@ -156,7 +165,7 @@ export const NetworkProvider = () =>
         }),
         delete: Effect.fn(({ olds, output }) =>
           docker.network
-            .remove(output.id, dockerContextName(olds?.context))
+            .remove(output.id, dockerEngineContextName(olds?.context))
             .pipe(
               Effect.catchReason(
                 "PlatformError",

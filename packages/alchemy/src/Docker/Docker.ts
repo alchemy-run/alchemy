@@ -215,6 +215,25 @@ export class Docker extends Context.Service<
         context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
+    readonly swarm: {
+      /** Initializes swarm mode on the engine (`docker swarm init`). */
+      readonly init: (options: {
+        context?: string;
+        "advertise-addr"?: string;
+        "listen-addr"?: string;
+        "default-addr-pool"?: string[];
+        "default-addr-pool-mask-length"?: number;
+      }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Reads the engine's swarm state (`docker info --format '{{json .Swarm}}'`). */
+      readonly info: (
+        context?: string,
+      ) => Effect.Effect<Docker.SwarmInfo, PlatformError>;
+      /** Leaves the swarm (`docker swarm leave`). */
+      readonly leave: (
+        force?: boolean,
+        context?: string,
+      ) => Effect.Effect<CommandOutput, PlatformError>;
+    };
     readonly service: {
       /** Creates a new service. */
       readonly create: (options: {
@@ -318,6 +337,30 @@ export class Docker extends Context.Service<
 
 export declare namespace Docker {
   export type ContextRef = string | { name: string };
+
+  /**
+   * A reference to the Docker engine an operation runs against: a context
+   * name, a `Docker.Context` resource, or a `Docker.Swarm` resource
+   * (narrowed structurally by its `nodeId` attribute) — passing the swarm
+   * also orders the operation after the swarm is initialized.
+   */
+  export type EngineRef = ContextRef | { nodeId: string; context?: string };
+
+  export interface SwarmInfo {
+    NodeID: string;
+    LocalNodeState:
+      | "inactive"
+      | "pending"
+      | "active"
+      | "error"
+      | "locked"
+      | (string & {});
+    ControlAvailable: boolean;
+    Cluster?: { ID: string; CreatedAt?: string } | null;
+    RemoteManagers?: Array<{ NodeID: string; Addr: string }> | null;
+    Managers?: number;
+    Nodes?: number;
+  }
 
   export type ContainerStatus =
     | "created"
@@ -747,6 +790,33 @@ export const DockerLive = Layer.effect(
         remove: (id, context) =>
           run([...formatArgs({ context }), "network", "rm", id]),
       },
+      swarm: {
+        init: ({ context, ...options }) =>
+          run([
+            ...formatArgs({ context }),
+            "swarm",
+            "init",
+            ...formatArgs(options),
+          ]),
+        info: (context) =>
+          run([
+            ...formatArgs({ context }),
+            "info",
+            "--format",
+            "{{json .Swarm}}",
+          ]).pipe(
+            Effect.map(
+              (result) => JSON.parse(result.stdout) as Docker.SwarmInfo,
+            ),
+          ),
+        leave: (force, context) =>
+          run([
+            ...formatArgs({ context }),
+            "swarm",
+            "leave",
+            ...(force ? ["--force"] : []),
+          ]),
+      },
       service: {
         create: ({ context, image, command, args, ...options }) =>
           run([
@@ -782,6 +852,20 @@ export const dockerContextName = (
   const value = typeof context === "string" ? context : context?.name;
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : undefined;
+};
+
+/**
+ * Resolve an {@link Docker.EngineRef} to a context name. A `Docker.Swarm`
+ * reference (narrowed by its `nodeId` attribute) contributes the context the
+ * swarm was initialized on.
+ */
+export const dockerEngineContextName = (
+  ref: Docker.EngineRef | undefined,
+): string | undefined => {
+  if (typeof ref === "object" && ref !== null && "nodeId" in ref) {
+    return dockerContextName((ref as { context?: string }).context);
+  }
+  return dockerContextName(ref as Docker.ContextRef | undefined);
 };
 
 export const dockerPhysicalName = (

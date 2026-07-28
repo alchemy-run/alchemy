@@ -8,4 +8,5 @@ export * from "./Providers.ts";
 export type { ImageRegistry } from "./Registry.ts";
 export * from "./RemoteImage.ts";
 export * from "./Service.ts";
+export * from "./Swarm.ts";
 export * from "./Volume.ts";
