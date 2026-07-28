@@ -349,7 +349,9 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * @section Creating Services
  * @example Replicated Nginx
  * ```typescript
+ * const swarm = yield* Docker.Swarm("swarm");
  * const web = yield* Docker.Service("web", {
+ *   context: swarm,
  *   image: "nginx:alpine",
  *   replicas: 3,
  *   ports: [{ external: 8080, internal: 80 }],
@@ -362,6 +364,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *   build: { context: "./app" },
  * });
  * const app = yield* Docker.Service("app", {
+ *   context: swarm,
  *   image,
  *   replicas: 2,
  * });
@@ -370,9 +373,11 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * @section Effectful Services
  * @example Inline Effect Server
  * ```typescript
+ * const swarm = yield* Docker.Swarm("swarm");
  * const api = yield* Docker.Service(
  *   "Api",
  *   {
+ *     context: swarm,
  *     main: import.meta.url,
  *     port: 3000,
  *     ports: [{ external: 8080, internal: 3000 }],
@@ -390,9 +395,16 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * @example Background Loops with ServerHost
  * ```typescript
+ * // Class props may be an Effect, so the service can yield the swarm it
+ * // deploys into (declared once at module level).
+ * const Swarm = Docker.Swarm("swarm");
+ *
  * export default class Worker extends Docker.Service<Worker>()(
  *   "Worker",
- *   { main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     const swarm = yield* Swarm;
+ *     return { context: swarm, main: import.meta.url, port: 3000 };
+ *   }),
  *   Effect.gen(function* () {
  *     const host = yield* ServerHost;
  *     yield* host.run(
@@ -411,8 +423,12 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * const vps = yield* Docker.Context("vps", {
  *   docker: "host=ssh://deploy@example.com",
  * });
- * const app = yield* Docker.Service("app", {
+ * const swarm = yield* Docker.Swarm("swarm", {
  *   context: vps,
+ *   advertiseAddr: "10.0.0.1",
+ * });
+ * const app = yield* Docker.Service("app", {
+ *   context: swarm,
  *   image: "nginx:alpine",
  *   replicas: 3,
  * });
@@ -421,8 +437,12 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * @section Networks & Volumes
  * @example Overlay Network with Aliases
  * ```typescript
- * const network = yield* Docker.Network("app-net", { driver: "overlay" });
+ * const network = yield* Docker.Network("app-net", {
+ *   context: swarm,
+ *   driver: "overlay",
+ * });
  * const db = yield* Docker.Service("db", {
+ *   context: swarm,
  *   image: "postgres:18-alpine",
  *   networks: [{ name: network.name, aliases: ["postgres"] }],
  *   volumes: [{ hostPath: "pg-data", containerPath: "/var/lib/postgresql/data" }],
