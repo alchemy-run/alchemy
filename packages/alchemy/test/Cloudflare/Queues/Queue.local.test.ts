@@ -105,11 +105,13 @@ test.provider(
 );
 
 /**
- * `Alchemy.live()` queues cannot be produced to from local dev yet — the
- * runtime's remote queue producer is not functional (its capnweb RPC leg is
- * unfinished upstream), so the local worker provider fails the deploy with
- * a descriptive error instead of wiring a binding that 500s on first send.
- * This pins the loud failure.
+ * `Alchemy.live()` queues cannot be produced to from local dev — a
+ * Cloudflare platform limitation, not an alchemy one: remote-binding
+ * (edge-preview) sessions do not support queue bindings at all (a preview
+ * worker carrying one serves 503 for every request; wrangler has the same
+ * gap — cloudflare/workers-sdk#9929). The local worker provider fails the
+ * deploy with a descriptive error instead of wiring a binding that breaks
+ * on first send. This pins the loud failure.
  */
 test.provider(
   "Alchemy.live() queue in dev fails the deploy loudly",
