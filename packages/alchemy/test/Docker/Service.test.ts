@@ -1,96 +1,28 @@
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Docker from "@/Docker";
-import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { isDockerSwarmReady } from "./Runtime.ts";
+import { ensureDockerSwarm, isDockerSwarmReady } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
   state: inMemoryState(),
 });
 
-test.provider("diff replaces a service when replicas change", () =>
-  Effect.gen(function* () {
-    const serviceProvider = yield* Provider.findProvider(Docker.Service);
-    const serviceDiff = yield* serviceProvider.diff!({
-      id: "web",
-      fqn: "web",
-      instanceId: "instance",
-      olds: {
-        name: "web",
-        image: "nginx:alpine",
-        replicas: 1,
-      },
-      news: {
-        name: "web",
-        image: "nginx:alpine",
-        replicas: 2,
-      },
-      oldBindings: [],
-      newBindings: [],
-      output: {
-        id: "service-id-1",
-        name: "web",
-        image: "nginx:alpine",
-        replicas: 1,
-        networks: [],
-        ports: [],
-        labels: {},
-        endpointMode: "vip",
-        createdAt: 0,
-        updatedAt: 0,
-      },
-    });
-    expect(serviceDiff).toEqual({ action: "replace", deleteFirst: true });
-  }),
-);
-
-test.provider("diff replaces a service when its Docker context changes", () =>
-  Effect.gen(function* () {
-    const serviceProvider = yield* Provider.findProvider(Docker.Service);
-    const serviceDiff = yield* serviceProvider.diff!({
-      id: "web",
-      fqn: "web",
-      instanceId: "instance",
-      olds: {
-        name: "web",
-        image: "nginx:alpine",
-        context: "default",
-      },
-      news: {
-        name: "web",
-        image: "nginx:alpine",
-        context: "remote-build",
-      },
-      oldBindings: [],
-      newBindings: [],
-      output: {
-        id: "service-id-1",
-        name: "web",
-        context: "default",
-        image: "nginx:alpine",
-        replicas: 1,
-        networks: [],
-        ports: [],
-        labels: {},
-        endpointMode: "vip",
-        createdAt: 0,
-        updatedAt: 0,
-      },
-    });
-    expect(serviceDiff).toEqual({ action: "replace", deleteFirst: true });
-  }),
-);
-
+// Every test deploys real swarm services through the engine (plan → apply →
+// destroy) — no provider-method unit tests. The suite self-provisions a
+// single-node swarm on the local engine (`ensureDockerSwarm`), so it runs
+// anywhere Docker runs; deactivate afterwards with `docker swarm leave
+// --force` if you don't want the node to stay a swarm manager.
 describe("Docker.Service", { concurrent: false }, () => {
   test.provider.skipIf(!isDockerSwarmReady)(
     "creates a replicated service with labels",
     (stack) =>
       Effect.gen(function* () {
+        yield* ensureDockerSwarm;
         const serviceName = "alchemy-test-service-create";
         const service = yield* stack.deploy(
           Docker.Service("created-service", {
@@ -107,6 +39,83 @@ describe("Docker.Service", { concurrent: false }, () => {
         expect(service.replicas).toBe(1);
         expect(service.endpointMode).toBe("vip");
         expect(service.labels["com.alchemy.test"]).toBe("true");
+
+        yield* stack.destroy();
+
+        const docker = yield* Docker.Docker;
+        const gone = yield* docker.service.inspect(service.id).pipe(
+          Effect.map(() => false),
+          Effect.catchReason("PlatformError", "NotFound", () =>
+            Effect.succeed(true),
+          ),
+        );
+        expect(gone).toBe(true);
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider.skipIf(!isDockerSwarmReady)(
+    "replaces a service when replicas change",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* ensureDockerSwarm;
+        const serviceName = "alchemy-test-service-replicas";
+
+        const first = yield* stack.deploy(
+          Docker.Service("scaled-service", {
+            name: serviceName,
+            image: "nginx:alpine",
+            replicas: 1,
+          }),
+        );
+        expect(first.replicas).toBe(1);
+
+        const second = yield* stack.deploy(
+          Docker.Service("scaled-service", {
+            name: serviceName,
+            image: "nginx:alpine",
+            replicas: 2,
+          }),
+        );
+
+        expect(second.id).not.toBe(first.id);
+        expect(second.replicas).toBe(2);
+
+        yield* stack.destroy();
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider.skipIf(!isDockerSwarmReady)(
+    "replaces a service when its Docker context changes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* ensureDockerSwarm;
+        const serviceName = "alchemy-test-service-context";
+
+        const first = yield* stack.deploy(
+          Docker.Service("context-service", {
+            name: serviceName,
+            image: "nginx:alpine",
+          }),
+        );
+        expect(first.context).toBeUndefined();
+
+        // `default` is the engine's built-in context — same daemon, but a
+        // different context ref, so the replace path (delete-first, recreate
+        // under `--context`) runs against a real named context.
+        const second = yield* stack.deploy(
+          Docker.Service("context-service", {
+            name: serviceName,
+            image: "nginx:alpine",
+            context: "default",
+          }),
+        );
+
+        expect(second.id).not.toBe(first.id);
+        expect(second.context).toBe("default");
+
+        yield* stack.destroy();
       }),
     { timeout: 240_000 },
   );
@@ -115,6 +124,7 @@ describe("Docker.Service", { concurrent: false }, () => {
     "refuses a pre-existing service unless explicitly adopted",
     (stack) =>
       Effect.gen(function* () {
+        yield* ensureDockerSwarm;
         const docker = yield* Docker.Docker;
         const serviceName = "alchemy-test-service-adopt-existing";
 
@@ -159,6 +169,8 @@ describe("Docker.Service", { concurrent: false }, () => {
 
         expect(adopted.name).toBe(serviceName);
         expect(adopted.id.length).toBeGreaterThan(0);
+
+        yield* stack.destroy();
       }),
     { timeout: 240_000 },
   );
@@ -167,6 +179,7 @@ describe("Docker.Service", { concurrent: false }, () => {
     "replaces a service when labels change",
     (stack) =>
       Effect.gen(function* () {
+        yield* ensureDockerSwarm;
         const serviceName = "alchemy-test-service-replace";
 
         const first = yield* stack.deploy(
@@ -187,6 +200,8 @@ describe("Docker.Service", { concurrent: false }, () => {
 
         expect(second.id).not.toBe(first.id);
         expect(second.labels.generation).toBe("2");
+
+        yield* stack.destroy();
       }),
     { timeout: 240_000 },
   );

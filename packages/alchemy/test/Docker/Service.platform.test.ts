@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
-import { isDockerSwarmReady } from "./Runtime.ts";
+import { ensureDockerSwarm, isDockerSwarmReady } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers() });
 
@@ -18,6 +18,7 @@ test.provider.skipIf(!isDockerSwarmReady)(
   "effectful service serves fetch and runs background loops",
   (stack) =>
     Effect.gen(function* () {
+      yield* ensureDockerSwarm;
       yield* stack.destroy();
 
       const service = yield* stack.deploy(
