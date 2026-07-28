@@ -28,8 +28,10 @@ import type {
   ArchilClient,
   ClientExecRequest,
   DiskClient,
-  DiskRefOptions,
+  DiskTarget,
+  DiskTargetOptions,
 } from "./Client.ts";
+import { isDisk } from "./Disk.ts";
 import { Credentials } from "./Credentials.ts";
 import { DEFAULT_REGION, type ArchilRegion } from "./Region.ts";
 
@@ -97,7 +99,7 @@ export const makeArchilClient = (
   auth: ArchilAuth,
   clientRegion: Effect.Effect<ArchilRegion>,
 ): ArchilClient => {
-  const regionOf = (options?: DiskRefOptions): Effect.Effect<ArchilRegion> =>
+  const regionOf = (options?: DiskTargetOptions): Effect.Effect<ArchilRegion> =>
     options?.region === undefined
       ? clientRegion
       : Effect.isEffect(options.region)
@@ -188,11 +190,30 @@ export const makeArchilClient = (
   });
 
   return {
-    disk: (id, options) =>
-      makeDisk(
-        typeof id === "string" ? Effect.succeed(id) : id,
-        regionOf(options),
-      ),
+    disk: Effect.fn("Archil.Client.disk")(function* (
+      ref: DiskTarget,
+      options?: DiskTargetOptions,
+    ) {
+      if (typeof ref === "string") {
+        return makeDisk(Effect.succeed(ref), regionOf(options));
+      }
+      // An `Archil.Disk` resource, or an Effect yielding one (so the
+      // resource can be declared at module scope and imported) — or an
+      // Effect yielding a raw ID.
+      const resolved = isDisk(ref) ? ref : yield* ref;
+      if (typeof resolved === "string") {
+        return makeDisk(Effect.succeed(resolved), regionOf(options));
+      }
+      // Reading the resource's accessors registers them on the host, which
+      // is why resource references belong in the init phase. The disk's own
+      // region wins unless the caller overrides it.
+      const id = yield* resolved.diskId;
+      const region =
+        options?.region === undefined
+          ? yield* resolved.region
+          : regionOf(options);
+      return makeDisk(id, region);
+    }),
     listDisks: Effect.fn("Archil.Client.listDisks")(function* (options?: {
       name?: string;
       limit?: number;

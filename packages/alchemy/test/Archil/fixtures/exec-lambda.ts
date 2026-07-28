@@ -3,6 +3,7 @@ import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { LambdaDisk } from "./disks.ts";
 
 export class ArchilExecFunction extends Lambda.Function<Lambda.Function>()(
   "ArchilExecFunction",
@@ -19,11 +20,8 @@ export default ArchilExecFunction.make(
     url: true,
   },
   Effect.gen(function* () {
-    const disk = yield* Archil.Disk("LambdaDisk");
     const archil = yield* Archil.Client();
-    const data = archil.disk(yield* disk.diskId, {
-      region: yield* disk.region,
-    });
+    const data = yield* archil.disk(LambdaDisk);
 
     return {
       fetch: Effect.gen(function* () {

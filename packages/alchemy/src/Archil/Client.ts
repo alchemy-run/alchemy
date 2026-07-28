@@ -18,6 +18,7 @@ import type {
   GrepResult,
   MountConfig,
 } from "./Api.ts";
+import type { Disk } from "./Disk.ts";
 import type { ArchilRegion } from "./Region.ts";
 
 export interface ClientOptions {
@@ -30,13 +31,31 @@ export interface ClientOptions {
   region?: ArchilRegion;
 }
 
-export interface DiskRefOptions {
+export interface DiskTargetOptions {
   /**
    * Region the disk lives in, when it differs from the client's region.
    * Accepts a plain value or a deferred accessor (e.g. `yield* disk.region`).
+   *
+   * When the reference is an {@link Disk} resource its own region is used
+   * by default, so this is only needed for disks addressed by raw ID.
    */
   region?: ArchilRegion | Effect.Effect<ArchilRegion>;
 }
+
+/**
+ * How a disk is addressed by {@link ArchilClient.disk}:
+ *
+ * - an `Archil.Disk` resource — or an Effect yielding one, so the resource
+ *   can be declared at module scope and imported (`archil.disk(BaseDisk)`).
+ *   Its ID and region are read through the resource's accessors.
+ * - a disk ID string (or an Effect yielding one) for disks that only exist
+ *   at request time — a route param, a database row, a prior `createDisk`.
+ */
+export type DiskTarget<Req = never> =
+  | string
+  | Disk
+  | Effect.Effect<string, never, Req>
+  | Effect.Effect<Disk, never, Req>;
 
 /**
  * A cheap handle on one Archil disk — no I/O until a method is called.
@@ -170,14 +189,19 @@ export interface ClientExecRequest {
  */
 export interface ArchilClient {
   /**
-   * Handle an existing disk by ID — a plain string (known at request time)
-   * or a deferred accessor (e.g. `yield* dataDisk.diskId` in the init phase
-   * to pin a deploy-time `Archil.Disk` resource). No I/O is performed.
+   * Handle a disk — an `Archil.Disk` resource (the usual case; declare it at
+   * module scope and import it) or a raw disk ID known only at request time.
+   * See {@link DiskTarget}.
+   *
+   * Resolve resource references in the host's **init** phase, like any other
+   * binding: reading a resource's accessors is what registers them on the
+   * host. Raw-ID references are pure and may be resolved at request time.
+   * No control-plane I/O happens either way.
    */
-  disk(
-    id: string | Effect.Effect<string>,
-    options?: DiskRefOptions,
-  ): DiskClient;
+  disk<Req = never>(
+    ref: DiskTarget<Req>,
+    options?: DiskTargetOptions,
+  ): Effect.Effect<DiskClient, never, Req>;
   /** List disks in the client's region. */
   listDisks(options?: {
     /** Filter by exact name match. */
@@ -258,7 +282,7 @@ export interface ArchilClient {
  * @example Address an existing disk by ID
  * ```typescript
  * // disk id from the request, a database row, wherever — no I/O
- * const disk = archil.disk(tenantDiskId);
+ * const disk = yield* archil.disk(tenantDiskId);
  * const { stdout } = yield* disk.exec("wc -l /mnt/archil/*.csv");
  * ```
  *
@@ -269,14 +293,21 @@ export interface ArchilClient {
  *
  * @section Deploy-Time Disks
  * @example Pin an `Archil.Disk` resource
+ * Declare the disk at module scope and import it — the same shape as any
+ * other Alchemy binding (`Cloudflare.R2.ReadBucket(TestBucket)`):
  * ```typescript
- * const dataDisk = yield* Archil.Disk("data");
- * const archil = yield* Archil.Client();
- * const data = archil.disk(yield* dataDisk.diskId);
+ * // disks.ts
+ * export const DataDisk = Archil.Disk("data");
  *
- * // request time:
+ * // worker.ts — init
+ * const archil = yield* Archil.Client();
+ * const data = yield* archil.disk(DataDisk);
+ *
+ * // request time
  * const { stdout } = yield* data.exec("ls -la /mnt/archil");
  * ```
+ * The disk's own region comes from the resource, so cross-region disks need
+ * no extra configuration.
  *
  * @section Base Images (Branches & Checkpoints)
  * @example Fork every user off a baked base image
@@ -292,9 +323,11 @@ export interface ArchilClient {
  * Then fork a private writable copy per user at request time. Branch writes
  * are isolated from the base and from every sibling branch:
  * ```typescript
- * // init — pin the base image resource
- * const baseDisk = yield* Archil.Disk("base");
- * const base = archil.disk(yield* baseDisk.diskId);
+ * // disks.ts
+ * export const BaseDisk = Archil.Disk("base");
+ *
+ * // worker.ts — init
+ * const base = yield* archil.disk(BaseDisk);
  *
  * // request time
  * const branch = yield* base.createBranch({
@@ -315,8 +348,8 @@ export interface ArchilClient {
  * @example Aggregate across disks
  * ```typescript
  * // init
- * const data = archil.disk(yield* dataDisk.diskId);
- * const logs = archil.disk(yield* logsDisk.diskId);
+ * const data = yield* archil.disk(DataDisk);
+ * const logs = yield* archil.disk(LogsDisk);
  *
  * // request time
  * yield* archil.exec({

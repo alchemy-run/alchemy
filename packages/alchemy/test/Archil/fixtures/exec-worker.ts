@@ -3,12 +3,13 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { WorkerDisk } from "./disks.ts";
 
 /**
  * Worker fixture exercising the Archil {@link Archil.Client} binding from
  * the workerd runtime:
  *
- * - `/static` — exec on a deploy-time `Archil.Disk` pinned via accessor
+ * - `/static` — exec on a module-scope `Archil.Disk` resource
  * - `/grep`   — read-only search for the marker `/static` wrote
  * - `/multi`  — multi-disk exec mounting the pinned disk at a named path
  * - `/dynamic` — the flagship: provision a disk at request time, run bash
@@ -20,11 +21,10 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    const disk = yield* Archil.Disk("WorkerDisk");
     const archil = yield* Archil.Client();
-    const data = archil.disk(yield* disk.diskId, {
-      region: yield* disk.region,
-    });
+    // The disk resource is declared at module scope and passed straight in;
+    // its ID and region are read through the resource's own accessors.
+    const data = yield* archil.disk(WorkerDisk);
 
     return {
       fetch: Effect.gen(function* () {
