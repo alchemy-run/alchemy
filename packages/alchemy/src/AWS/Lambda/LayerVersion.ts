@@ -146,8 +146,10 @@ export interface LayerVersion extends Resource<
  * or other dependencies that Lambda extracts into `/opt` alongside your
  * function code.
  *
- * Layer versions are immutable: changing the content or any publish setting
- * publishes a new version and replaces the resource.
+ * Layer versions are immutable, so changing the content or any publish
+ * setting publishes a new version under the same layer and retires the one
+ * it supersedes. `layerVersionArn` and `version` therefore change on update;
+ * `layerName` and `layerArn` stay put.
  *
  * @resource
  * @section Publishing a Layer
@@ -350,10 +352,14 @@ export const LayerVersionProvider = () =>
         );
 
       return {
-        stables: ["layerName", "layerArn", "layerVersionArn", "version"],
-        // A layer version is immutable — every publish mints a new version
-        // ARN — so any change to the content or the publish configuration is
-        // a replacement rather than an update.
+        // `layerVersionArn`/`version` deliberately are NOT stable: an update
+        // publishes a new version under the same layer.
+        stables: ["layerName", "layerArn"],
+        // A layer version is immutable, but the *layer* is not: publishing
+        // re-uses the layer name and mints version N+1. So a content or
+        // config change is an UPDATE, not a replacement — a replacement would
+        // mint a fresh instance id, hence a fresh layer name, and every
+        // change would strand a new layer stuck at version 1.
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return;
           if (!output) return undefined;
@@ -374,7 +380,7 @@ export const LayerVersionProvider = () =>
               news.compatibleArchitectures,
             )
           ) {
-            return { action: "replace" } as const;
+            return { action: "update" } as const;
           }
           return { action: "noop" } as const;
         }),
@@ -448,6 +454,22 @@ export const LayerVersionProvider = () =>
           if (!attrs) {
             return yield* Effect.die(
               `Lambda layer ${layerName} did not return complete attributes.`,
+            );
+          }
+
+          // Retire the version this one supersedes, so an update doesn't
+          // leak a version per deploy. Functions already referencing the old
+          // version keep working — Lambda retains a copy until nothing
+          // refers to it.
+          if (
+            output?.version !== undefined &&
+            output.version !== attrs.version
+          ) {
+            yield* Lambda.deleteLayerVersion({
+              LayerName: layerName,
+              VersionNumber: output.version,
+            }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
           }
 

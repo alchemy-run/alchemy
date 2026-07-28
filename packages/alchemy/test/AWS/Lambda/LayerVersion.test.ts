@@ -77,25 +77,29 @@ test.provider(
       expect(unchanged.layer.version).toBe(v1.version);
       expect(unchanged.layer.layerVersionArn).toBe(v1.layerVersionArn);
 
-      // --- replace (changed content publishes a new version) ---
+      // --- update (changed content publishes a new version of the SAME
+      // layer, rather than stranding a fresh layer at version 1) ---
       const republished = yield* stack.deploy(program({ path: layerV2Path }));
       const v2 = republished.layer;
 
       expect(v2.layerName).toBe(v1.layerName);
-      expect(v2.version).toBeGreaterThan(v1.version);
+      expect(v2.layerArn).toBe(v1.layerArn);
+      expect(v2.version).toBe(v1.version + 1);
       expect(v2.layerVersionArn).not.toBe(v1.layerVersionArn);
       expect(v2.codeSha256).not.toBe(v1.codeSha256);
 
-      // The replaced version is deleted as part of the replacement.
+      // The superseded version is retired, so updates don't leak one
+      // version per deploy.
       expect(
         yield* getLayerVersionOrUndefined(v1.layerName, v1.version),
       ).toBeUndefined();
 
-      // --- replace (changed description alone also republishes) ---
+      // --- update (changed description alone also republishes) ---
       const described = yield* stack.deploy(
         program({ path: layerV2Path, description: "with description" }),
       );
-      expect(described.layer.version).toBeGreaterThan(v2.version);
+      expect(described.layer.layerName).toBe(v1.layerName);
+      expect(described.layer.version).toBe(v2.version + 1);
       expect(described.layer.description).toBe("with description");
 
       const currentLayer = described.layer;

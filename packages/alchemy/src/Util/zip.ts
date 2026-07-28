@@ -46,6 +46,15 @@ export const zipFiles = Effect.fn(function* (files: ReadonlyArray<ZipFile>) {
       unixPermissions: file.mode,
     });
   }
+  // Nested paths make JSZip synthesize the intermediate folder entries, and
+  // those are stamped with `new Date()` rather than the per-file `date`
+  // above. Left alone, two archives built from identical bytes seconds apart
+  // differ — which reads downstream as a content change.
+  yield* Effect.sync(() => {
+    for (const entry of Object.values(zip.files)) {
+      entry.date = date;
+    }
+  });
 
   return yield* Effect.promise(() =>
     zip.generateAsync({
