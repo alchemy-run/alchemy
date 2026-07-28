@@ -954,7 +954,10 @@ export const DistributionProvider = () =>
           // Sync config — diff observed config against desired and patch
           // via `updateDistribution` with the freshly observed ETag. We
           // keep the observed `CallerReference` because CloudFront does
-          // not allow it to change.
+          // not allow it to change, and fill every member the props don't
+          // express from the observed config: UpdateDistribution replaces
+          // the whole config and rejects requests with missing members
+          // (see `mergeWithObservedConfig`).
           yield* Effect.logInfo(
             `CloudFront Distribution reconcile: updating config for ${observed.distribution.Id} with etag=${observed.etag ?? "missing"}`,
           );
@@ -962,9 +965,9 @@ export const DistributionProvider = () =>
             .updateDistribution({
               Id: observed.distribution.Id,
               IfMatch: observed.etag,
-              DistributionConfig: toConfig(
-                observed.config.CallerReference,
-                news,
+              DistributionConfig: mergeWithObservedConfig(
+                toConfig(observed.config.CallerReference, news),
+                observed.config,
               ),
             })
             .pipe(
@@ -1146,8 +1149,16 @@ const toBehavior = (
   CachePolicyId: behavior.cachePolicyId,
   OriginRequestPolicyId: behavior.originRequestPolicyId,
   ResponseHeadersPolicyId: behavior.responseHeadersPolicyId,
-  ForwardedValues: behavior.forwardedValues,
-  MinTTL: toWireSeconds(behavior.minTtl),
+  // Without a cache policy, CloudFront is in legacy mode and rejects the
+  // request unless both ForwardedValues and MinTTL are present.
+  ForwardedValues:
+    behavior.forwardedValues ??
+    (behavior.cachePolicyId === undefined
+      ? { QueryString: false, Cookies: { Forward: "none" } }
+      : undefined),
+  MinTTL:
+    toWireSeconds(behavior.minTtl) ??
+    (behavior.cachePolicyId === undefined ? 0 : undefined),
   DefaultTTL: toWireSeconds(behavior.defaultTtl),
   MaxTTL: toWireSeconds(behavior.maxTtl),
   TrustedKeyGroups: behavior.trustedKeyGroups
@@ -1275,6 +1286,105 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
               : undefined,
           },
   };
+};
+
+/**
+ * Recursively fills `undefined` members of `desired` from `observed`.
+ * Defined values in `desired` always win; arrays are taken from `desired`
+ * wholesale (item-level merging is the caller's concern).
+ */
+const fillUndefined = <T>(desired: T, observed: T): T => {
+  if (desired === undefined) return observed;
+  if (
+    desired === null ||
+    typeof desired !== "object" ||
+    Array.isArray(desired) ||
+    observed === null ||
+    typeof observed !== "object" ||
+    Array.isArray(observed)
+  ) {
+    return desired;
+  }
+  const out: Record<string, unknown> = {
+    ...(desired as Record<string, unknown>),
+  };
+  const desiredObj = desired as Record<string, unknown>;
+  for (const key of Object.keys(observed as Record<string, unknown>)) {
+    // CloudFront list shapes pair `Quantity` with `Items`. A desired node
+    // that declares a `Quantity` but no `Items` (e.g. a geo restriction of
+    // `{ RestrictionType: "none", Quantity: 0 }`) is fully specified —
+    // filling `Items` from the observed config would desynchronize the two
+    // and CloudFront rejects the update with `InconsistentQuantities`.
+    if (
+      key === "Items" &&
+      typeof desiredObj.Quantity === "number" &&
+      desiredObj.Items === undefined
+    ) {
+      continue;
+    }
+    out[key] = fillUndefined(
+      desiredObj[key],
+      (observed as Record<string, unknown>)[key],
+    );
+  }
+  return out as T;
+};
+
+/**
+ * Completes a desired `DistributionConfig` with the freshly observed live
+ * config before an `updateDistribution` call.
+ *
+ * CloudFront's `UpdateDistribution` replaces the ENTIRE distribution config:
+ * any member missing from the request is rejected with `IllegalUpdate`
+ * (observed in practice: "Default root object is missing for the resource",
+ * "The 'OriginCustomHeaders' field is missing"). `toConfig` emits only the
+ * members the props express, so updating a live distribution fails on every
+ * member the props don't model — some of which (e.g. per-origin
+ * `CustomHeaders`, per-behavior `TrustedSigners`) are nested inside
+ * collections and not expressible as props at all.
+ *
+ * The standard CloudFront update pattern is read-modify-write, which the
+ * delete path here already uses (`{ ...current.config, Enabled: false }`).
+ * This applies the same idea to updates: desired values always win — the
+ * declared props still fully control drift — and only `undefined` members
+ * are carried over from the observed config. `Origins` and `CacheBehaviors`
+ * items are additionally merged by identity (`Id` / `PathPattern`) so their
+ * nested unexpressed members carry over too.
+ *
+ * Exported for unit tests.
+ */
+export const mergeWithObservedConfig = (
+  desired: cloudfront.DistributionConfig,
+  observed: cloudfront.DistributionConfig,
+): cloudfront.DistributionConfig => {
+  const merged = fillUndefined(desired, observed);
+  if (merged.Origins?.Items && observed.Origins?.Items) {
+    const observedOrigins = observed.Origins.Items;
+    merged.Origins = {
+      ...merged.Origins,
+      Items: merged.Origins.Items.map((item) =>
+        fillUndefined(
+          item,
+          observedOrigins.find((origin) => origin.Id === item.Id) ?? item,
+        ),
+      ),
+    };
+  }
+  if (merged.CacheBehaviors?.Items && observed.CacheBehaviors?.Items) {
+    const observedBehaviors = observed.CacheBehaviors.Items;
+    merged.CacheBehaviors = {
+      ...merged.CacheBehaviors,
+      Items: merged.CacheBehaviors.Items.map((item) =>
+        fillUndefined(
+          item,
+          observedBehaviors.find(
+            (behavior) => behavior.PathPattern === item.PathPattern,
+          ) ?? item,
+        ),
+      ),
+    };
+  }
+  return merged;
 };
 
 const toConfig = (

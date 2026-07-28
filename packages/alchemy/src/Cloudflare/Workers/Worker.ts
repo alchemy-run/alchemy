@@ -11,6 +11,7 @@ import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named, Tag } from "../../Named.ts";
+import type * as Output from "../../Output.ts";
 import {
   Platform,
   type Main,
@@ -278,6 +279,13 @@ export type WorkerBindingProps = {
     | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
+type Unwrap<T> = T extends Output.Output<infer A, infer _Req> ? A : T;
+
+// NOTE: `Worker<NormalizedBindings<...>>` must provably satisfy the
+// `WorkerBindings` constraint for *generic* `Bindings`, which restricts the
+// shapes usable here: conditional checks on the naked parameter `T` and an
+// outermost `Extract<..., WorkerBindingResource>` are provable; e.g.
+// `Unwrap<T> extends ...` as a check type is not.
 export type NormalizedBindings<
   Bindings extends WorkerBindingProps = {},
   AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
@@ -287,10 +295,10 @@ export type NormalizedBindings<
     any,
     any
   >
-    ? T extends Redacted.Redacted<infer T> | Config.Config<infer T>
-      ? T
-      : T
-    : Extract<Bindings[B], WorkerBindingResource>;
+    ? T extends Redacted.Redacted<infer V> | Config.Config<infer V>
+      ? V
+      : Unwrap<T>
+    : Extract<Unwrap<Bindings[B]>, WorkerBindingResource>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
@@ -434,6 +442,11 @@ export interface WorkerProps<
    * - A string path to the assets directory
    * - An AssetsProps object with directory and config
    * - An object with path and hash (e.g., from a Build resource)
+   *
+   * When neither {@link main} nor {@link script} is provided, the Worker is
+   * deployed **assets-only**: no script is uploaded at all and Cloudflare's
+   * asset layer serves every request, applying `htmlHandling` /
+   * `notFoundHandling` (including single-page-application fallback) itself.
    */
   assets?: Assets;
   subdomain?: {
@@ -476,7 +489,8 @@ export interface WorkerProps<
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
-   * upload. Mutually exclusive with {@link script} — provide exactly one.
+   * upload. Mutually exclusive with {@link script} — provide at most one.
+   * Omit both (with {@link assets} set) to deploy an assets-only Worker.
    *
    * A `.py` entry deploys a Python Worker instead: no bundling runs — the
    * entry plus every sibling `.py` file upload as Python modules, the
@@ -519,6 +533,11 @@ export interface WorkerProps<
    *   [Secrets & env](/cloudflare/security/secrets-env).
    * - Literal values — routed by shape: `Redacted<string>` →
    *   `secret_text`, `string` → `plain_text`, anything else → `json`.
+   * - `Output` values that resolve to a plain env value (e.g.
+   *   `Alchemy.makeRandom`) — classified at deploy time by their
+   *   resolved value using the literal rules above. Whole-resource
+   *   Outputs (`Output.of(bucket)`) are rejected at deploy time; bind
+   *   the resource itself instead.
    *
    * In Effect-native Workers you can alternatively `yield*` a
    * `Config` in the Init phase to register the binding implicitly;
@@ -778,6 +797,86 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   Providers
 >;
 
+/** The env key the resolved URL is injected under when `yield*`-ed. */
+const SELF_URL_BINDING_NAME = "WORKER_URL";
+
+/**
+ * Effect-native accessor for the Worker's own URL. The value is injected as an
+ * env binding that only exists at the *exec* phase on the deployed Worker, so
+ * reading it is deferred behind an Effect that requires {@link RuntimeContext}.
+ * Yield it inside a handler to obtain the URL string.
+ */
+export type URLAccessor = Effect.Effect<string, never, RuntimeContext>;
+
+/**
+ * The type of {@link URL} (`Worker.URL`).
+ *
+ * It is a real `Effect` — `yield* Worker.URL` inside a Worker init attaches
+ * the binding and resolves the deferred {@link URLAccessor} — but it also
+ * carries the `~alchemy/Kind` marker statically, so when it is declared on a
+ * Worker's `env` the binding machinery recognises it as a `self_url` binding
+ * (`isSelfUrl`) instead of running it.
+ *
+ * Defined in this module (not its own file): the effect closes over the
+ * `Worker` tag and `WorkerEnvironment`, and a separate module would form a
+ * value cycle with Worker.ts that the deploy bundler's scope hoisting turns
+ * into a startup crash.
+ */
+export interface URLEffect extends Effect.Effect<
+  URLAccessor,
+  never,
+  WorkerEnvironment | Worker
+> {
+  "~alchemy/Kind": "Cloudflare.Workers.URL";
+}
+
+/**
+ * A Worker's own public URL, injected as a binding on that same Worker. At
+ * deploy time Alchemy resolves the URL the Worker will be served at (its first
+ * custom domain if any, otherwise its `workers.dev` URL) and injects it as a
+ * plain-text env binding, so the running Worker knows its own public address.
+ *
+ * Declare it on a Worker's `env` (it flows through `InferEnv` → `string`) or
+ * `yield*` it inside an Effect-native Worker to attach the binding and obtain
+ * a deferred {@link URLAccessor}. It is also exposed as
+ * `Cloudflare.Worker.URL`.
+ *
+ * Because the URL is resolved *before* the bundle is built, a `VITE_`-prefixed
+ * env key holding `Worker.URL` is inlined into the client bundle as
+ * `import.meta.env.VITE_*` — the canonical way to give a Vite frontend its own
+ * public URL.
+ */
+export const URL: URLEffect = Object.assign(
+  Effect.gen(function* () {
+    // Deploy-time only: register the binding on the host Worker. The provider
+    // lowers the `self_url` sentinel into a plain-text binding holding the
+    // resolved URL just before upload.
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* (yield* Worker).bind`${SELF_URL_BINDING_NAME}`({
+        bindings: [{ type: "self_url", name: SELF_URL_BINDING_NAME }],
+      });
+    }
+    // Captured at init; the deferred read only runs at exec phase (the
+    // accessor is colored with RuntimeContext), where env is populated.
+    const env = yield* WorkerEnvironment;
+    return Effect.sync(
+      () => (env as Record<string, string>)[SELF_URL_BINDING_NAME]!,
+    ) as URLAccessor;
+  }),
+  { "~alchemy/Kind": "Cloudflare.Workers.URL" as const },
+);
+
+/**
+ * Returns true when the value is the `Worker.URL` binding (keyed on the
+ * static `~alchemy/Kind` marker — the value is a real Effect, so every
+ * env-resolution site must check this before `Effect.isEffect`).
+ */
+export const isSelfUrl = (value: unknown): value is URLEffect =>
+  typeof value === "object" &&
+  value !== null &&
+  "~alchemy/Kind" in value &&
+  (value as URLEffect)["~alchemy/Kind"] === "Cloudflare.Workers.URL";
+
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
  * collection.
@@ -1018,6 +1117,22 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * }
  * ```
  *
+ * @example Assets-only Worker (static site)
+ * Omit `main` and `script` entirely to deploy a static site: no Worker
+ * code is uploaded — Cloudflare's asset layer serves every request and
+ * applies `htmlHandling` / `notFoundHandling` (including SPA fallback)
+ * itself, exactly like an assets-only `wrangler deploy`.
+ * ```typescript
+ * const site = yield* Cloudflare.Worker("Site", {
+ *   assets: {
+ *     directory: "./public",
+ *     htmlHandling: "drop-trailing-slash",
+ *     notFoundHandling: "404-page",
+ *   },
+ *   domain: "static.example.com",
+ * });
+ * ```
+ *
  * @example Zone routes
  * ```typescript
  * {
@@ -1092,6 +1207,45 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *   main: "./src/worker.ts",
  *   version: { traffic: 25 },
  * });
+ * ```
+ *
+ * @section The Worker's own URL
+ * `Worker.URL` injects the URL a Worker is served at as a binding on that
+ * same Worker — the first custom `domain` if one is configured, otherwise
+ * its `workers.dev` URL, always equal to the resource's `url` attribute.
+ * Under `alchemy dev` it resolves to the local dev server's URL.
+ *
+ * @example Read the Worker's own URL inside a handler
+ * ```typescript
+ * Cloudflare.Worker(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     // Attaches the binding and returns a deferred accessor.
+ *     const url = yield* Cloudflare.Worker.URL;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const publicUrl = yield* url;
+ *         return Response.json({ url: publicUrl });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.Workers.URLBinding)),
+ * );
+ * ```
+ *
+ * @example Inject the URL into an async Worker's env
+ * `InferEnv` types the entry as `string`. A `VITE_`-prefixed key on a
+ * vite-built Worker is additionally inlined into the client bundle as
+ * `import.meta.env.VITE_PUBLIC_URL` at build time.
+ * ```typescript
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { PUBLIC_URL: Cloudflare.Worker.URL },
+ * });
+ *
+ * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+ * //   { PUBLIC_URL: string }
  * ```
  *
  * @section Observability
@@ -1429,6 +1583,26 @@ export const Worker: ResourceClassLike<Worker> &
         Named<Id> & {
           new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
         };
+      /**
+       * Class form without an implementation — an external Worker (a plain
+       * bundled `main`, a raw `script`, or an assets-only Worker with no
+       * script at all):
+       *
+       * ```typescript
+       * export class Site extends Cloudflare.Worker<Site>()("Site", {
+       *   assets: { directory: "./public" },
+       * }) {}
+       * ```
+       */
+      <const Id extends string, Req = never>(
+        id: Id,
+        props:
+          | InputProps<WorkerProps>
+          | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
+      ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
+        Named<Id> & {
+          new (): Named<Id> & Tag;
+        };
     };
     <
       const Bindings extends WorkerBindingProps = {},
@@ -1471,15 +1645,26 @@ export const Worker: ResourceClassLike<Worker> &
       Extract<Req, Container.Application<any>> | Providers
     > &
       Named<Id>;
-  } = Platform(WorkerTypeId, {
-  // Both hooks are wrapped in arrows so the imported references are resolved
-  // at call time rather than at module-load time. Worker.ts forms import
-  // cycles with both WorkerAsyncBindings.ts (which imports `isWorker` here)
-  // and WorkerRuntimeContext.ts (which imports `WorkerTypeId`/`WorkerEnvironment`
-  // here). Reading either binding eagerly here hits TDZ when Bun loads the
-  // package from node_modules in a different module-init order than the local
-  // workspace.
-  onCreate: (resource, props) =>
-    bindWorkerAsyncBindings(resource as Worker, props),
-  createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-});
+    /**
+     * The Worker's own public URL, injected as a binding on that same Worker.
+     * Declare it on `env` (`env: { VITE_PUBLIC_URL: Worker.URL }`) or
+     * `yield*` it inside an Effect-native Worker to obtain a deferred
+     * accessor. See {@link URLEffect}.
+     */
+    readonly URL: URLEffect;
+  } = Platform(
+  WorkerTypeId,
+  {
+    // Both hooks are wrapped in arrows so the imported references are resolved
+    // at call time rather than at module-load time. Worker.ts forms import
+    // cycles with both WorkerAsyncBindings.ts (which imports `isWorker` here)
+    // and WorkerRuntimeContext.ts (which imports `WorkerTypeId`/`WorkerEnvironment`
+    // here). Reading either binding eagerly here hits TDZ when Bun loads the
+    // package from node_modules in a different module-init order than the local
+    // workspace.
+    onCreate: (resource, props) =>
+      bindWorkerAsyncBindings(resource as Worker, props),
+    createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+  },
+  { URL },
+);

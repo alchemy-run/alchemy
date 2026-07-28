@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { Command, Flag } from "effect/unstable/cli";
 import picomatch from "picomatch";
 
@@ -73,6 +74,26 @@ const timeoutFlag = Flag.integer("timeout").pipe(
       "hanging provider can't stall the whole run. Default: 120.",
   ),
   Flag.withDefault(120),
+);
+
+const independentFlag = Flag.boolean("independent").pipe(
+  Flag.withDescription(
+    "Delete every resource independently instead of in coordinated passes. " +
+      "In pass mode a single slow or hanging delete delays the next pass for " +
+      "everything; with --independent each resource retries its own delete " +
+      "with backoff, in parallel, until it succeeds or --retries is " +
+      "exhausted. Dependency violations resolve naturally as the blocking " +
+      "resources are deleted concurrently.",
+  ),
+  Flag.withDefault(false),
+);
+
+const retriesFlag = Flag.integer("retries").pipe(
+  Flag.withDescription(
+    "With --independent: retries per resource after the initial delete " +
+      "attempt (each attempt still bounded by --timeout). Default: 10.",
+  ),
+  Flag.withDefault(10),
 );
 
 interface DiscoveredProvider {
@@ -262,6 +283,59 @@ const groupBy = <T>(items: T[], key: (item: T) => string): Map<string, T[]> => {
   return out;
 };
 
+const addEdge = (map: Map<string, Set<string>>, from: string, to: string) => {
+  const set = map.get(from) ?? new Set<string>();
+  set.add(to);
+  map.set(from, set);
+};
+
+/**
+ * Strongly-connected components of the type-level teardown-dependency graph
+ * (Tarjan). Components are emitted in reverse topological order of the
+ * condensation — every component's successors are emitted before it — so
+ * callers can compute layers by iterating the result backwards.
+ */
+const stronglyConnectedComponents = (
+  nodes: readonly string[],
+  successors: Map<string, Set<string>>,
+): string[][] => {
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const components: string[][] = [];
+  let counter = 0;
+  const strongConnect = (v: string): void => {
+    index.set(v, counter);
+    low.set(v, counter);
+    counter += 1;
+    stack.push(v);
+    onStack.add(v);
+    for (const w of successors.get(v) ?? []) {
+      if (!index.has(w)) {
+        strongConnect(w);
+        low.set(v, Math.min(low.get(v)!, low.get(w)!));
+      } else if (onStack.has(w)) {
+        low.set(v, Math.min(low.get(v)!, index.get(w)!));
+      }
+    }
+    if (low.get(v) === index.get(v)) {
+      const component: string[] = [];
+      for (;;) {
+        const w = stack.pop()!;
+        onStack.delete(w);
+        component.push(w);
+        if (w === v) break;
+      }
+      components.push(component);
+    }
+  };
+  for (const v of nodes) {
+    if (!index.has(v)) strongConnect(v);
+  }
+  return components;
+};
+
 const nukeSession: ScopedPlanStatusSession = {
   emit: () => Effect.void,
   done: () => Effect.void,
@@ -278,6 +352,8 @@ const nukeCommand = Command.make(
     verbose: verboseFlag,
     concurrency: concurrencyFlag,
     timeout: timeoutFlag,
+    independent: independentFlag,
+    retries: retriesFlag,
     include: includeFlag,
     exclude: excludeFlag,
     filter: filterFlag,
@@ -295,6 +371,8 @@ const nukeCommand = Command.make(
       verbose,
       concurrency,
       timeout,
+      independent,
+      retries,
       include,
       exclude,
       filter,
@@ -476,69 +554,223 @@ const nukeCommand = Command.make(
       const emitDelete = (event: NukeUI.DeleteEvent) =>
         deleteUI ? Effect.sync(() => deleteUI.emit(event)) : Effect.void;
 
-      let remaining = targets;
-      let pass = 0;
-      while (remaining.length > 0) {
-        pass += 1;
-        yield* emitDelete({ kind: "pass", pass });
+      // One delete attempt for a single resource, bounded by --timeout, with
+      // the failure cause logged to the stack's file logger. Failure stays on
+      // the error channel so callers can retry or fold it as they see fit.
+      const attemptDelete = (item: (typeof targets)[number]) =>
+        item.provider
+          .delete({
+            id: displayName(item.attr),
+            // Enumerated straight from the cloud, so there is no
+            // Alchemy namespace — an un-namespaced fqn is just the id.
+            fqn: displayName(item.attr),
+            instanceId: "",
+            olds: item.attr as never,
+            output: item.attr as never,
+            session: nukeSession,
+            bindings: [],
+            // Nuke is an explicit, operator-confirmed account
+            // teardown: allow destructive prerequisites (e.g.
+            // emptying a bucket) that normal destroys gate behind
+            // props such as `forceDestroy` — `olds` here is cloud
+            // Attributes, not the originally-deployed Props.
+            force: true,
+          })
+          .pipe(
+            Effect.timeout(`${timeout} seconds`),
+            Effect.tapCause((cause) =>
+              Effect.logWarning(
+                `nuke: delete failed for ${item.id} ${displayName(item.attr)}`,
+                cause,
+              ),
+            ),
+            Effect.provide(context),
+          );
 
-        const byType = groupBy(remaining, (t) => t.id);
-        const results = yield* Effect.all(
-          [...byType.values()].map((items) =>
-            Effect.all(
-              items.map((item) =>
-                item.provider
-                  .delete({
-                    id: displayName(item.attr),
-                    // Enumerated straight from the cloud, so there is no
-                    // Alchemy namespace — an un-namespaced fqn is just the id.
-                    fqn: displayName(item.attr),
-                    instanceId: "",
-                    olds: item.attr as never,
-                    output: item.attr as never,
-                    session: nukeSession,
-                    bindings: [],
-                    // Nuke is an explicit, operator-confirmed account
-                    // teardown: allow destructive prerequisites (e.g.
-                    // emptying a bucket) that normal destroys gate behind
-                    // props such as `forceDestroy` — `olds` here is cloud
-                    // Attributes, not the originally-deployed Props.
-                    force: true,
-                  })
-                  .pipe(
-                    Effect.timeout(`${timeout} seconds`),
-                    Effect.tapCause((cause) =>
-                      Effect.logWarning(
-                        `nuke: delete failed for ${item.id} ${displayName(item.attr)}`,
-                        cause,
+      const retrySchedule = Schedule.min([
+        Schedule.exponential("1 second"),
+        Schedule.spaced("15 seconds"),
+      ]);
+
+      let pass = 0;
+
+      // Delete one tier of resources to completion, returning the items
+      // that could not be deleted.
+      const runTier = (tier: typeof targets) =>
+        Effect.gen(function* () {
+          if (tier.length === 0) return [] as typeof targets;
+          if (independent) {
+            // Independent mode: no pass barrier. Every resource retries its
+            // own delete with capped exponential backoff, all in parallel
+            // (provider groups bounded by --concurrency, resources within a
+            // provider unbounded, matching pass mode). A dependency
+            // violation resolves on a later attempt once the blocking
+            // resource's concurrent delete lands — a hanging delete only
+            // ever stalls itself.
+            pass += 1;
+            yield* emitDelete({ kind: "pass", pass });
+            const results = yield* Effect.all(
+              [...groupBy(tier, (t) => t.id).values()].map((items) =>
+                Effect.all(
+                  items.map((item) =>
+                    attemptDelete(item).pipe(
+                      Effect.retry({ schedule: retrySchedule, times: retries }),
+                      Effect.matchCause({
+                        onSuccess: () => ({ item, ok: true as const }),
+                        onFailure: () => ({ item, ok: false as const }),
+                      }),
+                      // Only the final outcome is emitted, so the UI's
+                      // failure count reflects exhausted resources, not
+                      // transient attempts.
+                      Effect.tap((r) =>
+                        r.ok
+                          ? emitDelete({ kind: "deleted", id: item.id })
+                          : emitDelete({ kind: "failed", id: item.id }),
                       ),
                     ),
-                    Effect.provide(context),
-                    Effect.matchCause({
-                      onSuccess: () => ({ item, ok: true as const }),
-                      onFailure: () => ({ item, ok: false as const }),
-                    }),
-                    Effect.tap((r) =>
-                      r.ok
-                        ? emitDelete({ kind: "deleted", id: item.id })
-                        : emitDelete({ kind: "failed", id: item.id }),
+                  ),
+                  { concurrency: "unbounded" },
+                ),
+              ),
+              { concurrency },
+            );
+            return results.flat().flatMap((r) => (r.ok ? [] : [r.item]));
+          }
+          let remaining = tier;
+          while (remaining.length > 0) {
+            pass += 1;
+            yield* emitDelete({ kind: "pass", pass });
+
+            const byType = groupBy(remaining, (t) => t.id);
+            const results = yield* Effect.all(
+              [...byType.values()].map((items) =>
+                Effect.all(
+                  items.map((item) =>
+                    attemptDelete(item).pipe(
+                      Effect.matchCause({
+                        onSuccess: () => ({ item, ok: true as const }),
+                        onFailure: () => ({ item, ok: false as const }),
+                      }),
+                      Effect.tap((r) =>
+                        r.ok
+                          ? emitDelete({ kind: "deleted", id: item.id })
+                          : emitDelete({ kind: "failed", id: item.id }),
+                      ),
                     ),
                   ),
+                  { concurrency: "unbounded" },
+                ),
               ),
-              { concurrency: "unbounded" },
-            ),
-          ),
-          { concurrency },
-        );
+              { concurrency },
+            );
 
-        const failed = results.flat().flatMap((r) => (r.ok ? [] : [r.item]));
-        // No resource deleted this pass: dependencies can't resolve further,
-        // so stop instead of looping forever.
-        if (failed.length === remaining.length) {
-          remaining = failed;
-          break;
+            const failed = results
+              .flat()
+              .flatMap((r) => (r.ok ? [] : [r.item]));
+            // No resource deleted this pass: dependencies can't resolve
+            // further, so stop instead of looping forever.
+            if (failed.length === remaining.length) {
+              return failed;
+            }
+            remaining = failed;
+          }
+          return remaining;
+        });
+
+      // ---- Teardown-dependency ordering ---------------------------------
+      // Providers declare `nuke.dependsOn: [globs]` when their cloud-side
+      // teardown CONSUMES another type (e.g. SageMaker HyperPod deletes
+      // node ENIs by assuming the instance group's execution role inside
+      // the cluster's VPC — deleting the role or network mid-teardown
+      // wedges the cluster in `Deleting` forever). Edge A→B means every A
+      // must be fully GONE before any B is deleted. Only types present in
+      // the target set participate, so the constraint costs nothing when no
+      // dependent resources exist; declaration cycles collapse into one
+      // concurrent wave (handled by the intra-wave retry machinery) with a
+      // logged warning instead of failing.
+      const typeIds = [...new Set(targets.map((t) => t.id))];
+      const providerOfType = new Map(targets.map((t) => [t.id, t.provider]));
+      const successors = new Map<string, Set<string>>();
+      const predecessors = new Map<string, Set<string>>();
+      for (const id of typeIds) {
+        const globs = providerOfType.get(id)?.nuke?.dependsOn;
+        if (!globs || globs.length === 0) continue;
+        const matches = picomatch([...globs]);
+        for (const other of typeIds) {
+          if (other === id || !matches(other)) continue;
+          addEdge(successors, id, other);
+          addEdge(predecessors, other, id);
         }
-        remaining = failed;
+      }
+
+      const components = stronglyConnectedComponents(typeIds, successors);
+      for (const component of components) {
+        if (component.length > 1) {
+          yield* Effect.logWarning(
+            `nuke: teardown-dependency cycle between ${component.join(", ")} — deleting them concurrently`,
+          ).pipe(Effect.provide(context));
+        }
+      }
+      const compOf = new Map<string, number>();
+      components.forEach((component, i) => {
+        for (const node of component) compOf.set(node, i);
+      });
+      // Layer each component: 0 for sources, else 1 + max predecessor
+      // layer. Tarjan emits components in reverse topological order, so
+      // iterating backwards visits predecessors before dependents.
+      const layerOfComp: number[] = new Array(components.length).fill(0);
+      for (let i = components.length - 1; i >= 0; i--) {
+        let layer = 0;
+        for (const node of components[i]!) {
+          for (const pred of predecessors.get(node) ?? []) {
+            const predComp = compOf.get(pred)!;
+            if (predComp !== i) {
+              layer = Math.max(layer, layerOfComp[predComp]! + 1);
+            }
+          }
+        }
+        layerOfComp[i] = layer;
+      }
+      const waves: string[][] = [];
+      components.forEach((component, i) => {
+        (waves[layerOfComp[i]!] ??= []).push(...component);
+      });
+
+      // ---- Execute waves -------------------------------------------------
+      const targetsOfType = groupBy(targets, (t) => t.id);
+      const remainingCount = new Map(
+        [...targetsOfType.entries()].map(([id, items]) => [id, items.length]),
+      );
+      const remaining: typeof targets = [];
+      const held: string[] = [];
+      for (const wave of waves) {
+        const runnable: typeof targets = [];
+        for (const typeId of wave) {
+          const items = targetsOfType.get(typeId) ?? [];
+          // A dependent type still has undeleted resources — deleting this
+          // type now could wedge their in-flight teardown, which is exactly
+          // what the ordering exists to prevent. Hold it back and report.
+          const blockers = [...(predecessors.get(typeId) ?? [])].filter(
+            (pred) =>
+              compOf.get(pred) !== compOf.get(typeId) &&
+              (remainingCount.get(pred) ?? 0) > 0,
+          );
+          if (blockers.length > 0) {
+            held.push(`${typeId} (blocked by ${blockers.join(", ")})`);
+            remaining.push(...items);
+            for (const item of items) {
+              yield* emitDelete({ kind: "failed", id: item.id });
+            }
+            continue;
+          }
+          runnable.push(...items);
+        }
+        const failed = yield* runTier(runnable);
+        remaining.push(...failed);
+        const failedOfType = groupBy(failed, (t) => t.id);
+        for (const typeId of new Set(runnable.map((t) => t.id))) {
+          remainingCount.set(typeId, failedOfType.get(typeId)?.length ?? 0);
+        }
       }
 
       if (deleteUI) {
@@ -549,8 +781,15 @@ const nukeCommand = Command.make(
       const deleted = targets.length - remaining.length;
       yield* Console.log("");
       yield* Console.log(
-        `Deleted ${deleted} resource(s) over ${pass} pass(es).`,
+        independent
+          ? `Deleted ${deleted} resource(s).`
+          : `Deleted ${deleted} resource(s) over ${pass} pass(es).`,
       );
+      if (held.length > 0) {
+        yield* Console.log(
+          `Held back (their dependent types could not be fully deleted): ${held.join("; ")}`,
+        );
+      }
       if (remaining.length > 0) {
         yield* Console.log(
           `${remaining.length} resource(s) could not be deleted.`,

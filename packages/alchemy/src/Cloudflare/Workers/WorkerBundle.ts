@@ -1,4 +1,3 @@
-import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
@@ -64,6 +63,12 @@ export const WorkerBundle = Effect.gen(function* () {
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
+    // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
+    // command tree reaches this module) never loads rolldown's native
+    // binding — only actually bundling a Worker does (#562).
+    const { default: cloudflareRolldown } = yield* Effect.promise(
+      () => import("@distilled.cloud/cloudflare-rolldown-plugin"),
+    );
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,

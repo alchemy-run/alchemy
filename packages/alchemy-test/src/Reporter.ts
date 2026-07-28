@@ -37,6 +37,12 @@ export interface RunSummary {
   readonly todo: number;
   readonly durationMs: number;
   readonly failures: ReadonlyArray<{ meta: TestMeta; result: TestResult }>;
+  /**
+   * Files that failed as a whole (import error, or a `beforeAll`/`afterAll`
+   * hook failure) rather than through an individual test. Counted in
+   * {@link failed} alongside `failures`.
+   */
+  readonly fileFailures: ReadonlyArray<{ file: string; error: string }>;
 }
 
 export type TestEvent =
