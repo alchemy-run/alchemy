@@ -621,6 +621,34 @@ export const LocalWorkerProvider = () =>
         return proxy.url;
       });
 
+      // Assets-only Worker: there is no entry module to bundle or watch.
+      // The local runtime requires a user worker module, so serve a stub
+      // that delegates every request to the ASSETS binding — the assets
+      // worker applies `htmlHandling` / `notFoundHandling` (including SPA
+      // fallback) itself, matching Cloudflare's deployed assets-only
+      // behavior.
+      const assetsOnlyBundle: Bundle.BundleOutput = {
+        files: [
+          {
+            path: "main.js",
+            content:
+              "export default { fetch: (request, env) => env.ASSETS.fetch(request) };",
+            hash: "assets-only-stub",
+          },
+        ],
+        hash: "assets-only-stub",
+      };
+
+      const runAssetsOnly = Effect.fn(function* (worker: WorkerConfig) {
+        const start = Date.now();
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        yield* serveScoped(worker, assetsOnlyBundle, proxy);
+        yield* Effect.log(
+          `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
+        );
+        return proxy.url;
+      });
+
       const runVite = Effect.fn(function* (
         worker: WorkerConfig,
         rootDir: string | undefined,
@@ -680,7 +708,11 @@ export const LocalWorkerProvider = () =>
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
         const url = yield* (
-          props.vite ? runVite(config, props.vite.rootDir) : runWorker(config)
+          props.vite
+            ? runVite(config, props.vite.rootDir)
+            : props.main === undefined && props.assets
+              ? runAssetsOnly(config)
+              : runWorker(config)
         ).pipe(Effect.map((url) => url.toString()));
         return {
           workerId: config.name,

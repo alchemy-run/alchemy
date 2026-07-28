@@ -367,6 +367,11 @@ export interface WorkerProps<
    * - A string path to the assets directory
    * - An AssetsProps object with directory and config
    * - An object with path and hash (e.g., from a Build resource)
+   *
+   * When neither {@link main} nor {@link script} is provided, the Worker is
+   * deployed **assets-only**: no script is uploaded at all and Cloudflare's
+   * asset layer serves every request, applying `htmlHandling` /
+   * `notFoundHandling` (including single-page-application fallback) itself.
    */
   assets?: Assets;
   subdomain?: {
@@ -409,7 +414,8 @@ export interface WorkerProps<
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
-   * upload. Mutually exclusive with {@link script} — provide exactly one.
+   * upload. Mutually exclusive with {@link script} — provide at most one.
+   * Omit both (with {@link assets} set) to deploy an assets-only Worker.
    *
    * A `.py` entry deploys a Python Worker instead: no bundling runs — the
    * entry plus every sibling `.py` file upload as Python modules, the
@@ -1012,6 +1018,22 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  *   main: import.meta.url,
  *   assets: "./public",
  * }
+ * ```
+ *
+ * @example Assets-only Worker (static site)
+ * Omit `main` and `script` entirely to deploy a static site: no Worker
+ * code is uploaded — Cloudflare's asset layer serves every request and
+ * applies `htmlHandling` / `notFoundHandling` (including SPA fallback)
+ * itself, exactly like an assets-only `wrangler deploy`.
+ * ```typescript
+ * const site = yield* Cloudflare.Worker("Site", {
+ *   assets: {
+ *     directory: "./public",
+ *     htmlHandling: "drop-trailing-slash",
+ *     notFoundHandling: "404-page",
+ *   },
+ *   domain: "static.example.com",
+ * });
  * ```
  *
  * @example Zone routes
