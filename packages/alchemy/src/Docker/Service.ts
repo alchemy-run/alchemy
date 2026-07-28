@@ -551,7 +551,7 @@ export const ServiceProvider = () =>
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const name = yield* servicePhysicalName(id, olds, instanceId);
-          const context = dockerContextName(olds.context);
+          const context = dockerContextName(olds?.context);
           const live = yield* inspect(name, context);
           if (!live) return undefined;
           ensureReplicatedMode(live);
