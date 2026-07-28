@@ -20,6 +20,7 @@ import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
 import { isQueue } from "../Queues/Queue.ts";
+import { maybeQueueShim } from "../Queues/QueueShim.ts";
 import { isBucket } from "../R2/Bucket.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
@@ -74,6 +75,29 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           ? yield* bindingEff as Effect.Effect<unknown>
           : bindingEff
       ) as WorkerBindingResource;
+
+      // Queue producer bindings may need the dev-mode remote-producer shim
+      // (a LOCAL worker binding a LIVE queue): `maybeQueueShim` registers
+      // the shim worker + token resources at eval time — the same idiom as
+      // the WorkflowResource registration below — and contributes their
+      // outputs to the binding data.
+      if (isQueue(binding)) {
+        const shim = yield* maybeQueueShim(binding, resource);
+        yield* resource.bind`${bindingName}`({
+          bindings: [
+            {
+              type: "queue",
+              name: bindingName,
+              queueName: binding.queueName,
+              // Alchemy-only mode discriminator for dev (stripped before
+              // upload).
+              queueId: binding.queueId,
+              ...(shim ? { shim } : {}),
+            },
+          ],
+        });
+        continue;
+      }
 
       const bindingMeta:
         | BindingSpec

@@ -939,29 +939,40 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
       return Pipelines.remote(b.name, b.pipeline);
     case "plain_text":
       return Text.local(b.name, b.text);
-    case "queue":
+    case "queue": {
       // A real queueId belongs to an `Alchemy.live()` queue. Queue bindings
       // are NOT supported in Cloudflare's remote/preview sessions — a
-      // platform limitation, not an alchemy one: an edge-preview worker
-      // with a queue binding serves 503 for every request, wrangler's
-      // remote bindings exclude Queues, and `wrangler dev --remote` rejects
-      // them outright (cloudflare/workers-sdk#9929). Fail the deploy loudly
-      // instead of wiring a binding that breaks on first send.
+      // platform limitation (cloudflare/workers-sdk#9929) — so live
+      // production goes through the deployed shim worker registered at
+      // eval time (see `Queues/QueueShim.ts`): the local binding targets a
+      // forwarder service that relays the queue wire protocol to the shim
+      // over HTTPS with a bearer token.
       if (b.queueId !== undefined && !isLocalId(b.queueId)) {
-        return yield* new WorkerValidationError({
-          message:
-            `Queue binding "${b.name}" targets a live queue (Alchemy.live()) — ` +
-            "Cloudflare's remote-binding sessions do not support Queues " +
-            "(see cloudflare/workers-sdk#9929), so a live queue cannot be " +
-            "produced to from local dev. Remove live() from the queue " +
-            "(local emulation), or run the whole stack live (alchemy deploy).",
-          value: b,
+        const url = b.shim?.url;
+        const token = b.shim?.token;
+        if (url === undefined || token === undefined) {
+          // Defensive: binding data produced by current eval always carries
+          // the shim for this mode combination.
+          return yield* new WorkerValidationError({
+            message:
+              `Queue binding "${b.name}" targets a live queue ` +
+              "(Alchemy.live()) but no producer shim was registered for it — " +
+              "re-deploy, or remove live() from the queue (local emulation).",
+            value: b,
+          });
+        }
+        return Queue.remote({
+          binding: b.name,
+          queueName: b.queueName,
+          url,
+          token: typeof token === "string" ? token : Redacted.value(token),
         });
       }
       return Queue.local({
         binding: b.name,
         queueName: b.queueName,
       });
+    }
     case "r2_bucket":
       // A `dev:`-prefixed bucket name belongs to a locally-emulated bucket
       // (R2 has no opaque id — the name is the identity); a real name is a

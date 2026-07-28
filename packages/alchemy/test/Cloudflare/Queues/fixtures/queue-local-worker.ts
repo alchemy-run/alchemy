@@ -5,6 +5,9 @@
 interface Env {
   QUEUE: {
     send(body: unknown, options?: { contentType?: string }): Promise<void>;
+    sendBatch(
+      messages: Iterable<{ body: unknown; contentType?: string }>,
+    ): Promise<void>;
   };
 }
 
@@ -24,6 +27,14 @@ export default {
       const text = url.searchParams.get("text") ?? "hello";
       await env.QUEUE.send(text, { contentType: "text" });
       return Response.json({ sent: text });
+    }
+    if (url.pathname === "/sendbatch") {
+      const text = url.searchParams.get("text") ?? "hello";
+      await env.QUEUE.sendBatch([
+        { body: `${text}-a`, contentType: "text" },
+        { body: { text, index: 2 }, contentType: "json" },
+      ]);
+      return Response.json({ sent: 2 });
     }
     if (url.pathname === "/received") {
       return Response.json({ received });

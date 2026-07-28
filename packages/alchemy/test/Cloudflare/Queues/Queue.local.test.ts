@@ -1,7 +1,9 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
+import * as queues from "@distilled.cloud/cloudflare/queues";
 import { expect } from "alchemy-test";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -105,41 +107,105 @@ test.provider(
 );
 
 /**
- * `Alchemy.live()` queues cannot be produced to from local dev — a
- * Cloudflare platform limitation, not an alchemy one: remote-binding
- * (edge-preview) sessions do not support queue bindings at all (a preview
- * worker carrying one serves 503 for every request; wrangler has the same
- * gap — cloudflare/workers-sdk#9929). The local worker provider fails the
- * deploy with a descriptive error instead of wiring a binding that breaks
- * on first send. This pins the loud failure.
+ * `Alchemy.live()` queues in dev: Cloudflare's remote-binding (preview)
+ * sessions reject queue bindings at the platform level
+ * (cloudflare/workers-sdk#9929), so production goes through the deployed
+ * shim instead — the eval registers a real shim worker holding the actual
+ * queue binding, and the local worker's producer binding relays the queue
+ * wire protocol to it over HTTPS with a minted bearer token.
+ *
+ * The proof is out-of-band: an `http_pull` consumer attached directly via
+ * the cloud API pulls the messages back from the REAL queue.
  */
 test.provider(
-  "Alchemy.live() queue in dev fails the deploy loudly",
+  "Alchemy.live() queue in dev produces through the deployed shim",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const error = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            const queue = yield* Cloudflare.Queues.Queue("LiveDevQueue").pipe(
-              Alchemy.live(),
-            );
-            const worker = yield* Cloudflare.Worker("queue-live-worker", {
-              main: pathe.resolve(
-                import.meta.dirname,
-                "fixtures/queue-local-worker.ts",
-              ),
-              env: { QUEUE: queue },
-            });
-            return { queue, worker };
-          }),
-        )
-        .pipe(Effect.flip);
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* Cloudflare.Queues.Queue("LiveDevQueue").pipe(
+            Alchemy.live(),
+          );
+          const worker = yield* Cloudflare.Worker("queue-live-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/queue-local-worker.ts",
+            ),
+            env: { QUEUE: queue },
+          });
+          return { queue, worker };
+        }),
+      );
 
-      expect(String(error)).toContain("live queue");
+      // The queue is real (live provider), the worker is local.
+      expect(deployed.queue.queueId).not.toMatch(/^dev:/);
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      // Out-of-band http_pull consumer so the test can pull from the real
+      // queue (a local queue() handler cannot receive from a live queue —
+      // Cloudflare pushes to deployed consumers only).
+      yield* queues.createConsumer({
+        accountId,
+        queueId: deployed.queue.queueId,
+        type: "http_pull",
+      });
+
+      // Produce through the local worker: binding → forwarder → shim →
+      // queue. The first send rides out the shim's workers.dev propagation
+      // (the forwarder retries 404/503 internally; the outer retry covers
+      // the tail).
+      const sent = (yield* getJsonReady(
+        `${deployed.worker.url}send?text=live-hello`,
+      )) as { sent: string };
+      expect(sent.sent).toBe("live-hello");
+      const batch = (yield* getJsonReady(
+        `${deployed.worker.url}sendbatch?text=live-batch`,
+      )) as { sent: number };
+      expect(batch.sent).toBe(2);
+
+      // Pull the messages back from the REAL queue. Pulled messages are
+      // leased (invisible to subsequent pulls until the timeout), so
+      // accumulate bodies across pulls instead of expecting one batch to
+      // carry everything.
+      const seen = new Set<string>();
+      const bodies = yield* queues
+        .pullMessage({
+          accountId,
+          queueId: deployed.queue.queueId,
+          batchSize: 10,
+          visibilityTimeoutMs: 1000,
+        })
+        .pipe(
+          Effect.map((res) => {
+            for (const m of res.messages ?? []) {
+              seen.add(String(m.body ?? ""));
+            }
+            return Array.from(seen);
+          }),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (bodies) =>
+              bodies.some((b) => b.includes("live-hello")) &&
+              bodies.some((b) => b.includes("live-batch-a")) &&
+              bodies.some((b) => b.includes("live-batch")),
+            times: 20,
+          }),
+        );
+      expect(bodies.some((b) => b.includes("live-hello"))).toBe(true);
+      expect(bodies.some((b) => b.includes("live-batch-a"))).toBe(true);
 
       yield* stack.destroy();
+
+      // Destroy removed the real queue (and with it the shim + consumer).
+      const gone = yield* queues
+        .getQueue({ accountId, queueId: deployed.queue.queueId })
+        .pipe(
+          Effect.as(false),
+          Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+        );
+      expect(gone).toBe(true);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

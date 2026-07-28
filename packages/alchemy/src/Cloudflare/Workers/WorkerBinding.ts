@@ -78,6 +78,18 @@ export type QueueWorkerBinding = Extract<
   { type: "queue" }
 > & {
   queueId?: string;
+  /**
+   * Alchemy-only (stripped before upload): dev-mode remote-producer shim
+   * for an `Alchemy.live()` queue. Cloudflare preview sessions reject
+   * queue bindings, so a local worker produces to the live queue through
+   * this deployed shim worker instead (see `Queues/QueueShim.ts`).
+   */
+  shim?: {
+    /** The shim worker's workers.dev URL. */
+    url: string | undefined;
+    /** Bearer token the shim requires. */
+    token: Redacted.Redacted<string> | string;
+  };
 };
 
 /**
