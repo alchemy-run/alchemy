@@ -2,52 +2,43 @@ import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
+  resolveWorkersDev,
+  stateCustomDomains,
 } from "@/Cloudflare/Workers/WorkerProvider";
 import { describe, expect, test } from "alchemy-test";
 
 describe("WorkerProvider", () => {
   describe("normalizeStateDomains", () => {
-    // Worker state written by Alchemy <= beta.44 stored each custom domain as a
-    // `{ id, hostname, zoneId }` object; beta.45+ stores `https://<hostname>`
-    // strings. The diff path then called `.endsWith` directly on each entry and
-    // threw `u.endsWith is not a function` when reading the older object state
-    // (#546).
-    test("coerces legacy domain objects to https:// strings", () => {
+    // Worker state has gone through three generations: <= beta.44 stored each
+    // custom domain as a `{ id, hostname, zoneId }` object; beta.45 – beta.57
+    // stored `https://<hostname>` URL strings (with the workers.dev URL mixed
+    // in); the current format stores bare hostnames aligned with `allUrls`.
+    // The diff path reads all three without throwing (#546).
+    test("coerces legacy domain objects to hostnames", () => {
       expect(
         normalizeStateDomains([
           { id: "abc", hostname: "metrics.example.com", zoneId: "z1" },
         ]),
-      ).toEqual(["https://metrics.example.com"]);
+      ).toEqual(["metrics.example.com"]);
     });
 
-    test("leaves modern string entries untouched", () => {
+    test("coerces legacy https:// URL strings to hostnames", () => {
       expect(
         normalizeStateDomains([
           "https://app.example.com",
           "https://my-worker.acct.workers.dev",
         ]),
-      ).toEqual([
-        "https://app.example.com",
-        "https://my-worker.acct.workers.dev",
+      ).toEqual(["app.example.com", "my-worker.acct.workers.dev"]);
+    });
+
+    test("leaves current-format hostnames untouched", () => {
+      expect(normalizeStateDomains(["app.example.com", "localhost"])).toEqual([
+        "app.example.com",
+        "localhost",
       ]);
     });
 
-    test("keeps the diff filter and workers.dev lookup working after normalization", () => {
-      const normalized = normalizeStateDomains([
-        { id: "abc", hostname: "app.example.com", zoneId: "z1" },
-        "https://my-worker.acct.workers.dev",
-      ]);
-      // custom domains used by the domainsChanged diff (workers.dev excluded)
-      expect(normalized.filter((u) => !u.endsWith(".workers.dev"))).toEqual([
-        "https://app.example.com",
-      ]);
-      // the workers.dev url stays findable for the `newUrl` computation
-      expect(normalized.find((u) => u.endsWith(".workers.dev"))).toBe(
-        "https://my-worker.acct.workers.dev",
-      );
-    });
-
-    test("drops entries that are neither strings nor objects with a string hostname", () => {
+    test("drops entries that fit no state generation", () => {
       expect(
         normalizeStateDomains([
           "https://keep.example.com",
@@ -55,12 +46,66 @@ describe("WorkerProvider", () => {
           { hostname: 123 },
           null,
           42,
+          "",
         ]),
-      ).toEqual(["https://keep.example.com"]);
+      ).toEqual(["keep.example.com"]);
     });
 
     test("returns an empty array for undefined state", () => {
       expect(normalizeStateDomains(undefined)).toEqual([]);
+    });
+  });
+
+  describe("stateCustomDomains", () => {
+    test("excludes workers.dev, preview, and local-dev entries", () => {
+      expect(
+        stateCustomDomains([
+          "my-worker.acct.workers.dev",
+          "0a1b2c3d-my-worker.acct.workers.dev",
+          "localhost",
+          "192.168.0.12",
+          "app.example.com",
+        ]),
+      ).toEqual(["app.example.com"]);
+    });
+
+    test("reads legacy URL-string state", () => {
+      expect(
+        stateCustomDomains([
+          "https://app.example.com",
+          "https://my-worker.acct.workers.dev",
+        ]),
+      ).toEqual(["app.example.com"]);
+    });
+  });
+
+  describe("resolveWorkersDev", () => {
+    test("defaults to the full workers.dev behavior", () => {
+      expect(resolveWorkersDev(undefined)).toEqual({
+        url: true,
+        previews: true,
+      });
+      expect(resolveWorkersDev(true)).toEqual({ url: true, previews: true });
+    });
+
+    test("false disables both toggles", () => {
+      expect(resolveWorkersDev(false)).toEqual({ url: false, previews: false });
+    });
+
+    test("object form fills unset toggles with true", () => {
+      expect(resolveWorkersDev({})).toEqual({ url: true, previews: true });
+      expect(resolveWorkersDev({ url: false })).toEqual({
+        url: false,
+        previews: true,
+      });
+      expect(resolveWorkersDev({ previews: false })).toEqual({
+        url: true,
+        previews: false,
+      });
+      expect(resolveWorkersDev({ url: false, previews: true })).toEqual({
+        url: false,
+        previews: true,
+      });
     });
   });
 

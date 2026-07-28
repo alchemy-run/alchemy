@@ -7,7 +7,7 @@ sidebar:
 
 Every Worker gets a `workers.dev` URL by default, but production apps
 live on their own domain. This guide covers the pieces involved: the
-Zone that holds your domain, the `domain` prop that attaches a hostname
+Zone that holds your domain, the `domains` prop that attaches hostnames
 to a Worker, Routes for pattern-based dispatch, plain DNS records, and
 the account's `workers.dev` subdomain.
 
@@ -74,28 +74,32 @@ still retains on destroy unless you add `destroy()`.
 
 ## Attach a custom domain to a Worker
 
-The simplest way to serve a Worker on your domain is the `domain` prop.
+The simplest way to serve a Worker on your domain is the `domains` prop.
 Cloudflare provisions the DNS record and certificate for you; the zone
-is inferred from the hostname, so it must already exist in the account:
+is inferred from each hostname, so it must already exist in the account:
 
 ```typescript
 const worker = yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
-  domain: "api.example.com",
+  domains: ["api.example.com"],
 });
 ```
 
-`domain` also accepts an array. Custom domains come first in
-`worker.domains` (in the order you provided them), followed by the
-`workers.dev` URL when the subdomain is enabled — and `worker.url` is
-`domains[0]`, so the custom domain wins:
+Every URL the Worker is reachable at is collected in `worker.allUrls`
+(most relevant first — the `workers.dev` URL when enabled, then your
+custom domains in the order you provided them), `worker.domains` holds
+the matching hostnames, and `worker.url` is always `allUrls[0]`.
+Disable `workers.dev` to make your first custom domain the primary URL:
 
 ```typescript
 const worker = yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
-  domain: ["api.example.com", "api-v2.example.com"],
+  workersDev: false,
+  domains: ["api.example.com", "api-v2.example.com"],
 });
-// worker.url === "https://api.example.com"
+// worker.url     === "https://api.example.com"
+// worker.allUrls === ["https://api.example.com", "https://api-v2.example.com"]
+// worker.domains === ["api.example.com", "api-v2.example.com"]
 ```
 
 ## Route a hostname pattern to a Worker
@@ -202,15 +206,29 @@ yield* Cloudflare.Workers.WorkerRoute("AssetsBypass", {
 
 ## Control the workers.dev subdomain
 
-Per Worker, the `url` prop toggles the `workers.dev` URL (it defaults
-to `true`). Once a custom domain serves production traffic, you may
-want to switch the dev URL off:
+Per Worker, the `workersDev` prop toggles the `workers.dev` URLs (it
+defaults to `true`). Once a custom domain serves production traffic,
+you may want to switch them off — the custom domain then becomes
+`worker.url`:
 
 ```typescript
 const worker = yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
-  domain: "api.example.com",
-  url: false,
+  domains: ["api.example.com"],
+  workersDev: false,
+});
+// worker.url === "https://api.example.com"
+```
+
+The object form controls the stable URL and per-version preview URLs
+independently. With the stable URL off and previews on, each deploy's
+preview URL (`https://<version-prefix>-<name>.<subdomain>.workers.dev`)
+becomes `worker.url`:
+
+```typescript
+const worker = yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  workersDev: { url: false, previews: true },
 });
 ```
 
