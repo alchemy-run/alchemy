@@ -53,23 +53,28 @@ export class Docker extends Context.Service<
         p: Array<string> | undefined;
         command: Array<string> | undefined;
         label?: Record<string, string>;
+        context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a container. */
       readonly inspect: (
         name: string,
+        context?: string,
       ) => Effect.Effect<Docker.Container, PlatformError>;
       /** Removes a container. */
       readonly remove: (
         name: string,
         force?: boolean,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Starts a container. */
       readonly start: (
         name: string,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Stops a container. */
       readonly stop: (
         name: string,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
     readonly image: {
@@ -85,6 +90,7 @@ export class Docker extends Context.Service<
           "cache-from"?: Array<string>;
           "cache-to"?: Array<string>;
           args?: Array<string>;
+          engineContext?: string;
         },
         session?: ScopedPlanStatusSession,
       ) => Effect.Effect<CommandOutput, PlatformError>;
@@ -92,6 +98,7 @@ export class Docker extends Context.Service<
       readonly pull: (
         ref: string,
         platform?: string,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /**
        * Pushes an image to a registry. When `platform` is given, only that
@@ -110,20 +117,24 @@ export class Docker extends Context.Service<
           password: string | Redacted.Redacted<string>;
         },
         platform?: string,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Tags an image. */
       readonly tag: (
         source: string,
         target: string,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects an image. */
       readonly inspect: (
         ref: string,
+        context?: string,
       ) => Effect.Effect<Docker.Image, PlatformError>;
       /** Removes an image. */
       readonly remove: (
         ref: string | Array<string>,
         force?: boolean,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
     readonly volume: {
@@ -133,15 +144,43 @@ export class Docker extends Context.Service<
         driver?: string;
         opt?: Record<string, string>;
         label?: Record<string, string>;
+        context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Removes a volume. */
       readonly remove: (
         name: string,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a volume. */
       readonly inspect: (
         name: string,
+        context?: string,
       ) => Effect.Effect<Docker.Volume, PlatformError>;
+    };
+    readonly context: {
+      /** Creates a new Docker context. */
+      readonly create: (options: {
+        name: string;
+        description?: string;
+        /** Raw value for `--docker`, for example `host=ssh://user@host`. */
+        docker?: string;
+      }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Updates an existing Docker context. */
+      readonly update: (options: {
+        name: string;
+        description?: string;
+        /** Raw value for `--docker`, for example `host=ssh://user@host`. */
+        docker?: string;
+      }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Inspects a Docker context. */
+      readonly inspect: (
+        name: string,
+      ) => Effect.Effect<Docker.Context, PlatformError>;
+      /** Removes a Docker context. */
+      readonly remove: (
+        name: string,
+        force?: boolean,
+      ) => Effect.Effect<CommandOutput, PlatformError>;
     };
     readonly network: {
       /** Creates a new network. */
@@ -150,31 +189,136 @@ export class Docker extends Context.Service<
         driver: string;
         ipv6?: boolean;
         label?: Record<string, string>;
+        context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Connects a container to a network. */
       readonly connect: (options: {
         network: string;
         container: string;
         alias?: string[];
+        context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Disconnects a container from a network. */
       readonly disconnect: (options: {
         network: string;
         container: string;
+        context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a network. */
       readonly inspect: (
         name: string,
+        context?: string,
       ) => Effect.Effect<Docker.Network, PlatformError>;
       /** Removes a network. */
       readonly remove: (
         id: string,
+        context?: string,
+      ) => Effect.Effect<CommandOutput, PlatformError>;
+    };
+    readonly service: {
+      /** Creates a new service. */
+      readonly create: (options: {
+        name: string;
+        image: string;
+        context?: string;
+        replicas?: number;
+        "endpoint-mode"?: "vip" | "dnsrr";
+        network?: string[];
+        constraint?: string[];
+        "replicas-max-per-node"?: number;
+        "placement-pref"?: string[];
+        "update-parallelism"?: number;
+        "update-delay"?: string;
+        "update-monitor"?: string;
+        "update-failure-action"?: "pause" | "continue" | "rollback";
+        "update-max-failure-ratio"?: number;
+        "update-order"?: "stop-first" | "start-first";
+        "rollback-parallelism"?: number;
+        "rollback-delay"?: string;
+        "rollback-monitor"?: string;
+        "rollback-failure-action"?: "pause" | "continue" | "rollback";
+        "rollback-max-failure-ratio"?: number;
+        "rollback-order"?: "stop-first" | "start-first";
+        "restart-condition"?: "none" | "on-failure" | "any";
+        "restart-delay"?: string;
+        "restart-max-attempts"?: number;
+        "restart-window"?: string;
+        "health-cmd"?: string;
+        "health-interval"?: string;
+        "health-timeout"?: string;
+        "health-retries"?: number;
+        "health-start-period"?: string;
+        "stop-grace-period"?: string;
+        mount?: string[];
+        secret?: string[];
+        config?: string[];
+        "read-only"?: boolean;
+        publish?: string[];
+        label?: Record<string, string>;
+        env?: Record<string, string>;
+        command?: string[];
+        args?: string[];
+      }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Updates an existing service. */
+      readonly update: (options: {
+        id: string;
+        image: string;
+        context?: string;
+        replicas?: number;
+        "endpoint-mode"?: "vip" | "dnsrr";
+        "constraint-add"?: string[];
+        "constraint-rm"?: string[];
+        "replicas-max-per-node"?: number;
+        "placement-pref"?: string[];
+        "update-parallelism"?: number;
+        "update-delay"?: string;
+        "update-monitor"?: string;
+        "update-failure-action"?: "pause" | "continue" | "rollback";
+        "update-max-failure-ratio"?: number;
+        "update-order"?: "stop-first" | "start-first";
+        "rollback-parallelism"?: number;
+        "rollback-delay"?: string;
+        "rollback-monitor"?: string;
+        "rollback-failure-action"?: "pause" | "continue" | "rollback";
+        "rollback-max-failure-ratio"?: number;
+        "rollback-order"?: "stop-first" | "start-first";
+        "restart-condition"?: "none" | "on-failure" | "any";
+        "restart-delay"?: string;
+        "restart-max-attempts"?: number;
+        "restart-window"?: string;
+        "health-cmd"?: string;
+        "health-interval"?: string;
+        "health-timeout"?: string;
+        "health-retries"?: number;
+        "health-start-period"?: string;
+        "stop-grace-period"?: string;
+        "mount-add"?: string[];
+        "secret-add"?: string[];
+        "config-add"?: string[];
+        "read-only"?: boolean;
+        "publish-add"?: string[];
+        "label-add"?: Record<string, string>;
+        "label-rm"?: string[];
+        "env-add"?: Record<string, string>;
+        args?: string;
+      }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Inspects a service. */
+      readonly inspect: (
+        id: string,
+        context?: string,
+      ) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Removes a service. */
+      readonly remove: (
+        id: string,
+        context?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
   }
 >()("@alchemy/Docker") {}
 
 export declare namespace Docker {
+  export type ContextRef = string | { name: string };
+
   export type ContainerStatus =
     | "created"
     | "running"
@@ -246,6 +390,16 @@ export declare namespace Docker {
     Name: string;
     Options: Record<string, string> | null;
     Scope: string;
+  }
+
+  export interface Context {
+    Name: string;
+    Metadata?: {
+      Description?: string;
+    };
+    Endpoints?: {
+      docker?: string;
+    };
   }
 
   export interface Network {
@@ -384,34 +538,49 @@ export const DockerLive = Layer.effect(
         ),
       ),
       container: {
-        create: ({ image, env, command, ...options }) =>
-          run(
-            [
-              "container",
-              "create",
-              ...formatArgs({
-                ...options,
-                env: env ? Object.keys(env) : undefined,
-              }),
-              image,
-              ...(command ?? []),
-            ],
-            env,
-          ),
-        inspect: (name) =>
-          runInspect<Docker.Container>(["container", "inspect", name]),
-        remove: (name, force) =>
-          run(["container", "rm", name, ...(force ? ["-f"] : [])]),
-        start: (name) => run(["container", "start", name]),
-        stop: (name) => run(["container", "stop", name]),
+        create: ({ image, env, command, context, ...options }) =>
+          run([
+            ...formatArgs({ context }),
+            "container",
+            "create",
+            ...formatArgs({
+              ...options,
+              env: env ? Object.keys(env) : undefined,
+            }),
+            image,
+            ...(command ?? []),
+          ]),
+        inspect: (name, context) =>
+          runInspect<Docker.Container>([
+            ...formatArgs({ context }),
+            "container",
+            "inspect",
+            name,
+          ]),
+        remove: (name, force, context) =>
+          run([
+            ...formatArgs({ context }),
+            "container",
+            "rm",
+            name,
+            ...(force ? ["-f"] : []),
+          ]),
+        start: (name, context) =>
+          run([...formatArgs({ context }), "container", "start", name]),
+        stop: (name, context) =>
+          run([...formatArgs({ context }), "container", "stop", name]),
       },
       image: {
-        build: ({ context, args, ...options }, session) =>
+        build: (
+          { context: buildContext, engineContext, args, ...options },
+          session,
+        ) =>
           run(
             [
+              ...formatArgs({ context: engineContext }),
               "image",
               "build",
-              context,
+              buildContext,
               ...formatArgs(options),
               ...(args ?? []),
             ],
@@ -424,23 +593,32 @@ export const DockerLive = Layer.effect(
                 )
               : undefined,
           ),
-        pull: (ref, platform) =>
+        pull: (ref, platform, context) =>
           run([
+            ...formatArgs({ context }),
             "image",
             "pull",
             ref,
             ...(platform ? ["--platform", platform] : []),
           ]),
-        inspect: (ref) => runInspect<Docker.Image>(["image", "inspect", ref]),
-        remove: (ref, force) =>
+        inspect: (ref, context) =>
+          runInspect<Docker.Image>([
+            ...formatArgs({ context }),
+            "image",
+            "inspect",
+            ref,
+          ]),
+        remove: (ref, force, context) =>
           run([
+            ...formatArgs({ context }),
             "image",
             "rm",
             ...(Array.isArray(ref) ? ref : [ref]),
             ...(force ? ["-f"] : []),
           ]),
-        tag: (source, target) => run(["image", "tag", source, target]),
-        push: Effect.fn(function* (ref, credentials, platform) {
+        tag: (source, target, context) =>
+          run([...formatArgs({ context }), "image", "tag", source, target]),
+        push: Effect.fn(function* (ref, credentials, platform, context) {
           // Write the registry credentials directly into an isolated docker config
           // as a plaintext `auths` entry and skip `docker login` entirely.
           //
@@ -473,53 +651,138 @@ export const DockerLive = Layer.effect(
           });
           yield* fs.writeFileString(path.join(dir, "config.json"), config);
           if (platform === undefined) {
-            return yield* run(["push", ref], { DOCKER_CONFIG: dir });
+            return yield* run([...formatArgs({ context }), "push", ref], {
+              DOCKER_CONFIG: dir,
+            });
           }
-          return yield* run(["push", "--platform", platform, ref], {
-            DOCKER_CONFIG: dir,
-          }).pipe(
+          return yield* run(
+            [...formatArgs({ context }), "push", "--platform", platform, ref],
+            { DOCKER_CONFIG: dir },
+          ).pipe(
             // Engines without the containerd image store reject `--platform`
             // on push; their local tag is already narrowed to the requested
             // platform by `pull --platform`, so a plain push is equivalent.
             Effect.catchIf(
               (error) =>
                 /--platform|unknown flag|containerd/i.test(String(error)),
-              () => run(["push", ref], { DOCKER_CONFIG: dir }),
+              () =>
+                run([...formatArgs({ context }), "push", ref], {
+                  DOCKER_CONFIG: dir,
+                }),
             ),
           );
         }, Effect.scoped),
       },
       volume: {
-        create: (options) => run(["volume", "create", ...formatArgs(options)]),
-        remove: (name) => run(["volume", "rm", name]),
+        create: ({ context, ...options }) =>
+          run([
+            ...formatArgs({ context }),
+            "volume",
+            "create",
+            ...formatArgs(options),
+          ]),
+        remove: (name, context) =>
+          run([...formatArgs({ context }), "volume", "rm", name]),
+        inspect: (name, context) =>
+          runInspect<Docker.Volume>([
+            ...formatArgs({ context }),
+            "volume",
+            "inspect",
+            name,
+          ]),
+      },
+      context: {
+        create: ({ name, description, docker }) =>
+          run([
+            "context",
+            "create",
+            name,
+            ...formatArgs({ description, docker }),
+          ]),
+        update: ({ name, description, docker }) =>
+          run([
+            "context",
+            "update",
+            name,
+            ...formatArgs({ description, docker }),
+          ]),
         inspect: (name) =>
-          runInspect<Docker.Volume>(["volume", "inspect", name]),
+          runInspect<Docker.Context>(["context", "inspect", name]),
+        remove: (name, force) =>
+          run(["context", "rm", ...(force ? ["-f"] : []), name]),
       },
       network: {
-        create: ({ name, driver, ipv6, label }) =>
+        create: ({ name, driver, ipv6, label, context }) =>
           run([
+            ...formatArgs({ context }),
             "network",
             "create",
             name,
             ...formatArgs({ driver, ipv6, label }),
           ]),
-        connect: ({ network, container, alias }) =>
+        connect: ({ network, container, alias, context }) =>
           run([
+            ...formatArgs({ context }),
             "network",
             "connect",
             network,
             container,
             ...(alias ? alias.flatMap((a) => ["--alias", a]) : []),
           ]),
-        disconnect: ({ network, container }) =>
-          run(["network", "disconnect", network, container]),
-        inspect: (name) =>
-          runInspect<Docker.Network>(["network", "inspect", name]),
-        remove: (id) => run(["network", "rm", id]),
+        disconnect: ({ network, container, context }) =>
+          run([
+            ...formatArgs({ context }),
+            "network",
+            "disconnect",
+            network,
+            container,
+          ]),
+        inspect: (name, context) =>
+          runInspect<Docker.Network>([
+            ...formatArgs({ context }),
+            "network",
+            "inspect",
+            name,
+          ]),
+        remove: (id, context) =>
+          run([...formatArgs({ context }), "network", "rm", id]),
+      },
+      service: {
+        create: ({ context, image, command, args, ...options }) =>
+          run([
+            ...formatArgs({ context }),
+            "service",
+            "create",
+            ...formatArgs({ ...options }),
+            image,
+            ...(command ?? []),
+            ...(args ?? []),
+          ]),
+        update: ({ context, id, ...options }) =>
+          run([
+            ...formatArgs({ context }),
+            "service",
+            "update",
+            "--detach=false",
+            ...formatArgs({ ...options }),
+            id,
+          ]),
+        inspect: (id, context) =>
+          runInspect([...formatArgs({ context }), "service", "inspect", id]),
+        remove: (id, context) =>
+          run([...formatArgs({ context }), "service", "rm", id]),
       },
     });
   }),
 );
+
+export const dockerContextName = (
+  context: Docker.ContextRef | undefined,
+): string | undefined => {
+  const value = typeof context === "string" ? context : context?.name;
+  const normalized = value?.trim();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+};
 
 export const dockerPhysicalName = (
   id: string,

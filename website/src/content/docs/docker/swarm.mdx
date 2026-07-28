@@ -1,0 +1,77 @@
+---
+title: Docker Swarm
+description: Orchestrating a Swarm cluster with local dev mode support
+---
+
+Docker Swarm is an orchestration solution when regular Docker is not enough, but
+Kubernetes is an overkill.
+
+## Deploying to a Swarm cluster
+
+This example shows how to deploy a service to an existing Docker Swarm cluster.
+It supports both local development and production deployment.
+
+It uses local Docker during `alchemy dev`, and a Docker-over-SSH context for
+production deployment. Remote context runs all commands on the remote server,
+including building the image.
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as Docker from "alchemy/Docker";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "DockerSwarmExample",
+  {
+    providers: Layer.merge(Docker.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const dev = yield* Alchemy.ALCHEMY_DEV;
+
+    const context = yield* Docker.Context("docker-context", {
+      name: dev ? "local" : "vps",
+      docker: dev ? undefined : "host=ssh://user@hostname",
+    });
+    const network = yield* Docker.Network("docker-network", {
+      context,
+      driver: "overlay",
+    });
+    const image = yield* Docker.Image("docker-image", {
+      context,
+      tag: "latest",
+      build: {
+        context: ".",
+        dockerfile: "./Dockerfile",
+      },
+    });
+    const service = yield* Docker.Service("docker-service", {
+      context,
+      image,
+      replicas: dev ? 1 : 3,
+      networks: [network],
+      ports: [
+        {
+          external: 8080,
+          internal: 80,
+        },
+      ],
+      ...(dev && {
+        command: ["pnpm", "dev"],
+        volumes: [
+          {
+            hostPath: `${process.cwd()}/app`,
+            containerPath: "/app",
+          },
+        ],
+      }),
+    });
+
+    return {
+      container: service.name,
+      port: service.ports,
+    };
+  }),
+);
+```
