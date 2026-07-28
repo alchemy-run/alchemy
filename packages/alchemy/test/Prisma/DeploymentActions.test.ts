@@ -3,7 +3,7 @@ import {
   startDeploymentIdempotent,
   stopDeploymentIdempotent,
 } from "@/Prisma/Internal/DeploymentActions";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const conflict = (action: "start" | "stop") =>

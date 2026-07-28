@@ -47,7 +47,7 @@ import { Self } from "@/Self";
 import { Stack, type StackSpec } from "@/Stack";
 import { inMemoryState } from "@/State/InMemoryState";
 import { Stage } from "@/Stage";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

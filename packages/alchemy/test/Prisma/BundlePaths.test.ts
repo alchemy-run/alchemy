@@ -1,5 +1,5 @@
 import { normalizeBundleFilePath } from "@/Prisma/Internal/BundlePaths";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 describe("Prisma Compute bundle paths", () => {

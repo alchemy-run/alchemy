@@ -6,7 +6,7 @@ import {
   type PrismaStoredCredentials,
 } from "@/Prisma/AuthProvider";
 import { PrismaEnvironment, fromProfile } from "@/Prisma/PrismaEnvironment";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

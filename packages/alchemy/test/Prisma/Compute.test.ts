@@ -18,7 +18,7 @@ import type { ResourceBinding } from "@/Resource";
 import { Stack } from "@/Stack";
 import { PlatformServices } from "@/Util/PlatformServices";
 import type { Branch as ApiBranch } from "@/Prisma/Types";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";

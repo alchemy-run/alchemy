@@ -5,7 +5,7 @@ import {
   unresolvedDatabaseIdOf,
   unresolvedProjectIdOf,
 } from "@/Prisma/Refs";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 
 describe("Prisma Refs", () => {
   it("treats missing unresolved references as unknown", () => {

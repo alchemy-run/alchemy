@@ -1,13 +1,11 @@
 import type { ScopedPlanStatusSession } from "@/Cli/Cli.ts";
 import * as Command from "@/Command";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { assert, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Redacted from "effect/Redacted";
 import * as pathe from "pathe";
-import { assert } from "vitest";
-
 const { test } = Test.make({ providers: Command.providers() });
 
 const session = (notes: Array<string>) =>

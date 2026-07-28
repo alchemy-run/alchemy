@@ -3,7 +3,7 @@ import {
   ensurePrismaDevDatabase,
 } from "@/Prisma/PrismaDevDatabase";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";

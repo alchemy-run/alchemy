@@ -1,6 +1,6 @@
 import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import * as Prisma from "@/Prisma/Operations";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 type AssertNever<T extends never> = T;

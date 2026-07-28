@@ -8,7 +8,7 @@ import {
 import { AuthProviders, getAuthProvider } from "@/Auth/AuthProvider";
 import { CredentialsStore } from "@/Auth/Credentials";
 import { AlchemyProfile } from "@/Auth/Profile";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

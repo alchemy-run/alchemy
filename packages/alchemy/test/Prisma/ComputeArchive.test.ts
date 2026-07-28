@@ -4,7 +4,7 @@ import {
 } from "@/Prisma/ComputeArchive";
 import { closeDirectoryHandle } from "@/Prisma/Internal/ArchivePlatform";
 import { PlatformServices } from "@/Util/PlatformServices";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

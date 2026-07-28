@@ -7,7 +7,7 @@ import type {
   DatabaseConnectionWithOptionalSecrets,
   DatabaseSourceInput,
 } from "@/Prisma/Types";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 
 const nullableDatabaseSource: Database["source"] = null;
 const endpointSecretMayBeAbsent: DatabaseConnectionWithOptionalSecrets["endpoints"] =

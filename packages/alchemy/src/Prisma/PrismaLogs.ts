@@ -56,6 +56,16 @@ export const parseDeploymentLogRecord = (
   timestamp: Date,
 ): Effect.Effect<ParsedDeploymentLogRecord, PrismaLogStreamError> => {
   const byteLength = new TextEncoder().encode(message).byteLength;
+  // The socket is opened with `maxPayload`, but not every runtime's `ws`
+  // implementation enforces it (bun's ws shim delivers oversized frames), so
+  // bound the frame here too — without retaining any of its contents.
+  if (byteLength > MAX_WEBSOCKET_PAYLOAD_BYTES) {
+    return Effect.fail(
+      new PrismaLogStreamError({
+        message: `Prisma deployment log record exceeds the ${MAX_WEBSOCKET_PAYLOAD_BYTES}-byte frame limit (${byteLength} bytes)`,
+      }),
+    );
+  }
   let recordType: "log" | "terminal" | "unknown" | "invalid-json" =
     "invalid-json";
   return Effect.try({

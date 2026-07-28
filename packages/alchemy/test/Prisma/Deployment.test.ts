@@ -16,7 +16,7 @@ import { executeArtifactUpload } from "@/Prisma/Internal/ArtifactUpload";
 import { PrismaHttpClientLive } from "@/Prisma/Internal/HttpClient";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256, sha256Object } from "@/Util/sha256";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";

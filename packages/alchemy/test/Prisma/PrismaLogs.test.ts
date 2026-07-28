@@ -4,7 +4,7 @@ import {
   tailDeploymentLogs,
 } from "@/Prisma/PrismaLogs";
 import { createServer, type Server, type Socket } from "node:net";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -169,9 +169,7 @@ describe("Prisma deployment logs", () => {
           "deployment-1",
         ).pipe(Stream.runCollect, Effect.flip);
 
-        expect(String(error)).toContain(
-          "Prisma deployment log WebSocket failed",
-        );
+        expect(String(error)).toContain("exceeds the 1048576-byte frame limit");
         expect(String(error)).not.toContain(marker);
         expect(JSON.stringify(error)).not.toContain(marker);
       }),
@@ -487,7 +485,18 @@ const withWebSocketServer = <A, E, R>(
     f,
     (server) =>
       Effect.callback<void>((resume) => {
-        server.close(() => resume(Effect.void));
+        // This release runs as an uninterruptible finalizer, and bun's ws
+        // shim does not reliably fire the `server.close` callback once a
+        // connection was closed server-side — terminate stragglers and
+        // bound the wait so a shim quirk can't hang the test process.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const done = () => {
+          if (timer !== undefined) clearTimeout(timer);
+          resume(Effect.void);
+        };
+        for (const client of server.clients) client.terminate();
+        timer = setTimeout(done, 1_000);
+        server.close(done);
       }).pipe(Effect.ignore),
   );
 

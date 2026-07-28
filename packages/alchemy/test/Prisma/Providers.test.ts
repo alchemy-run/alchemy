@@ -1,7 +1,7 @@
 import { AlchemyContext } from "@/AlchemyContext";
 import * as Provider from "@/Provider";
 import * as Prisma from "@/Prisma";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -145,6 +145,10 @@ describe("Prisma providers", () => {
         Effect.provide(
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
+              // Route credential resolution down the env path — without CI the
+              // profile store is consulted and errors when the machine has no
+              // 'Prisma' credentials configured for the default profile.
+              CI: true,
               PRISMA_SERVICE_TOKEN: "test-token",
             }),
           ),

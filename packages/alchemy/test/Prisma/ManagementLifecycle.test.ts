@@ -24,8 +24,8 @@ import {
   SourceRepository as PrismaSourceRepository,
   SourceRepositoryProvider,
 } from "@/Prisma/SourceRepository";
-import * as Test from "@/Test/Vitest";
-import { expect, it } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
