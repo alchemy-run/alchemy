@@ -111,12 +111,13 @@ test.provider(
       expect(arns).toContain(second.configurationSetArn);
 
       // Drop the association in its own step before tearing the stack down.
-      // After a replacement the engine still orders the destroy against the
-      // association's PRE-replacement target, so `ConfigB` and `Link` are
-      // deleted concurrently and SES rejects the configuration-set delete with
-      // "Cannot delete <arn> because it has tenant associations". Removing the
+      // The replacement leaves both configuration sets `noop`, and a `noop`
+      // resource never re-persists its downstream edges, so destroy orders
+      // against the PRE-replacement target: `ConfigB` and `Link` delete
+      // concurrently and SES rejects the configuration-set delete with "Cannot
+      // delete <arn> because it has tenant associations". Removing the
       // association first keeps this test about replacement rather than about
-      // that ordering bug.
+      // that bug — see #979.
       yield* stack.deploy(
         Effect.gen(function* () {
           yield* Tenant("AssocTenant", {});
