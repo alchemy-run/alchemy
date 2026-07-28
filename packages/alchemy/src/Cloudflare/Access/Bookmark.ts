@@ -153,12 +153,10 @@ export const BookmarkProvider = () =>
           .createAccessBookmark({
             accountId: acct,
             bookmarkId,
-            body: {
-              name,
-              domain: news.domain,
-              logo_url: news.logoUrl,
-              app_launcher_visible: desiredVisible,
-            },
+            name,
+            domain: news.domain,
+            logoUrl: news.logoUrl,
+            appLauncherVisible: desiredVisible,
           })
           .pipe(
             Effect.catch((err) =>
@@ -187,12 +185,10 @@ export const BookmarkProvider = () =>
         const updated = yield* zeroTrust.updateAccessBookmark({
           accountId: acct,
           bookmarkId: observed.id,
-          body: {
-            name,
-            domain: news.domain,
-            logo_url: news.logoUrl,
-            app_launcher_visible: desiredVisible,
-          },
+          name,
+          domain: news.domain,
+          logoUrl: news.logoUrl,
+          appLauncherVisible: desiredVisible,
         });
         observed = {
           id: updated.id ?? observed.id,
@@ -274,9 +270,9 @@ const toAttrs = (observed: ObservedBookmark, accountId: string) => ({
 });
 
 type ObservedBookmark = {
-  id?: string | null;
-  name?: string | null;
-  domain?: string | null;
-  logoUrl?: string | null;
-  appLauncherVisible?: boolean | null;
+  id?: string;
+  name?: string;
+  domain?: string;
+  logoUrl?: string;
+  appLauncherVisible?: boolean;
 };
