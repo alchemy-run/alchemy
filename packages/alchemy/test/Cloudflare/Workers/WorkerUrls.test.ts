@@ -27,6 +27,39 @@ class RedirectNotReady extends Data.TaggedError("RedirectNotReady")<{
   detail: string;
 }> {}
 
+class DnsNotReady extends Data.TaggedError("DnsNotReady")<{
+  hostname: string;
+}> {}
+
+/**
+ * Wait until `hostname` resolves, querying 1.1.1.1 over DNS-over-HTTPS.
+ * The system resolver must not be asked before the record exists: a Worker
+ * custom domain's DNS record appears a few seconds after attach, and an
+ * early lookup negative-caches NXDOMAIN for the zone's SOA minimum TTL
+ * (30 minutes on Cloudflare) — poisoning every later fetch in the test.
+ * DoH bypasses that cache entirely, so the first system-resolver query
+ * only happens once the record is live.
+ */
+const waitForDns = Effect.fn(function* (hostname: string) {
+  yield* Effect.tryPromise({
+    try: async (signal) => {
+      const res = await fetch(
+        `https://1.1.1.1/dns-query?name=${hostname}&type=AAAA`,
+        { headers: { accept: "application/dns-json" }, signal },
+      );
+      const body = (await res.json()) as { Answer?: unknown[] };
+      if (!body.Answer?.length) throw new Error("no answer");
+    },
+    catch: () => new DnsNotReady({ hostname }),
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "DnsNotReady",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 36,
+    }),
+  );
+});
+
 /**
  * Fetch `from` without following redirects and assert a 301 whose
  * `location` matches `expectedLocation` exactly (path + query preserved).
@@ -164,11 +197,12 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
 
         // The canonical domain serves the Worker; the redirect host 301s
         // with path and query preserved — and never invokes the Worker.
-        // First-ever attachment of a hostname waits on edge-certificate
-        // issuance, which can take a few minutes — hence the long budget.
+        // Confirm DNS over DoH before the first fetch (see waitForDns).
+        yield* waitForDns(mainHost);
+        yield* waitForDns(oldHost);
         yield* expectUrlContains(worker.url!, "redirect-target", {
           label: "canonical domain serves the worker",
-          timeout: "240 seconds",
+          timeout: "120 seconds",
         });
         yield* expectRedirect(
           `https://${oldHost}/hello?x=1`,

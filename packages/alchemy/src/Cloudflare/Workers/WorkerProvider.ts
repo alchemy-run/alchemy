@@ -3133,6 +3133,38 @@ export const LiveWorkerProvider = () =>
         let effectiveDomain = manageCustomDomains
           ? domainConfig
           : previousDomain;
+        if (!manageCustomDomains && previousDomain !== undefined) {
+          // Unmanaged, but state remembers domains: observe which of them
+          // are actually still attached and carry only those forward —
+          // stale state entries (e.g. legacy records whose attach never
+          // happened, or hostnames detached out-of-band) must not
+          // resurface in `urls`. Plain workers.dev Workers (no persisted
+          // domains) never pay this listDomains call (#926).
+          const live = new Set(
+            yield* workers.listDomains({ accountId, service: name }).pipe(
+              Effect.map((r) =>
+                (r.result ?? []).flatMap((d) =>
+                  d.hostname ? [d.hostname] : [],
+                ),
+              ),
+              Effect.catch(() => Effect.succeed([] as string[])),
+            ),
+          );
+          const serving = [
+            ...(live.has(previousDomain.name) ? [previousDomain.name] : []),
+            ...previousDomain.aliases.filter((h) => live.has(h)),
+          ];
+          effectiveDomain =
+            serving.length > 0
+              ? {
+                  name: serving[0],
+                  aliases: serving.slice(1),
+                  redirects: previousDomain.redirects.filter((h) =>
+                    live.has(h),
+                  ),
+                }
+              : undefined;
+        }
         if (manageCustomDomains) {
           const desiredHostnames = domainConfig
             ? [
@@ -3209,7 +3241,7 @@ export const LiveWorkerProvider = () =>
           logpush: worker.logpush ?? undefined,
           url: urls[0],
           urls,
-          domain: domainConfig,
+          domain: effectiveDomain,
           tags: settings.tags ?? metadata.tags,
           durableObjectNamespaces,
           accountId,
