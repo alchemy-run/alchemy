@@ -37,6 +37,36 @@ test.provider("diff replaces a network when labels change", () =>
   }),
 );
 
+test.provider("diff replaces a network when its Docker context changes", () =>
+  Effect.gen(function* () {
+    const networkProvider = yield* Provider.findProvider(Docker.Network);
+    const networkDiff = yield* networkProvider.diff!({
+      id: "app",
+      fqn: "app",
+      instanceId: "instance",
+      olds: {
+        name: "app",
+        context: "default",
+      },
+      news: {
+        name: "app",
+        context: "remote-build",
+      },
+      oldBindings: [],
+      newBindings: [],
+      output: {
+        id: "app",
+        name: "app",
+        driver: "bridge",
+        enableIPv6: false,
+        labels: {},
+        createdAt: 0,
+      },
+    });
+    expect(networkDiff).toEqual({ action: "replace", deleteFirst: true });
+  }),
+);
+
 describe("Docker.Network", { concurrent: false }, () => {
   test.provider.skipIf(!isDockerReady)("creates a bridge network", (stack) =>
     Effect.gen(function* () {

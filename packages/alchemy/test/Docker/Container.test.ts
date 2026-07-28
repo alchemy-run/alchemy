@@ -41,6 +41,38 @@ test.provider("diff replaces a container when its image changes", () =>
   }),
 );
 
+test.provider("diff replaces a container when its Docker context changes", () =>
+  Effect.gen(function* () {
+    const containerProvider = yield* Provider.findProvider(Docker.Container);
+    const containerDiff = yield* containerProvider.diff!({
+      id: "web",
+      fqn: "web",
+      instanceId: "instance",
+      olds: {
+        name: "web",
+        image: "nginx:alpine",
+        context: "default",
+      },
+      news: {
+        name: "web",
+        image: "nginx:alpine",
+        context: "remote-build",
+      },
+      oldBindings: [],
+      newBindings: [],
+      output: {
+        id: "web",
+        name: "web",
+        status: "created",
+        createdAt: 0,
+        imageRef: "nginx:alpine",
+        ports: {},
+      },
+    });
+    expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
+  }),
+);
+
 test.provider(
   "diff replaces a container when its labels or stop timeout change",
   () =>

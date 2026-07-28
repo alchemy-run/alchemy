@@ -9,12 +9,14 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { toSeconds } from "../Util/Duration.ts";
-import { Docker, dockerPhysicalName } from "./Docker.ts";
+import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
   image: Container.Image;
+  /** Docker context name or context resource. */
+  context?: Docker.ContextRef;
   /**
    * Container name.
    *
@@ -187,6 +189,18 @@ export interface Container extends Resource<
  *   stopTimeout: "30 seconds",
  *   start: true,
  * });
+ *
+ * @example Use a Docker.Context resource
+ * ```typescript
+ * const remote = yield* Docker.Context("remote", {
+ *   name: "remote-build",
+ *   docker: "host=ssh://docker@example.com",
+ * });
+ *
+ * const api = yield* Docker.Container("api", {
+ *   image: "nginx:alpine",
+ *   context: remote,
+ * });
  * ```
  */
 export const Container = Resource<Container>("Docker.Container");
@@ -199,9 +213,12 @@ export const Container = Resource<Container>("Docker.Container");
  */
 export const inspectContainer = (
   name: string,
+  context?: Docker.ContextRef,
 ): Effect.Effect<Container["Attributes"], PlatformError, Docker> =>
   Docker.pipe(
-    Effect.flatMap((docker) => docker.container.inspect(name)),
+    Effect.flatMap((docker) =>
+      docker.container.inspect(name, dockerContextName(context)),
+    ),
     Effect.map((container) =>
       toContainerAttributes(container, container.Config.Image),
     ),
@@ -217,6 +234,7 @@ export const ContainerProvider = () =>
         live: Docker.Container,
         news: ContainerProps,
       ) {
+        const context = dockerContextName(news.context);
         const connect = new Map<string, Container.NetworkMapping>();
         const disconnect = new Set<string>();
         const noop = new Set<string>();
@@ -241,7 +259,7 @@ export const ContainerProvider = () =>
         yield* Effect.forEach(
           disconnect,
           (network) =>
-            docker.network.disconnect({ network, container: live.Id }),
+            docker.network.disconnect({ network, container: live.Id, context }),
           { concurrency: "unbounded" },
         );
         yield* Effect.forEach(
@@ -251,6 +269,7 @@ export const ContainerProvider = () =>
               network: network.name,
               container: live.Id,
               alias: network.aliases,
+              context,
             }),
           { concurrency: "unbounded" },
         );
@@ -259,9 +278,10 @@ export const ContainerProvider = () =>
       return Container.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          const context = dockerContextName(olds.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* docker.container
-            .inspect(name)
+            .inspect(name, context)
             .pipe(
               Effect.catchReason(
                 "PlatformError",
@@ -294,6 +314,11 @@ export const ContainerProvider = () =>
           // round-trip (it deserializes as `undefined`) — without comparable
           // prior create args, let the engine apply its default update logic.
           if (olds.image === undefined) return undefined;
+          if (
+            dockerContextName(olds.context) !== dockerContextName(news.context)
+          ) {
+            return { action: "replace" as const, deleteFirst: true };
+          }
           const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
           const newArgs = yield* makeCreateArgs(id, news, instanceId);
           if (!Equal.equals(oldArgs, newArgs)) {
@@ -307,9 +332,10 @@ export const ContainerProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+          const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
           const live = yield* docker.container
-            .inspect(args.name)
+            .inspect(args.name, context)
             .pipe(
               Effect.catchReason(
                 "PlatformError",
@@ -321,12 +347,12 @@ export const ContainerProvider = () =>
           if (live) {
             yield* reconcileNetworks(live, news);
             if (news.start && live.State.Status !== "running") {
-              yield* docker.container.start(live.Id);
+              yield* docker.container.start(live.Id, context);
             } else if (!news.start && live.State.Status === "running") {
-              yield* docker.container.stop(live.Id);
+              yield* docker.container.stop(live.Id, context);
             }
             return yield* docker.container
-              .inspect(live.Id)
+              .inspect(live.Id, context)
               .pipe(
                 Effect.map((info) => toContainerAttributes(info, args.image)),
               );
@@ -335,6 +361,7 @@ export const ContainerProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const { stdout: containerId } = yield* docker.container.create({
             ...args,
+            context,
             label: { ...args.label, ...internalTags },
           });
           yield* Effect.forEach(
@@ -344,20 +371,33 @@ export const ContainerProvider = () =>
                 network: network.name,
                 container: containerId,
                 alias: network.aliases,
+                context,
               }),
             { concurrency: "unbounded" },
           );
           if (news.start) {
-            yield* docker.container.start(containerId);
+            yield* docker.container.start(containerId, context);
           }
-          const info = yield* docker.container.inspect(containerId);
+          const info = yield* docker.container.inspect(containerId, context);
           return toContainerAttributes(info, args.image);
         }),
-        delete: Effect.fn(({ output }) =>
-          docker.container.stop(output.name).pipe(
-            Effect.andThen(docker.container.remove(output.name, true)),
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-          ),
+        delete: Effect.fn(({ olds, output }) =>
+          docker.container
+            .stop(output.name, dockerContextName(olds.context))
+            .pipe(
+              Effect.andThen(
+                docker.container.remove(
+                  output.name,
+                  true,
+                  dockerContextName(olds.context),
+                ),
+              ),
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.void,
+              ),
+            ),
         ),
       });
     }),

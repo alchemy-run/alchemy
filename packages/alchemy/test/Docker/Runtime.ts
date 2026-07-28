@@ -6,6 +6,19 @@ export const isDockerReady =
   NodeChildProcess.spawnSync("docker", ["info"], { stdio: "ignore" }).status ===
   0;
 
+const swarmState = NodeChildProcess.spawnSync(
+  "docker",
+  ["info", "--format", "{{.Swarm.LocalNodeState}}"],
+  {
+    stdio: ["ignore", "pipe", "ignore"],
+  },
+);
+
+export const isDockerSwarmReady =
+  isDockerReady &&
+  swarmState.status === 0 &&
+  String(swarmState.stdout).trim() === "active";
+
 export const findAvailablePort = () =>
   Effect.callback<number, Error>((resume) => {
     const server = NodeNet.createServer();
