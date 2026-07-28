@@ -1,4 +1,5 @@
 import { adopt, Unowned } from "@/AdoptPolicy";
+import type { DestroyError } from "@/Apply";
 import { Cli } from "@/Cli/Cli";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -13,7 +14,7 @@ import {
   State,
 } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
+import { assert, describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
@@ -103,8 +104,12 @@ const hook =
           },
         ),
       ),
+      // Phase-1 (create/update) failures surface as the raw ResourceFailure;
+      // Phase-2 (GC/destroy) delete failures are aggregated into DestroyError.
       // @ts-expect-error - catchTag changes the return type
-      Effect.catchTag("ResourceFailure", () => Effect.succeed(true)),
+      Effect.catchTag(["ResourceFailure", "DestroyError"], () =>
+        Effect.succeed(true),
+      ),
     ) as Effect.Effect<A, Err, Req | State>;
 
 // Helper to fail on specific resource IDs
@@ -5358,5 +5363,209 @@ describe("interrupted create persists no unresolved Output exprs", () => {
         expect(yield* getState("B")).toBeUndefined();
         expect(yield* listState()).toEqual([]);
       }),
+  );
+});
+
+// A single failed provider.delete used to abort the whole destroy, stranding
+// every not-yet-deleted resource — even ones whose deletes would have
+// succeeded. The engine now attempts every delete in dependency order,
+// collects the failures, skips only resources whose DEPENDENT failed to
+// delete (they may be legitimately undeletable — "blocked", not a second
+// error), and raises everything at the end as one typed DestroyError.
+describe("error-aggregating destroy", () => {
+  const expectDestroyError = (exit: Exit.Exit<unknown, unknown>) => {
+    expect(Exit.isFailure(exit)).toBe(true);
+    assert(Exit.isFailure(exit));
+    const reason = exit.cause.reasons.find(Cause.isFailReason);
+    const error = reason?.error as DestroyError;
+    expect(error._tag).toBe("DestroyError");
+    return error;
+  };
+
+  test.provider(
+    "a failed delete does not abort sibling deletes and aggregates into DestroyError",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { string: "a" });
+            yield* TestResource("B", { string: "b" });
+            yield* TestResource("C", { string: "c" });
+          }),
+        );
+
+        const deleted: string[] = [];
+        const exit = yield* stack.destroy().pipe(
+          Effect.provide(
+            Layer.succeed(TestResourceHooks, {
+              delete: (id: string) =>
+                id === "B"
+                  ? Effect.fail(new ResourceFailure())
+                  : Effect.sync(() => void deleted.push(id)),
+            }),
+          ),
+          Effect.exit,
+        );
+
+        // The independent siblings were still deleted...
+        expect(deleted.sort()).toEqual(["A", "C"]);
+        expect(yield* getState("A")).toBeUndefined();
+        expect(yield* getState("C")).toBeUndefined();
+        // ...the failed resource stays behind for the next destroy...
+        expect((yield* getState("B"))?.status).toEqual("deleting");
+
+        // ...and the destroy as a whole still fails, with a typed aggregate.
+        const error = expectDestroyError(exit);
+        expect(error.failures.map((f) => f.fqn)).toEqual(["B"]);
+        expect(error.blocked).toEqual([]);
+
+        // A subsequent destroy (failure gone) converges.
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "a resource whose dependent failed to delete is skipped as blocked, not attempted",
+    (stack) =>
+      Effect.gen(function* () {
+        // A <- B <- C is a dependency chain (deletes run C, B, A); D is
+        // independent.
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "a" });
+            const B = yield* TestResource("B", { string: A.string });
+            yield* TestResource("C", { string: B.string });
+            yield* TestResource("D", { string: "d" });
+          }),
+        );
+
+        const deleted: string[] = [];
+        const exit = yield* stack.destroy().pipe(
+          Effect.provide(
+            Layer.succeed(TestResourceHooks, {
+              delete: (id: string) =>
+                id === "C"
+                  ? Effect.fail(new ResourceFailure())
+                  : Effect.sync(() => void deleted.push(id)),
+            }),
+          ),
+          Effect.exit,
+        );
+
+        // Only the independent sibling was attempted and deleted. A and B
+        // sit upstream of the failed C, so their deletes were never even
+        // attempted — they may be legitimately undeletable while C exists.
+        expect(deleted).toEqual(["D"]);
+        expect(yield* getState("D")).toBeUndefined();
+        expect((yield* getState("C"))?.status).toEqual("deleting");
+        expect((yield* getState("B"))?.status).toEqual("created");
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // The aggregate reports exactly one FAILURE (C); B and A are
+        // "blocked by" notes, not spurious errors.
+        const error = expectDestroyError(exit);
+        expect(error.failures.map((f) => f.fqn)).toEqual(["C"]);
+        expect(
+          error.blocked
+            .map((b) => ({ fqn: b.fqn, blockedBy: b.blockedBy }))
+            .sort((x, y) => x.fqn.localeCompare(y.fqn)),
+        ).toEqual([
+          { fqn: "A", blockedBy: ["B"] },
+          { fqn: "B", blockedBy: ["C"] },
+        ]);
+
+        // Once the blocker can be deleted, everything drains.
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "independent subtrees are unaffected by a failure in another subtree",
+    (stack) =>
+      Effect.gen(function* () {
+        // Two disjoint chains: A <- B (B's delete fails) and X <- Y.
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "a" });
+            yield* TestResource("B", { string: A.string });
+            const X = yield* TestResource("X", { string: "x" });
+            yield* TestResource("Y", { string: X.string });
+          }),
+        );
+
+        const deleted: string[] = [];
+        const exit = yield* stack.destroy().pipe(
+          Effect.provide(
+            Layer.succeed(TestResourceHooks, {
+              delete: (id: string) =>
+                id === "B"
+                  ? Effect.fail(new ResourceFailure())
+                  : Effect.sync(() => void deleted.push(id)),
+            }),
+          ),
+          Effect.exit,
+        );
+
+        // The X <- Y chain drained fully, in dependency order.
+        expect(deleted).toEqual(["Y", "X"]);
+        expect(yield* getState("X")).toBeUndefined();
+        expect(yield* getState("Y")).toBeUndefined();
+        // B failed; A is blocked behind it.
+        expect((yield* getState("B"))?.status).toEqual("deleting");
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        const error = expectDestroyError(exit);
+        expect(error.failures.map((f) => f.fqn)).toEqual(["B"]);
+        expect(error.blocked.map((b) => b.fqn)).toEqual(["A"]);
+      }),
+  );
+
+  test.provider(
+    "a failed replaced-old-generation delete fails the deploy without spinning the drain loop",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { replaceString: "v1" });
+          }),
+        );
+
+        // Replacement create succeeds; GC then fails to delete the old
+        // generation. The drain loop must terminate (the still-`replaced`
+        // row is excluded from retry) and surface the typed aggregate.
+        const exit = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* TestResource("A", { replaceString: "v2" });
+            }),
+          )
+          .pipe(
+            Effect.provide(
+              Layer.succeed(TestResourceHooks, {
+                delete: () => Effect.fail(new ResourceFailure()),
+              }),
+            ),
+            Effect.exit,
+          );
+
+        const error = expectDestroyError(exit);
+        expect(error.failures.map((f) => f.fqn)).toEqual(["A"]);
+
+        // The replacement chain is preserved for a later deploy to drain.
+        const state = yield* getState<ReplacedResourceState>("A");
+        expect(state?.status).toEqual("replaced");
+        expect(state?.old?.status).toEqual("created");
+
+        // Next deploy (delete healthy again) drains the old chain.
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { replaceString: "v2" });
+          }),
+        );
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }),
+    { timeout: 15_000 },
   );
 });

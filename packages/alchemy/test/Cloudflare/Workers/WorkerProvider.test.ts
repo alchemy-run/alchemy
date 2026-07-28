@@ -3,6 +3,9 @@ import {
   getDurableObjectTagMap,
   normalizeStateDomains,
   resolveWorkersDev,
+  shouldObserveWorkerCrons,
+  shouldObserveWorkerDomains,
+  shouldObserveWorkerRoutes,
   stateCustomDomains,
 } from "@/Cloudflare/Workers/WorkerProvider";
 import { describe, expect, test } from "alchemy-test";
@@ -240,6 +243,94 @@ describe("WorkerProvider", () => {
 
     test("returns an empty map when no DO tags are present", () => {
       expect(getDurableObjectTagMap(["alchemy:stack:app", "user"])).toEqual({});
+    });
+  });
+
+  // Worker read used to always fan out listDomains + account-wide route
+  // discovery + getScriptSchedule, even for a plain workers.dev Worker. That
+  // stampeded GET /accounts/{id}/workers/subdomain neighbors into 429/code 971
+  // (#926). These helpers gate those observations on whether Alchemy manages
+  // the surface.
+  describe("shouldObserveWorkerDomains", () => {
+    test("skips when neither props nor state manage custom domains", () => {
+      expect(
+        shouldObserveWorkerDomains(
+          {},
+          {
+            domains: ["https://my-worker.acct.workers.dev"],
+          },
+        ),
+      ).toBe(false);
+      expect(shouldObserveWorkerDomains(undefined, undefined)).toBe(false);
+    });
+
+    test("observes when domain prop is present, including null", () => {
+      expect(shouldObserveWorkerDomains({ domain: null }, undefined)).toBe(
+        true,
+      );
+      expect(
+        shouldObserveWorkerDomains({ domain: "app.example.com" }, undefined),
+      ).toBe(true);
+    });
+
+    test("observes when prior state has non-workers.dev domains", () => {
+      expect(
+        shouldObserveWorkerDomains(
+          {},
+          {
+            domains: [
+              "https://app.example.com",
+              "https://my-worker.acct.workers.dev",
+            ],
+          },
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe("shouldObserveWorkerRoutes", () => {
+    test("skips when neither props nor state manage routes", () => {
+      expect(shouldObserveWorkerRoutes({}, { routes: [] })).toBe(false);
+      expect(shouldObserveWorkerRoutes(undefined, undefined)).toBe(false);
+    });
+
+    test("observes when routes prop is present, including empty array", () => {
+      expect(shouldObserveWorkerRoutes({ routes: [] }, undefined)).toBe(true);
+      expect(
+        shouldObserveWorkerRoutes(
+          { routes: [{ pattern: "example.com/*" }] },
+          undefined,
+        ),
+      ).toBe(true);
+    });
+
+    test("observes when prior state has routes", () => {
+      expect(
+        shouldObserveWorkerRoutes(
+          {},
+          {
+            routes: [{ id: "r1", pattern: "example.com/*", zoneId: "z1" }],
+          },
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe("shouldObserveWorkerCrons", () => {
+    test("skips when neither props nor state manage crons", () => {
+      expect(shouldObserveWorkerCrons({}, { crons: [] })).toBe(false);
+      expect(shouldObserveWorkerCrons(undefined, undefined)).toBe(false);
+    });
+
+    test("observes when crons prop is present, including empty array", () => {
+      expect(shouldObserveWorkerCrons({ crons: [] }, undefined)).toBe(true);
+      expect(
+        shouldObserveWorkerCrons({ crons: ["0 * * * *"] }, undefined),
+      ).toBe(true);
+    });
+
+    test("observes when prior state has crons (e.g. Effect-native cron())", () => {
+      expect(shouldObserveWorkerCrons({}, { crons: ["0 * * * *"] })).toBe(true);
     });
   });
 });

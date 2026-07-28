@@ -642,8 +642,12 @@ export interface WorkerProps<
    *
    * When set, `https://<name>` becomes the Worker's primary `url` output,
    * ranking above the `workers.dev` URL. See {@link WorkerDomainConfig}.
+   *
+   * Omitting the prop leaves custom domains unmanaged — attachments made
+   * outside Alchemy are preserved. Pass `null` to explicitly detach every
+   * custom domain (and remove their redirect rules).
    */
-  domain?: string | WorkerDomainConfig;
+  domain?: string | WorkerDomainConfig | null;
   /**
    * Zone routes that map URL patterns to this Worker. Equivalent to Wrangler's
    * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each

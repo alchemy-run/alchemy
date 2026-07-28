@@ -61,7 +61,7 @@ const expectRedirect = Effect.fn(function* (
     Effect.retry({
       while: (e) => e._tag === "RedirectNotReady",
       schedule: Schedule.spaced("5 seconds"),
-      times: 24,
+      times: 48,
     }),
   );
   expect(location).toEqual(expectedLocation);
@@ -120,8 +120,8 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
-        const mainHost = `alchemy-redirect-main-${suffix}.${customDomainZone}`;
-        const oldHost = `alchemy-redirect-old-${suffix}.${customDomainZone}`;
+        const mainHost = `alchemy-rdr-a-${suffix}.${customDomainZone}`;
+        const oldHost = `alchemy-rdr-b-${suffix}.${customDomainZone}`;
 
         yield* stack.destroy();
 
