@@ -588,6 +588,187 @@ export const removeDiskUser = (
   ).pipe(Effect.asVoid);
 
 // ============================================================================
+// Branches & Checkpoints
+// ============================================================================
+
+/**
+ * A checkpoint: an immutable, point-in-time snapshot of a disk's filesystem.
+ * The rough equivalent of a git commit.
+ */
+export interface CheckpointInfo {
+  /** The disk (or branch) the checkpoint was taken on. */
+  filesystemId: string;
+  /** Checkpoint name — unique within the branch it was taken on. */
+  checkpointName: string;
+  /**
+   * `pending` while the snapshot is still being committed; `committed`
+   * once it is durable and safe to branch from.
+   */
+  status: CheckpointStatus;
+  nonce?: string;
+  createdAt?: string;
+}
+
+export type CheckpointStatus = "pending" | "committed";
+
+/**
+ * A branch: an independent, writable fork of a disk taken from a
+ * checkpoint. Writes are isolated from the parent and from sibling
+ * branches. The rough equivalent of a git branch.
+ */
+export interface BranchInfo {
+  /** The disk this branch ultimately descends from. */
+  rootFilesystemId: string;
+  branchName: string;
+  /** The branch's own filesystem id. */
+  filesystemId: string;
+  /** The checkpoint this branch was forked from. */
+  fromCheckpointName: string;
+  /** The filesystem the source checkpoint was taken on. */
+  fromCheckpointFilesystemId?: string;
+  createdAt?: string;
+}
+
+/**
+ * Branch/checkpoint wire structs use snake_case, unlike the rest of the
+ * Archil API. These decoders normalize to the camelCase shapes above.
+ */
+const decodeBranch = (raw: Record<string, unknown>): BranchInfo => ({
+  rootFilesystemId: String(raw.root_filesystem_id ?? ""),
+  branchName: String(raw.branch_name ?? ""),
+  filesystemId: String(raw.filesystem_id ?? ""),
+  fromCheckpointName: String(raw.from_checkpoint_name ?? ""),
+  fromCheckpointFilesystemId:
+    raw.from_checkpoint_filesystem_id === undefined ||
+    raw.from_checkpoint_filesystem_id === null
+      ? undefined
+      : String(raw.from_checkpoint_filesystem_id),
+  createdAt:
+    raw.created_at === undefined || raw.created_at === null
+      ? undefined
+      : String(raw.created_at),
+});
+
+const decodeCheckpoint = (raw: Record<string, unknown>): CheckpointInfo => ({
+  filesystemId: String(raw.filesystem_id ?? ""),
+  checkpointName: String(raw.checkpoint_name ?? ""),
+  status: (raw.status ?? "pending") as CheckpointStatus,
+  nonce:
+    raw.nonce === undefined || raw.nonce === null
+      ? undefined
+      : String(raw.nonce),
+  createdAt:
+    raw.created_at === undefined || raw.created_at === null
+      ? undefined
+      : String(raw.created_at),
+});
+
+/**
+ * The response `data` for these routes is either the bare array/object or a
+ * `{ branches }` / `{ checkpoints }` wrapper depending on the control-plane
+ * build; accept both.
+ */
+const unwrapList = (data: unknown, key: string): Record<string, unknown>[] => {
+  if (Array.isArray(data)) return data as Record<string, unknown>[];
+  if (data && typeof data === "object") {
+    const inner = (data as Record<string, unknown>)[key];
+    if (Array.isArray(inner)) return inner as Record<string, unknown>[];
+  }
+  return [];
+};
+
+export const listBranches = (
+  input: DiskIdInput,
+): Effect.Effect<
+  BranchInfo[],
+  DiskNotFound | CommonError,
+  Credentials | HttpClient.HttpClient
+> =>
+  request<unknown, DiskNotFound>(
+    "listBranches",
+    {
+      method: "GET",
+      region: input.region,
+      path: `/api/disks/${input.diskId}/branches`,
+    },
+    (status, message) =>
+      status === 404
+        ? new DiskNotFound({ diskId: input.diskId, message })
+        : undefined,
+  ).pipe(Effect.map((data) => unwrapList(data, "branches").map(decodeBranch)));
+
+export interface CreateBranchInput extends DiskIdInput {
+  /** Name for the new branch — unique within the disk. */
+  branchName: string;
+  /** Checkpoint to fork from. Must be `committed`. */
+  fromCheckpoint: string;
+  /**
+   * Branch the source checkpoint was taken on. Omit to fork from a
+   * checkpoint on the disk's root branch.
+   */
+  fromBranch?: string;
+}
+
+export const createBranch = (
+  input: CreateBranchInput,
+): Effect.Effect<
+  BranchInfo,
+  DiskNotFound | CommonError,
+  Credentials | HttpClient.HttpClient
+> =>
+  request<unknown, DiskNotFound>(
+    "createBranch",
+    {
+      method: "POST",
+      region: input.region,
+      path: `/api/disks/${input.diskId}/branches`,
+      body: {
+        branch_name: input.branchName,
+        from_checkpoint_name: input.fromCheckpoint,
+        from_branch: input.fromBranch,
+      },
+    },
+    (status, message) =>
+      status === 404
+        ? new DiskNotFound({ diskId: input.diskId, message })
+        : undefined,
+  ).pipe(
+    Effect.map((data) => {
+      const raw = (data ?? {}) as Record<string, unknown>;
+      const inner = (raw.branch ?? raw) as Record<string, unknown>;
+      return decodeBranch(inner);
+    }),
+  );
+
+export interface ListCheckpointsInput extends DiskIdInput {
+  /** List checkpoints on this branch instead of the disk's root branch. */
+  branch?: string;
+}
+
+export const listCheckpoints = (
+  input: ListCheckpointsInput,
+): Effect.Effect<
+  CheckpointInfo[],
+  DiskNotFound | CommonError,
+  Credentials | HttpClient.HttpClient
+> =>
+  request<unknown, DiskNotFound>(
+    "listCheckpoints",
+    {
+      method: "GET",
+      region: input.region,
+      path: `/api/disks/${input.diskId}/checkpoints`,
+      query: { branch: input.branch },
+    },
+    (status, message) =>
+      status === 404
+        ? new DiskNotFound({ diskId: input.diskId, message })
+        : undefined,
+  ).pipe(
+    Effect.map((data) => unwrapList(data, "checkpoints").map(decodeCheckpoint)),
+  );
+
+// ============================================================================
 // Serverless Execution
 // ============================================================================
 

@@ -6,12 +6,15 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import {
+  createBranch,
   createDisk,
   deleteDisk,
   exec,
   execDisk,
   getDisk,
   grepDisk,
+  listBranches,
+  listCheckpoints,
   listDisks,
   removeDiskUser,
   addDiskUser,
@@ -149,6 +152,39 @@ export const makeArchilClient = (
         }),
       );
     }),
+    checkpoints: Effect.fn("Archil.Client.disk.checkpoints")(
+      function* (options?: { branch?: string }) {
+        return yield* auth.authorize(
+          listCheckpoints({
+            region: yield* region,
+            diskId: yield* id,
+            branch: options?.branch,
+          }),
+        );
+      },
+    ),
+    branches: Effect.fn("Archil.Client.disk.branches")(function* () {
+      return yield* auth.authorize(
+        listBranches({ region: yield* region, diskId: yield* id }),
+      );
+    }),
+    createBranch: Effect.fn("Archil.Client.disk.createBranch")(
+      function* (options: {
+        name: string;
+        fromCheckpoint: string;
+        fromBranch?: string;
+      }) {
+        return yield* auth.authorize(
+          createBranch({
+            region: yield* region,
+            diskId: yield* id,
+            branchName: options.name,
+            fromCheckpoint: options.fromCheckpoint,
+            fromBranch: options.fromBranch,
+          }),
+        );
+      },
+    ),
   });
 
   return {

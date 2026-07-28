@@ -4,6 +4,8 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type {
   AuthorizedUser,
+  BranchInfo,
+  CheckpointInfo,
   CommonError,
   DiskConflict,
   DiskData,
@@ -75,6 +77,51 @@ export interface DiskClient {
     type: "token" | "awssts";
     identifier?: string;
   }): Effect.Effect<void, DiskNotFound | CommonError, RuntimeContext>;
+  /**
+   * List the disk's checkpoints — immutable snapshots you can branch from.
+   * Pass `branch` to list checkpoints taken on a branch instead of the
+   * disk's root branch.
+   *
+   * Checkpoints are *created* from a mounted disk (`archil checkpoints
+   * create <mountpoint> <name>`), not over HTTP — there is no control-plane
+   * route for it. Bake them out-of-band (a build box, CI), then branch from
+   * them at runtime.
+   */
+  checkpoints(options?: {
+    branch?: string;
+  }): Effect.Effect<
+    CheckpointInfo[],
+    DiskNotFound | CommonError,
+    RuntimeContext
+  >;
+  /** List the disk's branches. */
+  branches(): Effect.Effect<
+    BranchInfo[],
+    DiskNotFound | CommonError,
+    RuntimeContext
+  >;
+  /**
+   * Fork a new writable branch from a checkpoint. Writes on the branch are
+   * isolated from the parent disk and from sibling branches, so this is the
+   * cheap way to hand every user their own copy of a baked base image.
+   *
+   * The checkpoint must be `committed`. Branches cannot be deleted — Archil
+   * exposes no delete route for them today.
+   *
+   * A branch is not a security boundary: disk credentials cover the disk and
+   * all of its branches.
+   */
+  createBranch(options: {
+    /** Name for the new branch — unique within the disk. */
+    name: string;
+    /** Checkpoint to fork from. */
+    fromCheckpoint: string;
+    /**
+     * Branch the source checkpoint was taken on. Omit to fork from a
+     * checkpoint on the disk's root branch.
+     */
+    fromBranch?: string;
+  }): Effect.Effect<BranchInfo, DiskNotFound | CommonError, RuntimeContext>;
 }
 
 /** A disk freshly provisioned at runtime via {@link ArchilClient.createDisk}. */
@@ -229,6 +276,35 @@ export interface ArchilClient {
  *
  * // request time:
  * const { stdout } = yield* data.exec("ls -la /mnt/archil");
+ * ```
+ *
+ * @section Base Images (Branches & Checkpoints)
+ * @example Fork every user off a baked base image
+ * Bake the base disk once and checkpoint it out-of-band (checkpoints require
+ * a mounted disk — a build box or CI step, not a Worker):
+ *
+ * ```bash
+ * sudo archil mount myorg/base /mnt/archil --region aws-us-east-1
+ * # …install deps, seed data…
+ * archil checkpoints create /mnt/archil golden-v1
+ * ```
+ *
+ * Then fork a private writable copy per user at request time. Branch writes
+ * are isolated from the base and from every sibling branch:
+ * ```typescript
+ * const base = archil.disk(baseDiskId);
+ * const branch = yield* base.createBranch({
+ *   name: `user-${userId}`,
+ *   fromCheckpoint: "golden-v1",
+ * });
+ * ```
+ *
+ * @example Inspect what you can fork from
+ * ```typescript
+ * const committed = (yield* base.checkpoints()).filter(
+ *   (c) => c.status === "committed",
+ * );
+ * const existing = yield* base.branches();
  * ```
  *
  * @section Multi-Disk Execution
