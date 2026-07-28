@@ -6,6 +6,58 @@ description: Orchestrating a Swarm cluster with local dev mode support
 Docker Swarm is an orchestration solution when regular Docker is not enough, but
 Kubernetes is an overkill.
 
+Alchemy orchestrates an **existing** swarm. `Docker.Service` wraps
+`docker service` — swarm mode's orchestration API — so the engine it targets
+must be a swarm manager. Cluster membership itself is one-time host setup with
+the Docker CLI (resources for it, like `Docker.Swarm`, may come later).
+
+## Setting up the swarm
+
+### Local development
+
+Turn your local engine into a single-node swarm. The node becomes both manager
+and worker, and regular `docker run`/`docker build` usage is unaffected:
+
+```sh
+docker swarm init
+```
+
+Undo it at any time with `docker swarm leave --force`.
+
+### Remote single node
+
+Run the same init on the server through a Docker context (or plain ssh):
+
+```sh
+docker context create vps --docker "host=ssh://deploy@example.com"
+docker --context vps swarm init
+```
+
+### Multi-node cluster
+
+On the manager, advertise a reachable address. Init prints a join token:
+
+```sh
+docker swarm init --advertise-addr <manager-ip>
+```
+
+On each worker, join with that token:
+
+```sh
+docker swarm join --token <token> <manager-ip>:2377
+```
+
+Label nodes to target them with `placement.constraints`
+(e.g. `"node.labels.zone==eu"`):
+
+```sh
+docker node update --label-add zone=eu <node>
+```
+
+Once the swarm exists, Alchemy connects to a **manager** node via
+`Docker.Context` — every `Docker.Service` and overlay `Docker.Network`
+operation runs against it.
+
 ## Deploying to a Swarm cluster
 
 This example shows how to deploy a service to an existing Docker Swarm cluster.

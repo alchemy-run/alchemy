@@ -313,6 +313,11 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * A Docker Swarm service: N replicas of a container kept alive by the swarm,
  * deployed through the active (or a named) Docker context.
  *
+ * The target engine must be a swarm manager — `Service` wraps
+ * `docker service`, swarm mode's orchestration API. `docker swarm init`
+ * turns a local engine into a single-node swarm; for a plain single
+ * container on a non-swarm daemon use `Docker.Container` instead.
+ *
  * The service's image comes from one of two sources:
  *
  * - `image` — run a pre-built reference (a registry ref, or a `Docker.Image`
