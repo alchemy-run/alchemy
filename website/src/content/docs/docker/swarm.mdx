@@ -75,3 +75,46 @@ export default Alchemy.Stack(
   }),
 );
 ```
+
+## Effectful services
+
+`Docker.Service` is also a platform, like `AWS.ECS.Service`. Pass `main` and
+an implementation instead of a pre-built image and Alchemy bundles the Effect
+program, builds a content-addressed image against the service's Docker
+context, and deploys it as a swarm service.
+
+```typescript
+import * as Docker from "alchemy/Docker";
+import { ServerHost } from "alchemy/Server/Process";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    port: 3000,
+    ports: [{ external: 8080, internal: 3000 }],
+    replicas: 2,
+  },
+  Effect.gen(function* () {
+    const host = yield* ServerHost;
+    yield* host.run(myBackgroundLoop);
+
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json({ ok: true });
+      }),
+    };
+  }),
+) {}
+```
+
+The returned `fetch` handler is served by a Bun HTTP server inside the
+container on `port`, and `host.run` registers long-running background loops.
+The image is rebuilt only when the bundled program changes.
+
+The image is built on the target engine's local store, so a single-node swarm
+runs it as-is. Multi-node swarms need the image on a registry every node can
+reach: build with `Docker.Image` and a `registry`, then pass the pushed
+reference as `image`.

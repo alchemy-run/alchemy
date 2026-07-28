@@ -1,17 +1,21 @@
-import { Resource } from "alchemy";
-import { deepEqual, isResolved } from "alchemy/Diff";
-import { Docker, dockerPhysicalName } from "alchemy/Docker";
-import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
+import { deepEqual, isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { Docker, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface ContextProps {
-  /** Context name. Defaults to generated physical name. */
+  /**
+   * Context name.
+   *
+   * @default Generated from stack, stage, logical id, and instance id.
+   */
   name?: string;
   /** Human-readable description displayed in `docker context ls`. */
   description?: string;
-  /** Docker endpoint URL, for example `host=ssh://user@host`. */
+  /** Docker endpoint spec, for example `host=ssh://user@host`. */
   docker?: string;
 }
 
@@ -19,15 +23,65 @@ export interface Context extends Resource<
   "Docker.Context",
   ContextProps,
   {
+    /** Docker context name (contexts are identified by name). */
     id: string;
+    /** Docker context name. */
     name: string;
+    /** Human-readable description. */
     description: string;
+    /** Docker endpoint the context targets. */
     docker?: string;
   },
   never,
   Providers
 > {}
 
+/**
+ * A named Docker CLI context — a pointer to a Docker engine (local socket,
+ * SSH host, or TCP endpoint) that other Docker resources deploy through.
+ *
+ * Pass the context (or its name) to any Docker resource's `context` prop to
+ * run that resource's operations against the referenced engine instead of the
+ * default one. Changing the endpoint updates the context in place; renaming
+ * it, or clearing a previously-set endpoint, replaces it.
+ *
+ * @resource
+ *
+ * @section Creating Contexts
+ * @example Remote engine over SSH
+ * ```typescript
+ * const vps = yield* Docker.Context("vps", {
+ *   docker: "host=ssh://deploy@example.com",
+ *   description: "production swarm manager",
+ * });
+ * ```
+ *
+ * @section Using a Context
+ * @example Deploy resources through the context
+ * ```typescript
+ * const vps = yield* Docker.Context("vps", {
+ *   docker: "host=ssh://deploy@example.com",
+ * });
+ * const network = yield* Docker.Network("app-net", {
+ *   context: vps,
+ *   driver: "overlay",
+ * });
+ * const app = yield* Docker.Service("app", {
+ *   context: vps,
+ *   image: "nginx:alpine",
+ *   networks: [network.name],
+ * });
+ * ```
+ *
+ * @example Local development vs production
+ * ```typescript
+ * const dev = yield* Alchemy.ALCHEMY_DEV;
+ * const context = yield* Docker.Context("target", {
+ *   name: dev ? "local" : "vps",
+ *   docker: dev ? undefined : "host=ssh://deploy@example.com",
+ * });
+ * ```
+ */
 export const Context = Resource<Context>("Docker.Context");
 
 export const ContextProvider = () =>

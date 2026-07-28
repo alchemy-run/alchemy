@@ -788,13 +788,16 @@ export const dockerPhysicalName = (
   id: string,
   props: { name?: string } | undefined,
   instanceId: string,
+  // Swarm service names are capped at 63 characters; other Docker object
+  // names accept much longer values.
+  maxLength = 128,
 ) =>
   props?.name
     ? Effect.succeed(props.name)
     : createPhysicalName({
         id,
         instanceId,
-        maxLength: 128,
+        maxLength,
         lowercase: true,
       });
 
