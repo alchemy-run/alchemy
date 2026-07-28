@@ -67,11 +67,11 @@ Alchemy avoids this. Your R2 Bucket is a real R2 Bucket. Your D1
 Database is a real D1 Database. The only thing running locally is
 your application code.
 
-The same is true of side effects: a
-[`send_email` binding](/cloudflare/email/send-and-receive) sends real
-mail in dev, exactly as in production. Gate calls like that on an env
-var (or the injected `ALCHEMY_STAGE` binding) when your dev loop
-shouldn't fire them.
+Bindings whose only job is a side effect are the exception: a
+[`send_email` binding](/cloudflare/email/send-and-receive) defaults
+to a local stub in dev, so `send()` logs the message to the dev
+console instead of delivering mail. Set `dev: { remote: true }` on
+the binding to send real mail from the dev loop.
 
 ## Debugging
 
