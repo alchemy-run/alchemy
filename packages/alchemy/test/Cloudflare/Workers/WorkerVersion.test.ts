@@ -1,6 +1,7 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
@@ -301,6 +302,78 @@ describe.concurrent("Cloudflare.Worker version", () => {
         yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 240_000 },
+  );
+
+  // State-migration: version workers deployed by the pre-url-redesign
+  // provider (#948) persisted their preview URLs in a `domains` list with
+  // no `urls`/`domain` attributes, and a metadata hash computed over the
+  // old url/subdomain surface. A props-identical redeploy must migrate the
+  // record as a one-time update and settle back to noop.
+  test.provider(
+    "props-identical redeploy migrates pre-redesign version-worker state",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const program = Effect.gen(function* () {
+          const parent = yield* Cloudflare.Worker("MigrParent", {
+            script: script("migr-parent-v1"),
+          });
+          const preview = yield* Cloudflare.Worker("MigrPreview", {
+            script: script("migr-preview-v1"),
+            version: { parent },
+          });
+          return { parent, preview };
+        });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const v1 = yield* stack.deploy(program);
+        expect(v1.preview.urls).toHaveLength(2);
+
+        // Rewrite the version worker's record to the #948-era shape:
+        // preview URLs in `domains`, no `urls`/`domain`, legacy hash.
+        yield* Effect.gen(function* () {
+          const state = yield* yield* State;
+          const key = { stack: stack.name, stage: "test", fqn: "MigrPreview" };
+          const current = yield* state.get(key);
+          expect(current).toBeDefined();
+          const attr = {
+            ...(current as any).attr,
+            domains: [...(current as any).attr.urls],
+            hash: { ...(current as any).attr.hash, metadata: "legacy" },
+          };
+          delete attr.urls;
+          delete attr.domain;
+          yield* state.set({ ...key, value: { ...(current as any), attr } });
+        }).pipe(Effect.provide(stack.state));
+
+        // Identical props still plan as an update, driven by the metadata
+        // hash surface change alone.
+        const migrationPlan = yield* stack.plan(program);
+        expect(actionOf(migrationPlan, "MigrPreview")).toBe("update");
+
+        const v2 = yield* stack.deploy(program);
+        // The aliased preview URL is deterministic, so it survives the
+        // migration byte-for-byte; the per-version URL is re-minted by the
+        // migration's version upload.
+        expect(v2.preview.urls[0]).toEqual(v1.preview.urls[0]);
+        expect(v2.preview.urls[1]).toMatch(
+          new RegExp(`^https://[0-9a-f]{8}-${v2.parent.workerName}\\.`),
+        );
+        expect(v2.preview.domain).toBeUndefined();
+
+        // One-time: the same program now settles as a full noop.
+        const settledPlan = yield* stack.plan(program);
+        expect(actionOf(settledPlan, "MigrParent")).toBe("noop");
+        expect(actionOf(settledPlan, "MigrPreview")).toBe("noop");
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 300_000 },
   );
 
   test.provider(

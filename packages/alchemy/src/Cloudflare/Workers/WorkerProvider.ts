@@ -267,11 +267,24 @@ const toPunycode = (hostname: string): string => {
  * @internal exported for unit testing.
  */
 export const resolveWorkerDomain = (
-  domain: WorkerProps["domain"],
+  // `string[]` is the pre-redesign prop shape — it can still reach us from
+  // persisted `olds` written by older providers (read's classification).
+  domain: WorkerProps["domain"] | string[],
 ): Effect.Effect<ResolvedWorkerDomain | undefined, WorkerDomainConfigError> =>
   Effect.gen(function* () {
     if (domain === undefined || domain === null) return undefined;
-    const config = typeof domain === "string" ? { name: domain } : domain;
+    // Legacy array form: the first hostname was the primary custom domain
+    // (`url = domains[0]` back then), the rest map to aliases. A legacy
+    // empty array was the explicit detach-all — no domain.
+    const config =
+      typeof domain === "string"
+        ? { name: domain }
+        : Array.isArray(domain)
+          ? domain.length > 0
+            ? { name: domain[0], aliases: domain.slice(1) }
+            : undefined
+          : domain;
+    if (config === undefined) return undefined;
     const name = toPunycode(config.name);
     const aliases = Array.from(new Set((config.aliases ?? []).map(toPunycode)));
     const redirects = Array.from(

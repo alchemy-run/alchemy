@@ -2,13 +2,17 @@ import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
+  resolveWorkerDomain,
   resolveWorkersDev,
   shouldObserveWorkerCrons,
   shouldObserveWorkerDomains,
   shouldObserveWorkerRoutes,
   stateCustomDomains,
+  stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
 import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 
 describe("WorkerProvider", () => {
   describe("normalizeStateDomains", () => {
@@ -79,6 +83,122 @@ describe("WorkerProvider", () => {
           "https://my-worker.acct.workers.dev",
         ]),
       ).toEqual(["app.example.com"]);
+    });
+  });
+
+  describe("resolveWorkerDomain", () => {
+    const resolve = (domain: Parameters<typeof resolveWorkerDomain>[0]) =>
+      Effect.runSync(resolveWorkerDomain(domain));
+
+    test("string shorthand resolves to { name }", () => {
+      expect(resolve("app.example.com")).toEqual({
+        name: "app.example.com",
+        aliases: [],
+        redirects: [],
+      });
+    });
+
+    test("object form dedupes and punycodes hostnames", () => {
+      expect(
+        resolve({
+          name: "📦.example.com",
+          aliases: ["www.example.com", "www.example.com"],
+          redirects: ["old.example.com"],
+        }),
+      ).toEqual({
+        name: "xn--cu8h.example.com",
+        aliases: ["www.example.com"],
+        redirects: ["old.example.com"],
+      });
+    });
+
+    test("undefined and null resolve to no domain", () => {
+      expect(resolve(undefined)).toBeUndefined();
+      expect(resolve(null)).toBeUndefined();
+    });
+
+    // Pre-redesign props stored `domain: string[]` — persisted `olds` can
+    // still hand that shape to read's classification. `domains[0]` was the
+    // primary hostname back then, so it maps to `name`; the rest to
+    // aliases. A legacy empty array was the explicit detach-all.
+    test("legacy string[] maps to name + aliases", () => {
+      expect(resolve(["app.example.com", "www.example.com"])).toEqual({
+        name: "app.example.com",
+        aliases: ["www.example.com"],
+        redirects: [],
+      });
+      expect(resolve([])).toBeUndefined();
+    });
+
+    test("a hostname in more than one role is a typed error", () => {
+      const result = Effect.runSync(
+        Effect.result(
+          resolveWorkerDomain({
+            name: "app.example.com",
+            aliases: ["app.example.com"],
+          }),
+        ),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toEqual("WorkerDomainConfigError");
+      }
+    });
+  });
+
+  describe("stateWorkerDomain", () => {
+    test("passes the current-format domain attribute through", () => {
+      expect(
+        stateWorkerDomain({
+          domain: {
+            name: "app.example.com",
+            aliases: ["www.example.com"],
+            redirects: ["old.example.com"],
+          },
+        }),
+      ).toEqual({
+        name: "app.example.com",
+        aliases: ["www.example.com"],
+        redirects: ["old.example.com"],
+      });
+    });
+
+    test("derives name + aliases from legacy URL-string domains state", () => {
+      expect(
+        stateWorkerDomain({
+          domains: [
+            "https://app.example.com",
+            "https://www.example.com",
+            "https://my-worker.acct.workers.dev",
+          ],
+        }),
+      ).toEqual({
+        name: "app.example.com",
+        aliases: ["www.example.com"],
+        redirects: [],
+      });
+    });
+
+    test("derives from <= beta.44 domain objects", () => {
+      expect(
+        stateWorkerDomain({
+          domains: [{ id: "abc", hostname: "app.example.com", zoneId: "z" }],
+        }),
+      ).toEqual({
+        name: "app.example.com",
+        aliases: [],
+        redirects: [],
+      });
+    });
+
+    test("workers.dev-only and empty state resolve to no domain", () => {
+      expect(
+        stateWorkerDomain({
+          domains: ["https://my-worker.acct.workers.dev"],
+        }),
+      ).toBeUndefined();
+      expect(stateWorkerDomain({})).toBeUndefined();
+      expect(stateWorkerDomain(undefined)).toBeUndefined();
     });
   });
 
