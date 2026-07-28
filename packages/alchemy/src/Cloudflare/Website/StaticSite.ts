@@ -95,13 +95,21 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * @category Workers & Compute
  *
  * @section Basic Usage
- * Point `command` at your build script, `outdir` at where it writes
- * output, and `main` at a Worker entrypoint that serves the assets.
- * Alchemy runs the command, hashes the output, and deploys the
- * Worker bound to the built assets.
+ * Point `command` at your build script and `outdir` at where it writes
+ * output. Alchemy runs the command, hashes the output, and deploys it as
+ * an assets-only Worker — no Worker code is uploaded, and Cloudflare's
+ * asset layer serves every request itself.
  *
- * The Worker receives an `ASSETS` binding it can delegate to. A
- * minimal passthrough Worker looks like:
+ * @example Deploying a Hugo site
+ * ```typescript
+ * const site = yield* Cloudflare.Website.StaticSite("Blog", {
+ *   command: "hugo --minify",
+ *   outdir: "public",
+ * });
+ * ```
+ *
+ * Provide `main` to put your own Worker in front of the assets instead.
+ * The Worker receives an `ASSETS` binding it can delegate to:
  *
  * ```typescript
  * // src/worker.ts
@@ -111,7 +119,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * };
  * ```
  *
- * @example Deploying a Hugo site
+ * @example Custom Worker in front of the assets
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
@@ -253,14 +261,9 @@ const makeStaticSite = <
           env: serializeEnv(props.env),
         });
 
-    // Pure-static sites don't need a custom Worker entrypoint —
-    // delegate every request straight to the ASSETS binding. Only
-    // injected when the user provided neither `main` nor `script`.
-    const fallbackScript =
-      props.main == null && props.script == null
-        ? `export default { fetch: (request, env) => env.ASSETS.fetch(request) };`
-        : undefined;
-
+    // Pure-static sites (neither `main` nor `script`) deploy as
+    // assets-only Workers: no script is uploaded and Cloudflare's asset
+    // layer serves every request itself.
     return yield* Worker<Bindings, WorkerAssetsConfig, Req>("Worker", {
       ...props,
       assets: build
@@ -274,7 +277,7 @@ const makeStaticSite = <
       // is serving the content. The Worker resource still exists in
       // state with a stub Attributes shape.
       dev: dev ? { mode: "external", url: dev.url } : undefined,
-      script: fallbackScript ?? props.script,
+      script: props.script,
     });
   }).pipe(Namespace.push(id));
 

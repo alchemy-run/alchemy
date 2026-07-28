@@ -1401,6 +1401,28 @@ export const LiveWorkerProvider = () =>
           if (props.vite) {
             return yield* viteBuild(props, opts.selfUrl);
           }
+          // Assets-only Worker: no entry module at all. The script PUT goes
+          // out with no modules and no main_module — Cloudflare's asset
+          // layer serves every request and applies `notFoundHandling`
+          // (including SPA fallback) itself, exactly like Wrangler's
+          // assets-only deploys.
+          if (props.main === undefined) {
+            if (!props.assets) {
+              return yield* Effect.die(
+                new Error(
+                  `Worker "${id}" has no main, script, or assets. Provide an entry module (main / script) or an assets directory to deploy an assets-only Worker.`,
+                ),
+              );
+            }
+            return {
+              assets: opts.skipAssetsRead
+                ? undefined
+                : yield* prepareAssets(props.assets),
+              bundle: undefined,
+              input: undefined,
+              additionalWorkspaces: undefined,
+            };
+          }
           const [assets, bundle] = yield* Effect.all(
             [
               opts.skipAssetsRead
@@ -2216,6 +2238,25 @@ export const LiveWorkerProvider = () =>
             Effect.succeed(output.hash?.additionalWorkspaces ?? []),
           );
           return hash !== output.hash?.input;
+        }
+        // Assets-only Worker — there is no bundle to hash. A stored bundle
+        // hash means the Worker previously had a script and is being
+        // converted to assets-only, which must deploy.
+        if (props.main === undefined) {
+          if (output.hash?.bundle !== undefined) {
+            return true;
+          }
+          const assetsHash =
+            props.assets && Predicate.hasProperty(props.assets, "hash")
+              ? props.assets.hash
+              : undefined;
+          if (assetsHash === undefined) {
+            // Same conservative rule as the directory-shaped `assets` below:
+            // don't read the directory during diff; `putWorker` reads once
+            // and keeps the existing manifest if nothing actually changed.
+            return true;
+          }
+          return assetsHash !== output.hash?.assets;
         }
         const bundleHash = yield* prepareBundle(id, props).pipe(
           Effect.map((b) => b.hash),
