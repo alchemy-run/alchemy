@@ -25,7 +25,7 @@ export interface DeviceDexTestData {
   /** The kind of synthetic test the WARP client runs. */
   kind: "http" | "traceroute";
   /** The HTTP method to use — only `GET` is supported. */
-  method?: "GET";
+  method?: "GET" | (string & {});
 }
 
 /**
@@ -258,7 +258,7 @@ type ObservedDexTest = {
   data: {
     host: string;
     kind: "http" | "traceroute" | (string & {});
-    method?: "GET" | null;
+    method?: "GET" | (string & {}) | null;
   };
   enabled: boolean;
   interval: string;
@@ -294,7 +294,11 @@ const createTestName = (id: string, name: string | undefined) =>
 
 const encodeData = (
   data: DeviceDexTestData,
-): { host: string; kind: "http" | "traceroute"; method?: "GET" } => ({
+): {
+  host: string;
+  kind: "http" | "traceroute";
+  method?: "GET" | (string & {});
+} => ({
   host: data.host,
   kind: data.kind,
   ...(data.method !== undefined ? { method: data.method } : {}),
