@@ -25,6 +25,16 @@ interface Env {
 export default {
   fetch: async (request: Request, env: Env) => {
     const url = new URL(request.url);
+    if (url.pathname === "/seed") {
+      // Writes without deleting, so the test can verify out-of-band (via
+      // the cloud API for an `Alchemy.live()` bucket) that the object
+      // actually landed in the bound bucket.
+      await env.BUCKET.put("seed.txt", "seeded by worker", {
+        httpMetadata: { contentType: "text/plain" },
+      });
+      const head = await env.BUCKET.head("seed.txt");
+      return Response.json({ etag: head?.etag ?? null });
+    }
     if (url.pathname === "/roundtrip") {
       await env.BUCKET.put("greeting.txt", "hello r2", {
         httpMetadata: { contentType: "text/plain" },

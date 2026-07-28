@@ -741,6 +741,15 @@ Registry-style local providers (the "instance" is an in-memory row, e.g. Cloudfl
 
 Reference implementations: [Command/Dev.ts](./packages/alchemy/src/Command/Dev.ts) (minimal: spawn + URL readiness), [Cloudflare Workers LocalWorkerProvider.ts](./packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts) (full-size: bundler watch loop, cross-restart proxy in `stop`), [Cloudflare Queues Queue.ts](./packages/alchemy/src/Cloudflare/Queues/Queue.ts) (registry-style, no runner). Engine coverage lives in [test/provider-mode.test.ts](./packages/alchemy/test/provider-mode.test.ts) and the "provider modes" describes in [plan.test.ts](./packages/alchemy/test/plan.test.ts) / [apply.test.ts](./packages/alchemy/test/apply.test.ts).
 
+## Local tests (`{Resource}.local.test.ts`)
+
+Every resource with a local (dev) provider gets a **`{Resource}.local.test.ts`** co-located with its live test, using `Test.make({ providers, dev: true })`. It must cover, minimum:
+
+1. **The local roundtrip** — deploy the resource + a worker binding it (file-based fixture `main`, never inline `script` — unsupported in dev) and drive the binding over HTTP against the local simulator. Assert the resource's identity carries the `dev:` marker (proof no cloud call ran).
+2. **The `Alchemy.live()` opt-out** — the same shape with the resource piped through `Alchemy.live()`: assert a real (non-`dev:`) identity, round-trip through the remote-proxied binding, verify out-of-band via distilled that the write landed in the real cloud resource, and after `stack.destroy()` verify the cloud resource is gone (pins the stamped-mode delete path).
+
+Reference: [KV Namespace.local.test.ts](./packages/alchemy/test/Cloudflare/KV/Namespace.local.test.ts) (includes the mixed local + live stack), [R2 Bucket.local.test.ts](./packages/alchemy/test/Cloudflare/R2/Bucket.local.test.ts), [D1 Database.local.test.ts](./packages/alchemy/test/Cloudflare/D1/Database.local.test.ts) (includes local migrations).
+
 # Test Fixtures for Effect-Native Workers / Functions
 
 To test runtime behavior of an Effect-native Worker, Workflow, Lambda, etc., write a **fixture** that defines the Worker/Function with the bindings under test and exposes one HTTP route per behavior, then write a **test** that deploys the fixture once via `beforeAll` and drives it over HTTP.
