@@ -821,20 +821,22 @@ export const Function: Platform<
                 // finalizer is logged and ignored so it can't mask the
                 // invocation's outcome.
                 const scope = Scope.makeUnsafe();
-                // Telemetry exporters build into the invocation scope so
-                // buffered spans/logs/metrics flush when it settles below.
-                const exit = await buildEventTelemetry(
-                  services,
-                  scope,
-                  (ctx as Serverless.FunctionContext).telemetry,
-                ).pipe(
-                  Effect.flatMap((telemetry) =>
-                    Effect.provideContext(eff, telemetry),
-                  ),
+                const exit = await eff.pipe(
                   Effect.provide(
                     Layer.mergeAll(
                       Layer.succeed(HandlerContext, context),
                       Layer.succeed(Scope.Scope, scope),
+                      // The configured telemetry exporters, attached to the
+                      // invocation scope by `buildEventTelemetry` so
+                      // buffered spans/logs/metrics flush when it settles
+                      // below.
+                      Layer.effectContext(
+                        buildEventTelemetry(
+                          services,
+                          scope,
+                          (ctx as Serverless.FunctionContext).telemetry,
+                        ),
+                      ),
                     ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
                   ),
                   Effect.tap(Effect.logDebug),

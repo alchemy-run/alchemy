@@ -91,18 +91,7 @@ export const makeWorkerBridge = (
       .then(
         (built) => {
           const [eff, services] = makeEffect(built);
-          // Build the configured telemetry exporters into the *request*
-          // scope (not the never-finalized isolate scope): the batching
-          // fiber lives in this event's I/O context and buffered telemetry
-          // flushes when the scope closes into `ctx.waitUntil` below.
-          return buildEventTelemetry(
-            built.context,
-            scope,
-            built.telemetry(),
-          ).pipe(
-            Effect.flatMap((telemetry) =>
-              Effect.provideContext(eff, telemetry),
-            ),
+          return eff.pipe(
             // Per-event services take precedence over the captured services
             // and the built isolate context: the isolate context carries the
             // *deferred* WorkerExecutionContext (yieldable in the top-level
@@ -117,6 +106,16 @@ export const makeWorkerBridge = (
                   fromExecutionContext(ctx),
                 ),
                 Layer.succeed(Scope.Scope, scope),
+                // The configured telemetry exporters. Constructed as part
+                // of this per-event layer, but `buildEventTelemetry`
+                // attaches their batching fibers and flush finalizers to
+                // the request `scope` (not this build's transient scope),
+                // so buffered telemetry flushes when the scope closes into
+                // `ctx.waitUntil` below — never on workerd's ephemeral
+                // isolate scope.
+                Layer.effectContext(
+                  buildEventTelemetry(built.context, scope, built.telemetry()),
+                ),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(built.context)),

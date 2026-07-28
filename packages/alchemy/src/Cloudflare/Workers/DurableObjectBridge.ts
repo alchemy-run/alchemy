@@ -132,20 +132,23 @@ export const makeDurableObjectBridge =
 
         const { instance, services, context, telemetry } = await this.#instance;
 
-        // Build the configured telemetry exporters into the *call* scope so
-        // buffered telemetry flushes when the scope closes into `waitUntil`
-        // below (the isolate scope never finalizes on workerd).
-        return buildEventTelemetry(context, scope, telemetry())
+        return fn(instance)
           .pipe(
-            Effect.flatMap((telemetry) =>
-              Effect.provideContext(fn(instance), telemetry),
-            ),
             Effect.provide(
-              Layer.succeed(
-                DurableObjectState,
-                fromDurableObjectState(this.#state),
+              Layer.mergeAll(
+                Layer.succeed(
+                  DurableObjectState,
+                  fromDurableObjectState(this.#state),
+                ),
+                Layer.succeed(Scope.Scope, scope),
+                // The configured telemetry exporters, attached to the *call*
+                // scope by `buildEventTelemetry` so buffered telemetry
+                // flushes when the scope closes into `waitUntil` below (the
+                // isolate scope never finalizes on workerd).
+                Layer.effectContext(
+                  buildEventTelemetry(context, scope, telemetry()),
+                ),
               ).pipe(
-                Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(context)),
               ),

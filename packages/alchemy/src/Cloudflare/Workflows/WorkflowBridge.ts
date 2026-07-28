@@ -84,24 +84,20 @@ export const makeWorkflowBridge =
         // workflow steps, matching the Worker and Durable Object bridges.
         const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(
-          // Build the configured telemetry exporters into the run's scope so
-          // buffered telemetry flushes when the scope closes at the end of
-          // the run-invocation.
-          buildEventTelemetry(context, scope, telemetry()).pipe(
-            Effect.flatMap((telemetry) =>
-              Effect.provideContext(fn(event.payload), telemetry),
-            ),
+          fn(event.payload).pipe(
             Effect.provide(
-              Layer.succeed(
-                WorkflowEventService,
-                wrapWorkflowEvent(event),
-              ).pipe(
-                Layer.provideMerge(
-                  Layer.succeed(WorkflowStep, wrapWorkflowStep(step)),
+              Layer.mergeAll(
+                Layer.succeed(WorkflowEventService, wrapWorkflowEvent(event)),
+                Layer.succeed(WorkflowStep, wrapWorkflowStep(step)),
+                Layer.succeed(Scope.Scope, scope),
+                // The configured telemetry exporters, attached to the run's
+                // scope by `buildEventTelemetry` so buffered telemetry
+                // flushes when the scope closes at the end of the
+                // run-invocation.
+                Layer.effectContext(
+                  buildEventTelemetry(context, scope, telemetry()),
                 ),
-                Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
-                Layer.provideMerge(Layer.succeedContext(context)),
-              ),
+              ).pipe(Layer.provideMerge(Layer.succeedContext(context))),
             ),
           ) as Effect.Effect<unknown>,
         );
