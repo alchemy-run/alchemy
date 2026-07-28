@@ -107,6 +107,77 @@ test.provider(
 );
 
 /**
+ * The full `Alchemy.live()` queue roundtrip in dev: the local worker
+ * produces through the deployed shim into the REAL queue, and its local
+ * `queue()` handler receives the messages back through the runtime's pull
+ * loop (the Consumer's local provider attaches an `http_pull` consumer to
+ * the real queue; the pull loop drains it into the local broker).
+ */
+test.provider(
+  "Alchemy.live() queue round-trips: local produce, real queue, local consume",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* Cloudflare.Queues.Queue(
+            "LiveRoundtripQueue",
+          ).pipe(Alchemy.live());
+          const worker = yield* Cloudflare.Worker("queue-roundtrip-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/queue-local-worker.ts",
+            ),
+            env: { QUEUE: queue },
+          });
+          yield* Cloudflare.Queues.Consumer("LiveRoundtripConsumer", {
+            queueId: queue.queueId,
+            scriptName: worker.workerName,
+          });
+          return { queue, worker };
+        }),
+      );
+
+      // The queue is real; the worker (and its queue() handler) is local.
+      expect(deployed.queue.queueId).not.toMatch(/^dev:/);
+
+      // Produce through the shim into the real queue.
+      const sent = (yield* getJsonReady(
+        `${deployed.worker.url}send?text=roundtrip-hello`,
+      )) as { sent: string };
+      expect(sent.sent).toBe("roundtrip-hello");
+
+      // The pull loop drains the real queue into the local broker, which
+      // delivers to the fixture's queue() handler.
+      const received = yield* getJsonReady(
+        `${deployed.worker.url}received`,
+      ).pipe(
+        Effect.map((body) => (body as { received: string[] }).received),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (received) => received.includes("roundtrip-hello"),
+          times: 30,
+        }),
+      );
+      expect(received).toContain("roundtrip-hello");
+
+      yield* stack.destroy();
+
+      // Destroy removed the real queue (with its pull consumer and shim).
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const gone = yield* queues
+        .getQueue({ accountId, queueId: deployed.queue.queueId })
+        .pipe(
+          Effect.as(false),
+          Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+        );
+      expect(gone).toBe(true);
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+/**
  * `Alchemy.live()` queues in dev: Cloudflare's remote-binding (preview)
  * sessions reject queue bindings at the platform level
  * (cloudflare/workers-sdk#9929), so production goes through the deployed

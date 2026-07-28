@@ -74,6 +74,18 @@ export type Consumer = Resource<
     accountId: string;
     deadLetterQueue?: string;
     settings?: ConsumerSettings;
+    /**
+     * Dev only, live queues only: the real queue's name, resolved from the
+     * cloud so the local runtime can wire the broker + pull loop for a
+     * locally-running consumer of an `Alchemy.live()` queue.
+     */
+    queueName?: string;
+    /**
+     * Dev only, live queues only: id of the `http_pull` consumer attached
+     * to the real queue so the local runtime can drain it via the HTTP
+     * pull API. Deleted when this resource is deleted.
+     */
+    pullConsumerId?: string;
   },
   never,
   Providers
@@ -638,6 +650,40 @@ export const ConsumerProviderLocal = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          // A LIVE queue (`Alchemy.live()`) consumed by a LOCAL worker:
+          // Cloudflare only pushes to deployed consumers, so the local
+          // runtime drains the real queue via the HTTP pull API instead.
+          // Observe the queue (name + existing consumers) and ensure an
+          // `http_pull` consumer exists for the pull loop to lease from.
+          let queueName: string | undefined;
+          let pullConsumerId: string | undefined;
+          if (isLiveId(news.queueId)) {
+            const queue = yield* queues.getQueue({
+              accountId,
+              queueId: news.queueId,
+            });
+            queueName = queue.queueName ?? undefined;
+            const existingPull = (queue.consumers ?? []).find(
+              (c) => c.type === "http_pull",
+            );
+            if (existingPull?.consumerId) {
+              pullConsumerId = existingPull.consumerId;
+            } else {
+              const created = yield* queues.createConsumer({
+                accountId,
+                queueId: news.queueId,
+                type: "http_pull",
+                settings: {
+                  batchSize: news.settings?.batchSize,
+                  maxRetries: news.settings?.maxRetries,
+                  retryDelay: news.settings?.retryDelay,
+                },
+              });
+              pullConsumerId =
+                ("consumerId" in created ? created.consumerId : undefined) ??
+                undefined;
+            }
+          }
           const consumer: Consumer["Attributes"] = {
             consumerId: output?.consumerId ?? `dev:${crypto.randomUUID()}`,
             queueId: news.queueId,
@@ -645,6 +691,8 @@ export const ConsumerProviderLocal = () =>
             deadLetterQueue: news.deadLetterQueue,
             accountId,
             settings: news.settings,
+            queueName,
+            pullConsumerId,
           };
           MutableHashMap.set(
             localRuntimeState.queueConsumers,
@@ -670,6 +718,23 @@ export const ConsumerProviderLocal = () =>
             output.consumerId,
           );
           yield* restartScripts([output.scriptName]);
+          // Remove the http_pull consumer this row attached to its live
+          // queue. Idempotent: gone-already (or queue deleted first) is
+          // success.
+          if (output.pullConsumerId && isLiveId(output.queueId)) {
+            yield* queues
+              .deleteConsumer({
+                accountId: output.accountId,
+                queueId: output.queueId,
+                consumerId: output.pullConsumerId,
+              })
+              .pipe(
+                Effect.catchTag(
+                  ["ConsumerNotFound", "QueueNotFound"],
+                  () => Effect.void,
+                ),
+              );
+          }
         }),
       };
     }),

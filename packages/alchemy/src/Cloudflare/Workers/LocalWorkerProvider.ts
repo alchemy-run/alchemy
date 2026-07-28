@@ -62,6 +62,7 @@ import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
+  isLiveId,
   isLocalId,
   LOCAL_ENTRY_URL,
   LocalRuntimeState,
@@ -123,6 +124,28 @@ export const LocalWorkerProvider = () =>
           localRuntimeState.queueConsumers,
         )) {
           if (consumer.scriptName === scriptName) {
+            // A LIVE queue (`Alchemy.live()`) consumed locally: the broker
+            // is still local, but it is fed by the runtime's pull loop
+            // draining the real queue over the HTTP pull API (the
+            // Consumer's local provider attached the `http_pull` consumer
+            // and resolved the queue's real name).
+            if (isLiveId(consumer.queueId)) {
+              if (!consumer.queueName) {
+                return yield* Effect.die(
+                  `Consumer of live queue ${consumer.queueId} is missing its resolved queueName — re-deploy the consumer`,
+                );
+              }
+              consumers.push({
+                queueName: consumer.queueName,
+                deadLetterQueue: consumer.deadLetterQueue,
+                ...consumer.settings,
+                pull: {
+                  queueId: consumer.queueId,
+                  accountId: consumer.accountId,
+                },
+              });
+              continue;
+            }
             const queue = MutableHashMap.get(
               localRuntimeState.queues,
               consumer.queueId,
