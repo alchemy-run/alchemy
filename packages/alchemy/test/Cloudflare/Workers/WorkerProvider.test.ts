@@ -82,29 +82,40 @@ describe("WorkerProvider", () => {
   describe("resolveWorkersDev", () => {
     test("defaults to the full workers.dev behavior", () => {
       expect(resolveWorkersDev(undefined)).toEqual({
-        url: true,
-        previews: true,
+        enabled: true,
+        previewsEnabled: true,
       });
-      expect(resolveWorkersDev(true)).toEqual({ url: true, previews: true });
+      expect(resolveWorkersDev(true)).toEqual({
+        enabled: true,
+        previewsEnabled: true,
+      });
     });
 
     test("false disables both toggles", () => {
-      expect(resolveWorkersDev(false)).toEqual({ url: false, previews: false });
+      expect(resolveWorkersDev(false)).toEqual({
+        enabled: false,
+        previewsEnabled: false,
+      });
     });
 
     test("object form fills unset toggles with true", () => {
-      expect(resolveWorkersDev({})).toEqual({ url: true, previews: true });
-      expect(resolveWorkersDev({ url: false })).toEqual({
-        url: false,
-        previews: true,
+      expect(resolveWorkersDev({})).toEqual({
+        enabled: true,
+        previewsEnabled: true,
       });
-      expect(resolveWorkersDev({ previews: false })).toEqual({
-        url: true,
-        previews: false,
+      expect(resolveWorkersDev({ enabled: false })).toEqual({
+        enabled: false,
+        previewsEnabled: true,
       });
-      expect(resolveWorkersDev({ url: false, previews: true })).toEqual({
-        url: false,
-        previews: true,
+      expect(resolveWorkersDev({ previewsEnabled: false })).toEqual({
+        enabled: true,
+        previewsEnabled: false,
+      });
+      expect(
+        resolveWorkersDev({ enabled: false, previewsEnabled: true }),
+      ).toEqual({
+        enabled: false,
+        previewsEnabled: true,
       });
     });
   });

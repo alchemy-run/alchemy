@@ -15,7 +15,7 @@ export default class EffectSecretWorker extends Cloudflare.Worker<EffectSecretWo
   "EffectSecretBindingWorker",
   {
     main: import.meta.url,
-    workersDev: { url: true, previews: false },
+    workersDev: { enabled: true, previewsEnabled: false },
   },
   Effect.gen(function* () {
     const secret = yield* ApiKey;

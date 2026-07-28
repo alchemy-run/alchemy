@@ -1,4 +1,5 @@
 import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects";
+import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as zones from "@distilled.cloud/cloudflare/zones";
@@ -185,6 +186,183 @@ const validateTraffic = (traffic: number | undefined) =>
       )
     : Effect.void;
 
+/**
+ * A Worker's `domain` configuration is invalid — a hostname appears in more
+ * than one role (name/aliases/redirects), or a redirect targets itself.
+ */
+export class WorkerDomainConfigError extends Data.TaggedError(
+  "WorkerDomainConfigError",
+)<{
+  message: string;
+}> {}
+
+/**
+ * The resolved shape of `WorkerProps.workersDev`: `enabled` drives the
+ * stable `<name>.<account>.workers.dev` URL, `previewsEnabled` the
+ * per-version preview URLs. The two toggles are independent on the
+ * Cloudflare API.
+ *
+ * @internal exported for unit testing.
+ */
+export interface ResolvedWorkersDev {
+  enabled: boolean;
+  previewsEnabled: boolean;
+}
+
+/**
+ * Resolve the `workersDev` prop to its full shape. `true` / omitted means
+ * "default workers.dev behavior" (stable URL + version previews), `false`
+ * disables both, and the object form fills unset toggles with `true`.
+ *
+ * @internal exported for unit testing.
+ */
+export const resolveWorkersDev = (
+  workersDev: WorkerProps["workersDev"],
+): ResolvedWorkersDev => {
+  if (workersDev === undefined || workersDev === true) {
+    return { enabled: true, previewsEnabled: true };
+  }
+  if (workersDev === false) {
+    return { enabled: false, previewsEnabled: false };
+  }
+  return {
+    enabled: workersDev.enabled ?? true,
+    previewsEnabled: workersDev.previewsEnabled ?? true,
+  };
+};
+
+/**
+ * The resolved shape of `WorkerProps.domain`: the canonical hostname plus
+ * alias and redirect hostname lists, all punycode-normalized and
+ * de-duplicated.
+ *
+ * @internal exported for unit testing.
+ */
+export interface ResolvedWorkerDomain {
+  name: string;
+  aliases: string[];
+  redirects: string[];
+}
+
+// Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
+// Cloudflare API receives the form it stores domains in. `new URL(...)`
+// does IDNA via WHATWG URL parsing — `📦.alchemy.run` → `xn--5z8h.alchemy.run`.
+const toPunycode = (hostname: string): string => {
+  try {
+    return new URL(`https://${hostname}`).hostname;
+  } catch {
+    return hostname;
+  }
+};
+
+/**
+ * Resolve the `domain` prop to its full shape — a bare string is shorthand
+ * for `{ name }`. Hostnames are punycode-normalized and de-duplicated;
+ * a hostname may only play one role, so aliases/redirects that repeat the
+ * canonical name (or each other) fail with a typed error.
+ *
+ * @internal exported for unit testing.
+ */
+export const resolveWorkerDomain = (
+  domain: WorkerProps["domain"],
+): Effect.Effect<ResolvedWorkerDomain | undefined, WorkerDomainConfigError> =>
+  Effect.gen(function* () {
+    if (domain === undefined) return undefined;
+    const config = typeof domain === "string" ? { name: domain } : domain;
+    const name = toPunycode(config.name);
+    const aliases = Array.from(new Set((config.aliases ?? []).map(toPunycode)));
+    const redirects = Array.from(
+      new Set((config.redirects ?? []).map(toPunycode)),
+    );
+    const overlap = [
+      ...aliases.filter((h) => h === name),
+      ...redirects.filter((h) => h === name || aliases.includes(h)),
+    ];
+    if (overlap.length > 0) {
+      return yield* Effect.fail(
+        new WorkerDomainConfigError({
+          message: `Each hostname may play only one role in a Worker's domain config; ${[...new Set(overlap)].map((h) => `'${h}'`).join(", ")} appears in more than one of name/aliases/redirects.`,
+        }),
+      );
+    }
+    return { name, aliases, redirects };
+  });
+
+const isWorkersDevHostname = (hostname: string) =>
+  hostname.endsWith(".workers.dev");
+
+// Hostnames that only appear in local-dev state (the dev server's
+// localhost/LAN URLs), never as attachable custom domains.
+const isLocalDevHostname = (hostname: string) =>
+  hostname === "localhost" ||
+  hostname === "::1" ||
+  /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
+
+const urlHostname = (url: string): string => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+};
+
+/** The `rules` payload shape of a zone phase-entrypoint PUT. */
+type PutZoneRedirectRules = rulesets.PutPhasForZoneRequest["rules"];
+
+/**
+ * The *custom domain* hostnames recorded in a Worker's persisted legacy
+ * `domains` state — minus the workers.dev (stable or preview) and local-dev
+ * entries that shared the list in older formats.
+ *
+ * @internal exported for unit testing.
+ */
+export const stateCustomDomains = (
+  domains: readonly unknown[] | undefined,
+): string[] =>
+  normalizeStateDomains(domains).filter(
+    (hostname) =>
+      !isWorkersDevHostname(hostname) && !isLocalDevHostname(hostname),
+  );
+
+/**
+ * The Worker's persisted domain configuration: the `domain` attribute for
+ * state written by the current format, else re-derived from the legacy
+ * `domains` list (first custom hostname = canonical name, rest = aliases;
+ * legacy state had no redirects).
+ *
+ * @internal exported for unit testing.
+ */
+export const stateWorkerDomain = (
+  output: object | undefined,
+): ResolvedWorkerDomain | undefined => {
+  const state = output as
+    | {
+        domain?: {
+          name?: unknown;
+          aliases?: unknown[];
+          redirects?: unknown[];
+        } | null;
+        domains?: unknown[];
+      }
+    | undefined;
+  const domain = state?.domain;
+  if (domain && typeof domain.name === "string") {
+    return {
+      name: domain.name,
+      aliases: (domain.aliases ?? []).filter(
+        (h): h is string => typeof h === "string",
+      ),
+      redirects: (domain.redirects ?? []).filter(
+        (h): h is string => typeof h === "string",
+      ),
+    };
+  }
+  const legacy = stateCustomDomains(state?.domains);
+  return legacy.length > 0
+    ? { name: legacy[0], aliases: legacy.slice(1), redirects: [] }
+    : undefined;
+};
+
 // Workers for Platforms "user workers" live inside a dispatch namespace and
 // use a parallel family of script endpoints (`/workers/dispatch/namespaces/
 // :namespace/scripts/...`). The request/response shapes are identical to the
@@ -331,14 +509,14 @@ const deleteWorkerScript = (
   });
 
 /**
- * Normalize a Worker's persisted `domains` state to `https://<hostname>`
- * strings. Alchemy <= beta.44 stored each custom domain as a
- * `{ id, hostname, zoneId }` object; beta.45+ stores `https://<hostname>`
- * strings and the diff path calls string methods on each entry. Older state is
- * coerced back to strings so `.endsWith` does not throw `u.endsWith is not a
- * function` (#546). Entries that are neither a string nor an object with a
- * string `hostname` are dropped rather than turned into a bogus `https://`
- * value that would skew the diff.
+ * Normalize a Worker's persisted *legacy* `domains` state to bare
+ * hostnames. Alchemy <= beta.44 stored each custom domain as a
+ * `{ id, hostname, zoneId }` object; beta.45+ stored `https://<hostname>`
+ * URL strings (with the workers.dev URL mixed in); current state stores the
+ * `domain` config object instead of a `domains` list. All legacy
+ * generations coerce to hostnames so the diff never throws on older state
+ * (#546). Entries that fit no generation are dropped rather than turned
+ * into a bogus hostname that would skew the diff.
  *
  * @internal exported for unit testing.
  */
@@ -346,9 +524,18 @@ export const normalizeStateDomains = (
   domains: readonly unknown[] | undefined,
 ): string[] =>
   (domains ?? []).flatMap((u) => {
-    if (typeof u === "string") return [u];
+    if (typeof u === "string") {
+      if (u.includes("://")) {
+        try {
+          return [new URL(u).hostname];
+        } catch {
+          return [];
+        }
+      }
+      return u.length > 0 ? [u] : [];
+    }
     const hostname = (u as { hostname?: unknown } | null)?.hostname;
-    return typeof hostname === "string" ? [`https://${hostname}`] : [];
+    return typeof hostname === "string" ? [hostname] : [];
   });
 
 /**
@@ -503,9 +690,8 @@ const resolveWorkerMetadataHash = ({
     logpush: props.logpush,
     observability: props.observability,
     placement: props.placement,
-    subdomain: props.subdomain,
     tags: props.tags,
-    url: props.url,
+    workersDev: resolveWorkersDev(props.workersDev),
     // Reduce `version.parent` to the parent's script name: the resolved
     // parent is a full attributes object whose *other* fields (hash, url,
     // ...) change on every parent deploy, which would spuriously re-version
@@ -557,46 +743,22 @@ export const LiveWorkerProvider = () =>
           })
           .pipe(Effect.map((result) => result.subdomain));
 
-      // Toggle the workers.dev subdomain via `POST /subdomain` with
-      // `enabled: true | false`. Mirrors the upstream Alchemy
-      // implementation in `.vendor/alchemy/.../worker-subdomain.ts`.
-      // When enabling we also set `previewsEnabled: true` so the
-      // script is reachable both at its stable workers.dev URL and at
-      // version-preview URLs; on disable we send just `enabled: false`.
+      // Converge the script's workers.dev settings via `POST /subdomain`.
+      // The two toggles are independent on the Cloudflare API: `enabled`
+      // drives the stable `<name>.<account>.workers.dev` URL and
+      // `previews_enabled` the per-version preview URLs.
       const setWorkerSubdomain = Effect.fn(function* (
         name: string,
-        enabled: boolean,
+        desired: ResolvedWorkersDev,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         return yield* workers.createScriptSubdomain({
           accountId,
           scriptName: name,
-          enabled,
-          previewsEnabled: enabled ? true : undefined,
+          enabled: desired.enabled,
+          previewsEnabled: desired.previewsEnabled,
         });
       });
-
-      // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
-      // Cloudflare API receives the form it stores domains in. `new URL(...)`
-      // does IDNA via WHATWG URL parsing — `📦.alchemy.run` → `xn--5z8h.alchemy.run`.
-      const toPunycode = (hostname: string): string => {
-        try {
-          return new URL(`https://${hostname}`).hostname;
-        } catch {
-          return hostname;
-        }
-      };
-
-      const normalizeDomains = (
-        domain: string | string[] | undefined,
-      ): string[] =>
-        domain === undefined
-          ? []
-          : Array.from(
-              new Set(
-                (Array.isArray(domain) ? domain : [domain]).map(toPunycode),
-              ),
-            );
 
       const normalizeCrons = (crons: string[] | undefined): string[] =>
         Array.from(new Set(crons ?? []));
@@ -618,13 +780,13 @@ export const LiveWorkerProvider = () =>
         props: WorkerProps,
         accountId: string,
       ) {
-        const customDomains = normalizeDomains(props.domain);
-        if (customDomains.length > 0) {
-          return `https://${customDomains[0]}`;
+        const domain = yield* resolveWorkerDomain(props.domain);
+        if (domain) {
+          return `https://${domain.name}`;
         }
-        if (props.url === false) {
+        if (!resolveWorkersDev(props.workersDev).enabled) {
           return yield* Effect.die(
-            `Worker "${name}" binds its own URL (Worker.URL) but has none: workers.dev is disabled (url: false) and no custom domain is configured.`,
+            `Worker "${name}" binds its own URL (Worker.URL) but has none: the stable workers.dev URL is disabled (workersDev) and no custom domain is configured.`,
           );
         }
         return `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`;
@@ -850,6 +1012,194 @@ export const LiveWorkerProvider = () =>
           });
           return applied;
         });
+
+      // The preview URL of the Worker's *current* version:
+      // `https://<version-prefix>-<name>.<subdomain>.workers.dev`, where the
+      // prefix is the first 8 characters of the version id (read from the
+      // latest deployment's majority version). Resolves to `undefined` when
+      // no deployment is visible yet — callers treat the preview URL as
+      // best-effort. Only consulted in previews-only mode
+      // (`workersDev: { enabled: false, previewsEnabled: true }`), where it
+      // is the Worker's only workers.dev surface.
+      const getPreviewUrl = Effect.fn(function* (
+        scriptName: string,
+        accountSubdomain: string,
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const deployments = yield* workers
+          .listScriptDeployments({ accountId, scriptName })
+          .pipe(
+            Effect.map((response) => response.deployments ?? []),
+            Effect.catch(() => Effect.succeed([])),
+          );
+        const latest = [...deployments].sort((a, b) =>
+          b.createdOn.localeCompare(a.createdOn),
+        )[0];
+        const version = latest?.versions?.reduce(
+          (max, candidate) =>
+            max === undefined || candidate.percentage > max.percentage
+              ? candidate
+              : max,
+          undefined as { percentage: number; versionId: string } | undefined,
+        );
+        if (!version?.versionId) return undefined;
+        return `https://${version.versionId.slice(0, 8)}-${scriptName}.${accountSubdomain}.workers.dev`;
+      });
+
+      /**
+       * Assemble every URL a deployed, script-owning Worker serves at, most
+       * significant first — the first entry becomes the `url` attribute:
+       *
+       * 1. `https://<domain.name>` — the canonical custom domain
+       * 2. aliases, in declared order
+       * 3. the stable workers.dev URL (`workersDev.enabled`)
+       * 4. preview URLs of the version this deploy uploaded (gradual
+       *    rollouts), or — in previews-only mode — the current version's
+       *    preview URL, which is then the only workers.dev surface
+       *
+       * Redirect hostnames never appear: they don't serve the Worker.
+       * (Version workers don't use this — their `urls` are their preview
+       * URLs, assembled in `putWorkerVersion`.)
+       */
+      const computeWorkerUrls = Effect.fn(function* (params: {
+        scriptName: string;
+        workersDev: ResolvedWorkersDev;
+        domain: ResolvedWorkerDomain | undefined;
+        /** the version uploaded by this deploy (self-rollout), if any */
+        uploadedVersionId?: string;
+        /** user-provided `version.alias` attached to the uploaded version */
+        uploadedVersionAlias?: string;
+      }) {
+        const { workersDev, domain, scriptName } = params;
+        const urls: string[] = [];
+        if (domain) {
+          urls.push(
+            `https://${domain.name}`,
+            ...domain.aliases.map((hostname) => `https://${hostname}`),
+          );
+        }
+        if (workersDev.enabled || workersDev.previewsEnabled) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const accountSubdomain = yield* getAccountSubdomain(accountId);
+          if (workersDev.enabled) {
+            urls.push(`https://${scriptName}.${accountSubdomain}.workers.dev`);
+          }
+          if (workersDev.previewsEnabled) {
+            if (params.uploadedVersionId !== undefined) {
+              if (params.uploadedVersionAlias !== undefined) {
+                urls.push(
+                  `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
+                );
+              }
+              urls.push(
+                `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+              );
+            } else if (!workersDev.enabled) {
+              const previewUrl = yield* getPreviewUrl(
+                scriptName,
+                accountSubdomain,
+              );
+              if (previewUrl) urls.push(previewUrl);
+            }
+          }
+        }
+        return urls;
+      });
+
+      /**
+       * Converge the redirect rules for a Worker's `domain.redirects` in
+       * each affected zone's `http_request_dynamic_redirect` phase
+       * entrypoint. Rules are identified by a
+       * `alchemy:worker:<script>:redirect:<host>` description; only our own
+       * rules are added/removed — every other rule in the shared entrypoint
+       * ruleset passes through untouched. Zones that previously held our
+       * rules but no longer should (removed redirects, removed domain) are
+       * cleaned the same way.
+       */
+      const reconcileRedirectRules = Effect.fn(function* (params: {
+        scriptName: string;
+        domain: ResolvedWorkerDomain | undefined;
+        /** hostname → zoneId for every currently-attached custom domain */
+        zoneIdByHostname: ReadonlyMap<string, string>;
+        /** redirect hostnames from previous state (for zone cleanup) */
+        previousRedirects: readonly string[];
+      }) {
+        const prefix = `alchemy:worker:${params.scriptName}:redirect:`;
+        const desired = params.domain?.redirects ?? [];
+        const targetName = params.domain?.name;
+        // Zones to touch: every zone hosting a desired redirect, plus every
+        // zone that hosted one before (so removals converge). Hostnames
+        // whose zone we can't resolve (e.g. the domain was already
+        // detached) are skipped — their rules become unreachable dead
+        // config at worst, never a failed destroy.
+        const zoneIds = new Set<string>();
+        for (const hostname of [...desired, ...params.previousRedirects]) {
+          const zoneId = params.zoneIdByHostname.get(hostname);
+          if (zoneId) zoneIds.add(zoneId);
+        }
+        if (zoneIds.size === 0) return;
+        for (const zoneId of zoneIds) {
+          const entrypoint = yield* rulesets
+            .getPhasForZone({
+              zoneId,
+              rulesetPhase: "http_request_dynamic_redirect",
+            })
+            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          const existingRules = entrypoint?.rules ?? [];
+          const ourDesired = desired
+            .filter(
+              (hostname) => params.zoneIdByHostname.get(hostname) === zoneId,
+            )
+            .map((hostname) => ({
+              action: "redirect" as const,
+              expression: `http.host eq "${hostname}"`,
+              description: `${prefix}${hostname}`,
+              enabled: true,
+              actionParameters: {
+                fromValue: {
+                  statusCode: 301,
+                  preserveQueryString: true,
+                  targetUrl: {
+                    expression: `concat("https://${targetName}", http.request.uri.path)`,
+                  },
+                },
+              },
+            }));
+          const isOurs = (rule: { description?: string | null }) =>
+            (rule.description ?? "").startsWith(prefix);
+          const ourExisting = existingRules.filter(isOurs);
+          const converged =
+            ourExisting.length === ourDesired.length &&
+            ourDesired.every((rule) =>
+              ourExisting.some(
+                (existing) =>
+                  existing.description === rule.description &&
+                  existing.expression === rule.expression,
+              ),
+            );
+          if (converged) continue;
+          // Pass foreign rules through untouched (minus the read-only
+          // fields the PUT schema doesn't accept) and replace our own set.
+          const foreign = existingRules
+            .filter((rule) => !isOurs(rule))
+            .map((rule) => {
+              const {
+                lastUpdated: _lastUpdated,
+                version: _version,
+                ...rest
+              } = rule as Record<string, unknown> & {
+                lastUpdated?: string;
+                version?: string;
+              };
+              return rest;
+            });
+          yield* rulesets.putPhasForZone({
+            zoneId,
+            rulesetPhase: "http_request_dynamic_redirect",
+            rules: [...foreign, ...ourDesired] as PutZoneRedirectRules,
+          });
+        }
+      });
 
       type NormalizedWorkerRoute = {
         pattern: string;
@@ -1756,7 +2106,7 @@ export const LiveWorkerProvider = () =>
             ["observability", news.observability],
             ["placement", news.placement],
             ["limits", news.limits],
-            ["subdomain", news.subdomain],
+            ["workersDev", news.workersDev],
             ["vite", news.vite],
           ] as const
         ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
@@ -1942,11 +2292,11 @@ export const LiveWorkerProvider = () =>
         }
         // The aliased URL is primary (`url`): it is stable across deploys,
         // re-pointing at each newly uploaded version. The per-version URL
-        // (prefixed by the version id) rides along in `domains`.
+        // (prefixed by the version id) rides along in `urls`.
         const versionedUrl = previewsEnabled
           ? `https://${versionId.split("-")[0]}-${parentName}.${accountSubdomain}.workers.dev`
           : undefined;
-        const domains = [
+        const urls = [
           ...(aliasedUrl ? [aliasedUrl] : []),
           ...(versionedUrl ? [versionedUrl] : []),
         ];
@@ -1955,11 +2305,12 @@ export const LiveWorkerProvider = () =>
           workerName: parentName,
           namespace: undefined,
           logpush: undefined,
-          url: domains[0],
+          url: urls[0],
+          urls,
+          domain: undefined,
           tags: undefined,
           durableObjectNamespaces: {},
           accountId,
-          domains,
           routes: [],
           crons: [],
           versionOf: parentName,
@@ -2642,20 +2993,21 @@ export const LiveWorkerProvider = () =>
             tags: settings.tags ?? metadata.tags,
             durableObjectNamespaces,
             accountId,
-            domains: [],
+            urls: [],
+            domain: undefined,
             routes: [],
             crons: [],
             hash,
           } satisfies Worker["Attributes"];
         }
-        // Reconcile workers.dev subdomain against observed cloud state.
-        // We can't diff `news.url` against `olds.url` here because both
-        // default to `undefined` (meaning "enable") — that comparison
-        // would skip the API call on every deploy where the user never
-        // explicitly set `url`, leaving the subdomain in whatever state
+        // Reconcile the workers.dev settings against observed cloud state.
+        // We can't diff `news.workersDev` against `olds.workersDev` here
+        // because both default to `undefined` (meaning "enable") — that
+        // comparison would skip the API call on every deploy where the user
+        // never set the prop, leaving the subdomain in whatever state
         // Cloudflare currently has it (disabled by default, or whatever
         // a previous failed/external action left it as).
-        const desiredSubdomainEnabled = news.url !== false;
+        const workersDev = resolveWorkersDev(news.workersDev);
         const observedSubdomain = yield* workers
           .getScriptSubdomain({
             accountId,
@@ -2668,11 +3020,11 @@ export const LiveWorkerProvider = () =>
             })),
           );
         if (
-          desiredSubdomainEnabled !== observedSubdomain.enabled ||
-          desiredSubdomainEnabled !== observedSubdomain.previewsEnabled
+          workersDev.enabled !== observedSubdomain.enabled ||
+          workersDev.previewsEnabled !== observedSubdomain.previewsEnabled
         ) {
           yield* session.note(
-            `${desiredSubdomainEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+            `${workersDev.enabled || workersDev.previewsEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
           // Cloudflare's script registry is eventually consistent — for the
           // first few hundred ms after `putScript` returns, POST /subdomain
@@ -2682,7 +3034,7 @@ export const LiveWorkerProvider = () =>
           // Retry the subdomain toggle on those transient tags with a short
           // exponential backoff; same pattern we use elsewhere in this
           // provider for DO-namespace propagation and for `putScript` itself.
-          yield* setWorkerSubdomain(name, desiredSubdomainEnabled).pipe(
+          yield* setWorkerSubdomain(name, workersDev).pipe(
             Effect.retry({
               while: (error) =>
                 error._tag === "WorkerNotFound" ||
@@ -2695,22 +3047,55 @@ export const LiveWorkerProvider = () =>
             }),
           );
         }
-        const desiredDomains = normalizeDomains(news.domain);
-        const previousDomains = output?.domains ?? [];
-        if (desiredDomains.length > 0 || previousDomains.length > 0) {
+        // Custom domains: canonical name + aliases + redirect hostnames are
+        // all attached to the Worker (DNS + edge certificate); redirect
+        // hostnames additionally get a redirect rule below, which runs
+        // before the Worker so those requests never invoke it.
+        const domainConfig = yield* resolveWorkerDomain(news.domain);
+        const previousDomain = stateWorkerDomain(output);
+        const desiredHostnames = domainConfig
+          ? [
+              domainConfig.name,
+              ...domainConfig.aliases,
+              ...domainConfig.redirects,
+            ]
+          : [];
+        if (desiredHostnames.length > 0 || previousDomain !== undefined) {
           yield* session.note(
-            `Reconciling custom domains (${desiredDomains.length}) ...`,
+            `Reconciling custom domains (${desiredHostnames.length}) ...`,
           );
         }
-        const reconciled = yield* reconcileDomains(name, desiredDomains);
-        const workersDevUrl =
-          news.url !== false
-            ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
-            : undefined;
-        const domains = [
-          ...reconciled.map((d) => `https://${d.hostname}`),
-          ...(workersDevUrl ? [workersDevUrl] : []),
-        ];
+        // Capture hostname → zone for *currently attached* domains before
+        // reconcile detaches removed ones — a removed redirect hostname's
+        // zone is otherwise unresolvable and its rule couldn't be cleaned.
+        const liveBeforeReconcile = yield* workers
+          .listDomains({ accountId, service: name })
+          .pipe(
+            Effect.map((r) =>
+              (r.result ?? []).flatMap((d) =>
+                d.hostname && d.zoneId ? [[d.hostname, d.zoneId] as const] : [],
+              ),
+            ),
+            Effect.catch(() => Effect.succeed([])),
+          );
+        const reconciled = yield* reconcileDomains(name, desiredHostnames);
+        const zoneIdByHostname = new Map([
+          ...liveBeforeReconcile,
+          ...reconciled.map((d) => [d.hostname, d.zoneId] as const),
+        ]);
+        yield* reconcileRedirectRules({
+          scriptName: name,
+          domain: domainConfig,
+          zoneIdByHostname,
+          previousRedirects: previousDomain?.redirects ?? [],
+        });
+        const urls = yield* computeWorkerUrls({
+          scriptName: name,
+          workersDev,
+          domain: domainConfig,
+          uploadedVersionId: versionId,
+          uploadedVersionAlias: news.version?.alias,
+        });
         const desiredRoutes = yield* normalizeRoutes(news.routes);
         const previousRoutes = output?.routes ?? [];
         if (desiredRoutes.length > 0 || previousRoutes.length > 0) {
@@ -2734,11 +3119,12 @@ export const LiveWorkerProvider = () =>
           workerName: name,
           namespace: undefined,
           logpush: worker.logpush ?? undefined,
-          url: domains[0],
+          url: urls[0],
+          urls,
+          domain: domainConfig,
           tags: settings.tags ?? metadata.tags,
           durableObjectNamespaces,
           accountId,
-          domains,
           routes,
           crons,
           versionOf: undefined,
@@ -2915,7 +3301,8 @@ export const LiveWorkerProvider = () =>
                               url: undefined,
                               tags: script.tags ?? undefined,
                               durableObjectNamespaces: {},
-                              domains: [],
+                              urls: [],
+                              domain: undefined,
                               routes: [],
                               crons: [],
                             },
@@ -2992,15 +3379,17 @@ export const LiveWorkerProvider = () =>
           if (!output) {
             return;
           }
-          const newDomains = normalizeDomains(news.domain)
-            .map((h) => `https://${h}`)
-            .sort();
-          const oldDomains = normalizeStateDomains(output?.domains)
-            .filter((u) => !u.endsWith(".workers.dev"))
-            .sort();
+          // Compare the full domain config — name, aliases (ordered: they
+          // drive `urls` order), and redirects — against persisted state
+          // (with legacy `domains`-list state migrated on the fly).
+          const newDomainConfig = yield* resolveWorkerDomain(news.domain);
+          const oldDomainConfig = stateWorkerDomain(output);
+          const domainKey = (d: ResolvedWorkerDomain | undefined) =>
+            d === undefined
+              ? ""
+              : JSON.stringify([d.name, d.aliases, [...d.redirects].sort()]);
           const domainsChanged =
-            newDomains.length !== oldDomains.length ||
-            newDomains.some((d, i) => d !== oldDomains[i]);
+            domainKey(newDomainConfig) !== domainKey(oldDomainConfig);
           const newCrons = normalizeCrons([
             ...(Array.isArray(newBindings)
               ? getCronBindings(
@@ -3020,31 +3409,33 @@ export const LiveWorkerProvider = () =>
           const routesChanged =
             newRouteKeys.length !== oldRouteKeys.length ||
             newRouteKeys.some((key, index) => key !== oldRouteKeys[index]);
-          // `url` is `domains[0]`: the first custom domain in user order if
-          // any, otherwise the workers.dev URL (derived from the stable
-          // worker name + account subdomain). It's stable across this update
-          // exactly when that first domain is unchanged — which is NOT the
-          // same as "the domain set is unchanged": adding a second custom
-          // domain leaves `url` put, while reordering changes it even though
-          // the set is equal. Compute the resulting `url` and carry it
-          // forward as a stable only when it matches the old one, so
-          // downstream resources that reference `worker.url` (e.g. a GitHub
-          // Webhook delivery URL built via `Output.interpolate`) resolve it
-          // to a concrete value during planning instead of an unresolved
-          // Output — otherwise every worker update spuriously re-updates them.
-          const newCustomDomains = normalizeDomains(news.domain);
-          const newUrl =
-            newCustomDomains.length > 0
-              ? `https://${newCustomDomains[0]}`
-              : news.url !== false
-                ? normalizeStateDomains(output.domains).find((u) =>
-                    u.endsWith(".workers.dev"),
+          // `url` is `urls[0]`: the canonical custom domain when one is
+          // configured, else the stable workers.dev URL. It's stable across
+          // this update exactly when the recomputed value matches what's
+          // deployed. Carry it forward as a stable only then, so downstream
+          // resources that reference `worker.url` (e.g. a GitHub Webhook
+          // delivery URL built via `Output.interpolate`) resolve it to a
+          // concrete value during planning instead of an unresolved Output —
+          // otherwise every worker update spuriously re-updates them.
+          // Previews-only mode (`workersDev: { enabled: false }` with
+          // previews on) derives `url` from the ever-changing version
+          // preview URL — never stable. Same for a version worker's aliased
+          // preview URL when its content is changing (the alias is stable,
+          // but treating it as such is only safe when the recomputed URL
+          // matches, which the generic comparison below covers).
+          const newWorkersDev = resolveWorkersDev(news.workersDev);
+          const newUrl = newIsVersion
+            ? undefined
+            : newDomainConfig !== undefined
+              ? `https://${newDomainConfig.name}`
+              : newWorkersDev.enabled
+                ? (output.urls ?? []).find(
+                    (u) =>
+                      isWorkersDevHostname(urlHostname(u)) &&
+                      urlHostname(u).startsWith(`${workerName}.`),
                   )
                 : undefined;
-          // A version worker's `url` is its version preview URL, which
-          // changes with every uploaded version — never stable.
-          const urlStable =
-            !newIsVersion && newUrl !== undefined && newUrl === output.url;
+          const urlStable = newUrl !== undefined && newUrl === output.url;
           // `durableObjectNamespaces` maps each hosted DO class name to the
           // namespace id Cloudflare assigned it. Those ids are permanent for
           // the lifetime of a (worker, class) pair, so the map only changes
@@ -3130,7 +3521,8 @@ export const LiveWorkerProvider = () =>
               tags: undefined,
               durableObjectNamespaces: {},
               accountId,
-              domains: [],
+              urls: [],
+              domain: undefined,
               routes: [],
               crons: [],
             } satisfies Worker["Attributes"];
@@ -3157,7 +3549,8 @@ export const LiveWorkerProvider = () =>
               tags: undefined,
               durableObjectNamespaces: {},
               accountId,
-              domains: [],
+              urls: [],
+              domain: undefined,
               routes: [],
               crons: [],
             } satisfies Worker["Attributes"];
@@ -3347,7 +3740,8 @@ export const LiveWorkerProvider = () =>
             tags: existingSettings?.tags ?? tags,
             durableObjectNamespaces,
             accountId,
-            domains: [],
+            urls: [],
+            domain: undefined,
             routes: [],
             crons: [],
           } satisfies Worker["Attributes"];
@@ -3412,7 +3806,8 @@ export const LiveWorkerProvider = () =>
                 url: undefined,
                 tags: settings.tags ?? undefined,
                 durableObjectNamespaces: getDurableObjects(settings.bindings),
-                domains: [],
+                urls: [],
+                domain: undefined,
                 routes: [],
                 crons: [],
               } satisfies Worker["Attributes"];
@@ -3450,29 +3845,53 @@ export const LiveWorkerProvider = () =>
                 ],
                 { concurrency: "unbounded" },
               );
-            // Preserve the order the user provided in `olds.domain`. The
-            // Cloudflare API returns domains in non-deterministic order,
-            // which would cause downstream `worker.domains[0]` reads to flip
-            // between deploys. Drift (domains we don't know about) is
-            // appended after the user-ordered ones.
-            const userOrder = normalizeDomains(olds?.domain);
-            const orderedHostnames = [
-              ...userOrder.flatMap(
-                (h) =>
-                  domainsList.find((d) => d.hostname === h)?.hostname ?? [],
-              ),
-              ...domainsList.flatMap((d) =>
-                d.hostname && !userOrder.includes(d.hostname)
-                  ? [d.hostname]
-                  : [],
-              ),
+            // Classify the observed hostnames using the declared config
+            // (`olds.domain`): the canonical name and each alias/redirect
+            // keep their declared role while still attached; drift (attached
+            // hostnames we don't know about) is appended to the aliases. The
+            // Cloudflare API returns domains in non-deterministic order, so
+            // the declared order is what keeps `url`/`urls` from flipping
+            // between reads.
+            const declared = yield* resolveWorkerDomain(olds?.domain).pipe(
+              Effect.orElseSucceed(() => undefined),
+            );
+            const observed = new Set(
+              domainsList.flatMap((d) => (d.hostname ? [d.hostname] : [])),
+            );
+            const keptName =
+              declared !== undefined && observed.has(declared.name)
+                ? declared.name
+                : undefined;
+            const keptAliases =
+              declared?.aliases.filter((h) => observed.has(h)) ?? [];
+            const keptRedirects =
+              declared?.redirects.filter((h) => observed.has(h)) ?? [];
+            const classified = new Set([
+              ...(keptName ? [keptName] : []),
+              ...keptAliases,
+              ...keptRedirects,
+            ]);
+            const drift = [...observed].filter((h) => !classified.has(h));
+            const serving = [
+              ...(keptName ? [keptName] : []),
+              ...keptAliases,
+              ...drift,
             ];
-            const workersDevUrl = subdomain.enabled
-              ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
-              : undefined;
-            const domains = [
-              ...orderedHostnames.map((h) => `https://${h}`),
-              ...(workersDevUrl ? [workersDevUrl] : []),
+            const observedDomain =
+              serving.length > 0
+                ? {
+                    name: serving[0],
+                    aliases: serving.slice(1),
+                    redirects: keptRedirects,
+                  }
+                : undefined;
+            const urls = [
+              ...serving.map((h) => `https://${h}`),
+              ...(subdomain.enabled
+                ? [
+                    `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`,
+                  ]
+                : []),
             ];
             const crons = yield* getWorkerCrons(workerName);
             yield* Effect.logInfo(
@@ -3484,10 +3903,11 @@ export const LiveWorkerProvider = () =>
               workerName,
               namespace: undefined,
               logpush: settings.logpush ?? undefined,
-              url: domains[0],
+              url: urls[0],
+              urls,
+              domain: observedDomain,
               tags: settings.tags ?? undefined,
               durableObjectNamespaces: getDurableObjects(settings.bindings),
-              domains,
               routes: routesList,
               crons,
             } satisfies Worker["Attributes"];
@@ -3691,6 +4111,27 @@ export const LiveWorkerProvider = () =>
               Effect.map((r) => r.result ?? []),
               Effect.catch(() => Effect.succeed([])),
             );
+          // Remove our redirect rules from each affected zone's dynamic
+          // redirect entrypoint *before* detaching the domains — the live
+          // domain list is what resolves each redirect hostname's zone.
+          // Reconciling with an empty domain config removes exactly the
+          // rules tagged `alchemy:worker:<script>:redirect:*`, leaving
+          // everything else in the shared entrypoint untouched.
+          const redirects = stateWorkerDomain(output)?.redirects ?? [];
+          if (redirects.length > 0) {
+            yield* reconcileRedirectRules({
+              scriptName: output.workerName,
+              domain: undefined,
+              zoneIdByHostname: new Map(
+                liveDomains.flatMap((d) =>
+                  d.hostname && d.zoneId
+                    ? [[d.hostname, d.zoneId] as const]
+                    : [],
+                ),
+              ),
+              previousRedirects: redirects,
+            }).pipe(Effect.catch(() => Effect.void));
+          }
           if (liveDomains.length) {
             yield* Effect.all(
               liveDomains.flatMap((d) =>

@@ -821,7 +821,7 @@ export const LocalWorkerProvider = () =>
             }
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const allUrls =
+          const urls =
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
                 []
@@ -834,11 +834,11 @@ export const LocalWorkerProvider = () =>
             workerName: name,
             namespace: undefined,
             logpush: undefined,
-            url: allUrls[0],
-            allUrls,
+            url: urls[0],
+            urls,
+            domain: undefined,
             tags: [],
             durableObjectNamespaces,
-            domains: allUrls.map(urlHostname),
             routes: [],
             crons: Array.from(
               new Set([...getCronBindings(bindings), ...(news.crons ?? [])]),
@@ -862,18 +862,18 @@ export const LocalWorkerProvider = () =>
               dropServeState(id);
             }
             const name = yield* createWorkerName(id, news.name);
-            const allUrls = news.dev.url ? [news.dev.url] : [];
+            const urls = news.dev.url ? [news.dev.url] : [];
             return {
               workerId: name,
               workerName: name,
               namespace: undefined,
               logpush: undefined,
-              url: allUrls[0],
-              allUrls,
+              url: urls[0],
+              urls,
+              domain: undefined,
               tags: [],
               durableObjectNamespaces: {},
               accountId,
-              domains: allUrls.map(urlHostname),
               routes: [],
               crons: news.crons ?? [],
             } satisfies Worker["Attributes"];

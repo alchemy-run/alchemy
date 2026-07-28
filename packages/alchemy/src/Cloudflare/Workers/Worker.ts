@@ -303,6 +303,63 @@ export type NormalizedBindings<
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
+/**
+ * Fine-grained control over the Worker's `workers.dev` surface. The two
+ * toggles are independent on the Cloudflare API.
+ */
+export interface WorkersDevConfig {
+  /**
+   * Serve the Worker at its stable `workers.dev` URL
+   * (`https://<worker-name>.<account-subdomain>.workers.dev`).
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * Enable version preview URLs — a distinct
+   * `https://<version-prefix>-<worker-name>.<account-subdomain>.workers.dev`
+   * URL per uploaded version, plus stable aliased preview URLs
+   * (`https://<alias>-...`) for versions uploaded with an alias.
+   *
+   * When previews are enabled but {@link enabled} is `false`, the current
+   * version's preview URL becomes the Worker's primary `url` output.
+   * @default true
+   */
+  previewsEnabled?: boolean;
+}
+
+/**
+ * The Worker's custom-domain configuration: one canonical hostname, plus
+ * optional aliases that also serve the Worker and redirect hostnames that
+ * 301 to the canonical name.
+ */
+export interface WorkerDomainConfig {
+  /**
+   * The canonical hostname (e.g. `"example.com"`). Attached to the Worker
+   * as a Cloudflare custom domain — DNS record and edge certificate are
+   * managed automatically. The Cloudflare zone is inferred from the
+   * hostname and must already exist in the account.
+   *
+   * When set, `https://<name>` is the Worker's primary `url` output.
+   */
+  name: string;
+  /**
+   * Additional hostnames that serve the Worker (e.g. `"www.example.com"`,
+   * `"api.example.com"`). Each is attached as its own custom domain.
+   * Order matters: aliases follow `name` in the `urls` output.
+   */
+  aliases?: string[];
+  /**
+   * Hostnames that permanently redirect (HTTP 301, path and query
+   * preserved) to {@link name} — e.g. `"old.example.com"`. Each is
+   * attached as a custom domain (for DNS + TLS) with a redirect rule in
+   * the zone's `http_request_dynamic_redirect` phase, which runs before
+   * the Worker — redirected requests never invoke it. Redirect hostnames
+   * serve no content, so they appear in the `domain` output but never in
+   * `urls`.
+   */
+  redirects?: string[];
+}
+
 export interface WorkerRouteConfig {
   /**
    * URL pattern to match incoming requests against, e.g.
@@ -448,10 +505,18 @@ export interface WorkerProps<
    */
   version?: WorkerVersionOptions;
   /**
-   * Whether to enable a workers.dev URL for this worker
+   * Controls the Worker's `workers.dev` surface.
+   *
+   * - `true` (the default) — serve the Worker at its stable `workers.dev`
+   *   URL and enable version preview URLs.
+   * - `false` — no `workers.dev` URLs at all.
+   * - An object — toggle the stable URL and version previews independently,
+   *   e.g. `{ enabled: false, previewsEnabled: true }` keeps the stable URL
+   *   off while each deployed version stays reachable at its preview URL.
+   *
    * @default true
    */
-  url?: boolean;
+  workersDev?: boolean | WorkersDevConfig;
   /**
    * Static assets to serve. Can be:
    * - A string path to the assets directory
@@ -464,10 +529,6 @@ export interface WorkerProps<
    * `notFoundHandling` (including single-page-application fallback) itself.
    */
   assets?: Assets;
-  subdomain?: {
-    enabled?: boolean;
-    previewsEnabled?: boolean;
-  };
   /** @internal used by Cloudflare.Website.Vite resource */
   vite?: ViteOptions;
   logpush?: boolean;
@@ -573,11 +634,16 @@ export interface WorkerProps<
    */
   crons?: string[];
   /**
-   * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
-   * Worker. The Cloudflare Zone is inferred from the hostname — the zone must
-   * already exist in the account.
+   * The Worker's custom domain: one canonical hostname, plus optional
+   * `aliases` that also serve the Worker and `redirects` that 301 to the
+   * canonical name. A bare string is shorthand for `{ name }`. The
+   * Cloudflare zone is inferred from each hostname — the zone must already
+   * exist in the account.
+   *
+   * When set, `https://<name>` becomes the Worker's primary `url` output,
+   * ranking above the `workers.dev` URL. See {@link WorkerDomainConfig}.
    */
-  domain?: string | string[];
+  domain?: string | WorkerDomainConfig;
   /**
    * Zone routes that map URL patterns to this Worker. Equivalent to Wrangler's
    * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
@@ -755,11 +821,35 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
      */
     namespace: string | undefined;
     logpush: boolean | undefined;
+    /**
+     * The most significant URL the Worker is reachable at — always
+     * `urls[0]`, or `undefined` when the Worker is not reachable at any
+     * URL (e.g. a dispatch-namespace user worker). Ranking: the canonical
+     * custom domain, then aliases, then the stable `workers.dev` URL; a
+     * version worker's `url` is its aliased preview URL; under
+     * `alchemy dev` it is the local dev server's URL.
+     */
     url: string | undefined;
+    /**
+     * Every URL that serves this Worker, most significant first —
+     * `[https://<domain.name>?, ...aliases, <workers.dev URL>?,
+     * <version preview URLs>?]`, or the local dev server's
+     * `[localhost, ...LAN]` URLs under `alchemy dev`. Redirect hostnames
+     * never appear (they don't serve the Worker). Useful wholesale, e.g.
+     * as a CORS allow-list.
+     */
+    urls: string[];
+    /**
+     * The Worker's resolved custom-domain configuration — canonical
+     * `name`, `aliases`, and `redirects` as deployed — or `undefined`
+     * when no custom domain is configured.
+     */
+    domain:
+      | { name: string; aliases: string[]; redirects: string[] }
+      | undefined;
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    domains: string[];
     routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
     /**

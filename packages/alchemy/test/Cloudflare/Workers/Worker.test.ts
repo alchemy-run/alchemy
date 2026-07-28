@@ -646,8 +646,8 @@ describe.concurrent("Cloudflare.Worker", () => {
         expect(worker.url).toMatch(
           new RegExp(`^https://${worker.workerName}\\..*\\.workers\\.dev$`),
         );
-        expect(worker.allUrls).toEqual([worker.url]);
-        expect(worker.domains).toEqual([new URL(worker.url!).hostname]);
+        expect(worker.urls).toEqual([worker.url]);
+        expect(worker.domain).toBeUndefined();
         yield* expectWorkersDevSubdomain(worker.workerName, accountId, true);
 
         yield* stack.destroy();
@@ -674,8 +674,8 @@ describe.concurrent("Cloudflare.Worker", () => {
         );
 
         expect(worker.url).toBeUndefined();
-        expect(worker.allUrls).toEqual([]);
-        expect(worker.domains).toEqual([]);
+        expect(worker.urls).toEqual([]);
+        expect(worker.domain).toBeUndefined();
         yield* expectWorkersDevSubdomain(worker.workerName, accountId, false);
 
         yield* stack.destroy();
@@ -726,7 +726,7 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
   );
 
-  // `workersDev: { url: false, previews: true }` — a "preview-only" worker.
+  // `workersDev: { enabled: false, previewsEnabled: true }` — a "preview-only" worker.
   // The stable workers.dev URL is off, so the current version's preview URL
   // (`https://<version-prefix>-<name>.<account>.workers.dev`) becomes the
   // primary `url` output.
@@ -742,7 +742,7 @@ describe.concurrent("Cloudflare.Worker", () => {
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("PreviewOnlyWorker", {
               main,
-              workersDev: { url: false, previews: true },
+              workersDev: { enabled: false, previewsEnabled: true },
               compatibility: { date: "2024-01-01" },
             });
           }),
@@ -759,8 +759,8 @@ describe.concurrent("Cloudflare.Worker", () => {
             `^https://[0-9a-f]{8}-${worker.workerName}\\..*\\.workers\\.dev$`,
           ),
         );
-        expect(worker.allUrls).toEqual([worker.url]);
-        expect(worker.domains).toEqual([new URL(worker.url!).hostname]);
+        expect(worker.urls).toEqual([worker.url]);
+        expect(worker.domain).toBeUndefined();
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
@@ -784,11 +784,9 @@ describe.concurrent("Cloudflare.Worker", () => {
       );
 
       expect(worker.url).toMatch(/^http:\/\/localhost:\d+$/);
-      expect(worker.allUrls[0]).toEqual(worker.url);
-      expect(worker.domains[0]).toEqual("localhost");
-      expect(worker.domains).toEqual(
-        worker.allUrls.map((u) => new URL(u).hostname),
-      );
+      expect(worker.urls[0]).toEqual(worker.url);
+      expect(new URL(worker.urls[0]).hostname).toEqual("localhost");
+      expect(worker.domain).toBeUndefined();
 
       // The URL actually serves the local worker.
       yield* expectUrlContains(`${worker.url}/`, "Hello from TestWorker", {
@@ -1270,14 +1268,14 @@ describe.concurrent("Cloudflare.Worker", () => {
           );
 
         const enabled = yield* deploy(true);
-        expect(enabled.allUrls).toHaveLength(1);
-        expect(enabled.allUrls[0]).toMatch(/\.workers\.dev$/);
-        expect(enabled.url).toEqual(enabled.allUrls[0]);
-        expect(enabled.domains).toEqual([new URL(enabled.allUrls[0]).hostname]);
+        expect(enabled.urls).toHaveLength(1);
+        expect(enabled.urls[0]).toMatch(/\.workers\.dev$/);
+        expect(enabled.url).toEqual(enabled.urls[0]);
+        expect(enabled.domain).toBeUndefined();
 
         const disabled = yield* deploy(false);
-        expect(disabled.allUrls).toEqual([]);
-        expect(disabled.domains).toEqual([]);
+        expect(disabled.urls).toEqual([]);
+        expect(disabled.domain).toBeUndefined();
         expect(disabled.url).toBeUndefined();
 
         yield* stack.destroy();
@@ -1285,12 +1283,12 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
   );
 
-  // Ordering contract: the workers.dev URL leads `allUrls`, followed by
-  // custom domains in user order. With workers.dev disabled ("domain only"),
-  // `domains[0]` is the primary URL — and reordering the list follows.
+  // Ordering contract: the canonical custom domain leads `urls` (it is the
+  // most significant URL), aliases follow in declared order, and the
+  // workers.dev URL comes last. Swapping name and alias moves `url`.
   const customDomainZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
   test.provider.skipIf(!customDomainZone)(
-    "custom domains order allUrls and select url when workers.dev is off",
+    "custom domain outranks workers.dev in urls and selects url",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1300,47 +1298,68 @@ describe.concurrent("Cloudflare.Worker", () => {
 
         yield* stack.destroy();
 
-        const deploy = (workersDev: boolean, domains: string[]) =>
+        const deploy = (
+          workersDev: boolean,
+          domain: { name: string; aliases?: string[] },
+        ) =>
           stack.deploy(
             Effect.gen(function* () {
               return yield* Cloudflare.Worker("CustomDomainWorker", {
                 main,
                 workersDev,
-                domains,
+                domain,
                 compatibility: { date: "2024-01-01" },
               });
             }),
           );
 
-        // workers.dev enabled: it leads allUrls, custom domains follow in
-        // user order, and url = allUrls[0] = the workers.dev URL.
-        const worker = yield* deploy(true, [domainA, domainB]);
-        expect(worker.allUrls).toHaveLength(3);
-        expect(worker.allUrls[0]).toMatch(
+        // workers.dev enabled: the canonical domain still leads `urls`,
+        // the alias follows, and the workers.dev URL comes last.
+        const worker = yield* deploy(true, {
+          name: domainA,
+          aliases: [domainB],
+        });
+        expect(worker.urls).toHaveLength(3);
+        expect(worker.urls.slice(0, 2)).toEqual([
+          `https://${domainA}`,
+          `https://${domainB}`,
+        ]);
+        expect(worker.urls[2]).toMatch(
           new RegExp(`^https://${worker.workerName}\\..*\\.workers\\.dev$`),
         );
-        expect(worker.allUrls.slice(1)).toEqual([
-          `https://${domainA}`,
-          `https://${domainB}`,
-        ]);
-        expect(worker.url).toEqual(worker.allUrls[0]);
-        expect(worker.domains).toEqual(
-          worker.allUrls.map((u) => new URL(u).hostname),
-        );
+        expect(worker.url).toEqual(`https://${domainA}`);
+        expect(worker.domain).toEqual({
+          name: domainA,
+          aliases: [domainB],
+          redirects: [],
+        });
 
-        // Domain only (no workers.dev): the first custom domain is the url.
-        const domainOnly = yield* deploy(false, [domainA, domainB]);
-        expect(domainOnly.allUrls).toEqual([
+        // Domain only (no workers.dev): urls is just the domain + alias.
+        const domainOnly = yield* deploy(false, {
+          name: domainA,
+          aliases: [domainB],
+        });
+        expect(domainOnly.urls).toEqual([
           `https://${domainA}`,
           `https://${domainB}`,
         ]);
-        expect(domainOnly.domains).toEqual([domainA, domainB]);
         expect(domainOnly.url).toEqual(`https://${domainA}`);
 
-        // Reorder — `url` follows `domains[0]`.
-        const swapped = yield* deploy(false, [domainB, domainA]);
-        expect(swapped.domains).toEqual([domainB, domainA]);
+        // Swap name and alias — `url` follows the canonical name.
+        const swapped = yield* deploy(false, {
+          name: domainB,
+          aliases: [domainA],
+        });
+        expect(swapped.urls).toEqual([
+          `https://${domainB}`,
+          `https://${domainA}`,
+        ]);
         expect(swapped.url).toEqual(`https://${domainB}`);
+        expect(swapped.domain).toEqual({
+          name: domainB,
+          aliases: [domainA],
+          redirects: [],
+        });
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
@@ -1397,7 +1416,8 @@ describe.concurrent("Cloudflare.Worker", () => {
             url: legacy.url,
             domains: legacy.domains,
           };
-          delete attr.allUrls;
+          delete attr.urls;
+          delete attr.domain;
           yield* state.set({
             ...key,
             value: {
@@ -1416,8 +1436,8 @@ describe.concurrent("Cloudflare.Worker", () => {
 
       const v2 = yield* deploy("2024-01-02");
       expect(v2.url).toEqual(`https://${workersDevHost}`);
-      expect(v2.allUrls).toEqual([`https://${workersDevHost}`]);
-      expect(v2.domains).toEqual([workersDevHost]);
+      expect(v2.urls).toEqual([`https://${workersDevHost}`]);
+      expect(v2.domain).toBeUndefined();
 
       // <= beta.44: `{ id, hostname, zoneId }` objects — and the props the
       // old code persisted alongside them (`url`/`subdomain` keys), so the
@@ -1433,8 +1453,8 @@ describe.concurrent("Cloudflare.Worker", () => {
 
       const v3 = yield* deploy("2024-01-03");
       expect(v3.url).toEqual(`https://${workersDevHost}`);
-      expect(v3.allUrls).toEqual([`https://${workersDevHost}`]);
-      expect(v3.domains).toEqual([workersDevHost]);
+      expect(v3.urls).toEqual([`https://${workersDevHost}`]);
+      expect(v3.domain).toBeUndefined();
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
@@ -1446,7 +1466,7 @@ describe.concurrent("Cloudflare.Worker", () => {
   // that can trigger the state migration is the metadata hash (its surface
   // changed: `url`/`subdomain` keys out, `workersDev` in). The migration
   // must be a one-time update — and a downstream resource consuming
-  // `worker.allUrls` (absent from legacy state) must re-resolve through it
+  // `worker.urls` (absent from legacy state) must re-resolve through it
   // and settle back to noop.
   test.provider(
     "props-identical redeploy migrates legacy state via the metadata hash",
@@ -1464,7 +1484,7 @@ describe.concurrent("Cloudflare.Worker", () => {
             compatibility: { date: "2024-01-01" },
           });
           yield* Cloudflare.Alerting.NotificationWebhook("Hook", {
-            url: worker.allUrls.pipe(Output.map((urls) => urls[0]!)),
+            url: worker.urls.pipe(Output.map((urls) => urls[0]!)),
           });
           return worker;
         });
@@ -1491,7 +1511,7 @@ describe.concurrent("Cloudflare.Worker", () => {
             domains: [`https://${workersDevHost}`],
             hash: { ...(current as any).attr.hash, metadata: "legacy" },
           };
-          delete attr.allUrls;
+          delete attr.urls;
           yield* state.set({ ...key, value: { ...(current as any), attr } });
         }).pipe(Effect.provide(stack.state));
 
@@ -1505,8 +1525,8 @@ describe.concurrent("Cloudflare.Worker", () => {
 
         const migrated = yield* stack.deploy(program);
         expect(migrated.url).toEqual(`https://${workersDevHost}`);
-        expect(migrated.allUrls).toEqual([`https://${workersDevHost}`]);
-        expect(migrated.domains).toEqual([workersDevHost]);
+        expect(migrated.urls).toEqual([`https://${workersDevHost}`]);
+        expect(migrated.domain).toBeUndefined();
 
         // Migration is one-time: the same props now settle as a full noop,
         // including the downstream (allUrls is present and stable again).

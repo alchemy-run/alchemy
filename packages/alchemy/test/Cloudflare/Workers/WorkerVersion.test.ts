@@ -64,14 +64,14 @@ describe.concurrent("Cloudflare.Worker version", () => {
         // Zero traffic: no deployment was created.
         expect(v1.preview.deploymentId).toBeUndefined();
         // Primary URL is the *aliased* preview URL (stable across deploys);
-        // the per-version URL (`<version-prefix>-...`) rides in domains.
+        // the per-version URL (`<version-prefix>-...`) rides in urls.
         expect(v1.preview.versionAlias).toBeDefined();
         expect(v1.preview.url).toEqual(
           expect.stringContaining(
             `https://${v1.preview.versionAlias}-${v1.parent.workerName}.`,
           ),
         );
-        expect(v1.preview.domains[1]).toMatch(
+        expect(v1.preview.urls[1]).toMatch(
           new RegExp(`^https://[0-9a-f]{8}-${v1.parent.workerName}\\.`),
         );
 
