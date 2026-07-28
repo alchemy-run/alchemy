@@ -9,7 +9,7 @@ runtime path:
 - `Prisma.Postgres`
 - `Prisma.Connection`
 - `Prisma.Compute(..., Effect.gen(...))`
-- `Prisma.ConnectionBinding(Connection)` inside the deployed runtime
+- `Prisma.Connect(Connection)` inside the deployed runtime
 
 `alchemy.run.ts` only wires the stack together. The Prisma data resources live
 in `src/Database.ts`, and the Effect-native Compute app lives in

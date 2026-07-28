@@ -1,6 +1,7 @@
 import * as Prisma from "@/Prisma";
 import type { RuntimeContext } from "@/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
@@ -30,7 +31,7 @@ export const PrismaComputeApiLive = PrismaComputeApi.make(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const db = yield* Prisma.ConnectionBinding(connection);
+    const db = yield* Prisma.Connect(connection);
     type _DatabaseUrlIsRuntimeOnly = Expect<
       Equal<EffectRequirement<typeof db.databaseUrl>, RuntimeContext>
     >;
@@ -48,10 +49,10 @@ export const PrismaComputeApiLive = PrismaComputeApi.make(
         }).pipe(Effect.catch(() => Effect.succeed(-1)));
         return yield* HttpServerResponse.json({
           ok: true,
-          hasDatabaseUrl: databaseUrl !== undefined,
+          hasDatabaseUrl: Redacted.isRedacted(databaseUrl),
           exitCode,
         });
       }),
     });
-  }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
+  }).pipe(Effect.provide(Prisma.ConnectBinding)),
 );

@@ -103,7 +103,7 @@ bun run db:setup   # migrate + demo seed, used by local dev
 The Vite dev server also auto-emits the contract on edits. The explicit scripts
 remain the source of truth for deploys and CI so builds are reproducible.
 
-The runtime uses `pg`, so the example uses `Prisma.connectionEnv(connection)`
+The runtime uses `pg`, so the example uses `connection.databaseUrl`
 to pass the pooled `postgres://` endpoint as `DATABASE_URL`. It explicitly
 omits `DIRECT_URL`, duplicate pooled variables, and Prisma resource IDs from the
 runtime environment. The schema command receives the direct endpoint only for

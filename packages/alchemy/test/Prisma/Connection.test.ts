@@ -4,13 +4,8 @@ import {
   PrismaClient,
   type PrismaManagementClient,
 } from "@/Prisma/Client";
-import {
-  Connection,
-  ConnectionProvider,
-  connectionBindingEnvKeys,
-  connectionEnv,
-} from "@/Prisma/Connection";
-import * as Output from "@/Output";
+import { connectEnvKeys } from "@/Prisma/Connect";
+import { Connection, ConnectionProvider } from "@/Prisma/Connection";
 import type {
   DatabaseConnection,
   DatabaseConnectionWithSecrets,
@@ -214,6 +209,9 @@ describe("Prisma Connection provider", () => {
         host: "db.prisma.test",
         user: undefined,
         password: undefined,
+        databaseUrl: undefined,
+        origin: undefined,
+        pooledOrigin: undefined,
       };
 
       return Effect.gen(function* () {
@@ -296,6 +294,9 @@ describe("Prisma Connection provider", () => {
       host: "db.prisma.test",
       user: "app",
       password: Redacted.make("current-password"),
+      databaseUrl: Redacted.make("postgres://pooled-current"),
+      origin: undefined,
+      pooledOrigin: undefined,
     };
 
     return Effect.gen(function* () {
@@ -343,6 +344,9 @@ describe("Prisma Connection provider", () => {
       host: undefined,
       user: undefined,
       password: undefined,
+      databaseUrl: undefined,
+      origin: undefined,
+      pooledOrigin: undefined,
     };
 
     return Effect.gen(function* () {
@@ -533,6 +537,9 @@ describe("Prisma Connection provider", () => {
       accelerateConnectionString: undefined,
       host: persisted.endpoints.direct?.host,
       user: undefined,
+      databaseUrl: undefined,
+      origin: undefined,
+      pooledOrigin: undefined,
       password: undefined,
     };
 
@@ -568,11 +575,11 @@ describe("Prisma Connection provider", () => {
   });
 
   it("does not collide binding keys after lossy normalization", () => {
-    const hyphenated = connectionBindingEnvKeys({
+    const hyphenated = connectEnvKeys({
       FQN: "db-a",
       LogicalId: "db-a",
     });
-    const underscored = connectionBindingEnvKeys({
+    const underscored = connectEnvKeys({
       FQN: "db_a",
       LogicalId: "db_a",
     });
@@ -582,45 +589,27 @@ describe("Prisma Connection provider", () => {
     );
   });
 
-  it.effect("uses pooled DATABASE_URL and direct DIRECT_URL", () => {
-    const resource = {
-      Type: "Prisma.Connection",
-      LogicalId: "Connection",
-      FQN: "Connection",
-      connectionId: Output.asOutput("connection-1"),
-      connectionName: Output.asOutput("api-aaaaaaaaaaaa"),
-      databaseId: Output.asOutput("database-1"),
-      kind: Output.asOutput("postgres" as const),
-      createdAt: Output.asOutput(createdAt),
-      directConnectionString: Output.asOutput(
-        Redacted.make("postgres://direct"),
-      ),
-      pooledConnectionString: Output.asOutput(
-        Redacted.make("postgres://pooled"),
-      ),
-      accelerateConnectionString: Output.asOutput(
-        Redacted.make("prisma://accelerate"),
-      ),
-      host: Output.asOutput("db.prisma.test"),
-      user: Output.asOutput("api"),
-      password: Output.asOutput(Redacted.make("secret")),
-    } as unknown as Connection;
-    const env = connectionEnv(resource);
+  it.effect("materializes databaseUrl and parsed origins on reconcile", () => {
+    const created = withSecrets(
+      connection("connection-1", "api-aaaaaaaaaaaa"),
+      "new",
+    );
+    const client = {
+      getConnection: () => Effect.succeed(undefined),
+      listDatabaseConnections: () => Effect.succeed([]),
+      createConnection: () => Effect.succeed(created),
+    } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const databaseUrl = yield* Output.evaluate(env.DATABASE_URL, {});
-      const directUrl = yield* Output.evaluate(env.DIRECT_URL, {});
+      const provider = yield* Connection.Provider;
+      const attrs = yield* provider.reconcile(reconcileInput());
 
-      expect(Redacted.isRedacted(databaseUrl)).toBe(true);
-      expect(Redacted.isRedacted(directUrl)).toBe(true);
-      if (
-        !Redacted.isRedacted(databaseUrl) ||
-        !Redacted.isRedacted(directUrl)
-      ) {
-        throw new Error("connectionEnv must preserve redacted URL values");
-      }
-      expect(Redacted.value(databaseUrl)).toBe("postgres://pooled");
-      expect(Redacted.value(directUrl)).toBe("postgres://direct");
-    });
+      // databaseUrl prefers the pooled endpoint for application traffic.
+      expect(Redacted.value(attrs.databaseUrl!)).toBe("postgres://pooled-new");
+      // origin parses the direct connection string into Hyperdrive's shape.
+      expect(attrs.origin?.host).toBe("direct-new");
+      expect(attrs.origin?.scheme).toBe("postgres");
+      expect(attrs.pooledOrigin?.host).toBe("pooled-new");
+    }).pipe(Effect.provide(providerLayer(client)));
   });
 });

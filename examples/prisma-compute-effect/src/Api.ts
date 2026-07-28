@@ -29,7 +29,7 @@ export default class Api extends Prisma.Compute<Api>()(
     };
   }),
   Effect.gen(function* () {
-    const db = yield* Prisma.ConnectionBinding(Connection);
+    const db = yield* Prisma.Connect(Connection);
 
     return {
       fetch: Effect.gen(function* () {
@@ -44,17 +44,7 @@ export default class Api extends Prisma.Compute<Api>()(
           return HttpServerResponse.text("Method not allowed", { status: 405 });
         }
 
-        const databaseUrl = yield* db.databaseUrl;
-        if (databaseUrl === undefined) {
-          return yield* HttpServerResponse.json(
-            {
-              ok: false,
-              mode: "effect-native",
-              databaseBinding: "unavailable",
-            },
-            { status: 503 },
-          );
-        }
+        yield* db.databaseUrl;
 
         const response: Record<string, string | boolean> = {
           ok: true,
@@ -69,5 +59,5 @@ export default class Api extends Prisma.Compute<Api>()(
         return yield* HttpServerResponse.json(response);
       }),
     };
-  }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
+  }).pipe(Effect.provide(Prisma.ConnectBinding)),
 ) {}

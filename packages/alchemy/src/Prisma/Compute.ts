@@ -595,15 +595,16 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *     main: import.meta.filename,
  *   },
  *   Effect.gen(function* () {
- *     const db = yield* Prisma.ConnectionBinding(connection);
+ *     const db = yield* Prisma.Connect(connection);
+ *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const databaseUrl = yield* db.databaseUrl;
- *         return HttpServerResponse.text(databaseUrl ?? "");
+ *         const users = yield* sql`SELECT * FROM users`;
+ *         return HttpServerResponse.json(users);
  *       }),
  *     };
- *   }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
+ *   }).pipe(Effect.provide(Prisma.ConnectBinding)),
  * );
  * ```
  *

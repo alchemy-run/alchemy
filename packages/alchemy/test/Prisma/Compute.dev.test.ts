@@ -88,7 +88,7 @@ test.provider(
             database,
             name: "api",
           });
-          const keys = Prisma.connectionBindingEnvKeys(connection);
+          const keys = Prisma.connectEnvKeys(connection);
           const app = yield* Prisma.Compute(
             "App",
             {
@@ -100,7 +100,7 @@ test.provider(
               },
             },
             Effect.gen(function* () {
-              const db = yield* Prisma.ConnectionBinding(connection);
+              const db = yield* Prisma.Connect(connection);
 
               return {
                 fetch: Effect.gen(function* () {
@@ -108,7 +108,7 @@ test.provider(
                   return HttpServerResponse.text(connectionId);
                 }),
               };
-            }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
+            }).pipe(Effect.provide(Prisma.ConnectBinding)),
           );
 
           return { app, keys };

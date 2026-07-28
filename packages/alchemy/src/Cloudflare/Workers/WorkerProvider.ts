@@ -11,6 +11,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
@@ -263,6 +264,20 @@ const bindingTargetNotFoundRetrySchedule = () =>
   Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 /**
+ * Script PUT is an idempotent upsert, so a pure transport failure (the
+ * request died before any response — e.g. Cloudflare closing a keep-alive
+ * socket that idled while slow upstream resources provisioned earlier in the
+ * deploy) is safe to replay. Errors that carry a response are real API
+ * verdicts and are NOT retried here.
+ */
+const isScriptPutTransportError = (e: { _tag?: string }): boolean =>
+  isHttpClientError(e) && e.reason._tag === "TransportError";
+
+const retryableScriptPut = (
+  e: Parameters<typeof isBindingTargetNotFound>[0],
+): boolean => isBindingTargetNotFound(e) || isScriptPutTransportError(e);
+
+/**
  * Upsert a Worker script, routing to the dispatch-namespace endpoint when
  * `dispatchNamespace` is set. The metadata/files contract is identical, and
  * both endpoints run the same binding validation (see
@@ -290,7 +305,7 @@ const putWorkerScript = (params: {
         })
         .pipe(
           Effect.retry({
-            while: isBindingTargetNotFound,
+            while: retryableScriptPut,
             schedule: bindingTargetNotFoundRetrySchedule(),
           }),
         );
@@ -304,7 +319,7 @@ const putWorkerScript = (params: {
       })
       .pipe(
         Effect.retry({
-          while: isBindingTargetNotFound,
+          while: retryableScriptPut,
           schedule: bindingTargetNotFoundRetrySchedule(),
         }),
       );

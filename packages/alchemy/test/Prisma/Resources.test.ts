@@ -12,14 +12,10 @@ import {
   Deployment as PrismaDeployment,
   DeploymentProvider,
 } from "@/Prisma/Deployment";
+import { Connect, ConnectBinding, connectEnvKeys } from "@/Prisma/Connect";
 import {
-  ConnectionBinding,
-  ConnectionBindingLive,
   Connection as PrismaConnection,
   ConnectionProvider,
-  connectionBindingEnvKeys,
-  connectionEnv,
-  connectionUrl,
 } from "@/Prisma/Connection";
 import {
   CustomDomain as PrismaCustomDomain,
@@ -462,13 +458,13 @@ const diffInput = <Props, Attrs>(olds: Props, news: Props, output?: Attrs) =>
 describe("Prisma resource providers", () => {
   it("derives namespaced-safe env keys for connection bindings", () => {
     expect(
-      connectionBindingEnvKeys({
+      connectEnvKeys({
         FQN: "Connection",
         LogicalId: "Connection",
       }).directConnectionString,
     ).toBe("PRISMA_CONNECTION_DIRECT_CONNECTION_STRING");
     expect(
-      connectionBindingEnvKeys({
+      connectEnvKeys({
         FQN: "Api/Connection",
         LogicalId: "Connection",
       }).directConnectionString,
@@ -476,87 +472,7 @@ describe("Prisma resource providers", () => {
   });
 
   it.effect(
-    "builds conventional env vars with Output-safe URL fallbacks",
-    () => {
-      const connection = {
-        Type: "Prisma.Connection",
-        LogicalId: "Connection",
-        FQN: "Connection",
-        connectionId: Output.asOutput("connection-1"),
-        databaseId: Output.asOutput("database-1"),
-        directConnectionString: Output.asOutput(undefined),
-        pooledConnectionString: Output.asOutput(
-          Redacted.make("prisma+postgres://pooled"),
-        ),
-        accelerateConnectionString: Output.asOutput(undefined),
-        host: Output.asOutput(undefined),
-        user: Output.asOutput(undefined),
-        password: Output.asOutput(undefined),
-      } as PrismaConnection;
-
-      return Effect.gen(function* () {
-        const url = yield* Output.evaluate(connectionUrl(connection), {});
-        const env = connectionEnv(connection);
-        const customEnv = connectionEnv(connection, {
-          databaseUrl: "APP_DATABASE_URL",
-          directUrl: false,
-          pooledDatabaseUrl: "POOL_URL",
-          connectionId: false,
-          databaseId: "DB_ID",
-        });
-        type _DefaultKeys = Expect<
-          Equal<
-            keyof typeof env,
-            | "DATABASE_URL"
-            | "DIRECT_URL"
-            | "POOLED_DATABASE_URL"
-            | "PRISMA_CONNECTION_ID"
-            | "PRISMA_DATABASE_ID"
-          >
-        >;
-        type _CustomKeys = Expect<
-          Equal<
-            keyof typeof customEnv,
-            "APP_DATABASE_URL" | "POOL_URL" | "DB_ID"
-          >
-        >;
-        const databaseUrl = yield* Output.evaluate(env.DATABASE_URL, {});
-        const directUrl = yield* Output.evaluate(env.DIRECT_URL, {});
-        const pooledDatabaseUrl = yield* Output.evaluate(
-          env.POOLED_DATABASE_URL,
-          {},
-        );
-        const connectionId = yield* Output.evaluate(
-          env.PRISMA_CONNECTION_ID,
-          {},
-        );
-        const databaseId = yield* Output.evaluate(env.PRISMA_DATABASE_ID, {});
-        const customDatabaseUrl = yield* Output.evaluate(
-          customEnv.APP_DATABASE_URL,
-          {},
-        );
-        const customPooledUrl = yield* Output.evaluate(customEnv.POOL_URL, {});
-        const customDatabaseId = yield* Output.evaluate(customEnv.DB_ID, {});
-
-        expect(redactedValue(url)).toBe("prisma+postgres://pooled");
-        expect(redactedValue(databaseUrl)).toBe("prisma+postgres://pooled");
-        expect(directUrl).toBeUndefined();
-        expect(redactedValue(pooledDatabaseUrl)).toBe(
-          "prisma+postgres://pooled",
-        );
-        expect(connectionId).toBe("connection-1");
-        expect(databaseId).toBe("database-1");
-        expect(redactedValue(customDatabaseUrl)).toBe(
-          "prisma+postgres://pooled",
-        );
-        expect(redactedValue(customPooledUrl)).toBe("prisma+postgres://pooled");
-        expect(customDatabaseId).toBe("database-1");
-      });
-    },
-  );
-
-  it.effect(
-    "ConnectionBindingLive resolves bound connection outputs at runtime",
+    "ConnectBinding resolves bound connection outputs at runtime",
     () => {
       const stored: Record<string, Output.Output> = {};
       let capturedBindingEnv: Record<string, Output.Output> | undefined;
@@ -609,8 +525,8 @@ describe("Prisma resource providers", () => {
       } as PrismaConnection;
 
       return Effect.gen(function* () {
-        const db = yield* ConnectionBinding(connection);
-        const keys = connectionBindingEnvKeys(connection);
+        const db = yield* Connect(connection);
+        const keys = connectEnvKeys(connection);
         const encodedEnv = yield* Output.evaluate(
           capturedBindingEnv ?? {},
           {},
@@ -622,16 +538,18 @@ describe("Prisma resource providers", () => {
         );
         expect(encodedEnv[keys.user]).toEqual(expect.any(String));
         expect(yield* db.connectionId).toBe("connection-1");
-        expect(yield* db.databaseUrl).toBe(escapedPooledConnectionString);
-        expect(yield* db.directUrl).toBe("postgres://direct");
-        expect(yield* db.directConnectionString).toBe("postgres://direct");
-        expect(yield* db.pooledDatabaseUrl).toBe(escapedPooledConnectionString);
-        expect(yield* db.pooledConnectionString).toBe(
+        expect(Redacted.value(yield* db.databaseUrl)).toBe(
+          escapedPooledConnectionString,
+        );
+        expect(Redacted.value((yield* db.directConnectionString)!)).toBe(
+          "postgres://direct",
+        );
+        expect(Redacted.value((yield* db.pooledConnectionString)!)).toBe(
           escapedPooledConnectionString,
         );
         expect(yield* db.accelerateConnectionString).toBeUndefined();
         expect(yield* db.user).toBeNull();
-        expect(yield* db.password).toBe("password");
+        expect(Redacted.value((yield* db.password)!)).toBe("password");
         expect(Object.keys(stored)).toEqual(
           expect.arrayContaining([
             "PRISMA_API_CONNECTION_CONNECTION_ID",
@@ -643,7 +561,7 @@ describe("Prisma resource providers", () => {
           ]),
         );
       }).pipe(
-        Effect.provide(ConnectionBindingLive),
+        Effect.provide(ConnectBinding),
         Effect.provide(Layer.succeed(RuntimeContext, runtime)),
         Effect.provide(Layer.succeed(Self, host)),
         Effect.provide(
@@ -657,7 +575,7 @@ describe("Prisma resource providers", () => {
   );
 
   it.effect(
-    "ConnectionBindingLive does not require the deploy-time host at runtime",
+    "ConnectBinding does not require the deploy-time host at runtime",
     () => {
       const stored: Record<string, Output.Output> = {};
       const runtime = {
@@ -697,12 +615,14 @@ describe("Prisma resource providers", () => {
       const wasRuntime = globalThis.__ALCHEMY_RUNTIME__;
       globalThis.__ALCHEMY_RUNTIME__ = true;
       return Effect.gen(function* () {
-        const db = yield* ConnectionBinding(connection);
+        const db = yield* Connect(connection);
 
         expect(yield* db.connectionId).toBe("connection-1");
-        expect(yield* db.databaseUrl).toBe("postgres://runtime");
+        expect(Redacted.value(yield* db.databaseUrl)).toBe(
+          "postgres://runtime",
+        );
       }).pipe(
-        Effect.provide(ConnectionBindingLive),
+        Effect.provide(ConnectBinding),
         Effect.provide(Layer.succeed(RuntimeContext, runtime)),
         Effect.provide(
           Layer.succeed(
@@ -756,11 +676,11 @@ describe("Prisma resource providers", () => {
             main: "app.ts",
           },
           Effect.gen(function* () {
-            yield* ConnectionBinding(connection);
-          }).pipe(Effect.provide(ConnectionBindingLive)),
+            yield* Connect(connection);
+          }).pipe(Effect.provide(ConnectBinding)),
         );
 
-        const keys = connectionBindingEnvKeys(connection);
+        const keys = connectEnvKeys(connection);
         const binding = stack.bindings[app.FQN]?.[0];
         const env = yield* Output.evaluate(binding?.data.env ?? {}, {});
 
@@ -850,8 +770,8 @@ describe("Prisma resource providers", () => {
     } as PrismaConnection;
 
     return Effect.gen(function* () {
-      const db = yield* ConnectionBinding(connection);
-      const keys = connectionBindingEnvKeys(connection);
+      const db = yield* Connect(connection);
+      const keys = connectEnvKeys(connection);
       const env = yield* Output.evaluate(
         capturedBindingEnv ?? {},
         {},
@@ -880,9 +800,9 @@ describe("Prisma resource providers", () => {
           env[keys.password] as string | Redacted.Redacted<string> | undefined,
         ),
       ).toBe("password");
-      expect(yield* db.databaseUrl).toBe("postgres://api");
+      expect(Redacted.value(yield* db.databaseUrl)).toBe("postgres://api");
     }).pipe(
-      Effect.provide(ConnectionBindingLive),
+      Effect.provide(ConnectBinding),
       Effect.provide(inMemoryState()),
       Effect.provide(Layer.succeed(RuntimeContext, runtime)),
       Effect.provide(Layer.succeed(Self, host)),
@@ -944,8 +864,8 @@ describe("Prisma resource providers", () => {
     } as PrismaConnection;
 
     return Effect.gen(function* () {
-      const db = yield* ConnectionBinding(connection);
-      const keys = connectionBindingEnvKeys(connection);
+      const db = yield* Connect(connection);
+      const keys = connectEnvKeys(connection);
       const bindings = (yield* Output.evaluate(
         capturedBindings ?? [],
         {},
@@ -980,10 +900,10 @@ describe("Prisma resource providers", () => {
         ]),
       );
       expect("connectionString" in db).toBe(false);
-      expect(yield* db.databaseUrl).toBe("postgres://api");
-      expect(yield* db.password).toBe("password");
+      expect(Redacted.value(yield* db.databaseUrl)).toBe("postgres://api");
+      expect(Redacted.value((yield* db.password)!)).toBe("password");
     }).pipe(
-      Effect.provide(ConnectionBindingLive),
+      Effect.provide(ConnectBinding),
       Effect.provide(inMemoryState()),
       Effect.provide(Layer.succeed(RuntimeContext, runtime)),
       Effect.provide(Layer.succeed(Self, host)),
@@ -3208,13 +3128,15 @@ describe("Prisma resource providers", () => {
             databaseId: "database-1",
             kind: "postgres" as const,
             createdAt,
-            connectionString: undefined,
             directConnectionString: Redacted.make("postgres://old-direct"),
             pooledConnectionString: undefined,
             accelerateConnectionString: undefined,
             host: "db.prisma.test",
             user: undefined,
             password: undefined,
+            databaseUrl: Redacted.make("postgres://old-direct"),
+            origin: undefined,
+            pooledOrigin: undefined,
           },
           {
             database: "database-1",

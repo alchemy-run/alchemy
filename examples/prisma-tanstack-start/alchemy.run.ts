@@ -67,15 +67,6 @@ export default Alchemy.Stack(
       name: "web",
     });
 
-    // The deployed application receives only the pooled credential it uses.
-    // The direct credential is scoped to the schema command below.
-    const runtimeDatabaseEnv = Prisma.connectionEnv(connection, {
-      directUrl: false,
-      pooledDatabaseUrl: false,
-      connectionId: false,
-      databaseId: false,
-    });
-
     // Apply checked-in, transactional Prisma Next migrations before building a
     // deployment. Apply is idempotent and intentionally runs every deploy so a
     // restored or drifted database is verified instead of trusting local state.
@@ -84,7 +75,7 @@ export default Alchemy.Stack(
       command: "bun run db:migrate",
       cwd: ".",
       env: {
-        DATABASE_URL: Prisma.connectionUrl(connection, "direct").as<
+        DATABASE_URL: connection.directConnectionString.as<
           Redacted.Redacted<string>
         >(),
         // Bound server-side lock waits and statement execution independently
@@ -125,7 +116,9 @@ export default Alchemy.Stack(
       port: 3000,
       healthCheck: { path: "/api/health" },
       env: {
-        ...runtimeDatabaseEnv,
+        // The deployed application receives only the pooled credential it
+        // uses. The direct credential is scoped to the schema command above.
+        DATABASE_URL: connection.databaseUrl,
         TANSTACK_MESSAGE: yield* tanstackMessageConfig(
           "hello from TanStack Start on Prisma Compute",
         ),

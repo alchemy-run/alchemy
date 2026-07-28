@@ -23,6 +23,7 @@ import {
   EnvironmentVariable,
   EnvironmentVariableProvider,
 } from "./EnvironmentVariable.ts";
+import { deriveConnectionAttrs } from "./Internal/DatabaseSecrets.ts";
 import {
   closePrismaDevDatabase,
   ensurePrismaDevDatabase,
@@ -264,28 +265,34 @@ const databaseDevProvider = () =>
   });
 
 const connectionDevProvider = () =>
-  devProvider(Connection, ["connectionId"], ({ id, news }) => ({
-    connectionId: devId("connection", id),
-    connectionName: news.name,
-    databaseId: attrOrString(news.database, "databaseId"),
-    kind: "postgres",
-    createdAt: DEV_TIMESTAMP,
-    directConnectionString: attrOrRedactedString(
-      news.database,
-      "directConnectionString",
-    ),
-    pooledConnectionString: attrOrRedactedString(
-      news.database,
-      "pooledConnectionString",
-    ),
-    accelerateConnectionString: attrOrRedactedString(
-      news.database,
-      "accelerateConnectionString",
-    ),
-    host: attrOrNullableString(news.database, "host"),
-    user: attrOrNullableString(news.database, "user"),
-    password: attrOrRedactedString(news.database, "password"),
-  }));
+  devProvider(Connection, ["connectionId"], ({ id, news }) => {
+    const secrets = {
+      directConnectionString: attrOrRedactedString(
+        news.database,
+        "directConnectionString",
+      ),
+      pooledConnectionString: attrOrRedactedString(
+        news.database,
+        "pooledConnectionString",
+      ),
+      accelerateConnectionString: attrOrRedactedString(
+        news.database,
+        "accelerateConnectionString",
+      ),
+    };
+    return {
+      connectionId: devId("connection", id),
+      connectionName: news.name,
+      databaseId: attrOrString(news.database, "databaseId"),
+      kind: "postgres",
+      createdAt: DEV_TIMESTAMP,
+      ...secrets,
+      host: attrOrNullableString(news.database, "host"),
+      user: attrOrNullableString(news.database, "user"),
+      password: attrOrRedactedString(news.database, "password"),
+      ...deriveConnectionAttrs(secrets),
+    };
+  });
 
 const branchDevProvider = () =>
   devProvider(Branch, ["branchId"], ({ id, news }) => ({
