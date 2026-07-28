@@ -350,12 +350,12 @@ const observe = Effect.fn(function* () {
       // singleton org) under `result`; an account that has not yet
       // enabled Zero Trust returns a sparse object with no
       // `authDomain`. Treat that as "missing".
-      const typed = org as zeroTrust.ListOrganizationsResponse;
+      const typed = org as zeroTrust.ListOrganizationsForAccountResponse;
       return typed && typed.authDomain ? typed : undefined;
     }),
     Effect.catchTag("OrganizationNotFound", () =>
       Effect.succeed(
-        undefined as zeroTrust.ListOrganizationsResponse | undefined,
+        undefined as zeroTrust.ListOrganizationsForAccountResponse | undefined,
       ),
     ),
   );
