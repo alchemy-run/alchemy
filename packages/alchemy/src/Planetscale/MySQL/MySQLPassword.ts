@@ -82,7 +82,7 @@ export interface MySQLPasswordAttributes {
   /** Resolved branch name. */
   branch: string;
   /** The role granted. */
-  role: "reader" | "writer" | "admin" | "readwriter";
+  role: "reader" | "writer" | "admin" | "readwriter" | (string & {});
   /** Whether this password is for a read replica. */
   replica: boolean | undefined;
   /** TTL in seconds (if set). */
@@ -412,7 +412,7 @@ const buildAttributes = (
     expires_at: string | null;
     access_host_url: string;
     username: string;
-    role: "reader" | "writer" | "admin" | "readwriter";
+    role: "reader" | "writer" | "admin" | "readwriter" | (string & {});
     replica: boolean;
     ttl_seconds: number | null;
     cidrs: readonly string[] | null;
