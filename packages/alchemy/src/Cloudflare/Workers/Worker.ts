@@ -1273,6 +1273,56 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * }
  * ```
  *
+ * @section URLs & Domains
+ * Every URL that serves the Worker is collected in `worker.urls`, most
+ * significant first, and `worker.url` is always `urls[0]`. The ranking:
+ * the canonical custom domain (`domain.name`), then aliases in declared
+ * order, then the stable `workers.dev` URL, then version preview URLs.
+ * Under `alchemy dev`, `urls` is the local dev server's
+ * `[localhost, ...LAN]` addresses instead. Redirect hostnames never
+ * appear in `urls` — they serve no content.
+ *
+ * The `workersDev` prop controls the `workers.dev` surface (`true` by
+ * default = stable URL + version previews; `false` = neither; object form
+ * toggles independently), and the `domain` prop attaches custom domains —
+ * DNS records and edge certificates are managed automatically.
+ *
+ * @example Custom domain with aliases and redirects
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   domain: {
+ *     name: "example.com",
+ *     aliases: ["www.example.com"],
+ *     redirects: ["old.example.com"], // 301 → https://example.com
+ *   },
+ * });
+ * // worker.url  === "https://example.com"
+ * // worker.urls === ["https://example.com", "https://www.example.com",
+ * //                  "https://<name>.<account>.workers.dev"]
+ * ```
+ *
+ * @example workers.dev toggles
+ * ```typescript
+ * // No workers.dev URLs at all:
+ * { main: "./src/api.ts", workersDev: false, domain: "api.example.com" }
+ *
+ * // Previews only — each deploy's version preview URL becomes worker.url:
+ * { main: "./src/api.ts", workersDev: { enabled: false, previewsEnabled: true } }
+ * ```
+ *
+ * @example All URLs as a CORS allow-list
+ * ```typescript
+ * const site = yield* Cloudflare.Worker("Site", {
+ *   main: "./src/site.ts",
+ *   domain: { name: "example.com", aliases: ["www.example.com"] },
+ * });
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: { ALLOWED_ORIGINS: site.urls },
+ * });
+ * ```
+ *
  * @section Versions & Gradual Deployments
  * The `version` prop maps Cloudflare's
  * [versions and gradual deployments](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/)

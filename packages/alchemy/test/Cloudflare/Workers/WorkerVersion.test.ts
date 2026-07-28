@@ -235,6 +235,16 @@ describe.concurrent("Cloudflare.Worker version", () => {
         expect(liveV2?.versions.some((v) => v.versionId === v2.versionId)).toBe(
           true,
         );
+        // urls ordering during a rollout: the stable workers.dev URL stays
+        // primary; the uploaded version's preview URL trails.
+        expect(v2.urls[0]).toMatch(
+          new RegExp(`^https://${v2.workerName}\\..*\\.workers\\.dev$`),
+        );
+        expect(v2.urls[v2.urls.length - 1]).toMatch(
+          new RegExp(
+            `^https://${v2.versionId!.split("-")[0]}-${v2.workerName}\\..*\\.workers\\.dev$`,
+          ),
+        );
 
         // Promote: traffic back to the default full cutover.
         const v3 = yield* stack.deploy(

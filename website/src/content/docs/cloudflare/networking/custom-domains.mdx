@@ -74,33 +74,48 @@ still retains on destroy unless you add `destroy()`.
 
 ## Attach a custom domain to a Worker
 
-The simplest way to serve a Worker on your domain is the `domains` prop.
-Cloudflare provisions the DNS record and certificate for you; the zone
-is inferred from each hostname, so it must already exist in the account:
+The simplest way to serve a Worker on your domain is the `domain` prop
+— a hostname, or an object with aliases and redirects. Cloudflare
+provisions the DNS record and certificate for you; the zone is inferred
+from each hostname, so it must already exist in the account:
 
 ```typescript
 const worker = yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
-  domains: ["api.example.com"],
+  domain: "api.example.com",
 });
+// worker.url === "https://api.example.com"
 ```
 
-Every URL the Worker is reachable at is collected in `worker.allUrls`
-(most relevant first — the `workers.dev` URL when enabled, then your
-custom domains in the order you provided them), `worker.domains` holds
-the matching hostnames, and `worker.url` is always `allUrls[0]`.
-Disable `workers.dev` to make your first custom domain the primary URL:
+The canonical domain is the Worker's most significant URL, so it leads
+`worker.urls` and becomes `worker.url` — ahead of the `workers.dev`
+URL. `aliases` are additional hostnames that serve the Worker, and
+`redirects` are hostnames that answer with a permanent redirect (HTTP
+301, path and query preserved) to the canonical name without ever
+invoking the Worker — ideal for domain migrations:
 
 ```typescript
 const worker = yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
+  domain: {
+    name: "api.example.com",
+    aliases: ["api-v2.example.com"],
+    redirects: ["api.old-example.com"],
+  },
   workersDev: false,
-  domains: ["api.example.com", "api-v2.example.com"],
 });
-// worker.url     === "https://api.example.com"
-// worker.allUrls === ["https://api.example.com", "https://api-v2.example.com"]
-// worker.domains === ["api.example.com", "api-v2.example.com"]
+// worker.url    === "https://api.example.com"
+// worker.urls   === ["https://api.example.com", "https://api-v2.example.com"]
+// worker.domain === { name: "api.example.com",
+//                     aliases: ["api-v2.example.com"],
+//                     redirects: ["api.old-example.com"] }
 ```
+
+Redirects are implemented as rules in the zone's
+`http_request_dynamic_redirect` phase, which runs before Workers —
+redirected requests never hit your code. Redirect hostnames appear in
+`worker.domain` but never in `worker.urls`, since they serve no
+content.
 
 ## Route a hostname pattern to a Worker
 
@@ -214,7 +229,7 @@ you may want to switch them off — the custom domain then becomes
 ```typescript
 const worker = yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
-  domains: ["api.example.com"],
+  domain: "api.example.com",
   workersDev: false,
 });
 // worker.url === "https://api.example.com"
@@ -228,7 +243,7 @@ becomes `worker.url`:
 ```typescript
 const worker = yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
-  workersDev: { url: false, previews: true },
+  workersDev: { enabled: false, previewsEnabled: true },
 });
 ```
 
