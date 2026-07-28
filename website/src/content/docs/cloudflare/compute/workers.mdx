@@ -285,6 +285,19 @@ single-page-application fallback) itself — the same deployment shape
 as an assets-only `wrangler deploy`. Static asset requests are free
 and never invoke a Worker.
 
+The class form works too — declare it in its own file and yield the
+class in your Stack:
+
+```typescript
+export class Site extends Cloudflare.Worker<Site>()("Site", {
+  assets: {
+    directory: "./public",
+    htmlHandling: "drop-trailing-slash",
+  },
+  domain: "static.example.com",
+}) {}
+```
+
 A `_headers` or `_redirects` file in the assets directory is applied
 automatically, and a `.assetsignore` file excludes files from the
 upload.
