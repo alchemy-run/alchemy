@@ -24,6 +24,18 @@ export type SendEmailProps = {
    * {@link Routing}) and the addresses must be verified.
    */
   allowedSenderAddresses?: string[];
+  /**
+   * Configuration for the binding in `alchemy dev`.
+   * @default { remote: false }
+   */
+  dev?: {
+    /**
+     * Whether to send emails through the live Cloudflare Email service in development.
+     * If `false`, emails will be logged to the console instead.
+     * @default false
+     */
+    remote?: boolean;
+  };
 };
 
 /**
@@ -83,5 +95,6 @@ export const SendEmail: (
     destinationAddress: props?.destinationAddress,
     allowedDestinationAddresses: props?.allowedDestinationAddresses,
     allowedSenderAddresses: props?.allowedSenderAddresses,
+    dev: props?.dev,
   } satisfies SendEmail;
 });
