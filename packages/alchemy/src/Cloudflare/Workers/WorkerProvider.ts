@@ -3508,8 +3508,11 @@ export const LiveWorkerProvider = () =>
             d === undefined
               ? ""
               : JSON.stringify([d.name, d.aliases, [...d.redirects].sort()]);
-          // An omitted `domain` leaves the surface unmanaged (#942) — no
-          // change regardless of what state holds.
+          // An omitted `domain` unmanages the surface (#942): reconcile
+          // carries previously-observed custom domains forward in state, so
+          // comparing the empty desired config against those would report a
+          // dirty plan on every deploy, forever. Only a declared `domain`
+          // (including `null`, the explicit detach-all) participates.
           const domainsChanged =
             news.domain !== undefined &&
             domainKey(newDomainConfig) !== domainKey(oldDomainConfig);
@@ -3533,24 +3536,24 @@ export const LiveWorkerProvider = () =>
             newRouteKeys.length !== oldRouteKeys.length ||
             newRouteKeys.some((key, index) => key !== oldRouteKeys[index]);
           // `url` is `urls[0]`: the canonical custom domain when one is
-          // configured, else the stable workers.dev URL. It's stable across
-          // this update exactly when the recomputed value matches what's
-          // deployed. Carry it forward as a stable only then, so downstream
-          // resources that reference `worker.url` (e.g. a GitHub Webhook
-          // delivery URL built via `Output.interpolate`) resolve it to a
-          // concrete value during planning instead of an unresolved Output —
-          // otherwise every worker update spuriously re-updates them.
-          // Previews-only mode (`workersDev: { enabled: false }` with
-          // previews on) derives `url` from the ever-changing version
-          // preview URL — never stable. Same for a version worker's aliased
-          // preview URL when its content is changing (the alias is stable,
-          // but treating it as such is only safe when the recomputed URL
-          // matches, which the generic comparison below covers).
+          // configured (or carried forward from state when the surface is
+          // unmanaged, #942/#975), else the stable workers.dev URL. It's
+          // stable across this update exactly when the recomputed value
+          // matches what's deployed. Carry it forward as a stable only
+          // then, so downstream resources that reference `worker.url`
+          // (e.g. a GitHub Webhook delivery URL built via
+          // `Output.interpolate`) resolve it to a concrete value during
+          // planning instead of an unresolved Output — otherwise every
+          // worker update spuriously re-updates them. Previews-only mode
+          // and version workers derive `url` from version preview URLs —
+          // never assumed stable here.
           const newWorkersDev = resolveWorkersDev(news.workersDev);
+          const effectiveDomainConfig =
+            news.domain !== undefined ? newDomainConfig : oldDomainConfig;
           const newUrl = newIsVersion
             ? undefined
-            : newDomainConfig !== undefined
-              ? `https://${newDomainConfig.name}`
+            : effectiveDomainConfig !== undefined
+              ? `https://${effectiveDomainConfig.name}`
               : newWorkersDev.enabled
                 ? (output.urls ?? []).find(
                     (u) =>
@@ -3558,10 +3561,7 @@ export const LiveWorkerProvider = () =>
                       urlHostname(u).startsWith(`${workerName}.`),
                   )
                 : undefined;
-          // A version worker's `url` is its version preview URL, which
-          // changes with every uploaded version — never stable.
-          const urlStable =
-            !newIsVersion && newUrl !== undefined && newUrl === output.url;
+          const urlStable = newUrl !== undefined && newUrl === output.url;
           // `durableObjectNamespaces` maps each hosted DO class name to the
           // namespace id Cloudflare assigned it. Those ids are permanent for
           // the lifetime of a (worker, class) pair, so the map only changes
