@@ -2,8 +2,10 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as zones from "@distilled.cloud/cloudflare/zones";
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
@@ -19,6 +21,7 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
+import { cachedFunction } from "../../Util/cached-function.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -296,6 +299,60 @@ export const normalizeStateDomains = (
   });
 
 /**
+ * Custom domains Alchemy is responsible for on this Worker — either declared
+ * on props (`domain`) or already persisted as non-`workers.dev` URLs in state.
+ * Used by `read` to skip `listDomains` when the surface is unmanaged (#926).
+ *
+ * @internal exported for unit testing.
+ */
+export const shouldObserveWorkerDomains = (
+  olds: Pick<WorkerProps, "domain"> | undefined,
+  output: Pick<Worker["Attributes"], "domains"> | undefined,
+): boolean =>
+  olds?.domain !== undefined ||
+  normalizeStateDomains(output?.domains).some(
+    (url) => !url.endsWith(".workers.dev"),
+  );
+
+/**
+ * Zone routes Alchemy is responsible for on this Worker. Used by `read` to
+ * skip account-wide zone/route fan-out when the surface is unmanaged (#926).
+ *
+ * @internal exported for unit testing.
+ */
+export const shouldObserveWorkerRoutes = (
+  olds: Pick<WorkerProps, "routes"> | undefined,
+  output: Pick<Worker["Attributes"], "routes"> | undefined,
+): boolean => olds?.routes !== undefined || (output?.routes?.length ?? 0) > 0;
+
+/**
+ * Cron triggers Alchemy is responsible for on this Worker. Used by `read` to
+ * skip `getScriptSchedule` when the surface is unmanaged (#926). Effect-native
+ * `cron()` bindings persist into `output.crons` after the first reconcile, so
+ * subsequent reads still observe them.
+ *
+ * @internal exported for unit testing.
+ */
+export const shouldObserveWorkerCrons = (
+  olds: Pick<WorkerProps, "crons"> | undefined,
+  output: Pick<Worker["Attributes"], "crons"> | undefined,
+): boolean => olds?.crons !== undefined || (output?.crons?.length ?? 0) > 0;
+
+/**
+ * Optional override for the account's stable `workers.dev` subdomain
+ * (`<subdomain>` in `https://<script>.<subdomain>.workers.dev`). When set,
+ * Worker URL construction skips `GET /accounts/{id}/workers/subdomain`.
+ */
+const CLOUDFLARE_WORKERS_SUBDOMAIN = Config.string(
+  "CLOUDFLARE_WORKERS_SUBDOMAIN",
+).pipe(
+  Config.map((value) => value.trim()),
+  Config.option,
+);
+
+const WORKERS_SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+/**
  * Max concurrent `GET /zones/{id}/workers/routes` calls when observing the
  * routes attached to a Worker. Route listing is per-zone, so this fans out
  * with the number of zones the Worker has routes in; unbounded fan-out here
@@ -481,12 +538,29 @@ export const LiveWorkerProvider = () =>
       // const listZones = yield* zones.listZones;
       const telemetry = yield* CloudflareLogs;
 
-      const getAccountSubdomain = (accountId: string) =>
-        workers
-          .getSubdomain({
-            accountId,
-          })
-          .pipe(Effect.map((result) => result.subdomain));
+      // Account subdomain is invariant for the life of a provider layer —
+      // memoize so N Workers (or repeated plan/deploy reads) don't each hit
+      // GET /accounts/{id}/workers/subdomain and trip Cloudflare's 429/971
+      // throttle (#926). `CLOUDFLARE_WORKERS_SUBDOMAIN` bypasses the lookup
+      // entirely when the operator already knows the value.
+      const getAccountSubdomain = yield* cachedFunction((accountId: string) =>
+        Effect.gen(function* () {
+          const configured = yield* CLOUDFLARE_WORKERS_SUBDOMAIN;
+          if (Option.isSome(configured) && configured.value !== "") {
+            if (!WORKERS_SUBDOMAIN_PATTERN.test(configured.value)) {
+              return yield* Effect.die(
+                new Error(
+                  `Invalid CLOUDFLARE_WORKERS_SUBDOMAIN "${configured.value}": ` +
+                    "expected a workers.dev subdomain label (lowercase letters, digits, hyphens)",
+                ),
+              );
+            }
+            return configured.value;
+          }
+          const result = yield* workers.getSubdomain({ accountId });
+          return result.subdomain;
+        }),
+      );
 
       // Toggle the workers.dev subdomain via `POST /subdomain` with
       // `enabled: true | false`. Mirrors the upstream Alchemy
@@ -2122,19 +2196,36 @@ export const LiveWorkerProvider = () =>
           );
         }
         const desiredDomains = normalizeDomains(news.domain);
-        const previousDomains = output?.domains ?? [];
-        if (desiredDomains.length > 0 || previousDomains.length > 0) {
+        // Custom domains are managed only when `domain` is declared on props
+        // (#942): `domain: []` detaches every attachment, an omitted `domain`
+        // leaves live attachments alone. The gate must key on declared intent,
+        // never on persisted state — reads before #932 observed listDomains
+        // unconditionally, so out-of-band hostnames may sit in
+        // `output.domains`, and running reconcileDomains against those would
+        // delete attachments Alchemy never managed. Skipping also spares a
+        // plain workers.dev Worker the listDomains call on every deploy
+        // (#926). Unmanaged domains persisted in state carry forward so read
+        // keeps observing (and refreshing) them.
+        const manageCustomDomains = news.domain !== undefined;
+        if (manageCustomDomains) {
           yield* session.note(
             `Reconciling custom domains (${desiredDomains.length}) ...`,
           );
         }
-        const reconciled = yield* reconcileDomains(name, desiredDomains);
+        const reconciled = manageCustomDomains
+          ? yield* reconcileDomains(name, desiredDomains)
+          : [];
+        const previousCustomDomains = normalizeStateDomains(
+          output?.domains,
+        ).filter((url) => !url.endsWith(".workers.dev"));
         const workersDevUrl =
           news.url !== false
             ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
             : undefined;
         const domains = [
-          ...reconciled.map((d) => `https://${d.hostname}`),
+          ...(manageCustomDomains
+            ? reconciled.map((d) => `https://${d.hostname}`)
+            : previousCustomDomains),
           ...(workersDevUrl ? [workersDevUrl] : []),
         ];
         const desiredRoutes = yield* normalizeRoutes(news.routes);
@@ -2149,12 +2240,17 @@ export const LiveWorkerProvider = () =>
           desiredRoutes,
           previousRoutes,
         );
-        const crons = yield* reconcileCrons(
-          name,
-          normalizeCrons([...getCronBindings(bindings), ...(news.crons ?? [])]),
-          output?.crons ?? [],
-          session,
-        );
+        const desiredCrons = normalizeCrons([
+          ...getCronBindings(bindings),
+          ...(news.crons ?? []),
+        ]);
+        const previousCrons = output?.crons ?? [];
+        // Same gating as read: skip getScriptSchedule when neither props nor
+        // prior state indicate cron management (#926).
+        const crons =
+          desiredCrons.length > 0 || previousCrons.length > 0
+            ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
+            : [];
         return {
           workerId: worker.id ?? name,
           workerName: name,
@@ -2755,6 +2851,18 @@ export const LiveWorkerProvider = () =>
             // `WorkerNotFound` if the script doesn't exist, which the
             // surrounding `Effect.catchTag` turns into `undefined` — that's
             // all the existence check we need.
+            //
+            // Domain / route / cron observation is gated on whether Alchemy
+            // manages that surface for this Worker (#926). A plain workers.dev
+            // Worker otherwise pays for listDomains + zone route listings +
+            // getScriptSchedule on every plan/deploy read. Route observation
+            // is additionally scoped to the zones state already associates
+            // with this Worker — see readWorkerRoutes. Empty-array props
+            // (`domain: []`, `routes: []`, `crons: []`) still observe so we
+            // can detect drift and converge deletions.
+            const observeDomains = shouldObserveWorkerDomains(olds, output);
+            const observeRoutes = shouldObserveWorkerRoutes(olds, output);
+            const observeCrons = shouldObserveWorkerCrons(olds, output);
             const [subdomain, settings, domainsList, routesList] =
               yield* Effect.all(
                 [
@@ -2766,15 +2874,23 @@ export const LiveWorkerProvider = () =>
                     accountId,
                     scriptName: workerName,
                   }),
-                  workers
-                    .listDomains({
-                      accountId,
-                      service: workerName,
-                    })
-                    .pipe(Effect.map((r) => r.result ?? [])),
-                  readWorkerRoutes(workerName, output?.routes),
+                  observeDomains
+                    ? workers
+                        .listDomains({
+                          accountId,
+                          service: workerName,
+                        })
+                        .pipe(Effect.map((r) => r.result ?? []))
+                    : Effect.succeed(
+                        [] as workers.ListDomainsResponse["result"],
+                      ),
+                  observeRoutes
+                    ? readWorkerRoutes(workerName, output?.routes)
+                    : Effect.succeed([] as Worker["Attributes"]["routes"]),
                 ],
-                { concurrency: "unbounded" },
+                // Bound concurrency so a single Worker read doesn't stampede
+                // the account alongside every other Worker's lifecycle calls.
+                { concurrency: 1 },
               );
             // Preserve the order the user provided in `olds.domain`. The
             // Cloudflare API returns domains in non-deterministic order,
@@ -2800,7 +2916,7 @@ export const LiveWorkerProvider = () =>
               ...orderedHostnames.map((h) => `https://${h}`),
               ...(workersDevUrl ? [workersDevUrl] : []),
             ];
-            const crons = yield* getWorkerCrons(workerName);
+            const crons = observeCrons ? yield* getWorkerCrons(workerName) : [];
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
             );

@@ -33,6 +33,7 @@ export * from "./InvokeFunctionHttp.ts";
 export * from "./InvokeWithResponseStream.ts";
 export * from "./InvokeWithResponseStreamHttp.ts";
 export * from "./KafkaEventSource.ts";
+export * from "./LayerVersion.ts";
 export * from "./ListFunctions.ts";
 export * from "./ListFunctionsHttp.ts";
 export * from "./ListManagedMicrovmImages.ts";

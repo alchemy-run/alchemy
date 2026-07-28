@@ -30,7 +30,7 @@ import {
   type PackageInstall,
 } from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
-import { deepEqual, isResolved } from "../../Diff.ts";
+import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -136,6 +136,17 @@ export type FunctionArchitecture = "x86_64" | "arm64";
 export type AccessPointRef = string | { accessPointArn: string };
 
 /**
+ * Reference to a Lambda layer version: a raw layer version ARN or anything
+ * exposing a `layerVersionArn` attribute (e.g. an `AWS.Lambda.LayerVersion`
+ * resource).
+ */
+export type LayerRef = string | { layerVersionArn: string };
+
+/** Resolve a {@link LayerRef} to its layer version ARN. */
+const layerVersionArnOf = (layer: LayerRef): string =>
+  typeof layer === "string" ? layer : layer.layerVersionArn;
+
+/**
  * Resolve an {@link AccessPointRef} (or the legacy raw-`arn` field) on a
  * `fileSystemConfigs` entry to the access point ARN.
  */
@@ -195,6 +206,13 @@ export interface FunctionProps extends PlatformProps {
    */
   architecture?: FunctionArchitecture;
   memorySize?: number;
+  /**
+   * Lambda layers to attach — pass an `AWS.Lambda.LayerVersion` resource
+   * directly, or a raw layer version ARN (e.g. an AWS-managed layer). Layers
+   * are extracted into `/opt` in the order given. Omit or pass `[]` to detach
+   * every layer.
+   */
+  layers?: LayerRef[];
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -1514,6 +1532,10 @@ export default handler;
           Runtime: news.runtime ?? "nodejs22.x",
           Architectures: [news.architecture ?? "x86_64"],
           MemorySize: news.memorySize,
+          // Always explicit: `UpdateFunctionConfiguration` treats an omitted
+          // `Layers` as "leave as-is", so removing the prop would strand the
+          // previously-attached layers.
+          Layers: (news.layers ?? []).map(layerVersionArnOf),
           Environment: runtimeEnv
             ? {
                 Variables: {
@@ -1831,6 +1853,18 @@ export default handler;
             news.reservedConcurrentExecutions
           ) {
             return { action: "update" };
+          }
+          // `layers` accepts a LayerVersion resource or a raw ARN, and the
+          // two forms are structurally different props even when they name
+          // the same layer. Compare them normalized so switching between the
+          // forms isn't a phantom change; everything else still falls through
+          // to the engine's default props comparison.
+          const normalizeLayers = (props: FunctionProps) => ({
+            ...props,
+            layers: (props.layers ?? []).map(layerVersionArnOf),
+          });
+          if (!havePropsChanged(normalizeLayers(olds), normalizeLayers(news))) {
+            return { action: "noop" };
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

@@ -486,6 +486,10 @@ export interface WorkerProps<
    * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
    * Worker. The Cloudflare Zone is inferred from the hostname — the zone must
    * already exist in the account.
+   *
+   * Pass an empty array to detach every custom domain. Omitting the prop
+   * leaves custom domains unmanaged — attachments made outside Alchemy are
+   * preserved.
    */
   domain?: string | string[];
   /**
