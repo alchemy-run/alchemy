@@ -25,7 +25,7 @@ import { cachedFunction } from "../../Util/cached-function.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
-import { listAllZones, resolveZoneId } from "../Zone/lookup.ts";
+import { resolveZoneId } from "../Zone/lookup.ts";
 import {
   mergeAssetsConfigFiles,
   readAssets,
@@ -884,27 +884,42 @@ export const LiveWorkerProvider = () =>
               Effect.catch(() => Effect.succeed([])),
             ),
           ),
-          { concurrency: "unbounded" },
+          // Bounded: one listRoutes per zone against Cloudflare's global
+          // per-user API budget — unbounded fan-out here is what tripped
+          // 429/971 on many-zone accounts (#926).
+          { concurrency: 8 },
         );
 
         return Effect.map(routesByZone, (routes) => routes.flat());
       };
 
-      // Observe every route attached to `scriptName` account-wide. Routes
-      // are zone-scoped with no account-level enumeration API, so fan out
-      // over all of the account's zones. Any failure to enumerate zones
-      // (e.g. a token without zone read scope) degrades to "no routes"
-      // rather than failing the read.
-      const readWorkerRoutes = (scriptName: string) =>
+      // Observe the routes attached to `scriptName` in the zones Alchemy
+      // manages for this Worker: the zones of routes persisted in state plus
+      // whatever zones the declared `routes` props resolve to. Routes are
+      // zone-scoped with no account-level enumeration API — the previous
+      // account-wide sweep cost one listRoutes call per zone, which on a
+      // many-zone account cleared Cloudflare's global per-user API budget in
+      // a couple of plan/deploy cycles and surfaced as 429/code 971 on
+      // whichever call landed next (#926). Routes attached out of band in
+      // zones Alchemy has never associated with this Worker are not
+      // observed; that discovery is an adoption concern, not something every
+      // read should pay an account sweep for. Zone-resolution failures for
+      // declared routes degrade to the state-derived zones rather than
+      // failing the read.
+      const readWorkerRoutes = (
+        scriptName: string,
+        declaredRoutes: WorkerRouteConfig[] | undefined,
+        stateRoutes: Worker["Attributes"]["routes"] | undefined,
+      ) =>
         Effect.gen(function* () {
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const accountZones = yield* listAllZones(accountId).pipe(
-            Effect.catch(() => Effect.succeed([])),
+          const declaredZoneIds = yield* normalizeRoutes(declaredRoutes).pipe(
+            Effect.map((routes) => routes.map((route) => route.zoneId)),
+            Effect.catch(() => Effect.succeed([] as string[])),
           );
-          return yield* listWorkerRoutesInZones(
-            scriptName,
-            accountZones.map((zone) => zone.id),
-          );
+          return yield* listWorkerRoutesInZones(scriptName, [
+            ...(stateRoutes ?? []).map((route) => route.zoneId),
+            ...declaredZoneIds,
+          ]);
         });
 
       // Converge the zone routes attached to `scriptName` to `desired`.
@@ -2085,28 +2100,36 @@ export const LiveWorkerProvider = () =>
           );
         }
         const desiredDomains = normalizeDomains(news.domain);
-        const previousCustomDomains = normalizeStateDomains(
-          output?.domains,
-        ).filter((url) => !url.endsWith(".workers.dev"));
-        // Skip listDomains when Alchemy has never managed custom domains for
-        // this Worker — otherwise every deploy pays for an unused account call
-        // (#926). Empty `domain: []` still reconciles so deletions converge.
-        const reconcileCustomDomains =
-          news.domain !== undefined || previousCustomDomains.length > 0;
-        if (reconcileCustomDomains) {
+        // Custom domains are managed only when `domain` is declared on props
+        // (#942): `domain: []` detaches every attachment, an omitted `domain`
+        // leaves live attachments alone. The gate must key on declared intent,
+        // never on persisted state — reads before #932 observed listDomains
+        // unconditionally, so out-of-band hostnames may sit in
+        // `output.domains`, and running reconcileDomains against those would
+        // delete attachments Alchemy never managed. Skipping also spares a
+        // plain workers.dev Worker the listDomains call on every deploy
+        // (#926). Unmanaged domains persisted in state carry forward so read
+        // keeps observing (and refreshing) them.
+        const manageCustomDomains = news.domain !== undefined;
+        if (manageCustomDomains) {
           yield* session.note(
             `Reconciling custom domains (${desiredDomains.length}) ...`,
           );
         }
-        const reconciled = reconcileCustomDomains
+        const reconciled = manageCustomDomains
           ? yield* reconcileDomains(name, desiredDomains)
           : [];
+        const previousCustomDomains = normalizeStateDomains(
+          output?.domains,
+        ).filter((url) => !url.endsWith(".workers.dev"));
         const workersDevUrl =
           news.url !== false
             ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
             : undefined;
         const domains = [
-          ...reconciled.map((d) => `https://${d.hostname}`),
+          ...(manageCustomDomains
+            ? reconciled.map((d) => `https://${d.hostname}`)
+            : previousCustomDomains),
           ...(workersDevUrl ? [workersDevUrl] : []),
         ];
         const desiredRoutes = yield* normalizeRoutes(news.routes);
@@ -2713,11 +2736,12 @@ export const LiveWorkerProvider = () =>
             //
             // Domain / route / cron observation is gated on whether Alchemy
             // manages that surface for this Worker (#926). A plain workers.dev
-            // Worker otherwise fans out through listDomains + every account
-            // zone's routes + getScriptSchedule on every plan/deploy read,
-            // which readily trips Cloudflare's account-level 429/971 throttle.
-            // Empty-array props (`domain: []`, `routes: []`, `crons: []`) still
-            // observe so we can detect drift and converge deletions.
+            // Worker otherwise pays for listDomains + zone route listings +
+            // getScriptSchedule on every plan/deploy read. Route observation
+            // is additionally scoped to the zones state/props associate with
+            // this Worker — see readWorkerRoutes. Empty-array props
+            // (`domain: []`, `routes: []`, `crons: []`) still observe so we
+            // can detect drift and converge deletions.
             const observeDomains = shouldObserveWorkerDomains(olds, output);
             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
             const observeCrons = shouldObserveWorkerCrons(olds, output);
@@ -2743,7 +2767,7 @@ export const LiveWorkerProvider = () =>
                         [] as workers.ListDomainsResponse["result"],
                       ),
                   observeRoutes
-                    ? readWorkerRoutes(workerName)
+                    ? readWorkerRoutes(workerName, olds?.routes, output?.routes)
                     : Effect.succeed([] as Worker["Attributes"]["routes"]),
                 ],
                 // Bound concurrency so a single Worker read doesn't stampede
