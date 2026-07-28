@@ -155,10 +155,15 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
         const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
         const mainHost = `alchemy-rdr-a-${suffix}.${customDomainZone}`;
         const oldHost = `alchemy-rdr-b-${suffix}.${customDomainZone}`;
+        const aliasHost = `alchemy-rdr-c-${suffix}.${customDomainZone}`;
 
         yield* stack.destroy();
 
-        const deploy = (domain: { name: string; redirects?: string[] }) =>
+        const deploy = (domain: {
+          name: string;
+          aliases?: string[];
+          redirects?: string[];
+        }) =>
           stack.deploy(
             Effect.gen(function* () {
               return yield* Cloudflare.Worker("RedirectWorker", {
@@ -170,22 +175,28 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
 
         const worker = yield* deploy({
           name: mainHost,
+          aliases: [aliasHost],
           redirects: [oldHost],
         });
 
-        // The redirect hostname is part of the domain config but serves
-        // nothing — it must not appear in `urls`.
+        // All three roles resolve into the domain output; the redirect
+        // hostname serves nothing, so it must not appear in `urls`.
         expect(worker.domain).toEqual({
           name: mainHost,
-          aliases: [],
+          aliases: [aliasHost],
           redirects: [oldHost],
         });
         expect(worker.url).toEqual(`https://${mainHost}`);
+        expect(worker.urls.slice(0, 2)).toEqual([
+          `https://${mainHost}`,
+          `https://${aliasHost}`,
+        ]);
         expect(worker.urls.some((u) => u.includes(oldHost))).toBe(false);
         // workers.dev stays on by default and ranks after the domain.
         expect(worker.urls[worker.urls.length - 1]).toMatch(/\.workers\.dev$/);
 
-        // Our tagged rule exists in the zone's shared entrypoint.
+        // Our tagged rule exists in the zone's shared entrypoint — one for
+        // the redirect host, none for the alias (aliases serve, not 301).
         const zone = yield* findZoneByName({
           accountId,
           name: customDomainZone!,
@@ -195,13 +206,19 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
           yield* listWorkerRedirectRules(zone!.id, worker.workerName),
         ).toEqual([`alchemy:worker:${worker.workerName}:redirect:${oldHost}`]);
 
-        // The canonical domain serves the Worker; the redirect host 301s
-        // with path and query preserved — and never invokes the Worker.
-        // Confirm DNS over DoH before the first fetch (see waitForDns).
+        // The canonical domain AND the alias serve the Worker; the
+        // redirect host 301s with path and query preserved — and never
+        // invokes the Worker. Confirm DNS over DoH before the first fetch
+        // (see waitForDns).
         yield* waitForDns(mainHost);
+        yield* waitForDns(aliasHost);
         yield* waitForDns(oldHost);
         yield* expectUrlContains(worker.url!, "redirect-target", {
           label: "canonical domain serves the worker",
+          timeout: "120 seconds",
+        });
+        yield* expectUrlContains(`https://${aliasHost}`, "redirect-target", {
+          label: "alias serves the worker",
           timeout: "120 seconds",
         });
         yield* expectRedirect(

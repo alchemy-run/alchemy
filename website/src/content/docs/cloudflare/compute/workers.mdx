@@ -229,40 +229,18 @@ for the model across all runtimes.
 
 ## URLs & domains
 
-Every URL that serves a Worker is collected in `worker.urls`, most
-significant first, and `worker.url` is always `urls[0]`. The ranking:
-the canonical custom domain, then its aliases, then the stable
-`workers.dev` URL, then version preview URLs. Under `alchemy dev`,
-`urls` is the local dev server's `[localhost, ...LAN]` addresses
-instead — the URLs actually serving your session. `worker.urls` is
-handy wholesale, e.g. as a CORS allow-list.
-
-The `workersDev` prop controls the `workers.dev` surface: `true` (the
-default) serves the stable URL and enables version previews, `false`
-turns both off, and the object form
-(`{ enabled, previewsEnabled }`) toggles them independently.
-
-To serve the Worker from your own hostname, pass `domain` — a string,
-or an object with `aliases` (additional hostnames that serve the
-Worker) and `redirects` (hostnames that 301 to the canonical name,
-path and query preserved, without ever invoking the Worker). Every
-hostname is attached as a Cloudflare custom domain, so DNS records and
-edge certificates are managed for you; the zone must already exist in
-the account:
+`worker.urls` is every URL that serves the Worker, most significant
+first — and `worker.url` is always `urls[0]`:
 
 ```typescript
-export default Cloudflare.Worker(
-  "Worker",
-  {
-    main: import.meta.url,
-    domain: {
-      name: "example.com",
-      aliases: ["www.example.com"],
-      redirects: ["old.example.com"],
-    },
+const worker = yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  domain: {
+    name: "example.com",
+    aliases: ["www.example.com"],
+    redirects: ["old.example.com"], // 301 → https://example.com
   },
-  // ...
-);
+});
 // worker.url    === "https://example.com"
 // worker.urls   === ["https://example.com", "https://www.example.com",
 //                    "https://<name>.<account>.workers.dev"]
@@ -270,9 +248,36 @@ export default Cloudflare.Worker(
 //                     redirects: ["old.example.com"] }
 ```
 
-Redirect hostnames appear in `worker.domain` but never in
-`worker.urls` — they serve no content. For zone setup, DNS records, and
-route patterns, see the
+Every hostname is attached as a Cloudflare custom domain — DNS records
+and edge certificates are managed for you (the zone must already exist
+in the account). A bare string is shorthand for `{ name }`. Redirect
+hostnames answer with a permanent redirect (path and query preserved)
+before the Worker runs, so they never appear in `urls`.
+
+`workersDev` controls the `workers.dev` surface:
+
+```typescript
+workersDev: false, // no workers.dev URLs — url is the custom domain
+workersDev: { enabled: false, previewsEnabled: true }, // preview URLs only
+```
+
+Under `alchemy dev`, `urls` is the dev server's actual surface:
+
+```typescript
+// worker.url  === "http://localhost:1337"
+// worker.urls === ["http://localhost:1337", "http://192.168.0.12:1337"]
+```
+
+Pass `urls` wholesale wherever a list of origins is needed:
+
+```typescript
+const api = yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  env: { ALLOWED_ORIGINS: site.urls }, // CORS allow-list
+});
+```
+
+For zone setup, DNS records, and route patterns, see the
 [custom domains guide](/cloudflare/networking/custom-domains).
 
 ## Static assets
