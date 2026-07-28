@@ -335,6 +335,64 @@ export interface ProviderService<
   }): Effect.Effect<void, any, DeleteReq>;
 }
 
+/**
+ * The provider shape accepted by {@link effect} / {@link succeed}: identical
+ * to {@link ProviderService} except `list` is **optional**. Providers with no
+ * native enumeration API (local/dev providers, account singletons,
+ * sub-resources keyed entirely by a parent) simply omit it and get a safe
+ * `() => Effect.succeed([])` default.
+ *
+ * Making `list` optional at the constructor (rather than on
+ * {@link ProviderService} itself) keeps the engine's contract intact — every
+ * registered provider still has a callable `list` — while removing the
+ * type-inference trap where a missing required member silently defaults all
+ * `*Req` type params to `never` and produces baffling `R is not assignable
+ * to never` cascades at every other property.
+ */
+export type ProviderServiceInput<
+  Res extends ResourceLike = ResourceLike,
+  ReadReq = never,
+  DiffReq = never,
+  PrecreateReq = never,
+  ReconcileReq = never,
+  DeleteReq = never,
+  TailReq = never,
+  LogsReq = never,
+  ListReq = never,
+> = Omit<
+  ProviderService<
+    Res,
+    ReadReq,
+    DiffReq,
+    PrecreateReq,
+    ReconcileReq,
+    DeleteReq,
+    TailReq,
+    LogsReq,
+    ListReq
+  >,
+  "list"
+> &
+  Partial<
+    Pick<
+      ProviderService<
+        Res,
+        ReadReq,
+        DiffReq,
+        PrecreateReq,
+        ReconcileReq,
+        DeleteReq,
+        TailReq,
+        LogsReq,
+        ListReq
+      >,
+      "list"
+    >
+  >;
+
+const withDefaultList = <S extends { list?: unknown }>(service: S): S =>
+  service.list ? service : { ...service, list: () => Effect.succeed([]) };
+
 export const effect = <
   R extends ResourceLike,
   Req = never,
@@ -349,7 +407,7 @@ export const effect = <
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
   eff: Effect.Effect<
-    ProviderService<
+    ProviderServiceInput<
       R,
       ReadReq,
       DiffReq,
@@ -376,7 +434,7 @@ export const effect = <
     Provider(cls.Type),
     Effect.map(eff, (service) => ({
       aliases: "Aliases" in cls ? cls.Aliases : undefined,
-      ...service,
+      ...withDefaultList(service),
     })),
   ) as any;
 
@@ -392,7 +450,7 @@ export const succeed = <
   ListReq = never,
 >(
   cls: ResourceClass<R> | Platform<R, any, any, any, any>,
-  service: ProviderService<
+  service: ProviderServiceInput<
     R,
     ReadReq,
     DiffReq,
@@ -414,7 +472,7 @@ export const succeed = <
   // @ts-expect-error
   Layer.succeed(Provider(cls.Type), {
     aliases: "Aliases" in cls ? cls.Aliases : undefined,
-    ...service,
+    ...withDefaultList(service),
   });
 
 export interface ProviderCollectionLike {

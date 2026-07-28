@@ -245,8 +245,6 @@ export const ProviderLive = () =>
 export const ProviderLocal = () =>
   Provider.succeed(Namespace, {
     stables: ["accountId"],
-    // Local namespaces are engine-state rows only — nothing to enumerate.
-    list: () => Effect.succeed([]),
     diff: Effect.fn(function* ({ news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!output?.namespaceId) return { action: "update" } as const;

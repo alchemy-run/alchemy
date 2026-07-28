@@ -67,14 +67,32 @@ export interface SelfUrlWorkerBinding {
 }
 
 /**
+ * The `queue` metadata binding extended with the alchemy-only `queueId`.
+ * The local worker provider uses it to discriminate a locally-emulated
+ * queue (`dev:` id → local broker) from an `Alchemy.live()` queue in dev
+ * (real id → remote-proxied producer). Stripped from the binding before
+ * the script upload — Cloudflare never sees it.
+ */
+export type QueueWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "queue" }
+> & {
+  queueId?: string;
+};
+
+/**
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
 export type WireWorkerBinding = Exclude<WorkerBinding, SelfUrlWorkerBinding>;
 
 export type WorkerBinding =
-  | Exclude<DistilledWorkerBinding, { type: "durable_object_namespace" }>
+  | Exclude<
+      DistilledWorkerBinding,
+      { type: "durable_object_namespace" } | { type: "queue" }
+    >
   | DurableObjectNamespaceWorkerBinding
+  | QueueWorkerBinding
   | SelfUrlWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<

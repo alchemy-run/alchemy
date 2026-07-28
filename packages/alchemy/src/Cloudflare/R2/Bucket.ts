@@ -1191,8 +1191,6 @@ export const ProviderLive = () =>
 export const ProviderLocal = () =>
   Provider.succeed(Bucket, {
     stables: ["accountId"],
-    // Local buckets are engine-state rows only — nothing to enumerate.
-    list: () => Effect.succeed([]),
     diff: Effect.fn(function* ({ news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!output?.bucketName) return { action: "update" } as const;

@@ -599,8 +599,6 @@ export const ProviderLocal = () =>
 
       return {
         stables: ["accountId"],
-        // Local databases are engine-state rows only — nothing to enumerate.
-        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ news = {}, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           if (!output?.databaseId) return { action: "update" } as const;

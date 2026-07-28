@@ -363,6 +363,8 @@ const toBinding = (
       type: "queue",
       name: bindingName,
       queueName: binding.queueName,
+      // Alchemy-only mode discriminator for dev (stripped before upload).
+      queueId: binding.queueId,
     };
   } else if (isDispatchNamespace(binding)) {
     return {

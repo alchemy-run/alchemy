@@ -357,6 +357,12 @@ export const LocalWorkerProvider = () =>
           compatibility,
           /** User env (Redacted preserved — the canonical hasher unwraps). */
           env: props.env,
+          /**
+           * Raw inline module source (mutually exclusive with `main`).
+           * Serves as-is without the bundler; part of the hashed config so
+           * editing the script restarts the instance.
+           */
+          script: props.script,
           hasAssets: !!(props.assets || props.vite),
           bindingDescriptors,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
@@ -404,22 +410,30 @@ export const LocalWorkerProvider = () =>
         selfUrl: string | undefined,
       ) {
         const { accountId } = yield* cloudflareEnv;
+        // Resource-backed env entries (e.g. `env: { KV: namespace }`) are
+        // represented by their binding descriptor (same name) — don't ALSO
+        // serialize the resolved attributes as a duplicate json binding.
+        const descriptorNames = new Set(
+          config.bindingDescriptors.map((descriptor) => descriptor.name),
+        );
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
           Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
-          ...Object.entries(config.env ?? {}).map(([key, value]) => {
-            if (isSelfUrl(value)) {
-              return Text.local(key, selfUrl!);
-            }
-            const unredacted = Redacted.isRedacted(value)
-              ? Redacted.value(value)
-              : value;
-            return typeof unredacted === "string"
-              ? Text.local(key, unredacted)
-              : Json.local(key, unredacted);
-          }),
+          ...Object.entries(config.env ?? {})
+            .filter(([key]) => !descriptorNames.has(key))
+            .map(([key, value]) => {
+              if (isSelfUrl(value)) {
+                return Text.local(key, selfUrl!);
+              }
+              const unredacted = Redacted.isRedacted(value)
+                ? Redacted.value(value)
+                : value;
+              return typeof unredacted === "string"
+                ? Text.local(key, unredacted)
+                : Json.local(key, unredacted);
+            }),
           ...(config.hasAssets ? [Assets.local("ASSETS")] : []),
         ];
         for (const descriptor of config.bindingDescriptors) {
@@ -588,6 +602,24 @@ export const LocalWorkerProvider = () =>
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        // Inline `script` workers bypass the bundler entirely — the string
+        // IS the module (mirroring the deploy path, which uploads it as a
+        // single `main.js`). There is nothing to watch: script changes flow
+        // through the hashed config and restart the instance.
+        if (worker.script !== undefined) {
+          yield* serveScoped(
+            worker,
+            {
+              files: [{ path: "main.js", content: worker.script, hash: "" }],
+              hash: "",
+            },
+            proxy,
+          );
+          yield* Effect.log(
+            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
+          );
+          return proxy.url;
+        }
         yield* (
           isPythonMain(worker.bundleOptions.main)
             ? watchPythonWorkerBundle({
@@ -903,6 +935,20 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue":
+      // A real queueId belongs to an `Alchemy.live()` queue. The runtime's
+      // remote queue producer (`Queue.remote`, the queue-remote translator)
+      // is not functional yet — its capnweb RPC leg 500s — so fail loudly at
+      // deploy time instead of wiring a binding that breaks on first send.
+      if (b.queueId !== undefined && !isLocalId(b.queueId)) {
+        return yield* new WorkerValidationError({
+          message:
+            `Queue binding "${b.name}" targets a live queue (Alchemy.live()) — ` +
+            "producing to a real queue from local dev is not supported yet. " +
+            "Remove live() from the queue (local emulation), or run the " +
+            "whole stack live (alchemy deploy).",
+          value: b,
+        });
+      }
       return Queue.local({
         binding: b.name,
         queueName: b.queueName,

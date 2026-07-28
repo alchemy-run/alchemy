@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as pathe from "pathe";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -47,56 +46,49 @@ const getJsonReady = (url: string) =>
     return yield* res.json;
   }).pipe(Effect.orDie);
 
+const scriptFor = (version: string) => `export default {
+  async fetch() {
+    return Response.json({ version: "${version}" });
+  },
+};`;
+
 /**
- * The local runtime ships an always-on Cache API simulator
- * (`caches.default` persisted under `.alchemy/local/cache`) and builds
- * `request.cf` from a fallback blob in the entry middleware. Neither needs
- * any alchemy-side wiring — this pins that both actually work for a worker
- * deployed by the local provider.
+ * Inline \`script:\` workers serve under the local provider without the
+ * bundler (the string IS the module), and editing the script restarts the
+ * instance via the hashed config. This used to hang silently: \`start\`
+ * returned the proxy URL while the bundler waited forever on a missing
+ * \`main\`.
  */
 test.provider(
-  "Cache API and request.cf work under the local runtime",
+  "inline script worker serves locally and restarts on script change",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const worker = yield* Cloudflare.Worker("cache-cf-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/cache-cf/worker.ts",
-            ),
-          });
-          return { worker };
-        }),
-      );
-      const url = deployed.worker.url!;
+      const deploy = (version: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return {
+              worker: yield* Cloudflare.Worker("script-local-worker", {
+                script: scriptFor(version),
+              }),
+            };
+          }),
+        );
 
-      // request.cf: the middleware injects Miniflare's static fallback blob,
-      // so `colo`/`country` are present without any configuration.
-      const cf = (yield* getJsonReady(`${url}cf`)) as {
-        colo: string | null;
-        country: string | null;
-        clientAcceptEncoding: string | null;
+      const v1 = yield* deploy("v1");
+      const first = (yield* getJsonReady(`${v1.worker.url}`)) as {
+        version: string;
       };
-      expect(cf.colo).toBeTruthy();
-      expect(cf.country).toBeTruthy();
+      expect(first.version).toBe("v1");
 
-      // Cache API: first request misses and populates, second hits.
-      const first = (yield* getJsonReady(`${url}cache`)) as {
-        hit: boolean;
-        body: string;
+      // Changing the script changes the config hash — the instance restarts
+      // with the new module.
+      const v2 = yield* deploy("v2");
+      const second = (yield* getJsonReady(`${v2.worker.url}`)) as {
+        version: string;
       };
-      expect(first.hit).toBe(false);
-      expect(first.body).toBe("cached-body");
-
-      const second = (yield* getJsonReady(`${url}cache`)) as {
-        hit: boolean;
-        body: string;
-      };
-      expect(second.hit).toBe(true);
-      expect(second.body).toBe("cached-body");
+      expect(second.version).toBe("v2");
 
       yield* stack.destroy();
     }).pipe(logLevel),

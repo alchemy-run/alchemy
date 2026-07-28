@@ -1530,6 +1530,13 @@ export const LiveWorkerProvider = () =>
               const { transferredFrom: _, ...rest } = item;
               return rest;
             }
+            // `queueId` is alchemy-only mode-discrimination metadata on
+            // queue bindings (dev-mode local broker vs remote proxy) — strip
+            // it from the wire shape.
+            if (item.type === "queue" && item.queueId !== undefined) {
+              const { queueId: _, ...rest } = item;
+              return rest;
+            }
             return item;
           }),
         );

@@ -38,8 +38,13 @@ const getJsonReady = (url: string) =>
       ),
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
+        // Cap the backoff: an uncapped exponential over 10 recurs sums to
+        // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.exponential("500 millis"),
+          Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("2 seconds"),
+          ]),
           Schedule.recurs(10),
         ]),
       }),
