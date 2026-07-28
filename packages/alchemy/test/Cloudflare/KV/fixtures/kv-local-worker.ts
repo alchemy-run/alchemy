@@ -39,6 +39,10 @@ export default {
         afterDelete,
       });
     }
+    if (url.pathname === "/get") {
+      const value = await kv.get(url.searchParams.get("key") ?? "");
+      return Response.json({ value });
+    }
     return new Response("not found", { status: 404 });
   },
 };

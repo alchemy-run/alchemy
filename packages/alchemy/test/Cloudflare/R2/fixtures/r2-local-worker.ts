@@ -53,6 +53,10 @@ export default {
         afterDelete: afterDelete === null,
       });
     }
+    if (url.pathname === "/get") {
+      const obj = await env.BUCKET.get(url.searchParams.get("key") ?? "");
+      return Response.json({ text: obj === null ? null : await obj.text() });
+    }
     return new Response("not found", { status: 404 });
   },
 };

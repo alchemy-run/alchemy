@@ -18,7 +18,10 @@ export default {
       });
     }
     if (url.pathname === "/cache") {
-      const key = new Request("https://example.com/cached-resource");
+      // The cache simulator persists in `.alchemy/local` across runs — a
+      // caller-supplied key keeps "first fetch misses" deterministic.
+      const keyName = url.searchParams.get("key") ?? "cached-resource";
+      const key = new Request(`https://example.com/${keyName}`);
       let hit = true;
       let res = await caches.default.match(key);
       if (!res) {

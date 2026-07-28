@@ -1,3 +1,4 @@
+import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
@@ -93,6 +94,79 @@ test.provider(
       expect(body.size).toBe("hello r2".length);
       expect(body.keys).toEqual(["greeting.txt"]);
       expect(body.afterDelete).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * The `*Local` R2 capability layers reach the local simulator through an
+ * ephemeral workerd gateway that emulates the R2 REST API over the native
+ * binding. An Action seeds (put/get/head/list/delete) a `dev:` bucket, and
+ * the worker's native binding then reads the same simulator storage —
+ * proving Node-side capability clients and worker bindings share one local
+ * data plane.
+ */
+test.provider(
+  "ReadWriteBucketLocal Action seeds the local simulator in dev",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("ActionSeededBucket");
+
+          const Seed = Action(
+            "Seed",
+            Effect.gen(function* () {
+              const client = yield* Cloudflare.R2.ReadWriteBucket(bucket);
+              return Effect.fn(function* () {
+                yield* client.put("seeded.txt", "from-action", {
+                  httpMetadata: { contentType: "text/plain" },
+                });
+                yield* client.put("other.txt", "value");
+                const object = yield* client.get("seeded.txt");
+                const text = object === null ? null : yield* object.text();
+                const head = yield* client.head("seeded.txt");
+                const list = yield* client.list();
+                yield* client.delete("other.txt");
+                const afterDelete = yield* client.get("other.txt");
+                return {
+                  text,
+                  contentType: head?.httpMetadata?.contentType ?? null,
+                  keys: list.objects.map((o) => o.key),
+                  afterDelete: afterDelete === null,
+                };
+              });
+            }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketLocal)),
+          );
+          const seeded = yield* Seed({});
+
+          const worker = yield* Cloudflare.Worker("r2-action-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/r2-local-worker.ts",
+            ),
+            env: { BUCKET: bucket },
+          });
+          return { bucket, worker, seeded };
+        }),
+      );
+
+      expect(deployed.bucket.bucketName).toMatch(/^dev:/);
+      expect(deployed.seeded.text).toBe("from-action");
+      expect(deployed.seeded.contentType).toBe("text/plain");
+      expect(deployed.seeded.keys.sort()).toEqual(["other.txt", "seeded.txt"]);
+      expect(deployed.seeded.afterDelete).toBe(true);
+
+      // The worker's native binding reads the same simulator storage the
+      // Action's gateway wrote to.
+      const body = (yield* getJsonReady(
+        `${deployed.worker.url}get?key=seeded.txt`,
+      )) as { text: string | null };
+      expect(body.text).toBe("from-action");
 
       yield* stack.destroy();
     }).pipe(logLevel),

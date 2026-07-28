@@ -940,17 +940,21 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue":
-      // A real queueId belongs to an `Alchemy.live()` queue. The runtime's
-      // remote queue producer (`Queue.remote`, the queue-remote translator)
-      // is not functional yet — its capnweb RPC leg 500s — so fail loudly at
-      // deploy time instead of wiring a binding that breaks on first send.
+      // A real queueId belongs to an `Alchemy.live()` queue. Queue bindings
+      // are NOT supported in Cloudflare's remote/preview sessions — a
+      // platform limitation, not an alchemy one: an edge-preview worker
+      // with a queue binding serves 503 for every request, wrangler's
+      // remote bindings exclude Queues, and `wrangler dev --remote` rejects
+      // them outright (cloudflare/workers-sdk#9929). Fail the deploy loudly
+      // instead of wiring a binding that breaks on first send.
       if (b.queueId !== undefined && !isLocalId(b.queueId)) {
         return yield* new WorkerValidationError({
           message:
             `Queue binding "${b.name}" targets a live queue (Alchemy.live()) — ` +
-            "producing to a real queue from local dev is not supported yet. " +
-            "Remove live() from the queue (local emulation), or run the " +
-            "whole stack live (alchemy deploy).",
+            "Cloudflare's remote-binding sessions do not support Queues " +
+            "(see cloudflare/workers-sdk#9929), so a live queue cannot be " +
+            "produced to from local dev. Remove live() from the queue " +
+            "(local emulation), or run the whole stack live (alchemy deploy).",
           value: b,
         });
       }

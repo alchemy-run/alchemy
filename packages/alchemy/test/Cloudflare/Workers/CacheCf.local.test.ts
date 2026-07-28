@@ -83,15 +83,17 @@ test.provider(
       expect(cf.colo).toBeTruthy();
       expect(cf.country).toBeTruthy();
 
-      // Cache API: first request misses and populates, second hits.
-      const first = (yield* getJsonReady(`${url}cache`)) as {
+      // Cache API: first request misses and populates, second hits. The
+      // simulator's storage persists across runs, so use a per-run key.
+      const cacheKey = crypto.randomUUID();
+      const first = (yield* getJsonReady(`${url}cache?key=${cacheKey}`)) as {
         hit: boolean;
         body: string;
       };
       expect(first.hit).toBe(false);
       expect(first.body).toBe("cached-body");
 
-      const second = (yield* getJsonReady(`${url}cache`)) as {
+      const second = (yield* getJsonReady(`${url}cache?key=${cacheKey}`)) as {
         hit: boolean;
         body: string;
       };

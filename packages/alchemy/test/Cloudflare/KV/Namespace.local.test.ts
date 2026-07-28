@@ -1,3 +1,4 @@
+import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
@@ -94,6 +95,78 @@ test.provider(
       expect(body.metadata).toEqual({ hello: "world" });
       expect(body.keys.sort()).toEqual(["key1", "key2"]);
       expect(body.afterDelete).toBeNull();
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * The `*Local` KV capability layers reach the local simulator through an
+ * ephemeral workerd gateway that emulates the KV REST API over the native
+ * binding. An Action seeds (put/get/getWithMetadata/list/delete) a `dev:`
+ * namespace, and the worker's native binding then reads the same simulator
+ * storage — proving Node-side capability clients and worker bindings share
+ * one local data plane.
+ */
+test.provider(
+  "ReadWriteNamespaceLocal Action seeds the local simulator in dev",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const ns = yield* Cloudflare.KV.Namespace("ActionSeededKV");
+
+          const Seed = Action(
+            "Seed",
+            Effect.gen(function* () {
+              const client = yield* Cloudflare.KV.ReadWriteNamespace(ns);
+              return Effect.fn(function* () {
+                yield* client.put("seeded", "from-action", {
+                  metadata: { source: "action" },
+                });
+                yield* client.put("other", "value");
+                const value = yield* client.get("seeded");
+                const withMetadata = yield* client.getWithMetadata("seeded");
+                const list = yield* client.list();
+                yield* client.delete("other");
+                const afterDelete = yield* client.get("other");
+                return {
+                  value,
+                  metadata: withMetadata.metadata,
+                  keys: list.keys.map((k) => k.name),
+                  afterDelete,
+                };
+              });
+            }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceLocal)),
+          );
+          const seeded = yield* Seed({});
+
+          const worker = yield* Cloudflare.Worker("kv-action-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/kv-local-worker.ts",
+            ),
+            env: { KV: ns },
+          });
+          return { ns, worker, seeded };
+        }),
+      );
+
+      expect(deployed.ns.namespaceId).toMatch(/^dev:/);
+      expect(deployed.seeded.value).toBe("from-action");
+      expect(deployed.seeded.metadata).toEqual({ source: "action" });
+      expect(deployed.seeded.keys.sort()).toEqual(["other", "seeded"]);
+      expect(deployed.seeded.afterDelete).toBeNull();
+
+      // The worker's native binding reads the same simulator storage the
+      // Action's gateway wrote to.
+      const body = (yield* getJsonReady(
+        `${deployed.worker.url}get?key=seeded`,
+      )) as { value: string | null };
+      expect(body.value).toBe("from-action");
 
       yield* stack.destroy();
     }).pipe(logLevel),
