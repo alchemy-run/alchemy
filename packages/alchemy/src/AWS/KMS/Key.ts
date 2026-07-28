@@ -1,4 +1,5 @@
 import * as kms from "@distilled.cloud/aws/kms";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -7,8 +8,14 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
+import type { PolicyDocument } from "../IAM/Policy.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+} from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 
 export type KeyId = string;
 export type KeyArn = `arn:aws:kms:${RegionID}:${AccountID}:key/${KeyId}`;
@@ -31,9 +38,11 @@ export interface KeyProps {
    */
   keySpec?: kms.KeySpec;
   /**
-   * Key policy JSON. If omitted, AWS creates and manages the default key policy.
+   * Key policy, either as a structured {@link PolicyDocument} or a raw JSON
+   * string (escape hatch). If omitted, AWS creates and manages the default
+   * key policy.
    */
-  policy?: string;
+  policy?: PolicyDocument | string;
   /**
    * Whether to bypass KMS policy lockout safety checks when creating or updating
    * the key policy.
@@ -51,20 +60,24 @@ export interface KeyProps {
    */
   enableKeyRotation?: boolean;
   /**
-   * Rotation period in days when automatic key rotation is enabled.
+   * Rotation period when automatic key rotation is enabled. Accepts any
+   * `Duration.Input` (e.g. `"90 days"`, `Duration.days(90)`; a bare number
+   * is milliseconds); the wire unit is whole days.
    */
-  rotationPeriodInDays?: number;
+  rotationPeriod?: Duration.Input;
   /**
    * Whether to create a multi-region primary key.
    * @default false
    */
   multiRegion?: boolean;
   /**
-   * Waiting period, in days, before AWS permanently deletes the key after
-   * destroy schedules deletion.
-   * @default 30
+   * Waiting period before AWS permanently deletes the key after destroy
+   * schedules deletion. Accepts any `Duration.Input` (e.g. `"7 days"`,
+   * `Duration.days(7)`; a bare number is milliseconds); the wire unit is
+   * whole days.
+   * @default 30 days
    */
-  deletionWindowInDays?: number;
+  deletionWindow?: Duration.Input;
   /**
    * User-defined tags to apply to the key.
    */
@@ -104,7 +117,7 @@ export interface Key extends Resource<
  * const key = yield* KMS.Key("AppKey", {
  *   description: "Application encryption key",
  *   enableKeyRotation: true,
- *   deletionWindowInDays: 7,
+ *   deletionWindow: "7 days",
  * });
  * ```
  *
@@ -112,15 +125,45 @@ export interface Key extends Resource<
  * @example Key with Inline Policy
  * ```typescript
  * const key = yield* KMS.Key("PolicyKey", {
- *   policy: JSON.stringify({
+ *   policy: {
  *     Version: "2012-10-17",
  *     Statement: [{
  *       Effect: "Allow",
  *       Principal: { AWS: "arn:aws:iam::123456789012:root" },
- *       Action: "kms:*",
+ *       Action: ["kms:*"],
  *       Resource: "*",
  *     }],
- *   }),
+ *   },
+ * });
+ * ```
+ *
+ * @section Runtime Operations
+ * Bind the KMS crypto operations to the key inside a Lambda function.
+ * Each binding grants least-privilege IAM (the exact key ARN) and injects
+ * the `KeyId` automatically.
+ *
+ * @example Encrypt and Decrypt from a Lambda Function
+ * ```typescript
+ * // init
+ * const key = yield* AWS.KMS.Key("AppKey");
+ * const encrypt = yield* AWS.KMS.Encrypt(key);
+ * const decrypt = yield* AWS.KMS.Decrypt(key);
+ *
+ * // runtime
+ * const { CiphertextBlob } = yield* encrypt({
+ *   Plaintext: new TextEncoder().encode("secret"),
+ * });
+ * const { Plaintext } = yield* decrypt({ CiphertextBlob });
+ * ```
+ *
+ * @example Envelope Encryption with a Data Key
+ * ```typescript
+ * // init
+ * const generateDataKey = yield* AWS.KMS.GenerateDataKey(key);
+ *
+ * // runtime — encrypt locally with the plaintext key, store the blob
+ * const { Plaintext, CiphertextBlob } = yield* generateDataKey({
+ *   KeySpec: "AES_256",
  * });
  * ```
  */
@@ -171,7 +214,7 @@ export const KeyProvider = () =>
         keyId: output.keyId,
         deletionWindowInDays:
           output.deletionWindowInDays ??
-          olds.deletionWindowInDays ??
+          toWireDays(olds.deletionWindow) ??
           defaultDeletionWindowInDays,
       });
     }),
@@ -195,7 +238,14 @@ export const KeyProvider = () =>
       const enableKeyRotation = news.enableKeyRotation ?? false;
       const multiRegion = news.multiRegion ?? false;
       const deletionWindowInDays =
-        news.deletionWindowInDays ?? defaultDeletionWindowInDays;
+        toWireDays(news.deletionWindow) ?? defaultDeletionWindowInDays;
+      const rotationPeriodInDays = toWireDays(news.rotationPeriod);
+      const desiredPolicy =
+        news.policy === undefined
+          ? undefined
+          : typeof news.policy === "string"
+            ? news.policy
+            : stringifyPolicyDocument(news.policy);
 
       // Observe via the cached identifier only — no tag-based discovery. On a
       // create or replacement the engine calls reconcile with
@@ -218,7 +268,7 @@ export const KeyProvider = () =>
           Description: news.description,
           KeyUsage: keyUsage,
           KeySpec: keySpec,
-          Policy: news.policy,
+          Policy: desiredPolicy,
           BypassPolicyLockoutSafetyCheck: news.bypassPolicyLockoutSafetyCheck,
           Tags: toKmsTags(desiredTags),
           MultiRegion: multiRegion,
@@ -259,12 +309,15 @@ export const KeyProvider = () =>
         );
       }
 
-      if (news.policy !== undefined && !sameJson(state.policy, news.policy)) {
+      if (
+        desiredPolicy !== undefined &&
+        !samePolicy(state.policy, desiredPolicy)
+      ) {
         yield* kms
           .putKeyPolicy({
             KeyId: state.keyId,
             PolicyName: "default",
-            Policy: news.policy,
+            Policy: desiredPolicy,
             BypassPolicyLockoutSafetyCheck: news.bypassPolicyLockoutSafetyCheck,
           })
           .pipe(
@@ -278,13 +331,13 @@ export const KeyProvider = () =>
       if (
         enableKeyRotation &&
         (state.keyRotationEnabled !== true ||
-          (news.rotationPeriodInDays !== undefined &&
-            state.rotationPeriodInDays !== news.rotationPeriodInDays))
+          (rotationPeriodInDays !== undefined &&
+            state.rotationPeriodInDays !== rotationPeriodInDays))
       ) {
         yield* kms
           .enableKeyRotation({
             KeyId: state.keyId,
-            RotationPeriodInDays: news.rotationPeriodInDays,
+            RotationPeriodInDays: rotationPeriodInDays,
           })
           .pipe(
             Effect.retry({
@@ -347,8 +400,8 @@ export const KeyProvider = () =>
         desiredDescription,
         desiredEnabled: enabled,
         desiredKeyRotationEnabled: enableKeyRotation,
-        desiredPolicy: news.policy,
-        desiredRotationPeriodInDays: news.rotationPeriodInDays,
+        desiredPolicy,
+        desiredRotationPeriodInDays: rotationPeriodInDays,
         desiredTags,
       });
 
@@ -365,6 +418,25 @@ export const KeyProvider = () =>
           Effect.catchTag("NotFoundException", () => Effect.void),
           Effect.catchTag("KMSInvalidStateException", () => Effect.void),
         );
+
+      const remaining = yield* Effect.repeat(
+        kms.describeKey({ KeyId: output.keyId }).pipe(
+          Effect.map((response) => response.KeyMetadata?.KeyState),
+          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        ),
+        {
+          schedule: Schedule.fixed("250 millis"),
+          until: (state) => state === undefined || state === "PendingDeletion",
+          times: 20,
+        },
+      );
+      if (remaining !== undefined && remaining !== "PendingDeletion") {
+        yield* Effect.die(
+          new Error(
+            `KMS key ${output.keyId} remained ${remaining} after scheduling deletion`,
+          ),
+        );
+      }
       yield* session.note(`Scheduled KMS key deletion: ${output.keyId}`);
     }),
   });
@@ -425,7 +497,7 @@ const readConvergedKey = Effect.fn(function* ({
   desiredRotationPeriodInDays: number | undefined;
   desiredTags: Record<string, string>;
 }) {
-  return yield* Effect.gen(function* () {
+  const observeConverged = Effect.gen(function* () {
     const key = yield* readKey({ keyId, deletionWindowInDays });
     if (!key) {
       return yield* Effect.fail(new KmsKeyNotConverged());
@@ -446,7 +518,7 @@ const readConvergedKey = Effect.fn(function* ({
     ) {
       return yield* Effect.fail(new KmsKeyNotConverged());
     }
-    if (desiredPolicy !== undefined && !sameJson(key.policy, desiredPolicy)) {
+    if (desiredPolicy !== undefined && !samePolicy(key.policy, desiredPolicy)) {
       return yield* Effect.fail(new KmsKeyNotConverged());
     }
     if (desiredEnabled) {
@@ -465,6 +537,17 @@ const readConvergedKey = Effect.fn(function* ({
       }
     }
     return key;
+  });
+
+  return yield* Effect.gen(function* () {
+    // KMS reads can briefly move backwards after a successful mutation (for
+    // example, GetKeyPolicy may serve the new policy once and then an older
+    // replica's default policy). A single matching read is therefore not a
+    // sufficient convergence signal under high concurrency. Require two
+    // consecutive observations before returning the resource to the engine.
+    yield* observeConverged;
+    yield* Effect.sleep("500 millis");
+    return yield* observeConverged;
   }).pipe(
     Effect.retry({
       while: (error: { _tag: string }) =>
@@ -550,31 +633,18 @@ const toTagRecord = (tags: kms.Tag[] | undefined): Record<string, string> =>
 const toKmsTags = (tags: Record<string, string>): kms.Tag[] =>
   Object.entries(tags).map(([TagKey, TagValue]) => ({ TagKey, TagValue }));
 
-const sameJson = (left: string | undefined, right: string | undefined) => {
-  if (left === right) return true;
-  if (left === undefined || right === undefined) return false;
-  try {
-    return (
-      JSON.stringify(canonicalizeJson(JSON.parse(left))) ===
-      JSON.stringify(canonicalizeJson(JSON.parse(right)))
-    );
-  } catch {
-    return false;
-  }
-};
-
-const canonicalizeJson = (value: unknown): unknown => {
-  if (Array.isArray(value)) {
-    return value.map(canonicalizeJson);
-  }
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, item]) => [key, canonicalizeJson(item)]),
-    );
-  }
-  return value;
+/**
+ * Compare the observed key policy against the desired one using the shared
+ * IAM canonicalizer so a re-deploy of an equivalent document (different key
+ * order, whitespace, or PolicyDocument-vs-string form) is a no-op.
+ */
+const samePolicy = (
+  observed: string | undefined,
+  desired: string | undefined,
+) => {
+  if (observed === desired) return true;
+  if (observed === undefined || desired === undefined) return false;
+  return normalizePolicyDocument(observed) === normalizePolicyDocument(desired);
 };
 
 const isKmsEventuallyConsistent = (error: { _tag: string }) =>

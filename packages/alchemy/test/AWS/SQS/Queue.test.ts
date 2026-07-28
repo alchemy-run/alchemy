@@ -8,6 +8,7 @@ import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/unstable/http/HttpBody";
@@ -29,6 +30,8 @@ const provider: typeof test.provider = ((name, fn, opts) =>
 
 provider("create and delete queue with default props", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("DefaultQueue");
@@ -53,11 +56,16 @@ provider("create and delete queue with default props", (stack) =>
 
 provider("create, update, delete standard queue", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
-          visibilityTimeout: 30,
-          delaySeconds: 0,
+          visibilityTimeout: "30 seconds",
+          delay: "0 seconds",
+          // exercise the non-string Duration.Input forms end-to-end
+          messageRetentionPeriod: Duration.days(4),
+          receiveMessageWaitTime: 10_000, // bare number = millis
         });
       }),
     );
@@ -69,13 +77,21 @@ provider("create, update, delete standard queue", (stack) =>
     });
     expect(queueAttributes.Attributes?.VisibilityTimeout).toEqual("30");
     expect(queueAttributes.Attributes?.DelaySeconds).toEqual("0");
+    expect(queueAttributes.Attributes?.MessageRetentionPeriod).toEqual(
+      "345600",
+    );
+    expect(queueAttributes.Attributes?.ReceiveMessageWaitTimeSeconds).toEqual(
+      "10",
+    );
 
     // Update the queue
     const updatedQueue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestQueue", {
-          visibilityTimeout: 60,
-          delaySeconds: 5,
+          visibilityTimeout: "60 seconds",
+          delay: "5 seconds",
+          messageRetentionPeriod: "5 days",
+          receiveMessageWaitTime: "20 seconds",
         });
       }),
     );
@@ -84,6 +100,8 @@ provider("create, update, delete standard queue", (stack) =>
     yield* waitForQueueAttributeMatch(updatedQueue.queueUrl, {
       VisibilityTimeout: "60",
       DelaySeconds: "5",
+      MessageRetentionPeriod: "432000",
+      ReceiveMessageWaitTimeSeconds: "20",
     });
 
     yield* stack.destroy();
@@ -94,12 +112,14 @@ provider("create, update, delete standard queue", (stack) =>
 
 provider("create, update, delete fifo queue", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("TestFifoQueue", {
           fifo: true,
           contentBasedDeduplication: false,
-          visibilityTimeout: 30,
+          visibilityTimeout: "30 seconds",
         });
       }),
     );
@@ -123,7 +143,7 @@ provider("create, update, delete fifo queue", (stack) =>
         return yield* Queue("TestFifoQueue", {
           fifo: true,
           contentBasedDeduplication: true,
-          visibilityTimeout: 60,
+          visibilityTimeout: "60 seconds",
         });
       }),
     );
@@ -142,6 +162,8 @@ provider("create, update, delete fifo queue", (stack) =>
 
 provider("create queue with custom name", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("CustomNameQueue", {
@@ -170,7 +192,7 @@ provider(
   "QueueSink writes arbitrary messages through a deployed Lambda",
   (stack) =>
     Effect.gen(function* () {
-      // yield* stack.destroy();
+      yield* stack.destroy();
 
       const apiFunction = yield* stack.deploy(
         QueueSinkFunction.pipe(Effect.provide(QueueSinkFunctionLive)),
@@ -179,14 +201,20 @@ provider(
 
       const { queueUrl } = yield* waitForFunctionReady(`${baseUrl}/ready`);
 
-      const messages = [
-        `sink-${crypto.randomUUID()}`,
-        `sink-${crypto.randomUUID()}`,
-        `sink-${crypto.randomUUID()}`,
-      ];
+      // 25 messages > the SendMessageBatch limit of 10, so the batched sink
+      // must split the chunk into 3 sequential API calls (10 + 10 + 5).
+      const messages = Array.from(
+        { length: 25 },
+        (_, i) => `sink-${i}-${crypto.randomUUID()}`,
+      );
       const response = yield* HttpClient.post(`${baseUrl}/sink`, {
         body: yield* HttpBody.json({ messages }),
       }).pipe(
+        // QueueSink can legitimately spend several seconds retrying a partial
+        // batch failure, but a stalled Function URL request must not consume
+        // the whole test timeout.
+        Effect.timeout("15 seconds"),
+        Effect.mapError(() => "not ready" as const),
         Effect.flatMap((result) =>
           result.status === 200
             ? Effect.succeed(result)
@@ -195,10 +223,8 @@ provider(
         Effect.tapError(Console.log),
         Effect.retry({
           while: (error) => error === "not ready",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.fixed("3 seconds"),
+          times: 4,
         }),
         Effect.flatMap((result) => result.json),
       );
@@ -218,15 +244,31 @@ provider(
 );
 
 // Engine-level adoption tests for SQS Queue.
+//
+// These tests wipe the engine state mid-test, which makes the live queue
+// invisible to the framework's automatic scratch-stack teardown. To satisfy
+// the "test passing implies zero leftover cloud resources" contract they:
+//   1. use a DETERMINISTIC queue name (stable across runs, so a re-run
+//      reclaims any prior orphan instead of minting a new one),
+//   2. pre-clean the name at the start (idempotent delete-if-exists; the
+//      provider's `QueueDeletedRecently` retry rides out SQS's 60s
+//      recreate-after-delete window), and
+//   3. guarantee cleanup with `Effect.ensuring(deleteQueueIfExists(...))`,
+//      which runs on success, failure, AND interruption.
+const ADOPT_QUEUE_NAME = "alchemy-test-sqs-adopt";
+const TAKEOVER_QUEUE_NAME = "alchemy-test-sqs-takeover";
+
 provider(
   "owned queue (matching alchemy tags) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const queueName = `alchemy-test-sqs-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      const queueName = ADOPT_QUEUE_NAME;
+
+      // Reclaim a leftover from a previously-killed run (idempotent no-op
+      // when the account is clean).
+      yield* deleteQueueIfExists(queueName);
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
@@ -256,16 +298,18 @@ provider(
 
       yield* stack.destroy();
       yield* assertQueueDeleted(initial.queueUrl);
-    }),
+    }).pipe(Effect.ensuring(deleteQueueIfExists(ADOPT_QUEUE_NAME))),
 );
 
 provider("foreign-tagged queue requires adopt(true) to take over", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const queueName = `alchemy-test-sqs-takeover-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    const queueName = TAKEOVER_QUEUE_NAME;
+
+    // Reclaim a leftover from a previously-killed run (idempotent no-op
+    // when the account is clean).
+    yield* deleteQueueIfExists(queueName);
 
     const original = yield* stack.deploy(
       Effect.gen(function* () {
@@ -295,7 +339,7 @@ provider("foreign-tagged queue requires adopt(true) to take over", (stack) =>
 
     yield* stack.destroy();
     yield* assertQueueDeleted(takenOver.queueUrl);
-  }),
+  }).pipe(Effect.ensuring(deleteQueueIfExists(TAKEOVER_QUEUE_NAME))),
 );
 
 provider(
@@ -340,6 +384,8 @@ provider(
   "DLQ redrive policy round-trips and can be removed",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       // Create the DLQ and source together, keeping both deployed across
       // steps to avoid the engine replace+remove-dependency deadlock.
       const deployBoth = (withRedrive: boolean) =>
@@ -389,6 +435,8 @@ provider(
   "redriveAllowPolicy is set on the dead-letter queue",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { dlq } = yield* stack.deploy(
         Effect.gen(function* () {
           const source = yield* Queue("AllowSource");
@@ -419,6 +467,8 @@ provider(
 
 provider("SSE-SQS encryption enables sqs-managed key", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("SseSqsQueue", { sqsManagedSseEnabled: true });
@@ -436,11 +486,13 @@ provider("SSE-SQS encryption enables sqs-managed key", (stack) =>
 
 provider("SSE-KMS encryption with AWS-managed key", (stack) =>
   Effect.gen(function* () {
+    yield* stack.destroy();
+
     const queue = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Queue("KmsQueue", {
           kmsMasterKeyId: "alias/aws/sqs",
-          kmsDataKeyReusePeriodSeconds: 300,
+          kmsDataKeyReusePeriod: "300 seconds",
         });
       }),
     );
@@ -459,6 +511,8 @@ provider(
   "kmsMasterKeyId and sqsManagedSseEnabled together fail fast",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const result = yield* stack
         .deploy(
           Effect.gen(function* () {
@@ -481,6 +535,8 @@ provider(
   "user tags coexist with internal tags and can be removed",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const withTags = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Queue("TaggedQueue", {
@@ -531,6 +587,8 @@ provider(
   "FIFO source with FIFO dead-letter queue (no type mismatch)",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { source } = yield* stack.deploy(
         Effect.gen(function* () {
           const dlq = yield* Queue("FifoDLQ", { fifo: true });
@@ -570,6 +628,8 @@ class QueueAttributesNotReady extends Data.TaggedError(
 
 const waitForFunctionReady = (url: string) =>
   HttpClient.get(url).pipe(
+    Effect.timeout("4 seconds"),
+    Effect.mapError(() => new FunctionNotReady()),
     Effect.flatMap((response) =>
       response.status === 200
         ? (response.json as Effect.Effect<{ queueUrl: string }>)
@@ -585,10 +645,8 @@ const waitForFunctionReady = (url: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(75),
-      ]),
+      schedule: Schedule.fixed("4 seconds"),
+      times: 10,
     }),
   );
 
@@ -689,6 +747,27 @@ const waitForQueueMessage = (queueUrl: string) =>
         Schedule.recurs(20),
       ]),
     }),
+  );
+
+/**
+ * Idempotent out-of-band delete by queue name. Used by the adoption tests
+ * (which wipe engine state mid-test, hiding the queue from the automatic
+ * scratch-stack teardown) both as a pre-clean at test start and as an
+ * `Effect.ensuring` finalizer, so it must never fail: not-found is success,
+ * and any residual transient error is retried on a bounded schedule then
+ * swallowed.
+ */
+const deleteQueueIfExists = (queueName: string) =>
+  SQS.getQueueUrl({ QueueName: queueName }).pipe(
+    Effect.flatMap((r) => SQS.deleteQueue({ QueueUrl: r.QueueUrl! })),
+    Effect.catchTag("QueueDoesNotExist", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(5),
+      ]),
+    }),
+    Effect.catch(() => Effect.void),
   );
 
 const assertQueueDeleted = Effect.fn(function* (queueUrl: string) {

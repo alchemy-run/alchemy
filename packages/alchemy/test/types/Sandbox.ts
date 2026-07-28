@@ -19,7 +19,7 @@ export const SandboxLive = Sandbox.make(
     main: import.meta.url,
     // handler: "SandboxLive",
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
-    dockerfile: `FROM alpine:latest`,
+    image: "alpine:latest",
   })),
   Effect.gen(function* () {
     // bind dependencies

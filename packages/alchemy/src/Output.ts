@@ -12,7 +12,7 @@ import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
-import { isPrimitive } from "./Util/data.ts";
+import { isPrimitive, type Primitive } from "./Util/data.ts";
 
 const inspect = Symbol.for("nodejs.util.inspect.custom");
 
@@ -27,10 +27,15 @@ export const of = <R extends ResourceLike>(
       metadata.stack,
       metadata.stage,
       metadata.id,
-      // Surface the target's resource type as a statically-known
-      // property so duck-typing classifiers (Worker env bindings)
-      // identify the ref exactly like a locally-declared resource.
-      metadata.type !== undefined ? { Type: metadata.type } : undefined,
+      // Surface the target's resource type and logical id as
+      // statically-known properties so duck-typing classifiers (Worker
+      // env bindings) and label/bind templates (`${resource.LogicalId}`,
+      // `host.bind\`...\``) identify the ref exactly like a
+      // locally-declared resource.
+      {
+        LogicalId: metadata.id,
+        ...(metadata.type !== undefined ? { Type: metadata.type } : {}),
+      },
     ) as any;
   }
   return new ResourceExpr(resource) as any;
@@ -68,16 +73,24 @@ export interface Output<A = any, Req = any> extends Pipeable {
 
 export interface Accessor<A> extends Effect.Effect<A> {}
 
-export type ToOutput<A, Req = never> = [Extract<A, object>] extends [never]
-  ? Output<A, Req>
-  : [Extract<A, any[]>] extends [never]
-    ? ObjectExpr<
-        {
-          [attr in keyof A]: A[attr];
-        },
-        Req
-      >
-    : ArrayExpr<Extract<A, any[]>, Req>;
+export type ToOutput<A, Req = never> =
+  // Branded primitives (`string & Brand<"...">`) are assignable to `object`
+  // via the brand intersection, so they must short-circuit to a plain Output
+  // before the object check — otherwise they explode into an ObjectExpr
+  // mapped over every String/Number method. Date is opaque for the same
+  // reason (mirrors AttrOutput in Resource.ts).
+  [A] extends [Primitive | Date]
+    ? Output<A, Req>
+    : [Extract<A, object>] extends [never]
+      ? Output<A, Req>
+      : [Extract<A, any[]>] extends [never]
+        ? ObjectExpr<
+            {
+              [attr in keyof A]: A[attr];
+            },
+            Req
+          >
+        : ArrayExpr<Extract<A, any[]>, Req>;
 
 export const ExprSymbol = Symbol.for("alchemy/Expr");
 
@@ -483,7 +496,16 @@ function proxy(self: any): any {
   }
   const proxy = new Proxy(target, {
     has: (_, prop) =>
-      prop === ExprSymbol || prop === inspect ? true : prop in self,
+      prop === ExprSymbol || prop === inspect
+        ? true
+        : // Statically-known literal props (`Type`, `LogicalId` on
+          // resource/ref exprs) are visible to `in` checks so duck-typing
+          // code paths (e.g. `"LogicalId" in arg`) treat them like real
+          // properties, matching what `get` serves.
+          ((isResourceExpr(self) || isRefExpr(self)) &&
+            self.stables !== undefined &&
+            prop in self.stables) ||
+          prop in self,
     get: (target, prop) =>
       prop === Symbol.toPrimitive
         ? (hint: string) => {

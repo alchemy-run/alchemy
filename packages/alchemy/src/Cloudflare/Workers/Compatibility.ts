@@ -1,3 +1,4 @@
+import { isPythonMain } from "./PythonWorkerBundle.ts";
 import type { WorkerProps } from "./Worker.ts";
 
 // TODO: figure out why the later one from workerd breaks
@@ -25,6 +26,15 @@ const CROSS_REQUEST_PROMISE_RESOLUTION_DEFAULT_ON = "2024-10-14";
 
 export const getCompatibility = (props: WorkerProps) => {
   const userFlags = props.compatibility?.flags ?? [];
+  const python = isPythonMain(props.main);
+  if (python && !props.isExternal) {
+    throw new Error(
+      "Python Workers cannot have an inline Effect implementation: the " +
+        "Effect runtime is a JavaScript bundle and cannot be injected into " +
+        "a Pyodide Worker. Declare the Worker with only its props (the " +
+        "handlers live in the Python entry module).",
+    );
+  }
   if (
     !props.isExternal &&
     userFlags.includes(`no_${CROSS_REQUEST_PROMISE_RESOLUTION}`)
@@ -41,6 +51,9 @@ export const getCompatibility = (props: WorkerProps) => {
     date,
     flags: [
       ...userFlags,
+      // Required while Python Workers are in open beta — the upload API
+      // rejects Python modules without it.
+      ...(python ? ["python_workers"] : []),
       ...(props.isExternal
         ? []
         : [

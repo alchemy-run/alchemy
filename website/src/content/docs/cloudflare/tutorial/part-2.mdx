@@ -18,7 +18,7 @@ Create `src/worker.ts`. A Worker is a special kind of Resource — it
 has both an infrastructure definition and a runtime implementation
 expressed as an Effect.
 
-```typescript twoslash
+```typescript
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -55,7 +55,7 @@ in `alchemy.run.ts` — we can't import it from there.
 A common pattern in Alchemy is to give each resource its own file.
 Create `src/bucket.ts`:
 
-```typescript twoslash
+```typescript
 // src/bucket.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
@@ -64,9 +64,7 @@ export const Bucket = Cloudflare.R2.Bucket("Bucket");
 
 Update `alchemy.run.ts` to import it instead of declaring it inline:
 
-```typescript twoslash
-// @filename: ./src/bucket.ts
-// ---cut---
+```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -80,8 +78,8 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
--   const bucket = yield* Cloudflare.R2.Bucket("Bucket");
-+   const bucket = yield* Bucket;
+-    const bucket = yield* Cloudflare.R2.Bucket("Bucket");
++    const bucket = yield* Bucket;
 
     return {
       bucketName: bucket.bucketName,
@@ -98,16 +96,7 @@ Stack. You can safely import them from multiple files.
 
 Now the Worker can import `Bucket` and bind it in the Init phase:
 
-```typescript twoslash errorReplace='.*::Type 'ReadWriteBucket' is not assignable to type 'WorkerServices | PlatformServices'.'
-// src/worker.ts
-// @errors: 2345
-// @noEmit: true
-// @allowImportingTsExtensions: true
-// @filename: bucket.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-export const Bucket = Cloudflare.R2.Bucket("Bucket");
-// @filename: index.ts
-// ---cut---
+```diff lang="typescript"
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -119,7 +108,8 @@ export default Cloudflare.Worker(
     main: import.meta.url,
   },
   Effect.gen(function* () {
-+   const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+  // @error: ts(2345) Type 'ReadWriteBucket' is not assignable to type 'WorkerServices | PlatformServices'.
++    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
     return {
       fetch: Effect.gen(function* () {
@@ -136,12 +126,7 @@ The previous step showed a type error — `Cloudflare.R2.ReadWriteBucket(Bucket)
 requires the `Cloudflare.R2.ReadWriteBucketBinding` service. Fix it by piping
 the outer Effect through `Cloudflare.R2.ReadWriteBucketBinding`:
 
-```typescript twoslash errorReplace='.*::Type 'R2Error' is not assignable to type 'HttpServerError | HttpBodyError'.'
-// src/worker.ts
-// @noEmit: true
-// @allowImportingTsExtensions: true
-// @filename: ./bucket.ts
-// ---cut---
+```diff lang="typescript"
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -158,7 +143,7 @@ export default Cloudflare.Worker(
         return HttpServerResponse.text("Hello, world!");
       }),
     };
-+ }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
++  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
 ```
 
@@ -172,13 +157,7 @@ Let's replace the placeholder response with a PUT route that stores
 objects in the bucket. Add `HttpServerRequest` to access the incoming
 request:
 
-```typescript twoslash errorReplace=".*::Type 'R2Error' is not assignable to type 'HttpServerError | HttpBodyError'."
-// src/worker.ts
-// @errors: 2345
-// @noEmit: true
-// @allowImportingTsExtensions: true
-// @filename: ./bucket.ts
-// ---cut---
+```diff lang="typescript"
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -192,15 +171,15 @@ export default Cloudflare.Worker(
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     return {
       fetch: Effect.gen(function* () {
-+       const request = yield* HttpServerRequest;
-+       const key = request.url.split("/").pop()!;
++        const request = yield* HttpServerRequest;
++        const key = request.url.split("/").pop()!;
 +
-+       if (request.method === "PUT") {
-+         yield* bucket.put(key, request.stream, {
-+           contentLength: Number(request.headers["content-length"] ?? 0),
-+         });
-+         return HttpServerResponse.empty({ status: 201 });
-+       }
++        if (request.method === "PUT") {
++          yield* bucket.put(key, request.stream, {
++            contentLength: Number(request.headers["content-length"] ?? 0),
++          });
++          return HttpServerResponse.empty({ status: 201 });
++        }
 
         return HttpServerResponse.text("Hello, world!");
       }),
@@ -219,12 +198,7 @@ system — you can't forget to handle it.
 Pipe the fetch Effect through `Effect.catchTag` to convert `R2Error`
 into a 500 response:
 
-```typescript twoslash
-// src/worker.ts
-// @noEmit: true
-// @allowImportingTsExtensions: true
-// @filename: ./bucket.ts
-// ---cut---
+```diff lang="typescript"
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -249,13 +223,13 @@ export default Cloudflare.Worker(
         }
 
         return HttpServerResponse.text("Hello, world!");
-+     }).pipe(
-+       Effect.catchTag("R2Error", (error) =>
-+         Effect.succeed(
-+           HttpServerResponse.text(error.message, { status: 500 }),
-+         ),
-+       ),
-+     ),
++      }).pipe(
++        Effect.catchTag("R2Error", (error) =>
++          Effect.succeed(
++            HttpServerResponse.text(error.message, { status: 500 }),
++          ),
++        ),
++      ),
     };
   }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
@@ -271,12 +245,7 @@ fully handled.
 Complete the fetch handler by reading objects from the bucket when the
 request isn't a PUT:
 
-```typescript twoslash
-// src/worker.ts
-// @noEmit: true
-// @allowImportingTsExtensions: true
-// @filename: ./bucket.ts
-// ---cut---
+```diff lang="typescript"
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -300,13 +269,13 @@ export default Cloudflare.Worker(
           return HttpServerResponse.empty({ status: 201 });
         }
 
-+       const object = yield* bucket.get(key);
-+       if (object === null) {
-+         return HttpServerResponse.text("Not found", { status: 404 });
-+       }
-+       const text = yield* object.text();
-+       return HttpServerResponse.text(text);
--       return HttpServerResponse.text("Hello, world!");
++        const object = yield* bucket.get(key);
++        if (object === null) {
++          return HttpServerResponse.text("Not found", { status: 404 });
++        }
++        const text = yield* object.text();
++        return HttpServerResponse.text(text);
+-        return HttpServerResponse.text("Hello, world!");
       }).pipe(
         Effect.catchTag("R2Error", (error) =>
           Effect.succeed(
@@ -333,11 +302,7 @@ needed.
 Add the Worker to `alchemy.run.ts` and expose its URL as a stack
 output:
 
-```typescript twoslash
-// alchemy.run.ts
-// @filename: ./src/bucket.ts
-// @filename: ./src/worker.ts
-// ---cut---
+```diff lang="typescript"
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -352,11 +317,11 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const bucket = yield* Bucket;
-+   const worker = yield* Worker;
++    const worker = yield* Worker;
 
     return {
       bucketName: bucket.bucketName,
-+     url: worker.url,
++      url: worker.url,
     };
   }),
 );

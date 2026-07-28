@@ -1,11 +1,13 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 import type { SubnetId } from "./Subnet.ts";
 
@@ -110,34 +112,47 @@ export const NetworkAclAssociationProvider = () =>
         // carries an Associations[] of {subnet, acl, associationId}; flatten
         // every page's associations to enumerate them all in the region.
         list: () =>
-          ec2.describeNetworkAcls.pages({}).pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.NetworkAcls ?? []).flatMap((acl) =>
-                  (acl.Associations ?? [])
+          Effect.gen(function* () {
+            // Associations on the default VPC's default network ACL are
+            // furniture AWS auto-provisions for its subnets; never
+            // census/nuke them. Associations to user-created (non-default)
+            // ACLs inside the default VPC are still listed.
+            const defaultVpc = yield* getDefaultVpcScope;
+            return yield* ec2.describeNetworkAcls.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.NetworkAcls ?? [])
                     .filter(
-                      (
-                        a,
-                      ): a is ec2.NetworkAclAssociation & {
-                        NetworkAclAssociationId: string;
-                        NetworkAclId: string;
-                        SubnetId: string;
-                      } =>
-                        a.NetworkAclAssociationId != null &&
-                        a.NetworkAclId != null &&
-                        a.SubnetId != null,
+                      (acl) =>
+                        defaultVpc.vpcId === undefined ||
+                        !(acl.VpcId === defaultVpc.vpcId && acl.IsDefault),
                     )
-                    .map((a) => ({
-                      associationId:
-                        a.NetworkAclAssociationId as NetworkAclAssociationId,
-                      networkAclId: a.NetworkAclId as NetworkAclId,
-                      subnetId: a.SubnetId as SubnetId,
-                    })),
+                    .flatMap((acl) =>
+                      (acl.Associations ?? [])
+                        .filter(
+                          (
+                            a,
+                          ): a is ec2.NetworkAclAssociation & {
+                            NetworkAclAssociationId: string;
+                            NetworkAclId: string;
+                            SubnetId: string;
+                          } =>
+                            a.NetworkAclAssociationId != null &&
+                            a.NetworkAclId != null &&
+                            a.SubnetId != null,
+                        )
+                        .map((a) => ({
+                          associationId:
+                            a.NetworkAclAssociationId as NetworkAclAssociationId,
+                          networkAclId: a.NetworkAclId as NetworkAclId,
+                          subnetId: a.SubnetId as SubnetId,
+                        })),
+                    ),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
 
         read: Effect.fn(function* ({ olds }) {
           if (!olds) return undefined;
@@ -230,14 +245,16 @@ export const NetworkAclAssociationProvider = () =>
             return;
           }
 
-          const defaultAclResult = yield* ec2.describeNetworkAcls({
-            Filters: [
-              { Name: "vpc-id", Values: [vpcId] },
-              { Name: "default", Values: ["true"] },
-            ],
-          });
+          const defaultAcl = yield* ec2.describeNetworkAcls
+            .items({
+              Filters: [
+                { Name: "vpc-id", Values: [vpcId] },
+                { Name: "default", Values: ["true"] },
+              ],
+            })
+            .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
 
-          const defaultAclId = defaultAclResult.NetworkAcls?.[0]?.NetworkAclId;
+          const defaultAclId = defaultAcl?.NetworkAclId;
 
           if (defaultAclId && defaultAclId !== (olds.networkAclId as string)) {
             // Replace with default NACL

@@ -29,6 +29,7 @@ export default BucketEventSourceFunction.make(
 
     const putObject = yield* S3.PutObject(bucket);
     const getObject = yield* S3.GetObject(bucket);
+    const BucketName = yield* bucket.bucketName;
 
     // Subscribe to object-created events under `incoming/`. Each notification
     // writes a derived object under `processed/<name>` recording the event.
@@ -62,6 +63,19 @@ export default BucketEventSourceFunction.make(
         const request = yield* HttpServerRequest;
         const url = new URL(request.originalUrl);
         const pathname = url.pathname;
+
+        if (request.method === "GET" && pathname === "/bucket-name") {
+          // The first event after a cold start can observe not-yet-hydrated
+          // resource Outputs — answer 503 so the test retries instead of
+          // recording "undefined" as the bucket name.
+          const bucketName = yield* BucketName;
+          if (!bucketName) {
+            return HttpServerResponse.text("Outputs not hydrated yet", {
+              status: 503,
+            });
+          }
+          return yield* HttpServerResponse.json({ bucketName });
+        }
 
         if (request.method === "POST" && pathname === "/put") {
           const body = (yield* request.json) as { key: string; value: string };

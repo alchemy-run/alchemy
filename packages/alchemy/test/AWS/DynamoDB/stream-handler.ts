@@ -52,15 +52,16 @@ export default DynamoDBStreamFunction.make(
       },
       (stream) =>
         stream.pipe(
-          Stream.map((record) =>
-            JSON.stringify({
+          Stream.map((record) => ({
+            MessageBody: JSON.stringify({
               eventName: record.eventName,
               keys: record.dynamodb.Keys,
               newImage: record.dynamodb.NewImage,
               oldImage: record.dynamodb.OldImage,
             }),
-          ),
+          })),
           Stream.run(sink),
+          Effect.orDie,
         ),
     );
   }).pipe(

@@ -30,7 +30,7 @@ test.provider("list enumerates the deployed log group", (stack) =>
       Effect.gen(function* () {
         return yield* LogGroup("ListLogGroup", {
           logGroupName: "alchemy-test-log-group-list",
-          retentionInDays: 7,
+          retention: "7 days",
         });
       }),
     );
@@ -43,6 +43,8 @@ test.provider("list enumerates the deployed log group", (stack) =>
     );
 
     yield* stack.destroy();
+    // Assert the log group is gone after the final destroy.
+    expect(yield* describeLogGroup(logGroup.logGroupName)).toBeUndefined();
   }),
 );
 
@@ -53,7 +55,7 @@ test.provider("configures log group class and deletion protection", (stack) =>
     const created = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* LogGroup("ConfiguredLogGroup", {
-          retentionInDays: 7,
+          retention: "7 days",
           logGroupClass: "INFREQUENT_ACCESS",
           deletionProtectionEnabled: false,
         });
@@ -71,7 +73,7 @@ test.provider("configures log group class and deletion protection", (stack) =>
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* LogGroup("ConfiguredLogGroup", {
-          retentionInDays: 14,
+          retention: "14 days",
           logGroupClass: "INFREQUENT_ACCESS",
           deletionProtectionEnabled: true,
         });
@@ -89,7 +91,7 @@ test.provider("configures log group class and deletion protection", (stack) =>
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* LogGroup("ConfiguredLogGroup", {
-          retentionInDays: 14,
+          retention: "14 days",
           logGroupClass: "STANDARD",
           deletionProtectionEnabled: false,
         });

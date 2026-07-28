@@ -516,9 +516,13 @@ export const VpcProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.Vpcs ?? []).map((vpc) =>
-                    vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
-                  ),
+                  (page.Vpcs ?? [])
+                    // The default VPC is account furniture AWS provisions (and
+                    // test/AWS/DefaultVpc.ts recreates); never census/nuke it.
+                    .filter((vpc) => !vpc.IsDefault)
+                    .map((vpc) =>
+                      vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
+                    ),
                 ),
               ),
             );
@@ -552,7 +556,11 @@ export const VpcProvider = () =>
                 // Use fixed 5s delay instead of exponential to avoid very long waits
                 schedule: Schedule.max([
                   Schedule.fixed(5000),
-                  Schedule.recurs(60),
+                  // A dependency that has not drained within ~50s is a real
+                  // cleanup defect. Preserve state and fail promptly so a
+                  // subsequent destroy/nuke can retry after fixing the child,
+                  // rather than hanging this resource for five minutes.
+                  Schedule.recurs(10),
                 ]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(

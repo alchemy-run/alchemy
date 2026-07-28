@@ -46,6 +46,8 @@ export interface TestCase {
    * everything in ONE bun process, so such mutations are visible everywhere.
    */
   readonly exclusive?: boolean;
+  /** Override the run-wide retry budget for this test. */
+  readonly retry?: number | undefined;
   readonly timeout?: number | undefined;
   readonly body: TestBody | undefined;
   readonly parent: Suite;
@@ -55,7 +57,7 @@ export interface Suite {
   readonly type: "suite";
   readonly name: string;
   mode: Mode;
-  /** When true, children run one at a time (describe.sequential). */
+  /** When true, children run one at a time (the default; describe.concurrent opts out). */
   sequential: boolean;
   readonly children: Array<Suite | TestCase>;
   readonly beforeAll: Array<Hook>;
@@ -79,7 +81,7 @@ export const makeSuite = (
   type: "suite",
   name,
   mode,
-  sequential: false,
+  sequential: true,
   children: [],
   beforeAll: [],
   afterAll: [],

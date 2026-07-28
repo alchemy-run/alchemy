@@ -8,7 +8,27 @@ export interface GetDataProtectionPolicyRequest extends Omit<
   "ResourceArn"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:GetDataProtectionPolicy`.
+ *
+ * Bind this operation to a {@link Topic} inside a function runtime to read
+ * the topic's data protection policy document; the `ResourceArn` is injected
+ * automatically. The binding grants the host function
+ * `sns:GetDataProtectionPolicy` on the topic. Provide the
+ * `GetDataProtectionPolicyHttp` layer on the Function to implement the
+ * binding.
+ * @binding
+ * @section Data Protection Policies
+ * @example Read the Data Protection Policy
+ * ```typescript
+ * // init (provide SNS.GetDataProtectionPolicyHttp on the Function)
+ * const getDataProtectionPolicy = yield* SNS.GetDataProtectionPolicy(topic);
+ *
+ * // runtime
+ * const response = yield* getDataProtectionPolicy();
+ * // response.DataProtectionPolicy (JSON document string)
+ * ```
+ */
 export interface GetDataProtectionPolicy extends Binding.Service<
   GetDataProtectionPolicy,
   "AWS.SNS.GetDataProtectionPolicy",

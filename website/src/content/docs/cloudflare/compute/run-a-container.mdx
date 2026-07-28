@@ -134,30 +134,30 @@ import { Sandbox } from "./Sandbox.ts";
 export const SandboxLive = Sandbox.make(
   Stack.useSync((stack) => ({ main: import.meta.url, /* ... */ })),
   Effect.gen(function* () {
-+   const cp = yield* ChildProcessSpawner;
++    const cp = yield* ChildProcessSpawner;
 
     return Sandbox.of({
-+     exec: (command) =>
-+       cp
-+         .spawn(ChildProcess.make(command, { shell: true }))
-+         .pipe(
-+           Effect.flatMap((handle) =>
-+             Effect.all(
-+               [
-+                 handle.exitCode,
-+                 handle.stdout.pipe(Stream.decodeText, Stream.mkString),
-+                 handle.stderr.pipe(Stream.decodeText, Stream.mkString),
-+               ],
-+               { concurrency: "unbounded" },
-+             ),
-+           ),
-+           Effect.map(([exitCode, stdout, stderr]) => ({
-+             exitCode,
-+             stdout,
-+             stderr,
-+           })),
-+           Effect.scoped,
-+         ),
++      exec: (command) =>
++        cp
++          .spawn(ChildProcess.make(command, { shell: true }))
++          .pipe(
++            Effect.flatMap((handle) =>
++              Effect.all(
++                [
++                  handle.exitCode,
++                  handle.stdout.pipe(Stream.decodeText, Stream.mkString),
++                  handle.stderr.pipe(Stream.decodeText, Stream.mkString),
++                ],
++                { concurrency: "unbounded" },
++              ),
++            ),
++            Effect.map(([exitCode, stdout, stderr]) => ({
++              exitCode,
++              stdout,
++              stderr,
++            })),
++            Effect.scoped,
++          ),
     });
   }),
 );
@@ -245,13 +245,13 @@ from the inner phase as an RPC method:
 export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
-+   const sandbox = yield* Sandbox;
++    const sandbox = yield* Sandbox;
 
     return Effect.gen(function* () {
--     return {};
-+     return {
-+       exec: (command: string) => sandbox.exec(command),
-+     };
+-      return {};
++      return {
++        exec: (command: string) => sandbox.exec(command),
++      };
     });
   }),
 ) {}
@@ -280,12 +280,12 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
         exec: (command: string) => sandbox.exec(command),
       };
     });
-- }),
-+ }).pipe(
-+   Effect.provide(
-+     Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
-+   ),
-+ ),
+-  }),
++  }).pipe(
++    Effect.provide(
++      Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
++    ),
++  ),
 ) {}
 ```
 

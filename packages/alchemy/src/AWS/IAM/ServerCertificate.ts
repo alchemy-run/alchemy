@@ -47,14 +47,23 @@ export interface ServerCertificate extends Resource<
   "AWS.IAM.ServerCertificate",
   ServerCertificateProps,
   {
+    /** The ARN of the server certificate. */
     serverCertificateArn: string;
+    /** The name of the server certificate. */
     serverCertificateName: string;
+    /** The stable unique ID of the server certificate. */
     serverCertificateId: string | undefined;
+    /** The IAM path of the server certificate. */
     path: string | undefined;
+    /** The PEM-encoded certificate body. */
     certificateBody: string;
+    /** The PEM-encoded certificate chain, if uploaded. */
     certificateChain: string | undefined;
+    /** When the certificate was uploaded. */
     uploadDate: Date | undefined;
+    /** When the certificate expires. */
     expiration: Date | undefined;
+    /** The tags applied to the certificate. */
     tags: Record<string, string>;
   },
   never,

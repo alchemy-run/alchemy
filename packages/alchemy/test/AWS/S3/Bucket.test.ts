@@ -9,6 +9,7 @@ import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -131,10 +132,19 @@ test.provider("create bucket with forceDestroy", (stack) =>
       Body: "Hello, World!",
     });
 
+    // A heavily parallel account sweep can briefly observe the successful
+    // PutObject before the object is readable through a different S3
+    // endpoint. Retry only the typed visibility miss, with a hard bound;
+    // authorization and request-shape errors still fail immediately.
     yield* S3.headObject({
       Bucket: bucket.bucketName,
       Key: "test-object.txt",
-    });
+    }).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "NotFound",
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(6)]),
+      }),
+    );
 
     yield* stack.destroy();
 
@@ -334,43 +344,56 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const bucketName = `alchemy-test-s3-adopt-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      // Deterministic name: the state wipe below intentionally makes the
+      // bucket invisible to the scratch stack's auto-destroy for a window, so
+      // the name must be stable across runs — a re-run then reclaims any
+      // orphan left by a previously-killed run instead of minting a new one.
+      const bucketName = "alchemy-test-s3-adopt-bucket";
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Bucket("AdoptableBucket", {
-            bucketName,
-            forceDestroy: true,
-          });
-        }),
-      );
-      expect(initial.bucketName).toEqual(bucketName);
+      // Idempotent pre-clean: reclaim a leftover from a prior interrupted run.
+      yield* deleteBucketIfExists(bucketName);
 
-      // Wipe state — bucket stays in S3.
       yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: "test",
-          fqn: "AdoptableBucket",
-        });
-      }).pipe(Effect.provide(stack.state));
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Bucket("AdoptableBucket", {
+              bucketName,
+              forceDestroy: true,
+            });
+          }),
+        );
+        expect(initial.bucketName).toEqual(bucketName);
 
-      const adopted = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Bucket("AdoptableBucket", {
-            bucketName,
-            forceDestroy: true,
+        // Wipe state — bucket stays in S3.
+        yield* Effect.gen(function* () {
+          const state = yield* yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "AdoptableBucket",
           });
-        }),
+        }).pipe(Effect.provide(stack.state));
+
+        const adopted = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Bucket("AdoptableBucket", {
+              bucketName,
+              forceDestroy: true,
+            });
+          }),
+        );
+
+        expect(adopted.bucketArn).toEqual(initial.bucketArn);
+
+        yield* stack.destroy();
+        yield* assertBucketDeleted(bucketName);
+      }).pipe(
+        // Guaranteed out-of-band cleanup: while state is wiped the bucket is
+        // outside the scratch stack, so the framework's ensuring-destroy can't
+        // see it. This finalizer runs on success, failure, AND interruption;
+        // it's a no-op when stack.destroy already deleted the bucket.
+        Effect.ensuring(deleteBucketIfExists(bucketName).pipe(Effect.ignore)),
       );
-
-      expect(adopted.bucketArn).toEqual(initial.bucketArn);
-
-      yield* stack.destroy();
-      yield* assertBucketDeleted(bucketName);
     }),
 );
 
@@ -645,54 +668,184 @@ test.provider("lifecycle add rule then remove", (stack) =>
   }),
 );
 
-test.provider("ownership controls and website hosting", (stack) =>
+test.provider(
+  "ownership controls and website hosting serves index.html",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const name = "alchemy-test-bucket-website";
+      const bucket = yield* stack.deploy(
+        Bucket("WebsiteBucket", {
+          bucketName: name,
+          objectOwnership: "BucketOwnerPreferred",
+          // The website endpoint serves anonymously, so the bucket must allow
+          // a public-read policy: PAB flags all off + a public GetObject
+          // statement. (publicAccessBlock syncs before policy in reconcile.)
+          publicAccessBlock: {
+            blockPublicAcls: false,
+            ignorePublicAcls: false,
+            blockPublicPolicy: false,
+            restrictPublicBuckets: false,
+          },
+          policy: [
+            {
+              Sid: "PublicReadGetObject",
+              Effect: "Allow",
+              Principal: { AWS: "*" },
+              Action: ["s3:GetObject"],
+              Resource: [`arn:aws:s3:::${name}/*`],
+            },
+          ],
+          website: {
+            indexDocument: { suffix: "index.html" },
+            errorDocument: { key: "error.html" },
+          },
+          forceDestroy: true,
+        }),
+      );
+
+      const own = yield* S3.getBucketOwnershipControls({
+        Bucket: bucket.bucketName,
+      });
+      expect(own.OwnershipControls?.Rules?.[0]?.ObjectOwnership).toEqual(
+        "BucketOwnerPreferred",
+      );
+
+      const web = yield* S3.getBucketWebsite({ Bucket: bucket.bucketName });
+      expect(web.IndexDocument?.Suffix).toEqual("index.html");
+      expect(web.ErrorDocument?.Key).toEqual("error.html");
+
+      // Prove the website endpoint actually serves: upload an index document
+      // and GET it anonymously over HTTP (marker-anchored, with propagation
+      // retry — fresh website endpoints can take a few seconds to serve).
+      const marker = "alchemy-s3-website-test-marker";
+      yield* S3.putObject({
+        Bucket: bucket.bucketName,
+        Key: "index.html",
+        Body: `<html><body>${marker}</body></html>`,
+        ContentType: "text/html",
+      });
+
+      const websiteUrl = `http://${name}.s3-website-${bucket.region}.amazonaws.com/`;
+      const body = yield* HttpClient.get(websiteUrl).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? response.text
+            : Effect.fail(
+                new Error(`website endpoint returned ${response.status}`),
+              ),
+        ),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.exponential(1000),
+            Schedule.recurs(8),
+          ]),
+        }),
+      );
+      expect(body).toContain(marker);
+
+      // In-place update of the index document; website config is in-place
+      // updatable. (Omitting the prop leaves the config untouched — to clear it
+      // a user removes the resource; we never silently drop unmanaged config.)
+      yield* stack.deploy(
+        Bucket("WebsiteBucket", {
+          bucketName: name,
+          objectOwnership: "BucketOwnerPreferred",
+          publicAccessBlock: {
+            blockPublicAcls: false,
+            ignorePublicAcls: false,
+            blockPublicPolicy: false,
+            restrictPublicBuckets: false,
+          },
+          policy: [
+            {
+              Sid: "PublicReadGetObject",
+              Effect: "Allow",
+              Principal: { AWS: "*" },
+              Action: ["s3:GetObject"],
+              Resource: [`arn:aws:s3:::${name}/*`],
+            },
+          ],
+          website: {
+            indexDocument: { suffix: "home.html" },
+            errorDocument: { key: "error.html" },
+          },
+          forceDestroy: true,
+        }),
+      );
+
+      const web2 = yield* S3.getBucketWebsite({ Bucket: bucket.bucketName });
+      expect(web2.IndexDocument?.Suffix).toEqual("home.html");
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { timeout: 120_000 },
+);
+
+// Server-access logging needs a same-stack target bucket that grants the S3
+// logging service principal permission to deliver logs (the modern, ACL-free
+// grant — works with the BucketOwnerEnforced default).
+test.provider("server access logging set and update prefix", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const name = "alchemy-test-bucket-website";
-    const bucket = yield* stack.deploy(
-      Bucket("WebsiteBucket", {
-        bucketName: name,
-        objectOwnership: "BucketOwnerPreferred",
-        website: {
-          indexDocument: { suffix: "index.html" },
-          errorDocument: { key: "error.html" },
-        },
-        forceDestroy: true,
-      }),
-    );
+    const target = "alchemy-test-bucket-logging-target";
+    const source = "alchemy-test-bucket-logging-src";
 
-    const own = yield* S3.getBucketOwnershipControls({
-      Bucket: bucket.bucketName,
+    const deployWith = (targetPrefix: string) =>
+      stack.deploy(
+        Effect.gen(function* () {
+          const targetBucket = yield* Bucket("LogTargetBucket", {
+            bucketName: target,
+            policy: [
+              {
+                Sid: "S3ServerAccessLogsPolicy",
+                Effect: "Allow",
+                Principal: { Service: "logging.s3.amazonaws.com" },
+                Action: ["s3:PutObject"],
+                Resource: [`arn:aws:s3:::${target}/*`],
+                Condition: {
+                  ArnLike: { "aws:SourceArn": `arn:aws:s3:::${source}` },
+                },
+              },
+            ],
+            forceDestroy: true,
+          });
+          const sourceBucket = yield* Bucket("LogSourceBucket", {
+            bucketName: source,
+            logging: {
+              // Output reference so the target (and its delivery policy)
+              // reconciles before the source's putBucketLogging.
+              targetBucket: targetBucket.bucketName,
+              targetPrefix,
+            },
+            forceDestroy: true,
+          });
+          return { sourceBucket, targetBucket };
+        }),
+      );
+
+    const buckets = yield* deployWith("logs/");
+
+    const l1 = yield* S3.getBucketLogging({
+      Bucket: buckets.sourceBucket.bucketName,
     });
-    expect(own.OwnershipControls?.Rules?.[0]?.ObjectOwnership).toEqual(
-      "BucketOwnerPreferred",
-    );
+    expect(l1.LoggingEnabled?.TargetBucket).toEqual(target);
+    expect(l1.LoggingEnabled?.TargetPrefix).toEqual("logs/");
 
-    const web = yield* S3.getBucketWebsite({ Bucket: bucket.bucketName });
-    expect(web.IndexDocument?.Suffix).toEqual("index.html");
-    expect(web.ErrorDocument?.Key).toEqual("error.html");
+    // In-place update of the log prefix.
+    yield* deployWith("access/");
 
-    // In-place update of the index document; website config is in-place
-    // updatable. (Omitting the prop leaves the config untouched — to clear it
-    // a user removes the resource; we never silently drop unmanaged config.)
-    yield* stack.deploy(
-      Bucket("WebsiteBucket", {
-        bucketName: name,
-        objectOwnership: "BucketOwnerPreferred",
-        website: {
-          indexDocument: { suffix: "home.html" },
-          errorDocument: { key: "error.html" },
-        },
-        forceDestroy: true,
-      }),
-    );
-
-    const web2 = yield* S3.getBucketWebsite({ Bucket: bucket.bucketName });
-    expect(web2.IndexDocument?.Suffix).toEqual("home.html");
+    const l2 = yield* S3.getBucketLogging({
+      Bucket: buckets.sourceBucket.bucketName,
+    });
+    expect(l2.LoggingEnabled?.TargetPrefix).toEqual("access/");
 
     yield* stack.destroy();
-    yield* assertBucketDeleted(bucket.bucketName);
+    yield* assertBucketDeleted(buckets.sourceBucket.bucketName);
+    yield* assertBucketDeleted(buckets.targetBucket.bucketName);
   }),
 );
 
@@ -749,7 +902,7 @@ test.provider("object lock default retention", (stack) =>
       Bucket("ObjLockRetentionBucket", {
         bucketName: name,
         objectLockEnabled: true,
-        objectLockConfiguration: { mode: "GOVERNANCE", days: 1 },
+        objectLockConfiguration: { mode: "GOVERNANCE", days: "1 day" },
         forceDestroy: true,
       }),
     );
@@ -945,6 +1098,19 @@ test.provider(
     }),
   { timeout: 180_000 },
 );
+
+// Idempotent out-of-band delete for the adoption test's deterministically
+// named bucket. Tolerates the bucket never existing / already deleted
+// (typed NoSuchBucket) and retries transient failures a bounded number of
+// times. The bucket is always empty in that test, so deleteBucket suffices.
+const deleteBucketIfExists = Effect.fn(function* (bucketName: string) {
+  yield* S3.deleteBucket({ Bucket: bucketName }).pipe(
+    Effect.catchTag("NoSuchBucket", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(5)]),
+    }),
+  );
+});
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 

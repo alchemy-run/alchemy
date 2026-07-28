@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
@@ -408,20 +409,21 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
       AuthTokenSecretName,
       EncryptionKeySecretName,
     ]);
-    const stores = yield* SecretsStore.listStores({ accountId }).pipe(
-      Effect.map((r) => r.result),
+    const stores = yield* SecretsStore.listStores.items({ accountId }).pipe(
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("InvalidAccountId", () => Effect.succeed([])),
     );
     for (const store of stores) {
-      const secrets = yield* SecretsStore.listStoreSecrets({
-        accountId,
-        storeId: store.id,
-      }).pipe(
-        Effect.map((r) => r.result),
-        Effect.catchTag(["StoreNotFound", "InvalidAccountId"], () =>
-          Effect.succeed([]),
-        ),
-      );
+      const secrets = yield* SecretsStore.listStoreSecrets
+        .items({ accountId, storeId: store.id })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag(["StoreNotFound", "InvalidAccountId"], () =>
+            Effect.succeed([]),
+          ),
+        );
       const ours = secrets.filter((s) => ourSecretNames.has(s.name));
       for (const secret of ours) {
         yield* Clank.info(`Deleting secret '${secret.name}'...`);
@@ -739,8 +741,9 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
     }
 
     // 1. Locate the single Secrets Store on the account.
-    const stores = yield* SecretsStore.listStores({ accountId });
-    const store = stores.result[0];
+    const store = yield* SecretsStore.listStores
+      .items({ accountId })
+      .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
     if (!store) {
       return yield* Effect.fail(
         new AuthError({

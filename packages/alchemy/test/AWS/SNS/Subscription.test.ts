@@ -9,10 +9,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 import {
-  SNSApiFunction,
-  SNSApiFunctionLive,
-  TopicAndQueue,
-} from "./handler.ts";
+  SubscriptionTargetFunction,
+  SubscriptionTargetFunctionLive,
+} from "./subscription-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,17 +23,20 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const { topic, queue, subscription } = yield* TopicAndQueue;
-
-          const apiFunction = yield* SNSApiFunction;
+          const topic = yield* AWS.SNS.Topic("LambdaSubscriptionTopic");
+          const target = yield* SubscriptionTargetFunction;
+          const subscription = yield* Subscription("LambdaSubscription", {
+            topicArn: topic.topicArn,
+            protocol: "lambda",
+            endpoint: target.functionArn,
+            returnSubscriptionArn: true,
+          });
 
           return {
-            apiFunction,
             topic,
-            queue,
             subscription,
           };
-        }).pipe(Effect.provide(SNSApiFunctionLive)),
+        }).pipe(Effect.provide(SubscriptionTargetFunctionLive)),
       );
 
       expect(deployed.subscription.subscriptionArn).toBeDefined();
@@ -48,6 +50,7 @@ test.provider(
         Effect.retry({
           while: (error) => error._tag === "NotFoundException",
           schedule: Schedule.fixed(300),
+          times: 10,
         }),
       );
       expect(attributes.Attributes?.Protocol).toBe("lambda");
@@ -56,7 +59,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertSubscriptionDeleted(deployed.subscription.subscriptionArn);
     }),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
@@ -114,6 +117,7 @@ const assertSubscriptionDeleted = Effect.fn(function* (
     Effect.retry({
       while: (error) => error._tag === "SubscriptionStillExists",
       schedule: Schedule.exponential(100),
+      times: 8,
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.catchTag("InvalidParameterException", () => Effect.void),

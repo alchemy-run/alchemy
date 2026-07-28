@@ -36,13 +36,26 @@ import type {
 type StaticSiteDomainInput = string | WebsiteDomainProps;
 
 export interface StaticSiteRouterAttachment {
+  /**
+   * The `AWS.Website.Router` to attach to (or its KV store, namespace,
+   * distribution ID, and URL outputs).
+   */
   instance: {
     kvStoreArn: Input<string>;
     kvNamespace: Input<string>;
     distributionId: Input<string>;
     url: Input<string>;
   };
+  /**
+   * Optional host pattern this site should be served for (e.g.
+   * `docs.example.com` or `*.example.com`). When omitted, the site matches
+   * any host on the router.
+   */
   domain?: string;
+  /**
+   * Path prefix the site is served under (e.g. `/docs`).
+   * @default "/"
+   */
   path?: string;
 }
 
@@ -137,6 +150,19 @@ export interface StaticSiteProps {
  *   environment: {
  *     VITE_API_URL: api.url,
  *   },
+ * });
+ * ```
+ *
+ * @section Custom Domains
+ * @example Site With A Route 53 Domain
+ * ```typescript
+ * const site = yield* StaticSite("Web", {
+ *   path: "./site",
+ *   domain: {
+ *     name: "www.example.com",
+ *     hostedZoneId: zone.hostedZoneId,
+ *   },
+ *   errorPage: "404.html",
  * });
  * ```
  *
@@ -364,7 +390,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
               httpPort: 80,
               httpsPort: 443,
               originProtocolPolicy: "https-only",
-              originReadTimeout: 20,
+              originReadTimeout: "20 seconds",
               originSslProtocols: ["TLSv1.2"],
             },
           },

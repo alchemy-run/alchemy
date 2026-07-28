@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { ServiceSpecificCredential, User } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
@@ -27,11 +28,18 @@ describe("AWS.IAM.ServiceSpecificCredential", () => {
               {
                 userName: user.userName,
                 serviceName: "codecommit.amazonaws.com",
+                // Duration.Input prop — converted to whole wire days.
+                credentialAge: "30 days",
               },
             );
             return { user, credential };
           }),
         );
+
+        // The Duration prop round-trips as an expiration ~30 days out, and
+        // the creation-only secret is captured as a Redacted output.
+        expect(deployed.credential.expirationDate).toBeDefined();
+        expect(deployed.credential.servicePassword).toBeDefined();
 
         const provider = yield* Provider.findProvider(
           ServiceSpecificCredential,
@@ -50,6 +58,12 @@ describe("AWS.IAM.ServiceSpecificCredential", () => {
         expect(found?.serviceCredentialSecret).toBeUndefined();
 
         yield* stack.destroy();
+
+        // The user (and with it the service-specific credential) is gone.
+        const deletedUser = yield* IAM.getUser({
+          UserName: deployed.user.userName,
+        }).pipe(Effect.option);
+        expect(deletedUser._tag).toBe("None");
       }),
   );
 });

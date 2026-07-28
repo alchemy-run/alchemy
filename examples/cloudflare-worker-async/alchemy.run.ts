@@ -18,14 +18,6 @@ export const Counter = Cloudflare.DurableObject<CounterClass>("Counter", {
   className: "Counter",
 });
 
-export const ClaudeCode = Cloudflare.Container("ClaudeCode", {
-  dockerfile: `
-    FROM alpine:latest
-    RUN curl -fsSL https://claude.ai/install.sh | bash
-  `,
-  context: ".",
-});
-
 export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
 export const Worker = Cloudflare.Worker("Worker", {

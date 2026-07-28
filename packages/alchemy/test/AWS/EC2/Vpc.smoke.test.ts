@@ -15,7 +15,7 @@ import {
   Vpc,
   VpcEndpoint,
 } from "@/AWS/EC2";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";

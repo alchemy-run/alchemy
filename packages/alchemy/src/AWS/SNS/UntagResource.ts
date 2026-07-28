@@ -8,7 +8,25 @@ export interface UntagResourceRequest extends Omit<
   "ResourceArn"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:UntagResource`.
+ *
+ * Bind this operation to a {@link Topic} inside a function runtime to remove
+ * tags from the topic by key; the `ResourceArn` is injected automatically.
+ * The binding grants the host function `sns:UntagResource` on the topic.
+ * Provide the `UntagResourceHttp` layer on the Function to implement the
+ * binding.
+ * @binding
+ * @section Tagging Topics
+ * @example Remove Tags from a Topic
+ * ```typescript
+ * // init (provide SNS.UntagResourceHttp on the Function)
+ * const untagResource = yield* SNS.UntagResource(topic);
+ *
+ * // runtime
+ * yield* untagResource({ TagKeys: ["team"] });
+ * ```
+ */
 export interface UntagResource extends Binding.Service<
   UntagResource,
   "AWS.SNS.UntagResource",

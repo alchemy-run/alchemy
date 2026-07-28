@@ -8,6 +8,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
+import { toSeconds } from "../Util/Duration.ts";
 import { Docker, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -30,6 +31,16 @@ export interface ContainerProps {
   volumes?: Container.VolumeMapping[];
   /** Restart policy. */
   restart?: "no" | "always" | "on-failure" | "unless-stopped";
+  /**
+   * Container labels. Alchemy's internal ownership labels are added
+   * automatically.
+   */
+  labels?: Record<string, string>;
+  /**
+   * Grace period before Docker forcefully kills the container after stopping
+   * it.
+   */
+  stopTimeout?: Duration.Input;
   /** Networks to connect after create. */
   networks?: Container.NetworkMapping[];
   /** Remove the container when it exits. @default false */
@@ -160,6 +171,22 @@ export interface Container extends Resource<
  *   start: true,
  * });
  * const runtime = yield* Docker.inspectContainer(postgresName);
+ * ```
+ *
+ * @section Traefik
+ * @example Route a container through Traefik
+ * ```typescript
+ * const api = yield* Docker.Container("api", {
+ *   image: "ghcr.io/acme/api:latest",
+ *   networks: [{ name: "traefik" }],
+ *   labels: {
+ *     "traefik.enable": "true",
+ *     "traefik.http.routers.api.rule": "Host(`api.example.com`)",
+ *     "traefik.http.services.api.loadbalancer.server.port": "3000",
+ *   },
+ *   stopTimeout: "30 seconds",
+ *   start: true,
+ * });
  * ```
  */
 export const Container = Resource<Container>("Docker.Container");
@@ -308,7 +335,7 @@ export const ContainerProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const { stdout: containerId } = yield* docker.container.create({
             ...args,
-            label: internalTags,
+            label: { ...args.label, ...internalTags },
           });
           yield* Effect.forEach(
             news.networks ?? [],
@@ -355,6 +382,8 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
             `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
         ),
         restart: news.restart ?? "no",
+        label: news.labels,
+        "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
         rm: news.removeOnExit ?? false,
         ...(news.healthcheck
           ? {
