@@ -30,7 +30,7 @@ import {
   type PackageInstall,
 } from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
-import { deepEqual, isResolved } from "../../Diff.ts";
+import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -1853,6 +1853,18 @@ export default handler;
             news.reservedConcurrentExecutions
           ) {
             return { action: "update" };
+          }
+          // `layers` accepts a LayerVersion resource or a raw ARN, and the
+          // two forms are structurally different props even when they name
+          // the same layer. Compare them normalized so switching between the
+          // forms isn't a phantom change; everything else still falls through
+          // to the engine's default props comparison.
+          const normalizeLayers = (props: FunctionProps) => ({
+            ...props,
+            layers: (props.layers ?? []).map(layerVersionArnOf),
+          });
+          if (!havePropsChanged(normalizeLayers(olds), normalizeLayers(news))) {
+            return { action: "noop" };
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
