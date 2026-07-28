@@ -19,6 +19,12 @@ const sharedStack = Core.scratchStack(testOptions, "SESBindings");
 // to a verified from-address to exercise the success path.
 const VERIFIED_FROM = process.env.AWS_TEST_SES_FROM;
 
+// These flags never skip a test — they tighten it. On an out-of-sandbox
+// account, or one with Virtual Deliverability Manager enabled, the binding
+// must return real data rather than the typed rejection the sandbox gives.
+const PRODUCTION_ACCOUNT = !!process.env.AWS_TEST_SES_PRODUCTION;
+const VDM_ENABLED = !!process.env.AWS_TEST_SES_VDM;
+
 // A syntactically valid address at the fixture's (unverified) domain
 // identity — SES rejects it with the typed MessageRejected tag in sandbox.
 const UNVERIFIED_FROM = "noreply@ses-bindings.alchemy-test.example.com";
@@ -448,8 +454,13 @@ describe("SES Bindings", () => {
           // rejects with a typed error (BadRequestException: "still in the
           // sandbox"). A production account returns a MessageId. Either way the
           // call round-trips ses:SendCustomVerificationEmail IAM + the
-          // injected TemplateName through the deployed Lambda.
-          if (response.error === undefined) {
+          // injected TemplateName through the deployed Lambda. Set
+          // AWS_TEST_SES_PRODUCTION=1 on an out-of-sandbox account to demand
+          // the real send instead of accepting the rejection.
+          if (PRODUCTION_ACCOUNT) {
+            expect(response.error).toBeUndefined();
+            expect(response.messageId).toBeTruthy();
+          } else if (response.error === undefined) {
             expect(response.messageId).toBeTruthy();
           } else {
             expect(typeof response.error).toBe("string");
@@ -475,9 +486,10 @@ describe("SES Bindings", () => {
           // with a typed error — NotFoundException, or BadRequestException when
           // VDM is disabled on the account. That proves the binding wires
           // ses:GetMessageInsights IAM + request marshalling into the Lambda.
-          // Live testing should pin the exact tag for the account's VDM state.
+          // With VDM on (AWS_TEST_SES_VDM=1) the tag is unambiguous.
           expect(typeof response.error).toBe("string");
           expect(response.messageId).toBeUndefined();
+          if (VDM_ENABLED) expect(response.error).toBe("NotFoundException");
         }),
     );
   });
@@ -497,9 +509,12 @@ describe("SES Bindings", () => {
           // With VDM enabled SES returns a (possibly empty) Results array; with
           // VDM disabled it rejects with a typed BadRequestException. Both
           // prove the binding wires ses:BatchGetMetricData IAM + the query
-          // payload into the deployed Lambda. Live testing should pin the tag
-          // for the account's VDM state.
-          if (response.error === undefined) {
+          // payload into the deployed Lambda. Set AWS_TEST_SES_VDM=1 on a
+          // VDM-enabled account to demand the series instead.
+          if (VDM_ENABLED) {
+            expect(response.error).toBeUndefined();
+            expect(typeof response.results).toBe("number");
+          } else if (response.error === undefined) {
             expect(typeof response.results).toBe("number");
           } else {
             expect(typeof response.error).toBe("string");

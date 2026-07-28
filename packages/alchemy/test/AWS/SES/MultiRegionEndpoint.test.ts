@@ -32,10 +32,12 @@ const assertEndpointDeleted = (name: string) =>
     }),
   );
 
-// Multi-region endpoint provisioning is slow and asynchronous — creation
-// returns CREATING and reaching READY exceeds the polling budget — so the
-// lifecycle is gated behind AWS_TEST_SES_MULTI_REGION=1.
-test.provider.skipIf(!process.env.AWS_TEST_SES_MULTI_REGION)(
+// A multi-region endpoint costs nothing to provision — SES charges $0.03/1k
+// emails routed through it and nothing for the endpoint itself — so this runs
+// ungated. Provisioning is asynchronous: create returns CREATING and reaching
+// READY exceeds the polling budget, so the lifecycle asserts CREATING and
+// deletes from there rather than waiting.
+test.provider(
   "multi-region endpoint lifecycle: create (CREATING), verify, delete",
   (stack) =>
     Effect.gen(function* () {

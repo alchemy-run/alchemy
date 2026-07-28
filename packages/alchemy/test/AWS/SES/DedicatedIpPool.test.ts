@@ -30,10 +30,38 @@ const assertPoolDeleted = (name: string) =>
     }),
   );
 
-// Dedicated IP pools provision dedicated IP capacity and bill immediately, so
-// the entire lifecycle is gated behind AWS_TEST_SES_DEDICATED_IP=1. Nothing in
-// this suite creates a pool unless that flag is set — there is no ungated
-// probe.
+// A STANDARD pool holding no dedicated IPs is free — SES bills $24.95/month
+// per dedicated IP, not per pool — so the STANDARD lifecycle runs ungated.
+test.provider(
+  "dedicated IP pool lifecycle: create STANDARD, verify, delete",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const pool = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* DedicatedIpPool("Standard", {
+            scalingMode: "STANDARD",
+          });
+        }),
+      );
+
+      expect(pool.poolName).toBeDefined();
+      expect(pool.scalingMode).toBe("STANDARD");
+
+      // out-of-band verification via distilled
+      const created = yield* getPool(pool.poolName);
+      expect(created?.ScalingMode).toBe("STANDARD");
+
+      yield* stack.destroy();
+      yield* assertPoolDeleted(pool.poolName);
+    }),
+  { timeout: 120_000 },
+);
+
+// Switching a pool to MANAGED enables managed dedicated IPs, which bill
+// $15/month/account from that point on, so every MANAGED case stays gated
+// behind AWS_TEST_SES_DEDICATED_IP=1.
 test.provider.skipIf(!process.env.AWS_TEST_SES_DEDICATED_IP)(
   "dedicated IP pool lifecycle: create STANDARD, scale to MANAGED, delete",
   (stack) =>
