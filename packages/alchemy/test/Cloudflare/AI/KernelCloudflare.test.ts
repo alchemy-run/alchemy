@@ -95,6 +95,7 @@ const runKey = (name: string) => `${name}-${stamp}`;
 interface Report {
   readonly users: number;
   readonly tools: number;
+  readonly assistants: number;
   readonly last: string | null;
   readonly thread: ReadonlyArray<string>;
 }
@@ -239,6 +240,62 @@ test(
     expect(
       woken.thread.some((entry) => entry.includes("the timer elapsed")),
     ).toBe(true);
+  }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+test(
+  "a round interrupted mid-sampling recovers by ALARM, with no caller waiting",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const key = runKey("recover");
+    const directive = `call:crash:r-${stamp}:1`;
+
+    // fire-and-forget: the input lands, the round opens, and the
+    // model DIES mid-sampling — the on-disk state is now identical to
+    // an eviction or a deploy killing the burst
+    yield* drive(url, "/send", { key, input: directive });
+
+    // touch NOTHING: the run must wake itself. The fixture arms
+    // recovery at ~3s, so by 15s the alarm has re-entered, the model
+    // has succeeded (its crash budget is spent), and the round closed
+    yield* Effect.sleep("15 seconds");
+
+    const after = yield* report(url, { key, input: "status" });
+    // the input survived the crash (append-first drain)…
+    expect(after.thread).toContain(directive);
+    // …and was ANSWERED before this poll arrived — only the alarm
+    // can have done that, since nothing else touched the run
+    expect(after.assistants).toBeGreaterThanOrEqual(1);
+    expect(after.users).toBe(2);
+  }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+test(
+  "a poisoned round exhausts its attempts, is abandoned VISIBLY, and the run keeps serving",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const key = runKey("exhaust");
+    const directive = `call:crash:x-${stamp}:99`;
+
+    // a budget of 99 never succeeds: initial burst + 2 alarm
+    // re-entries (maxAttempts) all die, then the next alarm abandons
+    // the round — total ~21s at the fixture's 3s base backoff
+    yield* drive(url, "/send", { key, input: directive });
+    yield* Effect.sleep("30 seconds");
+
+    const after = yield* report(url, { key, input: "status" });
+    // the abandonment is IN THE THREAD, not swallowed — the model
+    // (and any observer) can see the round died
+    expect(after.thread.some((entry) => entry.includes("interrupted"))).toBe(
+      true,
+    );
+    // no assistant message ever landed for the poisoned round…
+    expect(after.assistants).toBe(0);
+    // …but the run still serves: this very report answered, and the
+    // crash-loop did NOT run forever (bounded attempts)
+    expect(after.last).toBe("status");
   }).pipe(logLevel),
   { timeout: 300_000 },
 );

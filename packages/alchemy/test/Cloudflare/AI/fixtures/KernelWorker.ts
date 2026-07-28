@@ -10,7 +10,9 @@
  * so un-serializable) reaches a run without ever crossing the wire.
  */
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Agents, Scribe, Supervisor } from "./KernelAgents.ts";
@@ -37,8 +39,18 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
         switch (url.pathname) {
           // admit + join: resolves at `AI.reply`, or at quiescence
           case "/dispatch": {
-            const answer = yield* actor.dispatch(input, { key });
-            return yield* HttpServerResponse.json({ answer });
+            // surface failures as text instead of an opaque 500 — a
+            // deployed test can only be debugged through its responses
+            const result = yield* Effect.exit(actor.dispatch(input, { key }));
+            if (Exit.isSuccess(result)) {
+              return yield* HttpServerResponse.json({ answer: result.value });
+            }
+            const detail = Cause.pretty(result.cause);
+            yield* Effect.logError(`[fixture] dispatch failed: ${detail}`);
+            return yield* HttpServerResponse.json(
+              { error: detail },
+              { status: 500 },
+            );
           }
           // admit, fire-and-forget
           case "/send": {

@@ -85,12 +85,39 @@ const respond = (prompt: Prompt.Prompt): Array<Response.PartEncoded> => {
       JSON.stringify({
         users: users.length,
         tools: answered,
+        assistants: prompt.content.filter(
+          (message) => message.role === "assistant",
+        ).length,
         last: users[users.length - 1] ?? null,
         thread: users,
       }),
     ),
     finish(),
   ];
+};
+
+/**
+ * The CRASH directive, for the durability tests: while a directive
+ * `call:crash:<id>:<n>` is the LAST user message and its budget `n`
+ * is not spent, the sampling DIES — the way an eviction, deploy, or
+ * defect kills a burst mid-round. The budget is isolate memory on
+ * purpose: recovery re-enters in the same isolate, and the (n+1)th
+ * sampling succeeding is exactly the "transient failure" shape. Once
+ * any later message arrives, the directive stops firing, so a
+ * post-mortem poll can always read the thread.
+ */
+const crashBudgets = new Map<string, number>();
+
+const crashRequested = (prompt: Prompt.Prompt): string | undefined => {
+  const users = userTexts(prompt);
+  const last = users[users.length - 1];
+  const match = last?.match(/^call:crash:([^:]+):(\d+)$/);
+  if (match === null || match === undefined) return undefined;
+  const [, id, budget] = match;
+  const used = crashBudgets.get(id!) ?? 0;
+  if (used >= Number(budget)) return undefined;
+  crashBudgets.set(id!, used + 1);
+  return id;
 };
 
 const text = (content: string): Response.PartEncoded =>
@@ -123,9 +150,21 @@ const finish = (reason: "stop" | "tool-calls" = "stop"): Response.PartEncoded =>
 export const DeterministicModel = Layer.effect(
   LanguageModel.LanguageModel,
   LanguageModel.make({
-    generateText: (options) => Effect.sync(() => respond(options.prompt)),
-    streamText: (options) =>
-      Stream.fromIterable(respond(options.prompt).flatMap(streamed)),
+    generateText: (options) =>
+      Effect.suspend(() => {
+        const crash = crashRequested(options.prompt);
+        return crash !== undefined
+          ? Effect.die(new Error(`scripted crash '${crash}'`))
+          : Effect.sync(() => respond(options.prompt));
+      }),
+    streamText: (options) => {
+      const crash = crashRequested(options.prompt);
+      // a DEFECT, not a failure: it skips the kernel's in-round retry
+      // the way an eviction would, and lands in the crash path
+      return crash !== undefined
+        ? Stream.fromEffect(Effect.die(new Error(`scripted crash '${crash}'`)))
+        : Stream.fromIterable(respond(options.prompt).flatMap(streamed));
+    },
   }),
 );
 
@@ -224,6 +263,12 @@ export const Agents = SupervisorLive.pipe(
     Layer.mergeAll(
       DeterministicModel,
       LoggingObserver,
+      // recovery in SECONDS, not the production half-minute, so the
+      // durability tests can watch the alarm re-enter a broken round
+      Layer.succeed(Cloudflare.AI.KernelDurability, {
+        recoverAfterMillis: 3_000,
+        maxAttempts: 2,
+      }),
       // the kernel's own breadcrumbs are Debug — a deployed test that
       // can't be attached to is only as debuggable as its log level
       Layer.succeed(MinimumLogLevel, "Debug"),

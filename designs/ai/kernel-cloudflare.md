@@ -106,11 +106,58 @@ on send/dispatch/steer RPC (or alarm):
 Serial execution per run is free: DOs are single-threaded and
 `blockConcurrencyWhile`/input-gates order events.
 
+## Durability (v1.1 — after studying think)
+
+DOs run long but not forever: evictions, deploys, and defects kill an
+in-flight burst. The recovery design adapts
+`@cloudflare/agents`' fiber machinery (see
+[reports/think-durable-execution.md](./reports/think-durable-execution.md))
+to the burst loop — same mechanics, smaller surface:
+
+- **Liveness marker, not heartbeat** (`meta.busy`): written when a
+  round opens, cleared at quiescence, reset (attempts → 0) by every
+  completed sampling. A burst that finds it set on ENTRY knows its
+  predecessor died — eviction, deploy, and crash are indistinguishable
+  on disk and recovered identically. The burst gate makes the check
+  unambiguous: a healthy predecessor clears the marker before
+  releasing.
+- **Self-arming recovery alarm**: the single DO alarm serves both
+  clocks — `min(next reminder, busy.since + recoverAfter · 2^attempts)`
+  — re-armed on every mutation and after every alarm-driven burst. A
+  clientless DO with a broken round wakes itself; any ordinary event
+  (deliver/steer/dispatch) recovers it sooner for free.
+- **Progress-keyed attempt budget** (think's key insight): attempts
+  count consecutive re-entries on the SAME round; any sampling that
+  lands resets the budget, so long tool-looping rounds never exhaust.
+  On exhaustion (default 5) the round is abandoned VISIBLY — an
+  interruption note in the thread, a `crashed` observation — and the
+  run keeps serving fresh input with a fresh budget.
+- **Append-first drain with a watermark** (`meta.drained`): inputs are
+  appended to the thread — watermark advanced, round opened — in ONE
+  atomic write, and only then are inbox rows deleted. Rows below the
+  watermark on redelivery are discarded, never re-appended:
+  at-least-once drain, exactly-once append. `enqueue` writes its row
+  and the seq bump atomically for the same reason.
+- **No transcript repair needed**: a round's messages (tool results
+  included) append only after its sampling completes, so partial
+  rounds never persist — recovery re-samples; it never splices. The
+  cost is at-least-once TOOL side effects on recovery, which is the
+  standard contract.
+- `KernelDurability` (optional layer) tunes `recoverAfterMillis` /
+  `maxAttempts`; tests run recovery at seconds.
+
+Deliberately NOT taken from think: durable submissions/idempotency
+ledger for `dispatch` (callers re-drive; the round itself is durable),
+delivery-state snapshots (no streaming clients yet), and stash-based
+mid-callback checkpoints (the round is our checkpoint grain).
+
 ## v1 simplifications (accepted, revisit in layering)
 
 1. **Held-open dispatch RPC** — parent and child pinned for the round;
-   an eviction mid-round fails the round (the caller sees the error;
-   world re-delivery re-drives it). Durable continuations are v2.
+   an eviction mid-round fails the CALL (the caller sees the error and
+   re-drives) — but no longer the round: the run recovers and the
+   answer lands in the thread. A durable acceptance ledger
+   (think's `startFiber` idempotency keys) is the v2 follow-up.
 2. **No passivation snapshot beyond the thread** — `lastStance`,
    pending compaction etc. recompute per burst.
 3. **Observer = log sink** — board/Chats projection on Cloudflare is

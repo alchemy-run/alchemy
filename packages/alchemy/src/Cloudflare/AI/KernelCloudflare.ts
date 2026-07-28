@@ -130,7 +130,7 @@ const parseRunName = (name: string) => {
 // inbox:{seq}      pending inputs, drained per burst
 // msg:{seq}        thread messages, appended (the transcript)
 // remind:{fireAt}  scheduled notes (the alarm re-arms from these)
-// meta             { tick, observed, active[], settled? }
+// meta             { tick, observed, active[], settled?, drained, busy? }
 const INBOX = "inbox:";
 const MSG = "msg:";
 const REMIND = "remind:";
@@ -140,15 +140,58 @@ const META = "meta";
 const seqKey = (prefix: string, seq: number) =>
   `${prefix}${String(seq).padStart(12, "0")}`;
 
+const seqOf = (prefix: string, key: string) => Number(key.slice(prefix.length));
+
 interface RunMeta {
   readonly tick: number;
   readonly observed: number;
   readonly active: ReadonlyArray<string>;
   readonly settled?: { readonly outcome: unknown };
   readonly seq: number;
+  /**
+   * The drain WATERMARK: inbox rows below this seq are already in the
+   * thread. Inputs are appended (with this watermark advanced, in one
+   * atomic write) BEFORE their inbox rows are deleted, so a crash
+   * between the two redelivers rows the watermark tells us to discard
+   * — at-least-once drain, exactly-once append.
+   */
+  readonly drained: number;
+  /**
+   * The LIVENESS marker, following think's `cf_agents_runs` design
+   * (designs/ai/reports/think-durable-execution.md): present while a
+   * burst owes the thread a reply, cleared at quiescence. A burst that
+   * finds it already set on entry knows its predecessor DIED mid-round
+   * — eviction, deploy, or crash, all indistinguishable and all
+   * recovered the same way. `attempts` counts consecutive re-entries
+   * on the SAME round; any completed sampling resets it (progress-
+   * keyed budgets, not wall-clock).
+   */
+  readonly busy?: { readonly attempts: number; readonly since: number };
 }
 
-const emptyMeta: RunMeta = { tick: 0, observed: 0, active: [], seq: 0 };
+const emptyMeta: RunMeta = {
+  tick: 0,
+  observed: 0,
+  active: [],
+  seq: 0,
+  drained: 0,
+};
+
+/**
+ * Tuning for the recovery machinery — optional; tests shrink it so
+ * recovery is observable in seconds.
+ */
+export class KernelDurability extends Context.Service<
+  KernelDurability,
+  {
+    /** Base delay before the recovery alarm re-enters a silent round
+     *  (doubles per attempt, capped at 8×). @default 30 seconds */
+    readonly recoverAfterMillis?: number;
+    /** Re-entries on the same round before it is abandoned with an
+     *  interruption note. @default 5 */
+    readonly maxAttempts?: number;
+  }
+>()("alchemy/Cloudflare/AI/KernelDurability") {}
 
 /** The thread crosses storage in its ENCODED form — rows are JSON. */
 const encodeMessages = S.encodeSync(S.Array(Prompt.Message));
@@ -266,10 +309,35 @@ export const KernelCloudflare: Layer.Layer<
           });
 
         // ── observations ────────────────────────────────────────────
-        const observer = Context.getOption(
-          yield* Effect.context<never>(),
-          KernelObserver,
+        const captured = yield* Effect.context<never>();
+        const observer = Context.getOption(captured, KernelObserver);
+        const durability = Option.getOrElse(
+          Context.getOption(captured, KernelDurability),
+          () => ({}) as (typeof KernelDurability)["Service"],
         );
+        const recoverAfter = durability.recoverAfterMillis ?? 30_000;
+        const maxAttempts = durability.maxAttempts ?? 5;
+
+        /**
+         * ONE alarm, re-armed after every mutation to the earliest of
+         * its consumers: the next reminder, and the recovery deadline
+         * of an open round (backed off per attempt). A stale alarm
+         * firing after the work is done just parks — never cleared,
+         * only outraced.
+         */
+        const armAlarm = Effect.gen(function* () {
+          const meta = yield* readMeta;
+          const reminders = yield* listRows<string>(REMIND);
+          const deadlines = reminders.map(([k]) => seqOf(REMIND, k));
+          if (meta.busy !== undefined && meta.settled === undefined) {
+            deadlines.push(
+              meta.busy.since +
+                recoverAfter * 2 ** Math.min(meta.busy.attempts, 3),
+            );
+          }
+          if (deadlines.length === 0) return;
+          yield* storage.setAlarm(Math.min(...deadlines)).pipe(Effect.orDie);
+        });
         const observe = (
           observation: DistributiveOmit<
             KernelObservation,
@@ -338,12 +406,7 @@ export const KernelCloudflare: Layer.Layer<
               Effect.gen(function* () {
                 const fireAt = Date.now() + Duration.toMillis(delay);
                 yield* storage.put(seqKey(REMIND, fireAt), note);
-                // one alarm serves every pending note: it fires for the
-                // EARLIEST and re-arms for the next
-                const current = yield* storage.getAlarm();
-                if (current === null || fireAt < current) {
-                  yield* storage.setAlarm(fireAt);
-                }
+                yield* armAlarm;
               }),
             ),
         };
@@ -656,6 +719,44 @@ export const KernelCloudflare: Layer.Layer<
           // per-ACTIVATION init: the charter's closure is isolate
           // state (run-durable state lives in the thread/storage)
           let meta = yield* readMeta;
+
+          // ── recovery: a busy marker on ENTRY means the previous
+          // burst DIED mid-round — eviction, deploy, or crash, all
+          // indistinguishable on disk and all re-entered the same way.
+          // (The gate makes this unambiguous: a healthy predecessor
+          // clears the marker before releasing.) Bounded re-entry:
+          // progress resets the budget; exhaustion abandons the round
+          // VISIBLY and the run keeps serving.
+          let recovering = false;
+          if (meta.busy !== undefined && meta.settled === undefined) {
+            const attempts = meta.busy.attempts + 1;
+            if (attempts > maxAttempts) {
+              yield* appendThread([
+                noteMessage(
+                  `This round was interrupted ${maxAttempts} times and has been abandoned — the messages above it may be unanswered. Continuing fresh from here.`,
+                ),
+              ]);
+              yield* observe({
+                type: "input",
+                text: `<note>\nround abandoned after ${maxAttempts} interrupted attempts\n</note>`,
+              });
+              meta = { ...(yield* readMeta), busy: undefined };
+              yield* writeMeta(meta);
+              yield* observe({
+                type: "crashed",
+                error: `round abandoned after ${maxAttempts} interrupted attempts`,
+              });
+            } else {
+              meta = { ...meta, busy: { attempts, since: Date.now() } };
+              yield* writeMeta(meta);
+              yield* armAlarm;
+              recovering = true;
+              yield* Effect.logInfo(
+                `KernelCloudflare run '${me.term}/${me.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
+              );
+            }
+          }
+
           const tickService = (count: number): TickService => ({
             count,
             say: (note) => Effect.sync(() => void pendingNotes.push(note)),
@@ -676,36 +777,62 @@ export const KernelCloudflare: Layer.Layer<
            * come back around to read their results, with no new input
            * at all. Starts `true` so a burst kicked with nothing to do
            * (its input already drained by the burst it queued behind)
-           * parks instead of sampling.
+           * parks instead of sampling — unless it is RECOVERING an
+           * interrupted round, whose inputs are already in the thread
+           * and owed a reply.
            */
-          let quiescent = true;
+          let quiescent = !recovering;
 
           while (true) {
             meta = yield* readMeta;
             if (meta.settled !== undefined) break;
 
             const rows = yield* listRows<unknown>(INBOX);
-            if (rows.length === 0 && quiescent) {
+            // rows below the watermark were appended by an attempt
+            // that died before deleting them — discard, never re-append
+            const fresh = rows.filter(([k]) => seqOf(INBOX, k) >= meta.drained);
+            if (fresh.length === 0 && quiescent) {
+              if (rows.length > 0) {
+                yield* storage.delete(rows.map(([k]) => k)).pipe(Effect.orDie);
+              }
               // PARKED: the run's work is done until the world moves.
               // On this substrate parking is RETURNING — the next
               // event (deliver, steer, alarm) kicks a fresh burst.
               yield* observe({ type: "parked" });
               break;
             }
-            const inputs = rows.map(([, input]) => input);
+            const inputs = fresh.map(([, input]) => input);
+
+            // append the inputs, advance the watermark, and OPEN the
+            // round in ONE atomic write — only then delete the inbox
+            // rows. Every crash point between redelivers into a state
+            // that converges instead of losing or duplicating input.
+            const entries: Record<string, unknown> = {};
+            let seq = meta.seq;
+            for (const input of inputs) {
+              entries[seqKey(MSG, seq++)] = asUserMessage(input);
+            }
+            meta = {
+              ...meta,
+              seq,
+              drained:
+                fresh.length > 0
+                  ? seqOf(INBOX, fresh[fresh.length - 1]![0]) + 1
+                  : meta.drained,
+              busy: meta.busy ?? { attempts: 0, since: Date.now() },
+            };
+            entries[META] = meta;
+            yield* storage.put(entries).pipe(Effect.orDie);
+            yield* armAlarm;
             if (rows.length > 0) {
               yield* storage.delete(rows.map(([k]) => k)).pipe(Effect.orDie);
             }
-
-            const messages: Array<Prompt.MessageEncoded> = [];
             for (const input of inputs) {
-              messages.push(asUserMessage(input));
               yield* observe({
                 type: "input",
                 text: typeof input === "string" ? input : JSON.stringify(input),
               });
             }
-            yield* appendThread(messages);
 
             // TICK — the stance for this sampling
             pendingNotes.length = 0;
@@ -911,14 +1038,22 @@ export const KernelCloudflare: Layer.Layer<
                 input: call.params,
               })),
             });
-            meta = yield* readMeta;
-            yield* writeMeta({ ...meta, tick: meta.tick + 1 });
-
             quiescent = response.toolCalls.length === 0;
+            meta = yield* readMeta;
+            yield* writeMeta({
+              ...meta,
+              tick: meta.tick + 1,
+              // PROGRESS: a completed sampling resets the recovery
+              // budget; a quiescent one closes the round entirely
+              busy: quiescent ? undefined : { attempts: 0, since: Date.now() },
+            });
+
             if (quiescent) {
               // the round's remaining waiters answer with the text —
               // the loop comes around once more and parks there
               yield* resolveWaiters(response.text);
+            } else {
+              yield* armAlarm;
             }
           }
         }).pipe(
@@ -940,10 +1075,14 @@ export const KernelCloudflare: Layer.Layer<
         const enqueue = (input: unknown) =>
           Effect.gen(function* () {
             const meta = yield* readMeta;
+            // one atomic write: a crash can never leave a row the
+            // counter would overwrite
             yield* storage
-              .put(seqKey(INBOX, meta.seq), input)
+              .put({
+                [seqKey(INBOX, meta.seq)]: input,
+                [META]: { ...meta, seq: meta.seq + 1 },
+              })
               .pipe(Effect.orDie);
-            yield* writeMeta({ ...meta, seq: meta.seq + 1 });
           });
 
         return Effect.succeed<RunRpc>({
@@ -986,7 +1125,13 @@ export const KernelCloudflare: Layer.Layer<
             Effect.gen(function* () {
               const meta = yield* readMeta;
               if (meta.settled !== undefined) return;
-              yield* writeMeta({ ...meta, settled: { outcome } });
+              // busy dies with the run — a settled run must not keep
+              // an armed recovery alarm re-entering it
+              yield* writeMeta({
+                ...meta,
+                settled: { outcome },
+                busy: undefined,
+              });
               yield* observe({ type: "settled" });
               yield* resolveWaiters(outcome);
               // the SUPERVISION cascade, cross-DO: a supervisor's end
@@ -1000,28 +1145,28 @@ export const KernelCloudflare: Layer.Layer<
               }
               children.clear();
             }),
-          /** Due reminders become ordinary inputs, then the alarm re-arms. */
+          /**
+           * The single alarm serves BOTH clocks: due reminders become
+           * ordinary inputs, and an open round's recovery deadline
+           * re-enters the burst. Re-arming happens AFTER the burst so
+           * the alarm reflects the round's final state — and a failing
+           * burst is contained rather than failing the alarm event,
+           * because workerd's own alarm retry would race our bounded
+           * one (and give up for good after its budget).
+           */
           alarm: () =>
             Effect.gen(function* () {
               const now = Date.now();
               const rows = yield* listRows<string>(REMIND);
-              const due = rows.filter(
-                ([k]) => Number(k.slice(REMIND.length)) <= now,
-              );
+              const due = rows.filter(([k]) => seqOf(REMIND, k) <= now);
               for (const [, note] of due) {
                 yield* enqueue(`[reminder] ${note}`);
               }
               if (due.length > 0) {
                 yield* storage.delete(due.map(([k]) => k)).pipe(Effect.orDie);
               }
-              const next = rows
-                .map(([k]) => Number(k.slice(REMIND.length)))
-                .filter((at) => at > now)
-                .sort((a, b) => a - b)[0];
-              if (next !== undefined) {
-                yield* storage.setAlarm(next).pipe(Effect.orDie);
-              }
-              yield* burst;
+              yield* Effect.exit(burst);
+              yield* armAlarm;
             }),
         });
       }),
