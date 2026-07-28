@@ -8,14 +8,13 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import type { Context } from "./Context.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface ServiceProps {
   /** Service name. Defaults to generated physical name. */
   name?: string;
   /** Docker context resource for this service. Overrides global context when set. */
-  context?: Context;
+  context?: Docker.ContextRef;
   /** Docker image reference or Docker image resource. */
   image: Service.Image;
   /** Entrypoint command passed after the image. */
@@ -206,7 +205,7 @@ export const ServiceProvider = () =>
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const name = yield* dockerPhysicalName(id, olds, instanceId);
-          const context = normalizeContext(olds.context);
+          const context = normalizeContext(olds?.context);
           const live = yield* inspect(name, context);
           if (!live) return undefined;
           ensureReplicatedMode(live);
@@ -507,7 +506,7 @@ const normalizeImageRef = (image: Service.Image): string =>
   typeof image === "string" ? image : (image as { imageRef: string }).imageRef;
 
 const normalizeContext = (
-  context: Context | string | undefined,
+  context: Docker.ContextRef | undefined,
 ): string | undefined => {
   const value =
     typeof context === "string"
