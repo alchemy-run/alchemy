@@ -1,0 +1,86 @@
+---
+title: Agents
+description: Build organizations of AI agents as code — charters written in prose, capabilities granted by mention, wired to the world with Effect Layers.
+---
+
+Alchemy's agent runtime turns the pattern behind IaC on language
+itself: an **agent is prose with capabilities spliced in**, and an
+organization of agents is a typed, composable Effect program.
+
+```typescript
+import * as AI from "alchemy/AI";
+
+export class Reviewer extends AI.Agent<Reviewer>()("Reviewer") {}
+
+export const ReviewerLive = Reviewer.make`
+  You review each ${pr} against its originating ${issue} — the diff
+  and the spec; you did not write this code and never saw its
+  author's reasoning. Verdict via ${Approve} or changes via ${Comment}.`;
+```
+
+That template is not a system prompt in a string — every `${...}`
+splice is a **term** (a tool, a skill, another agent), and mentioning
+it is what grants it:
+
+- **Mention is presence.** The tools an agent holds are exactly the
+  ones its prose mentions — and the requirements ride Effect's type
+  system, so a missing implementation is a compile error, not a
+  runtime surprise.
+- **Capability by omission.** This Reviewer cannot merge — not because
+  a rule says so, but because no merge tool appears in its charter.
+  `rg '\$\{MergePullRequest\}'` audits the whole org.
+- **Physics by composition.** The same charter runs against local
+  shell tools today and different physics tomorrow, because
+  implementations are [Layers](/infrastructure-as-effects/layers)
+  chosen at the entrypoint.
+
+Agents are **perpetual actors**, not one-shot chains: each run is a
+conversation keyed by a world entity (`org/repo#123`), it parks when
+its work is done, and the next event — a comment, a review, a
+reminder it set itself — wakes it with its context intact.
+
+:::caution
+The agent runtime is **experimental**. The surface documented here is
+real and runs today on the in-memory kernel; durable kernels
+(Cloudflare Durable Objects) are in active development. Expect
+breaking changes between beta releases.
+:::
+
+## Start here
+
+- **[Tutorial](/agents/tutorial/part-1)** — build your first agent,
+  give it tools and skills, then grow it into a two-agent org.
+- **[Cheatsheet](/agents/cheatsheet)** — the whole loop-facing surface
+  on one page.
+
+## Concepts
+
+- [Agents & charters](/agents/concepts/agents) — the init → stance
+  model; static prose, closures, and guard-tier turns.
+- [Tools & parameters](/agents/concepts/tools) — typed verbs, their
+  physics, and answering callers with `AI.reply`.
+- [Skills](/agents/concepts/skills) — crafts that stay dormant until
+  the work demands them.
+- [Delegation](/agents/concepts/delegation) — dispatch, spawn, doors,
+  sessions, and the supervision cascade.
+- [Runs & threads](/agents/concepts/runs) — keys, parking, waking,
+  settling, and the kernel clock.
+- [Workspaces](/agents/concepts/workspaces) — git checkouts as
+  capabilities; sharing a tree by sharing a key.
+- [The kernel](/agents/concepts/kernel) — the interpreter behind
+  every agent, and how to swap it.
+- [Observability](/agents/concepts/observability) — stream every run
+  into your own UI with the AI SDK protocol.
+- [Roles & missions](/agents/concepts/roles-and-missions) — one role,
+  many missions, staffed per desk.
+- [Human in the loop](/agents/concepts/human-in-the-loop) — approval
+  as a Layer swap, not a framework feature.
+
+## The worked example
+
+These docs quote a real system throughout: **alchemy-org**, a software
+factory that manages a GitHub repository end to end — issues are
+triaged by an owner agent, an engineer builds the fix in its own git
+worktree, a reviewer verifies it in the same checkout, and the merge
+is ratified against an approvals ledger. Every pattern documented
+here is load-bearing there.

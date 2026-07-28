@@ -1,0 +1,245 @@
+---
+title: "Part 4: An Org"
+description: Add a specialist worker, delegate through a door with a code-derived session key, and run keyed conversations that park and resume.
+sidebar:
+  order: 4
+---
+
+One agent with skills goes far, but separation of duties needs a
+second persona: a **specialist** the desk hands refund decisions to,
+so judgment and customer voice live in different heads. This part
+builds the delegation machinery: doors, sessions, typed replies, and
+keyed runs.
+
+## Declare the specialist
+
+Create `src/Specialist.ts` — a worker with its own charter:
+
+```typescript
+// src/Specialist.ts
+import * as AI from "alchemy/AI";
+import { Refunds } from "./Refunds.ts";
+
+export class Specialist extends AI.Agent<Specialist>()("Specialist") {}
+
+export const SpecialistLive = Specialist.make`
+  You decide refunds for Acme Teas. Each task carries one case: the
+  order id and what the customer reports. ${Refunds} is your entire
+  rubric — a case the policy does not clearly cover is declined with
+  the reason. You decide and act; talking to the customer is someone
+  else's job.`;
+```
+
+Note what this charter *lacks*: no customer voice, no `escalate`, no
+small talk. The specialist sees only what its task says — isolation
+is what makes a second opinion worth having.
+
+## Reply with evidence
+
+The desk shouldn't trust a claim that a refund happened; it should
+receive the refund *itself*. Change the specialist to answer through
+its tool:
+
+```diff lang="typescript"
+// src/Specialist.ts
+import * as AI from "alchemy/AI";
++import * as Effect from "effect/Effect";
+import { Refunds } from "./Refunds.ts";
++import { IssueRefund, amount, orderId } from "./tools.ts";
+
+export class Specialist extends AI.Agent<Specialist>()("Specialist") {}
+
+-export const SpecialistLive = Specialist.make`
+-  You decide refunds for Acme Teas. Each task carries one case: the
+-  order id and what the customer reports. ${Refunds} is your entire
+-  rubric — a case the policy does not clearly cover is declined with
+-  the reason. You decide and act; talking to the customer is someone
+-  else's job.`;
++export const SpecialistLive = Specialist.make(
++  Effect.gen(function* () {
++    const issue = yield* IssueRefund;
++
++    const issueRefund = yield* AI.Tool("issue_refund")`
++      Execute the refund you decided on, for ${orderId} and
++      ${amount} (cents). Only call this once the policy clearly
++      authorizes it.`(
++      Effect.fn(function* (input) {
++        const receipt = yield* issue(input);
++        yield* AI.reply({ refunded: true, ...input });
++        return receipt;
++      }),
++    );
++
++    return AI.prose`
++      You decide refunds for Acme Teas. Each task carries one case:
++      the order id and what the customer reports. ${Refunds} is your
++      entire rubric — a case the policy does not clearly cover is
++      declined with the reason. Execute approved refunds with
++      ${issueRefund}. You decide and act; talking to the customer is
++      someone else's job.`;
++  }),
++);
+```
+
+`AI.reply(value)` answers the pending call **the moment the evidence
+exists** — the desk's dispatch resolves with the typed
+`{ refunded, orderId, amount }` object, not with prose claiming a
+refund happened. A round that never replies answers with its final
+text instead, which is exactly right for declines.
+
+## Build a door
+
+Back in the desk's charter, delegation gets a **door** — a dispatch
+whose policy lives in code:
+
+```diff lang="typescript"
+// src/Assistant.ts
++import { Specialist } from "./Specialist.ts";
++
++const task = AI.Parameter("task", S.String)`
++The case, standing alone: order id and what the customer reports.
++The specialist sees only this.`;
++
++const HandToRefunds = AI.Dispatch(Specialist, "hand_to_refunds")`
++  Hand one refund case to the specialist with ${task}. It is the
++  same specialist for this customer every time; it answers with the
++  decision.`(
++  (p: { task: string }, thread) => ({
++    task: p.task,
++    key: `${thread.key}/refunds`,
++  }),
++);
+```
+
+The model gets a tool with one `task` field and *no other levers*: the
+policy function derives the child run's key in code, so
+one-specialist-per-customer is an invariant the model cannot
+misspell. A bare `${Specialist}` splice would grant free-form
+delegation instead — doors are for the hops that carry rules.
+
+## Grant the door
+
+Doors are yielded in init and mentioned like tools:
+
+```diff lang="typescript"
+// src/Assistant.ts
+export const AssistantLive = Assistant.make(
+  Effect.gen(function* () {
+    const escalations = yield* Ref.make(0);
++    const handToRefunds = yield* HandToRefunds;
+
+    // ... escalate ...
+
+    return AI.prose`
+      You are the support desk of Acme Teas, a small online tea shop.
+      Answer customers plainly and warmly, in two or three sentences.
+      Order questions are answered from ${LookupOrder}, never from
+-      memory. ${Refunds} is your craft for anything refund-shaped.
++      memory. Anything refund-shaped goes through ${handToRefunds} —
++      relay its decision in your own warm words; the decision itself
++      is not yours to make.
+      A customer who is upset, or asks for something you
+      cannot do, goes to ${escalate} — never argue.`;
+  }),
+);
+```
+
+The desk lost the `Refunds` skill and gained a door: it can no longer
+issue refunds itself, only hand cases over and relay decisions —
+separation of duties, enforced by which charter mentions what.
+
+## Staff the org
+
+The environment now composes two agents:
+
+```diff lang="typescript"
+// src/main.ts
++import { SpecialistLive } from "./Specialist.ts";
+
+const Env = Layer.mergeAll(
+  AssistantLive.pipe(
+    Layer.provide(Kernel),
+    Layer.provide(LookupOrderLocal),
+-    Layer.provide(RefundsLive.pipe(Layer.provide(IssueRefundLocal))),
++    Layer.provide(
++      SpecialistLive.pipe(
++        Layer.provide(Kernel),
++        Layer.provide(RefundsLive.pipe(Layer.provide(IssueRefundLocal))),
++      ),
++    ),
+  ),
+  RuntimeContext.phantom,
+);
+```
+
+The desk's charter requires `Specialist`; providing `SpecialistLive`
+*inside the desk's composition* staffs it — the skill and refund tool
+move with it. When the door fires, the kernel dispatches into the
+specialist's own run, records the parent edge, and the desk's
+tool call resolves with the typed decision.
+
+## Key the conversations
+
+So far each `dispatch` minted a fresh run. Key them by customer and
+the desk becomes perpetual:
+
+```diff lang="typescript"
+// src/main.ts
+const main = Effect.gen(function* () {
+  const assistant = yield* Assistant;
+-  const answer = yield* assistant.dispatch(
+-    "Hi! Do you ship your jasmine green tea to Canada?",
+-  );
+-  console.log(answer);
++  const key = "customer:mia@example.com";
++  console.log(
++    yield* assistant.dispatch(
++      "My order ACME-1042 arrived with a cracked tin. Can you help?",
++      { key },
++    ),
++  );
++  console.log(
++    yield* assistant.dispatch("Thanks! How long will that take?", { key }),
++  );
+});
+```
+
+Same key, same conversation: the second dispatch wakes the run with
+its full context — the cracked tin, the refund decision — and the
+specialist's session (`customer:mia@example.com/refunds`) persists the
+same way. Between dispatches the runs are **parked**: no tokens burn
+while nobody is talking.
+
+## End a conversation
+
+Runs are perpetual until the world ends them:
+
+```diff lang="typescript"
+// src/main.ts
+  console.log(
+    yield* assistant.dispatch("Thanks! How long will that take?", { key }),
+  );
++
++  // the world closing the case ends the run — and the supervision
++  // cascade settles the specialist session it dispatched
++  yield* assistant.settle(key, { resolved: true });
+```
+
+`settle` is the owner's act, never the model's: the run ends, anyone
+still waiting receives the outcome, and every session worker the run
+dispatched settles with it — parked specialists never outlive the
+conversation that hired them.
+
+## Where to go next
+
+You've built the whole shape: charters, tools, skills, doors,
+sessions, supervision. From here:
+
+- [Concepts](/agents/concepts/agents) — the model behind what you
+  just built, one page per idea.
+- [Testing agents](/agents/guides/testing) — script the model and
+  assert the whole flow deterministically.
+- [Observability](/agents/concepts/observability) — stream these
+  runs into a live UI.
+- [GitHub events](/agents/guides/github-events) — replace the script
+  with a real event source, the way the alchemy-org factory runs.

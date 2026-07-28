@@ -1,0 +1,115 @@
+---
+title: Skills
+description: Crafts packaged as teachings on Layers — dormant until activated, granting their tools only while active, and referencing deeper skills as a graph.
+---
+
+A **skill** bundles knowledge with the tools that act on it, and
+keeps both out of the agent's context until the work demands them.
+Where a charter is *who the agent is*, a skill is *a craft it can
+pick up*.
+
+## Declaration and teaching
+
+The declaration is a bare tag; the **teaching** lives on the Layer:
+
+```typescript
+export class Coding extends AI.Skill<Coding>()("Coding") {}
+
+export const CodingLive = Coding.make`
+  # Writing code in the repository checkout
+
+  Your tools: ${Grep}, ${Glob}, ${ListDirectory}, ${ReadFile},
+  ${EditFile}, ${ApplyPatch}, ${WriteFile}, ${Bash}, and
+  ${ReadOutput}.
+
+  ## The discipline the tools cannot carry alone
+
+  - **Read before you edit** — the digest chain exists so you never
+    change a version you have not seen.
+  - **Verify with the test suite after your edits** — the suite, not
+    your reading of the diff, is the oracle of done-ness.
+  - **Write code that reads like the surrounding code** — match its
+    idiom, naming, and comment density.`;
+```
+
+Because the teaching is on the Layer, one contract can ship different
+teachings per environment — the same `Coding` skill can teach shell
+craft locally and container craft in production, with different tool
+grants to match.
+
+Teachings are documents: markdown headings, lists, and code fences
+render to the model as written. Write them like a good internal wiki
+page — [Writing prose](/agents/guides/writing-prose) covers what
+belongs in a skill versus a charter versus a tool description.
+
+## Access, then activation
+
+A charter grants a skill by mention, costing one line of context:
+
+```typescript
+return AI.prose`
+  ...${Coding} is your craft; done means the criteria are met and
+  the tests are green...`;
+```
+
+The mention is **access**, not content: the kernel gives the agent a
+`skill` intrinsic, and only when the model activates the skill does
+the teaching enter the conversation — and only then do the teaching's
+tool grants (`${Grep}`, `${Bash}`, …) join the toolkit. Progressive
+disclosure, driven by the model's own judgment about what the task
+needs. Deactivation removes both again.
+
+Type-level, mentioning a skill charges the charter with the *skill's*
+tag only — the tools surface as the skill Layer's own requirements
+(`Layer<Coding, never, Grep | Bash | …>`), so the bundle stays
+encapsulated and the entrypoint decides its physics.
+
+## The skill graph
+
+A teaching can reference deeper skills, and activating the parent
+exposes them for activation:
+
+```typescript
+// services/alchemy-org/src/skills/Coding.ts
+export const CodingLive = Coding.make`
+  ...
+  ## Deeper craft
+
+  When the work calls for it: ${ResourceEngineering} covers
+  everything about building alchemy resources — the contract, the
+  reconciler, and the disciplines that make providers reliable (its
+  own deeper skills included).`;
+```
+
+In the factory, `Coding` exposes `ResourceEngineering`, whose
+teaching exposes `TypedErrors` and `LiveTesting` — a tree of doctrine
+the agent descends level by level, paying for each layer of context
+only when a task actually reaches it. Composition mirrors the graph:
+
+```typescript
+const EngineerLayer = IssueEngineer.pipe(
+  Layer.provide(
+    CodingLocal.pipe(
+      Layer.provideMerge(
+        ResourceEngineeringLive.pipe(
+          Layer.provideMerge(Layer.mergeAll(TypedErrorsLive, LiveTestingLive)),
+        ),
+      ),
+    ),
+  ),
+);
+```
+
+## What belongs in a skill
+
+Skills encode **craft** — the cross-tool discipline and org-specific
+taste no single tool description can carry. They do not encode:
+
+- **Mission** — what an agent's rounds *are* belongs to its charter;
+  a skill cannot honestly redefine the persona's job. See
+  [Roles & missions](/agents/concepts/roles-and-missions).
+- **Per-tool usage** — that's the tool template's job; repeating it
+  in a skill creates the conflicting-directives tax.
+- **Authority** — tools that carry power (merge, approve, close) stay
+  direct splices in charters, so capability lines remain visible in a
+  grep. Skills bundle craft tools, never keys.

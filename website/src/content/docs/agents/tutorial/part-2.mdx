@@ -1,0 +1,192 @@
+---
+title: "Part 2: Tools"
+description: Give the agent typed verbs — parameters, a tool contract, swappable physics, and an inline tool closing over run state.
+sidebar:
+  order: 2
+---
+
+The assistant from [part 1](/agents/tutorial/part-1) can only talk.
+In this part you'll give it a typed tool, wire the tool's
+implementation as a Layer, and add a second tool inline — one that
+closes over the run's own state.
+
+## Declare a parameter
+
+Create `src/tools.ts` and describe the tool's one input:
+
+```typescript
+// src/tools.ts
+import * as AI from "alchemy/AI";
+import * as S from "effect/Schema";
+
+export const orderId = AI.Parameter("orderId", S.String)`
+The customer's order id, e.g. "ACME-1042".`;
+```
+
+A `Parameter` fuses a name, a schema, and a description into one
+term. The schema becomes the tool's JSON schema on the wire; the
+template becomes the field's documentation — the model reads exactly
+what you wrote.
+
+## Declare the tool
+
+Add the tool contract below it:
+
+```diff lang="typescript"
+// src/tools.ts
+import * as AI from "alchemy/AI";
+import * as S from "effect/Schema";
+
+export const orderId = AI.Parameter("orderId", S.String)`
+The customer's order id, e.g. "ACME-1042".`;
++
++export class LookupOrder extends AI.Tool<LookupOrder>()("lookupOrder")`
++Look up an order by ${orderId}. Returns its status, items, and
++shipping state — the only source of order facts you have.` {}
+```
+
+Like the agent, the tool is a **term**: the template is its
+description (the single place tool usage is taught), the spliced
+`${orderId}` is its schema, and the class is a tag whose
+implementation comes later. Note what the description does *not* do —
+it explains the tool, not the agent's policy around it.
+
+## Give it physics
+
+Implement the tool as a Layer in the same file:
+
+```diff lang="typescript"
+// src/tools.ts
+import * as AI from "alchemy/AI";
++import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import * as S from "effect/Schema";
+
+  // ... orderId and LookupOrder ...
++
++const orders = new Map([
++  ["ACME-1042", { status: "shipped", items: ["Jasmine Green 250g"] }],
++  ["ACME-1043", { status: "packing", items: ["Silver Needle 100g"] }],
++]);
++
++export const LookupOrderLocal = Layer.succeed(
++  LookupOrder,
++  (input: { orderId: string }) =>
++    Effect.succeed(
++      JSON.stringify(orders.get(input.orderId) ?? { error: "no such order" }),
++    ),
++);
+```
+
+A tool's service **is its handler** — a function from typed input to
+an Effect. This one answers from an in-memory Map; a real one would
+call your database. The charter never knows the difference, which is
+the point: physics is chosen where Layers are provided, so tests,
+local dev, and production can each answer the same contract.
+
+## Grant it in the charter
+
+Mention the tool in the prose:
+
+```diff lang="typescript"
+// src/Assistant.ts
+import * as AI from "alchemy/AI";
++import { LookupOrder } from "./tools.ts";
+
+export class Assistant extends AI.Agent<Assistant>()("Assistant") {}
+
+export const AssistantLive = Assistant.make`
+  You are the support desk of Acme Teas, a small online tea shop.
+  Answer customers plainly and warmly, in two or three sentences.
+-  You never invent order details you do not have.`;
++  Order questions are answered from ${LookupOrder}, never from
++  memory.`;
+```
+
+**Mention is presence.** Splicing `${LookupOrder}` is what puts the
+tool in the agent's toolkit — and it simultaneously adds `LookupOrder`
+to the Layer's type-level requirements, so forgetting to provide an
+implementation fails at compile time. An agent whose charter doesn't
+mention a tool cannot call it; there is no other grant mechanism.
+
+## Provide the implementation
+
+Add the physics to the environment:
+
+```diff lang="typescript"
+// src/main.ts
+import { Assistant, AssistantLive } from "./Assistant.ts";
++import { LookupOrderLocal } from "./tools.ts";
+
+const Env = Layer.mergeAll(
+-  AssistantLive.pipe(Layer.provide(Kernel)),
++  AssistantLive.pipe(Layer.provide(Kernel), Layer.provide(LookupOrderLocal)),
+  RuntimeContext.phantom,
+);
+```
+
+The charter demanded `LookupOrder`; the entrypoint supplies it. Ask
+about an order and the transcript will show the call:
+
+```sh
+bun src/main.ts
+# → the model calls lookupOrder({ orderId: "ACME-1042" }) and answers
+#   from its result
+```
+
+## Add an inline tool
+
+Some tools belong to one agent and need its private state. Change the
+charter from a template to an **init effect**:
+
+```diff lang="typescript"
+// src/Assistant.ts
+import * as AI from "alchemy/AI";
++import * as Effect from "effect/Effect";
++import * as Ref from "effect/Ref";
++import * as S from "effect/Schema";
+import { LookupOrder } from "./tools.ts";
+
+export class Assistant extends AI.Agent<Assistant>()("Assistant") {}
+
++const reason = AI.Parameter("reason", S.String)`
++Why this conversation needs a human.`;
++
+-export const AssistantLive = Assistant.make`
+-  You are the support desk of Acme Teas, a small online tea shop.
+-  Answer customers plainly and warmly, in two or three sentences.
+-  Order questions are answered from ${LookupOrder}, never from
+-  memory.`;
++export const AssistantLive = Assistant.make(
++  Effect.gen(function* () {
++    const escalations = yield* Ref.make(0);
++
++    const escalate = yield* AI.Tool("escalate")`
++      Hand this conversation to a human, with ${reason}.`(
++      (input) =>
++        Ref.updateAndGet(escalations, (n) => n + 1).pipe(
++          Effect.map((n) => `escalated (#${n} today): ${input.reason}`),
++        ),
++    );
++
++    return AI.prose`
++      You are the support desk of Acme Teas, a small online tea shop.
++      Answer customers plainly and warmly, in two or three sentences.
++      Order questions are answered from ${LookupOrder}, never from
++      memory. A customer who is upset, or asks for something you
++      cannot do, goes to ${escalate} — never argue.`;
++  }),
++);
+```
+
+The `Effect.gen` block is the charter's **init**: it runs once per
+run, and its closure is the run's instance — the `Ref` and the
+`escalate` handler live exactly as long as the conversation. Inline
+tools are how an agent gets private verbs over private state; shared
+contracts like `LookupOrder` stay classes with Layers.
+
+## What's next
+
+The assistant now acts, but everything it knows fits in one screen of
+prose. [Part 3](/agents/tutorial/part-3) moves the deep knowledge
+into a **skill** that stays out of context until the work demands it.

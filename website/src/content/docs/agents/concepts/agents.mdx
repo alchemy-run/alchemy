@@ -1,0 +1,129 @@
+---
+title: Agents & charters
+description: An agent is a tag; its behavior is a charter — an init effect that returns the stance the kernel renders before every sampling.
+---
+
+An **agent** is declared as a bare tag and implemented by a
+**charter** on a Layer:
+
+```typescript
+import * as AI from "alchemy/AI";
+
+export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
+
+export const EngineerLive = Engineer.make`
+  You are an engineer on one issue's thread; ...`;
+```
+
+The split matters: the class is the identity everyone references
+(charters splice it, routers resolve it, tests fake it with
+`Layer.succeed`), while the charter is swappable behavior. One
+runtime can hold two different implementations of the same agent —
+see [Roles & missions](/agents/concepts/roles-and-missions).
+
+## Charter = init → stance
+
+A charter is an Effect that runs **once per run** (the init) and
+produces the **stance** the kernel renders before every sampling:
+
+```typescript
+export const EngineerLive = Engineer.make(
+  Effect.gen(function* () {
+    // INIT — once per run: allocate state, define inline tools
+    const attempts = yield* Ref.make(0);
+    const openPullRequest = yield* AI.Tool("open_pull_request")`...`(handler);
+
+    // STANCE — what the persona knows and holds
+    return AI.prose`
+      You are an engineer on one issue's thread. ${Coding} is your
+      craft; done means the tests are green. Then ${openPullRequest}.`;
+  }),
+);
+```
+
+The init closure **is the run's instance**: `Ref`s allocated there,
+and tools closing over them, live exactly as long as that
+conversation. There are no hooks because there is a constructor.
+
+## Three tiers, static-first
+
+Charters climb a ladder; stay on the lowest rung that can say what
+you mean:
+
+```typescript
+// 1. STATIC — most agents: prose is the whole behavior
+Reviewer.make`You review each ${pr} against ...`;
+
+// 2. CLOSURE — init allocates state and inline tools, stance stays constant
+Engineer.make(Effect.gen(function* () {
+  const openPullRequest = yield* AI.Tool("open_pull_request")`...`(handler);
+  return AI.prose`...${openPullRequest}...`;
+}));
+
+// 3. GUARD — a function of the tick, for laws the model can't self-enforce
+Engineer.make(Effect.gen(function* () {
+  const stance = AI.prose`...`;
+  return Effect.fn(function* (tick: AI.TickEvent) {
+    if (tick.count >= 60) return yield* Effect.fail(new AI.Refused({ ... }));
+    if (tick.count === 45) yield* AI.say`45 of 60 spent — converge.`;
+    return yield* stance;
+  });
+}));
+```
+
+The guard tier receives `TickEvent` — `count` (samplings so far, the
+budget clock) and `inputs` (the messages this tick is about) — as a
+typed argument, so per-tick policy is a plain testable function.
+Budgets, refusals, and scheduled pressure notes live here; a typed
+`AI.Refused` failure is the run giving up, on the error channel where
+callers can handle it.
+
+## The render is the system prompt
+
+Whatever fragment the stance returns is delivered **verbatim, whole,
+at every sampling** — no diffing, no kernel-authored messages. A
+static stance is byte-identical every tick, so the provider's prompt
+cache never busts. Re-rendering a different stance mid-run is legal
+but replaces the system prompt (a cache miss) — skills and messages
+are the cheap dynamism channels; reserve stance changes for real
+phase shifts.
+
+Turns return **prose and nothing else**. Answering a caller is the
+explicit [`AI.reply`](/agents/concepts/runs) act from wherever the
+answer is actually produced; a non-prose return is a loud defect, not
+a secret channel.
+
+## Mention is presence
+
+Rendering the stance is also compiling the toolkit: every term the
+prose mentions is granted for that tick, and nothing else exists.
+
+| splice | renders as | grants |
+|---|---|---|
+| tool / inline tool | `` `name` `` | the tool, this tick |
+| skill | `` `name` `` | access (dormant until activated) |
+| agent | name | free-form dispatch to it |
+| door (`AI.Dispatch`) | `` `name` `` | policy-constrained dispatch |
+| parameter / event | `` `name` `` | nothing — identity in prose |
+| nested prose / Effect | its content | whatever *it* mentions |
+
+Two consequences worth internalizing:
+
+- **Capability by omission is a type-level fact.** Splices charge
+  Effect's requirement channel, so `EngineerLive` is a
+  `Layer<Engineer, never, Coding | OpenPullRequest | Kernel>` — the
+  prose *is* the dependency declaration, and the audit for "who can
+  merge" is a grep over charters.
+- **Branches count.** An `Effect` spliced into prose contributes the
+  requirements of every branch it *could* render, so a capability a
+  conditional might grant must be provided even on ticks it isn't.
+
+## The loop, from the charter's seat
+
+The kernel [runs the loop](/agents/concepts/kernel); the charter only
+ever sees its own stance being rendered. Per sampling: drain new
+messages → evaluate the turn → deliver any `AI.say` notes → sample →
+run the tools the model called → repeat until the model goes quiet.
+A quiet run **parks** — context intact, costing nothing — until the
+world sends the next event. Ending a run is the owner's act
+([`settle`](/agents/concepts/runs)), never the model's.

@@ -15,6 +15,7 @@ const b = (name: string): string | undefined => brands.icons[name]?.body;
 export const TAB_ICONS: Record<string, string | undefined> = {
   Core: l("book-open"),
   CLI: l("square-terminal"),
+  Agents: l("bot"),
   Cloudflare: b("cloudflare"),
   AWS: b("amazonwebservices"),
   PlanetScale: b("planetscale"),

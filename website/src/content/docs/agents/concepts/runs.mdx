@@ -1,0 +1,142 @@
+---
+title: Runs & threads
+description: Keyed conversations that park, wake, and settle — the actor verbs, AI.Thread and AI.Tick, typed replies, and the kernel clock.
+---
+
+An agent's implementation is one loop, but its *state* is a keyed map
+of **runs** — each run a durable conversation with its own thread,
+its own init closure, and its own lifecycle.
+
+## Keys are world identity
+
+Every run is addressed by a key, usually the world entity it serves:
+
+```typescript
+yield* owner.send(event, { key: "alchemy-run/test-alchemy#95" });
+```
+
+The kernel **admits** a run on first sight of a key and enqueues
+thereafter — so routers don't distinguish "start" from "continue",
+they just address. A re-sent key after a crash admits a fresh run
+that re-reads world state: recovery is the same code path as arrival.
+
+## The actor verbs
+
+Resolving an agent's tag yields four verbs:
+
+| verb | semantics |
+|---|---|
+| `send(input, { key })` | fire-and-forget delivery; admits if new |
+| `dispatch(input, { key, session })` | deliver and **wait for the answer** |
+| `steer(key, input)` | inject a message into a run mid-flight |
+| `settle(key, outcome)` | end the run; waiters get `outcome` |
+
+`send` is for events (the world moving); `dispatch` is for calls
+(work you await); `settle` is the world closing the book — an issue
+closed, a thread resolved. Runs are perpetual by default: answering a
+call does not end them.
+
+## The loop: drain → turn → sample → park
+
+Per sampling the kernel drains new inputs into the thread, evaluates
+the charter's turn (the stance), and samples; tool calls loop back
+around. When the model stops calling tools, the run goes **quiescent**
+and parks — full context retained, zero cost — until the next input
+wakes it. Parking is how a run "waits for the author to reply" without
+an idle loop burning tokens.
+
+## Answering calls: `AI.reply` and the text fallback
+
+A `dispatch` waits for the run's **answer to that round**:
+
+- **`AI.reply(value)`** answers explicitly with a typed value, from
+  wherever the answer is produced — usually the tool handler that
+  just created the artifact. The caller resolves immediately; the
+  model may keep working, then parks.
+- A round that never replies answers with its **quiescent text** —
+  right for conversational answers and declines.
+
+```typescript
+Effect.fn(function* (params) {
+  const created = yield* open(params);
+  yield* AI.reply(created.pr);   // ← the caller has its answer NOW
+  return `opened ${created.url}`;
+}),
+```
+
+Waiters ride their inputs: a dispatch that arrives while an earlier
+round is mid-flight can never be answered by that round's reply or
+text — each call is answered by the round that actually consumed it.
+
+## `AI.Thread` — the run's own handle
+
+Init, turns, and tool handlers can read the run they're part of:
+
+```typescript
+const thread = yield* AI.Thread;
+thread.key       // world identity ("org/repo#95")
+thread.tokens    // estimated thread size — a policy input
+thread.entries   // read-only transcript access
+thread.compact   // request compaction at the next boundary
+thread.reply     // what AI.reply delegates to
+thread.remind    // schedule a note to this run's future self
+```
+
+The asymmetry is deliberate: `entries` is read-only and `compact` is
+the only mutation — the thread stays kernel-owned; the charter gets a
+lever, not a pen.
+
+## The kernel clock: `remind`
+
+`thread.remind(delay, note)` schedules a message to the run's future
+self and returns immediately. The note arrives as an ordinary input —
+a wake if the run is parked, queued if busy, dropped if settled. The
+clock belongs to the kernel and lives as long as the run does, which
+is why this isn't `Effect.sleep` in a handler: a sleeping fiber dies
+with its host; the reminder must not.
+
+Userland wraps it in an org-voiced tool; the factory's owner covers
+author-silence with one:
+
+```typescript
+const remindMe = yield* AI.Tool("remind_me")`
+  Note ${note} to your future self, after ${delay}. It arrives as an
+  ordinary message — judge it fresh; the situation may have moved.`(
+  Effect.fn(function* (p) {
+    const thread = yield* AI.Thread;
+    yield* thread.remind(parse(p.delay), p.note);
+    return `noted — you'll hear this again in ${p.delay}`;
+  }),
+);
+```
+
+## `AI.Tick` and `AI.say`
+
+Inside the loop (turns and tool handlers — never init), `AI.Tick`
+carries this sampling's facts, and `AI.say` appends a one-shot note
+to the thread before the next sampling:
+
+```typescript
+return Effect.gen(function* () {
+  const { count } = yield* AI.Tick;
+  if (count === 30) {
+    yield* AI.say`30 of 40 samplings spent — converge now.`;
+  }
+  return yield* AI.prose`...stance...`;
+});
+```
+
+`say` is a plain append with no dedupe — the author's condition is
+the whole delivery policy. Every message in a thread traces to a call
+site: a `say`, a tool result, or an input from the world. The kernel
+authors no messages of its own.
+
+## Compaction
+
+Long threads are managed, not feared: `thread.compact` requests
+either a filtered **drop** (replaced by an archived-messages marker)
+or a **reset** to a summary — applied at the next sampling boundary,
+never mid-assembly, always visible in the transcript. Policy is
+yours (a token threshold in the turn, a model-triggered `handoff`
+tool whose self-authored summary becomes the new thread); the kernel
+owns only the mechanism.

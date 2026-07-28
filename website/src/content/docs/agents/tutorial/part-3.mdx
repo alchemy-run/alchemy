@@ -1,0 +1,162 @@
+---
+title: "Part 3: Skills"
+description: Package deep knowledge and its tools as a skill — dormant until the agent activates it.
+sidebar:
+  order: 3
+---
+
+Acme's refund policy is two pages of doctrine the assistant needs
+*sometimes*. Pasting it into the charter taxes every conversation; a
+**skill** keeps it out of context until the work demands it.
+
+## Declare the skill
+
+Create `src/Refunds.ts` with a bare tag:
+
+```typescript
+// src/Refunds.ts
+import * as AI from "alchemy/AI";
+
+export class Refunds extends AI.Skill<Refunds>()("Refunds") {}
+```
+
+Same shape as agents and tools: the class is a typed identifier, and
+what the skill *teaches* is a Layer — so different environments can
+ship different teachings for the same skill.
+
+## Add the tool it will grant
+
+Skills bundle knowledge **with** the tools that act on it. Declare a
+refund tool in `src/tools.ts`:
+
+```diff lang="typescript"
+// src/tools.ts
+
+  // ... orderId, LookupOrder, LookupOrderLocal ...
++
++export const amount = AI.Parameter("amount", S.Int)`
++Refund amount in cents. Never more than the order total.`;
++
++export class IssueRefund extends AI.Tool<IssueRefund>()("issueRefund")`
++Refund ${orderId} for ${amount} (cents). Irreversible.` {}
++
++export const IssueRefundLocal = Layer.succeed(
++  IssueRefund,
++  (input: { orderId: string; amount: number }) =>
++    Effect.succeed(`refunded ${input.amount}¢ on ${input.orderId}`),
++);
+```
+
+Nothing new — a parameter, a contract, local physics. What changes is
+*who grants it*: this tool will never appear in the assistant's
+charter directly.
+
+## Write the teaching
+
+Implement the skill as a document that mentions its tools:
+
+```diff lang="typescript"
+// src/Refunds.ts
+import * as AI from "alchemy/AI";
++import { IssueRefund, LookupOrder } from "./tools.ts";
+
+export class Refunds extends AI.Skill<Refunds>()("Refunds") {}
++
++export const RefundsLive = Refunds.make`
++  # Handling refunds at Acme Teas
++
++  Confirm the order with ${LookupOrder} first; the refund amount
++  comes from its line items, never from the customer's message.
++
++  - Unopened tea within 30 days: full refund via ${IssueRefund}.
++  - Opened tea the customer dislikes: half refund, once per
++    customer — we stand behind taste, not indecision.
++  - Damaged in shipping: full refund AND a replacement order;
++    apologize specifically for the damage described.
++
++  A refund the policy does not clearly cover is an escalation, not
++  a judgment call.`;
+```
+
+The teaching is markdown prose — headings and lists render to the
+model exactly as written — and its `${IssueRefund}` splice grants the
+tool *only while the skill is active*. Policy and capability travel
+together: an agent that never activates `Refunds` can never call
+`issueRefund`.
+
+## Mention it in the charter
+
+Grant the skill by mention, like any other term:
+
+```diff lang="typescript"
+// src/Assistant.ts
+import { LookupOrder } from "./tools.ts";
++import { Refunds } from "./Refunds.ts";
+
+    return AI.prose`
+      You are the support desk of Acme Teas, a small online tea shop.
+      Answer customers plainly and warmly, in two or three sentences.
+      Order questions are answered from ${LookupOrder}, never from
+-      memory. A customer who is upset, or asks for something you
++      memory. ${Refunds} is your craft for anything refund-shaped.
++      A customer who is upset, or asks for something you
+      cannot do, goes to ${escalate} — never argue.`;
+```
+
+This costs the context window one line. The kernel gives every agent
+a `skill` intrinsic; when a refund request arrives, the model
+activates `Refunds`, the teaching enters the conversation, and
+`issueRefund` appears in the toolkit — progressive disclosure the
+model drives itself.
+
+## Provide the skill
+
+Skills are staffed like everything else:
+
+```diff lang="typescript"
+// src/main.ts
+-import { LookupOrderLocal } from "./tools.ts";
++import { IssueRefundLocal, LookupOrderLocal } from "./tools.ts";
++import { RefundsLive } from "./Refunds.ts";
+
+const Env = Layer.mergeAll(
+  AssistantLive.pipe(
+    Layer.provide(Kernel),
+    Layer.provide(LookupOrderLocal),
++    Layer.provide(RefundsLive.pipe(Layer.provide(IssueRefundLocal))),
+  ),
+  RuntimeContext.phantom,
+);
+```
+
+The charter requires `Refunds`; `RefundsLive` supplies the teaching
+and, in turn, requires the tools its prose mentions — which the
+entrypoint satisfies with local physics. Ask for a refund on
+`ACME-1042` and watch the model activate the skill before it acts.
+
+## Skills reference deeper skills
+
+Teachings can splice other skills, forming a graph the agent descends
+as work deepens. The alchemy-org factory's `Coding` skill ends with:
+
+```typescript
+// services/alchemy-org/src/skills/Coding.ts
+export const CodingLive = Coding.make`
+  ...
+  ## Deeper craft
+
+  When the work calls for it: ${ResourceEngineering} covers
+  everything about building alchemy resources — the contract, the
+  reconciler, and the disciplines that make providers reliable (its
+  own deeper skills included).`;
+```
+
+Activating `Coding` exposes `ResourceEngineering` for activation,
+which in turn exposes `TypedErrors` and `LiveTesting` — four layers of
+doctrine, none of it in context until a task actually reaches it.
+
+## What's next
+
+One agent now knows when to read its own manual. [Part
+4](/agents/tutorial/part-4) adds a second agent and the delegation
+machinery that makes them an org.
