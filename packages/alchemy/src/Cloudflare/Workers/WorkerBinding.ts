@@ -3,6 +3,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
+import type * as Output from "../../Output.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import type { Gateway as AiGateway } from "../AI/Gateway.ts";
@@ -10,6 +11,7 @@ import type { SearchInstance } from "../AI/SearchInstance.ts";
 import type { SearchNamespace } from "../AI/SearchNamespace.ts";
 import { Dataset } from "../AnalyticsEngine/Dataset.ts";
 import type { Namespace as ArtifactsNamespace } from "../Artifacts/Namespace.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Database as D1Database } from "../D1/Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
@@ -24,6 +26,7 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
+import type { URLEffect } from "./Worker.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
@@ -52,9 +55,27 @@ export type DurableObjectNamespaceWorkerBinding = Extract<
   transferredFrom?: string | string[];
 };
 
+/**
+ * Alchemy-only binding: the host Worker's own public URL (`Worker.URL`). The
+ * provider resolves the URL the Worker will be served at (first custom domain,
+ * else its `workers.dev` URL) and lowers this into a `plain_text` binding
+ * before the script upload — Cloudflare never sees this type.
+ */
+export interface SelfUrlWorkerBinding {
+  type: "self_url";
+  name: string;
+}
+
+/**
+ * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
+ * minus the alchemy-only members that must be lowered before upload.
+ */
+export type WireWorkerBinding = Exclude<WorkerBinding, SelfUrlWorkerBinding>;
+
 export type WorkerBinding =
   | Exclude<DistilledWorkerBinding, { type: "durable_object_namespace" }>
-  | DurableObjectNamespaceWorkerBinding;
+  | DurableObjectNamespaceWorkerBinding
+  | SelfUrlWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<
   workers.GetScriptScriptAndVersionSettingResponse["bindings"],
@@ -66,6 +87,14 @@ export type WorkerBindingResource =
   | Json
   | Redacted.Redacted<Json>
   | Config.Config<Json>
+  // Outputs that resolve to a plain env value (e.g. `Alchemy.makeRandom`,
+  // `Output.literal`), classified by their resolved value at deploy time.
+  // Whole-resource Outputs (`Output.of(bucket)`) cannot be excluded here:
+  // `Input<T>` wraps this whole union in `Output<T>`, so any Output whose
+  // A is structurally Json (most resource attribute shapes) is admitted
+  // upstream regardless of this arm. `bindWorkerAsyncBindings` rejects
+  // them at deploy time instead.
+  | Output.Output<Json | Redacted.Redacted<Json>, unknown>
   // CF resources
   | Assets
   | Bucket
@@ -89,9 +118,14 @@ export type WorkerBindingResource =
   | Worker
   | WorkerLoader
   | VersionMetadataBinding
+  // The Worker's own URL (`Worker.URL`).
+  | URLEffect
   | DispatchNamespace
   | DurableObjectLike<any>
-  | WorkflowLike<any>;
+  | WorkflowLike<any>
+  // A Container bound directly in `env` declares a container-backed Durable
+  // Object class (DO namespace binding + ContainerApplication in one).
+  | Container.Decl.Any;
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;

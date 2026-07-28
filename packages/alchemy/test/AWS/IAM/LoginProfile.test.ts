@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { LoginProfile, User } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -41,6 +42,12 @@ describe("AWS.IAM.LoginProfile", () => {
       expect(found?.userName).toBe(deployed.user.userName);
 
       yield* stack.destroy();
+
+      // The user (and with it the login profile) is gone.
+      const deletedUser = yield* IAM.getUser({
+        UserName: deployed.user.userName,
+      }).pipe(Effect.option);
+      expect(deletedUser._tag).toBe("None");
     }),
   );
 });

@@ -8,7 +8,9 @@ import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface UsagePlanKeyProps {
+  /** ID of the usage plan to add the key to. */
   usagePlanId: Input<string>;
+  /** ID of the API key to associate. */
   keyId: Input<string>;
   /**
    * @default "API_KEY"

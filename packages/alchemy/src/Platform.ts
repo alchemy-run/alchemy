@@ -200,7 +200,11 @@ export interface Platform<
       id: Id,
       props:
         | InputProps<Resource["Props"]>
-        | Effect.Effect<Resource["Props"], ConfigError.ConfigError, PropsReq>,
+        | Effect.Effect<
+            InputProps<Resource["Props"]>,
+            ConfigError.ConfigError,
+            PropsReq
+          >,
       impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
@@ -292,6 +296,16 @@ export const Platform = <
     // Workflow). Allow an ambient requirement (`any`) rather than forcing
     // `never`; it is discharged by the surrounding provider context.
     onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
+    /**
+     * Transform the user-supplied props before the underlying resource is
+     * declared. Runs in the resource-construction context (Stack, Namespace,
+     * and providers are available), so the hook may compose REAL child
+     * resources (the `StaticSite` pattern) and return derived props that
+     * reference their Outputs. Implementations MUST be a no-op at runtime
+     * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
+     * wherever the props effect is, including inside deployed bundles.
+     */
+    transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -300,6 +314,19 @@ export const Platform = <
 
   const resource = Resource(type);
   const PlatformContext = RuntimeContext;
+
+  // Apply the optional `transformProps` hook to a (possibly Effect-valued)
+  // props argument. Returns the props untouched when no hook is installed so
+  // the plain-object fast paths below keep working.
+  const applyTransformProps = (id: string, props: any): any =>
+    hooks.transformProps === undefined
+      ? props
+      : Effect.flatMap(
+          Effect.isEffect(props)
+            ? (props as Effect.Effect<any>)
+            : Effect.succeed(props ?? {}),
+          (resolved) => hooks.transformProps!(id, resolved),
+        );
 
   const constructor = (
     id?: string,
@@ -317,6 +344,21 @@ export const Platform = <
         constructor(id, props, impl, true);
     } else if (!impl) {
       const cls = makeClass(id);
+      // A resource declared without an inline impl is "external": there is
+      // no Effect-native entry to inject (an ordinary bundled worker, or an
+      // assets-only worker with no script at all).
+      const externalProps = () => {
+        const transformed = applyTransformProps(id, props);
+        return Effect.isEffect(transformed)
+          ? Effect.map(transformed, (p: any) => ({
+              ...p,
+              isExternal: true,
+            }))
+          : {
+              ...transformed,
+              isExternal: true,
+            };
+      };
       const evaluate = () =>
         (!isTag
           ? // this is a non-tagged resource yielded without providing an implementation
@@ -329,21 +371,24 @@ export const Platform = <
             //     return new Response("Hello, world!");
             //   }
             // }
-            resource(
-              id,
-              Effect.isEffect(props)
-                ? Effect.map(props, (p: any) => ({ ...p, isExternal: true }))
-                : {
-                    ...props,
-                    isExternal: true,
-                  },
-            )
+            resource(id, externalProps())
           : Effect.flatMap(
               // this is a tagged resource
               Effect.serviceOption(cls.Self),
               Option.match({
-                // we are likely running at runtime, so we create
-                onNone: () => resource(id, props),
+                // we are likely running at runtime, so we create.
+                // A tagged class WITH props and no impl is the class form of
+                // the external resource above (e.g.
+                // `class Site extends Worker<Site>()("Site", { assets }) {}`)
+                // — same isExternal marking; without props, this is a bare
+                // tag whose props/impl arrive later via `.make`.
+                onNone: () =>
+                  resource(
+                    id,
+                    props === undefined
+                      ? applyTransformProps(id, props)
+                      : externalProps(),
+                  ),
                 onSome: Effect.succeed,
               }),
             )
@@ -414,7 +459,12 @@ export const Platform = <
           Self,
           Effect.flatMap(
             Effect.all([
-              Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+              (() => {
+                const transformed = applyTransformProps(id, props);
+                return Effect.isEffect(transformed)
+                  ? (transformed as Effect.Effect<any>)
+                  : Effect.succeed(transformed ?? {});
+              })(),
               Effect.sync(() => hooks.createRuntimeContext(id)),
               Effect.context<never>(),
             ]),

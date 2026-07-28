@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -11,6 +11,10 @@ test.provider.skipIf(!!process.env.FAST)(
   "patch API Gateway account settings",
   (stack) =>
     Effect.gen(function* () {
+      // Account settings are a singleton patch resource — the leading destroy
+      // clears any prior partial deployment before capturing the baseline.
+      yield* stack.destroy();
+
       const before = yield* ag.getAccount({});
 
       yield* stack.deploy(

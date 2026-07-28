@@ -75,7 +75,12 @@ test.provider("diff tracks Postgres branch replica intent", () =>
         hasReadOnlyReplicas: false,
       }),
     });
-    expect(exactHaCountChanged).toEqual({ action: "update" });
+    // A non-renaming update advertises `name` as stable so downstream
+    // consumers keep resolving `branch.name` at plan time.
+    expect(exactHaCountChanged).toEqual({
+      action: "update",
+      stables: ["organization", "database", "name"],
+    });
   }),
 );
 

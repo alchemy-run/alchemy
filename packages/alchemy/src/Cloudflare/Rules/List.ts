@@ -315,8 +315,11 @@ export const ListProvider = () =>
         return { action: "replace" } as const;
       }
       // Lists cannot be renamed and the kind is immutable.
-      const desiredName = yield* createListName(id, news.name);
       const oldName = output?.name ?? olds?.name;
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const desiredName = news.name ?? oldName;
       if (oldName !== undefined && desiredName !== oldName) {
         return { action: "replace" } as const;
       }
@@ -346,7 +349,9 @@ export const ListProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createListName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const name = yield* createListName(id, news.name ?? output?.name);
 
       // Observe — the listId cached on `output` is a hint, not a guarantee:
       // a missing list falls through to "missing" and ensure recreates.

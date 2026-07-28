@@ -124,7 +124,13 @@ export const EndpointHealthcheckProvider = () =>
       }
       // The name is create-only: Cloudflare's PUT echoes a new name back
       // but never persists it, so a name change forces a replacement.
-      const desiredName = yield* createHealthcheckName(id, news.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const desiredName =
+        news.name ??
+        output?.name ??
+        (yield* createHealthcheckName(id, news.name));
       if (output !== undefined && output.name !== desiredName) {
         return { action: "replace" } as const;
       }

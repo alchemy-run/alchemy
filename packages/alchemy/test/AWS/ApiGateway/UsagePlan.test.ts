@@ -1,9 +1,10 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { assertUsagePlanDeleted } from "./assertions.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -11,6 +12,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "create and delete usage plan",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const plan = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* AWS.ApiGateway.UsagePlan("AgUsagePlan", {
@@ -22,6 +25,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(plan.id).toBeDefined();
 
       yield* stack.destroy();
+      yield* assertUsagePlanDeleted(plan.id);
     }),
 );
 
@@ -29,6 +33,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "usage plan throttle updates in place",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const plan = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* AWS.ApiGateway.UsagePlan("AgUsagePlanThrottle", {
@@ -50,6 +56,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(remote.throttle?.rateLimit).toEqual(200);
 
       yield* stack.destroy();
+      yield* assertUsagePlanDeleted(plan.id);
     }),
 );
 
@@ -73,5 +80,6 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(all.some((p) => p.id === plan.id)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertUsagePlanDeleted(plan.id);
     }),
 );

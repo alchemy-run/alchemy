@@ -254,8 +254,8 @@ return StripeProduct.Provider.of({
 +      created: product.created,
 +    };
 +  }),
-   delete: () => Effect.die("not implemented"),
- });
+  delete: () => Effect.die("not implemented"),
+});
 ```
 
 The reconciler is **idempotent** by construction — running it
@@ -279,7 +279,7 @@ being written. Catch "not found" errors and return `Effect.void`.
 
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
-   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
+  reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
 -  delete: () => Effect.die("not implemented"),
 +  delete: Effect.fn(function* ({ output }) {
 +    const { apiKey } = yield* yield* StripeCredentials;
@@ -294,7 +294,7 @@ return StripeProduct.Provider.of({
 +      ),
 +    );
 +  }),
- });
+});
 ```
 
 ## Implement `diff` (optional)
@@ -334,9 +334,9 @@ return StripeProduct.Provider.of({
 +    }
 +    return undefined;
 +  }),
-   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
-   delete: Effect.fn(function* ({ output }) { /* ... */ }),
- });
+  reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
+  delete: Effect.fn(function* ({ output }) { /* ... */ }),
+});
 ```
 
 For attributes that are immutable across **all** updates (e.g.
@@ -346,9 +346,9 @@ the Stripe `productId`, an ARN), declare them in
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
 +  stables: ["productId"],
-   diff: Effect.fn(function* ({ news, olds }) { /* ... */ }),
-   // ...
- });
+  diff: Effect.fn(function* ({ news, olds }) { /* ... */ }),
+  // ...
+});
 ```
 
 ## Implement `read` (optional, for recovery and adoption)
@@ -360,8 +360,8 @@ Alchemy the resource doesn't exist and should be created.
 
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
-   stables: ["productId"],
-   diff: Effect.fn(function* ({ news, olds }) { /* ... */ }),
+  stables: ["productId"],
+  diff: Effect.fn(function* ({ news, olds }) { /* ... */ }),
 +  read: Effect.fn(function* ({ output }) {
 +    if (!output?.productId) return undefined;
 +    const { apiKey } = yield* yield* StripeCredentials;
@@ -374,9 +374,9 @@ return StripeProduct.Provider.of({
 +    if (!product) return undefined;
 +    return { productId: product.id, created: product.created };
 +  }),
-   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
-   delete: Effect.fn(function* ({ output }) { /* ... */ }),
- });
+  reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
+  delete: Effect.fn(function* ({ output }) { /* ... */ }),
+});
 ```
 
 This Stripe example only finds resources by an ID we previously
@@ -419,7 +419,7 @@ exhaustively (see [Providers › list](/infrastructure-as-code/provider#list)):
 
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
-   stables: ["productId"],
+  stables: ["productId"],
 -  list: () => Effect.succeed([]),
 +  list: Effect.fn(function* () {
 +    const { apiKey } = yield* yield* StripeCredentials;
@@ -429,8 +429,8 @@ return StripeProduct.Provider.of({
 +    );
 +    return products.map((p) => ({ productId: p.id, created: p.created }));
 +  }),
-   // ...
- });
+  // ...
+});
 ```
 
 Resources with no enumeration API (singletons, existence-only

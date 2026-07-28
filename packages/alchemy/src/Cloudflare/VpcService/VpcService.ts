@@ -174,17 +174,25 @@ export const VpcServiceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createServiceName(id, news.name);
-      const oldName = output?.serviceName
-        ? output.serviceName
-        : yield* createServiceName(id, olds?.name);
+      const oldName =
+        output?.serviceName ?? (yield* createServiceName(id, olds?.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "update" } as const;
       }
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createServiceName(id, news.name);
+      // Prefer the deployed name: regenerating would rename the deployed
+      // service if the generator's output for this id ever drifts. An
+      // explicit user-provided name still wins (renames apply in place).
+      const name =
+        news.name ??
+        output?.serviceName ??
+        (yield* createServiceName(id, news.name));
       const acct = output?.accountId ?? accountId;
 
       // Observe — re-fetch the cached service; fall back to a name

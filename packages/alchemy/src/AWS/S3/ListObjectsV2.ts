@@ -8,7 +8,26 @@ export interface ListObjectsV2Request extends Omit<
   "Bucket"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `s3:ListObjectsV2`.
+ *
+ * Bind this operation to a bucket to get a callable that lists objects —
+ * the bucket name is injected automatically and `s3:ListBucket` is granted
+ * on the bucket. Provide the implementation with
+ * `Effect.provide(AWS.S3.ListObjectsV2Http)`.
+ * @binding
+ * @section Listing Objects
+ * @example List Objects Under a Prefix
+ * ```typescript
+ * // init — bind the operation to the bucket
+ * const listObjects = yield* AWS.S3.ListObjectsV2(bucket);
+ *
+ * // runtime — list up to 100 keys under `jobs/`
+ * const result = yield* listObjects({ Prefix: "jobs/", MaxKeys: 100 });
+ * const keys = (result.Contents ?? []).map((object) => object.Key);
+ * // result.IsTruncated + result.NextContinuationToken page through the rest
+ * ```
+ */
 export interface ListObjectsV2 extends Binding.Service<
   ListObjectsV2,
   "AWS.S3.ListObjectsV2",

@@ -14,7 +14,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
-import { isResolved } from "../../Diff.ts";
+import { isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
@@ -22,19 +22,29 @@ import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
-import { listAllZones, resolveZoneId } from "../Zone/lookup.ts";
-import { readAssets, uploadAssets } from "./Assets.ts";
+import { resolveZoneId } from "../Zone/lookup.ts";
+import {
+  mergeAssetsConfigFiles,
+  readAssets,
+  readAssetsConfigFiles,
+  uploadAssets,
+} from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import {
+  isSelfUrl,
   Worker,
   type ViteOptions,
   type WorkerProps,
   type WorkerRouteConfig,
 } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
-import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
+import type {
+  WireWorkerBinding,
+  WorkerBinding,
+  WorkerSettingsBinding,
+} from "./WorkerBinding.ts";
 import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
@@ -285,6 +295,14 @@ export const normalizeStateDomains = (
     return typeof hostname === "string" ? [`https://${hostname}`] : [];
   });
 
+/**
+ * Max concurrent `GET /zones/{id}/workers/routes` calls when observing the
+ * routes attached to a Worker. Route listing is per-zone, so this fans out
+ * with the number of zones the Worker has routes in; unbounded fan-out here
+ * is what trips Cloudflare account-level 429 / code 971 throttling (#926).
+ */
+const WORKER_ROUTE_LIST_CONCURRENCY = 8;
+
 type MetadataHashValue =
   | string
   | number
@@ -374,6 +392,13 @@ interface WorkerMetadataHashInput {
   readonly bindings: readonly ResourceBinding<Worker["Binding"]>[];
   readonly accountId: string;
   readonly stack: { readonly name: string; readonly stage: string };
+  /**
+   * The resolved URL a `Worker.URL` (`self_url`) binding lowers into.
+   * Included in the hash so external URL changes (an account-subdomain
+   * rename, a custom-domain reorder) redeploy the Worker with the fresh
+   * value even though props and binding data are unchanged.
+   */
+  readonly selfUrl?: string;
 }
 
 // The asset router config the resource declares (htmlHandling,
@@ -404,9 +429,11 @@ const resolveWorkerMetadataHash = ({
   bindings,
   accountId,
   stack,
+  selfUrl,
 }: WorkerMetadataHashInput): Effect.Effect<string> =>
   resolveMetadataHashValue({
     accountId,
+    selfUrl,
     stack: { name: stack.name, stage: stack.stage },
     compatibility: getCompatibility(props),
     env: props.env,
@@ -504,6 +531,35 @@ export const LiveWorkerProvider = () =>
 
       const normalizeCrons = (crons: string[] | undefined): string[] =>
         Array.from(new Set(crons ?? []));
+
+      const hasSelfUrlBinding = (
+        bindings: readonly ResourceBinding<Worker["Binding"]>[],
+      ) =>
+        bindings.some((b) =>
+          (b.data.bindings ?? []).some((item) => item.type === "self_url"),
+        );
+
+      // Resolve the URL this Worker will be served at — the same formula that
+      // produces the `url` attribute (first custom domain in user order, else
+      // the workers.dev URL) — usable BEFORE the script upload, so `Worker.URL`
+      // bindings can be lowered into plain_text bindings and VITE_*-prefixed
+      // env entries can be inlined into the client bundle at build time.
+      const resolveSelfUrl = Effect.fn(function* (
+        name: string,
+        props: WorkerProps,
+        accountId: string,
+      ) {
+        const customDomains = normalizeDomains(props.domain);
+        if (customDomains.length > 0) {
+          return `https://${customDomains[0]}`;
+        }
+        if (props.url === false) {
+          return yield* Effect.die(
+            `Worker "${name}" binds its own URL (Worker.URL) but has none: workers.dev is disabled (url: false) and no custom domain is configured.`,
+          );
+        }
+        return `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`;
+      });
 
       const getWorkerCrons = Effect.fn(function* (scriptName: string) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -805,28 +861,39 @@ export const LiveWorkerProvider = () =>
               Effect.catch(() => Effect.succeed([])),
             ),
           ),
-          { concurrency: "unbounded" },
+          // Bounded: this issues one request per zone, so a Worker with routes
+          // spread across many zones would otherwise burst the account's whole
+          // API budget in a single tick (#926).
+          { concurrency: WORKER_ROUTE_LIST_CONCURRENCY },
         );
 
         return Effect.map(routesByZone, (routes) => routes.flat());
       };
 
-      // Observe every route attached to `scriptName` account-wide. Routes
-      // are zone-scoped with no account-level enumeration API, so fan out
-      // over all of the account's zones. Any failure to enumerate zones
-      // (e.g. a token without zone read scope) degrades to "no routes"
-      // rather than failing the read.
-      const readWorkerRoutes = (scriptName: string) =>
-        Effect.gen(function* () {
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const accountZones = yield* listAllZones(accountId).pipe(
-            Effect.catch(() => Effect.succeed([])),
-          );
-          return yield* listWorkerRoutesInZones(
-            scriptName,
-            accountZones.map((zone) => zone.id),
-          );
-        });
+      // Observe the routes attached to `scriptName` in the zones Alchemy
+      // already associates with this Worker.
+      //
+      // This used to enumerate every zone on the account and then list routes
+      // in each one. Routes are zone-scoped with no account-level enumeration
+      // API, so that costs O(zones) requests on *every* Worker read — on an
+      // account with a few hundred zones a couple of plan/deploy cycles
+      // exhausts Cloudflare's per-user API budget and unrelated calls start
+      // coming back 429 / code 971 (#926).
+      //
+      // `reconcileRoutes` already scopes itself to the zones implied by
+      // `desired ∪ previous` rather than sweeping the account, so `read` now
+      // uses the same bounded zone set: the zones of the routes already
+      // recorded in state. The blind spot this introduces — a route added out
+      // of band in a zone this Worker has never had a route in — is the one
+      // `reconcileRoutes` already has.
+      const readWorkerRoutes = (
+        scriptName: string,
+        knownRoutes: Worker["Attributes"]["routes"] | undefined,
+      ) =>
+        listWorkerRoutesInZones(
+          scriptName,
+          (knownRoutes ?? []).map((route) => route.zoneId),
+        );
 
       // Converge the zone routes attached to `scriptName` to `desired`.
       // Observed cloud state (not `previous`) is the diff baseline —
@@ -1170,7 +1237,10 @@ export const LiveWorkerProvider = () =>
           crypto.createHash("sha256").update(script).digest("hex"),
         );
 
-      const viteBuild = Effect.fn(function* (props: WorkerProps) {
+      const viteBuild = Effect.fn(function* (
+        props: WorkerProps,
+        selfUrl?: string,
+      ) {
         const compatibility = getCompatibility(props);
         // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
         // (~0.5s), which is only needed for vite-based workers at build time —
@@ -1190,15 +1260,20 @@ export const LiveWorkerProvider = () =>
                         : Redacted.isRedacted(value) &&
                             typeof Redacted.value(value) === "string"
                           ? Redacted.value(value)
-                          : // A `WorkerLoader` is a real Effect that also carries
-                            // the `~alchemy/Kind` marker — it is a binding, not a
-                            // runnable env value. Check it before `Effect.isEffect`
-                            // so we don't execute it as an inlined env entry.
-                            isWorkerLoader(value)
-                            ? undefined
-                            : Effect.isEffect(value)
-                              ? yield* value as any as Effect.Effect<any>
-                              : undefined,
+                          : // `Worker.URL` (bare tag or called) — resolved to
+                            // this Worker's own URL. The bare tag is
+                            // Effect-shaped, so check before `Effect.isEffect`.
+                            isSelfUrl(value)
+                            ? selfUrl
+                            : // A `WorkerLoader` is a real Effect that also carries
+                              // the `~alchemy/Kind` marker — it is a binding, not a
+                              // runnable env value. Check it before `Effect.isEffect`
+                              // so we don't execute it as an inlined env entry.
+                              isWorkerLoader(value)
+                              ? undefined
+                              : Effect.isEffect(value)
+                                ? yield* value as any as Effect.Effect<any>
+                                : undefined,
                     ];
                   }),
                 ),
@@ -1293,7 +1368,7 @@ export const LiveWorkerProvider = () =>
       const prepareAssetsAndBundle = (
         id: string,
         props: WorkerProps,
-        opts: { skipAssetsRead?: boolean } = {},
+        opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
           if (props.script !== undefined) {
@@ -1317,7 +1392,29 @@ export const LiveWorkerProvider = () =>
             };
           }
           if (props.vite) {
-            return yield* viteBuild(props);
+            return yield* viteBuild(props, opts.selfUrl);
+          }
+          // Assets-only Worker: no entry module at all. The script PUT goes
+          // out with no modules and no main_module — Cloudflare's asset
+          // layer serves every request and applies `notFoundHandling`
+          // (including SPA fallback) itself, exactly like Wrangler's
+          // assets-only deploys.
+          if (props.main === undefined) {
+            if (!props.assets) {
+              return yield* Effect.die(
+                new Error(
+                  `Worker "${id}" has no main, script, or assets. Provide an entry module (main / script) or an assets directory to deploy an assets-only Worker.`,
+                ),
+              );
+            }
+            return {
+              assets: opts.skipAssetsRead
+                ? undefined
+                : yield* prepareAssets(props.assets),
+              bundle: undefined,
+              input: undefined,
+              additionalWorkspaces: undefined,
+            };
           }
           const [assets, bundle] = yield* Effect.all(
             [
@@ -1360,8 +1457,8 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
       ) => {
         if (!Predicate.hasProperty(assets, "hash")) return undefined;
-        const { directory: _, hash, ...config } = assets;
-        return { config, hash, skip: hash === output?.hash?.assets };
+        const { directory, hash, ...config } = assets;
+        return { directory, config, hash, skip: hash === output?.hash?.assets };
       };
 
       const putWorker = Effect.fn(function* (
@@ -1374,12 +1471,27 @@ export const LiveWorkerProvider = () =>
         existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const name = yield* createWorkerName(id, news.name);
+        // Prefer the deployed name: regenerating would target a different
+        // script if the generator's output for this id ever drifts.
+        const name =
+          output?.workerName ?? (yield* createWorkerName(id, news.name));
         // When set, this Worker is a Workers for Platforms "user worker"
         // uploaded into a dispatch namespace rather than a routable
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
+        // Resolve the Worker's own URL up front when a `Worker.URL` binding
+        // is present: the value must exist before the bundle is built (Vite
+        // inlines VITE_*-prefixed env into the client bundle) and before the
+        // metadata bindings are assembled (the `self_url` sentinel lowers
+        // into a plain_text binding below).
+        const selfUrl = hasSelfUrlBinding(bindings)
+          ? dispatchNamespace
+            ? yield* Effect.die(
+                `Worker "${name}" binds its own URL (Worker.URL), but a dispatch-namespace user worker is invoked via dynamic dispatch and has no URL of its own.`,
+              )
+            : yield* resolveSelfUrl(name, news, accountId)
+          : undefined;
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
@@ -1395,6 +1507,7 @@ export const LiveWorkerProvider = () =>
           hash: preparedHash,
         } = yield* prepareAssetsAndBundle(id, news, {
           skipAssetsRead: prebuiltAssets?.skip,
+          selfUrl,
         });
         // When the caller supplied a precomputed hash (e.g. via
         // `Command.Build`), store *that* hash in output state so the
@@ -1407,6 +1520,7 @@ export const LiveWorkerProvider = () =>
           bindings,
           accountId,
           stack: { name: stack.name, stage: stack.stage },
+          selfUrl,
         });
         const hash = {
           ...preparedHash,
@@ -1418,7 +1532,12 @@ export const LiveWorkerProvider = () =>
         // `transferred_classes` migration below and must be stripped from the
         // wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>
-          (b.data.bindings ?? []).map((item): WorkerBinding => {
+          (b.data.bindings ?? []).map((item): WireWorkerBinding => {
+            // Lower the `Worker.URL` sentinel into the resolved URL —
+            // Cloudflare has no native binding for it.
+            if (item.type === "self_url") {
+              return { type: "plain_text", name: item.name, text: selfUrl! };
+            }
             if (
               item.type === "durable_object_namespace" &&
               item.transferredFrom !== undefined
@@ -1442,7 +1561,16 @@ export const LiveWorkerProvider = () =>
             `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
           );
           keepAssets = true;
-          metadataAssets = { config: prebuiltAssets.config };
+          // `keepAssets` only preserves the uploaded files — the PUT
+          // replaces the asset config wholesale. The skip path never
+          // walked the directory, so read just `_headers`/`_redirects`
+          // here or a no-op deploy would wipe their rules.
+          metadataAssets = {
+            config: mergeAssetsConfigFiles(
+              prebuiltAssets.config,
+              yield* readAssetsConfigFiles(prebuiltAssets.directory),
+            ),
+          };
           metadataBindings.push({
             type: "assets",
             name: "ASSETS",
@@ -2062,6 +2190,9 @@ export const LiveWorkerProvider = () =>
             bindings,
             accountId,
             stack: { name: stack.name, stage: stack.stage },
+            selfUrl: hasSelfUrlBinding(bindings)
+              ? yield* resolveSelfUrl(output.workerName, props, accountId)
+              : undefined,
           });
           if (metadataHash !== output.hash?.metadata) {
             return true;
@@ -2090,6 +2221,25 @@ export const LiveWorkerProvider = () =>
             Effect.succeed(output.hash?.additionalWorkspaces ?? []),
           );
           return hash !== output.hash?.input;
+        }
+        // Assets-only Worker — there is no bundle to hash. A stored bundle
+        // hash means the Worker previously had a script and is being
+        // converted to assets-only, which must deploy.
+        if (props.main === undefined) {
+          if (output.hash?.bundle !== undefined) {
+            return true;
+          }
+          const assetsHash =
+            props.assets && Predicate.hasProperty(props.assets, "hash")
+              ? props.assets.hash
+              : undefined;
+          if (assetsHash === undefined) {
+            // Same conservative rule as the directory-shaped `assets` below:
+            // don't read the directory during diff; `putWorker` reads once
+            // and keeps the existing manifest if nothing actually changed.
+            return true;
+          }
+          return assetsHash !== output.hash?.assets;
         }
         const bundleHash = yield* prepareBundle(id, props).pipe(
           Effect.map((b) => b.hash),
@@ -2179,8 +2329,24 @@ export const LiveWorkerProvider = () =>
               ),
             );
           }),
-        diff: Effect.fn(function* ({ id, news, olds, output, newBindings }) {
+        diff: Effect.fn(function* ({
+          id,
+          news: desired,
+          olds,
+          output,
+          newBindings,
+        }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          // Effect-valued `env` entries (tagged Worker classes / resource
+          // Effects — the circular-bindings pattern) never resolve at plan
+          // time and are dropped from persisted props by `stripUnresolved`
+          // at the commit boundary. Their deploy-time identity is carried by
+          // the resolved binding data, which the metadata hash below covers.
+          // Strip them before the resolution check so a tag in `env` doesn't
+          // force the raw-props fallback — which compares the Effect's JSON
+          // form against the stripped stored props and re-plans an update
+          // forever (#874).
+          const news = stripEffects(desired);
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
@@ -2194,10 +2360,14 @@ export const LiveWorkerProvider = () =>
           if (newNamespace !== oldNamespace) {
             return { action: "replace" };
           }
-          const workerName = yield* createWorkerName(id, news.name);
-          const oldWorkerName = output?.workerName
-            ? output.workerName
-            : yield* createWorkerName(id, olds?.name);
+          const oldWorkerName =
+            output?.workerName ?? (yield* createWorkerName(id, olds?.name));
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id
+          // differently today (a Worker replace would also destroy its
+          // Durable Object storage). Only an explicit user-provided name
+          // can force a replace.
+          const workerName = news.name ?? oldWorkerName;
           if (workerName !== oldWorkerName) {
             return { action: "replace" };
           }
@@ -2602,7 +2772,7 @@ export const LiveWorkerProvider = () =>
                       service: workerName,
                     })
                     .pipe(Effect.map((r) => r.result ?? [])),
-                  readWorkerRoutes(workerName),
+                  readWorkerRoutes(workerName, output?.routes),
                 ],
                 { concurrency: "unbounded" },
               );

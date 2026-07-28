@@ -213,10 +213,11 @@ const getTsig = (accountId: string, tsigId: string) =>
  * pick the lexicographically-first id for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  dns.listZoneTransferTsigs({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((t) => t.name === name)
+  dns.listZoneTransferTsigs.items({ accountId }).pipe(
+    Stream.filter((t) => t.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.id.localeCompare(b.id))
         .at(0),
     ),

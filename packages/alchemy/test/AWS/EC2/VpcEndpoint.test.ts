@@ -2,10 +2,11 @@ import * as AWS from "@/AWS";
 import { RouteTable, Vpc, VpcEndpoint } from "@/AWS/EC2";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -34,7 +35,7 @@ test.provider("list enumerates the deployed VpcEndpoint", (stack) =>
           vpcEndpointType: "Gateway",
           routeTableIds: [routeTable.routeTableId],
         });
-        return { endpoint };
+        return { vpc, endpoint };
       }),
     );
 
@@ -46,5 +47,9 @@ test.provider("list enumerates the deployed VpcEndpoint", (stack) =>
     ).toBe(true);
 
     yield* stack.destroy();
+
+    // The VPC cannot delete while the endpoint or route table exist —
+    // VPC-gone proves full teardown.
+    yield* assertVpcGone(deployed.vpc.vpcId);
   }).pipe(logLevel),
 );

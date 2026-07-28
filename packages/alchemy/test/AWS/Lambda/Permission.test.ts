@@ -13,6 +13,8 @@ test.provider(
   "creates permission scoped to function URL invocation",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const fn = yield* TestFunction;
@@ -37,6 +39,9 @@ test.provider(
           "lambda:InvokedViaFunctionUrl": "true",
         },
       });
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(deployed.fn.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -74,12 +79,29 @@ test.provider(
             p.functionName === deployed.fn.functionName,
         ),
       ).toBe(true);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(deployed.fn.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
   { timeout: 180_000 },
 );
+
+// Out-of-band proof that the trailing destroy removed the host function (and
+// with it the permission's policy) from the cloud.
+const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
+  yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+    Effect.flatMap(() =>
+      Effect.fail(new Error(`Function ${functionName} still exists`)),
+    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+    }),
+  );
+});
 
 const getPolicyStatement = Effect.fn(function* (
   functionName: string,

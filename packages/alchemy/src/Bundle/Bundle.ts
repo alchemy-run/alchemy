@@ -4,7 +4,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
-import * as rolldown from "rolldown";
+import type * as rolldown from "rolldown";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import {
   bundleAnalyzerPlugin,
@@ -12,6 +12,14 @@ import {
 } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
+
+/**
+ * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
+ * merely importing alchemy — the CLI command tree, the Cloudflare provider
+ * barrel — never loads `@rolldown/binding-*`. A stack that bundles
+ * nothing must not require the native bundler to be loadable (#562).
+ */
+const loadRolldown = () => import("rolldown");
 
 /**
  * Extra options accepted by {@link build} / {@link watch} on top of the
@@ -148,9 +156,10 @@ export const build = (
 ): Effect.Effect<BundleOutput, BundleError> =>
   Effect.tryPromise({
     try: async () => {
+      const rolldown = await loadRolldown();
       const bundle = await rolldown.rolldown({
         ...withAlchemyDefine(inputOptions),
-        plugins: [inputOptions.plugins, builtInPlugins(extra)],
+        plugins: [inputOptions.plugins, await builtInPlugins(extra)],
         optimization: inputOptions.optimization ?? {
           inlineConst: {
             mode: "smart",
@@ -188,12 +197,13 @@ export const watch = (
       }
   >((queue) =>
     Effect.acquireRelease(
-      Effect.sync(() => {
+      Effect.promise(async () => {
+        const rolldown = await loadRolldown();
         const watcher = rolldown.watch({
           ...withAlchemyDefine(inputOptions),
           plugins: [
             inputOptions.plugins,
-            builtInPlugins(extra),
+            await builtInPlugins(extra),
             // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
             {
               name: "alchemy:watch-bundle",
@@ -348,12 +358,12 @@ export function bundleOutputFromRolldownOutputBundle(
  * `node_modules/<pkg>/...` by upstream resolver plugins such as
  * `@distilled.cloud/cloudflare-rolldown-plugin`.
  */
-function builtInPlugins(
+async function builtInPlugins(
   extra?: BundleExtraOptions,
-): rolldown.RolldownPluginOption {
+): Promise<rolldown.RolldownPluginOption> {
   return [
     extra?.bundleAnalyzer
-      ? bundleAnalyzerPlugin(
+      ? await bundleAnalyzerPlugin(
           extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer,
         )
       : undefined,

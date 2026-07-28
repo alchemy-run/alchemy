@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { Alarm } from "@/AWS/CloudWatch/Alarm.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
@@ -39,6 +40,14 @@ test.provider(
       expect(all.some((a) => a.alarmArn === alarm.alarmArn)).toBe(true);
 
       yield* stack.destroy();
+
+      // Out-of-band assert-gone: describeAlarms by name returns an empty
+      // collection once the alarm is deleted.
+      const gone = yield* cloudwatch.describeAlarms({
+        AlarmNames: [alarm.alarmName],
+        AlarmTypes: ["MetricAlarm"],
+      });
+      expect(gone.MetricAlarms ?? []).toEqual([]);
     }),
   { timeout: 120_000 },
 );

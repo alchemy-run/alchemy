@@ -304,10 +304,11 @@ const observeRule = (accountId: string, ruleId: string) =>
  * names collide).
  */
 const findByName = (accountId: string, name: string) =>
-  zeroTrust.listDevicePostures({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((r) => r.name === name && r.id != null)
+  zeroTrust.listDevicePostures.items({ accountId }).pipe(
+    Stream.filter((r) => r.name === name && r.id != null),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
         .at(0),
     ),

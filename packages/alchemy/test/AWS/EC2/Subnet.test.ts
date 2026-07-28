@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { Subnet, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -121,7 +121,7 @@ const expectSubnetAttribute = Effect.fn(function* (props: {
     }),
     Effect.retry({
       while: (e) => e instanceof SubnetAttributeStale,
-      schedule: Schedule.exponential(100),
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
     }),
   );
 });
@@ -133,7 +133,7 @@ const assertSubnetDeleted = Effect.fn(function* (subnetId: string) {
     Effect.flatMap(() => Effect.fail(new SubnetStillExists())),
     Effect.retry({
       while: (e) => e instanceof SubnetStillExists,
-      schedule: Schedule.exponential(100),
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
     }),
     Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
   );

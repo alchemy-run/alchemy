@@ -23,7 +23,9 @@ export interface VpcLinkProps {
    * Target ARNs for the integration (e.g. load balancer ARNs).
    */
   targetArns: string[];
+  /** Description of the VPC link. */
   description?: string;
+  /** User-defined tags for the VPC link. */
   tags?: Record<string, string>;
 }
 
