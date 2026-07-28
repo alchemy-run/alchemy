@@ -2476,9 +2476,16 @@ export const LiveWorkerProvider = () =>
           const oldDomains = normalizeStateDomains(output?.domains)
             .filter((u) => !u.endsWith(".workers.dev"))
             .sort();
+          // An omitted `domain` unmanages the surface (#942): reconcile skips
+          // reconcileDomains and carries previously-observed custom domains
+          // forward in state, so comparing the empty desired set against those
+          // persisted domains would report a dirty plan on every deploy,
+          // forever. Only a declared `domain` (including `[]`, the explicit
+          // detach-all) participates in the diff.
           const domainsChanged =
-            newDomains.length !== oldDomains.length ||
-            newDomains.some((d, i) => d !== oldDomains[i]);
+            news.domain !== undefined &&
+            (newDomains.length !== oldDomains.length ||
+              newDomains.some((d, i) => d !== oldDomains[i]));
           const newCrons = normalizeCrons([
             ...(Array.isArray(newBindings)
               ? getCronBindings(
@@ -2510,10 +2517,19 @@ export const LiveWorkerProvider = () =>
           // Webhook delivery URL built via `Output.interpolate`) resolve it
           // to a concrete value during planning instead of an unresolved
           // Output — otherwise every worker update spuriously re-updates them.
-          const newCustomDomains = normalizeDomains(news.domain);
+          // Mirror reconcile's `domains[0]`: with `domain` declared, the
+          // first declared hostname; unmanaged (`domain` omitted, #942),
+          // previously-observed custom domains carry forward in state order;
+          // otherwise the workers.dev URL.
+          const newCustomDomains =
+            news.domain !== undefined
+              ? normalizeDomains(news.domain).map((h) => `https://${h}`)
+              : normalizeStateDomains(output.domains).filter(
+                  (u) => !u.endsWith(".workers.dev"),
+                );
           const newUrl =
             newCustomDomains.length > 0
-              ? `https://${newCustomDomains[0]}`
+              ? newCustomDomains[0]
               : news.url !== false
                 ? normalizeStateDomains(output.domains).find((u) =>
                     u.endsWith(".workers.dev"),

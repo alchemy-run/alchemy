@@ -162,6 +162,23 @@ test.provider.skipIf(!zoneName)(
         // subsequent reads keep observing them.
         expect(unmanaged.domains).toContain(`https://${DECLARED_HOSTNAME}`);
 
+        // The unmanaged surface must also converge: the custom domains
+        // carried forward in state must not diff dirty against the omitted
+        // `domain` prop — an identical program plans as a noop.
+        const settled = yield* stack.plan(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("DomainWorker", {
+              main,
+              url: false,
+              compatibility: { date: "2024-01-02" },
+            });
+          }),
+        );
+        const settledAction = (Object.values(settled.resources) as any[]).find(
+          (node: any) => node.resource.LogicalId === "DomainWorker",
+        )?.action;
+        expect(settledAction).toBe("noop");
+
         // `domain: []` is the explicit detach-all.
         const detached = yield* stack.deploy(
           Effect.gen(function* () {
