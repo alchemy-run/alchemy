@@ -136,6 +136,17 @@ export type FunctionArchitecture = "x86_64" | "arm64";
 export type AccessPointRef = string | { accessPointArn: string };
 
 /**
+ * Reference to a Lambda layer version: a raw layer version ARN or anything
+ * exposing a `layerVersionArn` attribute (e.g. an `AWS.Lambda.LayerVersion`
+ * resource).
+ */
+export type LayerRef = string | { layerVersionArn: string };
+
+/** Resolve a {@link LayerRef} to its layer version ARN. */
+const layerVersionArnOf = (layer: LayerRef): string =>
+  typeof layer === "string" ? layer : layer.layerVersionArn;
+
+/**
  * Resolve an {@link AccessPointRef} (or the legacy raw-`arn` field) on a
  * `fileSystemConfigs` entry to the access point ARN.
  */
@@ -196,12 +207,12 @@ export interface FunctionProps extends PlatformProps {
   architecture?: FunctionArchitecture;
   memorySize?: number;
   /**
-   * Lambda layers to attach, as layer version ARNs — pass
-   * `layer.layerVersionArn` from an `AWS.Lambda.LayerVersion` (or a literal
-   * ARN, e.g. an AWS-managed layer). Layers are extracted into `/opt` in the
-   * order given. Omit or pass `[]` to detach every layer.
+   * Lambda layers to attach — pass an `AWS.Lambda.LayerVersion` resource
+   * directly, or a raw layer version ARN (e.g. an AWS-managed layer). Layers
+   * are extracted into `/opt` in the order given. Omit or pass `[]` to detach
+   * every layer.
    */
-  layers?: string[];
+  layers?: LayerRef[];
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -1524,7 +1535,7 @@ export default handler;
           // Always explicit: `UpdateFunctionConfiguration` treats an omitted
           // `Layers` as "leave as-is", so removing the prop would strand the
           // previously-attached layers.
-          Layers: news.layers ?? [],
+          Layers: (news.layers ?? []).map(layerVersionArnOf),
           Environment: runtimeEnv
             ? {
                 Variables: {

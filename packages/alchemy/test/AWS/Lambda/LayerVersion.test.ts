@@ -48,7 +48,8 @@ test.provider(
                 handler: "handler",
                 isExternal: true,
                 url: false,
-                layers: layered ? [layer.layerVersionArn] : [],
+                // Pass the resource itself — `layers` also accepts a raw ARN.
+                layers: layered ? [layer] : [],
               })
             : undefined;
 

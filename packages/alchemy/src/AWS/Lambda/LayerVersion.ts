@@ -13,12 +13,25 @@ import { zipFiles, type ZipFile } from "../../Util/zip.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
+ * Reference to an S3 bucket: a raw bucket name or anything exposing a
+ * `bucketName` attribute (e.g. an `AWS.S3.Bucket` resource).
+ */
+export type BucketRef = string | { bucketName: string };
+
+/** Resolve a {@link BucketRef} to its bucket name. */
+const bucketNameOf = (bucket: BucketRef): string =>
+  typeof bucket === "string" ? bucket : bucket.bucketName;
+
+/**
  * Layer content stored in S3. Use this instead of {@link LayerVersionProps.path}
  * for archives larger than the 50 MB direct-upload limit.
  */
 export interface LayerVersionS3Content {
-  /** Name of the S3 bucket holding the layer archive. */
-  bucket: string;
+  /**
+   * S3 bucket holding the layer archive — an `AWS.S3.Bucket` resource or a
+   * raw bucket name.
+   */
+  bucket: BucketRef;
   /** Key of the layer archive object. */
   key: string;
   /** Version id of the object, for versioned buckets. */
@@ -160,7 +173,7 @@ export interface LayerVersion extends Resource<
  * ```typescript
  * const layer = yield* LayerVersion("BigLayer", {
  *   s3: {
- *     bucket: yield* bucket.bucketName,
+ *     bucket,
  *     key: "layers/big-layer.zip",
  *   },
  * });
@@ -171,7 +184,7 @@ export interface LayerVersion extends Resource<
  * ```typescript
  * const fn = yield* Function("Handler", {
  *   main: import.meta.resolve("./handler.ts"),
- *   layers: [deps.layerVersionArn],
+ *   layers: [deps],
  * });
  * ```
  */
@@ -242,13 +255,16 @@ export const LayerVersionProvider = () =>
           );
         }
         if (props.s3) {
+          // Hash the resolved coordinates, not the props, so a bucket passed
+          // as a resource and the same bucket passed by name agree.
+          const s3 = {
+            S3Bucket: bucketNameOf(props.s3.bucket),
+            S3Key: props.s3.key,
+            S3ObjectVersion: props.s3.objectVersion,
+          } satisfies lambda.LayerVersionContentInput;
           return {
-            content: {
-              S3Bucket: props.s3.bucket,
-              S3Key: props.s3.key,
-              S3ObjectVersion: props.s3.objectVersion,
-            } satisfies lambda.LayerVersionContentInput,
-            sourceHash: yield* sha256Object({ s3: props.s3, config }),
+            content: s3,
+            sourceHash: yield* sha256Object({ s3, config }),
           };
         }
         if (!props.path) {
