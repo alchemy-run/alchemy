@@ -65,6 +65,10 @@ export interface ContactList extends Resource<
  *
  * Add contacts with `SES.Contact`. Deleting the list deletes all of its
  * contacts.
+ *
+ * SES allows only **one contact list per AWS account**, so renaming a list
+ * replaces it by deleting the old list (and its contacts) before creating the
+ * new one — a create-then-delete replacement would exceed the account limit.
  * @resource
  * @section Creating Contact Lists
  * @example Basic Contact List
@@ -192,7 +196,9 @@ export const ContactListProvider = () =>
           const oldName = yield* createName(id, olds ?? {});
           const newName = yield* createName(id, news ?? {});
           if (oldName !== newName) {
-            return { action: "replace" } as const;
+            // Only one contact list is allowed per account, so the old list
+            // has to go before the new one can be created.
+            return { action: "replace", deleteFirst: true } as const;
           }
         }),
 

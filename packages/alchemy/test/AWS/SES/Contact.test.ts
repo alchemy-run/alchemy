@@ -106,7 +106,7 @@ test.provider(
         "reader@alchemy-test.example.com",
       );
     }),
-  { timeout: 120_000 },
+  { timeout: 120_000, exclusive: true },
 );
 
 test.provider(
@@ -157,5 +157,5 @@ test.provider(
         "second@alchemy-test.example.com",
       );
     }),
-  { timeout: 120_000 },
+  { timeout: 120_000, exclusive: true },
 );

@@ -9,6 +9,10 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+// SES allows only one contact list per AWS account, so every test that creates
+// one is `exclusive` — two contact-list suites running concurrently would
+// collide on the account-wide singleton.
+
 class ContactListStillExists extends Data.TaggedError(
   "ContactListStillExists",
 )<{
@@ -96,7 +100,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertContactListDeleted(list.contactListName);
     }),
-  { timeout: 120_000 },
+  { timeout: 120_000, exclusive: true },
 );
 
 test.provider(
@@ -114,6 +118,8 @@ test.provider(
       );
       expect(first.contactListName).toBe("alchemy-test-contact-list-a");
 
+      // The rename replaces delete-first: creating -b before deleting -a would
+      // exceed the one-contact-list-per-account limit.
       const second = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ContactList("Named", {
@@ -127,5 +133,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertContactListDeleted("alchemy-test-contact-list-b");
     }),
-  { timeout: 120_000 },
+  { timeout: 120_000, exclusive: true },
 );
