@@ -514,6 +514,7 @@ const resolveWorkerMetadataHash = ({
       ? {
           parent: resolveVersionParentName(props.version),
           traffic: props.version.traffic,
+          alias: props.version.alias,
           message: props.version.message,
           tag: props.version.tag,
         }
@@ -1644,14 +1645,74 @@ export const LiveWorkerProvider = () =>
       });
 
       /**
-       * The static preview URL for an uploaded version
-       * (`<version-prefix>-<script>.<subdomain>.workers.dev`), or
-       * `undefined` when the script's workers.dev previews are disabled.
+       * Resolve the preview-URL alias for a version worker: the
+       * user-provided `version.alias` (validated against Cloudflare's
+       * naming rules), or an alias derived from the stack, stage, and
+       * logical id — stable across deploys, so the aliased preview URL
+       * (`<alias>-<script>.<subdomain>.workers.dev`) is a durable link
+       * that always points at the latest uploaded version. Returns
+       * `undefined` when the parent's script name leaves no room in the
+       * 63-character DNS label and no explicit alias was given.
        */
-      const resolveVersionPreviewUrl = Effect.fn(function* (
+      const resolveVersionAlias = Effect.fn(function* (
+        id: string,
+        news: WorkerProps,
+        parentName: string,
+      ) {
+        // `<alias>-<script name>` is a single DNS label (≤ 63 chars).
+        const budget = 63 - parentName.length - 1;
+        const userAlias = news.version?.alias;
+        if (userAlias !== undefined) {
+          if (!/^[a-z][a-z0-9-]*$/.test(userAlias)) {
+            return yield* Effect.fail(
+              new WorkerVersionConfigError({
+                message: `version.alias '${userAlias}' is invalid: aliases must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
+              }),
+            );
+          }
+          if (userAlias.length > budget) {
+            return yield* Effect.fail(
+              new WorkerVersionConfigError({
+                message: `version.alias '${userAlias}' is too long: '<alias>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the alias.`,
+              }),
+            );
+          }
+          return userAlias;
+        }
+        if (budget < 4) {
+          return undefined;
+        }
+        // Deterministic per (stack, stage, id) — survives updates AND
+        // replacements so the aliased preview URL never moves. A short
+        // hash disambiguates different stacks/stages whose readable
+        // prefixes collide after truncation.
+        const hash = yield* Effect.sync(() =>
+          crypto
+            .createHash("sha256")
+            .update(`${stack.name}/${stack.stage}/${id}`)
+            .digest("hex")
+            .slice(0, 6),
+        );
+        const readable = `${stack.stage}-${id}`
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        const alias = [readable, hash]
+          .filter((part) => part.length > 0)
+          .join("-")
+          .slice(0, budget)
+          .replace(/-+$/, "");
+        return /^[a-z]/.test(alias) ? alias : `v${alias}`.slice(0, budget);
+      });
+
+      /**
+       * The parent's workers.dev preview settings + account subdomain,
+       * fetched once per version reconcile. Preview URLs (aliased and
+       * versioned) only serve when the parent has previews enabled.
+       */
+      const resolveVersionPreviewContext = Effect.fn(function* (
         accountId: string,
         scriptName: string,
-        versionId: string,
       ) {
         const subdomain = yield* workers
           .getScriptSubdomain({ accountId, scriptName })
@@ -1661,14 +1722,11 @@ export const LiveWorkerProvider = () =>
               previewsEnabled: false,
             })),
           );
-        if (!subdomain.previewsEnabled) {
-          yield* Effect.logInfo(
-            `Cloudflare Worker version: previews are disabled on ${scriptName}; no preview URL for version ${versionId}`,
-          );
-          return undefined;
-        }
         const accountSubdomain = yield* getAccountSubdomain(accountId);
-        return `https://${versionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`;
+        return {
+          previewsEnabled: subdomain.previewsEnabled === true,
+          accountSubdomain,
+        };
       });
 
       /**
@@ -1712,13 +1770,6 @@ export const LiveWorkerProvider = () =>
           );
         }
         yield* validateTraffic(news.version?.traffic);
-        if (hasSelfUrlBinding(bindings)) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `A version of '${parentName}' cannot bind its own URL (Worker.URL): a version's URL is its preview URL, which only exists after the version is uploaded. Bind the URL on the parent Worker instead.`,
-            }),
-          );
-        }
         const cronBindings = getCronBindings(bindings);
         if (cronBindings.length > 0) {
           return yield* Effect.fail(
@@ -1776,6 +1827,29 @@ export const LiveWorkerProvider = () =>
         }
         yield* validateVersionWorkerProps(news, bindings, parentName);
         const traffic = version.traffic ?? 0;
+        // Resolve the alias and preview context BEFORE the upload: the
+        // aliased preview URL (`<alias>-<script>.<subdomain>.workers.dev`)
+        // is deterministic ahead of time — unlike the versioned URL, whose
+        // prefix comes from the server-assigned version id — which is what
+        // lets a `Worker.URL` (self_url) binding be baked into the
+        // version's own bindings.
+        const alias = yield* resolveVersionAlias(id, news, parentName);
+        const { previewsEnabled, accountSubdomain } =
+          yield* resolveVersionPreviewContext(accountId, parentName);
+        const aliasedUrl =
+          alias !== undefined && previewsEnabled
+            ? `https://${alias}-${parentName}.${accountSubdomain}.workers.dev`
+            : undefined;
+        const selfUrl = hasSelfUrlBinding(bindings) ? aliasedUrl : undefined;
+        if (hasSelfUrlBinding(bindings) && selfUrl === undefined) {
+          return yield* Effect.fail(
+            new WorkerVersionConfigError({
+              message: previewsEnabled
+                ? `A version of '${parentName}' binds its own URL (Worker.URL), but no preview alias fits: '<alias>-${parentName}' must stay within a 63-character DNS label. Set a short version.alias or shorten the parent's name.`
+                : `A version of '${parentName}' binds its own URL (Worker.URL), but the parent's workers.dev previews are disabled — a version's URL is its aliased preview URL. Enable the parent's workers.dev subdomain (url: true, the default).`,
+            }),
+          );
+        }
         yield* Effect.logInfo(
           `Cloudflare Worker version: preparing bundle for ${parentName} (from ${id})`,
         );
@@ -1789,12 +1863,22 @@ export const LiveWorkerProvider = () =>
           bindings,
           accountId,
           stack: { name: stack.name, stage: stack.stage },
+          selfUrl,
         });
         const hash = {
           ...preparedHash,
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
-        const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
+        // Lower the `Worker.URL` sentinel into the aliased preview URL —
+        // same lowering `putWorker` performs, with the alias standing in
+        // for the script's own URL.
+        const metadataBindings = bindings.flatMap((b) =>
+          (b.data.bindings ?? []).map((item) =>
+            item.type === "self_url"
+              ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
+              : item,
+          ),
+        );
         appendAlchemyAndEnvBindings(metadataBindings, news, accountId);
         const compatibility = getCompatibility(news);
         yield* session.note(`Uploading version of ${parentName} ...`);
@@ -1810,8 +1894,11 @@ export const LiveWorkerProvider = () =>
               compatibilityFlags: compatibility.flags,
               cache: news.cache ?? getCacheBinding(bindings),
               annotations:
-                version.message !== undefined || version.tag !== undefined
+                alias !== undefined ||
+                version.message !== undefined ||
+                version.tag !== undefined
                   ? {
+                      workersAlias: alias,
                       workersMessage: version.message,
                       workersTag: version.tag,
                     }
@@ -1853,25 +1940,31 @@ export const LiveWorkerProvider = () =>
             message: version.message,
           });
         }
-        const previewUrl = yield* resolveVersionPreviewUrl(
-          accountId,
-          parentName,
-          versionId,
-        );
+        // The aliased URL is primary (`url`): it is stable across deploys,
+        // re-pointing at each newly uploaded version. The per-version URL
+        // (prefixed by the version id) rides along in `domains`.
+        const versionedUrl = previewsEnabled
+          ? `https://${versionId.split("-")[0]}-${parentName}.${accountSubdomain}.workers.dev`
+          : undefined;
+        const domains = [
+          ...(aliasedUrl ? [aliasedUrl] : []),
+          ...(versionedUrl ? [versionedUrl] : []),
+        ];
         return {
           workerId: parentName,
           workerName: parentName,
           namespace: undefined,
           logpush: undefined,
-          url: previewUrl,
+          url: domains[0],
           tags: undefined,
           durableObjectNamespaces: {},
           accountId,
-          domains: previewUrl ? [previewUrl] : [],
+          domains,
           routes: [],
           crons: [],
           versionOf: parentName,
           versionId,
+          versionAlias: alias,
           deploymentId,
           hash,
         } satisfies Worker["Attributes"];
@@ -2435,9 +2528,11 @@ export const LiveWorkerProvider = () =>
                 compatibilityFlags: metadata.compatibilityFlags,
                 cache: metadata.cache,
                 annotations:
+                  news.version?.alias !== undefined ||
                   news.version?.message !== undefined ||
                   news.version?.tag !== undefined
                     ? {
+                        workersAlias: news.version?.alias,
                         workersMessage: news.version?.message,
                         workersTag: news.version?.tag,
                       }
@@ -2667,14 +2762,34 @@ export const LiveWorkerProvider = () =>
         // unresolved: the hash can't be computed deterministically here, and
         // the eventual apply stores it once bindings resolve.
         if (bindings) {
+          // For a version worker, `Worker.URL` resolves to the *aliased
+          // preview URL* (see `putWorkerVersion`) — recompute the same
+          // value here so the metadata hash matches what the apply stored
+          // and unchanged deploys stay noops.
+          const versionParent =
+            props.version?.parent != null
+              ? (resolveVersionParentName(props.version) ?? output.versionOf)
+              : undefined;
+          const selfUrl = hasSelfUrlBinding(bindings)
+            ? versionParent !== undefined
+              ? yield* Effect.gen(function* () {
+                  const alias = yield* resolveVersionAlias(
+                    id,
+                    props,
+                    versionParent,
+                  );
+                  return alias !== undefined
+                    ? `https://${alias}-${versionParent}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+                    : undefined;
+                })
+              : yield* resolveSelfUrl(output.workerName, props, accountId)
+            : undefined;
           const metadataHash = yield* resolveWorkerMetadataHash({
             props,
             bindings,
             accountId,
             stack: { name: stack.name, stage: stack.stage },
-            selfUrl: hasSelfUrlBinding(bindings)
-              ? yield* resolveSelfUrl(output.workerName, props, accountId)
-              : undefined,
+            selfUrl,
           });
           if (metadataHash !== output.hash?.metadata) {
             return true;

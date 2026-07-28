@@ -424,13 +424,18 @@ const preview = yield* Cloudflare.Worker("Api", {
 });
 ```
 
-The version receives no traffic. `preview.url` is its static preview URL
-(`<version-prefix>-<name>.<subdomain>.workers.dev`), which serves the
-version's code while the parent's live traffic is untouched — the
-PR-preview workflow. The version carries its own bindings, so a preview
-stage binds its own KV namespaces, D1 databases, and secrets for a fully
-isolated environment. `parent` also accepts a literal script name as an
-escape hatch for scripts alchemy doesn't manage.
+The version receives no traffic. `preview.url` is its *aliased* preview
+URL (`<alias>-<name>.<subdomain>.workers.dev`) — alchemy derives a stable
+alias from the stack, stage, and logical id (override it with
+`version.alias`), so the link stays the same across re-deploys and always
+serves the latest uploaded version, while the parent's live traffic is
+untouched — the PR-preview workflow. The per-version URL
+(`<version-prefix>-...`) is also returned in `domains`. The version
+carries its own bindings, so a preview stage binds its own KV namespaces,
+D1 databases, and secrets for a fully isolated environment — and because
+the aliased URL is known before upload, [`Worker.URL`](#the-workers-own-url)
+works on version workers and resolves to it. `parent` also accepts a
+literal script name as an escape hatch for scripts alchemy doesn't manage.
 
 ### Canary traffic
 

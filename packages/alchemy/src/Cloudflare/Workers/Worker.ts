@@ -381,6 +381,21 @@ export interface WorkerVersionOptions {
    */
   traffic?: number;
   /**
+   * Preview-URL alias for the uploaded version. Aliased preview URLs
+   * (`<alias>-<name>.<subdomain>.workers.dev`) are stable — each upload
+   * with the same alias re-points the URL at the new version — which is
+   * what makes them useful as shareable PR-preview links and lets
+   * `Worker.URL` resolve before the version exists.
+   *
+   * For a version worker ({@link parent} set) an alias is derived
+   * automatically from the stack, stage, and logical id, so every version
+   * worker gets a stable preview URL out of the box; set this to override
+   * it. Must start with a lowercase letter, contain only lowercase
+   * letters, digits, and dashes, and `<alias>-<worker-name>` must fit in
+   * 63 characters (a DNS label).
+   */
+  alias?: string;
+  /**
    * Human-readable annotation attached to the uploaded version, shown in
    * the Cloudflare dashboard and `wrangler versions list`.
    */
@@ -762,6 +777,14 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
      * rollout (`version.traffic` < 100) deployed via the versions API.
      */
     versionId?: string | undefined;
+    /**
+     * The preview-URL alias attached to the uploaded version — the
+     * user-provided `version.alias`, or the auto-derived stable alias for
+     * a version worker. The aliased preview URL
+     * (`<alias>-<name>.<subdomain>.workers.dev`) is stable across
+     * deploys and is the version worker's primary `url`.
+     */
+    versionAlias?: string | undefined;
     /**
      * The id of the deployment created by the most recent deploy, when the
      * deploy created one through the deployments API (a version with
@@ -1169,6 +1192,14 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * run it as a canary, or use `version.traffic` on a normal Worker to roll
  * out its own deploys gradually.
  *
+ * A version worker's `url` is its *aliased* preview URL
+ * (`<alias>-<name>.<subdomain>.workers.dev`) — the alias is derived from
+ * the stack, stage, and logical id (override with `version.alias`), so the
+ * URL is stable across deploys and always points at the latest uploaded
+ * version. The per-version URL (`<version-prefix>-...`) is also returned
+ * in `domains`. Because the aliased URL is known before the version
+ * exists, `Worker.URL` works on version workers and resolves to it.
+ *
  * A version carries code, bindings, and compatibility settings. Script-level
  * settings (routes, domains, crons, tags, observability, …) belong to the
  * parent and are rejected on version workers, as are locally-hosted Durable
@@ -1179,7 +1210,7 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * ```typescript
  * // The staging stage deploys the real Worker; a PR stage uploads its
  * // code as a zero-traffic version of staging's script and gets back a
- * // preview URL.
+ * // stable preview URL.
  * const parent = yield* Cloudflare.Worker.ref("MyWorker", {
  *   stage: "staging",
  * });
@@ -1187,7 +1218,8 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  *   main: "./src/worker.ts",
  *   version: { parent, message: `PR #${process.env.PR_NUMBER}` },
  * });
- * // preview.url -> https://<version-prefix>-<name>.<subdomain>.workers.dev
+ * // preview.url -> https://<alias>-<name>.<subdomain>.workers.dev
+ * // (stable across deploys; re-points at each newly uploaded version)
  * ```
  *
  * @example Canary: send 10% of the parent's traffic to a version

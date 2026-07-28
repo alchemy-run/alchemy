@@ -63,8 +63,15 @@ describe.concurrent("Cloudflare.Worker version", () => {
         expect(v1.preview.versionId).toBeDefined();
         // Zero traffic: no deployment was created.
         expect(v1.preview.deploymentId).toBeUndefined();
-        // Preview URL: `<version-prefix>-<script>.<subdomain>.workers.dev`.
-        expect(v1.preview.url).toMatch(
+        // Primary URL is the *aliased* preview URL (stable across deploys);
+        // the per-version URL (`<version-prefix>-...`) rides in domains.
+        expect(v1.preview.versionAlias).toBeDefined();
+        expect(v1.preview.url).toEqual(
+          expect.stringContaining(
+            `https://${v1.preview.versionAlias}-${v1.parent.workerName}.`,
+          ),
+        );
+        expect(v1.preview.domains[1]).toMatch(
           new RegExp(`^https://[0-9a-f]{8}-${v1.parent.workerName}\\.`),
         );
 
@@ -101,6 +108,10 @@ describe.concurrent("Cloudflare.Worker version", () => {
 
         expect(v2.canary.versionId).toBeDefined();
         expect(v2.canary.deploymentId).toBeDefined();
+        // The aliased preview URL is stable: the same alias re-points at
+        // the newly uploaded version.
+        expect(v2.canary.versionAlias).toEqual(v1.preview.versionAlias);
+        expect(v2.canary.url).toEqual(v1.preview.url);
         const liveWithCanary = yield* latestDeployment(v2.parent.workerName);
         expect(liveWithCanary?.id).toEqual(v2.canary.deploymentId);
         expect(
@@ -243,6 +254,43 @@ describe.concurrent("Cloudflare.Worker version", () => {
         yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 300_000 },
+  );
+
+  test.provider(
+    "Worker.URL on a version worker resolves to the aliased preview URL",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const { preview } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("SelfUrlParent", {
+              script: script("self-url-parent-v1"),
+            });
+            // Async version worker binding its own URL via env — the
+            // self_url sentinel must lower into the aliased preview URL,
+            // which is known before the version exists.
+            const preview = yield* Cloudflare.Worker("SelfUrlPreview", {
+              script: `export default { fetch(request, env) { return new Response(env.PUBLIC_URL); } };`,
+              env: { PUBLIC_URL: Cloudflare.Worker.URL },
+              version: { parent },
+            });
+            return { preview };
+          }),
+        );
+
+        expect(preview.versionAlias).toBeDefined();
+        expect(preview.url).toEqual(
+          expect.stringContaining(`https://${preview.versionAlias}-`),
+        );
+        // The deployed version reports its own aliased preview URL.
+        yield* expectUrlContains(preview.url!, preview.url!, {
+          label: "version's PUBLIC_URL equals its aliased preview URL",
+        });
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 240_000 },
   );
 
   test.provider(
