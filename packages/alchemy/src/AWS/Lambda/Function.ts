@@ -195,6 +195,13 @@ export interface FunctionProps extends PlatformProps {
    */
   architecture?: FunctionArchitecture;
   memorySize?: number;
+  /**
+   * Lambda layers to attach, as layer version ARNs — pass
+   * `layer.layerVersionArn` from an `AWS.Lambda.LayerVersion` (or a literal
+   * ARN, e.g. an AWS-managed layer). Layers are extracted into `/opt` in the
+   * order given. Omit or pass `[]` to detach every layer.
+   */
+  layers?: string[];
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -1514,6 +1521,10 @@ export default handler;
           Runtime: news.runtime ?? "nodejs22.x",
           Architectures: [news.architecture ?? "x86_64"],
           MemorySize: news.memorySize,
+          // Always explicit: `UpdateFunctionConfiguration` treats an omitted
+          // `Layers` as "leave as-is", so removing the prop would strand the
+          // previously-attached layers.
+          Layers: news.layers ?? [],
           Environment: runtimeEnv
             ? {
                 Variables: {
