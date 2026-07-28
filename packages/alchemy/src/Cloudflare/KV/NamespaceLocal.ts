@@ -37,6 +37,21 @@ export const makeLocalKVNamespaceBinding = <Client>(options: {
         authorize: (eff) => eff.pipe(Effect.provideContext(context)),
         accountId: Effect.succeed(accountId),
       };
-      return options.makeClient(auth, namespaceId);
+      return options.makeClient(
+        auth,
+        // A `dev:` id belongs to a locally-emulated namespace — the cloud
+        // HTTP API this client speaks has no such namespace, so fail with
+        // guidance instead of a baffling 404. (Follow-up: tunnel into the
+        // local simulator through a workerd gateway, as D1's
+        // `QueryDatabaseLocal` does.)
+        Effect.flatMap(namespaceId, (id) =>
+          id.startsWith("dev:")
+            ? Effect.die(
+                `KV namespace "${id}" is locally emulated (alchemy dev) — the *Local KV capability layers query the cloud HTTP API and cannot reach it. ` +
+                  "Opt the namespace out of emulation with Alchemy.live(), or drive it through a Worker binding.",
+              )
+            : Effect.succeed(id),
+        ),
+      );
     });
   });

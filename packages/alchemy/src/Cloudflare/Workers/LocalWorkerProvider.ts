@@ -515,6 +515,11 @@ export const LocalWorkerProvider = () =>
                   durableObjectNamespaces: worker.durableObjectNamespaces,
                   workflows: worker.workflows,
                   queueConsumers,
+                  // Cache API opt-out (`dev: { cache: false }`) — matches
+                  // production workers.dev, where the Cache API is a no-op.
+                  cache: worker.dev.cache,
+                  // Per-worker request.cf override (`dev: { cf: {...} }`).
+                  cf: worker.dev.cf,
                   modules: yield* toRuntimeModules(bundle),
                   assets: yield* toRuntimeAssets(worker.assets),
                 })

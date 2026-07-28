@@ -562,6 +562,22 @@ export interface WorkerProps<
          * @default false
          */
         strictPort?: boolean;
+        /**
+         * Whether the local runtime's Cache API simulator
+         * (`caches.default` / `caches.open()`) stores responses. Set
+         * `false` to make every cache operation a no-op — matching
+         * production behaviour on `workers.dev` subdomains, where the
+         * Cache API silently does nothing.
+         * @default true
+         */
+        cache?: boolean;
+        /**
+         * Override the `request.cf` blob served to this Worker locally.
+         * Defaults to a static placeholder (Miniflare's Austin/DFW blob);
+         * pass e.g. `{ colo: "LHR", country: "GB" }` to simulate a
+         * different edge location.
+         */
+        cf?: Record<string, unknown>;
       }
     | {
         /**

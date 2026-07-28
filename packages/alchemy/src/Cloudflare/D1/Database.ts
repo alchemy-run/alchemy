@@ -606,7 +606,8 @@ export const ProviderLocal = () =>
           if (output.accountId !== accountId) {
             return { action: "replace" } as const;
           }
-          // Detect migration file drift — same rule as the live provider.
+          // Detect migration/import file drift — same rules as the live
+          // provider.
           if (news.migrationsDir) {
             const newHashes = yield* hashMigrations(news.migrationsDir);
             if (!recordsEqual(newHashes, output.migrationsHashes ?? {})) {
@@ -616,6 +617,15 @@ export const ProviderLocal = () =>
               (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
               (output.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
             ) {
+              return { action: "update" } as const;
+            }
+          }
+          if (news.importFiles?.length) {
+            const newHashes = yield* hashImports(
+              news.importFiles,
+              yield* rootDir,
+            );
+            if (!recordsEqual(newHashes, output.importHashes ?? {})) {
               return { action: "update" } as const;
             }
           }
@@ -651,11 +661,31 @@ export const ProviderLocal = () =>
             migrationsHashes = output?.migrationsHashes ?? {};
           }
 
+          // Sync imports — locally an import file is just multi-statement
+          // SQL, executed through the same gateway. Files whose hash matches
+          // previously-imported state are skipped (mirroring `runImports`).
+          const importHashes: Record<string, string> = {
+            ...(output?.importHashes ?? {}),
+          };
           if (news.importFiles?.length) {
-            yield* Effect.logWarning(
-              `[${id}] D1 importFiles are not applied in local dev — ` +
-                "the import flow is a cloud-only multi-step upload.",
-            );
+            const importRootDir = yield* rootDir;
+            const pending: Array<{ path: string; sql: string; hash: string }> =
+              [];
+            for (const filePath of news.importFiles) {
+              const file = yield* readSqlFile(importRootDir, filePath);
+              if (importHashes[filePath] === file.hash) continue;
+              pending.push({ path: filePath, sql: file.sql, hash: file.hash });
+            }
+            if (pending.length > 0) {
+              yield* withLocalD1Executor(databaseId, (executor) =>
+                Effect.forEach(pending, (file) => executor(file.sql), {
+                  discard: true,
+                }),
+              ).pipe(Effect.provideContext(runtimeContext));
+              for (const file of pending) {
+                importHashes[file.path] = file.hash;
+              }
+            }
           }
 
           return {
@@ -667,7 +697,7 @@ export const ProviderLocal = () =>
             migrationsDir: news.migrationsDir,
             migrationsTable: news.migrationsDir ? migrationsTable : undefined,
             migrationsHashes,
-            importHashes: {},
+            importHashes,
           };
         }),
         delete: Effect.fn(function* () {

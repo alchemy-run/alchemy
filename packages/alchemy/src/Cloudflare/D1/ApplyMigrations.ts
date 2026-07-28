@@ -13,7 +13,11 @@ import type { SqlFile } from "../../SQL/SqlFile.ts";
  *   protocol into the local workerd D1 simulator.
  */
 export interface D1QueryResult {
-  result: Array<{ results?: unknown }>;
+  result: Array<{
+    results?: unknown;
+    success?: boolean | null;
+    meta?: unknown;
+  }>;
 }
 
 export type D1SqlExecutor<E = unknown, R = never> = (

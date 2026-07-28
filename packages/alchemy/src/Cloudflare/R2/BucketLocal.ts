@@ -42,6 +42,22 @@ export const makeLocalBucketBinding = <Client>(makeClient: {
       // `host.bind`: the local variant registers no binding.
       const bucketName = yield* bucket.bucketName;
       const jurisdiction = yield* bucket.jurisdiction;
-      return makeClient(auth, bucketName, jurisdiction);
+      return makeClient(
+        auth,
+        // A `dev:` name belongs to a locally-emulated bucket — the cloud
+        // HTTP API this client speaks has no such bucket, so fail with
+        // guidance instead of a baffling 404. (Follow-up: tunnel into the
+        // local simulator through a workerd gateway, as D1's
+        // `QueryDatabaseLocal` does.)
+        Effect.flatMap(bucketName, (name) =>
+          name.startsWith("dev:")
+            ? Effect.die(
+                `R2 bucket "${name}" is locally emulated (alchemy dev) — the *Local R2 capability layers query the cloud HTTP API and cannot reach it. ` +
+                  "Opt the bucket out of emulation with Alchemy.live(), or drive it through a Worker binding.",
+              )
+            : Effect.succeed(name),
+        ),
+        jurisdiction,
+      );
     });
   });

@@ -102,3 +102,50 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+/**
+ * `dev: { cache: false }` turns every Cache API operation into a no-op
+ * (matching production workers.dev), and `dev: { cf }` overrides the
+ * `request.cf` blob served to this Worker.
+ */
+test.provider(
+  "dev.cache=false disables the Cache API and dev.cf overrides request.cf",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* Cloudflare.Worker("cache-off-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/cache-cf/worker.ts",
+            ),
+            dev: {
+              cache: false,
+              cf: { colo: "TST", country: "XX" },
+            },
+          });
+          return { worker };
+        }),
+      );
+      const url = deployed.worker.url!;
+
+      // The overridden blob is served verbatim.
+      const cf = (yield* getJsonReady(`${url}cf`)) as {
+        colo: string | null;
+        country: string | null;
+      };
+      expect(cf.colo).toBe("TST");
+      expect(cf.country).toBe("XX");
+
+      // With the cache disabled, every request misses — the put is a no-op.
+      const first = (yield* getJsonReady(`${url}cache`)) as { hit: boolean };
+      const second = (yield* getJsonReady(`${url}cache`)) as { hit: boolean };
+      expect(first.hit).toBe(false);
+      expect(second.hit).toBe(false);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);

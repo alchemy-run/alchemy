@@ -23,19 +23,32 @@
  *
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
-import { Runtime } from "@distilled.cloud/cloudflare-runtime";
+import { layerRuntime, Runtime } from "@distilled.cloud/cloudflare-runtime";
 import { D1 } from "@distilled.cloud/cloudflare-runtime/bindings";
 import { SERVICE_D1 } from "@distilled.cloud/cloudflare-runtime/bindings/d1/D1Options";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { AlchemyContext } from "../../AlchemyContext.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { D1QueryResult, D1SqlExecutor } from "./ApplyMigrations.ts";
 
 export class LocalD1QueryError extends Data.TaggedError("LocalD1QueryError")<{
   message: string;
   cause?: unknown;
 }> {}
+
+/**
+ * A single query or batch in the shape the cloud `d1.queryDatabase` op
+ * accepts — the local gateway speaks the same surface so client code can
+ * swap transports without translation.
+ */
+export type D1QueryBody =
+  | { sql: string; params?: unknown[] }
+  | { batch: Array<{ sql: string; params?: unknown[] }> };
 
 /**
  * The gateway worker: forwards the request body to the raw `d1` service.
@@ -58,17 +71,22 @@ const GATEWAY_MODULE = `export default {
 interface D1StatementResponse {
   success: boolean;
   results?: unknown;
+  meta?: unknown;
   error?: string;
 }
 
 /**
- * Boot an ephemeral gateway workerd for `databaseId`, hand `use` a
- * {@link D1SqlExecutor} that tunnels SQL into the local simulator, and tear
- * the instance down when `use` completes.
+ * Boot an ephemeral gateway workerd for `databaseId`, hand `use` a query
+ * function that tunnels {@link D1QueryBody} requests into the local
+ * simulator, and tear the instance down when `use` completes.
  */
-export const withLocalD1Executor = <A, E, R>(
+export const withLocalD1Query = <A, E, R>(
   databaseId: string,
-  use: (executor: D1SqlExecutor<LocalD1QueryError>) => Effect.Effect<A, E, R>,
+  use: (
+    query: (
+      body: D1QueryBody,
+    ) => Effect.Effect<D1QueryResult, LocalD1QueryError>,
+  ) => Effect.Effect<A, E, R>,
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -99,11 +117,15 @@ export const withLocalD1Executor = <A, E, R>(
         },
       });
 
-      const executor: D1SqlExecutor<LocalD1QueryError> = (sql) =>
+      const query = (body: D1QueryBody) =>
         client
           .execute(
             HttpClientRequest.post(url.toString()).pipe(
-              HttpClientRequest.bodyJsonUnsafe({ sql }),
+              // The DO accepts a single D1Query or an array (one
+              // transaction) — a batch maps to the array form.
+              HttpClientRequest.bodyJsonUnsafe(
+                "batch" in body ? body.batch : body,
+              ),
             ),
           )
           .pipe(
@@ -115,11 +137,11 @@ export const withLocalD1Executor = <A, E, R>(
                   cause,
                 }),
             ),
-            Effect.flatMap((body) => {
+            Effect.flatMap((responseBody) => {
               // Protocol errors come back `{ success: false, error }` (a
               // single object); successes are one envelope per statement.
               const responses = (
-                Array.isArray(body) ? body : [body]
+                Array.isArray(responseBody) ? responseBody : [responseBody]
               ) as D1StatementResponse[];
               const failed = responses.find((r) => !r.success);
               if (failed) {
@@ -130,11 +152,47 @@ export const withLocalD1Executor = <A, E, R>(
                 );
               }
               return Effect.succeed({
-                result: responses.map((r) => ({ results: r.results })),
-              } satisfies D1QueryResult);
+                result: responses.map((r) => ({
+                  results: r.results,
+                  success: true,
+                  meta: r.meta,
+                })),
+              } as D1QueryResult);
             }),
           );
 
-      return yield* use(executor);
+      return yield* use(query);
     }),
   );
+
+/**
+ * SQL-only view of {@link withLocalD1Query} matching the migration flow's
+ * {@link D1SqlExecutor} contract.
+ */
+export const withLocalD1Executor = <A, E, R>(
+  databaseId: string,
+  use: (executor: D1SqlExecutor<LocalD1QueryError>) => Effect.Effect<A, E, R>,
+) => withLocalD1Query(databaseId, (query) => use((sql) => query({ sql })));
+
+/**
+ * A standalone local-runtime layer for gateway consumers OUTSIDE the
+ * provider stack (e.g. `QueryDatabaseLocal` running in an Action, whose
+ * ambient context has no workerd `Runtime`). Configured identically to the
+ * providers' shared runtime — same `.alchemy/local` storage directory — so
+ * it reads and writes the same simulator data.
+ */
+export const localD1GatewayRuntime = Layer.unwrap(
+  Effect.gen(function* () {
+    const getEnv = yield* CloudflareEnvironment;
+    const { dotAlchemy } = yield* AlchemyContext;
+    const path = yield* Path.Path;
+    return layerRuntime({
+      api: {
+        accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
+      },
+      storage: {
+        directory: path.join(dotAlchemy, "local"),
+      },
+    });
+  }),
+);

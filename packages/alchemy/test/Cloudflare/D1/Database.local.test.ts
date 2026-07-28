@@ -1,3 +1,4 @@
+import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
@@ -179,6 +180,125 @@ test.provider(
         users: string[];
       };
       expect(usersAfter.users).toEqual(["seed"]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * `importFiles` apply locally too: an import file is multi-statement SQL,
+ * executed through the gateway with the same hash-skip semantics as the
+ * cloud import flow. Verified through the worker's binding.
+ */
+test.provider(
+  "D1 importFiles apply against the local simulator",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-local-import-",
+      });
+      const importFile = path.join(dir, "seed.sql");
+      yield* fs.writeFileString(
+        importFile,
+        [
+          "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+          "INSERT INTO users (name) VALUES ('imported');",
+        ].join("\n"),
+      );
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const db = yield* Cloudflare.D1.Database("LocalImportedDB", {
+            importFiles: [importFile],
+          });
+          const worker = yield* Cloudflare.Worker("d1-import-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/d1-local-worker.ts",
+            ),
+            env: { DB: db },
+          });
+          return { db, worker };
+        }),
+      );
+
+      expect(deployed.db.databaseId).toMatch(/^dev:/);
+      expect(Object.keys(deployed.db.importHashes)).toEqual([importFile]);
+
+      const users = (yield* getJsonReady(`${deployed.worker.url}users`)) as {
+        users: string[];
+      };
+      expect(users.users).toEqual(["imported"]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * `QueryDatabaseLocal` (the stack-eval capability used in Actions) reaches
+ * the LOCAL simulator when the database is a `dev:` row: queries tunnel
+ * through an ephemeral workerd gateway into the same DO SQLite the worker
+ * binding reads. The Action seeds; the deployed worker's native binding
+ * observes the seeded rows — proving both transports share one database.
+ */
+test.provider(
+  "QueryDatabaseLocal Action seeds the local simulator in dev",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const db = yield* Cloudflare.D1.Database("ActionSeededDB");
+
+          const Seed = Action(
+            "Seed",
+            Effect.gen(function* () {
+              const client = yield* Cloudflare.D1.QueryDatabase(db);
+              return Effect.fn(function* () {
+                yield* client.exec(
+                  "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+                );
+                yield* client.prepare("DELETE FROM users").run();
+                yield* client
+                  .prepare("INSERT INTO users (name) VALUES (?)")
+                  .bind("ada")
+                  .run();
+                const rows = yield* client
+                  .prepare("SELECT name FROM users ORDER BY name")
+                  .all<{ name: string }>();
+                return { names: rows.results.map((r) => r.name) };
+              });
+            }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseLocal)),
+          );
+          const seeded = yield* Seed({});
+
+          const worker = yield* Cloudflare.Worker("d1-action-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/d1-local-worker.ts",
+            ),
+            env: { DB: db },
+          });
+          return { db, worker, seeded };
+        }),
+      );
+
+      expect(deployed.db.databaseId).toMatch(/^dev:/);
+      expect(deployed.seeded.names).toEqual(["ada"]);
+
+      // The worker's native binding reads the same simulator storage the
+      // Action's gateway wrote to.
+      const users = (yield* getJsonReady(`${deployed.worker.url}users`)) as {
+        users: string[];
+      };
+      expect(users.users).toEqual(["ada"]);
 
       yield* stack.destroy();
     }).pipe(logLevel),
