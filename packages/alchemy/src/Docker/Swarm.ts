@@ -93,8 +93,21 @@ export interface Swarm extends Resource<
  * ```
  *
  * @section Using an Existing Swarm
+ * @example Reference without owning
+ * ```typescript
+ * // Services don't require a Swarm resource — point them at an engine that
+ * // is already a manager and the swarm's lifecycle stays external: destroy
+ * // removes the services, never the swarm.
+ * const web = yield* Docker.Service("web", {
+ *   context: vps,
+ *   image: "nginx:alpine",
+ * });
+ * ```
+ *
  * @example Adopt an already-initialized engine
  * ```typescript
+ * // Adoption makes the swarm part of the stack — destroy then dissolves
+ * // the node's membership.
  * const swarm = yield* Docker.Swarm("swarm").pipe(adopt(true));
  * ```
  *

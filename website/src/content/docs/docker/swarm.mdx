@@ -23,14 +23,41 @@ resource is destroyed the node leaves the swarm again.
 
 ## Use an existing swarm
 
+A swarm you didn't create with `Docker.Swarm` is still fully usable. There
+are two ways in, depending on who should own the swarm's lifecycle.
+
+### Reference it
+
+```typescript
+const vps = yield* Docker.Context("vps", {
+  docker: "host=ssh://deploy@example.com",
+});
+
+const web = yield* Docker.Service("web", {
+  context: vps,
+  image: "nginx:alpine",
+  replicas: 3,
+});
+```
+
+Services never require a `Docker.Swarm` resource — they only need the engine
+behind `context` to already be a swarm manager. Pass a `Docker.Context` (or a
+plain context name) and Alchemy manages the workloads while the swarm itself
+stays someone else's responsibility: destroying the stack removes the
+services and leaves the swarm untouched.
+
+### Adopt it
+
 ```typescript
 const swarm = yield* Docker.Swarm("swarm").pipe(Alchemy.adopt(true));
 ```
 
-An engine that is already in swarm mode is treated as foreign — the deploy
-fails with `OwnedBySomeoneElse` until you opt in with `adopt(true)` (or
-`--adopt`). After adoption Alchemy manages the swarm like one it created,
-including dissolving membership on destroy.
+Adoption makes the swarm's lifecycle part of the stack. An engine that is
+already in swarm mode is treated as foreign — the deploy fails with
+`OwnedBySomeoneElse` until you opt in with `adopt(true)` (or `--adopt`).
+After adoption Alchemy manages the swarm like one it created, **including
+dissolving the node's membership on destroy** — so adopt only when this
+stack should own the swarm, and reference otherwise.
 
 ## Deploy a service
 

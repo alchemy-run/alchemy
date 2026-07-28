@@ -15,7 +15,15 @@ export interface ContextProps {
   name?: string;
   /** Human-readable description displayed in `docker context ls`. */
   description?: string;
-  /** Docker endpoint spec, for example `host=ssh://user@host`. */
+  /**
+   * Docker endpoint spec, for example `host=ssh://user@host`.
+   *
+   * Connection metadata only — never credentials. SSH endpoints
+   * authenticate with keys/agent (Docker rejects passwords in the URL), and
+   * TLS endpoints reference cert/key material by file path
+   * (`host=tcp://...,ca=...,cert=...,key=...`), not by value. Docker itself
+   * stores this spec in plaintext under `~/.docker/contexts`.
+   */
   docker?: string;
 }
 
