@@ -106,7 +106,16 @@ const Memo = Effect.gen(function* () {
     const resolvedCwd = cwd ? path.resolve(cwd) : process.cwd();
     return {
       cwd: resolvedCwd,
-      include: options.include ?? ["**/*"],
+      // Rewrite absolute include patterns to cwd-relative ones: fast-glob
+      // silently drops an absolute pattern's matches when the same call also
+      // contains relative patterns, and relative patterns keep the matched
+      // keys (and therefore the memo hash) free of machine-specific path
+      // prefixes.
+      include: (options.include ?? ["**/*"]).map((pattern) =>
+        path.isAbsolute(pattern)
+          ? path.relative(resolvedCwd, pattern).replaceAll("\\", "/")
+          : pattern,
+      ),
       exclude:
         options.exclude ??
         (yield* readGitIgnoreRules(resolvedCwd).pipe(

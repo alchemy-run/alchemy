@@ -211,6 +211,22 @@ test.provider(
       expect(build3.hash.input).not.toBe(build1.hash.input);
       expect(yield* fs.readFileString(outputFile)).not.toBe(firstOutput);
 
+      // An *absolute* include glob matches the same files: its matches are
+      // normalized back to cwd-relative keys, so the input hash is identical
+      // to the `../` form — machine-specific path prefixes never leak into
+      // the hash (and the build memoizes instead of rerunning).
+      const build4 = yield* stack.deploy(
+        Command.Build("test-build", {
+          command: "bash build.sh",
+          cwd: appDir,
+          outdir: "dist",
+          memo: {
+            include: ["**/*", pathe.join(siblingDir, "**")],
+          },
+        }),
+      );
+      expect(build4.hash.input).toBe(build3.hash.input);
+
       yield* stack.destroy();
     }),
   { timeout: 60000 },
