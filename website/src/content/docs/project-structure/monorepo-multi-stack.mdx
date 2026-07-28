@@ -28,7 +28,9 @@ Each package owns its own `alchemy.run.ts`
 The packages themselves — workspace root, `Spec.ts`,
 `Service.ts`, `Client.ts`, the `./Client` subpath, the React
 entry — are identical to the
-[Single Stack](/project-structure/monorepo-single-stack) layout. This page
+[single-stack example](https://github.com/alchemy-run/alchemy/tree/main/examples/monorepo-single-stack)
+(the `HttpApi` schema/client pattern is covered in
+[Effect HTTP API](/cloudflare/apis/effect-http-api)). This page
 covers what changes: two Stacks wired by a typed reference,
 resolved at plan time against the state store. When to reach for
 this shape is covered in
@@ -163,8 +165,8 @@ form to use when:
 ## Where next
 
 - [Monorepo](/project-structure/monorepo) — the high-level chooser.
-- [Single Stack](/project-structure/monorepo-single-stack) — the shared
-  package layout and the one-Stack alternative.
+- [Single Stack](/project-structure/monorepo-single-stack) — the one-Stack
+  alternative, and how paths resolve from the workspace root.
 - [References](/infrastructure-as-code/references) — when to split
   Stacks, stage pinning, and the pattern → tool table.
 - [References](/infrastructure-as-code/references) — how a reference resolves:
