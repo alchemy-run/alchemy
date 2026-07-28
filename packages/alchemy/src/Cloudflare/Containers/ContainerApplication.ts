@@ -79,6 +79,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   name?: string;
   /**
+   * Name of the exported Durable Object class this container backs when the
+   * Container is bound on an **async** Worker's `env`. Defaults to the
+   * binding name (the `env` key). Ignored by the Effect-native path, where
+   * the class name comes from the hosting Durable Object.
+   */
+  className?: string;
+  /**
    * Initial number of instances to maintain. Matches wrangler, which forces
    * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
    * @default 0
@@ -286,6 +293,12 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * The pre-built image to pull and re-push.
    *
    * E.g. `ghcr.io/alpine/alpine:latest`
+   *
+   * When the reference already points at the target registry (the
+   * {@link ContainerApplicationPropsBase.registryId | registryId} host,
+   * `registry.cloudflare.com` by default) — e.g. a digest reference pushed
+   * by CI like `registry.cloudflare.com/<accountId>/app@sha256:...` — it is
+   * deployed as-is and the docker pull/push round-trip is skipped entirely.
    */
   image: string;
 }

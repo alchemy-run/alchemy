@@ -832,6 +832,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
     todo: allResults.filter((r) => r.result.status === "todo").length,
     durationMs: Date.now() - startedAt,
     failures,
+    fileFailures,
   };
   yield* emit({ _tag: "RunEnd", summary });
   // Drain the live hook-line queue so tail lines from the final file's

@@ -1420,8 +1420,10 @@ export default handler;
         // config untouched (precreate stub); `[]` explicitly clears mounts.
         fileSystemConfigs?: Lambda.FileSystemConfig[];
         // Effective VPC attachment (prop ∪ binding-channel requests).
-        // Defaults to `news.vpc` when omitted (precreate stub, before
-        // bindings are known).
+        // Omitted for the precreate stub: `news` is UNRESOLVED at precreate
+        // (Output-valued subnet/security-group ids would fail to serialize),
+        // and the stub doesn't need connectivity — `reconcile` attaches the
+        // resolved VPC config afterwards.
         vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
       }) => Effect.Effect<
@@ -1438,7 +1440,7 @@ export default handler;
         functionName,
         preferUpdate,
         fileSystemConfigs,
-        vpc = news.vpc,
+        vpc,
         session,
       }: {
         id: string;

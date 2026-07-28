@@ -38,4 +38,48 @@ describe("ContainerApplication", () => {
       yield* stack.destroy();
     }).pipe(logLevel),
   );
+
+  // Issue #953 (2): an `image` that already references the target registry
+  // (e.g. a digest reference pushed by CI) is deployed as-is — no docker
+  // pull/tag/push round-trip. The first deploy pushes a public image into the
+  // account registry the normal way; the second deploy references the pushed
+  // tag directly. The old (remote) path would have re-tagged it into a
+  // repository named after the consumer app, so `configuration.image`
+  // matching the original reference verbatim proves the as-is path ran.
+  test.provider(
+    "pre-pushed registry image is deployed as-is",
+    (scratch) =>
+      Effect.gen(function* () {
+        yield* scratch.destroy();
+
+        const source = yield* scratch.deploy(
+          Effect.gen(function* () {
+            return {
+              app: yield* Cloudflare.Container("PrepushSource", {
+                image: "mendhak/http-https-echo:latest",
+              }).Application,
+            };
+          }),
+        );
+        const pushedRef = source.app.configuration.image!;
+        expect(pushedRef).toMatch(/^registry\.cloudflare\.com\//);
+
+        const both = yield* scratch.deploy(
+          Effect.gen(function* () {
+            return {
+              app: yield* Cloudflare.Container("PrepushSource", {
+                image: "mendhak/http-https-echo:latest",
+              }).Application,
+              consumer: yield* Cloudflare.Container("PrepushConsumer", {
+                image: pushedRef,
+              }).Application,
+            };
+          }),
+        );
+        expect(both.consumer.configuration.image).toBe(pushedRef);
+
+        yield* scratch.destroy();
+      }).pipe(logLevel),
+    { timeout: 600_000 },
+  );
 });

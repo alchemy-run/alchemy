@@ -105,6 +105,17 @@ export interface TaskDefinitionConfig {
    */
   env?: Record<string, any>;
   /**
+   * Environment files to load into the primary container, e.g. `.env`
+   * objects stored in S3:
+   * `[{ value: "arn:aws:s3:::my-bucket/app.env", type: "s3" }]`.
+   *
+   * Variables from `env` (and the container's own `environment`) take
+   * precedence over values loaded from environment files. The execution
+   * role is automatically granted `s3:GetObject` on the referenced objects
+   * and `s3:GetBucketLocation` on their buckets.
+   */
+  environmentFiles?: ecs.EnvironmentFile[];
+  /**
    * Command override for the primary container (Docker `CMD`).
    */
   command?: string[];
@@ -426,6 +437,16 @@ export const createContainerRuntimeContext =
  *   },
  * });
  * ```
+ *
+ * @example Environment Files from S3
+ * ```typescript
+ * const task = yield* Task("ApiTask", {
+ *   main: import.meta.url,
+ *   environmentFiles: [
+ *     { value: "arn:aws:s3:::my-config-bucket/app.env", type: "s3" },
+ *   ],
+ * });
+ * ```
  */
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
   Platform("AWS.ECS.Task", {
@@ -516,6 +537,56 @@ export const ensureTaskExecutionRole = Effect.fn(function* ({
       .pipe(Effect.catchTag("LimitExceededException", () => Effect.void));
   }
   return roleArn;
+});
+
+/** Inline policy granting the execution role read access to `environmentFiles`. */
+const ENVIRONMENT_FILES_POLICY_NAME = "alchemy-environment-files";
+
+/**
+ * Sync the execution role's read access to the S3 `environmentFiles`: put
+ * an inline policy granting `s3:GetObject` on the referenced objects (and
+ * `s3:GetBucketLocation` on their buckets), or delete the policy when no
+ * environment files are configured.
+ */
+export const syncEnvironmentFilesPolicy = Effect.fn(function* ({
+  roleName,
+  environmentFiles,
+}: {
+  roleName: string;
+  environmentFiles: ecs.EnvironmentFile[] | undefined;
+}) {
+  const objectArns = (environmentFiles ?? [])
+    .filter((file) => file.type === "s3")
+    .map((file) => file.value);
+  if (objectArns.length === 0) {
+    yield* iam
+      .deleteRolePolicy({
+        RoleName: roleName,
+        PolicyName: ENVIRONMENT_FILES_POLICY_NAME,
+      })
+      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+    return;
+  }
+  const bucketArns = [...new Set(objectArns.map((arn) => arn.split("/")[0]))];
+  yield* iam.putRolePolicy({
+    RoleName: roleName,
+    PolicyName: ENVIRONMENT_FILES_POLICY_NAME,
+    PolicyDocument: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: ["s3:GetObject"],
+          Resource: objectArns,
+        },
+        {
+          Effect: "Allow",
+          Action: ["s3:GetBucketLocation"],
+          Resource: bucketArns,
+        },
+      ],
+    }),
+  });
 });
 
 /** Ensure the CloudWatch log group the task writes to exists. */
@@ -655,6 +726,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
       name,
       value: typeof value === "string" ? value : JSON.stringify(value),
     })),
+    environmentFiles: props.environmentFiles,
     logConfiguration: {
       logDriver: "awslogs",
       options: {
@@ -1136,6 +1208,13 @@ export const TaskProvider = () =>
                 Effect.catchTag("LimitExceededException", () => Effect.void),
               );
           }
+
+          // Environment files: the execution role reads the referenced S3
+          // objects at task start.
+          yield* syncEnvironmentFilesPolicy({
+            roleName: executionRoleName,
+            environmentFiles: news.environmentFiles,
+          });
 
           const {
             env: bindingEnv,

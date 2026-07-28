@@ -49,6 +49,7 @@ export class Docker extends Context.Service<
         "health-retries": number | undefined;
         "health-start-period": string | undefined;
         "health-start-interval": string | undefined;
+        "stop-timeout": string | undefined;
         p: Array<string> | undefined;
         command: Array<string> | undefined;
         label?: Record<string, string>;
@@ -193,6 +194,7 @@ export declare namespace Docker {
       Cmd: string[] | null;
       Env: string[] | null;
       Labels: Record<string, string> | null;
+      StopTimeout?: number;
       Healthcheck?: {
         Test: string[] | null;
         Interval?: number;

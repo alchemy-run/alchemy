@@ -1,3 +1,41 @@
+## v2.0.0-beta.65
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - **sagemaker**: HyperPod — Slurm & EKS clusters, task governance, workload DX &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/924 [<samp>(e13e3)</samp>](https://github.com/alchemy-run/alchemy/commit/e13e36db)
+- **cli**:
+  - **nuke**: Independent retries and identity/network delete-last tier &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/950 [<samp>(0f291)</samp>](https://github.com/alchemy-run/alchemy/commit/0f2914d9)
+- **docker**:
+  - Support container labels and stop timeout &nbsp;-&nbsp; by **Gerben Mulder** in https://github.com/alchemy-run/alchemy/issues/931 [<samp>(dd8cf)</samp>](https://github.com/alchemy-run/alchemy/commit/dd8cf40e)
+- **test**:
+  - Progress counters and a failed-test list in the plain reporter &nbsp;-&nbsp; by **sam** and **Cursor** [<samp>(7e878)</samp>](https://github.com/alchemy-run/alchemy/commit/7e878d56)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **aws**:
+  - Destroy converges in one pass with VPC-attached Lambdas &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/937 [<samp>(4b5d7)</samp>](https://github.com/alchemy-run/alchemy/commit/4b5d7ec4)
+- **bundle**:
+  - Stop purePlugin from deleting route registrations in user code &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/952 [<samp>(1c33d)</samp>](https://github.com/alchemy-run/alchemy/commit/1c33d82b)
+- **cloudflare**:
+  - **vite**:
+    - Workflows not exported correctly in vite dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy/issues/933 [<samp>(8fc52)</samp>](https://github.com/alchemy-run/alchemy/commit/8fc526ad)
+  - **workers**:
+    - Send _redirects/_headers contents to Cloudflare &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/928 [<samp>(2bac5)</samp>](https://github.com/alchemy-run/alchemy/commit/2bac5f7b)
+    - Enable strictExecutionOrder to prevent cross-chunk TDZ at startup &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy/issues/940 [<samp>(306d1)</samp>](https://github.com/alchemy-run/alchemy/commit/306d15ee)
+  - **workflows**:
+    - Preserve pause control-flow errors in WorkflowBridge &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy/issues/934 [<samp>(5c8a6)</samp>](https://github.com/alchemy-run/alchemy/commit/5c8a6eb8)
+- **core**:
+  - Keep branded primitives opaque in ToOutput &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/941 [<samp>(1b5d5)</samp>](https://github.com/alchemy-run/alchemy/commit/1b5d5a71)
+- **sql**:
+  - Replay nested proxyChain fragments against the resolved root &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/951 [<samp>(80441)</samp>](https://github.com/alchemy-run/alchemy/commit/804419c1)
+- **test**:
+  - Restore alchemy/Test/Vitest harness &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/947 [<samp>(4f675)</samp>](https://github.com/alchemy-run/alchemy/commit/4f6754d3)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.64...HEAD)
+
+---
+
 ## v2.0.0-beta.64
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

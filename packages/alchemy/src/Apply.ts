@@ -193,6 +193,16 @@ export const apply = <P extends Plan>(
 
     yield* session.done();
 
+    if (plan.destroy) {
+      // The destroy converged: every resource row was deleted above. Drop
+      // the rest of the stage's persisted state — notably the stack output
+      // record written by the last deploy — so `getOutput` returns
+      // undefined and `listStages` no longer reports the stage.
+      // https://github.com/alchemy-run/alchemy/issues/961
+      yield* state.deleteStack({ stack: stackName, stage });
+      return undefined;
+    }
+
     if (!plan.output) {
       return undefined;
     }
