@@ -248,6 +248,64 @@ export default Cloudflare.Worker(
 For zone setup, DNS records, and route patterns, see the
 [custom domains guide](/cloudflare/networking/custom-domains).
 
+## Static assets
+
+A Worker can serve a directory of static files alongside its code.
+Pass `assets` and Cloudflare serves matching requests from its asset
+layer; everything else invokes your handlers:
+
+```typescript
+export default Cloudflare.Worker(
+  "Worker",
+  {
+    main: import.meta.url,
+    assets: "./public",
+  },
+  // ...
+);
+```
+
+Omit `main` entirely to deploy an **assets-only Worker** — a static
+site with no Worker code of your own:
+
+```typescript
+const site = yield* Cloudflare.Worker("Site", {
+  assets: {
+    directory: "./public",
+    htmlHandling: "drop-trailing-slash",
+    notFoundHandling: "404-page",
+  },
+  domain: "static.example.com",
+});
+```
+
+Cloudflare's asset layer serves every request and applies
+`htmlHandling` / `notFoundHandling` (including
+single-page-application fallback) itself — the same deployment shape
+as an assets-only `wrangler deploy`. Static asset requests are free
+and never invoke a Worker.
+
+The class form works too — declare it in its own file and yield the
+class in your Stack:
+
+```typescript
+export class Site extends Cloudflare.Worker<Site>()("Site", {
+  assets: {
+    directory: "./public",
+    htmlHandling: "drop-trailing-slash",
+  },
+  domain: "static.example.com",
+}) {}
+```
+
+A `_headers` or `_redirects` file in the assets directory is applied
+automatically, and a `.assetsignore` file excludes files from the
+upload.
+
+If the directory comes from a build command, use
+[StaticSite](/cloudflare/frontend/static-site); for Vite projects,
+use the [Vite resource](/cloudflare/frontend/vite).
+
 ## The Worker's own URL
 
 A Worker often needs to know the URL it is served at — to build

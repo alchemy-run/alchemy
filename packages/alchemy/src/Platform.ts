@@ -344,6 +344,21 @@ export const Platform = <
         constructor(id, props, impl, true);
     } else if (!impl) {
       const cls = makeClass(id);
+      // A resource declared without an inline impl is "external": there is
+      // no Effect-native entry to inject (an ordinary bundled worker, or an
+      // assets-only worker with no script at all).
+      const externalProps = () => {
+        const transformed = applyTransformProps(id, props);
+        return Effect.isEffect(transformed)
+          ? Effect.map(transformed, (p: any) => ({
+              ...p,
+              isExternal: true,
+            }))
+          : {
+              ...transformed,
+              isExternal: true,
+            };
+      };
       const evaluate = () =>
         (!isTag
           ? // this is a non-tagged resource yielded without providing an implementation
@@ -356,27 +371,24 @@ export const Platform = <
             //     return new Response("Hello, world!");
             //   }
             // }
-            resource(
-              id,
-              (() => {
-                const transformed = applyTransformProps(id, props);
-                return Effect.isEffect(transformed)
-                  ? Effect.map(transformed, (p: any) => ({
-                      ...p,
-                      isExternal: true,
-                    }))
-                  : {
-                      ...transformed,
-                      isExternal: true,
-                    };
-              })(),
-            )
+            resource(id, externalProps())
           : Effect.flatMap(
               // this is a tagged resource
               Effect.serviceOption(cls.Self),
               Option.match({
-                // we are likely running at runtime, so we create
-                onNone: () => resource(id, applyTransformProps(id, props)),
+                // we are likely running at runtime, so we create.
+                // A tagged class WITH props and no impl is the class form of
+                // the external resource above (e.g.
+                // `class Site extends Worker<Site>()("Site", { assets }) {}`)
+                // — same isExternal marking; without props, this is a bare
+                // tag whose props/impl arrive later via `.make`.
+                onNone: () =>
+                  resource(
+                    id,
+                    props === undefined
+                      ? applyTransformProps(id, props)
+                      : externalProps(),
+                  ),
                 onSome: Effect.succeed,
               }),
             )

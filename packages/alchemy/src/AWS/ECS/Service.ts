@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
@@ -21,7 +22,7 @@ import { Resource } from "../../Resource.ts";
 import type { HostRuntimeContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
-import { toSeconds, toWireSeconds } from "../../Util/Duration.ts";
+import { toMillis, toSeconds, toWireSeconds } from "../../Util/Duration.ts";
 import { Certificate } from "../ACM/Certificate.ts";
 import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
@@ -61,6 +62,7 @@ import {
   ensureTaskLogGroup,
   reapSupersededTaskDefinitionRevision,
   registerTaskDefinitionRevision,
+  syncEnvironmentFilesPolicy,
   syncTaskDefinitionTags,
   taskImagePlatform,
   type TaskBindingContract,
@@ -360,6 +362,22 @@ export class RequestCountScalingRequiresLoadBalancer extends Data.TaggedError(
   "RequestCountScalingRequiresLoadBalancer",
 )<{
   readonly serviceId: string;
+  readonly message: string;
+}> {}
+
+/** An ECS service did not converge to the requested deployment before timeout. */
+export class ServiceDidNotStabilize extends Data.TaggedError(
+  "ServiceDidNotStabilize",
+)<{
+  readonly clusterArn: string;
+  readonly serviceName: string;
+  readonly expectedTaskDefinitionArn: string | undefined;
+  readonly status: string | undefined;
+  readonly desiredCount: number | undefined;
+  readonly runningCount: number | undefined;
+  readonly pendingCount: number | undefined;
+  readonly deploymentCount: number;
+  readonly unhealthyTargetCount: number;
   readonly message: string;
 }> {}
 
@@ -679,6 +697,14 @@ export interface ServicePropsBase extends PlatformProps {
    * breaker, deployment strategy, alarms). Updated in place.
    */
   deploymentConfiguration?: ecs.DeploymentConfiguration;
+
+  /**
+   * Maximum time to wait for an ECS deployment, old-task drain, and target
+   * health to converge before failing the resource operation. The provider
+   * hard-caps this at 30 minutes so polling always remains bounded.
+   * @default "10 minutes"
+   */
+  deploymentStabilizationTimeout?: Duration.Input;
 
   /**
    * Deployment controller (`ECS`, `CODE_DEPLOY`, `EXTERNAL`). The controller
@@ -2526,6 +2552,219 @@ const resolveServiceVolumes = (
   return { volumes: resolved, mountPoints };
 };
 
+type ServiceConvergenceDependencies = Credentials | HttpClient | Region;
+
+interface ServiceConvergenceSnapshot {
+  readonly service: ecs.Service | undefined;
+  readonly targetGroups: readonly {
+    readonly missing: boolean;
+    readonly states: readonly (string | undefined)[];
+  }[];
+  readonly converged: boolean;
+}
+
+type ServiceConvergenceMode = "stable" | "drained" | "deleted";
+
+/**
+ * Observe the complete service deployment boundary: ECS rollout state,
+ * desired/running/pending counts, superseded deployments, and every target
+ * group's registered target state.
+ */
+const observeServiceConvergence = (input: {
+  clusterArn: string;
+  serviceName: string;
+  expectedTaskDefinitionArn?: string;
+  mode: ServiceConvergenceMode;
+}): Effect.Effect<
+  ServiceConvergenceSnapshot,
+  ecs.DescribeServicesError | elbv2.DescribeTargetHealthError,
+  ServiceConvergenceDependencies
+> =>
+  Effect.gen(function* () {
+    const described = yield* ecs
+      .describeServices({
+        cluster: input.clusterArn,
+        services: [input.serviceName],
+      })
+      .pipe(
+        Effect.catchTag("ClusterNotFoundException", () =>
+          Effect.succeed(undefined),
+        ),
+      );
+    const service = described?.services?.find(
+      (candidate) =>
+        candidate.serviceName === input.serviceName &&
+        candidate.status !== "INACTIVE",
+    );
+
+    if (service === undefined) {
+      return {
+        service,
+        targetGroups: [],
+        converged: input.mode === "drained" || input.mode === "deleted",
+      };
+    }
+
+    const targetGroupArns = [
+      ...new Set(
+        (service.loadBalancers ?? []).flatMap((loadBalancer) =>
+          loadBalancer.targetGroupArn ? [loadBalancer.targetGroupArn] : [],
+        ),
+      ),
+    ];
+    const targetGroups = yield* Effect.forEach(
+      targetGroupArns,
+      (targetGroupArn) =>
+        elbv2.describeTargetHealth({ TargetGroupArn: targetGroupArn }).pipe(
+          Effect.map((health) => ({
+            missing: false,
+            states: (health.TargetHealthDescriptions ?? []).map(
+              (target) => target.TargetHealth?.State,
+            ),
+          })),
+          Effect.catchTag("TargetGroupNotFoundException", () =>
+            Effect.succeed({
+              missing: true,
+              states: [] as (string | undefined)[],
+            }),
+          ),
+        ),
+      { concurrency: 4 },
+    );
+
+    if (input.mode === "deleted") {
+      return { service, targetGroups, converged: false };
+    }
+
+    const runningCount = service.runningCount ?? 0;
+    const pendingCount = service.pendingCount ?? 0;
+    const desiredCount = service.desiredCount ?? 0;
+    const expectedTargetCount =
+      service.schedulingStrategy === "DAEMON" ? runningCount : desiredCount;
+
+    if (input.mode === "drained") {
+      return {
+        service,
+        targetGroups,
+        converged:
+          runningCount === 0 &&
+          pendingCount === 0 &&
+          targetGroups.every(
+            (targetGroup) =>
+              targetGroup.missing || targetGroup.states.length === 0,
+          ),
+      };
+    }
+
+    const deployments = service.deployments ?? [];
+    const primary = deployments.find(
+      (deployment) => deployment.status === "PRIMARY",
+    );
+    const deploymentController = service.deploymentController?.type ?? "ECS";
+    const countsConverged =
+      service.schedulingStrategy === "DAEMON"
+        ? pendingCount === 0
+        : runningCount === desiredCount && pendingCount === 0;
+    const deploymentConverged =
+      deployments.length === 1 &&
+      primary !== undefined &&
+      primary.taskDefinition === input.expectedTaskDefinitionArn &&
+      (deploymentController === "ECS"
+        ? primary.rolloutState === "COMPLETED"
+        : primary.rolloutState === undefined ||
+          primary.rolloutState === "COMPLETED");
+    const targetsConverged = targetGroups.every(
+      (targetGroup) =>
+        !targetGroup.missing &&
+        targetGroup.states.length === expectedTargetCount &&
+        targetGroup.states.every((state) => state === "healthy"),
+    );
+
+    return {
+      service,
+      targetGroups,
+      converged:
+        service.status === "ACTIVE" &&
+        service.taskDefinition === input.expectedTaskDefinitionArn &&
+        countsConverged &&
+        deploymentConverged &&
+        targetsConverged,
+    };
+  });
+
+const waitForServiceConvergence = (input: {
+  clusterArn: string;
+  serviceName: string;
+  expectedTaskDefinitionArn?: string;
+  mode: ServiceConvergenceMode;
+  timeout?: Duration.Input;
+}): Effect.Effect<
+  ServiceConvergenceSnapshot,
+  | ecs.DescribeServicesError
+  | elbv2.DescribeTargetHealthError
+  | ServiceDidNotStabilize,
+  ServiceConvergenceDependencies
+> => {
+  const pollIntervalMillis = 5_000;
+  const timeoutMillis = Math.min(
+    toMillis(input.timeout ?? "10 minutes")!,
+    30 * 60 * 1_000,
+  );
+  const attempts = Math.max(1, Math.ceil(timeoutMillis / pollIntervalMillis));
+
+  return observeServiceConvergence(input).pipe(
+    Effect.repeat({
+      schedule: Schedule.max([
+        Schedule.spaced(pollIntervalMillis),
+        Schedule.recurs(attempts),
+      ]),
+      until: (snapshot) =>
+        snapshot.converged ||
+        snapshot.service?.deployments?.some(
+          (deployment) => deployment.rolloutState === "FAILED",
+        ) === true,
+    }),
+    Effect.flatMap((snapshot) => {
+      if (snapshot.converged) {
+        return Effect.succeed(snapshot);
+      }
+      const service = snapshot.service;
+      const expectedTargetCount =
+        service?.schedulingStrategy === "DAEMON"
+          ? (service.runningCount ?? 0)
+          : (service?.desiredCount ?? 0);
+      const unhealthyTargetCount = snapshot.targetGroups.reduce(
+        (total, targetGroup) =>
+          total +
+          (targetGroup.missing
+            ? Math.max(1, expectedTargetCount)
+            : targetGroup.states.filter((state) => state !== "healthy").length +
+              Math.abs(targetGroup.states.length - expectedTargetCount)),
+        0,
+      );
+      return Effect.fail(
+        new ServiceDidNotStabilize({
+          clusterArn: input.clusterArn,
+          serviceName: input.serviceName,
+          expectedTaskDefinitionArn: input.expectedTaskDefinitionArn,
+          status: service?.status,
+          desiredCount: service?.desiredCount,
+          runningCount: service?.runningCount,
+          pendingCount: service?.pendingCount,
+          deploymentCount: service?.deployments?.length ?? 0,
+          unhealthyTargetCount,
+          message:
+            service?.deployments?.some(
+              (deployment) => deployment.rolloutState === "FAILED",
+            ) === true
+              ? `ECS service ${input.serviceName} reported a failed deployment`
+              : `ECS service ${input.serviceName} did not become ${input.mode} before timeout`,
+        }),
+      );
+    }),
+  );
+};
+
 export const ServiceProvider = () =>
   Provider.effect(
     Service,
@@ -2834,6 +3073,13 @@ export const ServiceProvider = () =>
         yield* syncTaskSecretsPolicy({
           roleName: executionRoleName,
           secretArns: secretEntries.map(([, arn]) => arn),
+        });
+
+        // Environment files: the execution role reads the referenced S3
+        // objects at task start.
+        yield* syncEnvironmentFilesPolicy({
+          roleName: executionRoleName,
+          environmentFiles: news.environmentFiles,
         });
 
         const logGroupArn =
@@ -3310,6 +3556,17 @@ export const ServiceProvider = () =>
                 new Error("createService returned no service"),
               );
             }
+            yield* session.note(
+              `Waiting for ECS service ${serviceName} to stabilize`,
+            );
+            const stable = yield* waitForServiceConvergence({
+              clusterArn,
+              serviceName,
+              expectedTaskDefinitionArn: task.taskDefinitionArn,
+              mode: "stable",
+              timeout: news.deploymentStabilizationTimeout,
+            });
+            const stableService = stable.service!;
             // Legacy inline ingress recorded in prior attrs (service itself
             // was missing — e.g. recreated) is stale now: reap it.
             yield* reapLegacyIngress({ output, session });
@@ -3324,11 +3581,11 @@ export const ServiceProvider = () =>
             }
             yield* session.note(service.serviceArn);
             return {
-              serviceArn: service.serviceArn as ServiceArn,
-              serviceName: service.serviceName!,
-              clusterArn: service.clusterArn as ClusterArn,
-              taskDefinitionArn: service.taskDefinition!,
-              status: service.status ?? "ACTIVE",
+              serviceArn: stableService.serviceArn as ServiceArn,
+              serviceName: stableService.serviceName!,
+              clusterArn: stableService.clusterArn as ClusterArn,
+              taskDefinitionArn: stableService.taskDefinition!,
+              status: stableService.status ?? "ACTIVE",
               ...ingressAttrs,
               ...ownedAttributes,
             };
@@ -3337,7 +3594,7 @@ export const ServiceProvider = () =>
           // Sync — apply in-place mutable fields via updateService. Force a new
           // deployment so a changed task definition (same revision-less ARN) or
           // load-balancer wiring rolls out.
-          const updated = yield* ecs
+          yield* ecs
             .updateService({
               ...mutableInput(news, task, network, securityGroups),
               // While autoscaling manages the desired count, leave it
@@ -3377,7 +3634,17 @@ export const ServiceProvider = () =>
                 ]),
               }),
             );
-          const service = updated.service;
+          yield* session.note(
+            `Waiting for ECS service ${serviceName} to stabilize`,
+          );
+          const stable = yield* waitForServiceConvergence({
+            clusterArn,
+            serviceName,
+            expectedTaskDefinitionArn: task.taskDefinitionArn,
+            mode: "stable",
+            timeout: news.deploymentStabilizationTimeout,
+          });
+          const stableService = stable.service!;
 
           // Sync tags — diff observed service tags against desired.
           const observedTags = Object.fromEntries(
@@ -3423,24 +3690,18 @@ export const ServiceProvider = () =>
 
           yield* session.note(observed.serviceArn);
           return {
-            serviceArn: observed.serviceArn as ServiceArn,
-            serviceName: observed.serviceName!,
-            clusterArn: observed.clusterArn as ClusterArn,
-            taskDefinitionArn:
-              service?.taskDefinition ??
-              observed.taskDefinition ??
-              output?.taskDefinitionArn ??
-              "",
-            status: service?.status ?? observed.status ?? "ACTIVE",
+            serviceArn: stableService.serviceArn as ServiceArn,
+            serviceName: stableService.serviceName!,
+            clusterArn: stableService.clusterArn as ClusterArn,
+            taskDefinitionArn: stableService.taskDefinition!,
+            status: stableService.status ?? "ACTIVE",
             ...ingressAttrs,
             ...ownedAttributes,
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {
-          // Scale to zero first so `deleteService` has no running tasks to
-          // drain. If the service is mid-transition (`ServiceNotActiveException`)
-          // we skip the scale-down — `deleteService({ force: true })` below
-          // tears it down regardless.
+          // Scale to zero and prove every task/target has drained before
+          // deleting the service or its dependent task-definition resources.
           yield* ecs
             .updateService({
               cluster: output.clusterArn,
@@ -3448,10 +3709,25 @@ export const ServiceProvider = () =>
               desiredCount: 0,
             })
             .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "ServiceNotActiveException",
+                schedule: Schedule.max([
+                  Schedule.spaced("5 seconds"),
+                  Schedule.recurs(8),
+                ]),
+              }),
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
-              Effect.catchTag("ServiceNotActiveException", () => Effect.void),
             );
+
+          yield* session.note(
+            `Waiting for ECS service ${output.serviceName} to drain`,
+          );
+          yield* waitForServiceConvergence({
+            clusterArn: output.clusterArn,
+            serviceName: output.serviceName,
+            mode: "drained",
+          });
 
           yield* ecs
             .deleteService({
@@ -3463,6 +3739,12 @@ export const ServiceProvider = () =>
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
+
+          yield* waitForServiceConvergence({
+            clusterArn: output.clusterArn,
+            serviceName: output.serviceName,
+            mode: "deleted",
+          });
 
           // Inline ingress teardown applies ONLY to legacy state rows (no
           // `ingressKind` marker) whose ALB/TG/listener/SG were created

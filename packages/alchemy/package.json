@@ -317,7 +317,7 @@
   "dependencies": {
     "@alchemy.run/node-utils": "catalog:",
     "@aws-sdk/credential-providers": "catalog:",
-    "@clack/prompts": "^0.11.0",
+    "@clack/prompts": "^1.7.0",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
@@ -356,7 +356,6 @@
   "devDependencies": {
     "@aws/durable-execution-sdk-js": "^2.1.0",
     "alchemy-test": "workspace:*",
-    "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "catalog:",
