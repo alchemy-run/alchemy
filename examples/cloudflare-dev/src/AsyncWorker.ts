@@ -43,9 +43,8 @@ export default {
         });
       }
       case "/d1": {
-        await env.DB.exec(
-          "CREATE TABLE IF NOT EXISTS greetings (id INTEGER PRIMARY KEY, text TEXT NOT NULL)",
-        );
+        // The `greetings` table comes from ./migrations — no DDL here, so a
+        // failing migration apply fails this route loudly.
         await env.DB.prepare("INSERT INTO greetings (text) VALUES (?)")
           .bind("hello from d1")
           .run();

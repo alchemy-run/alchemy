@@ -40,6 +40,24 @@ export default {
         count: first?.n ?? null,
       });
     }
+    if (url.pathname === "/tables") {
+      const tables = await env.DB.prepare(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name",
+      ).all<{ name: string }>();
+      return Response.json({ tables: tables.results.map((t) => t.name) });
+    }
+    if (url.pathname === "/migrations") {
+      const rows = await env.DB.prepare(
+        "SELECT id, name FROM d1_migrations ORDER BY id",
+      ).all<{ id: string; name: string }>();
+      return Response.json({ migrations: rows.results });
+    }
+    if (url.pathname === "/users") {
+      const rows = await env.DB.prepare(
+        "SELECT name FROM users ORDER BY name",
+      ).all<{ name: string }>();
+      return Response.json({ users: rows.results.map((r) => r.name) });
+    }
     return new Response("not found", { status: 404 });
   },
 };

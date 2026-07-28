@@ -3,6 +3,8 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -78,6 +80,97 @@ test.provider(
       };
       expect(body.names).toEqual(["alice", "bob"]);
       expect(body.count).toBe(2);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * Migrations apply against the local simulator: reconcile boots an
+ * ephemeral gateway workerd and drives the same executor-agnostic migration
+ * flow the live provider uses (wrangler-compatible `d1_migrations` table,
+ * idempotent re-application, sequential ids). Verified through the deployed
+ * worker's binding — the same DO SQLite storage the gateway wrote to.
+ */
+test.provider(
+  "D1 migrations apply against the local simulator and re-apply incrementally",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-local-migrations-",
+      });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_users.sql"),
+        [
+          "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+          "INSERT INTO users (name) VALUES ('seed');",
+        ].join("\n"),
+      );
+
+      yield* stack.destroy();
+
+      const deploy = Effect.gen(function* () {
+        const db = yield* Cloudflare.D1.Database("LocalMigratedDB", {
+          migrationsDir,
+        });
+        const worker = yield* Cloudflare.Worker("d1-migrations-worker", {
+          main: pathe.resolve(
+            import.meta.dirname,
+            "fixtures/d1-local-worker.ts",
+          ),
+          env: { DB: db },
+        });
+        return { db, worker };
+      });
+
+      const v1 = yield* stack.deploy(deploy);
+      expect(v1.db.databaseId).toMatch(/^dev:/);
+      expect(v1.db.migrationsTable).toBe("d1_migrations");
+      expect(Object.keys(v1.db.migrationsHashes)).toEqual(["0001_users.sql"]);
+
+      const url = v1.worker.url!;
+      const schema = (yield* getJsonReady(`${url}tables`)) as {
+        tables: string[];
+      };
+      expect(schema.tables).toContain("users");
+      expect(schema.tables).toContain("d1_migrations");
+
+      const users = (yield* getJsonReady(`${url}users`)) as {
+        users: string[];
+      };
+      expect(users.users).toEqual(["seed"]);
+
+      // Add a second migration — the redeploy applies ONLY the new file
+      // (0001's seed row would fail a re-run with a duplicate table error,
+      // so a passing redeploy also proves idempotency).
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0002_posts.sql"),
+        "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);",
+      );
+
+      const v2 = yield* stack.deploy(deploy);
+      expect(v2.db.databaseId).toBe(v1.db.databaseId);
+      expect(Object.keys(v2.db.migrationsHashes).sort()).toEqual([
+        "0001_users.sql",
+        "0002_posts.sql",
+      ]);
+
+      const migrations = (yield* getJsonReady(`${url}migrations`)) as {
+        migrations: Array<{ id: string; name: string }>;
+      };
+      expect(migrations.migrations).toEqual([
+        { id: "00001", name: "0001_users.sql" },
+        { id: "00002", name: "0002_posts.sql" },
+      ]);
+
+      // Data written by 0001 survived the second deploy (not re-applied).
+      const usersAfter = (yield* getJsonReady(`${url}users`)) as {
+        users: string[];
+      };
+      expect(usersAfter.users).toEqual(["seed"]);
 
       yield* stack.destroy();
     }).pipe(logLevel),
