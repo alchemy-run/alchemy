@@ -15,6 +15,7 @@ export type Dialect = "postgres" | "mysql" | "sqlite";
 
 type DrizzleSnapshot = {
   id?: string;
+  prevIds?: string[];
 };
 
 type DrizzleKitApi = {
@@ -244,12 +245,36 @@ export const SchemaProvider = () =>
                 new Error(`drizzle-kit generate failed: ${String(cause)}`),
             ),
           );
-          const output = `${result.stdout}\n${result.stderr}`;
-          if (result.exitCode !== 0 || /^Error:/m.test(output)) {
+          if (result.exitCode === 0) return;
+
+          // Since drizzle-kit 1.0.0-rc.4 the non-interactive CLI refuses
+          // ambiguous decisions (rename-vs-create, data-loss confirmation)
+          // with a `missing_hints` report on exit 2. These are deliberate
+          // safety prompts — the generated SQL is applied to the real
+          // database later in the same deploy — so we never answer them
+          // automatically. Ask the user to decide.
+          if (result.exitCode === 2) {
             return yield* Effect.fail(
-              new Error(`drizzle-kit generate failed: ${output}`),
+              new Error(
+                [
+                  `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively (rename vs create, or a change that loses data):`,
+                  "",
+                  result.stdout.trim(),
+                  "",
+                  "To resolve, generate the migration yourself and commit it:",
+                  `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
+                  "then re-run the deploy (the schema resource will see no drift and apply the committed migration).",
+                  "Alternatively, run the deploy in a terminal to answer drizzle-kit's prompts interactively.",
+                ].join("\n"),
+              ),
             );
           }
+
+          return yield* Effect.fail(
+            new Error(
+              `drizzle-kit generate failed: ${result.stdout}\n${result.stderr}`,
+            ),
+          );
         });
 
       // List `<ts>_*` migration directories under `out`, sorted by numeric
@@ -262,20 +287,36 @@ export const SchemaProvider = () =>
           return entries.filter((name) => /^\d+_/.test(name)).sort();
         });
 
+      // The latest snapshot is the head of the `prevIds` chain — the one no
+      // other snapshot points back to. Directory-name order alone is not
+      // enough: two migrations generated within the same second share the
+      // timestamp prefix, and the random name suffix then decides the sort.
       const readLatestSnapshot = (out: string) =>
         Effect.gen(function* () {
           const dirs = yield* listMigrationDirs(out);
-          for (const dir of [...dirs].reverse()) {
+          const entries: Array<{ snapshot: DrizzleSnapshot; hash: string }> =
+            [];
+          for (const dir of dirs) {
             const snapshotPath = path.join(out, dir, "snapshot.json");
             const exists = yield* fs.exists(snapshotPath);
             if (!exists) continue;
             const text = yield* fs.readFileString(snapshotPath);
-            return {
+            entries.push({
               snapshot: JSON.parse(text) as DrizzleSnapshot,
               hash: sha(text),
-            };
+            });
           }
-          return undefined;
+          if (entries.length === 0) return undefined;
+          const referenced = new Set(
+            entries.flatMap((entry) => entry.snapshot.prevIds ?? []),
+          );
+          const head = entries.find(
+            (entry) =>
+              entry.snapshot.id !== undefined &&
+              !referenced.has(entry.snapshot.id),
+          );
+          // Fall back to name order for snapshots without id/prevIds chains.
+          return head ?? entries[entries.length - 1];
         });
 
       const detectDriftWithCli = (props: SchemaProps) =>

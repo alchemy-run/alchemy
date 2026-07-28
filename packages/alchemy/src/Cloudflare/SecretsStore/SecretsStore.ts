@@ -1,5 +1,6 @@
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -59,17 +60,15 @@ export const SecretsStoreProvider = () =>
     // ever invoked when no store exists yet.
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const stores = yield* secretsStore.listStores({
-        accountId: output?.accountId ?? accountId,
-      });
+      const acct = output?.accountId ?? accountId;
       const match = output?.storeId
-        ? stores.result.find((s) => s.id === output.storeId)
-        : stores.result[0];
+        ? yield* findStoreById(acct, output.storeId)
+        : yield* firstStore(acct);
       if (!match) return undefined;
       return {
         storeId: match.id,
         storeName: match.name,
-        accountId: output?.accountId ?? accountId,
+        accountId: acct,
       };
     }),
     reconcile: Effect.fn(function* ({ output }) {
@@ -77,13 +76,12 @@ export const SecretsStoreProvider = () =>
       const acct = output?.accountId ?? accountId;
 
       // Observe — Cloudflare permits exactly one Secrets Store per
-      // account. List the account's stores; reuse the cached one if
-      // it still exists, otherwise reuse the first one.
-      const stores = yield* secretsStore.listStores({ accountId: acct });
-      const observed = output?.storeId
-        ? (stores.result.find((s) => s.id === output.storeId) ??
-          stores.result[0])
-        : stores.result[0];
+      // account. Reuse the cached store if it still exists, otherwise
+      // reuse the first one listed.
+      const cached = output?.storeId
+        ? yield* findStoreById(acct, output.storeId)
+        : undefined;
+      const observed = cached ?? (yield* firstStore(acct));
 
       if (observed) {
         return {
@@ -117,8 +115,7 @@ export const SecretsStoreProvider = () =>
         };
       }
 
-      const after = yield* secretsStore.listStores({ accountId: acct });
-      const first = after.result[0];
+      const first = yield* firstStore(acct);
       if (first) {
         return {
           storeId: first.id,
@@ -160,3 +157,17 @@ export const SecretsStoreProvider = () =>
       // should never be torn down by a single stack.
     }),
   });
+
+/** First store on the account (Cloudflare permits at most one). */
+const firstStore = (accountId: string) =>
+  secretsStore.listStores
+    .items({ accountId })
+    .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
+
+/** Look a store up by id, terminating pagination on the first match. */
+const findStoreById = (accountId: string, storeId: string) =>
+  secretsStore.listStores.items({ accountId }).pipe(
+    Stream.filter((s) => s.id === storeId),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );

@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Planetscale from "@/Planetscale";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -102,7 +102,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).sequential("Hyperdrive", () => {
    *
    * Validates that:
    *   - migrations applied from the fixtures dir produce the expected table
-   *   - `Cloudflare.Hyperdrive.Connect(...) + Drizzle.postgres(...)` produces
+   *   - `Cloudflare.Hyperdrive.Connect(...) + Drizzle.Postgres(...)` produces
    *     a working Effect-native client at runtime
    *   - INSERT / SELECT / DELETE round-trip through Hyperdrive to Planetscale
    */

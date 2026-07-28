@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { fileURLToPath } from "node:url";
@@ -230,6 +230,25 @@ test.provider(
         "stable",
       );
       expect(afterDestroy).toBeUndefined();
+
+      // ...and the host function itself is gone (bounded retry to ride out
+      // delete propagation).
+      yield* Lambda.getFunction({
+        FunctionName: replaced.fn.functionName,
+      }).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(
+            new Error(`Function ${replaced.fn.functionName} still exists`),
+          ),
+        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(8),
+          ]),
+        }),
+      );
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),

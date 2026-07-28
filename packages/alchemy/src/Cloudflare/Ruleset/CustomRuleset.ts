@@ -165,7 +165,10 @@ export const CustomRulesetProvider = () =>
       }
       const oldName =
         output?.name ?? olds.name ?? (yield* createPhysicalName({ id }));
-      const name = news.name ?? (yield* createPhysicalName({ id }));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         olds.description !== news.description ||
@@ -219,7 +222,10 @@ export const CustomRulesetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = news.name ?? (yield* createPhysicalName({ id }));
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const name =
+        news.name ?? output?.name ?? (yield* createPhysicalName({ id }));
       const kind = news.kind ?? "custom";
 
       // 1. Observe — the persisted rulesetId is a cache, not a guarantee.

@@ -71,8 +71,7 @@ Resources managed by Providers with state tracked between deploys.
 
 Create an `alchemy.run.ts` file:
 
-```typescript twoslash
-// @errors: 2345
+```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
@@ -81,6 +80,8 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "MyApp",
   {
+  // @error: ts(2345) Argument of type '{ providers: Layer.Layer<never, never, never>; }' is not assignable to parameter of type 'StackProps<never>'.
+  // @error:   Property 'state' is missing in type '{ providers: Layer.Layer<never, never, never>; }' but required in type 'StackProps<never>'.
     providers: Layer.empty,
   },
   Effect.gen(function* () {
@@ -98,7 +99,7 @@ deploys and compute diffs against your infrastructure.
 For this tutorial we'll use `Cloudflare.state()`, which persists state
 in a Cloudflare-hosted Worker backed by a Durable Object:
 
-```typescript twoslash
+```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 +import * as Cloudflare from "alchemy/Cloudflare";
@@ -109,7 +110,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Layer.empty,
-+   state: Cloudflare.state(),
++    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     // we'll add resources here next
@@ -143,8 +144,7 @@ Effect generator.
 
 Let's add a Cloudflare R2 Bucket to our Stack and observe the type error:
 
-```typescript twoslash errorReplace='ProviderCollectionShape<"Cloudflare">::Cloudflare.Providers'
-// @errors: 2322
+```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -155,10 +155,12 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Layer.empty,
+    // @error: ts(2322) Type 'Layer<never, never, never>' is not assignable to type 'Layer<NoInfer<Providers>, never, StackServices>'.
+    // @error:   Type 'Providers' is not assignable to type 'never'.
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-+   const bucket = yield* Cloudflare.R2.Bucket("Bucket");
++    const bucket = yield* Cloudflare.R2.Bucket("Bucket");
   }),
 );
 ```
@@ -171,7 +173,7 @@ TypeScript is telling us that `Layer.empty` doesn't provide
 Replace `Layer.empty` with `Cloudflare.providers()` to resolve the
 type error:
 
-```typescript twoslash
+```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -181,7 +183,7 @@ import * as Effect from "effect/Effect";
 export default Alchemy.Stack(
   "MyApp",
   {
-+   providers: Cloudflare.providers(),
++    providers: Cloudflare.providers(),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
@@ -199,7 +201,7 @@ forget to wire it up.
 Stack outputs let you see important values after a deploy. Return an
 object from the generator to expose them:
 
-```typescript twoslash
+```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -214,9 +216,8 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 
-+   return {
-+     bucketName: bucket.bucketName,
-+     //    ^?
++    return {
++      bucketName: bucket.bucketName,
     };
   }),
 );

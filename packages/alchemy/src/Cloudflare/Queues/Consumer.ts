@@ -574,6 +574,27 @@ export const ConsumerProviderLocal = () =>
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       const localRuntimeState = yield* LocalRuntimeState;
+
+      // Restart the locally running workerd instances (if any) for the
+      // given scripts so start-time queue-consumer wiring is re-read from
+      // `localRuntimeState.queueConsumers`. See `workerRestarts` on
+      // {@link LocalRuntimeState}.
+      const restartScripts = (scriptNames: ReadonlyArray<string>) =>
+        Effect.forEach(
+          scriptNames,
+          (scriptName) =>
+            MutableHashMap.get(
+              localRuntimeState.workerRestarts,
+              scriptName,
+            ).pipe(
+              Option.match({
+                onNone: () => Effect.void,
+                onSome: (restart) => restart,
+              }),
+            ),
+          { discard: true },
+        );
+
       return {
         list: () =>
           Effect.sync(() =>
@@ -628,6 +649,17 @@ export const ConsumerProviderLocal = () =>
             consumer.consumerId,
             consumer,
           );
+          // A local workerd instance only reads its queue-consumer wiring
+          // at start time, and this reconcile races the sibling Worker's
+          // start (the Worker's `precreate` resolves `scriptName` before
+          // workerd is up). Restart any already-running instance so it
+          // picks up the new wiring; if the worker hasn't served yet this
+          // is a no-op and its first serve observes the map we just set.
+          yield* restartScripts(
+            output && output.scriptName !== consumer.scriptName
+              ? [output.scriptName, consumer.scriptName]
+              : [consumer.scriptName],
+          );
           return consumer;
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -635,6 +667,7 @@ export const ConsumerProviderLocal = () =>
             localRuntimeState.queueConsumers,
             output.consumerId,
           );
+          yield* restartScripts([output.scriptName]);
         }),
       };
     }),

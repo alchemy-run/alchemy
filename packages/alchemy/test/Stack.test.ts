@@ -1,5 +1,5 @@
 import * as Alchemy from "@/index.ts";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
 // These tests are compile-time assertions: they verify that the
 // `Alchemy.Stack` effect permits a `ConfigError` in its body without
 // forcing the user to `Effect.orDie`. See
-// https://github.com/alchemy-run/alchemy-effect/issues/479
+// https://github.com/alchemy-run/alchemy/issues/479
 describe("Alchemy.Stack error channel", () => {
   it("allows ConfigError in the stack body", () => {
     // A stack body that reads from `effect/Config` fails with `ConfigError`.

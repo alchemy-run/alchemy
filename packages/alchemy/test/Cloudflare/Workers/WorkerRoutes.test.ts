@@ -1,10 +1,10 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

@@ -1,13 +1,14 @@
 import * as AWS from "@/AWS";
 import { NetworkAcl, NetworkAclAssociation, Subnet } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
+import { assertNetworkAclGone, assertSubnetGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,7 +26,7 @@ test.provider("list enumerates the deployed NetworkAclAssociation", (stack) =>
     yield* stack.destroy();
 
     const defaultVpc = yield* getDefaultVpc;
-    const { assoc } = yield* stack.deploy(
+    const { subnet, acl, assoc } = yield* stack.deploy(
       Effect.gen(function* () {
         const subnet = yield* Subnet("ListNaclAssocSubnet", {
           vpcId: defaultVpc.vpcId,
@@ -61,5 +62,11 @@ test.provider("list enumerates the deployed NetworkAclAssociation", (stack) =>
     expect(all.some((x) => x.associationId === assoc.associationId)).toBe(true);
 
     yield* stack.destroy();
+
+    // The default VPC is shared/standing — assert the resources this test
+    // created inside it (subnet + ACL, whose deletion also proves the
+    // association was released) are gone.
+    yield* assertNetworkAclGone(acl.networkAclId);
+    yield* assertSubnetGone(subnet.subnetId);
   }).pipe(logLevel),
 );

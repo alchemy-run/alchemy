@@ -1,7 +1,7 @@
 import { unwrapRpcHandlers } from "@/Local/RpcSerialization.ts";
 import type { RpcProxyApi } from "@/Local/RpcServer.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { assert, describe, expect, it } from "@effect/vitest";
+import { assert, describe, expect, it } from "alchemy-test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -80,7 +80,7 @@ for (const runtime of runtimes()) {
             // surface is Promise-based, so we wrap exactly at the boundary
             // and let everything above and below stay in Effect.
 
-            // TODO(sam): tsgo vomits here, so we cast to any.
+            // TODO(sam): tsc (typescript 7) vomits here, so we cast to any.
             const stub = (newWebSocketRpcSession as any)(
               url,
             ) as RpcStub<RpcProxyApi>;

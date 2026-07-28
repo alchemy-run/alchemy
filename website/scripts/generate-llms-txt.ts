@@ -1,7 +1,11 @@
 /**
- * Generates `public/llms.txt` — a navigation index of every docs page,
- * grouped by section, with title + description pulled from each page's
- * frontmatter.
+ * Generates `public/llms.txt` and `public/llms-full.txt` — navigation
+ * indexes of the docs pages, grouped by section, with title + description
+ * pulled from each page's frontmatter.
+ *
+ * `llms.txt` covers the guides and concept docs and links to
+ * `llms-full.txt`, which additionally lists every generated per-resource
+ * API reference page (the Providers section) and is much larger.
  *
  * Run with: `bun scripts/generate-llms-txt.ts`
  *
@@ -17,7 +21,8 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const docsDir = path.resolve(here, "../src/content/docs");
 const outFile = path.resolve(here, "../public/llms.txt");
-const siteUrl = "https://v2.alchemy.run";
+const outFullFile = path.resolve(here, "../public/llms-full.txt");
+const siteUrl = "https://alchemy.run";
 
 interface Page {
   /** URL path, e.g. "/infrastructure-as-effects/binding" */
@@ -105,7 +110,6 @@ const SECTIONS: Section[] = [
         "infrastructure-as-effects/sinks",
         "infrastructure-as-effects/phases",
         "infrastructure-as-effects/layers",
-        "infrastructure-as-effects/infrastructure-layers",
         "infrastructure-as-effects/circular-bindings",
         "infrastructure-as-effects/custom-runtime",
       ],
@@ -229,7 +233,7 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — start here",
     intro:
-      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.",
+      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.",
     pages: {
       slugs: ["aws/index", "aws/setup", "aws/compute/choosing-a-runtime"],
     },
@@ -357,23 +361,20 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "Kubernetes",
+    heading: "SQL",
     intro:
-      "Kubernetes objects (Namespace, Deployment, Service, ConfigMap, Job, ServiceAccount) defined in TypeScript and converged onto an EKS cluster via server-side apply; cluster provisioning and workload guides live under AWS → EKS.",
+      "One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.",
     pages: {
       slugs: [
-        "kubernetes/index",
-        "kubernetes/setup",
-        "kubernetes/objects-as-bindings",
+        "sql/index",
+        "sql/effect-sql/postgres",
+        "sql/effect-sql/d1",
+        "sql/effect-sql/migrations",
+        "sql/effect-sql/lifecycle",
+        "sql/drizzle/postgres",
+        "sql/drizzle/d1",
+        "sql/drizzle/migrations",
       ],
-    },
-  },
-  {
-    heading: "Drizzle",
-    intro:
-      "Drizzle schemas as Stack resources — migration SQL regenerated on deploy and applied by whichever database resource consumes it; Worker runtime wiring lives under Cloudflare → Data.",
-    pages: {
-      slugs: ["drizzle/index", "drizzle/migrations"],
     },
   },
   {
@@ -386,7 +387,9 @@ const SECTIONS: Section[] = [
   },
 ];
 
-const PROVIDERS_INTRO = `Per-resource API reference, generated from JSDoc on the source \`.ts\` files via \`bun generate:api-reference\`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from \`@section\` / \`@example\` JSDoc tags. Grouped by cloud below.`;
+const PROVIDERS_INTRO_BASE = `Per-resource API reference, generated from JSDoc on the source \`.ts\` files via \`bun generate:api-reference\`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from \`@section\` / \`@example\` JSDoc tags.`;
+
+const PROVIDERS_INTRO = `${PROVIDERS_INTRO_BASE} Grouped by cloud below.`;
 
 /**
  * Enumerates every generated provider page under `providers/{Cloud}/...`,
@@ -428,7 +431,13 @@ const HEADER = `# Alchemy
 
 > Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
 
-This file is a navigation index for the documentation site at ${siteUrl}. Every page under \`/src/content/docs/\` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop.`;
+This file is a navigation index for the documentation site at ${siteUrl}. Guide and concept pages are listed below with their URL and a one-line summary, so an agent can pick the right page in one hop. The per-resource API reference is indexed separately in [llms-full.txt](${siteUrl}/llms-full.txt).`;
+
+const FULL_HEADER = `# Alchemy
+
+> Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
+
+This file is a navigation index for the documentation site at ${siteUrl}. Every page under \`/src/content/docs/\` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop. This is the full index including every per-resource API reference page; the smaller [llms.txt](${siteUrl}/llms.txt) covers just the guides and concept docs.`;
 
 function parseFrontmatter(source: string): Record<string, string> {
   if (!source.startsWith("---")) return {};
@@ -540,7 +549,7 @@ function renderPage(page: Page): string {
 }
 
 async function main() {
-  const parts: string[] = [HEADER];
+  const sections: string[] = [];
 
   for (const section of SECTIONS) {
     const isDirectory = !("slugs" in section.pages);
@@ -555,14 +564,24 @@ async function main() {
     // sections keep the curated order they were declared in.
     if (isDirectory) pages.sort(byOrderThenTitle);
 
-    parts.push(`## ${section.heading}`);
-    if (section.intro) parts.push(section.intro);
-    parts.push(pages.map(renderPage).join("\n"));
+    sections.push(`## ${section.heading}`);
+    if (section.intro) sections.push(section.intro);
+    sections.push(pages.map(renderPage).join("\n"));
   }
 
-  parts.push(await renderProvidersSection());
+  const fullBody =
+    [FULL_HEADER, ...sections, await renderProvidersSection()].join("\n\n") +
+    "\n";
+  await writeFile(outFullFile, fullBody, "utf8");
+  console.log(`Wrote ${outFullFile}`);
 
-  const body = parts.join("\n\n") + "\n";
+  const fullSizeKb = Math.round(Buffer.byteLength(fullBody, "utf8") / 1024);
+  const referenceSection = [
+    `## API reference`,
+    `${PROVIDERS_INTRO_BASE}\n\nThe per-resource pages are indexed in [llms-full.txt](${siteUrl}/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~${fullSizeKb} KB) — only fetch it when you need to locate a specific resource's reference page.`,
+  ];
+
+  const body = [HEADER, ...sections, ...referenceSection].join("\n\n") + "\n";
   await writeFile(outFile, body, "utf8");
   console.log(`Wrote ${outFile}`);
 }

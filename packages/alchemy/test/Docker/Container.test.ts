@@ -6,10 +6,9 @@ import {
   State,
   type ResourceState,
 } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { describe } from "vitest";
 import { findAvailablePort, isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
@@ -40,6 +39,42 @@ test.provider("diff replaces a container when its image changes", () =>
     });
     expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
   }),
+);
+
+test.provider(
+  "diff replaces a container when its labels or stop timeout change",
+  () =>
+    Effect.gen(function* () {
+      const containerProvider = yield* Provider.findProvider(Docker.Container);
+      const containerDiff = yield* containerProvider.diff!({
+        id: "web",
+        fqn: "web",
+        instanceId: "instance",
+        olds: {
+          name: "web",
+          image: "nginx:alpine",
+          labels: { "traefik.enable": "true" },
+          stopTimeout: "10 seconds",
+        },
+        news: {
+          name: "web",
+          image: "nginx:alpine",
+          labels: { "traefik.enable": "false" },
+          stopTimeout: "30 seconds",
+        },
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          id: "web",
+          name: "web",
+          status: "created",
+          createdAt: 0,
+          imageRef: "nginx:alpine",
+          ports: {},
+        },
+      });
+      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
+    }),
 );
 
 describe("Docker.Container", { concurrent: false }, () => {
@@ -85,6 +120,34 @@ describe("Docker.Container", { concurrent: false }, () => {
         );
         expect(container.status).toBe("created");
         expect(container.imageRef).toBe("nginx:alpine");
+      }),
+  );
+
+  test.provider.skipIf(!isDockerReady)(
+    "applies container labels and a stop timeout",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("traefik-container", {
+            image: "nginx:alpine",
+            labels: {
+              "traefik.enable": "true",
+              "traefik.http.services.web.loadbalancer.server.port": "80",
+            },
+            stopTimeout: "10 minutes",
+            start: true,
+          }),
+        );
+
+        const info = yield* docker.container.inspect(container.name);
+        expect(info.Config.Labels).toEqual(
+          expect.objectContaining({
+            "traefik.enable": "true",
+            "traefik.http.services.web.loadbalancer.server.port": "80",
+          }),
+        );
+        expect(info.Config.StopTimeout).toBe(600);
       }),
   );
 

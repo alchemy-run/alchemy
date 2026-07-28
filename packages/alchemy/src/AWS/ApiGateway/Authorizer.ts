@@ -1,4 +1,5 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -6,6 +7,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AuthorizerProps {
@@ -50,9 +52,11 @@ export interface AuthorizerProps {
    */
   identityValidationExpression?: string;
   /**
-   * Cache TTL for authorizer results, in seconds.
+   * Cache TTL for authorizer results (e.g. `"5 minutes"` or
+   * `Duration.seconds(300)`; a bare number is milliseconds). Sent to the
+   * API as whole seconds (`authorizerResultTtlInSeconds`).
    */
-  authorizerResultTtlInSeconds?: number;
+  authorizerResultTtl?: Duration.Input;
 }
 
 /** @resource */
@@ -176,7 +180,9 @@ export const AuthorizerProvider = () =>
               authorizerCredentials: news.authorizerCredentials,
               identitySource: news.identitySource,
               identityValidationExpression: news.identityValidationExpression,
-              authorizerResultTtlInSeconds: news.authorizerResultTtlInSeconds,
+              authorizerResultTtlInSeconds: toWireSeconds(
+                news.authorizerResultTtl,
+              ),
             });
             if (!created.id)
               return yield* Effect.die("createAuthorizer missing id");
@@ -226,20 +232,15 @@ export const AuthorizerProvider = () =>
               value: news.identityValidationExpression,
             });
           }
-          if (
-            news.authorizerResultTtlInSeconds !==
-            observed.authorizerResultTtlInSeconds
-          ) {
+          const desiredTtlSeconds = toWireSeconds(news.authorizerResultTtl);
+          if (desiredTtlSeconds !== observed.authorizerResultTtlInSeconds) {
             patches.push({
-              op:
-                news.authorizerResultTtlInSeconds === undefined
-                  ? "remove"
-                  : "replace",
+              op: desiredTtlSeconds === undefined ? "remove" : "replace",
               path: "/authorizerResultTtlInSeconds",
               value:
-                news.authorizerResultTtlInSeconds === undefined
+                desiredTtlSeconds === undefined
                   ? undefined
-                  : String(news.authorizerResultTtlInSeconds),
+                  : String(desiredTtlSeconds),
             });
           }
           if (patches.length > 0) {

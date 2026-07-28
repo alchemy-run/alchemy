@@ -1,4 +1,5 @@
 import { adopt, Unowned } from "@/AdoptPolicy";
+import type { DestroyError } from "@/Apply";
 import { Cli } from "@/Cli/Cli";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -6,16 +7,19 @@ import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
 import {
+  type CreatingResourceState,
   type ReplacedResourceState,
   type ReplacingResourceState,
   type ResourceState,
   State,
 } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { assert, describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import {
   AliasedWidget,
@@ -100,8 +104,12 @@ const hook =
           },
         ),
       ),
+      // Phase-1 (create/update) failures surface as the raw ResourceFailure;
+      // Phase-2 (GC/destroy) delete failures are aggregated into DestroyError.
       // @ts-expect-error - catchTag changes the return type
-      Effect.catchTag("ResourceFailure", () => Effect.succeed(true)),
+      Effect.catchTag(["ResourceFailure", "DestroyError"], () =>
+        Effect.succeed(true),
+      ),
     ) as Effect.Effect<A, Err, Req | State>;
 
 // Helper to fail on specific resource IDs
@@ -348,6 +356,68 @@ describe("basic operations", () => {
       }),
   );
 
+  // #874: terminal commits must persist the RESOLVED binding payload the
+  // provider reconciled with, not the raw plan-time expressions. Raw
+  // `node.bindings` hold unresolved Outputs (silently dropped by JSON state
+  // stores), so persisting them makes every later plan's `diffBindings`
+  // compare a lossy stored shape against fully-resolved data — a phantom
+  // binding update on every plan. Exercises the create, update, and replace
+  // commit sites.
+  test.provider("terminal commits persist resolved binding payloads", (stack) =>
+    Effect.gen(function* () {
+      const program = (opts: { source: string; replaceString?: string }) =>
+        Effect.gen(function* () {
+          const source = yield* BindingTarget("BindSource", {
+            string: opts.source,
+          });
+          const host = yield* BindingTarget("BindHost", {
+            name: "host",
+            replaceString: opts.replaceString,
+          });
+          // `source.string` is an unresolved Output at plan time.
+          yield* host.bind("FromSource", {
+            env: { VALUE: source.string },
+          });
+          return { source, host };
+        });
+
+      const actionOf = (plan: any, logicalId: string) =>
+        (Object.values(plan.resources) as any[]).find(
+          (node: any) => node.resource.LogicalId === logicalId,
+        )?.action;
+
+      const expectHostBindings = Effect.fn(function* (value: string) {
+        const hostState = yield* getState("BindHost");
+        expect(hostState?.bindings).toEqual([
+          { sid: "FromSource", data: { env: { VALUE: value } } },
+        ]);
+      });
+
+      // ── create commit ──
+      yield* stack.deploy(program({ source: "v1" }));
+      yield* expectHostBindings("v1");
+      const created = yield* stack.plan(program({ source: "v1" }));
+      expect(actionOf(created, "BindSource")).toBe("noop");
+      expect(actionOf(created, "BindHost")).toBe("noop");
+
+      // ── update commit ──
+      yield* stack.deploy(program({ source: "v2" }));
+      yield* expectHostBindings("v2");
+      const updated = yield* stack.plan(program({ source: "v2" }));
+      expect(actionOf(updated, "BindSource")).toBe("noop");
+      expect(actionOf(updated, "BindHost")).toBe("noop");
+
+      // ── replace commit ──
+      yield* stack.deploy(program({ source: "v2", replaceString: "flip" }));
+      yield* expectHostBindings("v2");
+      const replaced = yield* stack.plan(
+        program({ source: "v2", replaceString: "flip" }),
+      );
+      expect(actionOf(replaced, "BindSource")).toBe("noop");
+      expect(actionOf(replaced, "BindHost")).toBe("noop");
+    }),
+  );
+
   test.provider(
     "should update a surviving consumer before deleting a removed dependency",
     (stack) =>
@@ -415,10 +485,10 @@ describe("basic operations", () => {
 
 // Regression: a logical ID may legitimately contain the FQN separator ("/").
 // The GitHub event source registers a webhook keyed by `${owner}/${repository}`
-// (e.g. "alchemy-run/alchemy-effect"). During destroy the deletion path used to
+// (e.g. "alchemy-run/alchemy"). During destroy the deletion path used to
 // recompute the state key via `toFqn(namespace, logicalId)`, but `logicalId`
 // came from `parseFqn` which splits on "/" and keeps only the last segment
-// ("alchemy-effect"). The recomputed key missed the real state row, so the
+// ("alchemy"). The recomputed key missed the real state row, so the
 // resource was deleted from the cloud yet never removed from state — resurfacing
 // as an orphan deletion on every subsequent destroy, forever.
 describe("FQN separator in logical ID", () => {
@@ -426,7 +496,7 @@ describe("FQN separator in logical ID", () => {
     "destroy clears state for a top-level logical ID containing '/'",
     (stack) =>
       Effect.gen(function* () {
-        const fqn = "alchemy-run/alchemy-effect";
+        const fqn = "alchemy-run/alchemy";
 
         yield* stack.deploy(
           Effect.gen(function* () {
@@ -461,11 +531,11 @@ describe("FQN separator in logical ID", () => {
       Effect.gen(function* () {
         // Mirrors the GitHub webhook: a host construct (the Worker) whose
         // child resource's logical ID is "owner/repo".
-        const fqn = "ReleaseService/alchemy-run/alchemy-effect";
+        const fqn = "ReleaseService/alchemy-run/alchemy";
 
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* TestResource("alchemy-run/alchemy-effect", {
+            return yield* TestResource("alchemy-run/alchemy", {
               string: "v1",
             });
           }).pipe(Namespace.push("ReleaseService")),
@@ -1701,6 +1771,241 @@ describe("from creating state", () => {
 
         // Resource should be cleaned up
         expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  // ── attr-less `creating` rows must not orphan the physical resource ──
+  //
+  // A create can be interrupted AFTER the cloud-side call succeeded but
+  // BEFORE reconcile returned Attributes, leaving a `creating` row with
+  // `attr === undefined`. Destroy used to skip `provider.delete` entirely
+  // for such rows and drop the state, silently orphaning the physical
+  // resource. The engine now read-then-deletes: `provider.read` recovers
+  // the attributes from the persisted props (deterministic physical name),
+  // and only a confirmed-missing or Unowned resource skips the delete.
+
+  test.provider(
+    "destroy deletes the recovered physical resource of an attr-less creating row",
+    (stack) =>
+      Effect.gen(function* () {
+        // Interrupted create: cloud-side create "succeeded" but no attrs
+        // were ever persisted.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        expect((yield* getState("A"))?.attr).toBeUndefined();
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            read: () => Effect.succeed({ string: "test-string" }),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // The physical resource recovered by `read` was actually deleted —
+        // not silently orphaned.
+        expect(deleted).toEqual(["A"]);
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "destroy never deletes a recovered resource that is Unowned",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            // The physical name exists but belongs to someone else — our
+            // interrupted create actually lost a name race (or died before
+            // stamping ownership).
+            read: () => Effect.succeed(Unowned({ string: "foreign" })),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // Foreign resources are left in place; only our state is dropped.
+        expect(deleted).toEqual([]);
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "destroy tolerates not-found for an attr-less creating row",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            read: () => Effect.succeed(undefined),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // Nothing exists cloud-side — delete is not invoked, state is dropped.
+        expect(deleted).toEqual([]);
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "destroy drops an attr-less creating row when the provider has no read",
+    (stack) =>
+      Effect.gen(function* () {
+        // Manufacture the interrupted-create row directly: Test.Queue's
+        // provider implements no `read`, so recovery is impossible and the
+        // engine can only drop the row (surfacing a note, not crashing).
+        const state = yield* yield* State;
+        const stk = yield* Stack;
+        yield* state.set({
+          stack: stk.name,
+          stage: stk.stage,
+          fqn: "Q",
+          value: {
+            kind: "resource",
+            status: "creating",
+            resourceType: "Test.Queue",
+            namespace: undefined,
+            fqn: "Q",
+            logicalId: "Q",
+            instanceId: "q-instance",
+            providerVersion: 0,
+            downstream: [],
+            bindings: [],
+            props: { name: "q" },
+          } satisfies CreatingResourceState,
+        });
+
+        yield* stack.destroy();
+        expect(yield* getState("Q")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "replacement drain recovers and deletes an attr-less old generation",
+    (stack) =>
+      Effect.gen(function* () {
+        // 1. Interrupted create — `creating` row with no attr.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            replaceString: "original",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        expect((yield* getState("A"))?.attr).toBeUndefined();
+
+        // 2. Deploy a replacement. The first `read` (plan-time create-resume
+        // probe) reports not-found so the engine plans a replacement instead
+        // of resuming the create; the drain-time `read` then discovers the
+        // physical resource the interrupted create actually made, and the
+        // engine must delete it while draining the replaced old generation.
+        const deleted: string[] = [];
+        let reads = 0;
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            replaceString: "new",
+          });
+        }).pipe(
+          stack.deploy,
+          hook({
+            read: () =>
+              Effect.sync(() => ++reads).pipe(
+                Effect.map((n) =>
+                  n === 1 ? undefined : { replaceString: "original" },
+                ),
+              ),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // The old generation's physical resource was recovered and deleted,
+        // and the replacement collapsed to a stable `created` row.
+        expect(deleted).toEqual(["A"]);
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect(
+          ((yield* getState("A"))?.attr as TestResourceProps)?.replaceString,
+        ).toEqual("new");
+      }),
+  );
+
+  test.provider(
+    "resuming an interrupted create fails loudly when the recovered resource is Unowned",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        const exit = yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(
+          stack.deploy,
+          hook({
+            read: () => Effect.succeed(Unowned({ string: "foreign" })),
+          }),
+          Effect.exit,
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const reason = exit.cause.reasons.find(Cause.isFailReason);
+          expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
+        }
+        // The row is untouched — the user can re-run with --adopt.
+        expect((yield* getState("A"))?.status).toEqual("creating");
+      }),
+  );
+
+  test.provider(
+    "resuming an interrupted create with adopt(true) takes over an Unowned resource",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(
+          adopt(true),
+          stack.deploy,
+          hook({
+            read: () => Effect.succeed(Unowned({ string: "test-string" })),
+          }),
+        );
+
+        const persisted = yield* getState("A");
+        expect(persisted?.status).toEqual("created");
+        // The Unowned brand never reaches persisted state.
+        expect(Unowned.is(persisted?.attr)).toBe(false);
       }),
   );
 });
@@ -4965,7 +5270,7 @@ describe("type aliases", () => {
 });
 
 // Regression coverage for
-// https://github.com/alchemy-run/alchemy-effect/issues/793
+// https://github.com/alchemy-run/alchemy/issues/793
 //
 // `Plan.make` used to `state.set(...)` the adopted `created` state during plan
 // construction. Because `alchemy plan` / `deploy --dry-run` build a plan the
@@ -5026,5 +5331,241 @@ describe("engine-level adoption persists at apply, not plan (issue #793)", () =>
         expect(["created", "updated"]).toContain(persisted?.status);
         expect(yield* listState()).toEqual(["Adopted"]);
       }),
+  );
+});
+
+describe("interrupted create persists no unresolved Output exprs", () => {
+  test.provider(
+    "creating-state props are plain data and destroy converges",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const a = yield* TestResource("A", { string: "a-value" });
+          const b = yield* TestResource("B", { string: a.string });
+          return { a, b };
+        });
+
+        // B's reconcile fails AFTER the engine committed its `creating`
+        // state, which snapshots the plan props — where `string` is still
+        // an unresolved PropExpr referencing A's output.
+        yield* program.pipe(stack.deploy, hook(failOn("B", "create")));
+
+        const b = yield* getState("B");
+        expect(b?.status).toEqual("creating");
+        // State only holds plain data: the unresolved expr must be
+        // stripped, never persisted as a live proxy. A later destroy plan
+        // hands these props back to `provider.read` as `olds`; a live
+        // proxy explodes on first string coercion (e.g. inside a distilled
+        // path-parameter builder).
+        expect((b?.props as TestResourceProps).string).toBeUndefined();
+
+        yield* stack.destroy();
+        expect(yield* getState("B")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
+// A single failed provider.delete used to abort the whole destroy, stranding
+// every not-yet-deleted resource — even ones whose deletes would have
+// succeeded. The engine now attempts every delete in dependency order,
+// collects the failures, skips only resources whose DEPENDENT failed to
+// delete (they may be legitimately undeletable — "blocked", not a second
+// error), and raises everything at the end as one typed DestroyError.
+describe("error-aggregating destroy", () => {
+  const expectDestroyError = (exit: Exit.Exit<unknown, unknown>) => {
+    expect(Exit.isFailure(exit)).toBe(true);
+    assert(Exit.isFailure(exit));
+    const reason = exit.cause.reasons.find(Cause.isFailReason);
+    const error = reason?.error as DestroyError;
+    expect(error._tag).toBe("DestroyError");
+    return error;
+  };
+
+  test.provider(
+    "a failed delete does not abort sibling deletes and aggregates into DestroyError",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { string: "a" });
+            yield* TestResource("B", { string: "b" });
+            yield* TestResource("C", { string: "c" });
+          }),
+        );
+
+        const deleted: string[] = [];
+        const exit = yield* stack.destroy().pipe(
+          Effect.provide(
+            Layer.succeed(TestResourceHooks, {
+              delete: (id: string) =>
+                id === "B"
+                  ? Effect.fail(new ResourceFailure())
+                  : Effect.sync(() => void deleted.push(id)),
+            }),
+          ),
+          Effect.exit,
+        );
+
+        // The independent siblings were still deleted...
+        expect(deleted.sort()).toEqual(["A", "C"]);
+        expect(yield* getState("A")).toBeUndefined();
+        expect(yield* getState("C")).toBeUndefined();
+        // ...the failed resource stays behind for the next destroy...
+        expect((yield* getState("B"))?.status).toEqual("deleting");
+
+        // ...and the destroy as a whole still fails, with a typed aggregate.
+        const error = expectDestroyError(exit);
+        expect(error.failures.map((f) => f.fqn)).toEqual(["B"]);
+        expect(error.blocked).toEqual([]);
+
+        // A subsequent destroy (failure gone) converges.
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "a resource whose dependent failed to delete is skipped as blocked, not attempted",
+    (stack) =>
+      Effect.gen(function* () {
+        // A <- B <- C is a dependency chain (deletes run C, B, A); D is
+        // independent.
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "a" });
+            const B = yield* TestResource("B", { string: A.string });
+            yield* TestResource("C", { string: B.string });
+            yield* TestResource("D", { string: "d" });
+          }),
+        );
+
+        const deleted: string[] = [];
+        const exit = yield* stack.destroy().pipe(
+          Effect.provide(
+            Layer.succeed(TestResourceHooks, {
+              delete: (id: string) =>
+                id === "C"
+                  ? Effect.fail(new ResourceFailure())
+                  : Effect.sync(() => void deleted.push(id)),
+            }),
+          ),
+          Effect.exit,
+        );
+
+        // Only the independent sibling was attempted and deleted. A and B
+        // sit upstream of the failed C, so their deletes were never even
+        // attempted — they may be legitimately undeletable while C exists.
+        expect(deleted).toEqual(["D"]);
+        expect(yield* getState("D")).toBeUndefined();
+        expect((yield* getState("C"))?.status).toEqual("deleting");
+        expect((yield* getState("B"))?.status).toEqual("created");
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // The aggregate reports exactly one FAILURE (C); B and A are
+        // "blocked by" notes, not spurious errors.
+        const error = expectDestroyError(exit);
+        expect(error.failures.map((f) => f.fqn)).toEqual(["C"]);
+        expect(
+          error.blocked
+            .map((b) => ({ fqn: b.fqn, blockedBy: b.blockedBy }))
+            .sort((x, y) => x.fqn.localeCompare(y.fqn)),
+        ).toEqual([
+          { fqn: "A", blockedBy: ["B"] },
+          { fqn: "B", blockedBy: ["C"] },
+        ]);
+
+        // Once the blocker can be deleted, everything drains.
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "independent subtrees are unaffected by a failure in another subtree",
+    (stack) =>
+      Effect.gen(function* () {
+        // Two disjoint chains: A <- B (B's delete fails) and X <- Y.
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "a" });
+            yield* TestResource("B", { string: A.string });
+            const X = yield* TestResource("X", { string: "x" });
+            yield* TestResource("Y", { string: X.string });
+          }),
+        );
+
+        const deleted: string[] = [];
+        const exit = yield* stack.destroy().pipe(
+          Effect.provide(
+            Layer.succeed(TestResourceHooks, {
+              delete: (id: string) =>
+                id === "B"
+                  ? Effect.fail(new ResourceFailure())
+                  : Effect.sync(() => void deleted.push(id)),
+            }),
+          ),
+          Effect.exit,
+        );
+
+        // The X <- Y chain drained fully, in dependency order.
+        expect(deleted).toEqual(["Y", "X"]);
+        expect(yield* getState("X")).toBeUndefined();
+        expect(yield* getState("Y")).toBeUndefined();
+        // B failed; A is blocked behind it.
+        expect((yield* getState("B"))?.status).toEqual("deleting");
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        const error = expectDestroyError(exit);
+        expect(error.failures.map((f) => f.fqn)).toEqual(["B"]);
+        expect(error.blocked.map((b) => b.fqn)).toEqual(["A"]);
+      }),
+  );
+
+  test.provider(
+    "a failed replaced-old-generation delete fails the deploy without spinning the drain loop",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { replaceString: "v1" });
+          }),
+        );
+
+        // Replacement create succeeds; GC then fails to delete the old
+        // generation. The drain loop must terminate (the still-`replaced`
+        // row is excluded from retry) and surface the typed aggregate.
+        const exit = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* TestResource("A", { replaceString: "v2" });
+            }),
+          )
+          .pipe(
+            Effect.provide(
+              Layer.succeed(TestResourceHooks, {
+                delete: () => Effect.fail(new ResourceFailure()),
+              }),
+            ),
+            Effect.exit,
+          );
+
+        const error = expectDestroyError(exit);
+        expect(error.failures.map((f) => f.fqn)).toEqual(["A"]);
+
+        // The replacement chain is preserved for a later deploy to drain.
+        const state = yield* getState<ReplacedResourceState>("A");
+        expect(state?.status).toEqual("replaced");
+        expect(state?.old?.status).toEqual("created");
+
+        // Next deploy (delete healthy again) drains the old chain.
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { replaceString: "v2" });
+          }),
+        );
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }),
+    { timeout: 15_000 },
   );
 });

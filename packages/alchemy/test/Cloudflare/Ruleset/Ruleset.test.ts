@@ -5,15 +5,13 @@ import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { MinimumLogLevel } from "effect/References";
-import { describe } from "vitest";
-
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 // Cloudflare intermittently blocks *all* zone creation on an account with

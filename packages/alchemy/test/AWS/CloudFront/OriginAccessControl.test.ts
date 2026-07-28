@@ -1,18 +1,16 @@
 import * as AWS from "@/AWS";
 import { OriginAccessControl } from "@/AWS/CloudFront";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
-
 describe("AWS.CloudFront.OriginAccessControl", () => {
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "list enumerates the deployed origin access control",
     (stack) =>
       Effect.gen(function* () {

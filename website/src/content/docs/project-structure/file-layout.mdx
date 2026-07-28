@@ -3,7 +3,7 @@ title: File layout
 description: How to organize an Alchemy project — one file per Resource or Layer, group Resources that travel together by concern, and keep alchemy.run.ts as the composition root.
 ---
 
-A typical alchemy app ([`examples/cloudflare-neon-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-neon-drizzle)):
+A typical alchemy app ([`examples/cloudflare-neon-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle)):
 
 ```sh
 .
@@ -97,7 +97,7 @@ there is no separate `wrangler.toml` pointing at a script.
 
 Layers follow the same rule — the `SandboxLive` Layer lives in
 `src/Sandbox.ts` (see
-[Building with Layers](/infrastructure-as-effects/infrastructure-layers)).
+[Layers](/infrastructure-as-effects/layers)).
 
 ## Group by concern
 
@@ -240,7 +240,7 @@ shape step by step ([Part 2](/cloudflare/tutorial/part-2)).
   this question: one Stack or one per package.
 - [References](/infrastructure-as-code/references) — when the split
   crosses Stack boundaries.
-- [Building with Layers](/infrastructure-as-effects/infrastructure-layers) — promote
+- [Layers](/infrastructure-as-effects/layers) — promote
   a multi-Resource unit into a swappable Layer.
 - [Stacks](/infrastructure-as-code/stack) — the Stack service, stages, and
   outputs used by the composition root.

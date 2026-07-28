@@ -89,8 +89,8 @@ Give each server environment its own build input:
 
 ```diff lang="typescript"
 // vite.config.ts
- export default defineConfig({
-   plugins: [react(), rsc({ ... })],
+export default defineConfig({
+  plugins: [react(), rsc({ ... })],
 +  environments: {
 +    // The Worker is the RSC environment.
 +    rsc: {
@@ -109,7 +109,7 @@ Give each server environment its own build input:
 +      },
 +    },
 +  },
- });
+});
 ```
 
 The `rsc` input is the Worker entry, and the extra `ssr` input

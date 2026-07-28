@@ -28,6 +28,7 @@ export const SendBinding = Layer.effect(
               allowedSenderAddresses: sender.allowedSenderAddresses,
             },
           ],
+          dev: sender.dev,
         });
       }
 

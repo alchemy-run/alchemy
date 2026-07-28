@@ -1,5 +1,6 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -9,6 +10,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -25,30 +27,40 @@ export type QueueProps = {
    */
   queueName?: string;
   /**
-   * Delay in seconds for all messages in the queue (`0` - `900`).
+   * Delay applied to all messages in the queue (`0` - `900` seconds).
+   * Accepts any `Duration.Input` (e.g. `"30 seconds"`,
+   * `Duration.seconds(30)`; a bare number is milliseconds); the wire unit
+   * is whole seconds.
    * @default 0
    */
-  delaySeconds?: number;
+  delay?: Duration.Input;
   /**
    * Maximum message size in bytes (`1,024` - `1,048,576`).
    * @default 1048576
    */
   maximumMessageSize?: number;
   /**
-   * Message retention period in seconds (`60` - `1,209,600`).
-   * @default 345600
+   * How long messages are retained (`60` - `1,209,600` seconds). Accepts
+   * any `Duration.Input` (e.g. `"4 days"`, `Duration.days(4)`; a bare
+   * number is milliseconds); the wire unit is whole seconds.
+   * @default 4 days
    */
-  messageRetentionPeriod?: number;
+  messageRetentionPeriod?: Duration.Input;
   /**
-   * Time in seconds for `ReceiveMessage` to wait for a message (`0` - `20`).
+   * How long `ReceiveMessage` waits for a message (`0` - `20` seconds).
+   * Accepts any `Duration.Input` (e.g. `"20 seconds"`,
+   * `Duration.seconds(20)`; a bare number is milliseconds); the wire unit
+   * is whole seconds.
    * @default 0
    */
-  receiveMessageWaitTimeSeconds?: number;
+  receiveMessageWaitTime?: Duration.Input;
   /**
-   * Visibility timeout in seconds (`0` - `43,200`).
-   * @default 30
+   * Visibility timeout (`0` - `43,200` seconds). Accepts any
+   * `Duration.Input` (e.g. `"30 seconds"`, `Duration.seconds(30)`; a bare
+   * number is milliseconds); the wire unit is whole seconds.
+   * @default 30 seconds
    */
-  visibilityTimeout?: number;
+  visibilityTimeout?: Duration.Input;
   /**
    * Dead-letter queue redrive policy. Failed messages are moved to the
    * dead-letter queue after `maxReceiveCount` receive attempts. The
@@ -96,12 +108,13 @@ export type QueueProps = {
    */
   kmsMasterKeyId?: string;
   /**
-   * The length of time, in seconds, that SQS reuses a data key before
-   * calling KMS again (`60` - `86,400`). Only meaningful with
-   * `kmsMasterKeyId`.
-   * @default 300
+   * How long SQS reuses a data key before calling KMS again (`60` -
+   * `86,400` seconds). Accepts any `Duration.Input` (e.g. `"5 minutes"`,
+   * `Duration.minutes(5)`; a bare number is milliseconds); the wire unit
+   * is whole seconds. Only meaningful with `kmsMasterKeyId`.
+   * @default 5 minutes
    */
-  kmsDataKeyReusePeriodSeconds?: number;
+  kmsDataKeyReusePeriod?: Duration.Input;
   /**
    * Enables server-side encryption using SQS-owned keys (SSE-SQS).
    * Mutually exclusive with `kmsMasterKeyId`.
@@ -153,6 +166,10 @@ export interface Queue extends Resource<
   Providers
 > {}
 
+class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
+  readonly queueUrl: string;
+}> {}
+
 /**
  * An Amazon SQS queue for reliable, decoupled message processing.
  *
@@ -179,9 +196,9 @@ export interface Queue extends Resource<
  * @example Queue with Custom Settings
  * ```typescript
  * const queue = yield* SQS.Queue("ProcessingQueue", {
- *   visibilityTimeout: 120,
- *   messageRetentionPeriod: 86400,
- *   receiveMessageWaitTimeSeconds: 20,
+ *   visibilityTimeout: "2 minutes",
+ *   messageRetentionPeriod: "1 day",
+ *   receiveMessageWaitTime: "20 seconds",
  * });
  * ```
  *
@@ -219,7 +236,7 @@ export interface Queue extends Resource<
  * ```typescript
  * const queue = yield* SQS.Queue("KmsQueue", {
  *   kmsMasterKeyId: "alias/aws/sqs",
- *   kmsDataKeyReusePeriodSeconds: 300,
+ *   kmsDataKeyReusePeriod: "5 minutes",
  * });
  * ```
  *
@@ -349,18 +366,22 @@ export const QueueProvider = () =>
         const policy = buildPolicy(props, bindings) ?? "";
 
         const baseAttributes: Record<string, string | undefined> = {
-          DelaySeconds: props.delaySeconds?.toString(),
+          DelaySeconds: toWireSeconds(props.delay)?.toString(),
           MaximumMessageSize: props.maximumMessageSize?.toString(),
-          MessageRetentionPeriod: props.messageRetentionPeriod?.toString(),
-          ReceiveMessageWaitTimeSeconds:
-            props.receiveMessageWaitTimeSeconds?.toString(),
-          VisibilityTimeout: props.visibilityTimeout?.toString(),
+          MessageRetentionPeriod: toWireSeconds(
+            props.messageRetentionPeriod,
+          )?.toString(),
+          ReceiveMessageWaitTimeSeconds: toWireSeconds(
+            props.receiveMessageWaitTime,
+          )?.toString(),
+          VisibilityTimeout: toWireSeconds(props.visibilityTimeout)?.toString(),
           RedrivePolicy: redrivePolicy,
           RedriveAllowPolicy: redriveAllowPolicy,
           Policy: policy,
           KmsMasterKeyId: props.kmsMasterKeyId,
-          KmsDataKeyReusePeriodSeconds:
-            props.kmsDataKeyReusePeriodSeconds?.toString(),
+          KmsDataKeyReusePeriodSeconds: toWireSeconds(
+            props.kmsDataKeyReusePeriod,
+          )?.toString(),
           SqsManagedSseEnabled:
             props.sqsManagedSseEnabled === undefined
               ? undefined
@@ -664,11 +685,67 @@ export const QueueProvider = () =>
           };
         }),
         delete: Effect.fn(function* (input) {
+          const queueUrl = input.output.queueUrl;
           yield* sqs
             .deleteQueue({
-              QueueUrl: input.output.queueUrl,
+              QueueUrl: queueUrl,
             })
-            .pipe(Effect.catchTag("QueueDoesNotExist", () => Effect.void));
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "RequestThrottled",
+                schedule: Schedule.max([
+                  Schedule.exponential("500 millis"),
+                  Schedule.recurs(6),
+                ]),
+              }),
+              Effect.catchTag("QueueDoesNotExist", () => Effect.void),
+            );
+
+          // DeleteQueue is asynchronous and SQS can keep serving the queue
+          // for up to 60 seconds. GetQueueAttributes can report not-found
+          // before ListQueues stops returning the URL, and nuke discovers
+          // queues through ListQueues. Require both control-plane views to
+          // agree before state is removed or a same-name replacement starts.
+          // Typed read throttles mean "absence not confirmed yet" and retry;
+          // re-entering delete remains safe because QueueDoesNotExist is OK.
+          const queueName = queueUrl.slice(queueUrl.lastIndexOf("/") + 1);
+          yield* Effect.gen(function* () {
+            const attributesAbsent = yield* sqs
+              .getQueueAttributes({
+                QueueUrl: queueUrl,
+                AttributeNames: ["QueueArn"],
+              })
+              .pipe(
+                Effect.as(false),
+                Effect.catchTag("QueueDoesNotExist", () =>
+                  Effect.succeed(true),
+                ),
+                Effect.catchTag("RequestThrottled", () =>
+                  Effect.succeed(false),
+                ),
+              );
+            const absentFromList = yield* sqs
+              .listQueues({ QueueNamePrefix: queueName })
+              .pipe(
+                Effect.map(
+                  (result) => !(result.QueueUrls ?? []).includes(queueUrl),
+                ),
+                Effect.catchTag("RequestThrottled", () =>
+                  Effect.succeed(false),
+                ),
+              );
+            if (!attributesAbsent || !absentFromList) {
+              return yield* Effect.fail(new QueueStillExists({ queueUrl }));
+            }
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "QueueStillExists",
+              schedule: Schedule.max([
+                Schedule.spaced("2 seconds"),
+                Schedule.recurs(30),
+              ]),
+            }),
+          );
         }),
       });
     }),

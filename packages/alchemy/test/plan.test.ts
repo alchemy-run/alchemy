@@ -16,8 +16,8 @@ import {
   type ResourceState,
   type ResourceStatus,
 } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -1079,11 +1079,12 @@ describe("duplicate bindings are collapsed by sid before diff", () => {
         { sid: "Shared", data: { env: { K: "last" } } },
       ]);
 
-      // The duplicated sid retains its first-seen position but takes the
-      // last value (matching `diffBindings`' `Map`-based collapse).
+      // The duplicated sid takes the last value (matching `diffBindings`'
+      // `Map`-based collapse) and the result is sid-sorted so binding rows
+      // are deterministic regardless of registration order.
       expect(deduped).toEqual([
-        { sid: "Shared", data: { env: { K: "last" } } },
         { sid: "Other", data: { env: { K: "x" } } },
+        { sid: "Shared", data: { env: { K: "last" } } },
       ]);
     }),
   );
@@ -3557,4 +3558,161 @@ describe("type aliases", () => {
       }),
     );
   });
+});
+
+describe("zombie rows", () => {
+  // A state row whose resource type has no registered provider (the type
+  // was removed from the program, or renamed without an alias) is FATAL:
+  // the program and state disagree, and without the provider the row's
+  // physical resource cannot be deleted anyway. Planning dies with a typed
+  // MissingProviderError naming the row and the remediation (see
+  // destroy-robustness.test.ts for the deploy/destroy behavior).
+  test(
+    "a row whose resource type has no provider fails the plan",
+    Effect.gen(function* () {
+      yield* seed({
+        Ghost: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Ghost",
+          fqn: "Ghost",
+          namespace: undefined,
+          resourceType: "Test.Vanished",
+          status: "created",
+          props: { name: "ghost" },
+          attr: { name: "ghost" },
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const exit = yield* makePlan(
+        Effect.gen(function* () {
+          yield* Bucket("Survivor", { name: "survivor" });
+        }),
+      ).pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      const defect = Exit.isFailure(exit)
+        ? exit.cause.reasons.find(
+            (r) =>
+              Cause.isDieReason(r) &&
+              r.defect instanceof Provider.MissingProviderError,
+          )
+        : undefined;
+      expect(defect && Cause.isDieReason(defect)).toBe(true);
+      if (defect && Cause.isDieReason(defect)) {
+        const error = defect.defect as Provider.MissingProviderError;
+        expect(error.resourceType).toBe("Test.Vanished");
+        expect(error.fqn).toBe("Ghost");
+        expect(error.message).toContain("aliases");
+      }
+    }),
+  );
+});
+
+describe("read is never handed unresolved persisted props", () => {
+  // A failed create persists `creating` state carrying the RAW plan-time
+  // props, which may contain unresolved Output expressions (e.g. a prop
+  // referencing an upstream resource that was never created). Providers
+  // derive identity from `olds` inside `read` when `output` is undefined,
+  // so the engine must skip the read probe entirely rather than hand it
+  // unresolved exprs (see the isResolved guards in Plan.ts).
+
+  const creatingWithUnresolvedProps = (fqn: string): ResourceState => ({
+    instanceId,
+    providerVersion: 0,
+    logicalId: fqn,
+    fqn,
+    namespace: undefined,
+    resourceType: "Test.TestResource",
+    status: "creating",
+    props: {
+      // an unresolved Output expression, exactly as persisted by a create
+      // that failed before its upstream dependencies resolved
+      string: Output.literal("unresolved") as any,
+    },
+    attr: undefined,
+    bindings: [],
+    downstream: [],
+  });
+
+  const trackReads = () => {
+    const reads: string[] = [];
+    const layer = Layer.succeed(TestResourceHooks, {
+      read: (id: string) =>
+        Effect.sync(() => {
+          reads.push(id);
+          return undefined;
+        }),
+    });
+    return { reads, layer };
+  };
+
+  test(
+    "destroy after failed create with unresolved props skips read and deletes with attr undefined",
+    Effect.gen(function* () {
+      yield* seed({ Zombie: creatingWithUnresolvedProps("Zombie") });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
+      expect(reads).not.toContain("Zombie");
+      expect(plan.deletions.Zombie).toMatchObject({ action: "delete" });
+      expect((plan.deletions.Zombie as any).state.attr).toBeUndefined();
+    }),
+  );
+
+  test(
+    "creating-state recovery with unresolved persisted props skips the read probe and re-drives create",
+    Effect.gen(function* () {
+      yield* seed({ Half: creatingWithUnresolvedProps("Half") });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved-now" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).not.toContain("Half");
+      expect(plan.resources.Half!.action).toBe("create");
+    }),
+  );
+
+  test(
+    "destroy of a creating row defers read recovery to apply even with resolved props",
+    Effect.gen(function* () {
+      // Plan never probes a deleted attr-less row — resolved or not. Apply's
+      // `deleteResource` owns the authoritative read-then-delete recovery
+      // (it also covers replaced-chain old generations that never pass
+      // through plan); see the apply.test.ts destroy-recovery cases.
+      yield* seed({
+        Zombie: {
+          ...creatingWithUnresolvedProps("Zombie"),
+          props: { string: "resolved" },
+        },
+      });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
+      expect(reads).not.toContain("Zombie");
+      expect(plan.deletions.Zombie).toMatchObject({ action: "delete" });
+      expect((plan.deletions.Zombie as any).state.attr).toBeUndefined();
+    }),
+  );
+
+  test(
+    "resolved persisted creating props still go through read recovery when re-declared (control)",
+    Effect.gen(function* () {
+      yield* seed({
+        Half: {
+          ...creatingWithUnresolvedProps("Half"),
+          props: { string: "resolved" },
+        },
+      });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved-now" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toContain("Half");
+      expect(plan.resources.Half!.action).toBe("create");
+    }),
+  );
 });

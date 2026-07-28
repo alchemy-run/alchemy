@@ -476,7 +476,7 @@ export const providers = () =>
         Devices.DeviceSettingsProvider(),
 
         // Split into nested groups: a single flat mergeAll with ~200
-        // arguments exceeds tsgo's variadic inference ceiling and
+        // arguments exceeds tsc's variadic inference ceiling and
         // silently drops the tail layers from the inferred union.
         Layer.mergeAll(
           Diagnostics.EndpointHealthcheckProvider(),

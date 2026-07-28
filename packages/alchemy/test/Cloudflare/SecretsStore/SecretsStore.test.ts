@@ -1,12 +1,12 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import {
   Credentials,
   apiTokenCredentials,
 } from "@distilled.cloud/cloudflare/Credentials";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
-import { expect, it } from "@effect/vitest";
+import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpBody from "effect/unstable/http/HttpBody";

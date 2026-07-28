@@ -2,7 +2,7 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
-import { isFunction } from "../Lambda/Function.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
 import {
   ExecuteTransaction,
   type ExecuteTransactionRequest,
@@ -20,7 +20,7 @@ export const ExecuteTransactionHttp = Layer.effect(
           a.LogicalId.localeCompare(b.LogicalId),
         );
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
+        if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.DynamoDB.ExecuteTransaction(${sortedTables}))`(
             {
               policyStatements: [
