@@ -13,8 +13,37 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { getAutoScalingTestSubnetId } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// Out-of-band proof a scaling policy is deleted: describePolicies by name
+// returns an empty list once the policy (or its group) is gone.
+const assertPolicyGone = (policyName: string) =>
+  autoscaling.describePolicies({ PolicyNames: [policyName] }).pipe(
+    Effect.map((r) => (r.ScalingPolicies ?? []).length),
+    Effect.repeat({
+      until: (count) => count === 0,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 8,
+    }),
+    Effect.map((count) => expect(count).toBe(0)),
+  );
+
+// Out-of-band proof an Auto Scaling Group is deleted after the trailing
+// stack.destroy(): the name-filtered describe returns an empty list.
+const assertGroupGone = (name: string) =>
+  autoscaling
+    .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
+    .pipe(
+      Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+      Effect.repeat({
+        until: (count) => count === 0,
+        schedule: Schedule.spaced("3 seconds"),
+        times: 10,
+      }),
+      Effect.map((count) => expect(count).toBe(0)),
+    );
 
 // `list()` enumerates every scaling policy in the account/region via the
 // paginated `autoscaling.describePolicies` op (no AutoScalingGroupName filter,
@@ -22,20 +51,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // instances launch) with a target-tracking policy, resolve the provider from
 // context via the typed `findProvider`, call `list()`, and assert the deployed
 // policy appears in the exhaustively paginated result.
-//
-// SKIP gate: a ScalingPolicy requires a parent AutoScalingGroup, which requires
-// a LaunchTemplate. Deploying a LaunchTemplate currently fails during plan with
-// a pre-existing bug in the sibling `AWS/AutoScaling/LaunchTemplate.ts`
-// provider (out of scope for this resource): its `read` adoption path calls
-// `ec2.describeLaunchTemplates` by name, AWS rejects a missing template with
-//   UnknownAwsError: At least one of the launch templates specified in the
-//   request does not exist.   (errorTag: InvalidLaunchTemplateName.NotFoundException)
-// distilled EC2 does not type that error on `describeLaunchTemplates`, and the
-// provider's `isLaunchTemplateNotFound` duck-types the wrong tag string, so the
-// catch misses and the whole plan fails. The identical failure reproduces in
-// the sibling `AutoScalingGroup.test.ts` "list" case. Gated behind an env var
-// so an environment with the LaunchTemplate provider fixed runs it unchanged.
-test.provider.skipIf(!process.env.AWS_TEST_SCALING_POLICY_LIST)(
+test.provider(
   "list enumerates the deployed scaling policy",
   (stack) =>
     Effect.gen(function* () {
@@ -80,6 +96,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SCALING_POLICY_LIST)(
       expect(all.some((p) => p.policyName === policy.policyName)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertPolicyGone(policy.policyName);
+      yield* assertGroupGone("alchemy-test-policy-asg-list");
     }),
   { timeout: 240_000 },
 );
@@ -138,15 +156,7 @@ test.provider(
         LaunchTemplateData: { ImageId: imageId, InstanceType: "t3.micro" },
       } as any);
 
-      const subnets = yield* ec2.describeSubnets({
-        Filters: [{ Name: "default-for-az", Values: ["true"] }],
-      } as any);
-      const subnetId = subnets.Subnets?.[0]?.SubnetId;
-      if (!subnetId) {
-        return yield* Effect.die(
-          new Error("no default-VPC subnet available in this region"),
-        );
-      }
+      const subnetId = yield* getAutoScalingTestSubnetId;
 
       const deployPolicy = () =>
         stack.deploy(
@@ -154,7 +164,7 @@ test.provider(
             const group = yield* AutoScalingGroup("RecoveryGroup", {
               autoScalingGroupName: recoveryAsgName,
               launchTemplate: { launchTemplateName: recoveryLtName },
-              subnetIds: [subnetId as `subnet-${string}`],
+              subnetIds: [subnetId],
               minSize: 0,
               maxSize: 0,
               desiredCapacity: 0,
@@ -173,11 +183,21 @@ test.provider(
               autoScalingGroup: group,
               predefinedMetricType: "ASGAverageCPUUtilization",
               targetValue: 50,
+              // Duration.Input prop — whole seconds on the wire.
+              estimatedInstanceWarmup: "90 seconds",
             });
           }),
         );
 
       const created = yield* deployPolicy();
+
+      // Duration.Input round-trips to the wire as whole seconds.
+      const liveCreated = yield* autoscaling.describePolicies({
+        PolicyNames: [created.policyName],
+      });
+      expect(liveCreated.ScalingPolicies?.[0]?.EstimatedInstanceWarmup).toEqual(
+        90,
+      );
 
       // Rewrite the policy's persisted row into the wedged shape an
       // interrupted deploy leaves behind: `creating`, no attributes, and the
@@ -270,6 +290,8 @@ test.provider(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertPolicyGone(created.policyName);
+      yield* assertGroupGone(recoveryAsgName);
       yield* cleanupRecoveryLt;
     }).pipe(Effect.ensuring(cleanupRecoveryLt)),
   { timeout: 240_000 },

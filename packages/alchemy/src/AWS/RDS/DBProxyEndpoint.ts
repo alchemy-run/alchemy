@@ -44,15 +44,45 @@ export interface DBProxyEndpoint extends Resource<
   "AWS.RDS.DBProxyEndpoint",
   DBProxyEndpointProps,
   {
+    /**
+     * Name of the proxy endpoint.
+     */
     dbProxyEndpointName: string;
+    /**
+     * ARN of the proxy endpoint.
+     */
     dbProxyEndpointArn: string;
+    /**
+     * Proxy that owns the endpoint.
+     */
     dbProxyName: string | undefined;
+    /**
+     * DNS address applications connect to.
+     */
     endpoint: string | undefined;
+    /**
+     * Status of the endpoint (e.g. `available`).
+     */
     status: string | undefined;
+    /**
+     * VPC the endpoint is placed in.
+     */
     vpcId: string | undefined;
+    /**
+     * Subnets the endpoint is attached to.
+     */
     vpcSubnetIds: string[];
+    /**
+     * Security groups attached to the endpoint.
+     */
     vpcSecurityGroupIds: string[];
+    /**
+     * Role of the endpoint (`READ_WRITE` or `READ_ONLY`).
+     */
     targetRole: string | undefined;
+    /**
+     * Tags on the endpoint.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -60,8 +90,23 @@ export interface DBProxyEndpoint extends Resource<
 > {}
 
 /**
- * An additional RDS Proxy endpoint.
+ * An additional RDS Proxy endpoint — a second DNS name on an existing
+ * `DBProxy`, typically read-only for reader traffic or placed in a
+ * different VPC.
+ *
+ * Changing the name, owning proxy, subnets, or target role replaces the
+ * endpoint; security groups and tags update in place.
  * @resource
+ * @section Creating Proxy Endpoints
+ * @example Read-Only Endpoint
+ * ```typescript
+ * const readerEndpoint = yield* DBProxyEndpoint("ReaderEndpoint", {
+ *   dbProxyName: proxy.dbProxyName,
+ *   vpcSubnetIds: [privateSubnetA.subnetId, privateSubnetB.subnetId],
+ *   vpcSecurityGroupIds: [dbSecurityGroup.groupId],
+ *   targetRole: "READ_ONLY",
+ * });
+ * ```
  */
 export const DBProxyEndpoint = Resource<DBProxyEndpoint>(
   "AWS.RDS.DBProxyEndpoint",

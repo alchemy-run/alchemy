@@ -3,6 +3,7 @@ export type * as lambda from "aws-lambda";
 
 import * as kinesis from "@distilled.cloud/aws/kinesis";
 import type * as lambda from "aws-lambda";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 // `Stream` is the resource class name in this file, so alias the Effect
@@ -19,6 +20,7 @@ import {
   hasAlchemyTags,
   type Tags,
 } from "../../Tags.ts";
+import { toWireHours } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -38,7 +40,13 @@ export type StreamMode = "PROVISIONED" | "ON_DEMAND";
 export type EncryptionType = "NONE" | "KMS";
 
 export type WarmThroughput = {
+  /**
+   * Requested warm throughput in MiBps.
+   */
   targetMiBps?: number;
+  /**
+   * Warm throughput currently provisioned by AWS, in MiBps.
+   */
   currentMiBps?: number;
 };
 
@@ -61,11 +69,12 @@ export type StreamProps = {
    */
   shardCount?: number;
   /**
-   * The number of hours that records remain accessible in the stream.
-   * Valid values range from 24 to 8760.
-   * @default 24
+   * How long records remain accessible in the stream, e.g. `"48 hours"` or
+   * `Duration.hours(48)`. The API stores whole hours; valid values range
+   * from 24 hours to 8760 hours (365 days).
+   * @default "24 hours"
    */
-  retentionPeriodHours?: number;
+  retentionPeriod?: Duration.Input;
   /**
    * If set to true, server-side encryption is enabled on the stream.
    * Uses the AWS managed CMK for Kinesis (`alias/aws/kinesis`) when `kmsKeyId`
@@ -189,7 +198,7 @@ export interface Stream extends Resource<
  * const stream = yield* Kinesis.Stream("AnalyticsStream", {
  *   streamMode: "PROVISIONED",
  *   shardCount: 2,
- *   retentionPeriodHours: 48,
+ *   retentionPeriod: "48 hours",
  * });
  * ```
  *
@@ -577,7 +586,7 @@ export const StreamProvider = () =>
 
           // Sync retention period — observed ↔ desired.
           const desiredRetention =
-            news.retentionPeriodHours ?? defaultRetentionPeriodHours;
+            toWireHours(news.retentionPeriod) ?? defaultRetentionPeriodHours;
           if (state.retentionPeriodHours !== desiredRetention) {
             if (desiredRetention > state.retentionPeriodHours) {
               yield* kinesis.increaseStreamRetentionPeriod({

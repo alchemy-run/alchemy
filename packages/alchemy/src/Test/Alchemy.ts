@@ -9,8 +9,10 @@
  * concurrency + timeouts itself.
  */
 import {
+  exclusiveOf,
   registerHook,
   registerTest,
+  retryOf,
   timeoutOf,
   type TestOptions,
 } from "alchemy-test";
@@ -140,6 +142,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerTest({
       name,
       mode,
+      exclusive: exclusiveOf(opts),
+      retry: retryOf(opts),
       timeout: timeoutOf(opts),
       body: mode === "skip" || mode === "todo" ? undefined : () => wrap(eff),
     });
@@ -187,6 +191,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerTest({
       name,
       mode,
+      exclusive: exclusiveOf(opts),
+      retry: retryOf(opts),
       timeout: timeoutOf(opts),
       body: mode === "skip" ? undefined : () => wrapProvider(name, fn),
     });

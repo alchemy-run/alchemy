@@ -14,7 +14,34 @@ export interface TopicEventSourceProps {
   attributes?: Record<string, string>;
 }
 
-/** @binding */
+/**
+ * Event source connecting an SNS {@link Topic} to the hosting Lambda
+ * function: it creates the `lambda`-protocol subscription (plus the invoke
+ * permission) at deploy time and dispatches delivered notifications to the
+ * registered handler at runtime.
+ *
+ * The contract is a `Binding.Service`; the Lambda implementation layer is
+ * `Lambda.TopicEventSource`. Consume it through the
+ * {@link consumeTopicNotifications} helper.
+ * @binding
+ * @section Consuming a Topic
+ * @example Consume Notifications in a Lambda Function
+ * ```typescript
+ * export default WorkerFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const topic = yield* SNS.Topic("Events");
+ *
+ *     // registers the subscription and the runtime dispatcher
+ *     yield* SNS.consumeTopicNotifications(topic, (stream) =>
+ *       stream.pipe(
+ *         Stream.runForEach((message) => Effect.log(message.Message)),
+ *       ),
+ *     );
+ *   }).pipe(Effect.provide(Lambda.TopicEventSource)),
+ * );
+ * ```
+ */
 export interface TopicEventSource extends Binding.Service<
   TopicEventSource,
   "AWS.SNS.TopicEventSource",

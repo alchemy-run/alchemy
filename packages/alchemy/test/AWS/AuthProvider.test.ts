@@ -19,20 +19,13 @@ describe("applyEnvRegionOverride", () => {
     }).pipe(withEnv({ AWS_REGION: "us-east-2" })),
   );
 
-  it.effect("AWS_DEFAULT_REGION overrides when AWS_REGION is unset", () =>
+  // AWS_DEFAULT_REGION is a default, not an override — the profile's region
+  // is explicit configuration and must win over it.
+  it.effect("AWS_DEFAULT_REGION does NOT override the profile region", () =>
     Effect.gen(function* () {
       const creds = yield* applyEnvRegionOverride(profileCreds);
-      expect(creds.region).toBe("eu-west-1");
+      expect(creds.region).toBe("us-west-2");
     }).pipe(withEnv({ AWS_DEFAULT_REGION: "eu-west-1" })),
-  );
-
-  it.effect("AWS_REGION takes precedence over AWS_DEFAULT_REGION", () =>
-    Effect.gen(function* () {
-      const creds = yield* applyEnvRegionOverride(profileCreds);
-      expect(creds.region).toBe("us-east-2");
-    }).pipe(
-      withEnv({ AWS_REGION: "us-east-2", AWS_DEFAULT_REGION: "eu-west-1" }),
-    ),
   );
 
   it.effect("falls back to the profile region when no env is set", () =>

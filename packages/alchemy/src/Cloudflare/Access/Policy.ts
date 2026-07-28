@@ -177,10 +177,11 @@ export const PolicyProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createPolicyName(id, news.name);
-      const oldName = output?.name
-        ? output.name
-        : yield* createPolicyName(id, olds.name);
+      const oldName = output?.name ?? (yield* createPolicyName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "replace" } as const;
       }
@@ -191,7 +192,9 @@ export const PolicyProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {} as PolicyProps, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createPolicyName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const name = yield* createPolicyName(id, news.name ?? output?.name);
       const acct = output?.accountId ?? accountId;
 
       // Observe — prefer cached policyId, fall back to a name lookup so

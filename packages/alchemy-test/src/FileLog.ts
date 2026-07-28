@@ -3,10 +3,13 @@
  * output, appended to `.alchemy/log/test.log` as the run progresses —
  * color-free so agents and tooling can read it directly.
  */
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
 
 import type { LogEntry } from "./Model.ts";
 import type { TestEvent } from "./Reporter.ts";
@@ -76,6 +79,26 @@ export const formatEvent = (event: TestEvent): string | undefined => {
 
 export interface FileLog {
   readonly append: (event: TestEvent) => Effect.Effect<void>;
+  /**
+   * Enqueue one live file-hook log line (prefixed with the file it belongs
+   * to). File-level hooks (beforeAll deploys / afterAll destroys) can run
+   * for many minutes; buffering their output until `FileEnd` makes the run
+   * log go silent for the whole time — a long-running deploy then reads as
+   * a deadlocked run. Streaming each entry as it is captured keeps the log
+   * tail-able mid-hook.
+   *
+   * This performs NO I/O: it only offers the formatted line to an
+   * unbounded queue drained by a background writer fiber (all file I/O is
+   * Effect-based and async). It is therefore safe to call from the
+   * synchronous array-push interception that captures hook output.
+   */
+  readonly appendHookLine: (file: string, entry: LogEntry) => void;
+  /**
+   * Gracefully end the hook-line stream: signals the queue, lets the
+   * writer fiber drain every enqueued line to disk, and awaits it. Call
+   * once at the end of the run so no tail lines are lost.
+   */
+  readonly close: Effect.Effect<void>;
 }
 
 const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -122,5 +145,36 @@ export const makeFileLog = Effect.fn(function* (logFile: string) {
       .writeFileString(logFile, chunk, { flag: "a" })
       .pipe(Effect.ignore);
   };
-  return { append } satisfies FileLog;
+  // Hook lines flow through an unbounded queue to a single writer fiber so
+  // the capture site (a synchronous array-push interception) never performs
+  // I/O and never blocks: `offerUnsafe` on an unbounded queue is a plain
+  // in-memory enqueue. The writer serializes appends, so hook lines cannot
+  // interleave mid-line with the Effect-based `append` writes.
+  const hookLines = yield* Queue.make<string, Cause.Done>();
+  const writer = yield* Effect.forkChild(
+    Effect.gen(function* () {
+      while (true) {
+        const line = yield* Queue.take(hookLines);
+        yield* fs
+          .writeFileString(logFile, `${line}\n`, { flag: "a" })
+          .pipe(Effect.ignore);
+      }
+    }).pipe(
+      // `Queue.take` fails with `Done` once `close` ends the queue and the
+      // backlog is drained — that is the writer's normal exit.
+      Effect.catchCause(() => Effect.void),
+    ),
+  );
+  const appendHookLine: FileLog["appendHookLine"] = (file, entry) => {
+    const prefixed = entry.message
+      .split("\n")
+      .map((line) => `[hook ${file}] ${line}`)
+      .join("\n");
+    Queue.offerUnsafe(hookLines, prefixed);
+  };
+  const close: FileLog["close"] = Effect.gen(function* () {
+    yield* Queue.end(hookLines);
+    yield* Fiber.await(writer);
+  });
+  return { append, appendHookLine, close } satisfies FileLog;
 });

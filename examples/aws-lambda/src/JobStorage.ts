@@ -56,15 +56,16 @@ export const JobStorageDynamoDB = Layer.provideMerge(
         batchSize: 10,
       }, (stream) =>
         stream.pipe(
-          Stream.map((record) =>
-            JSON.stringify({
+          Stream.map((record) => ({
+            MessageBody: JSON.stringify({
               eventName: record.eventName,
               keys: record.dynamodb.Keys,
               newImage: record.dynamodb.NewImage,
               oldImage: record.dynamodb.OldImage,
             }),
-          ),
+          })),
           Stream.run(sink),
+          Effect.orDie,
         ),
       );
 
@@ -207,8 +208,9 @@ export const JobStorageS3 = Layer.provideMerge(
             Stream.fromEffect(getJob(item.key).pipe(Effect.orDie)),
           ),
           Stream.filter((job): job is Job => job !== undefined),
-          Stream.map((job) => JSON.stringify(job)),
+          Stream.map((job) => ({ MessageBody: JSON.stringify(job) })),
           Stream.run(sink),
+          Effect.orDie,
         ),
       );
 

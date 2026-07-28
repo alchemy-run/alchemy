@@ -241,10 +241,11 @@ const getApp = (accountId: string, appId: string) =>
  * oldest for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  flagship.listApps({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((a) => a.name === name)
+  flagship.listApps.items({ accountId }).pipe(
+    Stream.filter((a) => a.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .at(0),
     ),

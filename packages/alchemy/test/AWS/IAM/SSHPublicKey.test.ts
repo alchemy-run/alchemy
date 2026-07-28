@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { SSHPublicKey, User } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { testSshPublicKey } from "./fixtures.ts";
@@ -42,6 +43,12 @@ describe("AWS.IAM.SSHPublicKey", () => {
       expect(found?.fingerprint).toBeDefined();
 
       yield* stack.destroy();
+
+      // The user (and with it the SSH public key) is gone.
+      const deletedUser = yield* IAM.getUser({
+        UserName: deployed.user.userName,
+      }).pipe(Effect.option);
+      expect(deletedUser._tag).toBe("None");
     }),
   );
 });

@@ -36,11 +36,17 @@ export interface CompositeAlarm extends Resource<
   "AWS.CloudWatch.CompositeAlarm",
   CompositeAlarmProps,
   {
+    /** Physical name of the composite alarm. */
     alarmName: CompositeAlarmName;
+    /** ARN of the composite alarm. */
     alarmArn: AlarmArn;
+    /** Current state of the composite alarm (`OK`, `ALARM`, or `INSUFFICIENT_DATA`). */
     stateValue: cloudwatch.StateValue | undefined;
+    /** Human-readable reason for the current state. */
     stateReason: string | undefined;
+    /** The full CompositeAlarm description as last read from CloudWatch. */
     compositeAlarm: cloudwatch.CompositeAlarm;
+    /** Tags on the composite alarm, including the internal Alchemy ownership tags. */
     tags: Record<string, string>;
   },
   never,
@@ -48,13 +54,32 @@ export interface CompositeAlarm extends Resource<
 > {}
 
 /**
- * A CloudWatch composite alarm.
+ * A CloudWatch composite alarm — combines the states of other alarms with
+ * a boolean `AlarmRule` expression so a single alarm (and its actions)
+ * reflects overall health.
  * @resource
  * @section Creating Composite Alarms
  * @example Composite Rule
  * ```typescript
  * const composite = yield* CompositeAlarm("HighSeverity", {
  *   AlarmRule: 'ALARM("HighErrors") OR ALARM("HighLatency")',
+ * });
+ * ```
+ *
+ * @example Compose Alarm Resources with Output.interpolate
+ * ```typescript
+ * const errors = yield* Alarm("HighErrors", {
+ *   MetricName: "Errors",
+ *   Namespace: "AWS/Lambda",
+ *   Statistic: "Sum",
+ *   Period: 60,
+ *   EvaluationPeriods: 1,
+ *   Threshold: 1,
+ *   ComparisonOperator: "GreaterThanOrEqualToThreshold",
+ * });
+ *
+ * const composite = yield* CompositeAlarm("HighSeverity", {
+ *   AlarmRule: Output.interpolate`ALARM("${errors.alarmName}")`,
  * });
  * ```
  */

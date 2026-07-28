@@ -169,9 +169,12 @@ export const SnippetProvider = () =>
       const n = news as SnippetProps;
 
       // Name is the snippet's identity within the zone.
-      const name = yield* createSnippetName(id, n.name);
       const oldName =
         output?.name ?? (yield* createSnippetName(id, o.name as string));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = n.name ?? oldName;
       if (oldName !== name) {
         return { action: "replace" } as const;
       }

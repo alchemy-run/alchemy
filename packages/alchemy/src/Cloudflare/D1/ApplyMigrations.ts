@@ -2,7 +2,7 @@ import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlFile } from "../../Sql/SqlFile.ts";
+import type { SqlFile } from "../../SQL/SqlFile.ts";
 
 export interface ApplyMigrationsOptions {
   accountId: string;

@@ -7,8 +7,27 @@ import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { getAutoScalingTestSubnetId } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// Out-of-band proof that an Auto Scaling Group is fully deleted after the
+// trailing stack.destroy(): describeAutoScalingGroups with a name filter
+// returns an empty list once deletion completes (bounded poll — the provider's
+// delete already waits, this is a cheap final confirmation).
+const assertGroupGone = (name: string) =>
+  autoscaling
+    .describeAutoScalingGroups({ AutoScalingGroupNames: [name] } as any)
+    .pipe(
+      Effect.map((r) => (r.AutoScalingGroups ?? []).length),
+      Effect.repeat({
+        until: (count) => count === 0,
+        schedule: Schedule.spaced("3 seconds"),
+        times: 10,
+      }),
+      Effect.map((count) => expect(count).toBe(0)),
+    );
 
 const launchTemplateName = "alchemy-test-asg-lt-oob";
 
@@ -27,23 +46,7 @@ const cleanupLaunchTemplate = ec2
 // to zero so no EC2 instances launch), resolve the provider from context via the
 // typed `findProvider`, call `list()`, and assert the deployed group appears in
 // the exhaustively paginated result.
-//
-// Gated off by default: the entire distilled `auto-scaling` service is currently
-// non-functional against the live API. The `aws-query` protocol derives the
-// request `Action` from the input shape's identifier (stripping a trailing
-// `Request|Input|Message`), but AutoScaling's Smithy input shapes do not follow
-// that convention — `describeAutoScalingGroups` takes `AutoScalingGroupNamesType`
-// — so every describe call sends `Action=AutoScalingGroupNamesType` and AWS
-// rejects it:
-//
-//   UnknownAwsError: Could not find operation AutoScalingGroupNamesType for
-//   version 2011-01-01  (errorTag: InvalidAction)
-//
-// This is a distilled generator/protocol bug affecting the whole service (the ASG
-// resource has never been live-tested), not the `list()` implementation. Once the
-// `aws-query` Action derivation uses the real operation name, run this with
-// AWS_TEST_AUTOSCALING=1.
-test.provider.skipIf(!process.env.AWS_TEST_AUTOSCALING)(
+test.provider(
   "list enumerates the deployed auto scaling group",
   (stack) =>
     Effect.gen(function* () {
@@ -83,6 +86,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AUTOSCALING)(
       ).toBe(true);
 
       yield* stack.destroy();
+      yield* assertGroupGone("alchemy-test-asg-list");
     }).pipe(Effect.ensuring(cleanupLaunchTemplate)),
   { timeout: 240_000 },
 );
@@ -119,15 +123,7 @@ test.provider(
       // to a syntactically valid id if the lookup returns nothing.
       const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
 
-      const subnets = yield* ec2.describeSubnets({
-        Filters: [{ Name: "default-for-az", Values: ["true"] }],
-      } as any);
-      const subnetId = subnets.Subnets?.[0]?.SubnetId;
-      if (!subnetId) {
-        return yield* Effect.die(
-          new Error("no default-VPC subnet available in this region"),
-        );
-      }
+      const subnetId = yield* getAutoScalingTestSubnetId;
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
@@ -139,10 +135,13 @@ test.provider(
             autoScalingGroupName: wholeAsgName,
             // Whole resource — resolves to bare Attributes at deploy time.
             launchTemplate: template,
-            subnetIds: [subnetId as `subnet-${string}`],
+            subnetIds: [subnetId],
             minSize: 0,
             maxSize: 0,
             desiredCapacity: 0,
+            // Duration.Input props — whole seconds on the wire.
+            defaultCooldown: "45 seconds",
+            healthCheckGracePeriod: "2 minutes",
           });
           return {
             templateId: template.launchTemplateId.as<string>(),
@@ -159,7 +158,12 @@ test.provider(
         String(deployed.templateDefaultVersion),
       );
 
-      // Out-of-band: the live group carries the id-only spec.
+      // Duration.Input props round-trip as whole seconds in the attributes.
+      expect(deployed.group.defaultCooldown).toEqual(45);
+      expect(deployed.group.healthCheckGracePeriod).toEqual(120);
+
+      // Out-of-band: the live group carries the id-only spec and the
+      // Duration-derived second counts on the wire.
       const described = yield* autoscaling.describeAutoScalingGroups({
         AutoScalingGroupNames: [wholeAsgName],
       } as any);
@@ -167,8 +171,11 @@ test.provider(
       expect(live?.LaunchTemplate?.LaunchTemplateId).toEqual(
         deployed.templateId,
       );
+      expect(live?.DefaultCooldown).toEqual(45);
+      expect(live?.HealthCheckGracePeriod).toEqual(120);
 
       yield* stack.destroy();
+      yield* assertGroupGone(wholeAsgName);
     }).pipe(Effect.ensuring(cleanupWholeAsg)),
   { timeout: 240_000 },
 );

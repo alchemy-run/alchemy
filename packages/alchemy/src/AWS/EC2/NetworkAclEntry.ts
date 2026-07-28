@@ -1,5 +1,6 @@
 import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -205,15 +206,16 @@ export const NetworkAclEntryProvider = () =>
         ruleNumber: number,
         egress: boolean,
       ) =>
-        ec2
-          .describeNetworkAcls({ NetworkAclIds: [networkAclId] })
-          .pipe(
-            Effect.map((r) =>
-              r.NetworkAcls?.[0]?.Entries?.find(
-                (e) => e.RuleNumber === ruleNumber && e.Egress === egress,
-              ),
+        ec2.describeNetworkAcls({ NetworkAclIds: [networkAclId] }).pipe(
+          Effect.catchTag("InvalidNetworkAclID.NotFound", () =>
+            Effect.succeed({ NetworkAcls: [] }),
+          ),
+          Effect.map((r) =>
+            r.NetworkAcls?.[0]?.Entries?.find(
+              (e) => e.RuleNumber === ruleNumber && e.Egress === egress,
             ),
-          );
+          ),
+        );
 
       const toAttrs = (
         props: NetworkAclEntryProps,
@@ -262,31 +264,38 @@ export const NetworkAclEntryProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.NetworkAcls ?? []).flatMap((acl) =>
-                  (acl.Entries ?? [])
-                    .filter((e) => e.RuleNumber !== 32767)
-                    .map((entry) => ({
-                      networkAclId: acl.NetworkAclId as NetworkAclId,
-                      ruleNumber: entry.RuleNumber!,
-                      egress: entry.Egress!,
-                      protocol: entry.Protocol!,
-                      ruleAction: entry.RuleAction!,
-                      cidrBlock: entry.CidrBlock,
-                      ipv6CidrBlock: entry.Ipv6CidrBlock,
-                      icmpTypeCode: entry.IcmpTypeCode
-                        ? {
-                            code: entry.IcmpTypeCode.Code,
-                            type: entry.IcmpTypeCode.Type,
-                          }
-                        : undefined,
-                      portRange: entry.PortRange
-                        ? {
-                            from: entry.PortRange.From,
-                            to: entry.PortRange.To,
-                          }
-                        : undefined,
-                    })),
-                ),
+                (page.NetworkAcls ?? [])
+                  // Entries on AWS's default ACL are service-managed account
+                  // baseline, not independently owned resources. Enumerating
+                  // their rule-100 allow entries made every clean nuke mutate
+                  // the rematerialized default VPC and report two false
+                  // stragglers.
+                  .filter((acl) => acl.IsDefault !== true)
+                  .flatMap((acl) =>
+                    (acl.Entries ?? [])
+                      .filter((e) => e.RuleNumber !== 32767)
+                      .map((entry) => ({
+                        networkAclId: acl.NetworkAclId as NetworkAclId,
+                        ruleNumber: entry.RuleNumber!,
+                        egress: entry.Egress!,
+                        protocol: entry.Protocol!,
+                        ruleAction: entry.RuleAction!,
+                        cidrBlock: entry.CidrBlock,
+                        ipv6CidrBlock: entry.Ipv6CidrBlock,
+                        icmpTypeCode: entry.IcmpTypeCode
+                          ? {
+                              code: entry.IcmpTypeCode.Code,
+                              type: entry.IcmpTypeCode.Type,
+                            }
+                          : undefined,
+                        portRange: entry.PortRange
+                          ? {
+                              from: entry.PortRange.From,
+                              to: entry.PortRange.To,
+                            }
+                          : undefined,
+                      })),
+                  ),
               ),
             ),
           ),
@@ -403,14 +412,15 @@ export const NetworkAclEntryProvider = () =>
           return toAttrs(news, entry);
         }),
 
-        delete: Effect.fn(function* ({ olds, output, session }) {
+        delete: Effect.fn(function* ({ output, session }) {
+          const networkAclId = output.networkAclId;
           yield* session.note(
             `Deleting Network ACL Entry (rule ${output.ruleNumber})...`,
           );
 
           yield* ec2
             .deleteNetworkAclEntry({
-              NetworkAclId: olds.networkAclId as string,
+              NetworkAclId: networkAclId,
               RuleNumber: output.ruleNumber,
               Egress: output.egress,
               DryRun: false,
@@ -420,7 +430,35 @@ export const NetworkAclEntryProvider = () =>
                 "InvalidNetworkAclEntry.NotFound",
                 () => Effect.void,
               ),
+              Effect.catchTag(
+                "InvalidNetworkAclID.NotFound",
+                () => Effect.void,
+              ),
             );
+
+          // Delete success is only an acknowledgement. Observe the exact
+          // (ACL, rule number, direction) tuple until it is absent so nuke
+          // cannot report success while the entry is still enumerable.
+          yield* findEntry(networkAclId, output.ruleNumber, output.egress).pipe(
+            Effect.flatMap((entry) =>
+              entry === undefined
+                ? Effect.void
+                : Effect.fail(
+                    new NetworkAclEntryStillVisible({
+                      networkAclId,
+                      ruleNumber: output.ruleNumber,
+                      egress: output.egress,
+                    }),
+                  ),
+            ),
+            Effect.retry({
+              while: (error) => error instanceof NetworkAclEntryStillVisible,
+              schedule: Schedule.max([
+                Schedule.fixed(1000),
+                Schedule.recurs(10),
+              ]),
+            }),
+          );
 
           yield* session.note(
             `Network ACL Entry deleted: rule ${output.ruleNumber}`,
@@ -429,3 +467,11 @@ export const NetworkAclEntryProvider = () =>
       };
     }),
   );
+
+class NetworkAclEntryStillVisible extends Data.TaggedError(
+  "NetworkAclEntryStillVisible",
+)<{
+  networkAclId: string;
+  ruleNumber: number;
+  egress: boolean;
+}> {}

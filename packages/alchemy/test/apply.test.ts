@@ -6,6 +6,7 @@ import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
 import {
+  type CreatingResourceState,
   type ReplacedResourceState,
   type ReplacingResourceState,
   type ResourceState,
@@ -14,8 +15,10 @@ import {
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import {
   AliasedWidget,
@@ -346,6 +349,68 @@ describe("basic operations", () => {
           },
         });
       }),
+  );
+
+  // #874: terminal commits must persist the RESOLVED binding payload the
+  // provider reconciled with, not the raw plan-time expressions. Raw
+  // `node.bindings` hold unresolved Outputs (silently dropped by JSON state
+  // stores), so persisting them makes every later plan's `diffBindings`
+  // compare a lossy stored shape against fully-resolved data — a phantom
+  // binding update on every plan. Exercises the create, update, and replace
+  // commit sites.
+  test.provider("terminal commits persist resolved binding payloads", (stack) =>
+    Effect.gen(function* () {
+      const program = (opts: { source: string; replaceString?: string }) =>
+        Effect.gen(function* () {
+          const source = yield* BindingTarget("BindSource", {
+            string: opts.source,
+          });
+          const host = yield* BindingTarget("BindHost", {
+            name: "host",
+            replaceString: opts.replaceString,
+          });
+          // `source.string` is an unresolved Output at plan time.
+          yield* host.bind("FromSource", {
+            env: { VALUE: source.string },
+          });
+          return { source, host };
+        });
+
+      const actionOf = (plan: any, logicalId: string) =>
+        (Object.values(plan.resources) as any[]).find(
+          (node: any) => node.resource.LogicalId === logicalId,
+        )?.action;
+
+      const expectHostBindings = Effect.fn(function* (value: string) {
+        const hostState = yield* getState("BindHost");
+        expect(hostState?.bindings).toEqual([
+          { sid: "FromSource", data: { env: { VALUE: value } } },
+        ]);
+      });
+
+      // ── create commit ──
+      yield* stack.deploy(program({ source: "v1" }));
+      yield* expectHostBindings("v1");
+      const created = yield* stack.plan(program({ source: "v1" }));
+      expect(actionOf(created, "BindSource")).toBe("noop");
+      expect(actionOf(created, "BindHost")).toBe("noop");
+
+      // ── update commit ──
+      yield* stack.deploy(program({ source: "v2" }));
+      yield* expectHostBindings("v2");
+      const updated = yield* stack.plan(program({ source: "v2" }));
+      expect(actionOf(updated, "BindSource")).toBe("noop");
+      expect(actionOf(updated, "BindHost")).toBe("noop");
+
+      // ── replace commit ──
+      yield* stack.deploy(program({ source: "v2", replaceString: "flip" }));
+      yield* expectHostBindings("v2");
+      const replaced = yield* stack.plan(
+        program({ source: "v2", replaceString: "flip" }),
+      );
+      expect(actionOf(replaced, "BindSource")).toBe("noop");
+      expect(actionOf(replaced, "BindHost")).toBe("noop");
+    }),
   );
 
   test.provider(
@@ -1701,6 +1766,241 @@ describe("from creating state", () => {
 
         // Resource should be cleaned up
         expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  // ── attr-less `creating` rows must not orphan the physical resource ──
+  //
+  // A create can be interrupted AFTER the cloud-side call succeeded but
+  // BEFORE reconcile returned Attributes, leaving a `creating` row with
+  // `attr === undefined`. Destroy used to skip `provider.delete` entirely
+  // for such rows and drop the state, silently orphaning the physical
+  // resource. The engine now read-then-deletes: `provider.read` recovers
+  // the attributes from the persisted props (deterministic physical name),
+  // and only a confirmed-missing or Unowned resource skips the delete.
+
+  test.provider(
+    "destroy deletes the recovered physical resource of an attr-less creating row",
+    (stack) =>
+      Effect.gen(function* () {
+        // Interrupted create: cloud-side create "succeeded" but no attrs
+        // were ever persisted.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        expect((yield* getState("A"))?.attr).toBeUndefined();
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            read: () => Effect.succeed({ string: "test-string" }),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // The physical resource recovered by `read` was actually deleted —
+        // not silently orphaned.
+        expect(deleted).toEqual(["A"]);
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "destroy never deletes a recovered resource that is Unowned",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            // The physical name exists but belongs to someone else — our
+            // interrupted create actually lost a name race (or died before
+            // stamping ownership).
+            read: () => Effect.succeed(Unowned({ string: "foreign" })),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // Foreign resources are left in place; only our state is dropped.
+        expect(deleted).toEqual([]);
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "destroy tolerates not-found for an attr-less creating row",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            read: () => Effect.succeed(undefined),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // Nothing exists cloud-side — delete is not invoked, state is dropped.
+        expect(deleted).toEqual([]);
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "destroy drops an attr-less creating row when the provider has no read",
+    (stack) =>
+      Effect.gen(function* () {
+        // Manufacture the interrupted-create row directly: Test.Queue's
+        // provider implements no `read`, so recovery is impossible and the
+        // engine can only drop the row (surfacing a note, not crashing).
+        const state = yield* yield* State;
+        const stk = yield* Stack;
+        yield* state.set({
+          stack: stk.name,
+          stage: stk.stage,
+          fqn: "Q",
+          value: {
+            kind: "resource",
+            status: "creating",
+            resourceType: "Test.Queue",
+            namespace: undefined,
+            fqn: "Q",
+            logicalId: "Q",
+            instanceId: "q-instance",
+            providerVersion: 0,
+            downstream: [],
+            bindings: [],
+            props: { name: "q" },
+          } satisfies CreatingResourceState,
+        });
+
+        yield* stack.destroy();
+        expect(yield* getState("Q")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
+    "replacement drain recovers and deletes an attr-less old generation",
+    (stack) =>
+      Effect.gen(function* () {
+        // 1. Interrupted create — `creating` row with no attr.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            replaceString: "original",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        expect((yield* getState("A"))?.attr).toBeUndefined();
+
+        // 2. Deploy a replacement. The first `read` (plan-time create-resume
+        // probe) reports not-found so the engine plans a replacement instead
+        // of resuming the create; the drain-time `read` then discovers the
+        // physical resource the interrupted create actually made, and the
+        // engine must delete it while draining the replaced old generation.
+        const deleted: string[] = [];
+        let reads = 0;
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            replaceString: "new",
+          });
+        }).pipe(
+          stack.deploy,
+          hook({
+            read: () =>
+              Effect.sync(() => ++reads).pipe(
+                Effect.map((n) =>
+                  n === 1 ? undefined : { replaceString: "original" },
+                ),
+              ),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // The old generation's physical resource was recovered and deleted,
+        // and the replacement collapsed to a stable `created` row.
+        expect(deleted).toEqual(["A"]);
+        expect((yield* getState("A"))?.status).toEqual("created");
+        expect(
+          ((yield* getState("A"))?.attr as TestResourceProps)?.replaceString,
+        ).toEqual("new");
+      }),
+  );
+
+  test.provider(
+    "resuming an interrupted create fails loudly when the recovered resource is Unowned",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        const exit = yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(
+          stack.deploy,
+          hook({
+            read: () => Effect.succeed(Unowned({ string: "foreign" })),
+          }),
+          Effect.exit,
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const reason = exit.cause.reasons.find(Cause.isFailReason);
+          expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
+        }
+        // The row is untouched — the user can re-run with --adopt.
+        expect((yield* getState("A"))?.status).toEqual("creating");
+      }),
+  );
+
+  test.provider(
+    "resuming an interrupted create with adopt(true) takes over an Unowned resource",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(
+          adopt(true),
+          stack.deploy,
+          hook({
+            read: () => Effect.succeed(Unowned({ string: "test-string" })),
+          }),
+        );
+
+        const persisted = yield* getState("A");
+        expect(persisted?.status).toEqual("created");
+        // The Unowned brand never reaches persisted state.
+        expect(Unowned.is(persisted?.attr)).toBe(false);
       }),
   );
 });

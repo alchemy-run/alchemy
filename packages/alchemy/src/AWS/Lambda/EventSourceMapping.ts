@@ -1,9 +1,11 @@
 import * as lambda from "@distilled.cloud/aws/lambda";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
@@ -32,10 +34,12 @@ export interface EventSourceMappingProps {
    */
   batchSize?: number;
   /**
-   * The maximum amount of time, in seconds, that Lambda spends gathering records before invoking the function.
+   * The maximum amount of time that Lambda spends gathering records before
+   * invoking the function (e.g. `"5 seconds"`). Rounded to whole seconds on
+   * the wire.
    * @default 0
    */
-  maximumBatchingWindowInSeconds?: number;
+  maximumBatchingWindow?: Duration.Input;
   /**
    * Whether the event source mapping is active.
    * @default true
@@ -64,19 +68,22 @@ export interface EventSourceMappingProps {
    */
   bisectBatchOnFunctionError?: boolean;
   /**
-   * (Kinesis and DynamoDB Streams) Discard records older than the specified age in seconds.
-   * @default -1 (infinite)
+   * (Kinesis and DynamoDB Streams) Discard records older than the specified
+   * age (e.g. `"1 hour"`). Rounded to whole seconds on the wire.
+   * @default infinite (omit to never expire records)
    */
-  maximumRecordAgeInSeconds?: number;
+  maximumRecordAge?: Duration.Input;
   /**
    * (Kinesis and DynamoDB Streams) Discard records after the specified number of retries.
    * @default -1 (infinite)
    */
   maximumRetryAttempts?: number;
   /**
-   * (Kinesis and DynamoDB Streams) The duration in seconds of a processing window for tumbling windows.
+   * (Kinesis and DynamoDB Streams) The duration of a processing window for
+   * tumbling windows (e.g. `"30 seconds"`). Rounded to whole seconds on the
+   * wire.
    */
-  tumblingWindowInSeconds?: number;
+  tumblingWindow?: Duration.Input;
   /**
    * A list of current response type enums applied to the event source mapping.
    * @default ["ReportBatchItemFailures"]
@@ -202,7 +209,7 @@ export interface EventSourceMapping extends Resource<
  *   functionName: worker.functionName,
  *   eventSourceArn: queue.queueArn,
  *   batchSize: 10,
- *   maximumBatchingWindowInSeconds: 5,
+ *   maximumBatchingWindow: "5 seconds",
  * });
  * ```
  *
@@ -286,16 +293,16 @@ export interface EventSourceMapping extends Resource<
  *   eventSourceArn: stream.streamArn,
  *   startingPosition: "LATEST",
  *   batchSize: 500,
- *   maximumBatchingWindowInSeconds: 10,
+ *   maximumBatchingWindow: "10 seconds",
  *   parallelizationFactor: 5,
- *   tumblingWindowInSeconds: 30,
+ *   tumblingWindow: "30 seconds",
  * });
  * ```
  *
  * `parallelizationFactor` runs up to 5 concurrent batches per shard (records
  * with the same partition key still stay in order), while
- * `tumblingWindowInSeconds` aggregates results across sequential batches for
- * windowed stream processing. Raising `batchSize`/`maximumBatchingWindowInSeconds`
+ * `tumblingWindow` aggregates results across sequential batches for
+ * windowed stream processing. Raising `batchSize`/`maximumBatchingWindow`
  * favors fewer, larger invocations.
  *
  * @section Error Handling & Retries
@@ -313,7 +320,7 @@ export interface EventSourceMapping extends Resource<
  *   startingPosition: "LATEST",
  *   bisectBatchOnFunctionError: true,
  *   maximumRetryAttempts: 3,
- *   maximumRecordAgeInSeconds: 3600,
+ *   maximumRecordAge: "1 hour",
  *   destinationConfig: {
  *     OnFailure: { Destination: dlq.queueArn },
  *   },
@@ -322,7 +329,7 @@ export interface EventSourceMapping extends Resource<
  *
  * On a function error, `bisectBatchOnFunctionError` splits the batch in two and
  * retries each half to isolate the bad record; after `maximumRetryAttempts` (or
- * once a record is older than `maximumRecordAgeInSeconds`) the record is
+ * once a record is older than `maximumRecordAge`) the record is
  * discarded and its metadata is sent to the `destinationConfig.OnFailure`
  * target so it is never silently lost.
  *
@@ -505,14 +512,16 @@ export const EventSourceMappingProvider = () =>
         EventSourceArn: props.eventSourceArn as string,
         Enabled: props.enabled ?? true,
         BatchSize: props.batchSize,
-        MaximumBatchingWindowInSeconds: props.maximumBatchingWindowInSeconds,
+        MaximumBatchingWindowInSeconds: toWireSeconds(
+          props.maximumBatchingWindow,
+        ),
         StartingPosition: props.startingPosition,
         StartingPositionTimestamp: props.startingPositionTimestamp,
         ParallelizationFactor: props.parallelizationFactor,
         BisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
-        MaximumRecordAgeInSeconds: props.maximumRecordAgeInSeconds,
+        MaximumRecordAgeInSeconds: toWireSeconds(props.maximumRecordAge),
         MaximumRetryAttempts: props.maximumRetryAttempts,
-        TumblingWindowInSeconds: props.tumblingWindowInSeconds,
+        TumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
         FunctionResponseTypes: props.functionResponseTypes ?? [
           "ReportBatchItemFailures",
         ],
@@ -543,11 +552,13 @@ export const EventSourceMappingProvider = () =>
         FunctionName: props.functionName as string,
         Enabled: props.enabled ?? true,
         BatchSize: props.batchSize,
-        MaximumBatchingWindowInSeconds: props.maximumBatchingWindowInSeconds,
+        MaximumBatchingWindowInSeconds: toWireSeconds(
+          props.maximumBatchingWindow,
+        ),
         BisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
-        MaximumRecordAgeInSeconds: props.maximumRecordAgeInSeconds,
+        MaximumRecordAgeInSeconds: toWireSeconds(props.maximumRecordAge),
         MaximumRetryAttempts: props.maximumRetryAttempts,
-        TumblingWindowInSeconds: props.tumblingWindowInSeconds,
+        TumblingWindowInSeconds: toWireSeconds(props.tumblingWindow),
         FunctionResponseTypes: props.functionResponseTypes ?? [
           "ReportBatchItemFailures",
         ],

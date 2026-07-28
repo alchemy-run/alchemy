@@ -194,6 +194,79 @@ over their TCP port via `getTcpPort`. To build, tag, and push that
 image as part of the same Stack, see
 [Build & push images](/docker/build-and-push) in the Docker hub.
 
+When `image` already references Cloudflare's managed registry —
+for example a digest reference pushed by CI, like
+`registry.cloudflare.com/<accountId>/app@sha256:...` — alchemy
+deploys the reference as-is and skips the docker pull and push
+entirely.
+
+## Bind on an async Worker
+
+An async Worker can host a container-backed Durable Object class
+that ships as plain JavaScript — `@cloudflare/sandbox`'s `Sandbox`,
+or your own class extending `@cloudflare/containers`' `Container`.
+The class lives in the worker script:
+
+```typescript
+// src/worker.ts
+import { Container } from "@cloudflare/containers";
+
+export class Sandbox extends Container {
+  defaultPort = 8080;
+}
+```
+
+`Sandbox` is the Durable Object class Cloudflare instantiates for
+each container instance; `Container` (from `@cloudflare/containers`)
+handles the lifecycle and forwards `fetch` to the port inside it.
+
+Declare it in the stack by binding a `Cloudflare.Container` in the
+Worker's `env` — the Container is the Durable Object binding and its
+ContainerApplication together. Alchemy emits the
+`durable_object_namespace` binding, marks the class as
+container-backed in the script metadata, provisions the application,
+and attaches it to the class's namespace:
+
+```typescript
+// alchemy.run.ts
+import type { Sandbox } from "./src/worker.ts";
+
+export const Worker = Cloudflare.Worker("Worker", {
+  main: "./src/worker.ts",
+  env: {
+    Sandbox: Cloudflare.Container<Sandbox>("Sandbox", {
+      image: "docker.io/cloudflare/sandbox:0.1.3",
+    }),
+  },
+});
+```
+
+The Durable Object class name defaults to the binding name (the
+`env` key). Set `className` when the exported class is named
+differently. The type parameter (`Container<Sandbox>`) is the class
+from `worker.ts` above — it types `env.Sandbox` as
+`DurableObjectNamespace<Sandbox>` through
+[`InferEnv`](/cloudflare/compute/workers#typed-env-for-async-workers),
+so the handler reaches the container with full types:
+
+```typescript
+// src/worker.ts
+import { getContainer } from "@cloudflare/containers";
+import type * as Cloudflare from "alchemy/Cloudflare";
+import type { Worker } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: Cloudflare.InferEnv<typeof Worker>) {
+    return getContainer(env.Sandbox, "default").fetch(request);
+  },
+};
+```
+
+Only image-backed containers (`image`, or `context`/`dockerfile`)
+can be bound this way. An effectful (`main`) container's runtime is
+provided by its `.make()` Layer, which needs an Effect-native
+Durable Object host.
+
 ## ContainerApplication
 
 Under the hood every container is backed by a

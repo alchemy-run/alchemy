@@ -952,6 +952,28 @@ export class DurableObjectScope extends Context.Service<
  * });
  * ```
  *
+ * @section Container-Backed Durable Objects in an Async Worker
+ * A container-backed class is declared by binding a `Cloudflare.Container`
+ * directly in the async Worker's `env` — the Container *is* the Durable
+ * Object binding plus its ContainerApplication. See the Async Workers
+ * section on {@link Container} for the full walkthrough.
+ *
+ * @example A Container binding declares the container-backed class
+ * ```typescript
+ * // `Sandbox` is the container-backed DO class exported by the worker
+ * // script (extends `@cloudflare/containers`' `Container`).
+ * import type { Sandbox } from "./src/worker.ts";
+ *
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     Sandbox: Cloudflare.Container<Sandbox>("Sandbox", {
+ *       image: "docker.io/cloudflare/sandbox:0.1.3",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * @section Moving a Class Between Workers
  * A Durable Object class can move from one Worker to another with its
  * data intact. The move is always **declared** — a class that disappears

@@ -127,9 +127,13 @@ export interface Dashboard extends Resource<
   "AWS.CloudWatch.Dashboard",
   DashboardProps,
   {
+    /** Physical name of the dashboard. */
     dashboardName: DashboardName;
+    /** ARN of the dashboard. */
     dashboardArn: DashboardArn;
+    /** The parsed dashboard document as last read from CloudWatch. */
     dashboardBody: DashboardBody | undefined;
+    /** Tags accepted for API consistency (not persisted remotely). */
     tags: Record<string, string>;
   },
   never,
@@ -137,7 +141,9 @@ export interface Dashboard extends Resource<
 > {}
 
 /**
- * An Amazon CloudWatch dashboard.
+ * An Amazon CloudWatch dashboard. The `DashboardBody` is a structured,
+ * typed document (metric, text, alarm-status, and log widgets) that the
+ * provider serializes to the JSON string CloudWatch expects.
  * @resource
  * @section Creating Dashboards
  * @example Basic Dashboard
@@ -147,6 +153,43 @@ export interface Dashboard extends Resource<
  *     widgets: [],
  *   },
  * });
+ * ```
+ *
+ * @example Dashboard with Metric and Text Widgets
+ * ```typescript
+ * const dashboard = yield* Dashboard("PaymentsDashboard", {
+ *   DashboardBody: {
+ *     widgets: [
+ *       {
+ *         type: "text",
+ *         x: 0, y: 0, width: 6, height: 3,
+ *         properties: { markdown: "# Payments service" },
+ *       },
+ *       {
+ *         type: "metric",
+ *         x: 0, y: 3, width: 12, height: 6,
+ *         properties: {
+ *           title: "Payments processed",
+ *           metrics: [["MyApp/Payments", "PaymentProcessed"]],
+ *           stat: "Sum",
+ *           period: 60,
+ *           view: "timeSeries",
+ *         },
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * @section Reading Dashboards at Runtime
+ * @example Read the Dashboard Body from a Function
+ * ```typescript
+ * // init — bind the dashboard to the function (see GetDashboard)
+ * const getDashboard = yield* AWS.CloudWatch.GetDashboard(dashboard);
+ *
+ * // runtime
+ * const result = yield* getDashboard();
+ * const body = JSON.parse(result.DashboardBody ?? "{}");
  * ```
  */
 export const Dashboard = Resource<Dashboard>("AWS.CloudWatch.Dashboard");

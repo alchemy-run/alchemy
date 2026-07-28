@@ -1,8 +1,10 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -48,10 +50,10 @@ export interface TargetGroupProps {
   healthCheckProtocol?: string;
   /** Whether health checks are enabled. Updated in place. */
   healthCheckEnabled?: boolean;
-  /** The approximate interval between health checks, in seconds. Updated in place. */
-  healthCheckIntervalSeconds?: number;
-  /** The amount of time, in seconds, to wait for a health-check response. Updated in place. */
-  healthCheckTimeoutSeconds?: number;
+  /** The approximate interval between health checks — e.g. `"15 seconds"`. Sent to AWS as whole seconds. Updated in place. */
+  healthCheckInterval?: Duration.Input;
+  /** The amount of time to wait for a health-check response — e.g. `"5 seconds"`. Sent to AWS as whole seconds. Updated in place. */
+  healthCheckTimeout?: Duration.Input;
   /** The number of consecutive successes before a target is healthy. Updated in place. */
   healthyThresholdCount?: number;
   /** The number of consecutive failures before a target is unhealthy. Updated in place. */
@@ -68,12 +70,19 @@ export interface TargetGroup extends Resource<
   "AWS.ELBv2.TargetGroup",
   TargetGroupProps,
   {
+    /** The ARN of the target group. */
     targetGroupArn: TargetGroupArn;
+    /** The name of the target group. */
     targetGroupName: TargetGroupName;
-    port: number;
-    protocol: string;
+    /** Undefined for `lambda` target groups (they have no port). */
+    port: number | undefined;
+    /** Undefined for `lambda` target groups (they have no protocol). */
+    protocol: string | undefined;
+    /** The target type (`instance`, `ip`, `lambda`, or `alb`). */
     targetType: string;
-    vpcId: string;
+    /** Undefined for `lambda` target groups (they are not VPC-scoped). */
+    vpcId: string | undefined;
+    /** The tags applied to the target group. */
     tags: Record<string, string>;
   },
   never,
@@ -96,6 +105,14 @@ export interface TargetGroup extends Resource<
  * });
  * ```
  *
+ * @example Lambda target group
+ * ```typescript
+ * // No vpc/port/protocol — the target is a Lambda function.
+ * const tg = yield* TargetGroup("fn", {
+ *   targetType: "lambda",
+ * });
+ * ```
+ *
  * @example gRPC target group
  * ```typescript
  * const tg = yield* TargetGroup("grpc", {
@@ -115,7 +132,7 @@ export interface TargetGroup extends Resource<
  *   port: 8080,
  *   protocol: "HTTP",
  *   healthCheckPath: "/healthz",
- *   healthCheckIntervalSeconds: 15,
+ *   healthCheckInterval: "15 seconds",
  *   healthyThresholdCount: 3,
  *   unhealthyThresholdCount: 3,
  * });
@@ -183,10 +200,10 @@ export const TargetGroupProvider = () =>
           }
           return {
             ...output,
-            port: targetGroup.Port!,
-            protocol: targetGroup.Protocol!,
+            port: targetGroup.Port,
+            protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
-            vpcId: targetGroup.VpcId!,
+            vpcId: targetGroup.VpcId,
           };
         }),
         // Target groups are account/region-scoped. Exhaustively paginate
@@ -232,10 +249,10 @@ export const TargetGroupProvider = () =>
                   return {
                     targetGroupArn: tg.TargetGroupArn as TargetGroupArn,
                     targetGroupName: tg.TargetGroupName!,
-                    port: tg.Port!,
-                    protocol: tg.Protocol!,
+                    port: tg.Port,
+                    protocol: tg.Protocol,
                     targetType: tg.TargetType!,
-                    vpcId: tg.VpcId!,
+                    vpcId: tg.VpcId,
                     tags,
                   };
                 }),
@@ -263,21 +280,26 @@ export const TargetGroupProvider = () =>
 
           // Ensure — create if missing. Stable axes (vpcId, port, protocol,
           // targetType) are handled by diff so we don't deal with mismatch.
+          // Lambda target groups have no port/protocol/VPC — the API rejects
+          // those members, so omit them entirely.
+          const isLambdaTarget = news.targetType === "lambda";
           if (!targetGroup?.TargetGroupArn) {
             const created = yield* elbv2.createTargetGroup({
               Name: name,
-              Port: news.port,
-              Protocol: news.protocol ?? "HTTP",
-              ProtocolVersion: news.protocolVersion,
-              VpcId: news.vpcId,
+              Port: isLambdaTarget ? undefined : news.port,
+              Protocol: isLambdaTarget ? undefined : (news.protocol ?? "HTTP"),
+              ProtocolVersion: isLambdaTarget
+                ? undefined
+                : news.protocolVersion,
+              VpcId: isLambdaTarget ? undefined : news.vpcId,
               TargetType: news.targetType ?? "ip",
-              IpAddressType: news.ipAddressType,
+              IpAddressType: isLambdaTarget ? undefined : news.ipAddressType,
               HealthCheckPath: news.healthCheckPath,
               HealthCheckPort: news.healthCheckPort,
               HealthCheckProtocol: news.healthCheckProtocol,
               HealthCheckEnabled: news.healthCheckEnabled,
-              HealthCheckIntervalSeconds: news.healthCheckIntervalSeconds,
-              HealthCheckTimeoutSeconds: news.healthCheckTimeoutSeconds,
+              HealthCheckIntervalSeconds: toSeconds(news.healthCheckInterval),
+              HealthCheckTimeoutSeconds: toSeconds(news.healthCheckTimeout),
               HealthyThresholdCount: news.healthyThresholdCount,
               UnhealthyThresholdCount: news.unhealthyThresholdCount,
               Matcher: news.matcher,
@@ -317,10 +339,10 @@ export const TargetGroupProvider = () =>
             HealthCheckEnabled:
               news.healthCheckEnabled ?? observedHc.HealthCheckEnabled,
             HealthCheckIntervalSeconds:
-              news.healthCheckIntervalSeconds ??
+              toSeconds(news.healthCheckInterval) ??
               observedHc.HealthCheckIntervalSeconds,
             HealthCheckTimeoutSeconds:
-              news.healthCheckTimeoutSeconds ??
+              toSeconds(news.healthCheckTimeout) ??
               observedHc.HealthCheckTimeoutSeconds,
             HealthyThresholdCount:
               news.healthyThresholdCount ?? observedHc.HealthyThresholdCount,
@@ -380,10 +402,10 @@ export const TargetGroupProvider = () =>
           return {
             targetGroupArn,
             targetGroupName: targetGroup.TargetGroupName!,
-            port: targetGroup.Port!,
-            protocol: targetGroup.Protocol!,
+            port: targetGroup.Port,
+            protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
-            vpcId: targetGroup.VpcId!,
+            vpcId: targetGroup.VpcId,
             tags: desiredTags,
           };
         }),

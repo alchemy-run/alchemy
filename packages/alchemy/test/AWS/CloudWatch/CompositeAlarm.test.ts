@@ -3,6 +3,7 @@ import { Alarm, CompositeAlarm } from "@/AWS/CloudWatch";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Output from "@/Output";
 
@@ -44,5 +45,17 @@ test.provider("list enumerates the deployed composite alarm", (stack) =>
     expect(all.some((a) => a.alarmName === deployed.alarmName)).toBe(true);
 
     yield* stack.destroy();
+
+    // Out-of-band assert-gone: both the composite alarm and its member
+    // metric alarm are deleted after the final destroy.
+    const gone = yield* cloudwatch.describeAlarms({
+      AlarmNames: [
+        "alchemy-test-composite-list",
+        "alchemy-test-composite-list-metric",
+      ],
+      AlarmTypes: ["CompositeAlarm", "MetricAlarm"],
+    });
+    expect(gone.CompositeAlarms ?? []).toEqual([]);
+    expect(gone.MetricAlarms ?? []).toEqual([]);
   }),
 );

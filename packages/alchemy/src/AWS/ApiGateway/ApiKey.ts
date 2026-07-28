@@ -195,7 +195,10 @@ export const ApiKeyProvider = () =>
                 description: news.description,
                 enabled: news.enabled,
                 generateDistinctId: news.generateDistinctId,
-                value: resolvedValue(news.value),
+                // Distilled's CreateApiKeyRequest.value is SensitiveString —
+                // it accepts the Redacted directly and unwraps on encode, so
+                // the plaintext never passes through alchemy code.
+                value: news.value,
                 stageKeys: news.stageKeys,
                 customerId: news.customerId,
                 tags: desiredTags,

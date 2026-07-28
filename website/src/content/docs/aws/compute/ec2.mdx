@@ -11,8 +11,9 @@ roles — a **low-level compute primitive** (launch an AMI, attach
 networking, done), or a **host for a bundled Effect program**
 that Alchemy deploys onto the machine and keeps running.
 
-This is the lowest-level of Alchemy's three runtimes: unlike
-[Lambda](/aws/compute/lambda) and [ECS](/aws/compute/ecs), you own patching,
+This is the lowest-level of Alchemy's four runtimes: unlike
+[Lambda](/aws/compute/lambda), [ECS](/aws/compute/ecs), and
+[EKS](/aws/compute/eks), you own patching,
 scaling, and availability. Reach for it deliberately — see
 [Choosing a runtime](/aws/compute/choosing-a-runtime).
 
@@ -171,7 +172,8 @@ through the whole set.
 ## Where next
 
 - [Choosing a runtime](/aws/compute/choosing-a-runtime) — Lambda first,
-  ECS for containers, EC2 when you need the machine.
+  ECS for containers, EKS for Kubernetes, EC2 when you need the
+  machine.
 - [VPC & networking](/aws/networking) — the `Network` helper and
   the VPC primitives an instance lives in.
 - [`Instance` reference](/providers/aws/ec2/instance),

@@ -87,7 +87,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
           Effect.gen(function* () {
             return yield* Stream("TestStream", {
               streamMode: "ON_DEMAND",
-              retentionPeriodHours: 48,
+              retentionPeriod: "48 hours",
               tags: { Environment: "production", Team: "platform" },
             });
           }),
@@ -413,7 +413,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         const stream = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Stream("RetentionStream", {
-              retentionPeriodHours: 48,
+              retentionPeriod: "48 hours",
             });
           }),
         );
@@ -430,7 +430,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
         yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Stream("RetentionStream", {
-              retentionPeriodHours: 24,
+              retentionPeriod: "24 hours",
             });
           }),
         );
@@ -558,37 +558,45 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const streamName = `alchemy-test-kinesis-adopt-${Math.random()
-          .toString(36)
-          .slice(2, 8)}`;
+        // Deterministic name so a previously-killed run's orphan is reclaimed
+        // by the pre-clean below instead of leaking forever.
+        const streamName = "alchemy-test-kinesis-adopt";
 
-        const initial = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Stream("AdoptableStream", { streamName });
-          }),
-        );
-        expect(initial.streamName).toEqual(streamName);
-
-        // Wipe state — the stream stays in Kinesis.
-        yield* Effect.gen(function* () {
-          const state = yield* yield* State;
-          yield* state.delete({
-            stack: stack.name,
-            stage: "test",
-            fqn: "AdoptableStream",
-          });
-        }).pipe(Effect.provide(stack.state));
-
-        const adopted = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Stream("AdoptableStream", { streamName });
-          }),
-        );
-
-        expect(adopted.streamArn).toEqual(initial.streamArn);
-
-        yield* stack.destroy();
+        // Idempotent pre-clean: reclaim any leftover from an interrupted run.
+        yield* deleteStreamIfExists(streamName);
         yield* assertStreamDeleted(streamName);
+
+        // The state wipe below detaches the stream from the scratch stack, so
+        // a crash in that window would orphan it — guarantee deletion.
+        yield* Effect.gen(function* () {
+          const initial = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Stream("AdoptableStream", { streamName });
+            }),
+          );
+          expect(initial.streamName).toEqual(streamName);
+
+          // Wipe state — the stream stays in Kinesis.
+          yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            yield* state.delete({
+              stack: stack.name,
+              stage: "test",
+              fqn: "AdoptableStream",
+            });
+          }).pipe(Effect.provide(stack.state));
+
+          const adopted = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Stream("AdoptableStream", { streamName });
+            }),
+          );
+
+          expect(adopted.streamArn).toEqual(initial.streamArn);
+
+          yield* stack.destroy();
+          yield* assertStreamDeleted(streamName);
+        }).pipe(Effect.ensuring(deleteStreamIfExists(streamName)));
       }),
     { timeout: 240_000 },
   );
@@ -599,50 +607,58 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const streamName = `alchemy-test-kinesis-takeover-${Math.random()
-          .toString(36)
-          .slice(2, 8)}`;
+        // Deterministic name so a previously-killed run's orphan is reclaimed
+        // by the pre-clean below instead of leaking forever.
+        const streamName = "alchemy-test-kinesis-takeover";
 
-        yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Stream("Original", { streamName });
-          }),
-        );
-
-        yield* Effect.gen(function* () {
-          const state = yield* yield* State;
-          yield* state.delete({
-            stack: stack.name,
-            stage: "test",
-            fqn: "Original",
-          });
-        }).pipe(Effect.provide(stack.state));
-
-        const takenOver = yield* stack
-          .deploy(
-            Effect.gen(function* () {
-              return yield* Stream("Different", { streamName });
-            }),
-          )
-          .pipe(adopt(true));
-
-        expect(takenOver.streamName).toEqual(streamName);
-
-        const tagsResp = yield* Kinesis.listTagsForResource({
-          ResourceARN: takenOver.streamArn,
-        });
-        const tagMap = Object.fromEntries(
-          (tagsResp.Tags ?? [])
-            .filter(
-              (t): t is { Key: string; Value: string } =>
-                typeof t.Value === "string",
-            )
-            .map((t) => [t.Key, t.Value]),
-        );
-        expect(tagMap["alchemy::id"]).toEqual("Different");
-
-        yield* stack.destroy();
+        // Idempotent pre-clean: reclaim any leftover from an interrupted run.
+        yield* deleteStreamIfExists(streamName);
         yield* assertStreamDeleted(streamName);
+
+        // The state wipe below detaches the stream from the scratch stack, so
+        // a crash in that window would orphan it — guarantee deletion.
+        yield* Effect.gen(function* () {
+          yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Stream("Original", { streamName });
+            }),
+          );
+
+          yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            yield* state.delete({
+              stack: stack.name,
+              stage: "test",
+              fqn: "Original",
+            });
+          }).pipe(Effect.provide(stack.state));
+
+          const takenOver = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Stream("Different", { streamName });
+              }),
+            )
+            .pipe(adopt(true));
+
+          expect(takenOver.streamName).toEqual(streamName);
+
+          const tagsResp = yield* Kinesis.listTagsForResource({
+            ResourceARN: takenOver.streamArn,
+          });
+          const tagMap = Object.fromEntries(
+            (tagsResp.Tags ?? [])
+              .filter(
+                (t): t is { Key: string; Value: string } =>
+                  typeof t.Value === "string",
+              )
+              .map((t) => [t.Key, t.Value]),
+          );
+          expect(tagMap["alchemy::id"]).toEqual("Different");
+
+          yield* stack.destroy();
+          yield* assertStreamDeleted(streamName);
+        }).pipe(Effect.ensuring(deleteStreamIfExists(streamName)));
       }),
     { timeout: 240_000 },
   );
@@ -683,6 +699,28 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
     { timeout: 240_000 },
   );
 
+  // Idempotent out-of-band delete: safe when the stream never existed or was
+  // already deleted (tolerates ResourceNotFoundException), retries the
+  // transient in-use/limit errors, and dies loudly on anything else so a
+  // cleanup failure is never silent. Error channel is `never` so it can be
+  // used as an `Effect.ensuring` finalizer.
+  const deleteStreamIfExists = Effect.fn(function* (streamName: string) {
+    yield* Kinesis.deleteStream({
+      StreamName: streamName,
+      EnforceConsumerDeletion: true,
+    }).pipe(
+      Effect.retry({
+        while: (e) =>
+          e._tag === "ResourceInUseException" ||
+          e._tag === "LimitExceededException",
+        schedule: Schedule.spaced("5 seconds"),
+        times: 8,
+      }),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+      Effect.orDie,
+    );
+  });
+
   class StreamStillExists extends Data.TaggedError("StreamStillExists") {}
 
   const assertStreamDeleted = Effect.fn(function* (streamName: string) {
@@ -695,10 +733,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
           e._tag === "StreamStillExists" ||
           // During stream deletion, AWS may return incomplete responses that fail parsing
           e._tag === "ParseError",
-        schedule: Schedule.max([
-          Schedule.exponential(500),
-          Schedule.recurs(30),
-        ]),
+        schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
       }),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     );

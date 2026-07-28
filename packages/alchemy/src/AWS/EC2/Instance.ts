@@ -252,7 +252,9 @@ export interface Instance extends Resource<
     };
   },
   {
+    /** Environment variables injected into the hosted instance runtime. */
     env?: Record<string, any>;
+    /** IAM policy statements attached to the instance profile role. */
     policyStatements?: PolicyStatement[];
   },
   Providers
