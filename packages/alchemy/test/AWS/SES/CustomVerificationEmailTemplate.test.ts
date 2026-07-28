@@ -9,10 +9,13 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-// A custom verification email template can be created/updated/deleted on any
-// account; only SENDING one requires production (out-of-sandbox) access. The
-// FromEmailAddress must be a verified sending identity for the create call.
-const FROM = "verify@alchemy-test.example.com";
+// SES rejects CreateCustomVerificationEmailTemplate outright when its
+// FromEmailAddress is not already a verified identity ("NotFoundException: The
+// from email address <...> is not verified"), so the whole suite needs a
+// verified sender. Point AWS_TEST_SES_FROM at one to run it. Sending through a
+// template additionally requires production (out-of-sandbox) access.
+const VERIFIED_FROM = process.env.AWS_TEST_SES_FROM;
+const FROM = VERIFIED_FROM ?? "verify@alchemy-test.example.com";
 
 class CvetStillExists extends Data.TaggedError("CvetStillExists")<{
   readonly name: string;
@@ -28,7 +31,7 @@ const assertCvetDeleted = (name: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(!VERIFIED_FROM)(
   "custom verification template lifecycle: create, update, delete",
   (stack) =>
     Effect.gen(function* () {
@@ -82,7 +85,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(!VERIFIED_FROM)(
   "custom name replaces on rename",
   (stack) =>
     Effect.gen(function* () {

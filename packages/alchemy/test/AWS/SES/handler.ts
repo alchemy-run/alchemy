@@ -67,20 +67,11 @@ export default SESTestFunction.make(
         ),
     );
 
-    // A custom verification email template — creating it works on any
-    // account; sending through it needs production access. Its name is
-    // injected into the SendCustomVerificationEmail request below.
-    const cveTemplate = yield* SES.CustomVerificationEmailTemplate(
-      "VerifyTemplate",
-      {
-        fromEmailAddress: "verify@ses-bindings.alchemy-test.example.com",
-        templateSubject: "Confirm your email",
-        templateContent:
-          "<html><body>Please confirm your address to finish signing up.</body></html>",
-        successRedirectionURL: "https://example.com/verify/success",
-        failureRedirectionURL: "https://example.com/verify/failure",
-      },
-    );
+    // No custom verification email template is declared here: SES rejects
+    // CreateCustomVerificationEmailTemplate unless its FromEmailAddress is
+    // already a verified identity, which a bare account has none of, and a
+    // failed create here would take down every binding test in the file. The
+    // template name is a request parameter instead — see /send-custom-verification.
 
     const sendEmail = yield* SES.SendEmail(identity, configSet);
     const sendWithoutConfigSet = yield* SES.SendEmail(identity);
@@ -98,7 +89,6 @@ export default SESTestFunction.make(
     const getDomainStatisticsReport = yield* SES.GetDomainStatisticsReport();
     const getBlacklistReports = yield* SES.GetBlacklistReports();
     const TemplateName = yield* template.templateName;
-    const CveTemplateName = yield* cveTemplate.templateName;
 
     return {
       fetch: Effect.gen(function* () {
@@ -284,7 +274,12 @@ export default SESTestFunction.make(
           request.method === "POST" &&
           pathname === "/send-custom-verification"
         ) {
-          const templateName = yield* CveTemplateName;
+          // The template name comes from the request: on a bare account no
+          // verified sender exists to create one with, so the ungated test
+          // passes a name that does not resolve and asserts the typed
+          // rejection. AWS_TEST_SES_CVE_TEMPLATE names a real one.
+          const templateName =
+            url.searchParams.get("template") ?? "alchemy-test-missing-template";
           return yield* respond(
             sendCustomVerification({
               EmailAddress: email ?? "verify-target@simulator.amazonses.com",

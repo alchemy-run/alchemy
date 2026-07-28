@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { EmailIdentity, EmailIdentityPolicy } from "@/AWS/SES";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
@@ -11,7 +12,10 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const DOMAIN = "policy.alchemy-test.example.com";
 
-const allowPolicy = (sid: string) =>
+// SES validates the policy document on write: Resource must be the identity's
+// own ARN, not a wildcard ("BadRequestException: Invalid ARN: ARNs must start
+// with 'arn:': *").
+const allowPolicy = (sid: string, identityArn: string) =>
   JSON.stringify({
     Version: "2012-10-17",
     Statement: [
@@ -20,7 +24,7 @@ const allowPolicy = (sid: string) =>
         Effect: "Allow",
         Principal: { AWS: "*" },
         Action: "ses:SendEmail",
-        Resource: "*",
+        Resource: identityArn,
       },
     ],
   });
@@ -58,7 +62,9 @@ test.provider(
           });
           const policy = yield* EmailIdentityPolicy("Authz", {
             emailIdentity: identity.emailIdentity,
-            policy: allowPolicy("AllowSend"),
+            policy: Output.all(identity.identityArn).pipe(
+              Output.map(([arn]) => allowPolicy("AllowSend", arn)),
+            ),
           });
           return { identity, policy };
         }),
@@ -81,7 +87,9 @@ test.provider(
           });
           yield* EmailIdentityPolicy("Authz", {
             emailIdentity: identity.emailIdentity,
-            policy: allowPolicy("AllowSendUpdated"),
+            policy: Output.all(identity.identityArn).pipe(
+              Output.map(([arn]) => allowPolicy("AllowSendUpdated", arn)),
+            ),
           });
         }),
       );
@@ -114,7 +122,9 @@ test.provider(
           const policy = yield* EmailIdentityPolicy("RenamePolicy", {
             emailIdentity: identity.emailIdentity,
             policyName: "alchemy-test-policy-a",
-            policy: allowPolicy("A"),
+            policy: Output.all(identity.identityArn).pipe(
+              Output.map(([arn]) => allowPolicy("A", arn)),
+            ),
           });
           return {
             emailIdentity: identity.emailIdentity,
@@ -132,7 +142,9 @@ test.provider(
           const policy = yield* EmailIdentityPolicy("RenamePolicy", {
             emailIdentity: identity.emailIdentity,
             policyName: "alchemy-test-policy-b",
-            policy: allowPolicy("B"),
+            policy: Output.all(identity.identityArn).pipe(
+              Output.map(([arn]) => allowPolicy("B", arn)),
+            ),
           });
           return {
             emailIdentity: identity.emailIdentity,

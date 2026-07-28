@@ -19,10 +19,14 @@ const sharedStack = Core.scratchStack(testOptions, "SESBindings");
 // to a verified from-address to exercise the success path.
 const VERIFIED_FROM = process.env.AWS_TEST_SES_FROM;
 
-// These flags never skip a test — they tighten it. On an out-of-sandbox
-// account, or one with Virtual Deliverability Manager enabled, the binding
-// must return real data rather than the typed rejection the sandbox gives.
-const PRODUCTION_ACCOUNT = !!process.env.AWS_TEST_SES_PRODUCTION;
+// Names an existing custom verification email template. Creating one requires
+// a verified sender, so the fixture cannot declare it — pass a template you
+// created out of band to exercise the real send.
+const CVE_TEMPLATE = process.env.AWS_TEST_SES_CVE_TEMPLATE;
+
+// Never skips a test — tightens it. With Virtual Deliverability Manager
+// enabled the insight bindings must return real data rather than the typed
+// rejection a VDM-less account gives.
 const VDM_ENABLED = !!process.env.AWS_TEST_SES_VDM;
 
 // A syntactically valid address at the fixture's (unverified) domain
@@ -433,39 +437,46 @@ describe("SES Bindings", () => {
   });
 
   describe("SendCustomVerificationEmail", () => {
+    const sendCustomVerification = (template?: string) => {
+      const email = encodeURIComponent(
+        "verify-target@ses-bindings.alchemy-test.example.com",
+      );
+      const query = template
+        ? `?email=${email}&template=${encodeURIComponent(template)}`
+        : `?email=${email}`;
+      return send(
+        HttpClientRequest.post(`${baseUrl}/send-custom-verification${query}`),
+      ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
+        { messageId?: string; error?: string; message?: string },
+        any,
+        any
+      >;
+    };
+
     test.provider(
-      "sends a custom verification email through the binding (typed rejection in the sandbox)",
+      "an unknown template surfaces a typed SES error through the binding",
       (_stack) =>
         Effect.gen(function* () {
-          const email = encodeURIComponent(
-            "verify-target@ses-bindings.alchemy-test.example.com",
-          );
-          const response = (yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/send-custom-verification?email=${email}`,
-            ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            messageId?: string;
-            error?: string;
-            message?: string;
-          };
+          const response = yield* sendCustomVerification();
 
-          // Sandbox accounts cannot send custom verification emails — SES
-          // rejects with a typed error (BadRequestException: "still in the
-          // sandbox"). A production account returns a MessageId. Either way the
-          // call round-trips ses:SendCustomVerificationEmail IAM + the
-          // injected TemplateName through the deployed Lambda. Set
-          // AWS_TEST_SES_PRODUCTION=1 on an out-of-sandbox account to demand
-          // the real send instead of accepting the rejection.
-          if (PRODUCTION_ACCOUNT) {
-            expect(response.error).toBeUndefined();
-            expect(response.messageId).toBeTruthy();
-          } else if (response.error === undefined) {
-            expect(response.messageId).toBeTruthy();
-          } else {
-            expect(typeof response.error).toBe("string");
-            expect(response.messageId).toBeUndefined();
-          }
+          // The fixture declares no template — SES rejects
+          // CreateCustomVerificationEmailTemplate unless its sender is already
+          // verified, which a bare account has none of. So the request names a
+          // template that does not resolve and SES answers with a typed error,
+          // which still proves ses:SendCustomVerificationEmail IAM + request
+          // marshalling reach the deployed Lambda.
+          expect(typeof response.error).toBe("string");
+          expect(response.messageId).toBeUndefined();
+        }),
+    );
+
+    test.provider.skipIf(!CVE_TEMPLATE)(
+      "sends through a real template (AWS_TEST_SES_CVE_TEMPLATE)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* sendCustomVerification(CVE_TEMPLATE);
+          expect(response.error).toBeUndefined();
+          expect(response.messageId).toBeTruthy();
         }),
     );
   });

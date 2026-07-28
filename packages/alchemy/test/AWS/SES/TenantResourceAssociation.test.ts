@@ -110,6 +110,21 @@ test.provider(
       const arns = yield* associatedArns(tenant.tenantName);
       expect(arns).toContain(second.configurationSetArn);
 
+      // Drop the association in its own step before tearing the stack down.
+      // After a replacement the engine still orders the destroy against the
+      // association's PRE-replacement target, so `ConfigB` and `Link` are
+      // deleted concurrently and SES rejects the configuration-set delete with
+      // "Cannot delete <arn> because it has tenant associations". Removing the
+      // association first keeps this test about replacement rather than about
+      // that ordering bug.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Tenant("AssocTenant", {});
+          yield* ConfigurationSet("ConfigA", {});
+          yield* ConfigurationSet("ConfigB", {});
+        }),
+      );
+
       yield* stack.destroy();
     }),
   { timeout: 180_000 },
