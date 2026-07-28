@@ -1,201 +1,86 @@
 /**
- * Node-side path into the local workerd KV simulator.
+ * Node-side path into the local workerd KV simulator, built on the
+ * runtime's platform proxy (`PlatformProxy.open` — our `getPlatformProxy`).
  *
- * The `*Local` KV capability layers speak the Cloudflare KV REST API via
- * distilled ops. For a `dev:` namespace there is no cloud namespace — so
- * this gateway boots an ephemeral workerd with the native KV binding and
- * EMULATES the REST endpoints the client builders call, over that binding:
+ * For a `dev:` namespace there is no cloud namespace to speak REST to.
+ * Instead, each operation opens a scoped platform proxy hosting the native
+ * KV binding and runs against `proxy.env.KV` — the same
+ * `runtime.KVNamespace` surface the Worker-binding client builders
+ * (`makeReadKVClient` / `makeWriteKVClient`) already consume, so the
+ * `*Local` layers reuse those builders verbatim:
  *
- *   Node ── KV REST op ──▶ gateway worker ──▶ env.KV ──▶ simulator
+ *   Node ── proxy.env.KV.get(...) ──▶ kv service ──▶ KVNamespaceObject
  *
- * The ops run unchanged: {@link authorizeThroughLocalKVGateway} rebases the
- * op's HttpClient onto the gateway URL for the duration of one operation.
- * Data lands in the same `{storage}/kv` directory every local worker
- * binding reads.
+ * One proxy boot per operation — slow but correct; the `*Local` layers run
+ * in deploy-time Actions, not on a request path. Data lands in the same
+ * `{storage}/kv` directory every local worker binding reads.
  *
  * NOT exported from `index.ts` — capability-internal scaffolding.
  */
 import { KvNamespace } from "@distilled.cloud/cloudflare-runtime/bindings";
+import { open } from "@distilled.cloud/cloudflare-runtime/platform-proxy";
+import type * as runtime from "@cloudflare/workers-types";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import type { Credentials } from "../Credentials.ts";
-import {
-  gatewayName,
-  localGatewayRuntime,
-  rebaseHttpClient,
-  withLocalGateway,
-} from "../LocalGateway.ts";
+import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
+import type { makeKVNamespaceHelpers } from "./NamespaceBinding.ts";
+import { NamespaceError } from "./NamespaceTypes.ts";
+
+const tryPromise = <T>(
+  fn: () => Promise<T>,
+): Effect.Effect<T, NamespaceError> =>
+  Effect.tryPromise({
+    try: fn,
+    catch: (error: any) =>
+      new NamespaceError({
+        message: error?.message ?? "Unknown error",
+        cause: error,
+      }),
+  });
 
 /**
- * REST-surface emulation of the KV HTTP API over the native binding.
- * Covers exactly the operations the alchemy KV client builders use:
- *
- * - `GET    …/values/{key}`     → raw value bytes (404 code 10009 when absent)
- * - `PUT    …/values/{key}`     → multipart value+metadata, expiration query
- * - `DELETE …/values/{key}`
- * - `GET    …/metadata/{key}`   → envelope with the key's metadata
- * - `GET    …/keys`             → envelope list with cursor result_info
- * - `POST   …/bulk/get`         → envelope `{ values }` map
- *
- * Response envelopes mirror the cloud API (`{ success, errors, messages,
- * result }`) so distilled's decoders and typed error matchers (KeyNotFound
- * = code 10009) work identically against the simulator.
+ * Binding-client helpers backed by a per-operation platform proxy instead
+ * of a Worker's `env`. `raw` cannot be satisfied — a native namespace only
+ * lives as long as its proxy's scope — so it dies with guidance.
  */
-const GATEWAY_MODULE = `const envelope = (result, extra = {}) =>
-  Response.json({ success: true, errors: [], messages: [], result, ...extra });
-const failure = (status, code, message) =>
-  Response.json(
-    { success: false, errors: [{ code, message }], messages: [], result: null },
-    { status },
-  );
-
-export default {
-  async fetch(request, env) {
-    try {
-      const url = new URL(request.url);
-      const match = url.pathname.match(
-        /\\/storage\\/kv\\/namespaces\\/[^/]+\\/(values|metadata|keys|bulk)(?:\\/(.*))?$/,
-      );
-      if (!match) return failure(404, 7003, "no route for " + url.pathname);
-      const [, route, rest] = match;
-      const key = rest === undefined ? undefined : decodeURIComponent(rest);
-
-      if (route === "values" && request.method === "GET") {
-        const value = await env.KV.get(key, "stream");
-        if (value === null) return failure(404, 10009, "key not found");
-        return new Response(value, {
-          headers: { "content-type": "application/octet-stream" },
-        });
-      }
-
-      if (route === "values" && request.method === "PUT") {
-        const form = await request.formData();
-        const value = form.get("value");
-        const metadataRaw = form.get("metadata");
-        const options = {};
-        const expiration = url.searchParams.get("expiration");
-        if (expiration) options.expiration = Number(expiration);
-        const expirationTtl = url.searchParams.get("expiration_ttl");
-        if (expirationTtl) options.expirationTtl = Number(expirationTtl);
-        if (typeof metadataRaw === "string" && metadataRaw !== "") {
-          options.metadata = JSON.parse(metadataRaw);
-        }
-        await env.KV.put(
-          key,
-          typeof value === "string" ? value : value.stream(),
-          options,
-        );
-        return envelope({});
-      }
-
-      if (route === "values" && request.method === "DELETE") {
-        await env.KV.delete(key);
-        return envelope({});
-      }
-
-      if (route === "metadata" && request.method === "GET") {
-        const { value, metadata } = await env.KV.getWithMetadata(key, "stream");
-        if (value === null && metadata === null) {
-          return failure(404, 10009, "key not found");
-        }
-        return envelope(metadata ?? null);
-      }
-
-      if (route === "keys" && request.method === "GET") {
-        const list = await env.KV.list({
-          prefix: url.searchParams.get("prefix") ?? undefined,
-          limit: url.searchParams.get("limit")
-            ? Number(url.searchParams.get("limit"))
-            : undefined,
-          cursor: url.searchParams.get("cursor") ?? undefined,
-        });
-        return envelope(
-          list.keys.map((k) => ({
-            name: k.name,
-            expiration: k.expiration,
-            metadata: k.metadata,
-          })),
-          {
-            result_info: {
-              count: list.keys.length,
-              cursor: list.list_complete ? "" : list.cursor,
-            },
-          },
-        );
-      }
-
-      if (route === "bulk" && rest === "get" && request.method === "POST") {
-        const body = await request.json();
-        const type = body.type === "json" ? "json" : "text";
-        const values = {};
-        for (const k of body.keys ?? []) {
-          const value = await env.KV.get(k, type);
-          if (value === null) continue;
-          if (body.withMetadata) {
-            const { metadata } = await env.KV.getWithMetadata(k);
-            values[k] = { value, metadata: metadata ?? null };
-          } else {
-            values[k] = value;
-          }
-        }
-        return envelope({ values });
-      }
-
-      return failure(405, 7003, "unsupported " + request.method + " " + route);
-    } catch (e) {
-      return failure(
-        500,
-        7000,
-        "local KV gateway failed: " + (e && e.message ? e.message : String(e)),
-      );
-    }
-  },
-};`;
-
-/**
- * Run one distilled KV op against the local simulator: boot an ephemeral
- * gateway for `namespaceId`, rebase the op's HttpClient onto it (Credentials
- * come from the captured ambient context — the gateway ignores auth
- * headers), and tear the gateway down afterwards.
- *
- * One boot per operation — slow but correct; the `*Local` layers run in
- * deploy-time Actions, not on a request path.
- */
-export const authorizeThroughLocalKVGateway = <A, E>(
+export const makeProxyKVNamespaceHelpers = (
   namespaceId: string,
-  eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   /**
    * The FULL ambient stack-eval context: platform services for booting
-   * workerd, `CloudflareEnvironment`/`AlchemyContext` for the runtime
-   * layer, and `Credentials`/`HttpClient` for the op itself.
+   * workerd plus `CloudflareEnvironment`/`AlchemyContext` for the runtime
+   * layer.
    */
   ambient: Context.Context<never>,
-): Effect.Effect<A, E> =>
-  withLocalGateway(
-    {
-      name: gatewayName("alchemy-kv-gateway", namespaceId),
-      modules: [
-        { name: "gateway.js", type: "ESModule", content: GATEWAY_MODULE },
-      ],
-      bindings: [KvNamespace.local({ binding: "KV", id: namespaceId })],
-    },
-    (url) =>
+): ReturnType<typeof makeKVNamespaceHelpers> => {
+  const use = <T>(
+    fn: (raw: runtime.KVNamespace<string>) => Promise<T>,
+  ): Effect.Effect<T, NamespaceError> =>
+    Effect.scoped(
       Effect.gen(function* () {
-        const client = yield* HttpClient.HttpClient;
-        return yield* eff.pipe(
-          Effect.provideService(
-            HttpClient.HttpClient,
-            rebaseHttpClient(client, url),
-          ),
-          Effect.provideContext(ambient),
-        );
+        const proxy = yield* open({
+          name: gatewayName("alchemy-kv-gateway", namespaceId),
+          bindings: [KvNamespace.local({ binding: "KV", id: namespaceId })],
+        });
+        const kv = (proxy.env as Record<string, unknown>)
+          .KV as runtime.KVNamespace<string>;
+        return yield* tryPromise(() => fn(kv));
       }),
-  ).pipe(
-    Effect.provide(localGatewayRuntime),
-    // The gateway layer's platform requirements are satisfied by the
-    // ambient stack-eval context; `Context<never>` can't prove that
-    // statically, so erase the leftover R (and the gateway's own infra
-    // error channel) with a cast — mirroring D1's `QueryDatabaseLocal`.
-    Effect.provideContext(ambient),
-  ) as unknown as Effect.Effect<A, E>;
+    ).pipe(
+      Effect.provide(localGatewayRuntime),
+      // The gateway layer's platform requirements are satisfied by the
+      // ambient stack-eval context; `Context<never>` can't prove that
+      // statically, so erase the leftover R (and the proxy's own infra
+      // error channel) with a cast — mirroring D1's gateway.
+      Effect.provideContext(ambient),
+    ) as Effect.Effect<T, NamespaceError>;
+
+  const raw = Effect.die(
+    new NamespaceError({
+      message:
+        "A locally-emulated KV namespace has no long-lived native binding outside a Worker; use get/put/delete/list/getWithMetadata (each runs through a scoped local gateway).",
+      cause: new Error("unsupported"),
+    }),
+  ) as Effect.Effect<runtime.KVNamespace<string>>;
+
+  return { raw, use, tryPromise };
+};

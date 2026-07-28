@@ -1,35 +1,31 @@
 /**
- * Node-side query path into the local workerd D1 simulator.
+ * Node-side query path into the local workerd D1 simulator, built on the
+ * runtime's platform proxy (`PlatformProxy.open` — our `getPlatformProxy`).
  *
  * The simulator (a `d1` service routing to a per-database
  * `D1DatabaseObject` Durable Object over DO SQLite) is only reachable from
  * inside workerd — but alchemy's migration runner and the
- * `QueryDatabaseLocal` capability run in Node. This module bridges the two
- * with an ephemeral gateway (see `../LocalGateway.ts`) whose only job is to
- * forward HTTP requests to the raw `d1` service:
- *
- *   Node ── POST {sql} ──▶ gateway worker ──▶ `d1` service ──▶ D1DatabaseObject
- *
- * The gateway binds the `d1` service directly (a plain service binding with
- * the database id on the designator props — the same designator the
- * `cloudflare-internal:d1-api` wrapped binding targets), so Node speaks the
+ * `QueryDatabaseLocal` capability run in Node. The platform proxy bridges
+ * the two: it hosts the binding in a scoped workerd instance and exposes it
+ * to Node. We bind the raw `d1` service (the same designator the
+ * `cloudflare-internal:d1-api` wrapped binding targets) so Node speaks the
  * full D1 HTTP protocol (`POST /query`, multi-statement SQL) rather than
- * the line-based `exec()` surface of the wrapped binding. Data lands in the
- * same `{storage}/d1` directory every local worker binding reads.
+ * the line-based `exec()` surface of the wrapped binding:
+ *
+ *   Node ── proxy.env.D1_RAW.fetch({sql}) ──▶ `d1` service ──▶ D1DatabaseObject
+ *
+ * Data lands in the same `{storage}/d1` directory every local worker
+ * binding reads.
  *
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
+import { open } from "@distilled.cloud/cloudflare-runtime/platform-proxy";
 import { D1 } from "@distilled.cloud/cloudflare-runtime/bindings";
 import { SERVICE_D1 } from "@distilled.cloud/cloudflare-runtime/bindings/d1/D1Options";
+import type { BindingHook } from "@distilled.cloud/cloudflare-runtime/PluginContext";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import {
-  gatewayName,
-  localGatewayRuntime,
-  withLocalGateway,
-} from "../LocalGateway.ts";
+import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
 import type { D1QueryResult, D1SqlExecutor } from "./ApplyMigrations.ts";
 
 export { localGatewayRuntime as localD1GatewayRuntime };
@@ -48,24 +44,6 @@ export type D1QueryBody =
   | { sql: string; params?: unknown[] }
   | { batch: Array<{ sql: string; params?: unknown[] }> };
 
-/**
- * The gateway worker: forwards the request body to the raw `d1` service.
- * The `D1DatabaseObject` behind it answers `POST /query` with the D1 HTTP
- * protocol (an array of `{ success, results, meta }` per statement batch).
- */
-const GATEWAY_MODULE = `export default {
-  async fetch(request, env) {
-    if (request.method !== "POST") {
-      return new Response("not found", { status: 404 });
-    }
-    return env.D1_RAW.fetch("http://d1/query", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: request.body,
-    });
-  },
-};`;
-
 interface D1StatementResponse {
   success: boolean;
   results?: unknown;
@@ -74,7 +52,21 @@ interface D1StatementResponse {
 }
 
 /**
- * Boot an ephemeral gateway workerd for `databaseId`, hand `use` a query
+ * A plain service binding onto the raw `d1` service for `databaseId` —
+ * bypassing the `cloudflare-internal:d1-api` wrapper so the proxy's fetch
+ * passthrough can POST the full D1 HTTP protocol.
+ */
+const rawD1Binding = (databaseId: string): BindingHook =>
+  Effect.succeed({
+    name: "D1_RAW",
+    service: {
+      name: SERVICE_D1,
+      props: { json: JSON.stringify({ databaseId }) },
+    },
+  });
+
+/**
+ * Boot a scoped platform proxy for `databaseId`, hand `use` a query
  * function that tunnels {@link D1QueryBody} requests into the local
  * simulator, and tear the instance down when `use` completes.
  */
@@ -86,76 +78,66 @@ export const withLocalD1Query = <A, E, R>(
     ) => Effect.Effect<D1QueryResult, LocalD1QueryError>,
   ) => Effect.Effect<A, E, R>,
 ) =>
-  withLocalGateway(
-    {
-      name: gatewayName("alchemy-d1-gateway", databaseId),
-      modules: [
-        { name: "gateway.js", type: "ESModule", content: GATEWAY_MODULE },
-      ],
-      // The wrapped binding is unused by the gateway itself, but its hook
-      // registers the database with the D1 plugin so the `d1` service is
-      // emitted into this workerd config.
-      bindings: [D1.local({ binding: "DB", id: databaseId })],
-      unsafe: {
+  Effect.scoped(
+    Effect.gen(function* () {
+      const proxy = yield* open({
+        name: gatewayName("alchemy-d1-gateway", databaseId),
         bindings: [
-          {
-            name: "D1_RAW",
-            service: {
-              name: SERVICE_D1,
-              props: { json: JSON.stringify({ databaseId }) },
-            },
-          },
+          // The wrapped binding is unused by the gateway itself, but its
+          // hook registers the database with the D1 plugin so the `d1`
+          // service is emitted into this workerd config.
+          D1.local({ binding: "DB", id: databaseId }),
+          rawD1Binding(databaseId),
         ],
-      },
-    },
-    (url) =>
-      Effect.gen(function* () {
-        const client = yield* HttpClient.HttpClient;
-        const query = (body: D1QueryBody) =>
-          client
-            .execute(
-              HttpClientRequest.post(url.toString()).pipe(
-                // The DO accepts a single D1Query or an array (one
-                // transaction) — a batch maps to the array form.
-                HttpClientRequest.bodyJsonUnsafe(
-                  "batch" in body ? body.batch : body,
-                ),
-              ),
-            )
-            .pipe(
-              Effect.flatMap((res) => res.json),
-              Effect.mapError(
-                (cause) =>
-                  new LocalD1QueryError({
-                    message: "Failed to reach the local D1 gateway",
-                    cause,
-                  }),
-              ),
-              Effect.flatMap((responseBody) => {
-                // Protocol errors come back `{ success: false, error }` (a
-                // single object); successes are one envelope per statement.
-                const responses = (
-                  Array.isArray(responseBody) ? responseBody : [responseBody]
-                ) as D1StatementResponse[];
-                const failed = responses.find((r) => !r.success);
-                if (failed) {
-                  return Effect.fail(
-                    new LocalD1QueryError({
-                      message: failed.error ?? "Local D1 query failed",
-                    }),
-                  );
-                }
-                return Effect.succeed({
-                  result: responses.map((r) => ({
-                    results: r.results,
-                    success: true,
-                    meta: r.meta,
-                  })),
-                } as D1QueryResult);
-              }),
-            );
-        return yield* use(query);
-      }),
+      });
+      const raw = (proxy.env as Record<string, unknown>).D1_RAW as {
+        fetch: (input: string, init?: RequestInit) => Promise<Response>;
+      };
+
+      const query = (body: D1QueryBody) =>
+        Effect.tryPromise({
+          try: async () => {
+            const response = await raw.fetch("http://d1/query", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              // The DO accepts a single D1Query or an array (one
+              // transaction) — a batch maps to the array form.
+              body: JSON.stringify("batch" in body ? body.batch : body),
+            });
+            return (await response.json()) as unknown;
+          },
+          catch: (cause) =>
+            new LocalD1QueryError({
+              message: "Failed to reach the local D1 gateway",
+              cause,
+            }),
+        }).pipe(
+          Effect.flatMap((responseBody) => {
+            // Protocol errors come back `{ success: false, error }` (a
+            // single object); successes are one envelope per statement.
+            const responses = (
+              Array.isArray(responseBody) ? responseBody : [responseBody]
+            ) as D1StatementResponse[];
+            const failed = responses.find((r) => !r.success);
+            if (failed) {
+              return Effect.fail(
+                new LocalD1QueryError({
+                  message: failed.error ?? "Local D1 query failed",
+                }),
+              );
+            }
+            return Effect.succeed({
+              result: responses.map((r) => ({
+                results: r.results,
+                success: true,
+                meta: r.meta,
+              })),
+            } as D1QueryResult);
+          }),
+        );
+
+      return yield* use(query);
+    }),
   );
 
 /**
